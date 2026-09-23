@@ -9,6 +9,7 @@ import { dayMetricTarget } from '@haelan/core/target-key'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
+import { Sleep } from '../src/pages/Sleep.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -38,7 +39,10 @@ afterEach(() => {
 })
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  sleepTargetMinutes: 480,
+  sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
 const DAYS = ['2026-08-10', '2026-08-11', '2026-08-12']
@@ -227,6 +231,65 @@ function chartRoots(): (Element | null)[] {
   return [...container!.querySelectorAll('[role="img"]')].map((host) => host.firstElementChild)
 }
 
+/**
+ * The Sleep page's own routes, for the balance card's case below.
+ *
+ * sleep_asleep_minutes answers every day in the week with a real value, so the balance card has a
+ * bar for each and its `values` array is a real one rather than seven nulls. Everything else
+ * answers what the eleven tiles and the two summary cards need to stay out of an empty state.
+ */
+function stubSleepFetch(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] } })
+    }
+    if (url.includes('/overrides') || url.includes('/notes') || url.includes('/events')) return json({ items: [] })
+    if (url.includes('/sources')) {
+      return json({
+        items: [{
+          id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4',
+          alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 0,
+        }],
+      })
+    }
+    if (url.includes('/series')) {
+      const body: Record<string, unknown> = {}
+      for (const metric of new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')) {
+        body[metric] = {
+          points: [
+            '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14',
+          ].map((date, i) => seriesPoint(metric, date, 400 + i * 20)),
+          reduction: null,
+        }
+      }
+      return json(body)
+    }
+    if (url.includes('/sleep/nights')) {
+      const start = Date.parse('2026-08-12T22:00:00Z')
+      return json({
+        items: [{
+          localDate: '2026-08-13', sourceId: 'watch', sessionIds: ['s1'],
+          startMs: start, endMs: start + 7 * 3_600_000,
+          startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [], excludedSessions: [],
+          segments: [{ stage: 'DEEP', startMs: start, endMs: start + 7 * 3_600_000 }],
+        }],
+        cursor: null,
+      })
+    }
+    if (url.includes('/insights')) return json(insightBody(url))
+    // One baseline for the whole page answered without a `thin` flag set, which is what puts the
+    // balance card on the person's own usual rather than on their target: the branch that reads
+    // `center` is the one whose memo a lifecycle defect would be hiding in.
+    return json({ baseline: { center: 420, spread: 25, n: 55, thin: false } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the charts across a rerender', () => {
   // Section 7 of the spec names "a chart disposed on every render" as one of the two defect
   // classes the render environment was added to catch, and it came back one task later: useChart
@@ -373,6 +436,48 @@ describe('the charts across a rerender', () => {
     // A second render of the same component with the same client: every query is already settled
     // and staleTime is Infinity, so nothing either chart draws has changed.
     act(() => { root!.render(tree(<NightDetail />)) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    const after = chartRoots()
+    expect(after).toHaveLength(before.length)
+    for (let i = 0; i < before.length; i += 1) {
+      expect(after[i], `chart ${i} was re-initialised`).toBe(before[i])
+    }
+    restore()
+  })
+
+  // The sleep balance card's own case, on the page none of the four above mounts. It is the chart
+  // in this app with the most identity to lose: its `values` are a subtraction the page performs
+  // over `denseSeries` output, so a `balance` memo keyed on anything that changes per render (or no
+  // memo at all) disposes and re-initialises the chart on every commit, and the `marks` array
+  // `dayMarks` returns would go with it.
+  it('are not disposed and re-initialised on the sleep page either, where the balance card lives', async () => {
+    const restore = stubSleepFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', '/sleep?range=week&on=2026-08-16')
+    const tree = (node: ReactNode): ReactNode => (
+      <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
+    )
+
+    act(() => { root!.render(tree(<Sleep />)) })
+    await flush(client, () => container!.innerHTML)
+
+    // The balance chart is on the page at all, so the case cannot pass by measuring a page that
+    // rendered nothing to dispose: the hypnogram, the schedule chart and the eleven sparklines ride
+    // along, and the count is asserted below so a card that quietly stopped drawing is a failure
+    // here rather than a smaller number quietly passing.
+    const chartHosts = [...container!.querySelectorAll('div[role="img"]')]
+    expect(chartHosts.some((host) => (host.getAttribute('aria-label') ?? '').startsWith('Nightly sleep balance')))
+      .toBe(true)
+
+    const before = chartRoots()
+    expect(before.length).toBeGreaterThan(2)
+    expect(before.every((node) => node !== null)).toBe(true)
+
+    // A second render of the same component with the same client: every query is already settled
+    // and staleTime is Infinity, so nothing any chart draws has changed.
+    act(() => { root!.render(tree(<Sleep />)) })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     const after = chartRoots()

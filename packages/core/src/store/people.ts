@@ -1,7 +1,8 @@
-﻿import { eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { people } from '../db/schema/index.ts'
 import { ConfigError } from '../errors.ts'
+import { DEFAULT_SLEEP_TARGET_MINUTES, SLEEP_TARGET_MINUTES_RANGE } from '../derive/metrics.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
 
@@ -12,6 +13,8 @@ export interface PersonRow {
   birthDate: string | null
   sex: 'male' | 'female' | null
   companionPath: boolean
+  sleepTargetMinutes: number
+  sleepUseBaseline: boolean
   builtMappingVersion: number | null
   builtDerivationVersion: number | null
 }
@@ -38,7 +41,8 @@ export class PeopleStore {
    * rows built by something older" rather than "has rows, or does not, we cannot tell".
    */
   create(
-    input: Omit<PersonRow, 'birthDate' | 'sex' | 'builtMappingVersion' | 'builtDerivationVersion' | 'companionPath'>
+    input: Omit<PersonRow, 'birthDate' | 'sex' | 'sleepTargetMinutes' | 'sleepUseBaseline' | 'builtMappingVersion'
+      | 'builtDerivationVersion' | 'companionPath'>
       & { nowMs: number, companionPath?: boolean },
   ): PersonRow {
     this.#db.insert(people).values({
@@ -46,6 +50,9 @@ export class PeopleStore {
       displayName: input.displayName,
       timezone: input.timezone,
       companionPath: input.companionPath ?? false,
+      // The sleep target is left to the column's own default rather than written here: 480 is a
+      // fact about the schema (see the column's own comment), and repeating it in this insert
+      // would make two places to change it and one of them silent.
       createdAtMs: input.nowMs,
       builtMappingVersion: MAPPING_VERSION,
       builtDerivationVersion: DERIVATION_VERSION,
@@ -57,6 +64,12 @@ export class PeopleStore {
       birthDate: null,
       sex: null,
       companionPath: input.companionPath ?? false,
+      sleepTargetMinutes: DEFAULT_SLEEP_TARGET_MINUTES,
+      // The column's own default, restated: the insert above leaves it to the schema, and this
+      // return states what that default is. upgrade-rehearsal.test.ts holds the schema default
+      // against the migration's, and the default test below holds this return against both, so
+      // the three cannot drift to three answers.
+      sleepUseBaseline: true,
       builtMappingVersion: MAPPING_VERSION,
       builtDerivationVersion: DERIVATION_VERSION,
     }
@@ -72,6 +85,8 @@ export class PeopleStore {
         birthDate: row.birthDate ?? null,
         sex: row.sex ?? null,
         companionPath: row.companionPath ?? false,
+        sleepTargetMinutes: row.sleepTargetMinutes,
+        sleepUseBaseline: row.sleepUseBaseline,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }
@@ -87,6 +102,8 @@ export class PeopleStore {
         birthDate: row.birthDate ?? null,
         sex: row.sex ?? null,
         companionPath: row.companionPath ?? false,
+        sleepTargetMinutes: row.sleepTargetMinutes,
+        sleepUseBaseline: row.sleepUseBaseline,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }))
@@ -166,6 +183,51 @@ export class PeopleStore {
       throw new ConfigError(`sex must be 'male' or 'female'`)
     }
     this.#db.update(people).set({ sex }).where(eq(people.id, id)).run()
+  }
+
+  /**
+   * The nightly figure the sleep balance card measures a night against, once this person has no
+   * baseline of their own to be measured against instead.
+   *
+   * Cheap, like setBirthDate and unlike setTimezone: nothing derived reads this column, so the
+   * derivation stamp is deliberately not cleared here. The card computes at read time, from this
+   * number and from whatever is already stored, so a change to it changes what the next page load
+   * draws and nothing that has already been written. CONTRIBUTING asks a change like this for a
+   * version bump first; this is the sentence saying why neither version moves.
+   *
+   * The range is enforced here rather than only in the form, because a route is reachable without
+   * the form: 8 typed into a field that wanted minutes is a six times too long night, and a card
+   * silently comparing every night against 8 minutes would state a surplus with nothing wrong on
+   * screen to explain it.
+   */
+  setSleepTargetMinutes(id: string, minutes: number): void {
+    if (!Number.isInteger(minutes)) {
+      throw new ConfigError(`a sleep target must be whole minutes, got '${minutes}'`)
+    }
+    if (minutes < SLEEP_TARGET_MINUTES_RANGE.min || minutes > SLEEP_TARGET_MINUTES_RANGE.max) {
+      throw new ConfigError(
+        `a sleep target must be between ${SLEEP_TARGET_MINUTES_RANGE.min} and ${SLEEP_TARGET_MINUTES_RANGE.max} minutes, got ${minutes}`,
+      )
+    }
+    this.#db.update(people).set({ sleepTargetMinutes: minutes }).where(eq(people.id, id)).run()
+  }
+
+  /**
+   * Whether the sleep balance card may measure against this person's own usual once that is
+   * worth standing on. Off means the stored target, always, for whoever wants to hold a seven
+   * or eight hour line on purpose.
+   *
+   * Cheap in the same way setSleepTargetMinutes is: nothing derived reads this column, so the
+   * derivation stamp is deliberately not cleared here either. The type is enforced here rather
+   * than only in the form for the same reason the range is enforced there: a route is reachable
+   * without the form, and a truthy string saved as a preference would read back as a boolean
+   * the card could not trust.
+   */
+  setSleepUseBaseline(id: string, useBaseline: boolean): void {
+    if (typeof useBaseline !== 'boolean') {
+      throw new ConfigError(`whether to use the baseline must be a boolean, got '${useBaseline}'`)
+    }
+    this.#db.update(people).set({ sleepUseBaseline: useBaseline }).where(eq(people.id, id)).run()
   }
 
   /**

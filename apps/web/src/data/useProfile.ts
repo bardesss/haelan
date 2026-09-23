@@ -5,7 +5,7 @@ import type { ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 
 /**
- * What PUT /api/profile answers: the five fields as they were stored, and whether the timezone
+ * What PUT /api/profile answers: the seven fields as they were stored, and whether the timezone
  * write left this person's derived rows waiting on a rebuild.
  *
  * `rebuildPending` is a fact about the instance rather than about the request, which is why it is
@@ -19,6 +19,8 @@ export interface SavedProfile {
   timezone: string
   birthDate: string | null
   sex: 'male' | 'female' | null
+  sleepTargetMinutes: number
+  sleepUseBaseline: boolean
   rebuildPending: boolean
 }
 
@@ -28,10 +30,21 @@ export interface ProfileEdit {
   timezone: string
   birthDate: string | null
   sex: 'male' | 'female' | null
+  // Optional, unlike the stored answer in SavedProfile: a number input cleared mid-edit holds ''
+  // rather than a number, and Number('') is 0, which is outside the range the store accepts. An
+  // absent field is what the route already reads as "leave it alone" (its three answers rule), so
+  // a field the reader is midway through retyping is omitted from the body rather than sent as
+  // something the store would refuse. The panel's own `changed` comparison keeps the save button
+  // disabled while the draft holds nothing, so the omission is a second line of defence rather
+  // than the mechanism.
+  sleepTargetMinutes?: number
+  // Required, unlike the target above: a checkbox always holds a boolean, never the empty
+  // string a cleared number input holds, so there is no mid-edit state to omit.
+  sleepUseBaseline: boolean
 }
 
 /**
- * The caller's own display name, username, timezone, birth date and sex. No query beside it: GET
+ * The caller's own display name, username, timezone, birth date, sex and sleep preferences. No query beside it: GET
  * /api/auth/me already carries all five, and a second route answering the same values is a second
  * thing to keep in step. That is also why this invalidates the session key rather than one of its
  * own - the Shell, the rail and every day boundary the browser resolves read the session, and a

@@ -90,6 +90,11 @@ describe('auth', () => {
     expect(response.json()).toEqual({
       personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: true,
       timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+      // The sleep balance card's zero line until this person has a baseline worth standing on. Not
+      // nullable and not absent: 480 is a real answer for somebody who has never opened Settings,
+      // which is what keeps every reader of this field from supplying its own fallback.
+      sleepTargetMinutes: 480,
+      sleepUseBaseline: true,
       connected: true, credentialsUnreadable: false,
       baseUrl: 'http://localhost:4235',
     })

@@ -16,6 +16,11 @@ const CHART_SOURCES = {
   seriesAlt: 'series-alt',
   grid: 'grid',
   axis: 'axis',
+  // The sleep balance card's diverging pair: a night's own deviation from the zero line is drawn
+  // in one of these two, by sign. Added together with the tokens themselves, because
+  // readChartTokens throws on a name the stylesheet does not define.
+  balanceOver: 'balance-over',
+  balanceUnder: 'balance-under',
   band: 'band-baseline',
   excluded: 'state-excluded',
   noData: 'state-no-data',

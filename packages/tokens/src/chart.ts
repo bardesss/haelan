@@ -15,6 +15,14 @@ export const chartTokens = {
     'stage-awake': 'amber.500',
     series: 'blue.500',
     'series-alt': 'blue.200',
+    // Over and under a moving zero line, for the sleep balance card's diverging bars. The blue is
+    // the app's own series blue so a night above the line reads as ordinary data rather than as a
+    // second series, and the amber is the pair the palette was already built around: it survives
+    // common dichromacy against that blue (accessibility.test.ts asserts the separation under every
+    // CVD_KINDS simulation), which the obvious red would not. Bar direction carries the sign on its
+    // own, so colour here is the redundant channel and not the only one.
+    'balance-over': 'blue.500',
+    'balance-under': 'amber.500',
     grid: 'slate.925',
     axis: 'slate.500',
     'band-baseline': 'blue.900',
@@ -34,6 +42,11 @@ export const chartTokens = {
     'stage-awake': 'amber.700',
     series: 'blue.600',
     'series-alt': 'blue.800',
+    // Same pair, walked the other way for the light theme exactly as series/series-alt are: the
+    // over colour darkens and the under colour deepens, because "more" has to move away from the
+    // card in both themes.
+    'balance-over': 'blue.600',
+    'balance-under': 'amber.700',
     grid: 'slate.200',
     axis: 'slate.650',
     'band-baseline': 'blue.200',

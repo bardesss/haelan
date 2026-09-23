@@ -64,6 +64,8 @@ export type { QueueEntry } from './store/deriveQueue.ts'
 // core only through this file, which is why the store classes are here rather than deep
 // imported: `exports` in package.json publishes this module and no other.
 export { PeopleStore } from './store/people.ts'
+export { DEFAULT_SLEEP_TARGET_MINUTES, SLEEP_TARGET_MINUTES_RANGE } from './derive/metrics.ts'
+export { declaredColumnDefaults } from './db/schema/index.ts'
 export type { PersonRow } from './store/people.ts'
 export { AccountStore } from './store/accounts.ts'
 export type {

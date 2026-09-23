@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
+import { SLEEP_TARGET_MINUTES_RANGE } from '@haelan/core'
 import { errorBody, sendCoreError, statusFor } from '../api/envelope.ts'
 import { isKnownTimezone } from './setup.ts'
 
@@ -8,6 +9,8 @@ interface ProfileBody {
   timezone?: unknown
   birthDate?: unknown
   sex?: unknown
+  sleepTargetMinutes?: unknown
+  sleepUseBaseline?: unknown
 }
 interface PasswordBody { currentPassword?: unknown, newPassword?: unknown }
 
@@ -42,7 +45,7 @@ export function registerProfile(app: FastifyInstance): void {
         return reply.code(statusFor('not_found')).send(errorBody('not_found', 'no_such_person', 'this account has no person row'))
       }
 
-      const { displayName, username, timezone, birthDate, sex } = request.body ?? {}
+      const { displayName, username, timezone, birthDate, sex, sleepTargetMinutes, sleepUseBaseline } = request.body ?? {}
       // Each field is optional and absent means untouched, so a client can save one control
       // without restating the other two. A present field must still be a string: `undefined` and
       // `null` are different answers here, and treating the second as "leave it" would let a
@@ -64,6 +67,36 @@ export function registerProfile(app: FastifyInstance): void {
         }
       }
 
+      // Its own branch rather than a fourth entry in either loop above, because it is a number and
+      // not a string, and because it is neither clearable nor nullable: the column is NOT NULL with
+      // a default, so `null` here is a client mistake like a null name rather than an instruction
+      // to clear. The type check answers what the store cannot see (a JSON body carrying a string
+      // or a float where a number was meant, refused as a 4xx envelope rather than a throw), and
+      // the range check below answers it before anything is written: setSleepTargetMinutes throws
+      // ConfigError, which this scope turns into the same 4xx, but only after displayName,
+      // username, birthDate and sex have already landed, so { displayName: 'Bart',
+      // sleepTargetMinutes: 30 } would rename and then error. Checked here against the store's
+      // own range, so a route and a direct caller still refuse the same values.
+      if (sleepTargetMinutes !== undefined) {
+        if (typeof sleepTargetMinutes !== 'number' || !Number.isInteger(sleepTargetMinutes)) {
+          return reply.code(statusFor('config'))
+            .send(errorBody('config', 'config', 'sleepTargetMinutes must be whole minutes'))
+        }
+        if (sleepTargetMinutes < SLEEP_TARGET_MINUTES_RANGE.min
+          || sleepTargetMinutes > SLEEP_TARGET_MINUTES_RANGE.max) {
+          return reply.code(statusFor('config'))
+            .send(errorBody('config', 'config',
+              `a sleep target must be between ${SLEEP_TARGET_MINUTES_RANGE.min} and ${SLEEP_TARGET_MINUTES_RANGE.max} minutes, got ${sleepTargetMinutes}`))
+        }
+      }
+      // Its own branch for the same reason the number above has one: it is neither text nor
+      // clearable. A JSON body carries no booleans apart from real ones, so anything that is not
+      // one here is a client mistake, and the store's own setter refuses it the same way.
+      if (sleepUseBaseline !== undefined && typeof sleepUseBaseline !== 'boolean') {
+        return reply.code(statusFor('config'))
+          .send(errorBody('config', 'config', 'sleepUseBaseline must be a boolean'))
+      }
+
       // The zone comparison is against what is stored, not against whether the field was sent.
       // Saving the form unchanged sends all three every time, and a timezone write costs this
       // person every derived row they have until a rebuild replays them (PeopleStore.setTimezone),
@@ -76,6 +109,12 @@ export function registerProfile(app: FastifyInstance): void {
       if (typeof username === 'string') stores().accounts.setUsername(account.id, username)
       if (birthDate !== undefined) stores().people.setBirthDate(person.id, birthDate as string | null)
       if (sex !== undefined) stores().people.setSex(person.id, sex as 'male' | 'female' | null)
+      // An out of range value throws ConfigError here, which this scope's own error handler turns
+      // into the same envelope the branch above sends by hand. Left to travel rather than
+      // pre-checked against a second copy of the bounds: the range lives in the store, and a route
+      // that restated it would be the second place a future change had to reach.
+      if (typeof sleepTargetMinutes === 'number') stores().people.setSleepTargetMinutes(person.id, sleepTargetMinutes)
+      if (typeof sleepUseBaseline === 'boolean') stores().people.setSleepUseBaseline(person.id, sleepUseBaseline)
       if (zoneMoved) stores().people.setTimezone(person.id, timezone)
 
       const saved = stores().people.get(person.id)!
@@ -86,6 +125,8 @@ export function registerProfile(app: FastifyInstance): void {
         timezone: saved.timezone,
         birthDate: saved.birthDate,
         sex: saved.sex,
+        sleepTargetMinutes: saved.sleepTargetMinutes,
+        sleepUseBaseline: saved.sleepUseBaseline,
         // What the caller is owed rather than what happened: nothing rebuilds on this request. The
         // derivation stamp is cleared, which is what the boot rebuild reads, so this says "your
         // history is being re-derived from the archive the next time this instance starts" and the

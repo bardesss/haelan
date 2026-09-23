@@ -25,8 +25,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   ASLEEP_STAGES, DATABASE_FILENAME, DeriveQueue, EventStore, NoteStore, OverrideStore,
-  PeopleStore, RawArchive, SourceRegistry, closeDatabase, listBackups, openDatabase, openHaelan,
-  readSamples, runBackup, runRebuild, seedArchive, vacuumIfBloated,
+  PeopleStore, RawArchive, SourceRegistry, closeDatabase, declaredColumnDefaults, listBackups,
+  openDatabase, openHaelan, readSamples, runBackup, runRebuild, schema, seedArchive, vacuumIfBloated,
 } from '@haelan/core'
 import type { Database, SampleText } from '@haelan/core'
 import { sampleTarget } from '@haelan/core/target-key'
@@ -213,6 +213,39 @@ function restoreOver(dir: string, backupPath: string): void {
   copyFileSync(backupPath, live)
 }
 
+/**
+ * Every column the migrations after `LAST_OLD_TAG` add WITH a declared default, keyed by
+ * `table.column` to the literal that default was written as. Scanned out of the migration SQL
+ * rather than read off the schema module, because this file's own subject is what the migrations
+ * did to an old database: a default the schema declares and the migration does not write is
+ * exactly the drift the backfill check below has to see.
+ *
+ * Only an ADD COLUMN's own tail counts, keyed by its own table. A default anywhere else in a
+ * statement would belong to a column being created in a table this walk does not carry rows
+ * across, and reading one out of a multi-line CREATE TABLE would attribute it to whichever ADD
+ * COLUMN happened to come next. Keying table-blind would do the same across tables: two tables
+ * gaining the same column name would compare the wrong pair.
+ *
+ * The journal is read here as well as at the top of the test, which is deliberate: the two reads
+ * answer different questions (this one, which columns arrived with a default; that one, where the
+ * fixture stopped), and sharing a variable between them would make the second answer depend on the
+ * first having been taken.
+ */
+function addedColumnDefaults(): Map<string, string> {
+  const journal = JSON.parse(
+    readFileSync(join(MIGRATIONS_DIR, 'meta/_journal.json'), 'utf8'),
+  ) as { entries: { tag: string }[] }
+  const cut = journal.entries.findIndex((e) => e.tag === LAST_OLD_TAG)
+  const defaults = new Map<string, string>()
+  for (const entry of journal.entries.slice(cut + 1)) {
+    const sql = readFileSync(join(MIGRATIONS_DIR, `${entry.tag}.sql`), 'utf8')
+    for (const match of sql.matchAll(/ALTER\s+TABLE\s+`(\w+)`\s+ADD\s+`(\w+)`[^;]*?\bDEFAULT\s+('?[\w.]+'?)/gi)) {
+      defaults.set(`${match[1]}.${match[2]}`, match[3]!.replace(/^'|'$/g, ''))
+    }
+  }
+  return defaults
+}
+
 describe('the upgrade path', () => {
   it('carries tier 1 from an old schema through rebuild, reclaim, backup and restore', () => {
     const dir = mkdtempSync(join(tmpdir(), 'haelan-rehearsal-'))
@@ -364,33 +397,100 @@ describe('the upgrade path', () => {
         ).all()
         expect(projected, `${t}: a column present before the upgrade changed`).toEqual(tier1Before[t])
 
-        // Half two: every column the migration added is null on a row that predates it. Anything
-        // else is a backfill, and a backfill touching tier 1 is exactly what this test refuses to
-        // let through silently.
-        if (addedCols.length > 0) {
-          const addedRows = db.$client.prepare(
-            `select ${quoted(addedCols)} from ${t} order by id`,
-          ).all() as Record<string, unknown>[]
-          // `some()` over an empty array is `false`, the same value a genuinely clean table
-          // produces - so a tier-1 table this fixture leaves empty would pass the check below
-          // having measured nothing at all. `people` happens to carry the one row this file seeds,
-          // which is the only reason this has never gone quiet before now. Asserted with the table
-          // name, so an empty table fails loudly here rather than the backfill check silently
-          // proving nothing three lines down.
-          expect(addedRows.length, `${t}: no pre-existing rows to check for a backfill on ${addedCols.join(', ')}`)
-            .toBeGreaterThan(0)
-          // Every (row, column) pair that came back non-null, not a collapsed boolean: a failure
-          // here names exactly which row and which added column carried a value, rather than only
-          // that the table failed the check somewhere.
-          const backfilled = addedRows.flatMap((row, rowIndex) => addedCols
-            .filter((c) => row[c] !== null)
-            .map((c) => ({ row: rowIndex, column: c, value: row[c] })))
-          expect(
-            backfilled,
-            `${t}: migration since ${LAST_OLD_TAG} added ${addedCols.join(', ')} and backfilled `
-            + 'a pre-existing row with a non-null value',
-          ).toEqual([])
+      // Half two: every column the migration added carries its own declared default on a row that
+      // predates it, and null if it declared none.
+      //
+      // This check began as "an added column must be null on a pre-existing row", which was right
+      // while every added column was nullable. It is not right for a NOT NULL column with a
+      // default, and that is now a real shape rather than a hypothetical one: `people` gained
+      // sleep_target_minutes as `notNull().default(480)`, because a reader that had to supply its
+      // own fallback for a person who never chose would be the "two answers to one question" this
+      // codebase rejects. SQLite itself refuses to add a NOT NULL column to a populated table
+      // without a constant default, so the alternative to the default is a nullable column and a
+      // `?? 480` at every reader.
+      //
+      // So the question moved rather than went away, and it is now the stricter one: not "did the
+      // migration write anything into this row" but "did it write exactly what the column says it
+      // defaults to". A migration that backfilled 450 into a column declaring 480 still fails, and
+      // so does one that materialised a computed or per-row value. A column with no declared
+      // default is held to the old rule, null, which is what every added column before this one
+      // declared.
+      if (addedCols.length > 0) {
+        const addedRows = db.$client.prepare(
+          `select ${quoted(addedCols)} from ${t} order by id`,
+        ).all() as Record<string, unknown>[]
+        // `some()` over an empty array is `false`, the same value a genuinely clean table
+        // produces - so a tier-1 table this fixture leaves empty would pass the check below
+        // having measured nothing at all. `people` happens to carry the one row this file seeds,
+        // which is the only reason this has never gone quiet before now. Asserted with the table
+        // name, so an empty table fails loudly here rather than the backfill check silently
+        // proving nothing three lines down.
+        expect(addedRows.length, `${t}: no pre-existing rows to check for a backfill on ${addedCols.join(', ')}`)
+          .toBeGreaterThan(0)
+        // Every (row, column) pair carrying something other than what the column declares, not a
+        // collapsed boolean: a failure here names exactly which row and which added column carried
+        // the wrong value, rather than only that the table failed the check somewhere.
+        //
+        // Spelled out for the boolean case rather than folded into String(): SQLite has no boolean
+        // type, so a DEFAULT true the migration writes materialises as 1 on the row while the
+        // literal above still reads `true`. Rewriting the migration to DEFAULT 1 would only move
+        // the mismatch to the schema half below, which compares the same literal against the
+        // column's own default, so the normalisation lives here, where the reading happens.
+        const declared = addedColumnDefaults()
+        const backfilled = addedRows.flatMap((row, rowIndex) => addedCols
+          .filter((c) => {
+            if (row[c] === null) return false
+            const want = declared.get(`${t}.${c}`)
+            const read = String(row[c])
+            if (read === want) return false
+            return !((want === 'true' && read === '1') || (want === 'false' && read === '0'))
+          })
+          .map((c) => ({ row: rowIndex, column: c, value: row[c], declared: declared.get(`${t}.${c}`) ?? null })))
+        expect(
+          backfilled,
+          `${t}: migration since ${LAST_OLD_TAG} added ${addedCols.join(', ')} and wrote a value into `
+          + 'a pre-existing row that is not the default the column declares',
+        ).toEqual([])
         }
+      }
+
+      // The other half of the same claim, and the half the check above cannot make on its own: the
+      // default a migration writes and the default the column declares are two literals in two
+      // files, and nothing generated keeps them in step. drizzle-kit stamps the default into the
+      // snapshot when it writes the SQL, and the column's own `.default(...)` is a separate edit
+      // afterwards, so a column whose default moves without a new migration leaves every existing
+      // database carrying the old number while every freshly created one carries the new: the
+      // backfill check above stays green through exactly that, because it compares a row against
+      // the migration rather than the migration against the schema.
+      //
+      // Read off the schema module rather than restated as literals here, so this cannot become a
+      // third copy of the same number. Through core's own export rather than by importing drizzle
+      // for the column metadata: apps/server reaches core through the root export and does not
+      // depend on drizzle itself, and a test is not a good enough reason to change that.
+      //
+      // Over every table in TIER_1 and keyed by table.column, not people alone and not column
+      // alone: addedColumnDefaults collects from every table, so looking only at people silently
+      // skipped the next defaulted column added to sources, notes, events or overrides, which is
+      // the drift this block exists to catch, and a table-blind key would compare the wrong pair
+      // the moment two tables gained the same column name.
+      const tablesByName = {
+        people: schema.people,
+        sources: schema.sources,
+        raw_payloads: schema.rawPayloads,
+        overrides: schema.overrides,
+        notes: schema.notes,
+        events: schema.events,
+      } as const
+      const schemaDefaults = new Map<string, string>()
+      for (const tableName of TIER_1) {
+        for (const [column, literal] of declaredColumnDefaults(tablesByName[tableName])) {
+          schemaDefaults.set(`${tableName}.${column}`, literal)
+        }
+      }
+      for (const [key, literal] of addedColumnDefaults()) {
+        if (!schemaDefaults.has(key)) continue
+        expect(literal, `schema and the migration that added ${key} disagree on its default`)
+          .toBe(schemaDefaults.get(key))
       }
       // The deliberate part. 0016 drops `samples` rather than translating 1.6 million rows inside
       // a migration transaction, and the rebuild below is what refills it.

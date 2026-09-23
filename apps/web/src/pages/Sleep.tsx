@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { METRICS } from '@haelan/core/metrics'
+import { DEFAULT_SLEEP_TARGET_MINUTES, METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
@@ -16,6 +16,7 @@ import { NightExcludedSessions } from '../components/NightExcludedSessions.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
+import { BalanceBars } from '../charts/BalanceBars.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
 import { localMinutesOf, inWindow, napInWindow, withinSchedule, WIDE_WINDOW } from '../charts/schedule.js'
@@ -380,6 +381,101 @@ export function Sleep() {
 
   const asleepPoints = metricGroups.pointsOf('sleep_asleep_minutes')
   const asleepMean = mean(values(asleepPoints))
+
+  // The sleep balance card's own memos, declared after asleepPoints because that is the array they
+  // read, and both keyed on their real inputs for the reason every sibling memo on this page
+  // states: a freshly constructed array on every render disposes and reinitialises the chart
+  // underneath it (chart-lifecycle.test.tsx).
+  //
+  // The zero line the whole card hangs off. Two lines rather than one, deliberately: a person with
+  // no history has no usual to be measured against and eight hours is a real number on day one, so
+  // the target stands in until the baseline is worth standing on. `thin` is the app's own signal
+  // for that rather than a second threshold invented here: Sleep.tsx's own bandFrom withholds a
+  // band on exactly this flag for exactly this reason, and the crossover is 42 recorded nights in
+  // the trailing 60 day window (baseline.ts's `n < 14 || n / 60 < 0.7`, and a window that ends the
+  // day before the anchor, so the anchor day itself is never part of the baseline it is scored
+  // against, but a multi-day range does overlap it: on a week anchored at 2026-08-16 the window
+  // covers 2026-06-18 to 08-15 and six of the seven nights being scored contributed to it. A short
+  // night therefore pulls the line down and shrinks its own reported deficit by that share, which
+  // is accepted here to keep the anchor on historicalTo like every other baseline in the app
+  // rather than on the range start, where a Year view would measure against a year-old usual).
+  //
+  // Unless the reader switched the baseline off in Settings, in which case the stored target is
+  // the zero line always, even behind a solid baseline, for whoever wants to hold a seven or
+  // eight hour line on purpose. The switch defaults to on, so a reader who never opened Settings
+  // gets the baseline behaviour rather than a flat target they never chose.
+  //
+  // While the baseline request is in flight the target is used, which is the same answer as a thin
+  // or absent one and needs no third branch: nothing here waits on a query that is already mounted
+  // on this page, and the basis line below names which of the two is in force, because "8h short of
+  // 8h" and "1h below your usual" are different claims and a card that silently swapped between
+  // them would state a number with no meaning attached.
+  //
+  // historicalTo, not controls.to, and the same anchor asleepBaseline above is fetched with: a
+  // Month or Year view's calendar end is not the same date as the last day that has actually
+  // happened.
+  const balanceZeroLine = useMemo(() => {
+    const baseline = asleepBaseline.data?.baseline ?? null
+    const followBaseline = session.data?.sleepUseBaseline ?? true
+    if (followBaseline && baseline !== null && !baseline.thin) {
+      return { minutes: baseline.center, source: 'baseline' as const }
+    }
+    return { minutes: session.data?.sleepTargetMinutes ?? DEFAULT_SLEEP_TARGET_MINUTES, source: 'target' as const }
+  }, [asleepBaseline.data, session.data?.sleepTargetMinutes, session.data?.sleepUseBaseline])
+
+  // The signed deviation of each night in the range, dense: a night that reported nothing keeps its
+  // position and draws no bar, and an excluded night is the same shape rather than a special case,
+  // because deriveDay deletes the excluded metric's daily row and /series then omits the day
+  // entirely. Neither is read as a zero, which would draw as a night of exactly no surplus, and
+  // neither counts toward the headline or the denominator below: absent is not a number here.
+  const balance = useMemo(() => {
+    const dense = denseSeries(rangeDates, asleepPoints)
+    return {
+      labels: dense.labels,
+      values: dense.values.map((value) => (value === null ? null : value - balanceZeroLine.minutes)),
+    }
+  }, [rangeDates, sumSeries.data, balanceZeroLine.minutes])
+
+  // Sum, not mean: the card's own subject is the surplus or deficit over the period, and the basis
+  // line already states the night count it was taken over, so dividing by it here would answer a
+  // question nobody asked twice. A year's 365 nights against the mean of the trailing 60 days
+  // makes this a large number by construction, which is the deliberate choice rather than an
+  // accident: it reads as a year's running surplus against that recent usual, and the basis line
+  // names the window it was taken over so a Year tab does not make the same claim as a Week tab
+  // without saying so.
+  const balanceTotal = balance.values.reduce((total: number, value) => (value === null ? total : total + value), 0)
+
+  // The points MetricCard counts its own basis line from: the metric's own rows, narrowed to the
+  // dates this chart actually drew. Handed the raw `asleepPoints` it would count days outside the
+  // range the reader asked for, and the basis and the bars would then state two different night
+  // counts for one card. Written as the same denseSeries invariant the chart is built along rather
+  // than as an arbitrary filter, so "a point the chart has a bar for" and "a point the basis line
+  // counted" are the same predicate.
+  //
+  // Memoised, and read by the balance memo above rather than recomputed inside it, because both are
+  // `build`'s dependency chain one level down (chart-lifecycle.test.tsx).
+  const balancePoints = useMemo(() => {
+    const byDate = new Map(asleepPoints.map((point) => [point.localDate, point]))
+    return balance.labels.map((date) => byDate.get(date)).filter((point) => point !== undefined)
+  }, [sumSeries.data, balance.labels])
+
+  // No local "nothing readable in the range" gate, and its absence is deliberate rather than an
+  // omission. The rule is that the card renders nothing at all rather than an empty shell,
+  // and routing this card through MetricCard is what delivers it: every night absent means
+  // `asleepPoints` is empty, which is MetricCard's own no_data branch, which hides the Card. There
+  // is no second shape to catch, either. A card that kept a point with no value behind it would be
+  // one MetricCard could not see, and the range whose every night the reader excluded is not that
+  // shape: an applied exclusion deletes the metric's daily row at derivation (see the balance memo
+  // above), so the day leaves `points` along with its value. A guard here would be code no input
+  // could reach, which is why it is not here.
+  //
+  // The same pair the sparkline tiles above take, through the same two helpers, so an excluded
+  // night is a drawn, named gap here rather than a silent one: a table cell reading "excluded"
+  // beside a canvas showing nothing at all is the two channel divergence this project treats as a
+  // defect. The metric is this card's own, so an override scoped to sleep_asleep_minutes reaches
+  // it and an override scoped to another metric does not.
+  const { excluded: balanceExcluded, annotations: balanceAnnotations } =
+    annotationsFor(overridesByMetricMap, 'sleep_asleep_minutes')
   // historicalTo, not controls.to: this is the date asleepBaseline was actually anchored on above,
   // and the note has to name the date the band was really computed against, the same invariant
   // Dashboard.tsx's own hrBaseline comment states.
@@ -449,17 +545,62 @@ export function Sleep() {
           </Card>
         ) : null}
 
-        {/* Task 2 of M8c: a night list, mirroring Activity's own SessionList, with each row a link
-            into the night detail page tasks 4-7 build. Directly under the two charts rather than
-            at the foot of the page where it used to sit: the nights are the most specific thing
-            this page holds, and eleven aggregate tiles in front of them made a reader scroll past
-            every average to reach the individual nights those averages are made of. `resolved`,
-            not the raw `controls`: every other query on this page reads through `resolved` for the
-            reason stated where it is built above (a source named in the URL that this person's own
-            series responses have never reported has to fall back to the all sources sentinel), and
+        {/* The sleep balance card: the period's running surplus or deficit, one bar per night
+            against a zero line that is the person's own usual once that is worth standing on and
+            their stored target until it is.
+
+            Placed after the two summary cards and before the first tile row, so the period's own
+            reading comes before the per-metric tiles that break it down. Span 4, the bedtime
+            and efficiency tiles' own width: the card states one headline and one chart, and a
+            wider card would give that single number more weight than the tiles beside it.
+
+            Routed through MetricCard rather than hand rolled, which is what buys the pending, the
+            error, the not_synced and the no_data branches in one place, and is also what keeps
+            card-gating-guard.test.ts green. That routing is what makes the card render nothing at
+            all rather than an empty shell when no night in the range is readable: every night
+            absent leaves `balancePoints` empty, which is MetricCard's own no_data branch, which
+            hides the Card rather than leaving a shell that would still report itself present to
+            CardGrid. `oneDayRange` swaps the chart for ChartNote on the Day tab: a single diverging
+            bar says nothing the headline does not. */}
+        {/* No label on the MetricCard itself, the same as every tile above: the title lives in
+            the StatTile below, so Card renders no header of its own and the error and pending
+            branches keep the same chrome as their neighbours rather than a titled shell beside
+            untitled ones. No unit beside the headline either: formatSignedDuration already reads
+            "2h 15m", so a "Minutes" after it would state the unit twice. The bedtime and wake
+            time tiles above omit theirs for the same reason, and for the same reason this card
+            carries no delta: the headline is already a signed figure, and a change computed over
+            it would be noise. */}
+        <MetricCard metric="sleep_asleep_minutes" span={4} basisPlacement="body"
+          query={metricGroups.queryFor('sleep_asleep_minutes')} points={balancePoints}
+          basisKey={balanceZeroLine.source === 'baseline' ? 'sleep.balance.basisBaseline' : 'sleep.balance.basisTarget'}
+          basisWornKey={balanceZeroLine.source === 'baseline' ? 'sleep.balance.basisBaseline' : 'sleep.balance.basisTarget'}
+          basisValues={{ total: rangeDates.length, target: formatDuration(balanceZeroLine.minutes), on: controls.historicalTo }}
+          oneDayRange={controls.tab === 'day'}>
+          {(basis, oneDayRange) => (
+            <StatTile label={t('sleep.balance.label')} value={formatSignedDuration(balanceTotal, '')} basis={basis}>
+              {oneDayRange ? <ChartNote /> : (
+                <BalanceBars values={balance.values} labels={balance.labels}
+                  label={t('sleep.balance.chartLabel', { period })}
+                  unit={t('sleep.balance.columnUnit')}
+                  annotations={balanceAnnotations} excluded={balanceExcluded}
+                  onPointClick={(localDate) => setAnnotateTarget({
+                    scope: 'day_metric', localDate, metric: 'sleep_asleep_minutes',
+                  })} />
+              )}
+            </StatTile>
+          )}
+        </MetricCard>
+        {/* A night list, mirroring Activity's own SessionList, with each row a link into the night
+            detail page. Directly under the two charts and the balance card rather than at the foot
+            of the page where it used to sit: the nights are the most specific thing this page
+            holds, and eleven aggregate tiles in front of them made a reader scroll past every
+            average to reach the individual nights those averages are made of. `resolved`, not the
+            raw `controls`: every other query on this page reads through `resolved` for the reason
+            stated where it is built above (a source named in the URL that this person's own series
+            responses have never reported has to fall back to the all sources sentinel), and
             `Activity.tsx` mounts its own SessionList with `resolved` for that identical reason. A
-            night list built from the unresolved value would query a source the control row above
-            it is not showing, so the two would read as two different periods for the one page. */}
+            night list built from the unresolved value would query a source the control row above it
+            is not showing, so the two would read as two different periods for the one page. */}
         <Card span={12} label={t('sleep.nights.label')}>
           <NightList controls={resolved} />
         </Card>

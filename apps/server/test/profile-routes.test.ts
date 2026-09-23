@@ -199,6 +199,112 @@ describe('PUT /api/profile birthday and sex', () => {
   })
 })
 
+describe('PUT /api/profile sleep target', () => {
+  it('saves it, echoes it, and carries it on the session', async () => {
+    const response = await saveProfile(adminToken, { sleepTargetMinutes: 450 })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().sleepTargetMinutes).toBe(450)
+    // The read side is what the Sleep page and the Settings panel both read, and it is a separate
+    // route: an echo that agreed with itself while /api/auth/me still answered the default would
+    // leave the card measuring against 480 forever.
+    expect((await me(adminToken)).json().sleepTargetMinutes).toBe(450)
+  })
+
+  it('answers eight hours for a person who has never set one', async () => {
+    expect((await me(adminToken)).json().sleepTargetMinutes).toBe(480)
+  })
+
+  // The three answer rule this route already carries for the two clearable fields, minus the null:
+  // absent is "leave it", a number is "set it", and there is no third state because the column is
+  // NOT NULL with a default. Sending null is a client mistake, the same as a null display name.
+  it('leaves the stored value alone when the field is absent', async () => {
+    await saveProfile(adminToken, { sleepTargetMinutes: 450 })
+    await saveProfile(adminToken, { displayName: 'Sam' })
+    expect((await me(adminToken)).json().sleepTargetMinutes).toBe(450)
+  })
+
+  it('refuses null rather than reading it as a clear', async () => {
+    await saveProfile(adminToken, { sleepTargetMinutes: 450 })
+    const response = await saveProfile(adminToken, { sleepTargetMinutes: null })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+    expect((await me(adminToken)).json().sleepTargetMinutes).toBe(450)
+  })
+
+  // The bounds are the store's own, and the route refuses out of range values through the
+  // ConfigError it throws rather than against a second copy of the range. 8 is eight hours typed
+  // into a field that wanted minutes, which is the realistic way this is reached.
+  it('refuses a target outside the range the store accepts', async () => {
+    for (const value of [8, 59, 1081]) {
+      const response = await saveProfile(adminToken, { sleepTargetMinutes: value })
+      expect(response.statusCode, String(value)).toBe(400)
+      expect(response.json().error.kind, String(value)).toBe('config')
+    }
+    expect((await me(adminToken)).json().sleepTargetMinutes).toBe(480)
+  })
+
+  it('refuses a target that is not a whole number of minutes', async () => {
+    for (const value of ['450', 450.5, true]) {
+      const response = await saveProfile(adminToken, { sleepTargetMinutes: value })
+      expect(response.statusCode, String(value)).toBe(400)
+      expect(response.json().error.kind, String(value)).toBe('config')
+    }
+  })
+
+  // Nothing derived reads this column, so unlike the timezone on the same route it clears no stamp
+  // and costs nobody a rebuild. The same assertion the birthday and sex pair above carries.
+  it('reports no pending rebuild and leaves the derivation stamp standing', async () => {
+    const response = await saveProfile(adminToken, { sleepTargetMinutes: 450 })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().rebuildPending).toBe(false)
+    expect(person('p1')!.builtDerivationVersion).toEqual(expect.any(Number))
+  })
+})
+
+describe('PUT /api/profile baseline switch', () => {
+  it('saves it, echoes it, and carries it on the session', async () => {
+    const response = await saveProfile(adminToken, { sleepUseBaseline: false })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().sleepUseBaseline).toBe(false)
+    // The read side is what the Sleep page and the Settings panel both read: an echo that agreed
+    // with itself while /api/auth/me still answered true would leave the card following a
+    // baseline the reader switched off.
+    expect((await me(adminToken)).json().sleepUseBaseline).toBe(false)
+  })
+
+  it('answers on for a person who has never touched it', async () => {
+    expect((await me(adminToken)).json().sleepUseBaseline).toBe(true)
+  })
+
+  // Absent is "leave it", false is "set it": the column is NOT NULL with a default, so there is
+  // no third state and null is a client mistake, the same rule the target carries.
+  it('leaves the stored value alone when the field is absent', async () => {
+    await saveProfile(adminToken, { sleepUseBaseline: false })
+    await saveProfile(adminToken, { displayName: 'Sam' })
+    expect((await me(adminToken)).json().sleepUseBaseline).toBe(false)
+  })
+
+  // A JSON body carries no booleans apart from real ones: a string 'false' is a client mistake,
+  // and saving it would hand the card a preference it reads as a boolean but holds as text.
+  it('refuses a switch that is not a boolean', async () => {
+    await saveProfile(adminToken, { sleepUseBaseline: false })
+    for (const value of ['false', 1, 0, null]) {
+      const response = await saveProfile(adminToken, { sleepUseBaseline: value })
+      expect(response.statusCode, String(value)).toBe(400)
+      expect(response.json().error.kind, String(value)).toBe('config')
+    }
+    expect((await me(adminToken)).json().sleepUseBaseline).toBe(false)
+  })
+
+  // The same assertion the target carries: nothing derived reads this column either.
+  it('reports no pending rebuild and leaves the derivation stamp standing', async () => {
+    const response = await saveProfile(adminToken, { sleepUseBaseline: false })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().rebuildPending).toBe(false)
+    expect(person('p1')!.builtDerivationVersion).toEqual(expect.any(Number))
+  })
+})
+
 describe('PUT /api/profile/password', () => {
   const NEW_PASSWORD = 'an even better password'
 

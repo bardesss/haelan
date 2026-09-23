@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { DEFAULT_SLEEP_TARGET_MINUTES } from '@haelan/core'
 import { SESSION_COOKIE, setSessionCookie, clearSessionCookie } from '../auth/cookie.ts'
 import { bearerToken } from '../auth/bearer.ts'
 import { errorBody } from '../api/envelope.ts'
@@ -105,6 +106,17 @@ export function registerAuth(app: FastifyInstance): void {
       // computed at read time from these, so neither carries the timezone's rebuild machinery.
       birthDate: person?.birthDate ?? null,
       sex: person?.sex ?? null,
+      // The sleep balance card's zero line when the person has no baseline of their own to be
+      // compared against, and a stored preference rather than an instance setting, so it rides
+      // here beside the other per-person fields. The card is on the Sleep page and the control is
+      // on Settings, two screens that otherwise share only this payload, which is why it is here
+      // rather than behind its own route. Not nullable: the column is not null with a default.
+      sleepTargetMinutes: person?.sleepTargetMinutes ?? DEFAULT_SLEEP_TARGET_MINUTES,
+      // Beside the target, read by the same two screens: whether the card may measure against
+      // the person's own usual once that is worth standing on. True for rows predating the
+      // column the same way 480 is the target for rows predating its own, so a database that
+      // has not run the migration yet still answers one preference rather than none.
+      sleepUseBaseline: person?.sleepUseBaseline ?? true,
       // Whether this person has a *usable* Google connection - a credentials row whose token was
       // never revoked, matching listConnectedPeople's own predicate. A revoked row is not a
       // connection in any sense the UI cares about: it cannot sync, so it must show the same

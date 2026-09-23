@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { MAPPING_VERSION, DERIVATION_VERSION, peopleNeedingRebuild } from '../src/index.ts'
+import { MAPPING_VERSION, DERIVATION_VERSION, peopleNeedingRebuild, DEFAULT_SLEEP_TARGET_MINUTES } from '../src/index.ts'
 import { PeopleStore } from '../src/store/people.ts'
 import type { PersonRow } from '../src/store/people.ts'
 import { createTestDatabase } from '../src/testing/fixtures.ts'
@@ -11,7 +11,12 @@ const person = (over: Partial<PersonRow> = {}): PersonRow => ({
   timezone: 'Europe/Amsterdam',
   birthDate: null,
   sex: null,
+  // Present because PersonRow requires it, and read by nothing on this page: the point of this
+  // fixture is the two version stamps. See people-profile-fields.test.ts for the column's own
+  // behaviour.
   companionPath: false,
+  sleepTargetMinutes: DEFAULT_SLEEP_TARGET_MINUTES,
+  sleepUseBaseline: true,
   builtMappingVersion: MAPPING_VERSION,
   builtDerivationVersion: DERIVATION_VERSION,
   ...over,

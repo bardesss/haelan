@@ -29,7 +29,10 @@ afterEach(() => {
 })
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  sleepTargetMinutes: 480,
+  sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
 // The exact name DataTypePicker renders for this catalogue id (dataTypes.steps in en.json),

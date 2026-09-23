@@ -31,7 +31,10 @@ const LAST_METRICS = RECOVERY_METRIC_SOURCES.filter((s) => s.agg === 'last').map
 const SUM_METRICS = RECOVERY_METRIC_SOURCES.filter((s) => s.agg === 'sum').map((s) => s.metric)
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  sleepTargetMinutes: 480,
+  sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
 function shift(date: string, by: number): string {

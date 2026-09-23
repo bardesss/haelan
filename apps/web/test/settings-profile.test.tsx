@@ -32,7 +32,10 @@ afterEach(() => {
 
 const SESSION: Session = {
   personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: true,
-  timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false,
+  timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  sleepTargetMinutes: 480,
+  sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false,
   baseUrl: 'http://localhost:4235',
 }
 
@@ -86,10 +89,22 @@ function click(el: Element): void {
   act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
 }
 
+/**
+ * Every input on the first form, in the order the panel renders them: name, username, time zone,
+ * birthday, sleep target. Named rather than indexed at each call site, because the sleep target
+ * was added in the middle of this list and five tests carried a bare `fields()[4]` that silently
+ * changed meaning when it landed.
+ */
+const FIELDS = {
+  displayName: 0, username: 1, timezone: 2, birthDate: 3, sleepTarget: 4, sleepUseBaseline: 5,
+} as const
+
 const fields = (): HTMLInputElement[] => [...container!.querySelectorAll('input')] as HTMLInputElement[]
 const sexSelect = (): HTMLSelectElement => container!.querySelector('select') as HTMLSelectElement
 const saveButton = (): HTMLButtonElement => container!.querySelector('form button[type="submit"]') as HTMLButtonElement
 const passwordForm = (): Element => container!.querySelectorAll('form')[1]!
+const passwordFields = (): HTMLInputElement[] =>
+  [...passwordForm().querySelectorAll('input')] as HTMLInputElement[]
 
 /**
  * Stands in for PUT /api/profile and PUT /api/profile/password. `answer` decides what each one
@@ -115,9 +130,12 @@ const json = (status: number, payload: unknown) =>
   new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
 
 describe('the profile section', () => {
-  it('shows the session\'s own name, username, time zone, birthday and sex', () => {
+  it('shows the session\'s own name, username, time zone, birthday, sex, sleep target and baseline switch', () => {
     mountSection()
-    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', '', ''])
+    // The switch is a checkbox, so its "value" is the constant 'on' rather than anything the
+    // session holds; the stored position is asserted on `checked` in the switch's own cases
+    // below, not here.
+    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', '480', 'on', '', ''])
     expect(sexSelect().value).toBe('')
   })
 
@@ -128,7 +146,7 @@ describe('the profile section', () => {
     mountSection()
     expect(container!.innerHTML).not.toMatch(/\bsettings\.[a-zA-Z][a-zA-Z.]*\b/)
     expect([...container!.querySelectorAll('.field .label')].map((n) => n.textContent))
-      .toEqual(['Name', 'Username', 'Time zone', 'Birthday', 'Sex', 'Current password', 'New password'])
+      .toEqual(['Name', 'Username', 'Time zone', 'Birthday', 'Sex', 'Sleep target', 'Follow my baseline', 'Current password', 'New password'])
   })
 
   // The sentence that justifies asking for either field in the first place - not decoration, the
@@ -142,7 +160,7 @@ describe('the profile section', () => {
   // warning is owed regardless of what either control holds.
   it('carries no rebuild warning for either the birthday or the sex control', () => {
     mountSection()
-    type(fields()[3]!, '1985-03-04')
+    type(fields()[FIELDS.birthDate]!, '1985-03-04')
     act(() => {
       sexSelect().value = 'male'
       sexSelect().dispatchEvent(new Event('change', { bubbles: true }))
@@ -157,7 +175,7 @@ describe('the profile section', () => {
     }))
     const client = mountSection()
 
-    type(fields()[3]!, '1985-03-04')
+    type(fields()[FIELDS.birthDate]!, '1985-03-04')
     act(() => {
       sexSelect().value = 'male'
       sexSelect().dispatchEvent(new Event('change', { bubbles: true }))
@@ -180,10 +198,10 @@ describe('the profile section', () => {
     }))
     const client = mountSection({ birthDate: '1985-03-04', sex: 'male' })
 
-    expect(fields()[3]!.value).toBe('1985-03-04')
+    expect(fields()[FIELDS.birthDate]!.value).toBe('1985-03-04')
     expect(sexSelect().value).toBe('male')
 
-    type(fields()[3]!, '')
+    type(fields()[FIELDS.birthDate]!, '')
     act(() => {
       sexSelect().value = ''
       sexSelect().dispatchEvent(new Event('change', { bubbles: true }))
@@ -202,7 +220,7 @@ describe('the profile section', () => {
   it('offers nothing to save until something is actually different', () => {
     mountSection()
     expect(saveButton().disabled).toBe(true)
-    type(fields()[0]!, 'Bart')
+    type(fields()[FIELDS.displayName]!, 'Bart')
     expect(saveButton().disabled).toBe(false)
   })
 
@@ -211,15 +229,15 @@ describe('the profile section', () => {
     expect(container!.querySelector('.profile-warning')).toBeNull()
 
     // A name change is free and must not drag the warning on screen with it.
-    type(fields()[0]!, 'Bart')
+    type(fields()[FIELDS.displayName]!, 'Bart')
     expect(container!.querySelector('.profile-warning')).toBeNull()
 
-    type(fields()[2]!, 'Pacific/Auckland')
+    type(fields()[FIELDS.timezone]!, 'Pacific/Auckland')
     expect(container!.querySelector('.profile-warning')?.textContent)
       .toContain('re-derived from the archive')
 
     // Typed back to what it already was: no rebuild is owed, so no warning.
-    type(fields()[2]!, 'Europe/Amsterdam')
+    type(fields()[FIELDS.timezone]!, 'Europe/Amsterdam')
     expect(container!.querySelector('.profile-warning')).toBeNull()
   })
 
@@ -229,7 +247,7 @@ describe('the profile section', () => {
     }))
     const client = mountSection()
 
-    type(fields()[2]!, 'Pacific/Auckland')
+    type(fields()[FIELDS.timezone]!, 'Pacific/Auckland')
     click(saveButton())
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -250,7 +268,7 @@ describe('the profile section', () => {
     }))
     const client = mountSection()
 
-    type(fields()[0]!, 'Bart')
+    type(fields()[FIELDS.displayName]!, 'Bart')
     click(saveButton())
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -266,7 +284,7 @@ describe('the profile section', () => {
     }))
     const client = mountSection()
 
-    type(fields()[1]!, 'bob')
+    type(fields()[FIELDS.username]!, 'bob')
     click(saveButton())
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -282,8 +300,8 @@ describe('changing your own password', () => {
     const api = mockProfileApi(() => new Response(null, { status: 204 }))
     const client = mountSection()
 
-    type(fields()[4]!, 'a good long password')
-    type(fields()[5]!, 'an even better password')
+    type(passwordFields()[0]!, 'a good long password')
+    type(passwordFields()[1]!, 'an even better password')
     click(passwordForm().querySelector('button[type="submit"]')!)
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -295,7 +313,7 @@ describe('changing your own password', () => {
     })
     expect(container!.querySelector('.profile-result')?.textContent).toContain('still signed in')
     // Cleared on success, so neither password is left sitting in a field on a shared screen.
-    expect([fields()[4]!.value, fields()[5]!.value]).toEqual(['', ''])
+    expect([passwordFields()[0]!.value, passwordFields()[1]!.value]).toEqual(['', ''])
   })
 
   it('names the wrong current password rather than echoing a bare refusal', async () => {
@@ -304,20 +322,20 @@ describe('changing your own password', () => {
     }))
     const client = mountSection()
 
-    type(fields()[4]!, 'not my password')
-    type(fields()[5]!, 'an even better password')
+    type(passwordFields()[0]!, 'not my password')
+    type(passwordFields()[1]!, 'an even better password')
     click(passwordForm().querySelector('button[type="submit"]')!)
     await flush(client, () => container!.innerHTML)
     api.restore()
 
     expect(container!.querySelector('.field-error')?.textContent).toBe('That is not your current password.')
     // Still in the field, because the next thing the reader does is correct it.
-    expect(fields()[4]!.value).toBe('not my password')
+    expect(passwordFields()[0]!.value).toBe('not my password')
   })
 
   it('hides both password fields from the screen', () => {
     mountSection()
-    expect([fields()[4]!.type, fields()[5]!.type]).toEqual(['password', 'password'])
+    expect([passwordFields()[0]!.type, passwordFields()[1]!.type]).toEqual(['password', 'password'])
   })
 
   /**
@@ -353,6 +371,165 @@ describe('where the card is mounted', () => {
     expect(container!.textContent).toContain('Your account')
     expect(container!.textContent).not.toContain('Members')
     expect(container!.textContent).not.toContain('Instance address')
+  })
+})
+
+/**
+
+ * The sleep target, the first stored preference in this app beyond the profile fields. The unit is
+ * minutes because that is what the column stores and what every other sleep figure in the app
+ * reads; the hint reads the value back as a duration, which is where the reader's own thinking is.
+ */
+describe('the sleep target control', () => {
+  it('shows the stored value in minutes and reads it back as a duration', () => {
+    mountSection()
+    expect(fields()[FIELDS.sleepTarget]!.value).toBe('480')
+    expect(container!.textContent).toContain('Reads as 8h 00m.')
+  })
+
+  it('reads a value that is not eight hours back as the duration it actually is', () => {
+    mountSection({ sleepTargetMinutes: 450 })
+    expect(fields()[FIELDS.sleepTarget]!.value).toBe('450')
+    expect(container!.textContent).toContain('Reads as 7h 30m.')
+    expect(container!.textContent).not.toContain('Reads as 8h 00m.')
+  })
+
+  it('carries the store\'s own bounds, so the form cannot offer a value the store refuses', () => {
+    mountSection()
+    const input = fields()[FIELDS.sleepTarget]!
+    expect(input.min).toBe('60')
+    expect(input.max).toBe('1080')
+    // Step 1, not 15: with min 60 a step of 15 refuses anything but 60 + 15n (so 470 gets a
+    // native bubble) while the store would have accepted it.
+    expect(input.step).toBe('1')
+  })
+
+  it('saves an edited target with the rest of the profile', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: null, sex: null, sleepTargetMinutes: 450, sleepUseBaseline: true, rebuildPending: false,
+    }))
+    const client = mountSection()
+
+    type(fields()[FIELDS.sleepTarget]!, '450')
+    expect(saveButton().disabled).toBe(false)
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests[0]).toMatchObject({
+      method: 'PUT',
+      url: '/api/profile',
+      body: { sleepTargetMinutes: 450 },
+    })
+  })
+
+  // The panel's own `changed` rule, which the save button is gated on: a field typed back to what
+  // it already was costs nothing and must not light the button up.
+  it('leaves the save button disabled when the target is unchanged', () => {
+    mountSection()
+    expect(saveButton().disabled).toBe(true)
+    type(fields()[FIELDS.sleepTarget]!, '480')
+    expect(saveButton().disabled).toBe(true)
+    type(fields()[FIELDS.sleepTarget]!, '465')
+    expect(saveButton().disabled).toBe(false)
+    type(fields()[FIELDS.sleepTarget]!, '480')
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  // A cleared number input is not a target of zero minutes. Number('') is 0, which the store
+  // refuses, so a panel that sent it would answer a field the reader is midway through retyping
+  // with a validation error.
+  it('sends nothing for a target the reader has cleared', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Bart', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: true, rebuildPending: false,
+    }))
+    const client = mountSection()
+
+    type(fields()[FIELDS.sleepTarget]!, '450')
+    type(fields()[FIELDS.sleepTarget]!, '')
+    // Back to a field with nothing in it, which is not a change from what is stored.
+    expect(saveButton().disabled).toBe(true)
+    expect(container!.textContent).toContain('Enter a whole number of minutes.')
+
+    type(fields()[FIELDS.displayName]!, 'Bart')
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests[0]!.body).not.toHaveProperty('sleepTargetMinutes')
+  })
+
+  // Why there is no "the server refuses an out of range target" case here, which is worth writing
+  // down rather than leaving as a gap: there is no value the form will submit that the store
+  // refuses. The input carries the store's own bounds (asserted above), so a value outside them
+  // fails the browser's own constraint validation and `click(saveButton())` submits nothing at all,
+  // which is how the first draft of this case failed. The route's refusal is still real and still
+  // tested, at the layer that can reach it (apps/server/test/profile-routes.test.ts, which puts
+  // eight minutes and 1081 straight on the wire), and this control's job is to make that reachable
+  // by nothing but a crafted request.
+  it('cannot be made to submit a value the store would refuse', () => {
+    mountSection()
+    const input = fields()[FIELDS.sleepTarget]!
+    type(input, '1095')
+    // Above the input's own max, so the form is not submittable in the first place: the browser's
+    // answer rather than the instance's.
+    expect(input.checkValidity()).toBe(false)
+  })
+
+  // Nothing derived reads this column, so unlike the time zone above it no rebuild is owed and no
+  // warning is shown.
+  it('owes no rebuild warning, unlike the time zone', () => {
+    mountSection()
+    type(fields()[FIELDS.sleepTarget]!, '450')
+    expect(container!.querySelector('.profile-warning')).toBeNull()
+  })
+})
+
+/**
+ * The switch beside the target: on means the card measures against the person's own usual once
+ * that is worth standing on, off means the stored target always. A checkbox rather than a second
+ * number input, and always holding a boolean, so there is no cleared-mid-edit state to omit the
+ * way the target's draft does.
+ */
+describe('the baseline switch', () => {
+  it('shows the stored switch position', () => {
+    mountSection()
+    expect(fields()[FIELDS.sleepUseBaseline]!.checked).toBe(true)
+  })
+
+  it('shows an opted-out switch as off', () => {
+    mountSection({ sleepUseBaseline: false })
+    expect(fields()[FIELDS.sleepUseBaseline]!.checked).toBe(false)
+  })
+
+  it('saves a flipped switch with the rest of the profile', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: false, rebuildPending: false,
+    }))
+    const client = mountSection()
+
+    click(fields()[FIELDS.sleepUseBaseline]!)
+    expect(saveButton().disabled).toBe(false)
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests[0]).toMatchObject({
+      method: 'PUT',
+      url: '/api/profile',
+      body: { sleepUseBaseline: false },
+    })
+  })
+
+  it('leaves the save button disabled when the switch is flipped back', () => {
+    mountSection()
+    click(fields()[FIELDS.sleepUseBaseline]!)
+    expect(saveButton().disabled).toBe(false)
+    click(fields()[FIELDS.sleepUseBaseline]!)
+    expect(saveButton().disabled).toBe(true)
   })
 })
 
@@ -409,5 +586,6 @@ describe('pairing a phone', () => {
   it('is there for an admin already syncing through Google', () => {
     mountSection({ connected: true, isAdmin: true })
     expect(container!.querySelector('.profile-phone')).not.toBe(null)
+
   })
 })

@@ -9,6 +9,34 @@
 export const DAILY_AGGS = ['min', 'mean', 'max', 'last', 'sum', 'count', 'p50'] as const
 export type DailyAgg = (typeof DAILY_AGGS)[number]
 
+/**
+ * The nightly figure the sleep balance card measures a night against, until the person has enough
+ * history for their own usual to carry the comparison. Eight hours, in minutes.
+ *
+ * Here rather than beside the column that stores it, and the placement is the point: this module is
+ * a browser safe subpath (`@haelan/core/metrics`, which the web app already imports for METRICS),
+ * while the schema module it would otherwise sit beside is reachable only through `@haelan/core`'s
+ * root export, which pulls better-sqlite3 and drizzle into a browser bundle. The card's own fallback
+ * and the settings control's bounds are both read in the browser, and the schema's column default
+ * and the store's own validation are read on the server, so this is the one module all four can
+ * reach.
+ *
+ * The column default in db/schema/people.ts is written as the same literal with a comment naming
+ * this as the source of truth rather than importing it: that would point the data layer's dependency
+ * at the metric catalogue, the other way round from every other import between the two.
+ */
+export const DEFAULT_SLEEP_TARGET_MINUTES = 480
+
+/**
+ * What the sleep target is allowed to be: an hour to eighteen hours, in minutes.
+ *
+ * Eighteen hours is above every recorded night on earth and an hour below every sleep need that has
+ * been measured, so a value outside this range is a typo or a unit mistake (an 8 typed where minutes
+ * were asked for). Read by PeopleStore, which is where the refusal happens, and by the Settings
+ * number input, so the form cannot offer a value the store would refuse.
+ */
+export const SLEEP_TARGET_MINUTES_RANGE = { min: 60, max: 1080 } as const
+
 export interface MetricSpec {
   /** Which aggregates are meaningful. Summing heart rate is not a number anyone means. */
   aggs: readonly DailyAgg[]

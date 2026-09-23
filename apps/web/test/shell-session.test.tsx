@@ -12,7 +12,10 @@ import { signOutAndResetSession } from '../src/auth/signOutRequest.js'
 afterEach(() => { vi.unstubAllGlobals() })
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  sleepTargetMinutes: 480,
+  sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
 // Seeds the session query into the exact cache shape TanStack Query leaves behind after a

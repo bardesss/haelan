@@ -614,6 +614,11 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .input:hover { border-color: var(--text-faint); }
 .input::placeholder { color: var(--text-faint); }
 .field-hint { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); }
+/* A checkbox with its caption beside it rather than above it: .field stacks, which is what a
+   text control wants and not what a switch wants. Profile.tsx's own baseline switch is the only
+   caller, and the class lives here rather than beside it because css-classes fails on a class a
+   component renders and the stylesheet does not define. */
+.check-row { display: flex; align-items: center; gap: var(--space-2); }
 /* maintenance-backup-error and maintenance-reclaim-error carry the identical rule, added to the
    selector list rather than duplicated, the same reason annotate-note-withheld sits beside
    annotate-note below: Maintenance.tsx tracks its two mutations' failures separately, so each

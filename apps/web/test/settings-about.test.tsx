@@ -28,7 +28,10 @@ import type { RouteBasemapStatus } from '../src/data/useRouteBasemap.js'
  * for keeping them somewhere findable, which Settings is. It never argued for the rail.
  */
 const MEMBER: Session = {
-  personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+  personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  sleepTargetMinutes: 480,
+  sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
 /** The instance that has never been allowed to ask, which is every instance until an admin says

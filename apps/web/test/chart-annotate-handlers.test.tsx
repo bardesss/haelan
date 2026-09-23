@@ -10,6 +10,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ActivityHeatmap } from '../src/charts/ActivityHeatmap.js'
+import { BalanceBars } from '../src/charts/BalanceBars.js'
 import { DailyBars } from '../src/charts/DailyBars.js'
 import { HeartRateRange } from '../src/charts/HeartRateRange.js'
 import { IntradayHeartRate } from '../src/charts/IntradayHeartRate.js'
@@ -81,7 +82,10 @@ const POINTS = [0, 60_000].map((utcMs) => ({ sourceId: 'watch', utcMs, min: 55, 
 
 const SESSION: Session = {
   personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC',
-  birthDate: null, sex: null, connected: true, credentialsUnreadable: false,
+  birthDate: null, sex: null,
+  sleepTargetMinutes: 480,
+  sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false,
   baseUrl: 'http://localhost:4235',
 }
 
@@ -99,6 +103,11 @@ const CHARTS: { name: string, render: (onPointClick?: (...args: never[]) => void
   {
     name: 'ActivityHeatmap',
     render: (onPointClick) => <ActivityHeatmap days={DAYS} max={10_000} label="Steps"
+      onPointClick={onPointClick as ((date: string) => void) | undefined} />,
+  },
+  {
+    name: 'BalanceBars',
+    render: (onPointClick) => <BalanceBars values={VALUES} labels={LABELS} label="Balance" unit="Minutes over or under"
       onPointClick={onPointClick as ((date: string) => void) | undefined} />,
   },
   {

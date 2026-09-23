@@ -177,6 +177,25 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
     expect(minSeparation(chart.series, chart['series-alt']), 'series vs series-alt').toBeGreaterThanOrEqual(MIN_STATE)
   })
 
+  // The sleep balance card's two bar colours. The sign is also carried by which side of the zero
+  // line a bar sits on, so colour here is redundant rather than load bearing, and the floor is
+  // still the state floor rather than anything lower: a reader who cannot separate the pair can
+  // still read the card from the bar direction, and a reader who can should not have to.
+  it('keeps the over and under balance bars separable under every simulation', () => {
+    expect(minSeparation(chart['balance-over'], chart['balance-under']), 'balance-over vs balance-under')
+      .toBeGreaterThanOrEqual(MIN_STATE)
+  })
+
+  // Both are marks, not text: each is the fill of a bar sitting on the card, so what has to hold is
+  // WCAG 1.4.11 against the surfaces it is drawn on. The grid is included because a bar shorter
+  // than one gridline step is mostly surrounded by gridlines rather than by bare card.
+  it.each(['balance-over', 'balance-under'] as const)(
+    'meets non-text contrast for %s against the card and the grid', (token) => {
+      expect(contrast(chart[token], s['surface-card']), `${token} vs surface-card`).toBeGreaterThanOrEqual(3)
+      expect(contrast(chart[token], chart.grid), `${token} vs grid`).toBeGreaterThanOrEqual(3)
+    },
+  )
+
   // A no-data marker that shares its colour with the gridlines it sits among
   // fails "absence is visible" even though the mark is technically drawn.
   // Non-text contrast (WCAG 1.4.11) is the right tool for "visible against
@@ -262,7 +281,7 @@ describe('assertion coverage', () => {
   const ASSERTED_CHART: readonly ChartToken[] = [
     ...STAGE_KEYS, ...SCALE_KEYS,
     'series', 'series-alt', 'grid', 'axis', 'band-baseline',
-    'state-excluded', 'state-no-data', 'tooltip-bg',
+    'state-excluded', 'state-no-data', 'tooltip-bg', 'balance-over', 'balance-under',
   ]
 
   it('holds every semantic token to at least one assertion', () => {
