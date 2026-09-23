@@ -42,13 +42,17 @@ export function glanceBody(): Glance {
         strip: strip([420, 380, 450, 400, 415, 390, 393]),
       }),
       efficiency: glanceFigure({ metric: 'sleep_efficiency', value: 91, unit: 'percent', asOfMs: NIGHT_END }),
-      bedtime: glanceFigure({ metric: 'sleep_bedtime_minutes', value: 1390, unit: 'minutes', asOfMs: NIGHT_END }),
+      // Minutes from the wake date's midnight, negative before it: 23:10 the evening before is -50,
+      // the convention derive/sleep.ts writes sleep_bedtime_minutes in.
+      bedtime: glanceFigure({ metric: 'sleep_bedtime_minutes', value: -50, unit: 'minutes', asOfMs: NIGHT_END }),
       waketime: glanceFigure({ metric: 'sleep_waketime_minutes', value: 412, unit: 'minutes', asOfMs: NIGHT_END }),
     },
     recovery: {
       index: glanceFigure({
         metric: 'recovery_index', value: 42, unit: 'score',
-        baseline: { center: 45, low: 38, high: 52, thin: false },
+        // Null, as core always sends it: the index is already a comparison with the person's usual,
+        // and the band below is what the card says about it.
+        baseline: null,
         strip: strip([50, 44, 48, 46, 41, 43, 42]),
       }),
       band: 'usual',

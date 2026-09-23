@@ -1390,7 +1390,7 @@
       "index": "Herstelindex",
       "rhr": "Rusthartslag",
       "hrv": "HRV",
-      "respiratory": "Ademhaling {{value}}, boven je gebruikelijke",
+      "respiratory": "Ademhaling {{value}}, boven je gebruikelijke waarde",
       "unscored": "Nog niet genoeg metingen om te scoren.",
       "strip": "Herstelindex, laatste 7 dagen",
       "caption": "laatste 7 dagen",
@@ -1410,6 +1410,10 @@
     "subtitle": {
       "today": "vandaag",
       "yesterday": "gisteren"
+    },
+    "empty": {
+      "title": "Nog niets te zien",
+      "detail": "Zodra een synchronisatie een nacht of een dag binnenhaalt, verschijnt die hier."
     }
   }
 }

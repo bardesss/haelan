@@ -18,8 +18,9 @@ describe('the message catalogues', () => {
   })
 
   // A pin comparing dashboard.sleepStages.basis with sleep.sleepStages.basis stood here. It went in
-  // M9b with the key itself: the glance draws its hypnogram with Sleep's own chart label and no basis
-  // line, so there is no second wording left to drift from Sleep's.
+  // M9b with the key itself: the glance draws its hypnogram with Sleep's own chart label and, as its
+  // screen-reader-only description, Sleep's own sleep.sleepStages.basis, so there is no second
+  // wording left to drift from Sleep's.
 
   // One Dutch word per concept, not three. The moment of waking appeared as "wektijd" on a tile
   // label, "waaktijd" in the schedule basis beside it and "Ontwaakt" in that chart's own column

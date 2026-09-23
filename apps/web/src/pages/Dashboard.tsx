@@ -3,6 +3,7 @@ import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
+import { EmptyState } from '../components/EmptyState.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { IntradayHeartRate } from '../charts/IntradayHeartRate.js'
 import { localMinutesOf, inWindow, DEFAULT_WINDOW } from '../charts/schedule.js'
@@ -80,6 +81,17 @@ export function Dashboard() {
 
   const { recovery, day } = glance
 
+  // First run, or an archive with nothing in the last day and a half: three cards each saying it
+  // has no reading would be the page repeating one fact three times, so it says it once.
+  // emptyState.not_synced is not the words for this: that key means the person turned a data type
+  // off, which is a different fact.
+  const figures = [
+    recovery.index, recovery.restingHeartRate, recovery.hrv, recovery.respiratoryRate, day.steps, day.activeMinutes,
+  ]
+  if (sleep === null && day.heartRate.points.length === 0 && figures.every((f) => f === null || f.value === null)) {
+    return <><Title /><EmptyState title={t('glance.empty.title')} detail={t('glance.empty.detail')} /></>
+  }
+
   // The latest instant anything on the page was read at: the heart rate trace samples most often,
   // and steps stand in on a day the watch sent steps but no heart rate.
   const asOfMs = day.heartRate.asOfMs ?? day.steps.asOfMs
@@ -141,7 +153,12 @@ export function Dashboard() {
         <GlanceCard
           title={t('glance.recovery.title')}
           subtitle={recoverySubtitle}
-          headline={{ label: t('glance.recovery.index'), figure: recovery.index }}
+          // The index carries no baseline of its own (it is already a comparison with the person's
+          // usual), so its band is the line under it, in the words Recovery's index card uses.
+          headline={{
+            label: t('glance.recovery.index'), figure: recovery.index,
+            usual: recovery.band === null ? undefined : t(`recoveryIndex.band.${recovery.band}`),
+          }}
           emptyLine={t('glance.recovery.unscored')}
           secondary={[
             { label: t('glance.recovery.rhr'), unit: t('charts.units.bpm'), figure: recovery.restingHeartRate },

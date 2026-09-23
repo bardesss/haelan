@@ -657,7 +657,9 @@ describe('the wear clause', () => {
 
   // The wear clause was structurally always zero until the coverage fix, so it only ever rendered
   // its plural and nothing noticed it had no singular. The stubbed week reaches both in one
-  // render: heart rate has exactly one day at the derivation's coverage floor, and steps has none.
+  // render on Activity: steps has exactly one day at the derivation's coverage floor (the steps
+  // heatmap's singular), and Activity's other wear-signal card has no metric at the floor (its
+  // plural "0 days").
   it('counts one unworn day in the singular and none in the plural', () => {
     expect(html).toContain('1 day not worn')
     expect(html).not.toContain('1 days not worn')

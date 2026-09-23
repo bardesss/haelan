@@ -17,7 +17,18 @@ import { formatFigure, usualLine, asOfLine } from './glanceText.js'
  * ("milliseconds", "count", "score") that no card prints as is, and which words a column puts beside
  * its numbers is the page's call, the same way it hands in every other string this card shows.
  */
-export interface GlanceCardFigure { label: string, unit?: string, figure: GlanceFigure }
+export interface GlanceCardFigure {
+  label: string
+  unit?: string
+  figure: GlanceFigure
+  /**
+   * What stands in for the usual line when the figure has no baseline of its own to compare with:
+   * the recovery index is already a comparison with the person's usual (core sends it with
+   * `baseline: null`), so its band wording ("Around your usual") is the line that goes under it.
+   * Ignored whenever `usualLine` has something to say.
+   */
+  usual?: string
+}
 
 // A stable empty list for a card with no chart, so the union below is not rebuilt against a fresh
 // `[]` default on every render - the same device Sparkline.tsx's own EMPTY constant uses.
@@ -96,7 +107,7 @@ function Headline({ item, today, timezone, night, t, language }: {
       </div>
     )
   }
-  const usual = usualLine(item.figure, t, language)
+  const usual = usualLine(item.figure, t, language) ?? item.usual ?? null
   const asOf = asOfLine(item.figure, { today, timezone, night }, t, language)
   return (
     <div>
@@ -182,12 +193,21 @@ export function GlanceCard({
         {secondary.length > 0 && (
           <div className="glance-mini">
             {secondary.map((item) => {
-              const usual = usualLine(item.figure, t, language)
+              const usual = usualLine(item.figure, t, language) ?? item.usual ?? null
+              // A pair names its own day only when it differs from the headline's, or when the
+              // headline names none: core falls back to yesterday separately for each recovery
+              // figure, so a card whose index is yesterday's can carry today's resting heart rate,
+              // and the column's one subtitle would otherwise speak for a figure it does not cover.
+              const headlineDate = headline?.figure.value === null ? null : headline?.figure.asOfDate ?? null
+              const asOf = headlineDate === null || item.figure.asOfDate !== headlineDate
+                ? asOfLine(item.figure, { today, timezone, night }, t, language)
+                : null
               return (
                 <div key={item.label}>
                   <span className="label">{item.label}</span>
                   <b>{valueText(item, language) ?? t('glance.noReading')}</b>
                   {usual !== null && <em>{usual}</em>}
+                  {asOf !== null && <span className="glance-asof">{asOf}</span>}
                 </div>
               )
             })}

@@ -1410,6 +1410,10 @@
     "subtitle": {
       "today": "today",
       "yesterday": "yesterday"
+    },
+    "empty": {
+      "title": "Nothing here yet",
+      "detail": "Once a sync brings in a night or a day, it shows up here."
     }
   }
 }
