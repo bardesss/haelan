@@ -4,6 +4,7 @@ import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
+import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -355,7 +356,7 @@ export function Recovery() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('recovery.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
-      <CardGrid>
+      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         <RecoveryIndexCard from={controls.from} to={controls.to} source={source} today={controls.today} span={8} />
         {card('resting_heart_rate', metricGroups.pointsOf('resting_heart_rate'),
           'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
@@ -380,7 +381,7 @@ export function Recovery() {
             length. */}
         <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
           label={t('recovery.insights.restingHeartRate')} formatValue={restingHrInsightFormat} polarity="lower-is-better" />
-      </CardGrid>
+      </CardGrid></StaleSourcesProvider>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

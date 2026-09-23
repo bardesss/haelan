@@ -560,6 +560,13 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .workout-comparison { margin: 0; padding-left: var(--space-4); }
 
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
+/* SourceWarning.tsx: a source feeding this card has gone quiet. Beside the card's title, sized to
+   it, in the negative tone the rebuild and connect warnings use; the sentence is its tooltip. */
+.source-warning {
+  display: inline-flex; vertical-align: -3px; margin-left: var(--space-2); color: var(--negative);
+  cursor: help; text-transform: none; letter-spacing: normal;
+}
+.source-warning svg { width: 14px; height: 14px; }
 .value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }

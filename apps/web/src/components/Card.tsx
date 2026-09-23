@@ -6,8 +6,9 @@ import { ErrorBoundary } from './ErrorBoundary.js'
 // useCardPresence is only read inside a hook body — so it never matters which module evaluates
 // first. Hoisting either use to module-evaluation scope would break that silently.
 import { useCardPresence } from './CardGrid.js'
+import { SourceWarning, CardWarningContext } from './SourceWarning.js'
 
-export function Card({ span, label, basis, measured = false, ambient, children }: {
+export function Card({ span, label, basis, measured = false, ambient, warning, children }: {
   span: number
   label?: string
   basis?: string
@@ -45,6 +46,12 @@ export function Card({ span, label, basis, measured = false, ambient, children }
    * That is what this exists for, and why it is not a simplification waiting to be made.
    */
   ambient?: boolean
+  /**
+   * A sentence saying a source feeding this card has gone quiet (MetricCard builds it from
+   * data/staleSources.tsx). Drawn beside this card's label when it has one, and otherwise handed
+   * to the tile inside, which draws its own title (SourceWarning.tsx).
+   */
+  warning?: string
   children: React.ReactNode
 }) {
   // Reports this card to the enclosing CardGrid, so a page whose cards have all hidden themselves
@@ -61,13 +68,15 @@ export function Card({ span, label, basis, measured = false, ambient, children }
     // whole grid behind a stylesheet rule that a missing class would silently drop.
     <section className={measured ? 'card card-measured' : 'card'} data-span={span}
       style={{ gridColumn: `span ${span}` }}>
-      {label && <span className="label">{label}</span>}
+      {label && <span className="label">{label}{warning && <SourceWarning text={warning} />}</span>}
       {basis && <p className="basis" id={basisId}>{basis}</p>}
       <BasisContext.Provider value={basis ? basisId : undefined}>
-        {/* Inside the card rather than around it, so a card whose contents throw keeps its frame,
-            its label and its basis line and the reader can see which card failed. Per card rather
-            than per page, because per page one absent field still costs the reader everything. */}
-        <ErrorBoundary>{children}</ErrorBoundary>
+        <CardWarningContext.Provider value={warning ? { text: warning, shownByCard: Boolean(label) } : null}>
+          {/* Inside the card rather than around it, so a card whose contents throw keeps its frame,
+              its label and its basis line and the reader can see which card failed. Per card rather
+              than per page, because per page one absent field still costs the reader everything. */}
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </CardWarningContext.Provider>
       </BasisContext.Provider>
     </section>
   )

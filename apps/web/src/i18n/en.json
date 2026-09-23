@@ -70,6 +70,12 @@
       "note": "The period keys work on pages that have a period to step. None of these keys do anything while you are typing in a field."
     }
   },
+  "staleSource": {
+    "sentence": "{{name}} has not reported since {{date}}; {{usual}}.",
+    "sentenceNoCadence": "{{name}} has not reported since {{date}}.",
+    "daily": "it usually reports daily",
+    "every": "it usually reports every {{count}} days"
+  },
   "sync": {
     "run": "Sync",
     "ago": "Synced {{count}} min ago",
