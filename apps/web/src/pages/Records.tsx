@@ -18,8 +18,9 @@ import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/us
  * decoration: an all-time number that does not name its window is the failure the M6-0 probe
  * warned about, since this archive's steps begin eight months after its first row.
  *
- * The cost, accepted when this was designed: runSync lives only in ControlRow, so there is no
- * sync button here. Every page with a range keeps one.
+ * Dropping the control row costs this page nothing else: the sync button used to live in
+ * ControlRow, which left this page without one when it was designed, but it has since moved to the
+ * shell's rail (SyncControl.tsx), which every page shows.
  */
 export function Records() {
   const { t, i18n } = useTranslation()

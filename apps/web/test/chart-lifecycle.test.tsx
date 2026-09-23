@@ -386,10 +386,8 @@ describe('the charts across a rerender', () => {
   // heart rate card only mounts IntradayHeartRate on the Day tab.
   //
   // Mounts Recovery, not Dashboard: HeartRateCard (pages/recovery/HeartRateCard.tsx) moved out of
-  // Dashboard.tsx in M9b and is now shared with Recovery.tsx, which is where this defect would
-  // reopen on the page's own render loop just as readily as it did on Dashboard's -- both pages
-  // hand it the same props from their own state, and either one handing it a fresh identity would
-  // tear the chart down the same way.
+  // Dashboard.tsx in M9b and Recovery.tsx is now the only page that mounts it, which is where this
+  // defect would reopen on the page's own render loop just as readily as it did on Dashboard's.
   it('are not disposed and re-initialised on the Day tab either, where IntradayHeartRate lives', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })

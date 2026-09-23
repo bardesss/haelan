@@ -18,17 +18,17 @@ import { wornOn } from '../../data/emptyState.js'
 // One array for every prop and every fallback that is deliberately empty. A fresh [] on every
 // render gives the chart's `build` callback a new identity, which useChart reads as "rebuild", so
 // a literal handed straight to a chart prop was enough to dispose and re-initialise an echarts
-// instance on every commit of this card. Its own copy, not Dashboard.tsx's: the two pages that
-// mount this card share no module scope with each other's page file.
+// instance on every commit of this card. Its own copy rather than one imported from a page file,
+// so the card carries nothing from the page it moved out of.
 const EMPTY = Object.freeze([]) as never[]
 
 /**
  * The heart rate range card, and the Day tab's whole-day heart rate trace that replaces it on that
- * one tab: the two views Dashboard.tsx drew at its own foot before M9b, moved verbatim into a
- * component both Dashboard and Recovery can mount. See Dashboard.tsx's own comment on why the
- * range chart draws three series (min, mean, max) rather than one, and why the Day tab draws the
- * day's own minute by minute trace instead of a range chart that would otherwise hold at most one
- * row.
+ * one tab: the two views the old Dashboard drew at its own foot before M9b, moved verbatim into a
+ * component of their own when the Dashboard became the glance, and mounted now only by Recovery.
+ * The range chart draws three series (min, mean, max) rather than one because a day's heart rate
+ * is a spread, not a single number, and the Day tab draws the day's own minute by minute trace
+ * instead of a range chart that would otherwise hold at most one row.
  *
  * Owns its own queries rather than reading them off a page's shared groups: `from`/`to`/
  * `historicalTo`/`source`/`tab`/`rangeDates`/`period` are the page state this card needs, handed in
