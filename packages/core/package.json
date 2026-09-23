@@ -18,7 +18,8 @@
     "./split-heart-rate": "./src/api/splitHeartRate.ts",
     "./training-load": "./src/api/trainingLoad.ts",
     "./recovery-index": "./src/api/recoveryIndex.ts",
-    "./source-cadence": "./src/api/sourceCadence.ts"
+    "./source-cadence": "./src/api/sourceCadence.ts",
+    "./nights": "./src/api/nights.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"
