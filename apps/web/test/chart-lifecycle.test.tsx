@@ -59,15 +59,17 @@ function stubFetch(): () => void {
     if (url.includes('/api/sync/status')) {
       return json({ running: false, lastFinishedAtMs: null, rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] } })
     }
-    // A real override (on steps, so the "metric already has annotations" branch of
-    // mergeDayAnnotations runs, not only the fallback every other metric takes) plus a real note
-    // and a real event, both on the same day: task 11b's own merge has to keep every one of these
-    // arrays stable across the rerender below, on both branches, not only on an empty page.
+    // A real override plus a real note and a real event, all on the same day: task 11b's own merge
+    // has to keep every one of these arrays stable across a rerender, on both branches, not only on
+    // an empty page. The override is on resting_heart_rate because Recovery's week tab draws that
+    // metric's sparkline (the case below that mounts it), so the "metric already has annotations"
+    // branch of mergeDayAnnotations, the one that concatenates a fresh array, reaches a chart. It
+    // used to sit on steps, which only the old Dashboard drew; the glance reads no annotations.
     if (url.includes('/overrides')) {
       return json({
         items: [{
           id: 'o1', scope: 'day_metric',
-          targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'steps' }),
+          targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'resting_heart_rate' }),
           action: 'exclude', correctedValue: null, reason: 'Watch left charging',
         }],
       })
@@ -307,9 +309,9 @@ describe('the charts across a rerender', () => {
   // hypnogram from the night's segments made relative to its start, the heart rate trace from
   // today's points, and a seven-day strip per card). The segments are mapped on the page, so a
   // mapping recomputed on every render rather than memoised on the night would hand the hypnogram
-  // a new array each commit and fail this the same way the original defect did. The old page's
-  // annotation merge (mergeDayAnnotations) is no longer exercised here; Recovery's case below
-  // still mounts a page that reads it.
+  // a new array each commit and fail this the same way the original defect did. The glance reads
+  // no annotations, so the annotation merge (mergeDayAnnotations) is not exercised here: the
+  // Recovery week-tab case below is the one that guards it.
   it('are not disposed and re-initialised when nothing they draw has changed', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
@@ -331,6 +333,41 @@ describe('the charts across a rerender', () => {
     // A second render of the same component with the same client: every query is already settled
     // and staleTime is Infinity, so nothing the charts draw has changed.
     act(() => { root!.render(tree(<Dashboard />)) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    const after = chartRoots()
+    expect(after).toHaveLength(before.length)
+    for (let i = 0; i < before.length; i += 1) {
+      expect(after[i], `chart ${i} was re-initialised`).toBe(before[i])
+    }
+    restore()
+  })
+
+  // The annotation merge's own guard. The stub puts an override on resting_heart_rate, so that
+  // metric's entry in mergeDayAnnotations' result is a concatenation (the override's reason plus the
+  // day's note and event) rather than the shared dayAnnotations array every other metric falls back
+  // to. A fresh concatenation is a fresh array, so if useDayAnnotations' memo on the merge were
+  // dropped the resting heart rate sparkline would be handed a new `annotations` on every render
+  // and be rebuilt; the fallback branch alone would never show it, because its array is shared.
+  it('are not disposed and re-initialised on Recovery\'s week tab, where an overridden metric\'s annotations are merged', async () => {
+    const restore = stubFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', '/recovery?range=week&on=2026-08-12')
+    const tree = (node: ReactNode): ReactNode => (
+      <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
+    )
+
+    act(() => { root!.render(tree(<Recovery />)) })
+    await flush(client, () => container!.innerHTML)
+
+    // The overridden metric's own chart is on the page, so the case cannot pass without it.
+    const hosts = [...container!.querySelectorAll('[role="img"]')]
+    expect(hosts.some((host) => (host.getAttribute('aria-label') ?? '').startsWith('Daily resting heart rate'))).toBe(true)
+    const before = chartRoots()
+    expect(before.every((node) => node !== null)).toBe(true)
+
+    act(() => { root!.render(tree(<Recovery />)) })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     const after = chartRoots()
