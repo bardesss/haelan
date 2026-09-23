@@ -50,12 +50,13 @@ describe('the @haelan/core/metrics subpath', () => {
     // browser bundle' block both allow-list an empty list, the same contract this file's own
     // module holds itself to; workout-comparison-subpath.test.ts allow-lists the one import
     // workoutComparison.ts makes, into workout-summary.ts; split-heart-rate.test.ts allow-lists
-    // the two imports splitHeartRate.ts makes, into workoutSummary.ts and cardioLoad.ts; and
+    // the two imports splitHeartRate.ts makes, into workoutSummary.ts and cardioLoad.ts;
     // source-cadence-subpath.test.ts allow-lists an empty list, since that module is arithmetic
-    // over dates and imports nothing at all.
+    // over dates and imports nothing at all; and nights-subpath.test.ts holds ./nights, the
+    // one-night-per-date rule the glance and apps/web share, to the same empty list.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './cardio-load', './coverage-signal', './metric-data-type', SUBPATH,
-      './recovery-index', './source-cadence', './split-heart-rate', './target-key', './training-load',
+      './nights', './recovery-index', './source-cadence', './split-heart-rate', './target-key', './training-load',
       './workout-comparison', './workout-summary',
     ])
   })

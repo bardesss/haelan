@@ -40,6 +40,8 @@ import type { StoredNote } from '../store/notes.ts'
 import { EventStore } from '../store/events.ts'
 import type { StoredEvent } from '../store/events.ts'
 import { writeProjection } from './projection.ts'
+import { readGlance } from './glance.ts'
+import type { Glance } from './glance.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -220,6 +222,18 @@ export class PersonQuery {
   sourceActivity(input: { today: string }): SourceActivity[] {
     requireDate('today', input.today)
     return readSourceActivity(this.#db, this.#personId, input)
+  }
+
+  /**
+   * The glance (M9a): last night, today's recovery and today so far in one call, for the web
+   * dashboard and the native app alike. `today` and `nowMs` are the caller's, because the person's
+   * zone and the clock live above this layer; `nameOf` resolves a source id to the name the person
+   * gave it, defaulting to the id.
+   */
+  glance(input: { today: string, nowMs: number, nameOf?: (sourceId: string) => string }): Glance {
+    requireDate('today', input.today)
+    requireFiniteNumber('nowMs', input.nowMs)
+    return readGlance(this, { today: input.today, nowMs: input.nowMs, nameOf: input.nameOf ?? ((id) => id) })
   }
 
   /**

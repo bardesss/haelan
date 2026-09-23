@@ -1,11 +1,13 @@
 import type { Night } from './useNights.js'
 import type { Stage } from '../fixtures/july.js'
 import { ALL_SOURCES } from '../controls/source.js'
+import { oneNightPerDate } from '@haelan/core/nights'
 
 // oneNightPerDate and stageOf lived, byte-identical, in Dashboard.tsx and Sleep.tsx, one copy
-// each. The night detail page is a third caller, and a third copy is what makes the duplication
-// worth ending rather than repeating: both moved here verbatim, comments included, from
-// Dashboard.tsx.
+// each. The night detail page is a third caller, and a third copy is what made the duplication
+// worth ending rather than repeating: both moved here verbatim from Dashboard.tsx. stageOf still
+// lives here; oneNightPerDate has since moved on to @haelan/core/nights (see the re-export below),
+// and this file only passes it through.
 
 // packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGES recognise six stage values
 // (DEEP, LIGHT, REM, AWAKE, ASLEEP, RESTLESS), the derive layer's `recognised` guard refusing to
@@ -20,21 +22,9 @@ export function stageOf(raw: string): Stage | null {
   return known[raw] ?? null
 }
 
-// /sleep/nights returns one row per (localDate, sourceId), so two sources reporting sleep on the
-// same date is two rows for what is, to a reader, one night. Collapsed to one per date with a
-// stated rule rather than left to whatever order the route happens to return: the longest
-// duration entry wins, since a second device capturing the same night is more likely to hold a
-// shorter, partial recording than the source that actually stayed on through it.
-export function oneNightPerDate(items: readonly Night[]): Night[] {
-  const byDate = new Map<string, Night>()
-  for (const n of items) {
-    const existing = byDate.get(n.localDate)
-    if (existing === undefined || (n.endMs - n.startMs) > (existing.endMs - existing.startMs)) {
-      byDate.set(n.localDate, n)
-    }
-  }
-  return [...byDate.values()].sort((a, b) => a.localDate.localeCompare(b.localDate))
-}
+// The rule itself moved to core for M9, so the glance payload and this file cannot disagree
+// about which night a date means. Re-exported so every existing import keeps working.
+export { oneNightPerDate } from '@haelan/core/nights'
 
 /**
  * Which of a date's nights this page draws.
