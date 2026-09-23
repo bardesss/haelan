@@ -1,0 +1,89 @@
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import type { TestDatabase } from '../src/testing/fixtures.ts'
+import { daily, sources } from '../src/db/schema/index.ts'
+import { DERIVATION_VERSION } from '../src/derive/version.ts'
+import { PersonQuery } from '../src/query/personQuery.ts'
+import { contextFor, dailyFigure } from '../src/query/glance.ts'
+
+const TODAY = '2026-08-20'
+const NOW = Date.parse('2026-08-20T10:00:00Z')
+
+let test: TestDatabase
+beforeEach(() => {
+  test = createTestDatabase()
+  seedPerson(test.db, 'p1')
+  test.db.insert(sources).values({ id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+})
+afterEach(() => test.cleanup())
+
+const mix = (...ids: string[]) => JSON.stringify(ids.map((source) => ({ source, share: 1 / ids.length })))
+
+function insert(o: { metric: string, agg?: string, localDate: string, value: number, source?: string, sourceMix?: string | null }) {
+  test.db.insert(daily).values({
+    personId: 'p1', localDate: o.localDate, metric: o.metric, agg: o.agg ?? 'sum', source: o.source ?? 'merged',
+    value: o.value, coverage: 1, sourceMix: o.sourceMix === undefined ? mix('watch') : o.sourceMix,
+    derivationVersion: DERIVATION_VERSION, updatedAtMs: 123,
+  }).run()
+}
+
+/** `days` consecutive dates ending on `end`, oldest first. */
+function datesEnding(end: string, days: number): string[] {
+  const endMs = Date.parse(`${end}T00:00:00Z`)
+  return Array.from({ length: days }, (_, i) => new Date(endMs - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10))
+}
+
+const ctx = () => contextFor(new PersonQuery(test.db, 'p1'), { today: TODAY, nowMs: NOW, nameOf: (id) => `name:${id}` })
+
+describe('dailyFigure', () => {
+  it('carries the day\'s value, a seven day strip ending on it, and the day it belongs to', () => {
+    for (const [i, date] of datesEnding(TODAY, 7).entries()) insert({ metric: 'steps', localDate: date, value: 1000 + i })
+    const figure = dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: 999 })
+    expect(figure.value).toBe(1006)
+    // METRICS['steps'].unit is 'count', not the literal string 'steps' - the unit comes from the
+    // catalogue, so this pins that rather than a coincidental match on the metric's own name.
+    expect(figure.unit).toBe('count')
+    expect(figure.asOfDate).toBe(TODAY)
+    expect(figure.asOfMs).toBe(999)
+    expect(figure.partial).toBe(true)
+    expect(figure.strip.map((d) => d.value)).toEqual([1000, 1001, 1002, 1003, 1004, 1005, 1006])
+    expect(figure.strip.at(-1)!.localDate).toBe(TODAY)
+  })
+
+  it('leaves a silent day as a null in the strip, and a silent figure date with no value, no as-of and no time', () => {
+    insert({ metric: 'steps', localDate: '2026-08-15', value: 500 })
+    const figure = dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: 999 })
+    expect(figure.value).toBeNull()
+    expect(figure.asOfDate).toBeNull()
+    expect(figure.asOfMs).toBeNull()
+    expect(figure.strip.map((d) => d.value)).toEqual([null, 500, null, null, null, null, null])
+  })
+
+  it('states the baseline as a centre and a band, and says when it is thin', () => {
+    // Sixty days, not the thirty the brief's own draft used: baseline()'s default window is also
+    // sixty days, and thirty of sixty covers only half of it, which trips the day-fraction guard
+    // (INSIGHT_MIN_DAY_FRACTION, baseline.ts) and comes back thin regardless of day count. Sixty
+    // days of full coverage is what a well-covered baseline actually looks like.
+    for (const date of datesEnding('2026-08-19', 60)) insert({ metric: 'steps', localDate: date, value: 8000 })
+    const figure = dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: null })
+    expect(figure.baseline).toEqual({ center: 8000, low: 8000, high: 8000, thin: false })
+  })
+
+  it('never takes its time from the row\'s write time', () => {
+    insert({ metric: 'steps', localDate: TODAY, value: 10 })
+    expect(dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: null }).asOfMs).toBeNull()
+  })
+})
+
+describe('staleness', () => {
+  it('names a stale source that fed the figure, and not one that is still reporting', () => {
+    test.db.insert(sources).values({ id: 'phone', personId: 'p1', externalId: 'phone', displayName: 'Phone', kind: 'device', createdAtMs: 0 }).run()
+    // The watch reported daily for 30 days and stopped 20 days ago: stale by its own cadence.
+    for (const date of datesEnding('2026-07-31', 30)) insert({ metric: 'steps', localDate: date, value: 1, source: 'watch', sourceMix: null })
+    // The phone reported every day up to today: still reporting.
+    for (const date of datesEnding(TODAY, 30)) insert({ metric: 'steps', localDate: date, value: 1, source: 'phone', sourceMix: null })
+    for (const date of datesEnding(TODAY, 7)) insert({ metric: 'steps', localDate: date, value: 5, sourceMix: mix('watch', 'phone') })
+    const figure = dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: null })
+    expect(figure.staleSources).toEqual([{ sourceId: 'watch', name: 'name:watch', lastReportedDate: '2026-07-31', medianGapDays: 1 }])
+  })
+})
