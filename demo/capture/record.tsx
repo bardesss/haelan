@@ -65,12 +65,13 @@ if (dataDir === undefined || outDir === undefined || reportFile === undefined) {
 // for the same reason instant.ts derives DEMO_CLOCK_MS itself rather than being handed one.
 const DEMO_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(DEMO_CLOCK_MS)
 
-// The routes whose ControlRow offers a real source picker (Dashboard.tsx through Weight.tsx all
+// The routes whose ControlRow offers a real source picker (Activity.tsx through Weight.tsx all
 // build `sources` from distinctSources and pass it down). Notes has a ControlRow but no sources
 // (its own comment: a note is not read off a device); Settings, Account and Nutrition have no
 // ControlRow at all - routes.tsx's own table names every unparameterised path, and this is that
-// table minus those four.
-const SOURCE_ROUTES = new Set(['/', '/activity', '/sleep', '/recovery', '/health', '/weight'])
+// table minus those four. The Dashboard is not here either since M9b: it is the glance now, which
+// has no source picker, so sweeping it by source would only remount one page for nothing.
+const SOURCE_ROUTES = new Set(['/activity', '/sleep', '/recovery', '/health', '/weight'])
 
 /** Whether `path` reads range/anchor from the url at all. Settings, Account and Nutrition are
  *  the routes in ROUTES that do not (mount()'s own guard comment on Settings, which Account was
@@ -80,8 +81,10 @@ function usesPageControls(path: string): boolean {
   // /records (M6c) is the third, and the only one rangeless by design rather than by subject:
   // every figure on it is an all-time figure, so it has no ControlRow at all and its query key
   // carries no range. Five range mounts therefore ask for one already-cached resource, and only
-  // the first is owed a landing.
-  return path !== '/settings' && path !== '/account' && path !== '/nutrition' && path !== '/records'
+  // the first is owed a landing. The Dashboard (M9b) is the fourth: the glance reads one payload
+  // for today and never the range, so only its first mount lands anything new.
+  return path !== '/' && path !== '/settings' && path !== '/account' && path !== '/nutrition'
+    && path !== '/records'
 }
 
 let server: CaptureServer
