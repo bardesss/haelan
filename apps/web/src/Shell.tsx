@@ -16,6 +16,7 @@ import { signOutAndResetSession } from './auth/signOutRequest.js'
 import { queryKeys } from './api/queryKeys.js'
 import { ROUTES } from './routes.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
+import { Shortcuts } from './components/Shortcuts.js'
 
 export function Shell() {
   const { t } = useTranslation()
@@ -165,6 +166,9 @@ export function Shell() {
           layout, its control row, anything above its cards. A reader hitting this one has lost
           the page rather than one card. */}
       <main className="main"><ErrorBoundary>{active.element}</ErrorBoundary></main>
+      {/* "/" to go to a page by name and "?" for the list of keys, on every signed-in page. Given
+          the same exclusions as the rail, so the go-to box offers exactly the pages the rail does. */}
+      <Shortcuts excludedDataTypes={excludedDataTypes} />
     </div>
   )
 }

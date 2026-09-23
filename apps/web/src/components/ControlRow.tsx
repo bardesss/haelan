@@ -10,6 +10,7 @@ import { ALL_SOURCES } from '../controls/source.js'
 import { periodLabel } from '../controls/periodLabel.js'
 import { useIsPhone } from '../ui/breakpoint.js'
 import { RebuildNotice } from './RebuildNotice.js'
+import { useShortcutKeys } from '../ui/shortcuts.js'
 
 // A frozen module constant, not a fresh `[]` default: a new array identity on every render is
 // what chart-lifecycle.test.tsx exists to catch elsewhere in this app, and a default parameter
@@ -68,6 +69,20 @@ export function ControlRow({
   // says the numbers on this page are not being updated, which is a fact about exactly what the
   // reader is looking at, and it belongs directly above them.
   const status = useSyncStatus()
+
+  // The period keys belong to this row, because this row holds the controls they drive: a page
+  // with no control row (Records, Settings) has no period to step, and gets none of these keys.
+  // Numbers rather than letters for the ranges, because the ranges are named in two languages and
+  // "j" for jaar and "y" for year cannot both be right. The shell owns "/" and "?" (Shortcuts.tsx).
+  useShortcutKeys((event) => {
+    if (event.shiftKey) return
+    if (event.key === 'ArrowLeft') { event.preventDefault(); controls.step(-1); return }
+    if (event.key === 'ArrowRight') { event.preventDefault(); controls.step(1); return }
+    if (event.key === 't' || event.key === 'T') { controls.setAnchor(controls.today); return }
+    const index = Number(event.key) - 1
+    const range = Number.isInteger(index) ? RANGE_KEYS[index] : undefined
+    if (range !== undefined) controls.setTab(range)
+  })
 
   // Shown exactly as handed over. controls.source has already been resolved against this same
   // list in the state layer (controls/source.ts), so the label here and the source the page is
@@ -157,8 +172,13 @@ export function ControlRow({
     <div className="controls">
       {rebuildNotice}
       <div className="segmented" role="group" aria-label={t('controlRow.timeRangeLabel')}>
-        {RANGE_KEYS.map((key) => (
+        {/* Each control names its key in its tooltip, and to assistive tech through
+            aria-keyshortcuts: the "?" overview is the complete list, but a key is learned fastest
+            from the thing it presses. */}
+        {RANGE_KEYS.map((key, index) => (
           <button key={key} type="button" className="segment" aria-pressed={key === controls.tab}
+            title={t('shortcuts.withKey', { label: t(`controlRow.ranges.${key}`), key: index + 1 })}
+            aria-keyshortcuts={String(index + 1)}
             onClick={() => controls.setTab(key)}>
             {t(`controlRow.ranges.${key}`)}
           </button>
@@ -167,6 +187,8 @@ export function ControlRow({
 
       <div className="stepper">
         <button type="button" className="icon-button" aria-label={t('controlRow.previousPeriod')}
+          title={t('shortcuts.withKey', { label: t('controlRow.previousPeriod'), key: '←' })}
+          aria-keyshortcuts="ArrowLeft"
           onClick={() => controls.step(-1)}><Icon name="chevronLeft" /></button>
         {/* The exact bounds move to the title rather than being dropped: the label now names the
             period ("september 2026") and a reader who wants to know which days that covers can
@@ -174,6 +196,8 @@ export function ControlRow({
             on two ISO dates rather than a loss, so nothing here is sr-only. */}
         <span className="stepper-label" title={exactBounds}>{period}</span>
         <button type="button" className="icon-button" aria-label={t('controlRow.nextPeriod')}
+          title={t('shortcuts.withKey', { label: t('controlRow.nextPeriod'), key: '→' })}
+          aria-keyshortcuts="ArrowRight"
           onClick={() => controls.step(1)}><Icon name="chevronRight" /></button>
         {/* An icon rather than a second field. The picker's own text ("15-08-2026") sat beside the
             label and read as a second period, when on every tab but Day it was only whichever day

@@ -323,6 +323,38 @@ a.segment { text-decoration: none; display: inline-block; }
 }
 .period-sheet-field .date-picker { font-size: var(--font-size-sm); color: var(--text-primary); }
 .period-sheet-export { justify-content: center; min-height: 44px; }
+
+/* Shortcuts.tsx: the "/" go-to box and the "?" list. A small centred card rather than the period
+   sheet's bottom sheet, because these are reached from a keyboard, on a screen wide enough to
+   have one, and belong where the eye already is. */
+.shortcut-dialog {
+  margin: 12vh auto auto; padding: 0; border: 1px solid var(--border-subtle);
+  width: min(28rem, calc(100% - 2 * var(--space-4))); max-height: 76vh;
+  background: var(--surface-card); color: var(--text-primary); border-radius: var(--radius-md);
+}
+.shortcut-dialog::backdrop { background: color-mix(in srgb, var(--surface-page) 70%, transparent); }
+.shortcut-dialog-body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); }
+.shortcut-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.shortcut-dialog-title { font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
+.goto-input { width: 100%; }
+.goto-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.goto-option {
+  display: flex; align-items: center; min-height: 40px; padding: 0 var(--space-3);
+  border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); color: var(--text-secondary);
+}
+.goto-option:hover { color: var(--text-primary); }
+.goto-option[aria-selected='true'] { background: var(--surface-inset); color: var(--text-primary); font-weight: var(--weight-medium); }
+.goto-empty { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+.shortcut-list { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.shortcut-row { display: grid; grid-template-columns: 9rem 1fr; align-items: center; gap: var(--space-3); }
+.shortcut-row dt { display: flex; gap: 4px; flex-wrap: wrap; }
+.shortcut-row dd { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.shortcut-row kbd {
+  font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-primary);
+  background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  padding: 1px 6px; min-width: 1.6em; text-align: center;
+}
+.shortcut-note { margin: 0; font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); }
 /* <dialog> makes the page behind inert for focus and for pointer targeting and says nothing about
    scrolling, so the strip above an open sheet is still a live scroll surface. Locked from the
    element's own open state rather than a class, so a sheet closed by Escape - which never tells

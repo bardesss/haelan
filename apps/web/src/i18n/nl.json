@@ -52,6 +52,24 @@
     "periodSheetTitle": "Periode",
     "close": "Sluiten"
   },
+  "shortcuts": {
+    "withKey": "{{label}} ({{key}})",
+    "goTo": {
+      "title": "Ga naar een pagina",
+      "placeholder": "Typ de naam van een pagina",
+      "none": "Geen pagina met die naam."
+    },
+    "help": {
+      "title": "Sneltoetsen",
+      "step": "Vorige of volgende periode",
+      "today": "Terug naar vandaag",
+      "ranges": "Dag, week, maand, 3 maanden, jaar",
+      "goTo": "Naar een pagina op naam",
+      "help": "Deze lijst",
+      "close": "Een venster sluiten",
+      "note": "De periodetoetsen werken op pagina's met een periode om door te bladeren. Geen van deze toetsen doet iets terwijl je in een veld typt."
+    }
+  },
   "sync": {
     "run": "Synchroniseren",
     "ago": "Gesynchroniseerd {{count}} min geleden",
