@@ -3,10 +3,9 @@ import type { Translate } from '../../format.js'
 import { formatDuration, formatClock, formatMetricValue } from '../../format.js'
 
 // Which of the four printable shapes a figure's number takes. Not read by formatFigure or
-// usualLine as an argument - both take the figure itself and look the metric up - but exported for
-// a later glance-page task (the strip, the sparkline) that needs to know a figure's shape without
-// re-deriving it from the metric id a second time.
-export type FigureKind = 'count' | 'duration' | 'clock' | 'metric'
+// usualLine as an argument - both take the figure itself and look the metric up. Module-private:
+// nothing outside this file needs a figure's shape, since every caller formats through the two.
+type FigureKind = 'count' | 'duration' | 'clock' | 'metric'
 
 function figureKind(metric: string): FigureKind {
   if (metric === 'sleep_asleep_minutes') return 'duration'

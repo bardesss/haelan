@@ -27,7 +27,7 @@ export const SCREENSHOTS = [
   {
     file: 'dashboard.png',
     title: 'Dashboard',
-    alt: 'The Hælan dashboard in three columns: last night with its sleep stages, recovery today with resting heart rate and heart rate variability, and today so far with steps, heart rate and active minutes, each against your own usual.',
+    alt: 'The Hælan dashboard in three columns: last night with its sleep stages, today's recovery index with resting heart rate and heart rate variability, and today so far with steps, heart rate and active minutes, each against your own usual.',
     role: 'hero',
     readme: 'inline',
   },
