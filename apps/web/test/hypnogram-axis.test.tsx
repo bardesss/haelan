@@ -61,7 +61,7 @@ function xAxisOf(startClock: number | null): Axis {
 describe('the hypnogram axis', () => {
   // The ticks are handed over explicitly rather than left to an interval. An interval counts from
   // the axis minimum, which is what the first version of this change got wrong on a real night:
-  // a 23:54 bed time ticked 23:54, 00:54, 01:54.
+  // a 22:54 bed time ticked 23:54, 00:54, 01:54.
   it('plots clock minutes from the bed time, ticking on whole hours', () => {
     const axis = xAxisOf(40)
     expect(axis.min).toBe(40)

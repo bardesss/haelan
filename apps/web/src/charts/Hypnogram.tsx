@@ -96,7 +96,7 @@ export function Hypnogram({ segments, startLabel, label, startClock }: {
     const shift = origin ?? 0
     // Clock time on whole hours. The axis is plotted in clock minutes, and the ticks are handed to
     // ECharts as the whole hours inside the night rather than left to an interval: an interval
-    // counts from the axis minimum, so a 23:54 bed time ticked 23:54, 00:54, 01:54. The old axis
+    // counts from the axis minimum, so a 22:54 bed time ticked 23:54, 00:54, 01:54. The old axis
     // let ECharts pick its own spacing in minutes since bed, which is what printed "0h 1h 3h 5h".
     const xAxis = origin === null
       ? { type: 'value' as const, min: 0, max: spanMinutes,
