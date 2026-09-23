@@ -230,8 +230,11 @@ const ROUTES: readonly RouteCase[] = [
     // than for any other route in this table, because moving the clock after beforeAll's signIn()
     // would run every request in this block against a session already past its fixed 30 day expiry
     // (SessionStore.resolve, sessions.ts).
+    // The other person gets the same night, not seedSession's: a leak target the glance would never
+    // read even for its own person proves nothing, and seedSession's August night sits months
+    // outside the 36 hour window. seedNight keys its id on personId, so the two rows stay distinct.
     seedOwn: (h) => seedNight(h, { personId: 'p1', sourceId: 'own-source-ok' }),
-    seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'sleep' }),
+    seedOther: (h, personId) => seedNight(h, { personId, sourceId: 'leaked-source-999999' }),
     ownNeedle: 'own-source-ok',
     otherNeedle: 'leaked-source-999999',
   },
