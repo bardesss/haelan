@@ -1431,6 +1431,7 @@
       "today": "today",
       "yesterday": "yesterday",
       "night": "night of {{date}}"
-    }
+    },
+    "noReading": "No reading yet"
   }
 }

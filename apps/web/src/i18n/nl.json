@@ -1431,6 +1431,7 @@
       "today": "vandaag",
       "yesterday": "gisteren",
       "night": "nacht van {{date}}"
-    }
+    },
+    "noReading": "Nog geen meting"
   }
 }

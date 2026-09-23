@@ -673,6 +673,27 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .card-link { display: inline-block; margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; }
 .card-link:hover { text-decoration: underline; }
 
+/* GlanceCard.tsx: one column of the glance Dashboard, one question per card. A flex column so the
+   headline, chart, secondary figures, strip and link keep one rhythm whatever a column leaves out;
+   the link opts out of the column's stretch so its hover underline stays the width of its words. */
+.glance-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.glance-card > .card-link { align-self: flex-start; margin-top: 0; }
+.glance-card .basis { margin-bottom: 0; }
+/* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
+   regular weight to put the muted subtitle back to, so the heading is left at the body's weight
+   and only the title is raised. */
+.glance-card-title { margin: 0; font-size: var(--font-size-sm); }
+.glance-card-title strong { font-weight: var(--weight-semibold); }
+.glance-card-title > span:not(.source-warning) { margin-left: var(--space-1); color: var(--text-muted); }
+.glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
+.glance-mini { display: flex; flex-wrap: wrap; gap: var(--space-5); }
+.glance-mini > div { display: flex; flex-direction: column; gap: 2px; }
+.glance-mini b { font-size: var(--font-size-lg); }
+.glance-mini em { font-style: normal; font-size: var(--font-size-xs); color: var(--text-muted); }
+.glance-asof { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
+.glance-note { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
+.glance-empty { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
