@@ -1062,6 +1062,8 @@
       "expires": "Verloopt {{when}}",
       "expired": "Verlopen {{when}}",
       "revoked": "Ingetrokken {{when}}",
+      "revokedPasswordChanged": "Ingetrokken {{when}}, toen je wachtwoord werd gewijzigd",
+      "revokedPasswordReset": "Ingetrokken {{when}}, toen je wachtwoord opnieuw werd ingesteld",
       "lastUsed": "Laatst gebruikt {{when}}",
       "neverUsed": "Nooit gebruikt",
       "revoke": "Intrekken",

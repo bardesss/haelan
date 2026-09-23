@@ -205,7 +205,7 @@ async function execute(
   // end this account's MCP tokens is the same one either route acts on: a password set here is
   // set by someone who does not trust whatever currently proves this account's identity, and an
   // agent credential minted under the old proof must not survive the person deciding that.
-  mcpTokens.revokeAllForAccount(accountId, deps.now())
+  mcpTokens.revokeAllForAccount(accountId, deps.now(), 'password_reset')
   deps.out(`password set for ${command.username}, and any lockout cleared.`)
   return 0
 }

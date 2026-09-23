@@ -198,7 +198,7 @@ export function registerMemberRoutes(app: FastifyInstance): void {
     // the "somebody may have this account" situation the whole route exists for, and an agent
     // credential the reset leaves standing would be the one door this recovery path forgot to
     // close.
-    stores().mcpTokens.revokeAllForAccount(accountId, app.haelan.now())
+    stores().mcpTokens.revokeAllForAccount(accountId, app.haelan.now(), 'password_reset')
     return reply.code(204).send()
   })
 

@@ -41,7 +41,7 @@ afterEach(() => {
 
 const TOKEN: McpTokenRow = {
   id: 't1', label: 'the laptop', createdAtMs: NOW, expiresAtMs: NOW + 90 * 86_400_000,
-  lastUsedAtMs: null, revokedAtMs: null,
+  lastUsedAtMs: null, revokedAtMs: null, revokedReason: null,
 }
 
 const SESSION: Session = {
@@ -170,6 +170,24 @@ describe('the Agent access card', () => {
     mount([{ ...TOKEN, revokedAtMs: NOW + 1000 }])
     expect(text()).toContain('Revoked')
     expect(buttonSaying('Revoke')).toBeUndefined()
+  })
+
+  // A password change revokes every token on the account on its owner's behalf, and a date alone
+  // left them no way to tell that was why their agent stopped. The whole span, not a substring:
+  // "Revoked" alone would pass while the reason went missing.
+  it.each([
+    // The date itself has commas in English ("Feb 2, 2026, 3:00 AM"), so the plain case is pinned
+    // by what it must not say rather than by the absence of a comma.
+    ['manual', /^Revoked (?!.*password).+$/],
+    [null, /^Revoked (?!.*password).+$/],
+    ['password_changed', /^Revoked .+, when your password was changed$/],
+    ['password_reset', /^Revoked .+, when your password was reset$/],
+  ] as const)('says why a token was revoked: %s', (reason, expected) => {
+    mount([{ ...TOKEN, revokedAtMs: NOW + 1000, revokedReason: reason }])
+    const hints = [...container!.querySelectorAll('.field-hint')].map((el) => el.textContent ?? '')
+    const revoked = hints.filter((hint) => hint.startsWith('Revoked'))
+    expect(revoked).toHaveLength(1)
+    expect(revoked[0]).toMatch(expected)
   })
 
   it('shows a live token as live, with a working revoke button', async () => {

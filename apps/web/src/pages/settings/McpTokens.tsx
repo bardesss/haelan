@@ -191,7 +191,7 @@ export function McpTokens() {
         <span className="field-hint">{t('settings.mcp.created', { when: when(row.createdAtMs) })}</span>
         <span className="field-hint">
           {dead
-            ? t('settings.mcp.revoked', { when: when(row.revokedAtMs!) })
+            ? t(REVOKED_KEY[row.revokedReason ?? 'manual'], { when: when(row.revokedAtMs!) })
             : naturallyExpired
               ? t('settings.mcp.expired', { when: when(row.expiresAtMs) })
               : t('settings.mcp.expires', { when: when(row.expiresAtMs) })}
@@ -210,6 +210,16 @@ export function McpTokens() {
       </li>
     )
   }
+}
+
+// Why a token died, beside when. A password change revokes every token on the account on its
+// owner's behalf, and without the reason a member whose agent went dark saw only a date - nothing
+// connecting it to a reset they may not even have done themselves. Pressing Revoke needs no
+// explanation, and a row revoked before the server recorded reasons gets none either.
+const REVOKED_KEY: Record<NonNullable<McpTokenRow['revokedReason']>, string> = {
+  manual: 'settings.mcp.revoked',
+  password_changed: 'settings.mcp.revokedPasswordChanged',
+  password_reset: 'settings.mcp.revokedPasswordReset',
 }
 
 // Literal keys rather than a template built from `outcome`, so catalogue-usage.test.ts's static

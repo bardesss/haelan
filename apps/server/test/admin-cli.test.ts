@@ -117,6 +117,7 @@ describe('admin passwd', () => {
     expect(reloaded).toBeDefined()
     expect(reloaded!.id).toBe('t1')
     expect(reloaded!.revokedAtMs).not.toBeNull()
+    expect(reloaded!.revokedReason).toBe('password_reset')
   })
 
   it('clears the lockout, so the account it just rescued is not locked when it is used', async () => {
