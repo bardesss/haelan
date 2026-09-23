@@ -1124,6 +1124,8 @@
       "expires": "Expires {{when}}",
       "expired": "Expired {{when}}",
       "revoked": "Revoked {{when}}",
+      "revokedPasswordChanged": "Revoked {{when}}, when your password was changed",
+      "revokedPasswordReset": "Revoked {{when}}, when your password was reset",
       "lastUsed": "Last used {{when}}",
       "neverUsed": "Never used",
       "revoke": "Revoke",

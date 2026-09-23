@@ -89,6 +89,26 @@ describe('McpTokenStore', () => {
     expect(row?.revokedAtMs).toBe(NOW + 1)
   })
 
+  // Why a token stopped working is what its owner wants to know, and a password change revoking
+  // it on their behalf used to leave nothing but a date behind: a member whose agent went dark
+  // had no way to tell that a reset last week was the cause.
+  it('records why a token was revoked, and a live token has no reason', () => {
+    mint({ id: 't1' })
+    mint({ id: 't2' })
+    expect(tokens.listForAccount('acct-alice').map((t) => t.revokedReason)).toEqual([null, null])
+
+    tokens.revoke({ id: 't1', accountId: 'acct-alice', nowMs: NOW + 1 })
+    expect(tokens.revokeAllForAccount('acct-alice', NOW + 2, 'password_reset')).toBe(1)
+
+    // By id: both were minted at NOW, so their order under listForAccount's createdAtMs sort is a tie.
+    const byId = (id: string) => tokens.listForAccount('acct-alice').find((t) => t.id === id)
+    const [first, second] = [byId('t1'), byId('t2')]
+    // The earlier, more specific fact survives: t1 was already revoked by hand, and the reset
+    // neither restamps it nor rewrites why.
+    expect(first).toMatchObject({ id: 't1', revokedAtMs: NOW + 1, revokedReason: 'manual' })
+    expect(second).toMatchObject({ id: 't2', revokedAtMs: NOW + 2, revokedReason: 'password_reset' })
+  })
+
   it('moves lastUsedAtMs on touch and leaves expiry alone', () => {
     const { token } = mint()
     tokens.touch('t1', NOW + 5)

@@ -15,7 +15,12 @@ export function registerStatic(app: FastifyInstance, webRoot: string): void {
 
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? ''
-    if (path.startsWith('/api/') || path.startsWith('/oauth/')) {
+    // /mcp and /.well-known/ are where an MCP client goes after a 401: a GET on /mcp is the legacy
+    // SSE transport, and /.well-known/oauth-* is OAuth discovery. Neither is a page, and answering
+    // either with the shell makes the client report "the endpoint returned text/html" - which is
+    // what a real client did, with the actual cause (a revoked token) nowhere in its error.
+    if (path.startsWith('/api/') || path.startsWith('/oauth/') || path.startsWith('/.well-known/')
+      || path === '/mcp' || path.startsWith('/mcp/')) {
       return reply.code(404).send(errorBody('not_found', 'not_found', `no route answers '${path}'`))
     }
     // The shell exists for a browser following a client routed link, and a browser only ever

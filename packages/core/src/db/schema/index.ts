@@ -13,9 +13,9 @@ export type { SampleAgg, SessionKind } from './derived.ts'
 export { syncState, deriveQueue, excludedDataTypes, rebuildState, rebuildDrops } from './sync.ts'
 export {
   accounts, authSessions, instanceSettings, invites, mcpTokens, mcpCalls,
-  CONSENT_PATHS, MCP_CALL_OUTCOMES,
+  CONSENT_PATHS, MCP_CALL_OUTCOMES, MCP_TOKEN_REVOKE_REASONS,
 } from './accounts.ts'
-export type { ConsentPath, McpCallOutcome } from './accounts.ts'
+export type { ConsentPath, McpCallOutcome, McpTokenRevokeReason } from './accounts.ts'
 
 /**
  * Every column of a table that declares a default, as database column name to that default written

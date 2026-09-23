@@ -79,7 +79,9 @@ describe('the Profile card routes', () => {
 
     // Revocation is a stamp: the row stays so the call log still names something.
     const rows = (await list(session)).json().tokens as { id: string, revokedAtMs: number | null }[]
-    expect(rows).toEqual([expect.objectContaining({ id: mine.token.id, revokedAtMs: h.clock.nowMs })])
+    expect(rows).toEqual([expect.objectContaining({
+      id: mine.token.id, revokedAtMs: h.clock.nowMs, revokedReason: 'manual',
+    })])
   })
 
   it('reports the caller own recent calls and nobody else', async () => {
@@ -129,7 +131,11 @@ describe('a password change ends every MCP token the account holds', () => {
     // A stamp, not a delete: the row survives so the call log this token made still resolves to
     // an account, the same guarantee `revoke` already gives a caller-initiated revocation.
     const rows = (await list(session)).json().tokens as { id: string, revokedAtMs: number | null }[]
-    expect(rows).toEqual([expect.objectContaining({ id, revokedAtMs: expect.any(Number) })])
+    // And why, which the card turns into "your password was changed": without it an owner whose
+    // agent went dark saw only a date.
+    expect(rows).toEqual([expect.objectContaining({
+      id, revokedAtMs: expect.any(Number), revokedReason: 'password_changed',
+    })])
   })
 
   it('admin reset: a member\'s previously working token is refused at POST /mcp afterwards', async () => {
@@ -144,5 +150,9 @@ describe('a password change ends every MCP token the account holds', () => {
     expect(reset.statusCode).toBe(204)
 
     expect(await usable(secret)).toBe(false)
+    // password_reset, not password_changed: Bob did not do this himself, which is the case he
+    // most needs told when his agent stops working.
+    const [row] = h.app.haelan.stores.mcpTokens.listForAccount(bob.accountId)
+    expect(row?.revokedReason).toBe('password_reset')
   })
 })

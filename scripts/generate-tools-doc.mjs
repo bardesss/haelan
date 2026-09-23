@@ -138,7 +138,8 @@ export function render() {
     '',
     'The server is **stateless**: one JSON-RPC request, one response, no session id, no SSE and no '
       + 'resumability. `initialize` is accepted but nothing is remembered between requests, and '
-      + 'there is no `GET /mcp` to open a stream against.',
+      + 'there is no `GET /mcp` to open a stream against: a GET answers a JSON 404, which is '
+      + 'what a client set to the legacy SSE transport will see.',
     '',
     '**Before the first token is minted, `POST /mcp` answers 404 - exactly as it would if the '
       + 'route did not exist.** That is deliberate: an instance nobody has configured should not '
@@ -146,6 +147,11 @@ export function render() {
       + 'means a misconfigured instance looks like a missing route rather than an unauthenticated '
       + 'one, which is said here plainly so whoever is debugging it is not misled. Once any token '
       + 'exists, a missing or invalid one gets a 401 instead.',
+    '',
+    '**A token ends when its account\'s password changes**, whether its owner changed it or an '
+      + 'admin reset it, as well as when it expires or is revoked by hand. The 401 is the same in '
+      + 'every case, so it does not tell a caller which tokens once existed; the Agent access card '
+      + 'says which one it was, and a fresh token is minted there.',
     '',
     'Every call is recorded: when, which token, which tool, how many rows came back, how long it '
       + 'took and how it ended - visible on the same Settings card. **The arguments are not '

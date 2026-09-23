@@ -134,11 +134,22 @@ export function registerRequireMcpToken(app: FastifyInstance): void {
 }
 
 /**
+ * RFC 6750's challenge, which a 401 from a bearer protected resource is meant to carry. A client
+ * without it has only the status to show, and some go looking for OAuth metadata this instance
+ * does not have. `invalid_token` even when no token was presented at all: the RFC would have no
+ * error code there, but one fixed string is what keeps this header from telling the refusals
+ * apart when the body deliberately does not.
+ */
+const WWW_AUTHENTICATE = 'Bearer realm="haelan", error="invalid_token", '
+  + 'error_description="mint a token under Settings, Agent access"'
+
+/**
  * One answer for every way a presented token can fail: unknown, expired, revoked, and belonging to
  * a suspended account are the same to whoever is holding it, and telling them apart would tell
  * somebody probing which tokens once existed. The same rule InviteStore.findByToken follows.
  */
 function refuse(reply: FastifyReply): void {
   reply.code(statusFor('unauthorized'))
+    .header('www-authenticate', WWW_AUTHENTICATE)
     .send(errorBody('unauthorized', 'no_mcp_token', 'this surface needs a valid MCP token'))
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `mcp_tokens` ADD `revoked_reason` text;

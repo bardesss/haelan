@@ -27,9 +27,11 @@ Mint a token in **Settings → Agent access**, in your own account. It is shown 
 
 `Accept` must name **both** `application/json` and `text/event-stream`, even though this server always answers with JSON and never opens a stream. A request that accepts only JSON is refused with 406. That is the MCP SDK's transport rule rather than a choice made here, and it is the single most likely reason a first attempt fails.
 
-The server is **stateless**: one JSON-RPC request, one response, no session id, no SSE and no resumability. `initialize` is accepted but nothing is remembered between requests, and there is no `GET /mcp` to open a stream against.
+The server is **stateless**: one JSON-RPC request, one response, no session id, no SSE and no resumability. `initialize` is accepted but nothing is remembered between requests, and there is no `GET /mcp` to open a stream against: a GET answers a JSON 404, which is what a client set to the legacy SSE transport will see.
 
 **Before the first token is minted, `POST /mcp` answers 404 - exactly as it would if the route did not exist.** That is deliberate: an instance nobody has configured should not advertise that this surface is there, and there is no default credential to find. It also means a misconfigured instance looks like a missing route rather than an unauthenticated one, which is said here plainly so whoever is debugging it is not misled. Once any token exists, a missing or invalid one gets a 401 instead.
+
+**A token ends when its account's password changes**, whether its owner changed it or an admin reset it, as well as when it expires or is revoked by hand. The 401 is the same in every case, so it does not tell a caller which tokens once existed; the Agent access card says which one it was, and a fresh token is minted there.
 
 Every call is recorded: when, which token, which tool, how many rows came back, how long it took and how it ended - visible on the same Settings card. **The arguments are not recorded.** There is no column for them, so a search of your own notes cannot be read back out of the log. Calls made over stdio are not logged at all: that entry opens the database read-only and cannot write, and a process that can `docker exec` into the container already holds everything a log would be protecting.
 

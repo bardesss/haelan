@@ -364,3 +364,67 @@ describe('the summary sentence', () => {
     expect(result.content[1]!.text).toContain(sentinel)
   })
 })
+
+// What a real MCP client does after a 401, seen against a live instance: it falls back to the
+// legacy SSE transport (a GET on /mcp) or goes looking for OAuth metadata under /.well-known.
+// Every one of those used to answer 200 with the web shell, because the not found handler hands
+// index.html to any GET that does not look like a file - so the client reported "the endpoint
+// returned text/html", and the real cause, a token that no longer worked, was nowhere in sight.
+// The GET case above passes without a webRoot, which is exactly why it never saw this.
+describe('what a client probes after a refusal, with the shell installed', () => {
+  let shell: Harness
+  let webRoot: string
+  beforeEach(async () => {
+    webRoot = mkdtempSync(join(tmpdir(), 'haelan-mcp-web-'))
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>haelan</title><div id="root"></div>')
+    shell = await withServer({ webRoot })
+    await shell.completeSetup()
+    shell.mintMcpToken()
+  })
+  afterEach(async () => {
+    await shell.cleanup()
+    rmSync(webRoot, { recursive: true, force: true })
+  })
+
+  it.each([
+    '/mcp',
+    '/mcp/',
+    '/.well-known/oauth-protected-resource',
+    '/.well-known/oauth-protected-resource/mcp',
+    '/.well-known/oauth-authorization-server',
+    '/.well-known/openid-configuration',
+  ])('answers GET %s with a JSON 404, never the shell', async (url) => {
+    const response = await shell.app.inject({ method: 'GET', url, headers: { accept: 'text/event-stream' } })
+    expect(response.statusCode).toBe(404)
+    expect(response.headers['content-type']).toContain('application/json')
+    expect(response.json()).toEqual({
+      error: { kind: 'not_found', code: 'not_found', message: `no route answers '${url}'` },
+    })
+  })
+
+  it('still hands the shell to a client routed path', async () => {
+    const response = await shell.app.inject({ method: 'GET', url: '/settings' })
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('text/html')
+  })
+})
+
+// RFC 6750 section 3: a 401 from a bearer protected resource carries WWW-Authenticate. Without it
+// a client has nothing to show but the status, and some go hunting for OAuth metadata instead.
+// One header for every refusal, for the same reason the body is one answer: telling an unknown
+// token from a revoked one would tell a prober which tokens once existed.
+describe('the 401 says what kind of credential it wants', () => {
+  it('sends the same WWW-Authenticate for a missing, an unknown and a revoked token', async () => {
+    const { secret, id } = h.mintMcpToken()
+    h.app.haelan.stores.mcpTokens.revoke({ id, accountId: ADMIN_ACCOUNT, nowMs: h.clock.nowMs })
+
+    const missing = await rpc(null, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
+    const unknown = await toolsCall(`${MCP_TOKEN_PREFIX}nope`, 'list_metrics')
+    const revoked = await toolsCall(secret, 'list_metrics')
+
+    expect(missing.headers['www-authenticate']).toBe('Bearer realm="haelan", error="invalid_token", '
+      + 'error_description="mint a token under Settings, Agent access"')
+    expect(unknown.headers['www-authenticate']).toBe(missing.headers['www-authenticate'])
+    expect(revoked.headers['www-authenticate']).toBe(missing.headers['www-authenticate'])
+  })
+})

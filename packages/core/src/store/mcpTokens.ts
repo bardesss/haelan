@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { mcpTokens } from '../db/schema/index.ts'
+import type { McpTokenRevokeReason } from '../db/schema/index.ts'
 import { ConfigError } from '../errors.ts'
 
 /**
@@ -30,6 +31,7 @@ export interface McpToken {
   expiresAtMs: number
   lastUsedAtMs: number | null
   revokedAtMs: number | null
+  revokedReason: McpTokenRevokeReason | null
 }
 
 /**
@@ -72,6 +74,7 @@ export class McpTokenStore {
       expiresAtMs: input.nowMs + input.days * DAY_MS,
       lastUsedAtMs: null,
       revokedAtMs: null,
+      revokedReason: null,
     }
     this.#db.insert(mcpTokens).values({ ...token, tokenHash: digest(secret) }).run()
     return { token, secret }
@@ -129,7 +132,7 @@ export class McpTokenStore {
    * token, but reachable directly against the route.
    */
   revoke(input: { id: string, accountId: string, nowMs: number }): boolean {
-    return this.#db.update(mcpTokens).set({ revokedAtMs: input.nowMs })
+    return this.#db.update(mcpTokens).set({ revokedAtMs: input.nowMs, revokedReason: 'manual' })
       .where(and(
         eq(mcpTokens.id, input.id),
         eq(mcpTokens.accountId, input.accountId),
@@ -155,8 +158,8 @@ export class McpTokenStore {
    * (`McpCallLog.listForAccount` joins through them), so a revoked token's history stays readable
    * after the credential itself stops working.
    */
-  revokeAllForAccount(accountId: string, nowMs: number): number {
-    return this.#db.update(mcpTokens).set({ revokedAtMs: nowMs })
+  revokeAllForAccount(accountId: string, nowMs: number, reason: McpTokenRevokeReason): number {
+    return this.#db.update(mcpTokens).set({ revokedAtMs: nowMs, revokedReason: reason })
       .where(and(eq(mcpTokens.accountId, accountId), isNull(mcpTokens.revokedAtMs)))
       .run().changes
   }
@@ -166,6 +169,6 @@ function toToken(row: typeof mcpTokens.$inferSelect): McpToken {
   return {
     id: row.id, accountId: row.accountId, label: row.label,
     createdAtMs: row.createdAtMs, expiresAtMs: row.expiresAtMs,
-    lastUsedAtMs: row.lastUsedAtMs, revokedAtMs: row.revokedAtMs,
+    lastUsedAtMs: row.lastUsedAtMs, revokedAtMs: row.revokedAtMs, revokedReason: row.revokedReason,
   }
 }

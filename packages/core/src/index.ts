@@ -168,7 +168,8 @@ export {
 export type { McpToken, McpTokenDays } from './store/mcpTokens.ts'
 export { McpCallLog, MCP_CALL_LOG_TTL_MS } from './store/mcpCalls.ts'
 export type { McpCall } from './store/mcpCalls.ts'
-export type { McpCallOutcome } from './db/schema/index.ts'
+export type { McpCallOutcome, McpTokenRevokeReason } from './db/schema/index.ts'
+export { MCP_TOKEN_REVOKE_REASONS } from './db/schema/index.ts'
 export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts'
 export type { SessionGroup, GroupSessionsInput } from './derive/sessionOverlap.ts'
 
