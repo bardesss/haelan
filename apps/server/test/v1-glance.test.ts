@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, schema } from '@haelan/core'
+import { DERIVATION_VERSION, insertSample, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -26,26 +26,87 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(reply.statusCode).toBe(200)
     const body = reply.json()
     expect(body.today).toBe('2026-08-20')
-    expect(body.generatedAtMs).toBe(harness.clock.nowMs)
     expect(body).toHaveProperty('recovery.index')
     expect(body).toHaveProperty('day.steps')
   })
 
-  it('names a stale source by the name the person gave it', async () => {
+  it('answers 304 to a repeat request carrying the first one\'s ETag, a minute later', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const first = await get(harness, token, '/glance')
+    expect(first.statusCode).toBe(200)
+    // A minute on, same day, same rows. Moving the clock is the point: anything time-of-request
+    // in the hashed body would change the ETag, and the harness clock otherwise stands still.
+    harness.clock.nowMs += 60_000
+    const again = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/glance',
+      headers: { authorization: `Bearer ${token}`, 'if-none-match': first.headers.etag as string },
+    })
+    expect(again.statusCode).toBe(304)
+  })
+
+  it('rounds every figure to its metric\'s catalogue precision, as /series and /intraday do', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    const row = (metric: string, localDate: string, value: number) => db.insert(schema.daily).values({
+      personId: 'p1', localDate, metric, agg: 'sum', source: 'merged', value, coverage: 1, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    // Sixty days alternating 1000.4 and 2000.9: a centre of 1500.65 and a fractional spread, so
+    // the band's three numbers all arrive unrounded unless the route rounds them.
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
+      row('steps', localDate, i % 2 === 0 ? 1000.4 : 2000.9)
+    }
+    row('steps', '2026-08-20', 1234.6)
+    row('active_minutes_light', '2026-08-20', 12.7)
+    insertSample(db, {
+      personId: 'p1', sourceId: 'w1', metric: 'heart_rate', utcMs: Date.parse('2026-08-20T07:30:00Z'),
+      tzOffsetMinutes: 120, agg: 'mean', value: 64.4,
+    })
+    const body = (await get(harness, token, '/glance')).json()
+    const { steps } = body.day
+    expect(steps.value).toBe(1235)
+    for (const n of [steps.baseline.center, steps.baseline.low, steps.baseline.high]) expect(Number.isInteger(n)).toBe(true)
+    expect(steps.strip.at(-2).value).toBe(1000)
+    expect(body.day.activeMinutes.value).toBe(13)
+    expect(body.day.heartRate.points[0].mean).toBe(64)
+  })
+
+  it('names a stale source that fed the figure before it went quiet, by the name the person gave it', async () => {
     harness = await withServer()
     // Set before signIn for the same reason the first case does.
     harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
     const token = await harness.signIn()
     const db = harness.app.haelan.instance.db
     db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'FITBIT', kind: 'device', createdAtMs: 0 }).run()
+    db.insert(schema.sources).values({ id: 'ph', personId: 'p1', externalId: 'ph', displayName: 'Phone', kind: 'device', createdAtMs: 0 }).run()
     harness.app.haelan.instance.sourceAliases.put({ personId: 'p1', sourceId: 'w1', alias: 'My watch', nowMs: harness.clock.nowMs })
     const row = (localDate: string, source: string, sourceMix: string | null) => db.insert(schema.daily).values({
       personId: 'p1', localDate, metric: 'steps', agg: 'sum', source, value: 1000, coverage: 1, sourceMix,
       derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
     }).run()
-    for (let d = 1; d <= 31; d += 1) row(`2026-07-${String(d).padStart(2, '0')}`, 'w1', null)
-    row('2026-08-19', 'merged', JSON.stringify([{ source: 'w1', share: 1 }]))
+    const mix = (...ids: string[]) => JSON.stringify(ids.map((source) => ({ source, share: 1 / ids.length })))
+    // The shape derivation writes when a device stops: the watch and the phone both report through
+    // July, and each day's merged row names both; from August on only the phone reports, and the
+    // merged rows name only it. Nothing in the last week mentions the watch.
+    for (let d = 1; d <= 31; d += 1) {
+      const localDate = `2026-07-${String(d).padStart(2, '0')}`
+      row(localDate, 'w1', null)
+      row(localDate, 'ph', null)
+      row(localDate, 'merged', mix('w1', 'ph'))
+    }
+    for (let d = 1; d <= 20; d += 1) {
+      const localDate = `2026-08-${String(d).padStart(2, '0')}`
+      row(localDate, 'ph', null)
+      row(localDate, 'merged', mix('ph'))
+    }
     const body = (await get(harness, token, '/glance')).json()
+    // Exactly the watch: the phone fed the same figure and is still reporting.
     expect(body.day.steps.staleSources).toEqual([expect.objectContaining({ sourceId: 'w1', name: 'My watch' })])
   })
 })
