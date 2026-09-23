@@ -213,16 +213,6 @@
       "restingHr": "Rusthartslag, deze periode tegenover de vorige",
       "sleep": "Slaap, deze periode tegenover de vorige"
     },
-    "heartRateRange": {
-      "label": "Hartslagbereik",
-      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
-      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
-      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
-      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
-      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
-      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
-      "intradayChartLabel": "Hartslag tijdens de dag van {{date}}"
-    },
     "flaggedDays": {
       "label": "Gemarkeerde dagen",
       "emptyTitle": "Geen gemarkeerde dagen in deze periode.",
@@ -288,6 +278,16 @@
     "respiratoryRateSleep": {
       "label": "Ademhalingsfrequentie, tijdens slaap",
       "chartLabel": "Ademhalingsfrequentie in {{period}}, gemeten tijdens slaap"
+    },
+    "heartRateRange": {
+      "label": "Hartslagbereik",
+      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
+      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
+      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
+      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
+      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
+      "intradayChartLabel": "Hartslag tijdens de dag van {{date}}"
     }
   },
   "health": {

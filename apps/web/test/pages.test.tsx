@@ -52,7 +52,17 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
  * component built. `chart.setOption` still runs for real underneath the tap, so the SVG every
  * other assertion in this file depends on is unaffected.
  */
-type CapturedChart = { onClick?: (event: unknown) => void, lastOption?: EChartsOption }
+// `dom` is the host `<div role="img">` ChartFigure.tsx renders (useChart.ts's own `echarts.init`
+// call passes it as the first argument): captured so a caller with more than one chart-bearing
+// card and no other way to tell entries apart can find the one whose host sits inside a specific
+// card, rather than trusting capturedCharts' own order. That order is init() call order, not JSX
+// order: each card's chart mounts only once ITS OWN query has settled, so two cards fed by
+// independent queries (rather than one shared group) can commit in either order depending on
+// which settles first, and capturedCharts' order then reflects a race, not the page's declared
+// layout. The rendered HTML string is not subject to that race (it always reflects the completed
+// tree), which is why every assertion reading the HTML directly (a `.card` lookup, an accessible
+// table's position) stays reliable without this.
+type CapturedChart = { onClick?: (event: unknown) => void, lastOption?: EChartsOption, dom?: Element }
 const capturedCharts: CapturedChart[] = []
 
 vi.mock('echarts/core', async (importOriginal) => {
@@ -63,7 +73,7 @@ vi.mock('echarts/core', async (importOriginal) => {
     ...actual,
     init: (...args: unknown[]) => {
       const chart = actual.init(...args)
-      const entry: CapturedChart = {}
+      const entry: CapturedChart = { dom: args[0] as Element | undefined }
       capturedCharts.push(entry)
       const originalOn = chart.on.bind(chart)
       chart.on = (eventName: unknown, handler: unknown) => {
@@ -689,14 +699,12 @@ describe('Day tab', () => {
 // Task 11's own coverage: until this task every chart on every page was handed an empty
 // annotations/excluded pair (Dashboard's own EMPTY, by name, with a comment calling it a
 // milestone boundary) and no chart's onPointClick went anywhere, since no page held a target to
-// open the panel with. Recovery, not Dashboard: three plain Sparklines and nothing else touching
-// useChart, so the first entry captured after this test's own render is unambiguously
-// resting_heart_rate's, the same reasoning that picked it for the round trip harness above never
-// needed to state (nothing there clicks).
+// open the panel with. Recovery, not Dashboard.
 describe('annotate wiring', () => {
   const OVERRIDE_DATE = '2026-08-11'
   const OVERRIDE_METRIC = 'resting_heart_rate'
   const OVERRIDE_REASON = 'Watch left charging'
+  const RESTING_HR_LABEL = 'Resting heart rate'
 
   async function mountRecoveryWithOverride(): Promise<{ html: string, clickResting: (event: unknown) => void, cleanup: () => void }> {
     const restore = stubFetch([{
@@ -719,11 +727,18 @@ describe('annotate wiring', () => {
     })
     await flush(client, () => container.innerHTML)
 
-    // resting_heart_rate is Recovery.tsx's own first card(), so the first chart entry captured by
-    // this mount (capturedCharts already carries one entry per chart from the module level `pages`
-    // harness above, hence the slice) is unambiguously its Sparkline, not daily_hrv's or
-    // respiratory_rate's.
-    const entry = capturedCharts.slice(chartsBefore)[0]
+    // Found by DOM position, not by capturedCharts' own order: since M9b, Recovery also mounts
+    // HeartRateCard's own chart, fed by a query family independent of the three Sparklines' shared
+    // 'last' group, and the two can settle (and so mount their echarts instances) in either order
+    // - capturedCharts' own order is init() call order, a race, not the page's declared layout
+    // (see that array's own doc comment). The rendered DOM is not subject to that race, so this
+    // locates the "Resting heart rate" card's own host element there and matches it back to its
+    // captured entry by identity.
+    const restingCard = [...container.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === RESTING_HR_LABEL)
+    const restingHost = restingCard?.querySelector('[role="img"]')
+    if (!restingHost) throw new Error('no chart host rendered for the resting heart rate card')
+    const entry = capturedCharts.slice(chartsBefore).find((c) => c.dom === restingHost)
     if (!entry) throw new Error('no chart mounted')
     const clickResting = clickHandlerOf(entry)
 
@@ -783,10 +798,12 @@ describe('annotate wiring', () => {
 
 // Task 11b's own coverage: until this task useAnnotations issued GET /notes and GET /events on
 // every page and every range change and threw both away, the gap task-11b's own brief names.
-// Recovery, the same choice 'annotate wiring' above makes and for the same reason: three plain
-// Sparklines and nothing else on the page, so a note or an event landing on all three (or on
-// none) is unambiguous, with no heatmap or heart rate range chart nearby to blur which card a mark
-// actually reached.
+// Recovery, the same choice 'annotate wiring' above makes and for the same reason: every chart on
+// the page reads the same day level annotations, so a note or an event landing on all of them (or
+// on none) is unambiguous. Four charts since M9b, not three: HeartRateCard
+// (pages/recovery/HeartRateCard.tsx) mounted its own heart rate range chart at the foot of this
+// page, reading the same dayAnnotations this page's three Sparklines already did, so the loop
+// below has one more table to check rather than a different assertion to make.
 describe('notes and events reach the charts', () => {
   const DATE = '2026-08-11'
   const NOTE_BODY = 'felt off today'
@@ -833,7 +850,7 @@ describe('notes and events reach the charts', () => {
     const { html, cleanup } = await mountRecoveryWithDayAnnotations()
     try {
       const chartTables = [...html.matchAll(/<table class="sr-only">[\s\S]*?<\/table>/g)].map((m) => m[0])
-      expect(chartTables).toHaveLength(3)
+      expect(chartTables).toHaveLength(4)
       for (const t of chartTables) {
         const row = t.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
         if (!row) throw new Error(`no row for ${DATE}`)

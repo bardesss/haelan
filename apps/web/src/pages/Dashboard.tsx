@@ -20,8 +20,6 @@ import { NightExcludedSessions } from '../components/NightExcludedSessions.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
-import { HeartRateRange } from '../charts/HeartRateRange.js'
-import { IntradayHeartRate, intradayBasis } from '../charts/IntradayHeartRate.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
 import { localMinutesOf, inWindow, withinSchedule, DEFAULT_WINDOW } from '../charts/schedule.js'
@@ -32,22 +30,18 @@ import { Link } from '../router.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
-import { useBaseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { oneNightPerDate, stageOf } from '../data/nights.js'
-import { useIntraday } from '../data/useIntraday.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { wornOn } from '../data/emptyState.js'
-import { useDataTypes } from '../data/useDataTypes.js'
-import { dataTypeForMetric } from '@haelan/core/metric-data-type'
 import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
+import { HeartRateCard } from './recovery/HeartRateCard.js'
 import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, deltaFor, formatMetricValue } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
@@ -136,8 +130,10 @@ export const INSIGHTS = {
 const SUM_METRICS = under('sum')
 const LAST_METRICS = under('last')
 const MEAN_METRICS = under('mean')
-const MIN_METRICS = under('min')
-const MAX_METRICS = under('max')
+// No MIN_METRICS/MAX_METRICS here: REQUESTS.min and REQUESTS.max still name heart_rate, and stay
+// so dashboard-metrics.test.ts keeps holding every pairing this page's own REQUESTS table names to
+// the catalogue, but nothing on this page requests them any more. HeartRateCard
+// (pages/recovery/HeartRateCard.tsx) issues those two requests itself now.
 
 // The sum/last/mean groups useMetricGroups issues one request per, `metrics` and `covers` split
 // the same way `under` and REQUESTS already were: `metrics` is the catalogue-filtered list that
@@ -168,9 +164,11 @@ const GROUPS: readonly MetricGroup[] = [
 // user of this same array at once. Freezing turns that from a silent corruption into a throw at
 // the line that did it.
 //
-// Only min/max heart rate, the nights query and the sleep schedule's naps field still fall back to
-// this one: useMetricGroups carries its own frozen empty for every metric it resolves, so nothing
-// backed by `metricGroups.pointsOf` reaches this file's copy any more.
+// Only the nights query and the sleep schedule's naps field still fall back to this one:
+// useMetricGroups carries its own frozen empty for every metric it resolves, so nothing backed by
+// `metricGroups.pointsOf` reaches this file's copy any more, and min/max heart rate moved with the
+// rest of the heart rate range card into HeartRateCard (pages/recovery/HeartRateCard.tsx), which
+// carries its own copy.
 const EMPTY = Object.freeze([]) as never[]
 
 const values = (points: SeriesPoint[]): number[] =>
@@ -201,13 +199,11 @@ export function Dashboard() {
   const { t, i18n } = useTranslation()
   const session = useSession()
   const controls = usePageControls()
-  // Every other card on this page reads its own exclusion through MetricCard, which calls this
-  // same hook internally (data-types.ts's own dataTypesKey, so this costs no second request). The
-  // Day tab's intraday heart rate card below is not a MetricCard -- see its own comment for why --
-  // and used to have no exclusion check at all, claiming "no data" for a type nobody had asked
-  // haelan to fetch in the first place.
-  const { items: dashboardDataTypes, isPending: dataTypesPending } = useDataTypes()
-  const excludedDataTypes = dashboardDataTypes.filter((d) => d.excluded).map((d) => d.id)
+  // The Day tab's own exclusion check, on the intraday heart rate card that is not a MetricCard,
+  // used to live here (useDataTypes, unshared with the rest of this page's own MetricCards): it
+  // moved into HeartRateCard along with the card itself in M9b, which calls the same hook there
+  // (data-types.ts's own dataTypesKey, so it still costs no second request beside every other
+  // MetricCard's own internal call).
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
 
   // The control row's source selector has to be read off the unfiltered (merged-preferring) view,
@@ -278,8 +274,10 @@ export function Dashboard() {
 
   // Fixed groups, not derived from a response: useMetricGroups runs one useSeries call per entry
   // in GROUPS, in the same order, on every render regardless of what any of them returns. min and
-  // max stay their own calls beside it; see GROUPS' own comment for why heart_rate cannot share a
-  // metric-keyed group with the mean series above without the two colliding.
+  // max heart rate, and the baseline the range card's band reads, are no longer requested here at
+  // all: HeartRateCard (pages/recovery/HeartRateCard.tsx) owns those three now, and asks for the
+  // same metric under the same range and agg, so its query key matches this page's own mean group
+  // below and the two share one cache entry rather than doubling the request.
   const metricGroups = useMetricGroups(GROUPS, range)
   // By agg, not by naming one member metric as a stand in for its group: queryFor('steps') reads
   // right here but ties this line to a metric that has nothing to do with what it actually checks
@@ -291,20 +289,6 @@ export function Dashboard() {
   const sumSeries = metricGroups.queryForAgg('sum')
   const lastSeries = metricGroups.queryForAgg('last')
   const meanSeries = metricGroups.queryForAgg('mean')
-  const minHrSeries = useSeries([...MIN_METRICS], range, 'min')
-  const maxHrSeries = useSeries([...MAX_METRICS], range, 'max')
-  // 'mean' explicitly: useBaseline defaults to 'sum', which heart_rate's catalogue entry does not
-  // list, and the default would 400 the request (ConfigError, requireSource/requireMetricAndAgg)
-  // the same way it would for /series.
-  // Anchored on the range end, not on controls.anchor: baselineWindow reads the sixty days
-  // before `on`, and the chart under this band draws from..to. Anchoring on controls.to rather
-  // than controls.anchor is what lets the basis line state when the window actually ends: a Year
-  // view's anchor can sit months away from the range the chart draws, and the basis line used to
-  // report that anchor date instead of the one the drawn band was really computed against.
-  // historicalTo, not to itself: on the default Month view `to` is the calendar month's last day,
-  // which has not happened yet for all but that one day, and a sixty day window ending there asked
-  // for history that does not exist rather than the sixty real days behind today.
-  const hrBaseline = useBaseline('heart_rate', controls.historicalTo, source, 'mean')
   const nights = useNights(range)
 
   // /insights takes exactly one metric and one agg per call and, unlike /series, does not batch, so
@@ -454,88 +438,6 @@ export function Dashboard() {
       </MetricCard>
     )
   }
-
-  // Heart rate range: one day per date in range, min/mean/max looked up by localDate rather than
-  // zipped by array position, because each of the three requests can be silent on a different day
-  // (a source that only samples during waking hours never reports a night-time minimum) and the
-  // three arrays are not guaranteed to line up index for index.
-  const meanHrPoints = metricGroups.pointsOf('heart_rate')
-  const minHrPoints = minHrSeries.data?.heart_rate?.points ?? EMPTY
-  const maxHrPoints = maxHrSeries.data?.heart_rate?.points ?? EMPTY
-  const heartRateDays = useMemo(() => {
-    const meanHrByDate = new Map(meanHrPoints.map((p) => [p.localDate, p]))
-    const minHrByDate = new Map(minHrPoints.map((p) => [p.localDate, p]))
-    const maxHrByDate = new Map(maxHrPoints.map((p) => [p.localDate, p]))
-    return rangeDates.map((date) => {
-      const meanPoint = meanHrByDate.get(date)
-      return {
-        date,
-        steps: null, sleepMinutes: null,
-        hrMin: minHrByDate.get(date)?.value ?? null,
-        hrMean: meanPoint?.value ?? null,
-        hrMax: maxHrByDate.get(date)?.value ?? null,
-        // true (not worn) when there is no point at all: a missing point already reads as "no
-        // reading" through the null cells above, and adding "not worn" on top of that would
-        // assert a specific reason for the gap this data does not support. false only when a
-        // point exists and its own coverage answers the question.
-        worn: meanPoint === undefined || (wornOn('heart_rate', meanPoint) ?? true),
-      }
-    })
-  }, [rangeDates, meanHrPoints, minHrPoints, maxHrPoints])
-  const rawBaseline = hrBaseline.data?.baseline ?? null
-  // Thin stays undefined, not a band drawn thin: a band computed from three days looks exactly as
-  // authoritative as one computed from thirty, and thin is the reader's only signal that it is
-  // not.
-  const heartRateBand = useMemo(() => (rawBaseline !== null && !rawBaseline.thin
-    ? { low: rawBaseline.center - rawBaseline.spread, high: rawBaseline.center + rawBaseline.spread }
-    : undefined), [rawBaseline])
-  // Map.get on overridesByMetricMap, stable across a render that changed nothing (see that map's
-  // own comment): the same object reaches this chart on every render until the overrides list
-  // itself changes.
-  const heartRateOverrides = annotationsFor(overridesByMetricMap, 'heart_rate')
-  // The basis line's band clause tracks whether heartRateBand is actually defined above, rather
-  // than a single static string claiming a band that a thin or absent baseline never draws.
-  const heartRateBasisKey = hrBaseline.isError
-    // "No baseline yet" would be a claim about the person's history. A request that failed says
-    // nothing about how much history there is.
-    ? 'dashboard.heartRateRange.basisBaselineUnknown'
-    // Ahead of the null test for the same reason: /baselines settles independently of the three
-    // heart rate series MetricCard gates on, so `data` is undefined for a while after this card
-    // has drawn, and reading that as "no baseline yet" is the claim the comment above refuses.
-    : hrBaseline.isPending
-      ? 'dashboard.heartRateRange.basisBaselinePending'
-      : rawBaseline === null
-        ? 'dashboard.heartRateRange.basisNoBaseline'
-        : rawBaseline.thin
-          ? 'dashboard.heartRateRange.basisThin'
-          : 'dashboard.heartRateRange.basis'
-  // All three requests, not only the mean: a card drawing three series has not settled until
-  // the last of them has, and has failed if any of them did. The empty check itself, and the
-  // baseline omission it depends on, now live in MetricCard: this composite query is only built
-  // here because MetricCard takes one query object, not three.
-  const heartRateFailed = meanSeries.isError || minHrSeries.isError || maxHrSeries.isError
-  // Whichever of the three actually failed - MetricCard's own not_found branch (ErrorState) needs
-  // one concrete error to read a kind off, and a demo manifest miss on any of the three throws the
-  // same ApiError('not_found') regardless of which query it lands on.
-  const heartRateError = meanSeries.error ?? minHrSeries.error ?? maxHrSeries.error
-  const retryHeartRate = () => {
-    void meanSeries.refetch()
-    void minHrSeries.refetch()
-    void maxHrSeries.refetch()
-  }
-  const heartRatePending = meanSeries.isPending || minHrSeries.isPending || maxHrSeries.isPending
-
-  // The Day tab's own query, unrelated to the three above: those read the daily aggregate series
-  // (one row per calendar day), which on a one day range holds at most one row and cannot draw a
-  // trend; this reads the day's own minute by minute samples instead. Called unconditionally
-  // (React's own rule, not a choice) and gated by `enabled` rather than by an `if`, so it never
-  // fires outside the Day tab it exists for. `source`, not `controls.source`: this page already
-  // resolves a stale or foreign source name to the all sources sentinel for every other request
-  // (see `source` above), and reading the raw control here would let this one card query a device
-  // the reader does not have while every other card on the page fell back.
-  const intraday = useIntraday(
-    { metric: 'heart_rate', date: controls.from, source }, { enabled: controls.tab === 'day' },
-  )
 
   // Sleep stages (hypnogram): the most recent night in range, one per source collapsed to one per
   // date. Pending-tolerant the same way tile() is, rather than flashing "no data" the instant
@@ -695,84 +597,21 @@ export function Dashboard() {
         <InsightCard insight={sleepInsight.data} query={sleepInsight} metric="sleep_asleep_minutes" span={4}
           label={t('dashboard.insights.sleep')} formatValue={formatSignedDuration} polarity="higher-is-better" />
 
-        {/* basisKey and basisWornKey are the same string here on purpose: this card's basis is a
-            four way choice driven by the baseline's own validity (unknown, absent, thin, real),
-            not by whether heart_rate carries a wear signal (it does, so MetricCard would otherwise
-            always pick basisWornKey), and MetricCard has no third slot for that choice. Collapsing
-            both props to the one key heartRateBasisKey already selected means MetricCard's own
-            wear/plain switch has nothing left to decide between; whichever branch it takes renders
-            the same text. worn/count/reported still land in the call MetricCard makes for the wear
-            branch, but heartRateBasisKey's four templates reference none of them, so they are
-            unused interpolation values, not a second, competing basis. heartRateBand goes to
-            HeartRateRange below, never to MetricCard: a thin baseline should blank only the band
-            that chart draws around its lines, not the lines themselves, and MetricCard's own
-            `baseline` prop, which once fed emptyStateFor's `insufficient` branch, went with that
-            branch: M3e-2 marked both for removal, and this task removed them as dead code no
-            caller ever reached. */}
-        {controls.tab === 'day' ? (
-          // With from === to the daily series this card used to read holds at most one row (see
-          // emptyStateFor's own opening comment in emptyState.ts for why a one day range is
-          // deliberately not one of its states), so what it drew was one dot standing in for
-          // the "daily minimum, mean and maximum" its own label claimed. The Day tab draws the
-          // day's own trace instead. Not a MetricCard: useIntraday answers a different question
-          // than meanHrPoints (minute by minute samples through one day, not one row per day in a
-          // range) and emptyStateFor's gate was built to read the latter, so this hand rolls the
-          // same error/pending/empty order MetricCard enforces elsewhere, the same shape the sleep
-          // stages and flagged days cards already use for a query MetricCard cannot gate on.
-          // Nothing at all rather than an empty Card when the day truly has no samples, the same
-          // rule the sleep stages card follows just below: the exclusion branch keeps its card,
-          // since "not being synced" is still something to say about the day, and only the
-          // genuinely empty points.length === 0 case disappears.
-          // dataTypesPending joins the conditions that KEEP this card for the same reason
-          // MetricCard's own gate reads it (see that file): excludedDataTypes is [] while the data
-          // types request is in flight, which is indistinguishable from a loaded list excluding
-          // nothing, so without it a reader who turned heart rate off watches this card vanish for
-          // a moment instead of being told it is not being synced.
-          intraday.isError || intraday.isPending || dataTypesPending
-            || excludedDataTypes.includes(dataTypeForMetric('heart_rate') ?? '')
-            || intraday.data.points.length > 0 ? (
-            <Card span={8} label={t('dashboard.heartRateRange.label')}
-              basis={intraday.data ? intradayBasis(t, intraday.data.reduction, intraday.data.points.length) : undefined}>
-              {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} error={intraday.error} />
-                : intraday.isPending ? <Loading />
-                // Ahead of the exclusion check below, which cannot be trusted until the list it
-                // reads has arrived: an unloaded list would answer "not excluded" and fall through
-                // to a chart drawn over zero points.
-                : dataTypesPending ? <Loading />
-                // Checked ahead of the real no-data branch below, the same precedence emptyStateFor
-                // gives excludedTypes over both of its own no_data and not_worn checks: an excluded
-                // type has nothing this request could ever have answered, so the exclusion is the
-                // more specific and more actionable truth. dataTypeForMetric('heart_rate') is
-                // 'heart-rate', an ordinary excludable catalogue entry, so this is exactly the
-                // dataTypes/excludedTypes pair MetricCard's own gate reads, not a second rule.
-                : excludedDataTypes.includes(dataTypeForMetric('heart_rate') ?? '') ? (
-                  <EmptyState title={t('emptyState.not_synced.title')} detail={t('emptyState.not_synced.detail')} />
-                ) : (
-                  <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
-                    label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })}
-                    onPointClick={(point) => setAnnotateTarget({
-                      scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
-                    })} />
-                )}
-            </Card>
-          ) : null
-        ) : (
-          <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
-            query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate, error: heartRateError }}
-            points={meanHrPoints}
-            basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.historicalTo }}>
-            {() => (
-              // HeartRateRange has taken annotations/excluded since D1; heartRateOverrides is the
-              // same lookup tile() uses for every other card, read here under the metric this chart
-              // itself plots.
-              <HeartRateRange days={heartRateDays} baseline={heartRateBand}
-                annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
-                excluded={heartRateOverrides.excluded}
-                label={t('dashboard.heartRateRange.chartLabel', { period })}
-                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'heart_rate' })} />
-            )}
-          </MetricCard>
-        )}
+        {/* Moved into its own component in M9b (pages/recovery/HeartRateCard.tsx), verbatim: the
+            heart rate range card (and, on the Day tab, the day's own minute by minute trace that
+            replaces it) is now shared with Recovery.tsx, which mounts the same component at the
+            foot of its own CardGrid. annotations/excluded are this page's own heart_rate lookup,
+            the same one tile() above already reads for every other chart, handed in rather than
+            looked up a second time inside the card. */}
+        <HeartRateCard from={controls.from} to={controls.to} historicalTo={controls.historicalTo}
+          source={source} tab={controls.tab} rangeDates={rangeDates} period={period}
+          annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
+          excluded={annotationsFor(overridesByMetricMap, 'heart_rate').excluded}
+          onDayClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'heart_rate' })}
+          onSampleClick={(point) => setAnnotateTarget({
+            scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
+          })}
+          span={8} />
         {/* Real since M3c: the reader is the source of events (AnnotatePanel's chart-click flow),
             so this reads overridesQuery.events, already fetched above for the chart annotations,
             rather than the hardcoded EmptyState that predated the write path and never came back

@@ -9,6 +9,7 @@ import { dayMetricTarget } from '@haelan/core/target-key'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
+import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
@@ -336,25 +337,31 @@ describe('the charts across a rerender', () => {
   // object, and so a fresh `nameOf`, on every render. IntradayHeartRate's own `build` closes over
   // `nameOf` and lists it in that useCallback's deps, and useChart keys its init/dispose effect on
   // `build`, so a stable session and a stable query cache still tore the chart down and rebuilt it
-  // on every render -- the case above never caught it because it stays on the week tab, and
-  // Dashboard.tsx only mounts IntradayHeartRate on the Day tab.
+  // on every render -- the case above never caught it because it stays on the week tab, and the
+  // heart rate card only mounts IntradayHeartRate on the Day tab.
+  //
+  // Mounts Recovery, not Dashboard: HeartRateCard (pages/recovery/HeartRateCard.tsx) moved out of
+  // Dashboard.tsx in M9b and is now shared with Recovery.tsx, which is where this defect would
+  // reopen on the page's own render loop just as readily as it did on Dashboard's -- both pages
+  // hand it the same props from their own state, and either one handing it a fresh identity would
+  // tear the chart down the same way.
   it('are not disposed and re-initialised on the Day tab either, where IntradayHeartRate lives', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
-    window.history.replaceState(null, '', '/dashboard?range=day&on=2026-08-12')
+    window.history.replaceState(null, '', '/recovery?range=day&on=2026-08-12')
     const tree = (node: ReactNode): ReactNode => (
       <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
     )
 
-    act(() => { root!.render(tree(<Dashboard />)) })
+    act(() => { root!.render(tree(<Recovery />)) })
     await flush(client, () => container!.innerHTML)
 
     const before = chartRoots()
     expect(before.length).toBeGreaterThan(0)
     expect(before.every((node) => node !== null)).toBe(true)
 
-    act(() => { root!.render(tree(<Dashboard />)) })
+    act(() => { root!.render(tree(<Recovery />)) })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     const after = chartRoots()

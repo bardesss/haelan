@@ -213,16 +213,6 @@
       "restingHr": "Resting heart rate, this period against the last",
       "sleep": "Sleep, this period against the last"
     },
-    "heartRateRange": {
-      "label": "Heart rate range",
-      "basis": "daily minimum, mean and maximum, shaded band is the baseline from the 60 days before {{on}}",
-      "basisThin": "daily minimum, mean and maximum; the baseline from the 60 days before {{on}} is too thin to draw a band from",
-      "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
-      "basisBaselinePending": "daily minimum, mean and maximum; the baseline is still loading",
-      "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
-      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
-      "intradayChartLabel": "Heart rate through the day of {{date}}"
-    },
     "flaggedDays": {
       "label": "Flagged days",
       "emptyTitle": "No flagged days in this period.",
@@ -288,6 +278,16 @@
     "respiratoryRateSleep": {
       "label": "Respiratory rate, during sleep",
       "chartLabel": "Respiratory rate through {{period}}, measured during sleep"
+    },
+    "heartRateRange": {
+      "label": "Heart rate range",
+      "basis": "daily minimum, mean and maximum, shaded band is the baseline from the 60 days before {{on}}",
+      "basisThin": "daily minimum, mean and maximum; the baseline from the 60 days before {{on}} is too thin to draw a band from",
+      "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
+      "basisBaselinePending": "daily minimum, mean and maximum; the baseline is still loading",
+      "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
+      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
+      "intradayChartLabel": "Heart rate through the day of {{date}}"
     }
   },
   "health": {

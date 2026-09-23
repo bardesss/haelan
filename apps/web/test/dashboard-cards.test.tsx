@@ -513,26 +513,6 @@ describe('a day whose exclusion has applied', () => {
 })
 
 describe('the remaining Dashboard cards', () => {
-  // The rule the band exists for. A band computed from three days looks exactly as authoritative
-  // as one computed from thirty, and thin is the reader's only signal that it is not.
-  it('draws no baseline band when the baseline is thin', async () => {
-    const restore = stubFetch({ baseline: { center: 60, spread: 4, n: 3, thin: true } })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(tree)
-    await flush(client, () => container!.innerHTML)
-    expect(container!.querySelector('[data-baseline-band]')).toBeNull()
-    restore()
-  })
-
-  it('draws the band when the baseline is not thin', async () => {
-    const restore = stubFetch({ baseline: { center: 60, spread: 4, n: 28, thin: false } })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(tree)
-    await flush(client, () => container!.innerHTML)
-    expect(container!.querySelector('[data-baseline-band]')).not.toBeNull()
-    restore()
-  })
-
   // B3: this card now reads real events (see 'the flagged days card' below for the full
   // coverage), and stubFetch's default fallback answers no items for /events, so the honest
   // empty state is what a real, eventless period actually renders here too.
@@ -594,66 +574,6 @@ describe('the remaining Dashboard cards', () => {
     restore()
   })
 
-  // The principle heartRateBasisKey's own comment states three lines above the branch that broke
-  // it: "no baseline yet" is a claim about the person's history, and an unanswered request makes
-  // no such claim. MetricCard gates the card on the three heart rate series, /baselines settles
-  // separately, so the card draws while this one is still in flight and the null branch spoke for
-  // it.
-  it('does not claim there is no baseline while the baseline request is in flight', async () => {
-    const restore = stubFetch({ baseline: null, hangBaselines: true })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    // Gated on the basis line, not on the card's label: Dashboard passes `label` to MetricCard and
-    // MetricCard renders it in the pending branch too, so waiting for "Heart rate range" can go
-    // true a tick before any basis exists and the assertions below would be reading an empty card.
-    // "daily minimum, mean and maximum" is the shared prefix of all four heartRateRange templates,
-    // so it says a basis has rendered without being the clause under test, which is what keeps a
-    // regression an assertion failure rather than a timeout.
-    await pumpUntil(
-      () => container!.textContent!.includes('daily minimum, mean and maximum'),
-      'the heart rate range basis line',
-    )
-    const text = container!.textContent!
-    expect(text).toContain('the baseline is still loading')
-    expect(text).not.toContain('no baseline yet to compare against')
-    restore()
-  })
-
-  // Finding 4 of the final review: the Day tab's intraday heart rate chart hand rolls its own
-  // error/pending/empty order (it is not a MetricCard; see its own comment in Dashboard.tsx for
-  // why) and used to have no exclusion check in it at all, so excluding heart-rate rendered "No
-  // data yet" -- the untrue claim the empty-state work exists to prevent. The stub answers a real
-  // intraday point for this day, so a render that still shows no_data here would be reading the
-  // hand-rolled points.length check instead of the exclusion this test is for. Scoped to the
-  // "Heart rate range" card itself, not the whole page: this stub's /sleep/nights answers no
-  // nights at all, so the unrelated sleep stages card renders nothing at all (Task 3's own change),
-  // regardless of what this test is about.
-  it('says the excluded heart rate type was never synced, not that the day has no data', async () => {
-    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
-    const restore = stubFetch({ baseline: null, excludedDataTypes: ['heart-rate'] })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card?.textContent).toContain('Not being synced')
-    expect(card?.textContent).not.toContain('No data yet')
-    restore()
-  })
-
-  it('draws the intraday chart normally when heart rate is not excluded', async () => {
-    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
-    const restore = stubFetch({ baseline: null })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card?.textContent).not.toContain('Not being synced')
-    expect(card?.textContent).not.toContain('No data yet')
-    restore()
-  })
-
   // stubFetch has always answered /sleep/nights with items: [], so this card has had no night to
   // draw in every test in this file. It used to render "No data yet" for that; now it renders
   // nothing at all, and the whole Card goes with it rather than leaving a blank shell that would
@@ -667,65 +587,6 @@ describe('the remaining Dashboard cards', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Sleep stages')
     expect(card).toBeUndefined()
     restore()
-  })
-
-  // The Day tab's own hand-rolled card. Its exclusion check runs first and keeps its card (the
-  // existing "says the excluded heart rate type was never synced" test pins that); only a
-  // genuinely empty day disappears.
-  // The same cold-load race MetricCard's own gate exists for, in the one card that hand rolls its
-  // exclusion check instead of going through it. excludedDataTypes is [] while /data-types is in
-  // flight, which reads as "heart rate is not excluded", so an empty day hid this card for that
-  // moment rather than saying it is not being synced. The day is deliberately empty here, because
-  // that is the only case the race could hide.
-  it('keeps the heart rate card while the exclusion list is still loading', async () => {
-    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
-    const restore = stubFetch({ baseline: null, emptyIntraday: true, hangDataTypes: true })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    // pumpUntil, not flush: flush waits for nothing to be in flight, and the whole point of this
-    // fixture is one request that never settles. The tiles' own value is the signal that the
-    // series round trip finished, which is as far as this page can get with /data-types hung.
-    await pumpUntil(
-      () => container!.querySelector('.value') !== null,
-      'the tiles to settle while the exclusion list hangs',
-    )
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card).toBeDefined()
-    expect(card?.textContent).not.toContain('No data yet')
-    restore()
-  })
-
-  it('renders no heart rate card on a Day tab with no intraday samples', async () => {
-    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
-    const restore = stubFetch({ baseline: null, emptyIntraday: true })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card).toBeUndefined()
-    restore()
-  })
-
-  // M3 phase review B2: hrBaseline itself moved to historicalTo (the date the band is really
-  // computed against), but the basis line's own {{on}} kept reading controls.to, the month's own
-  // calendar end. Dashboard.tsx's own hrBaseline comment states the invariant this reopened:
-  // "the basis line used to report that anchor date instead of the one the drawn band was really
-  // computed against." dashboard.heartRateRange.basis interpolates {{on}} unconditionally (not
-  // only on a thin baseline), so a real, non-thin baseline is enough to catch this.
-  it('names the baseline\'s own anchor date in its basis line, not the month\'s own future end', async () => {
-    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
-    window.history.replaceState(null, '', '/')
-    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false } })
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const text = container!.textContent!
-    expect(text).toContain('60 days before 2026-09-05')
-    expect(text).not.toContain('60 days before 2026-09-30')
-    restore()
-    vi.useRealTimers()
   })
 
   // The refactor this task is for: Dashboard's own local groupNumber (a byte-identical copy of

@@ -153,6 +153,12 @@ describe('the Recovery page', () => {
   // range shifted back by the baseline window - a real, separate cost this test is not about.
   // Those two carry sleep_bedtime_minutes or sleep_asleep_minutes and nothing else here does, so
   // filtering them out leaves exactly the page's own group to assert against.
+  //
+  // Also excludes heart_rate: HeartRateCard (pages/recovery/HeartRateCard.tsx), mounted at the
+  // foot of this page since M9b, issues its own three /series requests (mean, min and max, each
+  // its own agg and so each its own round trip - see Dashboard.tsx's own REQUESTS comment for why
+  // /series cannot batch more than one agg per call). That is a real, separate cost of its own,
+  // not the one request this test is about.
   it('asks for its four metrics in one request', async () => {
     const urls: string[] = []
     const restore = stubRecovery(urls)
@@ -160,7 +166,8 @@ describe('the Recovery page', () => {
     mount(tree)
     await flush(client, () => container!.innerHTML)
     const series = urls.filter((u) =>
-      u.includes('/series') && !u.includes('sleep_bedtime_minutes') && !u.includes('sleep_asleep_minutes'))
+      u.includes('/series') && !u.includes('sleep_bedtime_minutes') && !u.includes('sleep_asleep_minutes')
+      && !u.includes('metric=heart_rate'))
     expect(series).toHaveLength(1)
     expect(series[0]!.match(/metric=/g)).toHaveLength(4)
     restore()
@@ -180,7 +187,9 @@ describe('the Recovery page', () => {
     mount(tree)
     await flush(client, () => container!.innerHTML)
 
-    const baselineUrls = urls.filter((u) => u.includes('/baselines'))
+    // heart_rate excluded: HeartRateCard's own baseline (mean agg) is a fifth request this test
+    // is not about, the same reason the metrics test above excludes its three /series calls.
+    const baselineUrls = urls.filter((u) => u.includes('/baselines') && !u.includes('metric=heart_rate'))
     const insightUrls = urls.filter((u) => u.includes('/insights'))
     // Four baselines (resting_heart_rate, daily_hrv and both of the respiratory card's two names)
     // and one insight (resting_heart_rate): if either list came back empty the loop below would

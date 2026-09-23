@@ -14,6 +14,7 @@ import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { RecoveryIndexCard } from './recovery/RecoveryIndexCard.js'
+import { HeartRateCard } from './recovery/HeartRateCard.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
@@ -388,6 +389,22 @@ export function Recovery() {
             length. */}
         <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
           label={t('recovery.insights.restingHeartRate')} formatValue={restingHrInsightFormat} polarity="lower-is-better" />
+
+        {/* The heart rate range card (and, on the Day tab, the day's own minute by minute trace),
+            moved here from Dashboard.tsx in M9b: this page is the one where a heart rate reading
+            already lives beside the metrics it correlates with, so the card that used to be
+            visible only on the Dashboard now shows here too, at the foot of this page's own grid.
+            annotations/excluded are this page's own heart_rate lookup, the same one card() above
+            already builds per metric, rather than a second lookup built inside the card. */}
+        <HeartRateCard from={controls.from} to={controls.to} historicalTo={controls.historicalTo}
+          source={source} tab={controls.tab} rangeDates={rangeDates} period={period}
+          annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
+          excluded={annotationsFor(overridesByMetricMap, 'heart_rate').excluded}
+          onDayClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'heart_rate' })}
+          onSampleClick={(point) => setAnnotateTarget({
+            scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
+          })}
+          span={12} />
       </CardGrid></StaleSourcesProvider>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
