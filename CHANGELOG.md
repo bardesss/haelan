@@ -9,6 +9,19 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.4.0](https://github.com/bardesss/haelan/compare/v2.3.0...v2.4.0) (2026-09-23)
+
+
+### Features
+
+* **web:** a per-night figure beside the balance headline ([#342](https://github.com/bardesss/haelan/issues/342)) ([0d6fb73](https://github.com/bardesss/haelan/commit/0d6fb7381c55b00f1abfe774145baa04714c1d0a))
+* **web:** Sleep balance card  ([#333](https://github.com/bardesss/haelan/issues/333)) ([dfd662e](https://github.com/bardesss/haelan/commit/dfd662e2c2a44624bdf79a0a8b48e38061e007b0))
+
+
+### Bug Fixes
+
+* **web:** a harvested recovery score is not something you wrote ([#340](https://github.com/bardesss/haelan/issues/340)) ([7ce07cc](https://github.com/bardesss/haelan/commit/7ce07ccd909cdba90daf73efd51c022c8ba40c00))
+
 ## [2.3.0](https://github.com/bardesss/haelan/compare/v2.2.0...v2.3.0) (2026-09-22)
 
 
