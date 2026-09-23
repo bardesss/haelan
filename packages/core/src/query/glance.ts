@@ -4,6 +4,8 @@ import type { PersonQuery, DailyPoint } from './personQuery.ts'
 import type { IntradayPoint } from './intraday.ts'
 import { baselineWindow, baselineOf } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
+import { oneNightPerDate } from '../api/nights.ts'
+import type { NightSegment } from './sleepNights.ts'
 
 /**
  * The glance: last night, today's recovery and today so far, as one person bound read (M9a).
@@ -175,6 +177,52 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
     partial: true,
     staleSources: staleFeeding(ctx, feeding),
     strip: dates.map((localDate) => ({ localDate, value: sums.get(localDate) ?? null })),
+  }
+}
+
+export interface GlanceSleep {
+  localDate: string
+  sourceId: string
+  startMs: number
+  endMs: number
+  startOffsetMinutes: number
+  endOffsetMinutes: number
+  segments: NightSegment[]
+  asleep: GlanceFigure
+  efficiency: GlanceFigure
+  bedtime: GlanceFigure
+  waketime: GlanceFigure
+}
+
+/**
+ * Last night is the main sleep with the latest end that finished in the 36 hours before now.
+ *
+ * Chosen by when a night ended rather than by the date it is filed under, so the rule does not
+ * depend on which date key a night carries. Thirty-six hours reaches back past one missed night
+ * without reaching two, and a night still in progress at `nowMs` is not last night yet. Naps are
+ * never last night: readSleepNights already files them apart from the night.
+ */
+export const LAST_NIGHT_WINDOW_MS = 36 * 3_600_000
+
+export function readLastNight(ctx: GlanceContext): GlanceSleep | null {
+  const nights = oneNightPerDate(ctx.q.sleepNights({ from: shiftLocalDate(ctx.today, -2), to: ctx.today }))
+  const candidates = nights.filter((n) => n.endMs <= ctx.nowMs && n.endMs >= ctx.nowMs - LAST_NIGHT_WINDOW_MS)
+  const night = candidates.reduce<(typeof candidates)[number] | null>((best, n) => (best === null || n.endMs > best.endMs ? n : best), null)
+  if (night === null) return null
+  const figure = (metric: string, agg: string) =>
+    dailyFigure(ctx, { metric, agg, on: night.localDate, partial: false, asOfMs: night.endMs })
+  return {
+    localDate: night.localDate,
+    sourceId: night.sourceId,
+    startMs: night.startMs,
+    endMs: night.endMs,
+    startOffsetMinutes: night.startOffsetMinutes,
+    endOffsetMinutes: night.endOffsetMinutes,
+    segments: night.segments,
+    asleep: figure('sleep_asleep_minutes', 'sum'),
+    efficiency: figure('sleep_efficiency', 'last'),
+    bedtime: figure('sleep_bedtime_minutes', 'last'),
+    waketime: figure('sleep_waketime_minutes', 'last'),
   }
 }
 

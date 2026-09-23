@@ -1,10 +1,10 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson, insertSample } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { daily, sources } from '../src/db/schema/index.ts'
+import { daily, sources, sessions } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { contextFor, dailyFigure, readDay } from '../src/query/glance.ts'
+import { contextFor, dailyFigure, readDay, readLastNight } from '../src/query/glance.ts'
 
 const TODAY = '2026-08-20'
 const NOW = Date.parse('2026-08-20T10:00:00Z')
@@ -128,5 +128,43 @@ describe('readDay', () => {
     expect(day.steps.value).toBeNull()
     expect(day.activeMinutes.value).toBeNull()
     expect(day.heartRate).toEqual({ points: [], asOfMs: null, staleSources: [] })
+  })
+})
+
+describe('readLastNight', () => {
+  function sleep(o: { id: string, localDate: string, startIso: string, endIso: string, sourceId?: string }) {
+    test.db.insert(sessions).values({
+      id: o.id, personId: 'p1', sourceId: o.sourceId ?? 'watch', kind: 'sleep', externalId: o.id,
+      startMs: Date.parse(o.startIso), startOffsetMinutes: 120, endMs: Date.parse(o.endIso), endOffsetMinutes: 120,
+      localDate: o.localDate, attrs: JSON.stringify({}), rawPayloadId: null,
+    }).run()
+  }
+
+  it('picks the night that ended most recently, and shows it whole across midnight', () => {
+    sleep({ id: 'n19', localDate: '2026-08-19', startIso: '2026-08-18T21:00:00Z', endIso: '2026-08-19T05:00:00Z' })
+    sleep({ id: 'n20', localDate: TODAY, startIso: '2026-08-19T21:30:00Z', endIso: '2026-08-20T05:10:00Z' })
+    insert({ metric: 'sleep_asleep_minutes', localDate: TODAY, value: 430 })
+    const night = readLastNight(ctx())!
+    expect(night.localDate).toBe(TODAY)
+    expect(night.startMs).toBe(Date.parse('2026-08-19T21:30:00Z'))
+    expect(night.endMs).toBe(Date.parse('2026-08-20T05:10:00Z'))
+    expect(night.asleep).toMatchObject({ value: 430, partial: false, asOfDate: TODAY, asOfMs: night.endMs })
+  })
+
+  it('chooses by when a night ended, not by the date it is filed under', () => {
+    // Filed under yesterday but ending this morning - the rule must not care which date key a
+    // night carries, which is the whole reason it reads endMs.
+    sleep({ id: 'odd', localDate: '2026-08-19', startIso: '2026-08-19T22:00:00Z', endIso: '2026-08-20T06:00:00Z' })
+    expect(readLastNight(ctx())!.endMs).toBe(Date.parse('2026-08-20T06:00:00Z'))
+  })
+
+  it('has no last night when the latest night ended more than 36 hours ago', () => {
+    sleep({ id: 'old', localDate: '2026-08-18', startIso: '2026-08-17T21:00:00Z', endIso: '2026-08-18T05:00:00Z' })
+    expect(readLastNight(ctx())).toBeNull()
+  })
+
+  it('never counts a night that has not ended yet at `nowMs`', () => {
+    sleep({ id: 'future', localDate: TODAY, startIso: '2026-08-20T09:00:00Z', endIso: '2026-08-20T11:00:00Z' })
+    expect(readLastNight(ctx())).toBeNull()
   })
 })
