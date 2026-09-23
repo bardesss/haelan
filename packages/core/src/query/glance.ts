@@ -3,6 +3,7 @@ import { shiftLocalDate } from '../derive/localDay.ts'
 import type { PersonQuery, DailyPoint } from './personQuery.ts'
 import type { IntradayPoint } from './intraday.ts'
 import { baselineWindow, baselineOf } from './baseline.ts'
+import type { Baseline } from './baseline.ts'
 
 /**
  * The glance: last night, today's recovery and today so far, as one person bound read (M9a).
@@ -96,6 +97,13 @@ export function stripDates(on: string): string[] {
   return Array.from({ length: STRIP_DAYS }, (_, i) => shiftLocalDate(on, i - (STRIP_DAYS - 1)))
 }
 
+/** One place turns a query's baseline into the band a client draws, so the two figures below cannot drift apart on the shape. */
+function toGlanceBaseline(baseline: Baseline | null): GlanceBaseline | null {
+  return baseline === null ? null : {
+    center: baseline.center, low: baseline.center - baseline.spread, high: baseline.center + baseline.spread, thin: baseline.thin,
+  }
+}
+
 export function dailyFigure(
   ctx: GlanceContext, o: { metric: string, agg: string, on: string, partial: boolean, asOfMs: number | null },
 ): GlanceFigure {
@@ -108,9 +116,7 @@ export function dailyFigure(
     metric: o.metric,
     value: onDay?.value ?? null,
     unit: METRICS[o.metric]?.unit ?? '',
-    baseline: baseline === null ? null : {
-      center: baseline.center, low: baseline.center - baseline.spread, high: baseline.center + baseline.spread, thin: baseline.thin,
-    },
+    baseline: toGlanceBaseline(baseline),
     asOfDate: onDay === undefined ? null : o.on,
     asOfMs: onDay === undefined ? null : o.asOfMs,
     partial: o.partial,
@@ -163,9 +169,7 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
     metric: 'active_minutes',
     value,
     unit: 'minutes',
-    baseline: baseline === null ? null : {
-      center: baseline.center, low: baseline.center - baseline.spread, high: baseline.center + baseline.spread, thin: baseline.thin,
-    },
+    baseline: toGlanceBaseline(baseline),
     asOfDate: value === null ? null : ctx.today,
     asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
     partial: true,
