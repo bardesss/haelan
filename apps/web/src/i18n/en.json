@@ -651,8 +651,8 @@
     },
     "balance": {
       "label": "Sleep Balance",
-      "basisTarget": "{{reported}} of {{total}} nights against your {{target}} target",
-      "basisBaseline": "{{reported}} of {{total}} nights against your usual {{target}}, 60 days before {{on}}",
+      "basisTarget": "{{reported}} of {{total}} nights, {{perNight}} a night, against your {{target}} target",
+      "basisBaseline": "{{reported}} of {{total}} nights, {{perNight}} a night, against your usual {{target}}, 60 days before {{on}}",
       "chartLabel": "Nightly sleep balance through {{period}}",
       "columnUnit": "Minutes over or under"
     },
