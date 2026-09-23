@@ -4,7 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources, sessions } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { contextFor, dailyFigure, readDay, readLastNight } from '../src/query/glance.ts'
+import { contextFor, dailyFigure, readDay, readLastNight, readRecovery } from '../src/query/glance.ts'
 
 const TODAY = '2026-08-20'
 const NOW = Date.parse('2026-08-20T10:00:00Z')
@@ -166,5 +166,48 @@ describe('readLastNight', () => {
   it('never counts a night that has not ended yet at `nowMs`', () => {
     sleep({ id: 'future', localDate: TODAY, startIso: '2026-08-20T09:00:00Z', endIso: '2026-08-20T11:00:00Z' })
     expect(readLastNight(ctx())).toBeNull()
+  })
+})
+
+describe('readRecovery', () => {
+  const seedBaselines = (o: { respiratory?: number } = {}) => {
+    for (const date of datesEnding('2026-08-19', 60)) {
+      insert({ metric: 'daily_hrv', agg: 'last', localDate: date, value: 40 + (Number(date.slice(8)) % 5) })
+      insert({ metric: 'resting_heart_rate', agg: 'last', localDate: date, value: 55 + (Number(date.slice(8)) % 3) })
+      insert({ metric: 'respiratory_rate', agg: 'last', localDate: date, value: 14 + (Number(date.slice(8)) % 2) * 0.4 })
+      insert({ metric: 'sleep_asleep_minutes', localDate: date, value: 420 })
+      insert({ metric: 'sleep_bedtime_minutes', agg: 'last', localDate: date, value: -30 })
+    }
+    insert({ metric: 'daily_hrv', agg: 'last', localDate: TODAY, value: 44 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: TODAY, value: 55 })
+    insert({ metric: 'respiratory_rate', agg: 'last', localDate: TODAY, value: o.respiratory ?? 14.2 })
+  }
+
+  it('scores today and carries its band, with HRV and resting heart rate beside it', () => {
+    seedBaselines()
+    const recovery = readRecovery(ctx())
+    expect(recovery.index.value).not.toBeNull()
+    expect(recovery.band).not.toBeNull()
+    expect(recovery.missing).toBeNull()
+    expect(recovery.hrv).toMatchObject({ value: 44, asOfDate: TODAY, partial: false })
+    expect(recovery.restingHeartRate.value).toBe(55)
+    expect(recovery.index.strip).toHaveLength(7)
+  })
+
+  it('leaves respiratory rate out on an ordinary day', () => {
+    seedBaselines()
+    expect(readRecovery(ctx()).respiratoryRate).toBeNull()
+  })
+
+  it('shows respiratory rate on a day it sits above its baseline', () => {
+    seedBaselines({ respiratory: 19 })
+    expect(readRecovery(ctx()).respiratoryRate).toMatchObject({ metric: 'respiratory_rate', value: 19 })
+  })
+
+  it('says why today could not be scored instead of inventing a score', () => {
+    const recovery = readRecovery(ctx())
+    expect(recovery.index.value).toBeNull()
+    expect(recovery.band).toBeNull()
+    expect(recovery.missing).toEqual(expect.arrayContaining(['hrv', 'restingHeartRate']))
   })
 })

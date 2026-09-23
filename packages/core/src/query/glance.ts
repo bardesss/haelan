@@ -6,6 +6,9 @@ import { baselineWindow, baselineOf } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import type { NightSegment } from './sleepNights.ts'
+import { recoveryIndexSeries, bandOf } from '../api/recoveryIndex.ts'
+import type { RecoveryBand } from '../api/recoveryIndex.ts'
+import { readRecoveryInput } from './recoveryInput.ts'
 
 /**
  * The glance: last night, today's recovery and today so far, as one person bound read (M9a).
@@ -223,6 +226,68 @@ export function readLastNight(ctx: GlanceContext): GlanceSleep | null {
     efficiency: figure('sleep_efficiency', 'last'),
     bedtime: figure('sleep_bedtime_minutes', 'last'),
     waketime: figure('sleep_waketime_minutes', 'last'),
+  }
+}
+
+export interface GlanceRecovery {
+  /** The 0-100 index for today as a figure; `value` null when today could not be scored. */
+  index: GlanceFigure
+  band: RecoveryBand | null
+  /** Why today could not be scored, the index's own reasons; null when it was. */
+  missing: string[] | null
+  restingHeartRate: GlanceFigure
+  hrv: GlanceFigure
+  /** Present only on a day it sits above its baseline's high; never on a thin baseline. */
+  respiratoryRate: GlanceFigure | null
+}
+
+/**
+ * Today's recovery: the index, the two readings people check beside it, and respiratory rate only
+ * when it says something.
+ *
+ * HRV is shown although it is also the index's heaviest input (0.35): beside the index it explains
+ * the number rather than repeating it, and it is the figure people look for. Respiratory rate
+ * barely moves from day to day, so as a permanent figure it would read "usual" nearly every
+ * morning; it appears only on a day it rises above its own baseline, because a rise is an early
+ * sign of illness. A thin baseline cannot say "above", so it never shows on one.
+ *
+ * The index figure has no baseline of its own: it already is a distance from the person's own
+ * baselines, and a baseline of that would be a baseline of a baseline.
+ */
+export function readRecovery(ctx: GlanceContext): GlanceRecovery {
+  const dates = stripDates(ctx.today)
+  const { input } = readRecoveryInput(ctx.q, { from: dates[0]!, to: ctx.today })
+  const series = recoveryIndexSeries(input, { from: dates[0]!, to: ctx.today })
+  const today = series.get(ctx.today)
+  const scored = today !== undefined && today.enough ? today : null
+
+  const figure = (metric: string) => dailyFigure(ctx, { metric, agg: 'last', on: ctx.today, partial: false, asOfMs: null })
+  const restingHeartRate = figure('resting_heart_rate')
+  const hrv = figure('daily_hrv')
+  const respiratory = figure('respiratory_rate')
+  const elevated = respiratory.value !== null && respiratory.baseline !== null && !respiratory.baseline.thin
+    && respiratory.value > respiratory.baseline.high
+
+  return {
+    index: {
+      metric: 'recovery_index',
+      value: scored?.score ?? null,
+      unit: '',
+      baseline: null,
+      asOfDate: scored === null ? null : ctx.today,
+      asOfMs: null,
+      partial: false,
+      staleSources: staleFeeding(ctx, [...restingHeartRate.staleSources, ...hrv.staleSources].map((s) => s.sourceId)),
+      strip: dates.map((localDate) => {
+        const day = series.get(localDate)
+        return { localDate, value: day !== undefined && day.enough ? day.score : null }
+      }),
+    },
+    band: scored === null ? null : bandOf(scored.score),
+    missing: today === undefined || today.enough ? null : [...today.missing],
+    restingHeartRate,
+    hrv,
+    respiratoryRate: elevated ? respiratory : null,
   }
 }
 
