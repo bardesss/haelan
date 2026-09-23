@@ -5,6 +5,7 @@ import type { Polarity } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { CardGrid } from '../components/CardGrid.js'
+import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -347,7 +348,7 @@ export function Activity() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
-      <CardGrid>
+      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
           {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} error={stepsQuery.error} />
             : stepsQuery.isPending ? <Loading /> : (
@@ -500,7 +501,7 @@ export function Activity() {
         <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
           label={t('activity.insights.steps')} polarity="higher-is-better" />
 
-      </CardGrid>
+      </CardGrid></StaleSourcesProvider>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

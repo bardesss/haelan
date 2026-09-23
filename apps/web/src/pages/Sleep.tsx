@@ -9,6 +9,7 @@ import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
 import { CardGrid } from '../components/CardGrid.js'
+import { StaleSourcesProvider } from '../data/staleSources.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
@@ -509,7 +510,7 @@ export function Sleep() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
-      <CardGrid>
+      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         {/* Not a MetricCard: gated on a night from useNights, not a metric and its points, the
             same reason Dashboard's own hypnogram card stays outside it. The date names the night
             actually drawn, never the range end, so an empty range never claims a night it has no
@@ -670,7 +671,7 @@ export function Sleep() {
             shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
           label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} polarity="higher-is-better" />
-      </CardGrid>
+      </CardGrid></StaleSourcesProvider>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

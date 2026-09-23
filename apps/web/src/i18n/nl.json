@@ -70,6 +70,12 @@
       "note": "De periodetoetsen werken op pagina's met een periode om door te bladeren. Geen van deze toetsen doet iets terwijl je in een veld typt."
     }
   },
+  "staleSource": {
+    "sentence": "{{name}} heeft sinds {{date}} niets meer doorgegeven; {{usual}}.",
+    "sentenceNoCadence": "{{name}} heeft sinds {{date}} niets meer doorgegeven.",
+    "daily": "normaal gebeurt dat dagelijks",
+    "every": "normaal gebeurt dat elke {{count}} dagen"
+  },
   "sync": {
     "run": "Synchroniseren",
     "ago": "Gesynchroniseerd {{count}} min geleden",

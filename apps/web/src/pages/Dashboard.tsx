@@ -5,6 +5,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { CardGrid } from '../components/CardGrid.js'
+import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { InsightCard } from '../components/InsightCard.js'
@@ -610,7 +611,7 @@ export function Dashboard() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
-      <CardGrid>
+      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         {/* The invitation to connect a Google account deliberately does not appear on this page,
             though it did before the companion app: a member who has just chosen the phone path
             would read it seconds after choosing not to. It lives on Account instead, which is
@@ -850,7 +851,7 @@ export function Dashboard() {
             : <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />)}
         </MetricCard>
 
-      </CardGrid>
+      </CardGrid></StaleSourcesProvider>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

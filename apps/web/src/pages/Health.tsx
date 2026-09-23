@@ -3,6 +3,7 @@ import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
+import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -244,7 +245,7 @@ export function Health() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('health.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
-      <CardGrid>
+      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         {/* basisPlacement 'header': the range chart carries no StatTile of its own to fold a basis
             into, the same reason Dashboard.tsx's heart rate range card takes 'header' rather than
             'body'. spo2 is an intraday metric (packages/core/src/api/catalogue.ts gives it `tier:
@@ -305,7 +306,7 @@ export function Health() {
             the same collision Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
         <InsightCard insight={dailySpo2Insight.data} query={dailySpo2Insight} metric="daily_spo2" span={12}
           label={t('health.insights.dailySpo2')} formatValue={dailySpo2InsightFormat} polarity="higher-is-better" />
-      </CardGrid>
+      </CardGrid></StaleSourcesProvider>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

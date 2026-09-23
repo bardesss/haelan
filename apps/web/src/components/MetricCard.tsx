@@ -7,6 +7,8 @@ import { EmptyState } from './EmptyState.js'
 import { emptyStateFor, hidesWhenEmpty, wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import { useDataTypes } from '../data/useDataTypes.js'
 import type { SeriesPoint } from '../data/useSeries.js'
+import { useStaleSourcesFor } from '../data/staleSources.js'
+import { formatLocalDate } from '../format.js'
 
 /**
  * Resolves a query's state and, once there is data, the basis line that goes with it, in one
@@ -93,7 +95,7 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // its old behaviour, since a function that ignores its second parameter is still assignable here.
   children: (basis: string, oneDayRange: boolean) => ReactNode
 }): ReactNode {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Called unconditionally, ahead of every early return below, because it is a hook: a page whose
   // query has already failed or is still pending still needs this one to run so the hook order
   // stays the same on every render. The query itself is the one useDataTypes defines
@@ -101,6 +103,16 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // itself, so mounting eight cards costs the one request their shared cache already pays for on
   // the page's first card, not eight.
   const { items: dataTypes, isPending: dataTypesPending } = useDataTypes()
+  // A hook too, so called here with the other one. Empty outside a StaleSourcesProvider, which is
+  // every test and any page that has not adopted it.
+  const stale = useStaleSourcesFor(points)
+  const warning = stale.length === 0 ? undefined : stale.map((source) => {
+    const date = formatLocalDate(source.lastReportedDate, i18n.language)
+    if (source.medianGapDays === null) return t('staleSource.sentenceNoCadence', { name: source.name, date })
+    const gap = Math.round(source.medianGapDays)
+    const usual = gap <= 1 ? t('staleSource.daily') : t('staleSource.every', { count: gap })
+    return t('staleSource.sentence', { name: source.name, date, usual })
+  }).join(' ')
 
   // A failed request is not an empty period, and it outranks the pending check even when both
   // flags are true at once: a composite query built by OR-ing several requests together (the
@@ -197,7 +209,7 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // children always receives the real basis string regardless of placement, since a 'body' caller
   // still needs it to hand to its own StatTile; only Card's own copy is conditional.
   return (
-    <Card span={span} label={label} basis={basisPlacement === 'header' ? basis : undefined}>
+    <Card span={span} label={label} basis={basisPlacement === 'header' ? basis : undefined} warning={warning}>
       {children(basis, oneDayRange ?? false)}{after}
     </Card>
   )
