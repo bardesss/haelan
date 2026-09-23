@@ -29,12 +29,22 @@ import { fileURLToPath } from 'node:url'
  * comfortably inside the spec's under-40 MB bracket, so the demo keeps the full 365 day span
  * rather than trimming intraday to 90 days or cutting the seed to 180.
  *
- * MAX_CAPTURE_BYTES is roughly 1.5x that measurement (7 380 571 * 1.5 = 11 070 856.5, rounded up):
- * a ceiling that catches a runaway (a route that starts recording every source separately, say, or
- * a metric catalogue that grows sharply), not one that trips on the ordinary growth a new card or
- * a new day of seeded data adds.
+ * Re-measured 2026-09-23 at 400 days, which is now the default: 748 files, 10 446 037 bytes
+ * (10.0 MB). The span grew past a year so the year-over-year comparison has a year earlier to draw:
+ * at exactly 365 days ending 6 September, no month on screen had any data twelve months before it,
+ * and every tile answered "nothing recorded a year earlier". 400 reaches back to early August of
+ * the year before, so September, the default Month view, compares against real days. Still well
+ * inside the spec's under-40 MB bracket.
+ *
+ * MAX_CAPTURE_BYTES is roughly 1.5x that measurement (10 446 037 * 1.5 = 15 669 055.5, rounded
+ * up): a ceiling that catches a runaway (a route that starts recording every source separately,
+ * say, or a metric catalogue that grows sharply), not one that trips on the ordinary growth a new
+ * card or a new day of seeded data adds.
  */
-const MAX_CAPTURE_BYTES = 11_070_857
+const MAX_CAPTURE_BYTES = 15_669_056
+
+/** The span the published demo seeds when no day count is given. See the measurement above. */
+const DEFAULT_DAYS = 400
 
 /**
  * Writes one JSON file per recorded response into `outDir`, plus a manifest mapping each response's
@@ -90,7 +100,7 @@ function formatMb(bytes) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const rootDir = fileURLToPath(new URL('..', import.meta.url))
   const outDir = join(rootDir, 'demo/capture/out')
-  const days = process.argv[2] === undefined ? 365 : Number(process.argv[2])
+  const days = process.argv[2] === undefined ? DEFAULT_DAYS : Number(process.argv[2])
   if (!Number.isInteger(days) || days <= 0) {
     console.error(`days must be a positive whole number, got ${process.argv[2]}`)
     process.exit(1)
