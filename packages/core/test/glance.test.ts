@@ -1,10 +1,10 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, seedPerson, insertSample } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { contextFor, dailyFigure } from '../src/query/glance.ts'
+import { contextFor, dailyFigure, readDay } from '../src/query/glance.ts'
 
 const TODAY = '2026-08-20'
 const NOW = Date.parse('2026-08-20T10:00:00Z')
@@ -85,5 +85,48 @@ describe('staleness', () => {
     for (const date of datesEnding(TODAY, 7)) insert({ metric: 'steps', localDate: date, value: 5, sourceMix: mix('watch', 'phone') })
     const figure = dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: null })
     expect(figure.staleSources).toEqual([{ sourceId: 'watch', name: 'name:watch', lastReportedDate: '2026-07-31', medianGapDays: 1 }])
+  })
+})
+
+describe('readDay', () => {
+  const at = (hh: number, mm = 0) => Date.parse(`2026-08-20T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00Z`)
+
+  it('states steps so far as partial, current to the last step sample of today', () => {
+    insert({ metric: 'steps', localDate: TODAY, value: 3200 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: at(8, 10), value: 40 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: at(9, 40), value: 12 })
+    const { steps } = readDay(ctx())
+    expect(steps).toMatchObject({ value: 3200, partial: true, asOfDate: TODAY, asOfMs: at(9, 40) })
+  })
+
+  it('sums the three activity levels into active minutes, per day, and baselines the sum', () => {
+    // Sixty days, not thirty: baselineOf's default window is sixty days, and thirty of sixty
+    // covers only half of it, which trips the day-fraction guard (INSIGHT_MIN_DAY_FRACTION,
+    // baseline.ts) and comes back thin regardless of day count, same as dailyFigure's own
+    // baseline test above.
+    for (const date of datesEnding('2026-08-19', 60)) {
+      insert({ metric: 'active_minutes_light', localDate: date, value: 30 })
+      insert({ metric: 'active_minutes_moderate', localDate: date, value: 10 })
+      insert({ metric: 'active_minutes_vigorous', localDate: date, value: 5 })
+    }
+    insert({ metric: 'active_minutes_light', localDate: TODAY, value: 12 })
+    const { activeMinutes } = readDay(ctx())
+    expect(activeMinutes.value).toBe(12)
+    expect(activeMinutes.strip.at(-2)!.value).toBe(45)
+    expect(activeMinutes.baseline).toMatchObject({ center: 45, thin: false })
+  })
+
+  it('draws today\'s heart rate so far, current to its last sample', () => {
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(9, 55), agg: 'mean', value: 64 })
+    const { heartRate } = readDay(ctx())
+    expect(heartRate.points.length).toBeGreaterThan(0)
+    expect(heartRate.asOfMs).toBe(at(9, 55))
+  })
+
+  it('answers a person with nothing today with empty figures rather than an error', () => {
+    const day = readDay(ctx())
+    expect(day.steps.value).toBeNull()
+    expect(day.activeMinutes.value).toBeNull()
+    expect(day.heartRate).toEqual({ points: [], asOfMs: null, staleSources: [] })
   })
 })

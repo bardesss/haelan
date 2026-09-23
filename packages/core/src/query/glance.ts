@@ -1,6 +1,8 @@
 import { METRICS } from '../derive/metrics.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 import type { PersonQuery, DailyPoint } from './personQuery.ts'
+import type { IntradayPoint } from './intraday.ts'
+import { baselineWindow, baselineOf } from './baseline.ts'
 
 /**
  * The glance: last night, today's recovery and today so far, as one person bound read (M9a).
@@ -114,5 +116,70 @@ export function dailyFigure(
     partial: o.partial,
     staleSources: staleFeeding(ctx, points.flatMap(sourcesOf)),
     strip: dates.map((localDate) => ({ localDate, value: byDate.get(localDate)?.value ?? null })),
+  }
+}
+
+export interface GlanceHeartRate { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
+export interface GlanceDay { steps: GlanceFigure, activeMinutes: GlanceFigure, heartRate: GlanceHeartRate }
+
+export const ACTIVE_MINUTE_METRICS: readonly string[] = ['active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous']
+
+// Heart rate thinned to a five minute budget over a day, which is what a card-sized trace can
+// draw; the reading's own resolution stays on the Recovery page's intraday chart.
+const HEART_RATE_POINTS = 288
+
+/** The instant of the last sample of any of `metrics` on `today`, or null when there is none. */
+function lastSampleMs(ctx: GlanceContext, metrics: readonly string[]): number | null {
+  let latest: number | null = null
+  for (const metric of metrics) {
+    for (const point of ctx.q.intraday({ metric, localDate: ctx.today }).points) {
+      if (latest === null || point.utcMs > latest) latest = point.utcMs
+    }
+  }
+  return latest
+}
+
+/**
+ * Active minutes as one figure: the three activity levels summed per day, which is what a person
+ * means by "active minutes today". The baseline is taken over the summed days rather than built
+ * from three baselines, because three spreads do not add.
+ */
+function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
+  const dates = stripDates(ctx.today)
+  const { from: baselineFrom, to: baselineTo } = baselineWindow(ctx.today)
+  const sums = new Map<string, number>()
+  const feeding: string[] = []
+  for (const metric of ACTIVE_MINUTE_METRICS) {
+    const { points } = ctx.q.series({ metric, agg: 'sum', from: baselineFrom, to: ctx.today })
+    for (const point of points) {
+      sums.set(point.localDate, (sums.get(point.localDate) ?? 0) + point.value)
+      if (point.localDate >= dates[0]!) feeding.push(...sourcesOf(point))
+    }
+  }
+  const baselineValues = [...sums].filter(([date]) => date >= baselineFrom && date <= baselineTo).map(([, value]) => value)
+  const baseline = baselineOf(baselineValues)
+  const value = sums.get(ctx.today) ?? null
+  return {
+    metric: 'active_minutes',
+    value,
+    unit: 'minutes',
+    baseline: baseline === null ? null : {
+      center: baseline.center, low: baseline.center - baseline.spread, high: baseline.center + baseline.spread, thin: baseline.thin,
+    },
+    asOfDate: value === null ? null : ctx.today,
+    asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
+    partial: true,
+    staleSources: staleFeeding(ctx, feeding),
+    strip: dates.map((localDate) => ({ localDate, value: sums.get(localDate) ?? null })),
+  }
+}
+
+export function readDay(ctx: GlanceContext): GlanceDay {
+  const heart = ctx.q.intraday({ metric: 'heart_rate', localDate: ctx.today, points: HEART_RATE_POINTS })
+  const heartAsOf = heart.points.reduce<number | null>((latest, p) => (latest === null || p.utcMs > latest ? p.utcMs : latest), null)
+  return {
+    steps: dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) }),
+    activeMinutes: activeMinutesFigure(ctx),
+    heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heart.points.map((p) => p.sourceId)) },
   }
 }
