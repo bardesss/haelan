@@ -141,8 +141,9 @@ describe('glanceText with real translations', () => {
   it.each([
     ['en', 'within your usual 8,000 – 9,000', 'above your usual 8,000 – 9,000', 'below your usual 8,000 – 9,000',
       'not enough history for a usual yet', 'so far; your usual day 8,700'],
-    ['nl', 'binnen je gebruikelijke 8.000 – 9.000', 'boven je gebruikelijke 8.000 – 9.000', 'onder je gebruikelijke 8.000 – 9.000',
-      'nog te weinig geschiedenis voor een gebruikelijke waarde', 'tot nu toe; je gebruikelijke dag 8.700'],
+    ['nl', 'binnen je gebruikelijke bereik 8.000 – 9.000', 'boven je gebruikelijke bereik 8.000 – 9.000',
+      'onder je gebruikelijke bereik 8.000 – 9.000',
+      'nog te weinig geschiedenis voor een gebruikelijke waarde', 'tot nu toe; op een gewone dag 8.700'],
   ] as const)('reads within / above / below / thin / partial in %s', (language, within, above, below, thin, partial) => {
     const t = realT(language)
     expect(usualLine(figure({ value: 8500, baseline }), t, language)).toBe(within)
@@ -154,7 +155,7 @@ describe('glanceText with real translations', () => {
 
   it.each([
     ['en', 'as of 11:32', 'today', 'yesterday', 'night of Sep 22'],
-    ['nl', 'om 11:32', 'vandaag', 'gisteren', 'nacht van 22 sep'],
+    ['nl', 'bijgewerkt om 11:32', 'vandaag', 'gisteren', 'nacht van 22 sep'],
   ] as const)('reads the as-of clauses in %s', (language, asOfTime, today, yesterday, night) => {
     const t = realT(language)
     const ms = Date.parse('2026-09-23T09:32:00Z')
