@@ -1417,5 +1417,20 @@
       "respiratoryRate": "Breathing rate"
     },
     "points": "{{points}} points"
+  },
+  "glance": {
+    "usual": {
+      "within": "within your usual {{low}} – {{high}}",
+      "above": "above your usual {{low}} – {{high}}",
+      "below": "below your usual {{low}} – {{high}}",
+      "thin": "not enough history for a usual yet",
+      "partial": "so far; your usual day {{center}}"
+    },
+    "asOf": {
+      "time": "as of {{time}}",
+      "today": "today",
+      "yesterday": "yesterday",
+      "night": "night of {{date}}"
+    }
   }
 }

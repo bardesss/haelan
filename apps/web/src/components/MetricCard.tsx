@@ -8,7 +8,7 @@ import { emptyStateFor, hidesWhenEmpty, wornOn, coverageIsWearSignal } from '../
 import { useDataTypes } from '../data/useDataTypes.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useStaleSourcesFor } from '../data/staleSources.js'
-import { formatLocalDate } from '../format.js'
+import { staleSentence } from './staleSentence.js'
 
 /**
  * Resolves a query's state and, once there is data, the basis line that goes with it, in one
@@ -106,13 +106,7 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // A hook too, so called here with the other one. Empty outside a StaleSourcesProvider, which is
   // every test and any page that has not adopted it.
   const stale = useStaleSourcesFor(points)
-  const warning = stale.length === 0 ? undefined : stale.map((source) => {
-    const date = formatLocalDate(source.lastReportedDate, i18n.language)
-    if (source.medianGapDays === null) return t('staleSource.sentenceNoCadence', { name: source.name, date })
-    const gap = Math.round(source.medianGapDays)
-    const usual = gap <= 1 ? t('staleSource.daily') : t('staleSource.every', { count: gap })
-    return t('staleSource.sentence', { name: source.name, date, usual })
-  }).join(' ')
+  const warning = staleSentence(stale, t, i18n.language)
 
   // A failed request is not an empty period, and it outranks the pending check even when both
   // flags are true at once: a composite query built by OR-ing several requests together (the

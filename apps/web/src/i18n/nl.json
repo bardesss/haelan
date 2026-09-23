@@ -1417,5 +1417,20 @@
       "respiratoryRate": "Ademhalingsfrequentie"
     },
     "points": "{{points}} punten"
+  },
+  "glance": {
+    "usual": {
+      "within": "binnen je gebruikelijke {{low}} – {{high}}",
+      "above": "boven je gebruikelijke {{low}} – {{high}}",
+      "below": "onder je gebruikelijke {{low}} – {{high}}",
+      "thin": "nog te weinig geschiedenis voor een gebruikelijke waarde",
+      "partial": "tot nu toe; je gebruikelijke dag {{center}}"
+    },
+    "asOf": {
+      "time": "om {{time}}",
+      "today": "vandaag",
+      "yesterday": "gisteren",
+      "night": "nacht van {{date}}"
+    }
   }
 }
