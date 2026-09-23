@@ -51,7 +51,8 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
 const dataDir = process.env.HAELAN_DEMO_DATA_DIR
 const outDir = process.env.HAELAN_DEMO_OUT_DIR
 const reportFile = process.env.HAELAN_DEMO_REPORT_FILE
-const seededDays = Number(process.env.HAELAN_DEMO_DAYS ?? '365')
+// capture-demo.mjs always sets this; the fallback matches its DEFAULT_DAYS for a direct run.
+const seededDays = Number(process.env.HAELAN_DEMO_DAYS ?? '400')
 if (dataDir === undefined || outDir === undefined || reportFile === undefined) {
   throw new Error(
     'record.tsx needs HAELAN_DEMO_DATA_DIR, HAELAN_DEMO_OUT_DIR and HAELAN_DEMO_REPORT_FILE - run '
