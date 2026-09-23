@@ -8,7 +8,7 @@ import { ALL_SOURCES } from './source.js'
  * were, which is what turns a dashboard into a terminus rather than a set of entry points.
  */
 export function deepLink(
-  path: string, controls: { tab: RangeKey, anchor: string, source: string },
+  path: string, controls: { tab: RangeKey, anchor: string, source: string, compareYear?: boolean },
 ): string {
   return withQuery(path, {
     range: controls.tab,
@@ -16,5 +16,7 @@ export function deepLink(
     // Omitted rather than written out, so a link says all sources by not saying anything.
     // Pinning the default would make every link carry a parameter that changes nothing.
     source: controls.source === ALL_SOURCES ? null : controls.source,
+    // The year-over-year comparison follows the reader into the page, the same as the period.
+    compare: controls.compareYear === true ? 'year' : null,
   })
 }

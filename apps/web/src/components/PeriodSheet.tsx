@@ -19,7 +19,7 @@ import { useSourceNames } from '../data/useSourceNames.js'
  * taps to save the rare one. The arrows stay on the row outside; this holds what you touch once in
  * a while - which range, which day, which source, and the export.
  */
-export function PeriodSheet({ controls, sources, exportPath, open, onClose, label }: {
+export function PeriodSheet({ controls, sources, exportPath, open, onClose, label, yearCompare = false }: {
   controls: PageControlsState
   sources: string[]
   exportPath?: string
@@ -27,6 +27,8 @@ export function PeriodSheet({ controls, sources, exportPath, open, onClose, labe
   onClose: () => void
   /** The period as the row outside spells it, repeated here so the sheet says what it is about. */
   label: string
+  /** Offer the year-over-year toggle (ControlRow's own prop of this name). */
+  yearCompare?: boolean
 }) {
   const { t } = useTranslation()
   const { nameOf } = useSourceNames()
@@ -109,6 +111,15 @@ export function PeriodSheet({ controls, sources, exportPath, open, onClose, labe
               ))}
             </select>
           </label>
+        )}
+
+        {/* A pressed/unpressed row like the ranges above, and it leaves the sheet open for the
+            same reason changing the day does: it is one of several things a reader sets here. */}
+        {yearCompare && controls.tab !== 'day' && controls.setCompareYear !== undefined && (
+          <button type="button" className="period-option" aria-pressed={controls.compareYear === true}
+            onClick={() => controls.setCompareYear!(controls.compareYear !== true)}>
+            {t('controlRow.compareYear')}
+          </button>
         )}
 
         {exportPath !== undefined && (

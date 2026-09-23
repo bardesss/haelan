@@ -221,6 +221,31 @@ describe('ControlRow', () => {
     })
   })
 
+  describe('the year-over-year toggle', () => {
+    const toggle = () => [...container!.querySelectorAll('.compare-toggle')] as HTMLButtonElement[]
+
+    it('is offered only on a page that asks for it', () => {
+      mount(withQuery(<ControlRow controls={stubControls({ setCompareYear: () => {} })} sources={['merged']} />))
+      expect(toggle()).toHaveLength(0)
+      act(() => { root?.render(<I18nProvider lng="en">{withQuery(<ControlRow controls={stubControls({ setCompareYear: () => {} })} sources={['merged']} yearCompare />)}</I18nProvider>) })
+      expect(toggle()).toHaveLength(1)
+      expect(toggle()[0]!.textContent).toBe('Compare with last year')
+    })
+
+    it('is not offered on a Day range, where a tile draws no line', () => {
+      mount(withQuery(<ControlRow controls={stubControls({ tab: 'day', setCompareYear: () => {} })} sources={['merged']} yearCompare />))
+      expect(toggle()).toHaveLength(0)
+    })
+
+    it('shows its state and flips it', () => {
+      const set: boolean[] = []
+      mount(withQuery(<ControlRow controls={stubControls({ compareYear: true, setCompareYear: (on) => set.push(on) })} sources={['merged']} yearCompare />))
+      expect(toggle()[0]!.getAttribute('aria-pressed')).toBe('true')
+      act(() => { toggle()[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+      expect(set).toEqual([false])
+    })
+  })
+
   it('offers the all sources sentinel plus every source the person has, and marks the chosen one', () => {
     mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch', 'phone']} />))
     const select = container!.querySelector('select') as HTMLSelectElement

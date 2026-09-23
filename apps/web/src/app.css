@@ -1049,6 +1049,11 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
   flex-basis: 100%; margin: 0; font-size: var(--font-size-xs); color: var(--text-muted);
   line-height: var(--leading-normal);
 }
+/* The year-over-year comparison: the toggle in the control row, pressed like a range button when
+   on, and the tile's "Last year" line under its headline, quieter than the headline it follows. */
+.compare-toggle { font-size: var(--font-size-xs); color: var(--text-secondary); }
+.compare-toggle[aria-pressed='true'] { background: var(--surface-inset); color: var(--text-primary); border-color: var(--accent); }
+.last-year { margin: 2px 0 0; font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 /* The badge now carries its own method sentence as a tooltip, and says so to a pointer. */
 .delta[title] { cursor: help; }
 /* The group, not a hiding place: these rows are rendered in full, with their inputs, because a

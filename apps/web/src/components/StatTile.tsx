@@ -1,9 +1,10 @@
 import { useId } from 'react'
 import { BasisContext } from './basis.js'
+import { useTranslation } from '../i18n/index.js'
 import { SourceWarning, useUnshownCardWarning } from './SourceWarning.js'
 import { toneOf, type Delta } from '../format.js'
 
-export function StatTile({ label, value, unit, basis, delta, children }: {
+export function StatTile({ label, value, unit, basis, delta, lastYear, children }: {
   label: string
   value: string
   unit?: string
@@ -15,9 +16,16 @@ export function StatTile({ label, value, unit, basis, delta, children }: {
    */
   basis?: string
   delta?: Delta
+  /**
+   * The same figure over the same days a year earlier, already formatted the way `value` is, for
+   * a reader comparing years: a string draws "Last year: 52,110", null says a year earlier holds
+   * nothing, and undefined (the comparison off, or still loading) draws nothing at all.
+   */
+  lastYear?: string | null
   children?: React.ReactNode
 }) {
   const basisId = useId()
+  const { t } = useTranslation()
   // A tile card has no Card label, so a stale-source warning on its card is drawn here, beside the
   // title the tile itself prints (SourceWarning.tsx).
   const warning = useUnshownCardWarning()
@@ -39,6 +47,13 @@ export function StatTile({ label, value, unit, basis, delta, children }: {
         )}
       </header>
       <div className="value">{value}{unit && <span style={{ fontSize: 'var(--font-size-lg)', color: 'var(--text-muted)' }}> {unit}</span>}</div>
+      {/* Directly under the headline it compares with, and above the basis: on a 34px line the
+          dashed year-earlier shape is context, and this number is what a reader actually reads. */}
+      {lastYear !== undefined && (
+        <p className="last-year">
+          {lastYear === null ? t('lastYear.none') : t('lastYear.value', { value: unit ? `${lastYear} ${unit}` : lastYear })}
+        </p>
+      )}
       {fullBasis !== null && <p className="basis" id={basisId}>{fullBasis}</p>}
       <BasisContext.Provider value={fullBasis !== null ? basisId : undefined}>{children}</BasisContext.Provider>
     </>
