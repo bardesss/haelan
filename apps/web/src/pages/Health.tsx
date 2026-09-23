@@ -26,6 +26,7 @@ import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
+import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
 import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
@@ -137,6 +138,10 @@ export function Health() {
   // Every calendar day in the range: the axis the range chart's days array and the daily card's
   // sparkline are both built along, and the denominator every basis line below counts against.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+  // The same groups over the same days a year earlier, asked for only while the comparison is on.
+  // Ended at historicalTo, not the period's end: a month six days old is set against the same six
+  // days a year earlier, never against the whole of last year's month.
+  const lastYear = useLastYear(GROUPS, { ...range, to: controls.historicalTo }, rangeDates, controls.compareYear === true)
 
   const meanSpo2Points = meanSpo2.data?.spo2?.points ?? EMPTY
   const minSpo2Points = minSpo2.data?.spo2?.points ?? EMPTY
@@ -243,7 +248,7 @@ export function Health() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('health.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
         stoppedSources={stoppedSources} />
       <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         {/* basisPlacement 'header': the range chart carries no StatTile of its own to fold a basis
@@ -289,9 +294,11 @@ export function Health() {
             <StatTile label={t('health.dailySpo2.label')}
               value={formatMetricValue(dailySpo2Headline, 'daily_spo2', i18n.language, '')}
               unit={t('health.units.percentShort')} basis={basis}
-              delta={deltaFor(t, 'daily_spo2', values(dailySpo2Points), 'higher-is-better')}>
+              delta={deltaFor(t, 'daily_spo2', values(dailySpo2Points), 'higher-is-better')}
+              lastYear={lastYear.summarise('daily_spo2', (earlier) => formatMetricValue(mean(values(earlier)), 'daily_spo2', i18n.language, ''))}>
               {oneDayRange ? <ChartNote /> : (
                 <Sparkline values={dailySpo2Spark.values} labels={dailySpo2Spark.labels} metric="daily_spo2"
+                  lastYear={lastYear.alignedOf('daily_spo2')}
                   label={t('health.dailySpo2.chartLabel', { period })} unit={t('health.units.percent')}
                   baseline={dailySpo2Band}
                   annotations={dailySpo2AnnotationsWithFilled} excluded={dailySpo2Overrides.excluded}

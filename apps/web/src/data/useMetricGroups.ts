@@ -146,9 +146,9 @@ function assertNoOverlap(groups: readonly MetricGroup[]): void {
  * React sees the same hooks in the same order on every render regardless of which queries have
  * settled.
  */
-export function useMetricGroups(groups: readonly MetricGroup[], range: SeriesRange): MetricGroups {
+export function useMetricGroups(groups: readonly MetricGroup[], range: SeriesRange, enabled = true): MetricGroups {
   assertNoOverlap(groups)
-  const queries = groups.map((group) => useSeries([...group.metrics], range, group.agg))
+  const queries = groups.map((group) => useSeries([...group.metrics], range, group.agg, enabled))
 
   const queryFor = (metric: string): UseQueryResult<Record<string, MetricSeries>> =>
     queries[indexOfGroup(groups, metric)]!

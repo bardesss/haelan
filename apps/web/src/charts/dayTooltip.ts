@@ -20,6 +20,8 @@ export interface DayTooltipInput {
   marks: DayMarks
   trend: readonly (number | null)[] | undefined
   hasTrend: boolean
+  /** The same days a year earlier, when the reader is comparing; undefined otherwise. */
+  lastYear?: readonly (number | null)[]
   episodic: boolean
   /** The accessible table's own value-column header, reused verbatim as the tooltip's label. */
   unit: string
@@ -48,7 +50,7 @@ export function dayTooltip(
   input: DayTooltipInput,
   event: Pick<ECElementEvent, 'componentType'> & { dataIndex?: number },
 ): string {
-  const { marks, labels, values, excluded, annotations, trend, hasTrend, episodic, unit, format, t } = input
+  const { marks, labels, values, excluded, annotations, trend, hasTrend, lastYear, episodic, unit, format, t } = input
   const index = event.dataIndex
 
   if (event.componentType === 'markPoint') {
@@ -86,6 +88,13 @@ export function dayTooltip(
     // wording, and the same formatter, since a trend is a smoothed reading in the identical unit.
     lines.push(t('charts.tooltip.line', {
       label: t('charts.columns.trend'), value: format(trend?.[index] ?? null, absent),
+    }))
+  }
+  if (lastYear !== undefined) {
+    // "no reading" whatever this year's day holds: an exclusion is something the reader did to
+    // this year's day, and says nothing about the same date a year earlier.
+    lines.push(t('charts.tooltip.line', {
+      label: t('charts.columns.lastYear'), value: format(lastYear[index] ?? null, t('charts.absence.noReading')),
     }))
   }
   // Each part escaped, then joined plainly, rather than assembled in one `tip` template: the

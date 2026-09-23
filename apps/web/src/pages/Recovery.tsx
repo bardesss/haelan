@@ -26,6 +26,7 @@ import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
+import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
 import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
@@ -263,6 +264,10 @@ export function Recovery() {
   // denominator every basis line counts against. Declared ahead of them rather than after, which is
   // where it used to sit, because they are built against it now.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+  // The same groups over the same days a year earlier, asked for only while the comparison is on.
+  // Ended at historicalTo, not the period's end: a month six days old is set against the same six
+  // days a year earlier, never against the whole of last year's month.
+  const lastYear = useLastYear(GROUPS, { ...range, to: controls.historicalTo }, rangeDates, controls.compareYear === true)
 
   // Stable array identities for the same reason Dashboard.tsx's own `sparklines` memo exists:
   // useChart keys its rebuild on `build`, and `build` is a useCallback over `values`/`baseline`, so
@@ -330,9 +335,11 @@ export function Recovery() {
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, note }}>
         {(basis, oneDayRange) => (
           <StatTile label={t(labelKey)} value={formatMetricValue(headline, metric, i18n.language, '')} unit={t(shortUnitKey)}
-            basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
+            basis={basis} delta={deltaFor(t, metric, values(points), polarity)}
+            lastYear={lastYear.summarise(metric, (earlier) => formatMetricValue(mean(values(earlier)), metric, i18n.language, ''))}>
             {oneDayRange ? <ChartNote /> : (
               <Sparkline values={spark.values} labels={spark.labels} metric={metric}
+                lastYear={lastYear.alignedOf(metric)}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
                 annotations={annotations} excluded={excluded}
                 onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
@@ -354,7 +361,7 @@ export function Recovery() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('recovery.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
         stoppedSources={stoppedSources} />
       <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         <RecoveryIndexCard from={controls.from} to={controls.to} source={source} today={controls.today} span={8} />

@@ -37,7 +37,7 @@ const listFormat = (language: string): Intl.ListFormat =>
  * action and must not cost a sheet.
  */
 export function ControlRow({
-  controls, sources, exportPath, stoppedSources = EMPTY_SOURCES, trendNote = false,
+  controls, sources, exportPath, stoppedSources = EMPTY_SOURCES, trendNote = false, yearCompare = false,
 }: {
   controls: PageControlsState
   sources: string[]
@@ -59,6 +59,11 @@ export function ControlRow({
    * text (StatTile); this is the sentence a reader needs before pointing at any of them.
    */
   trendNote?: boolean
+  /**
+   * For a page whose tiles can draw the same days a year earlier: offers the toggle for it, here
+   * and in the phone's period sheet. Left off on a page with nothing to compare (Notes).
+   */
+  yearCompare?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const { nameOf } = useSourceNames()
@@ -139,6 +144,15 @@ export function ControlRow({
 
   const note = trendNote && <p className="control-row-note">{t('controlRow.trendNote')}</p>
 
+  // Only on a page whose tiles draw the comparison, and never on Day, where a tile has no line.
+  const canCompare = yearCompare && controls.tab !== 'day' && controls.setCompareYear !== undefined
+  const compareToggle = canCompare && (
+    <button type="button" className="button compare-toggle" aria-pressed={controls.compareYear === true}
+      onClick={() => controls.setCompareYear!(controls.compareYear !== true)}>
+      {t('controlRow.compareYear')}
+    </button>
+  )
+
   if (isPhone) {
     return (
       <div className="controls controls-phone">
@@ -160,7 +174,7 @@ export function ControlRow({
           <button type="button" className="icon-button" aria-label={t('controlRow.nextPeriod')}
             onClick={() => controls.step(1)}><Icon name="chevronRight" /></button>
         </div>
-        <PeriodSheet controls={controls} sources={sources} exportPath={exportPath} label={period}
+        <PeriodSheet controls={controls} sources={sources} exportPath={exportPath} label={period} yearCompare={yearCompare}
           open={sheetOpen} onClose={() => setSheetOpen(false)} />
         {note}
         {stopped}
@@ -212,6 +226,8 @@ export function ControlRow({
             onClick={(e) => { try { e.currentTarget.showPicker?.() } catch { /* not allowed here; focus stands */ } }} />
         </span>
       </div>
+
+      {compareToggle}
 
       <div className="controls-end">
         {hasSourcePicker && (

@@ -37,6 +37,7 @@ import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
+import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
 import { formatDuration, formatSignedDuration, formatClock, deltaFor, formatMetricValue } from '../format.js'
@@ -324,6 +325,10 @@ export function Sleep() {
   // denominator every basis line counts against. Declared ahead of them rather than after, which is
   // where it used to sit, because they are built against it now.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+  // The same groups over the same days a year earlier, asked for only while the comparison is on.
+  // Ended at historicalTo, not the period's end: a month six days old is set against the same six
+  // days a year earlier, never against the whole of last year's month.
+  const lastYear = useLastYear(GROUPS, { ...range, to: controls.historicalTo }, rangeDates, controls.compareYear === true)
 
   // Stable array identities for the reason every sibling page's own copy of this memo states:
   // useChart keys its rebuild on `build`, itself a useCallback over `values`, so a freshly
@@ -352,8 +357,19 @@ export function Sleep() {
   // tier, and the sleep family has no data type of its own to appear in it), so MetricCard's wear
   // branch can never fire for any card on this page, the same reasoning Recovery.tsx's own card()
   // states for its three metrics.
-  const tile = (
-    metric: string, span: number, label: string, basisKey: string, chartLabelKey: string,
+  // A tile's "Last year" figure, summarised the way that tile's own headline is at its call site
+  // below: a typical night (the mean) for every nightly metric, the period total for the two
+  // episodic nap metrics, and a clock time for bed and wake.
+  const lastYearSummary = (metric: string, earlier: SeriesPoint[]): string => {
+    const readings = values(earlier)
+    if (metric === 'sleep_nap_count') return formatMetricValue(sum(readings), metric, i18n.language, '')
+    if (metric === 'sleep_nap_minutes') return formatDuration(sum(readings))
+    if (metric === 'sleep_efficiency') return formatMetricValue(mean(readings), metric, i18n.language, '')
+    if (metric === 'sleep_bedtime_minutes' || metric === 'sleep_waketime_minutes') return formatClock(mean(readings))
+    return formatDuration(mean(readings))
+  }
+
+  const tile = (    metric: string, span: number, label: string, basisKey: string, chartLabelKey: string,
     value: string, unitKey: string, shortUnit: string | undefined, polarity: Polarity,
     extra: Record<string, unknown> = {}, band?: { low: number, high: number },
   ) => {
@@ -367,9 +383,11 @@ export function Sleep() {
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>
         {(basis, oneDayRange) => (
           <StatTile label={label} value={value} unit={shortUnit} basis={basis}
-            delta={deltaFor(t, metric, values(points), polarity)}>
+            delta={deltaFor(t, metric, values(points), polarity)}
+            lastYear={lastYear.summarise(metric, (earlier) => lastYearSummary(metric, earlier))}>
             {oneDayRange ? <ChartNote /> : (
               <Sparkline values={spark.values} labels={spark.labels} metric={metric}
+                lastYear={lastYear.alignedOf(metric)}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
                 annotations={annotations} excluded={excluded}
                 onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
@@ -508,7 +526,7 @@ export function Sleep() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
         stoppedSources={stoppedSources} />
       <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         {/* Not a MetricCard: gated on a night from useNights, not a metric and its points, the

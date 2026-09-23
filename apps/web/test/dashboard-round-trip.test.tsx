@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -363,6 +363,54 @@ describe('the Dashboard round trip', () => {
     expect(container!.querySelectorAll('.delta:not(.insight-delta)')).toHaveLength(0)
     expect(container!.querySelectorAll('.insight-delta')).toHaveLength(3)
     restore()
+  })
+
+  // The comparison reads the page's own groups over the same days a year earlier, and only while it
+  // is switched on: a page with it off must not pay for a single extra request.
+  it('asks for the same days a year earlier only while the comparison is on, and says last year on the tiles', async () => {
+    for (const compare of [false, true]) {
+      const seen: string[] = []
+      const restore = stubFetchOnePointPerMetric(seen)
+      window.history.replaceState(null, '', `/dashboard?range=month&on=2026-08-15${compare ? '&compare=year' : ''}`)
+      const { client, tree } = withQuery(<Dashboard />)
+      mount(tree)
+      await flush(client, () => container!.innerHTML)
+      const earlier = seen.filter((u) => u.includes('/series') && u.includes('from=2025-08-01') && u.includes('to=2025-08-31'))
+      const lines = [...container!.querySelectorAll('.last-year')].map((p) => p.textContent)
+      if (compare) {
+        expect(earlier.length, 'one year-earlier read per metric group').toBeGreaterThan(0)
+        expect(lines.length).toBeGreaterThanOrEqual(4)
+        // No I18nProvider in this file, so t() answers the key: every tile found last year's point.
+        for (const line of lines) expect(line).toBe('lastYear.value')
+      } else {
+        expect(earlier).toEqual([])
+        expect(lines).toEqual([])
+      }
+      act(() => { root?.unmount() })
+      root = createRoot(container!)
+      restore()
+    }
+  })
+
+  // A month still in progress is set against the same days a year earlier, not against last year's
+  // whole month: six days of steps beside thirty would read as a collapse that never happened.
+  it('ends the year-earlier range on the day this period has reached', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-08-10T12:00:00Z'))
+    try {
+      const seen: string[] = []
+      const restore = stubFetchOnePointPerMetric(seen)
+      window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-10&compare=year')
+      const { client, tree } = withQuery(<Dashboard />)
+      mount(tree)
+      await flush(client, () => container!.innerHTML)
+      const earlier = seen.filter((u) => u.includes('/series') && u.includes('from=2025-08-01'))
+      expect(earlier.length).toBeGreaterThan(0)
+      for (const url of earlier) expect(url).toContain('to=2025-08-10')
+      restore()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // Every card link, not the two that already did it. The sleep card stayed plain on a comment

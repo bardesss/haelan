@@ -42,6 +42,7 @@ import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
+import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
 import { useDataTypes } from '../data/useDataTypes.js'
@@ -347,6 +348,10 @@ export function Dashboard() {
   // of the sparklines below rather than after them, which is where it used to sit, because those
   // are built against it now.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+  // The same groups over the same days a year earlier, asked for only while the comparison is on.
+  // Ended at historicalTo, not the period's end: a month six days old is set against the same six
+  // days a year earlier, never against the whole of last year's month.
+  const lastYear = useLastYear(GROUPS, { ...range, to: controls.historicalTo }, rangeDates, controls.compareYear === true)
 
   // Everything from here to the return is memoised on the query data it comes from, and nothing
   // below it constructs an array or an object inline in JSX. useChart keys its effect on `build`
@@ -423,7 +428,7 @@ export function Dashboard() {
           // compare, which is the day range (exactly one point), so there is nothing left for
           // this call site to guard against.
           <StatTile label={t(labelKey)} value={format(points)} unit={unit}
-            basis={basis}
+            basis={basis} lastYear={lastYear.summarise(metric, format)}
             delta={deltaFor(t, metric, values(points), direction)}>
             {/* On a single day the sparkline is replaced by a note saying why there is no chart,
                 and that is the one range where "how did this day compare to my usual" is a
@@ -439,6 +444,7 @@ export function Dashboard() {
               </>
             ) : (
               <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
+                lastYear={lastYear.alignedOf(metric)}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}
                 onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
@@ -609,7 +615,7 @@ export function Dashboard() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
         stoppedSources={stoppedSources} />
       <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         {/* The invitation to connect a Google account deliberately does not appear on this page,

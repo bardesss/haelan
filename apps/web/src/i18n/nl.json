@@ -46,6 +46,7 @@
     "pickDate": "Kies een datum",
     "sources": "Bronnen",
     "sourceStopped": "Gestopt met rapporteren tijdens deze periode: {{sources}}.",
+    "compareYear": "Vergelijk met vorig jaar",
     "trendNote": "Elk percentage vergelijkt de tweede helft van de metingen op die kaart met de eerste helft.",
     "sourceAll": "Alle bronnen",
     "downloadTotals": "Dagtotalen downloaden",
@@ -75,6 +76,10 @@
     "sentenceNoCadence": "{{name}} heeft sinds {{date}} niets meer doorgegeven.",
     "daily": "normaal gebeurt dat dagelijks",
     "every": "normaal gebeurt dat elke {{count}} dagen"
+  },
+  "lastYear": {
+    "value": "Vorig jaar: {{value}}",
+    "none": "Een jaar eerder niets vastgelegd"
   },
   "sync": {
     "run": "Synchroniseren",
@@ -589,6 +594,7 @@
       "naps": "Dutjes",
       "time": "Tijd",
       "source": "Bron",
+      "lastYear": "Vorig jaar",
       "trend": "Trend"
     },
     "weekday": {

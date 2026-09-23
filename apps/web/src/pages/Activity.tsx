@@ -32,6 +32,7 @@ import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
+import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
@@ -175,6 +176,10 @@ export function Activity() {
   // as well as the denominator every basis line counts against. Declared ahead of them rather than
   // after, which is where it used to sit, because they are built against it now.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+  // The same groups over the same days a year earlier, asked for only while the comparison is on.
+  // Ended at historicalTo, not the period's end: a month six days old is set against the same six
+  // days a year earlier, never against the whole of last year's month.
+  const lastYear = useLastYear(GROUPS, { ...range, to: controls.historicalTo }, rangeDates, controls.compareYear === true)
 
   // Stable array identities for the reason every sibling page's own copy of this memo states:
   // useChart keys its rebuild on `build`, itself a useCallback over `values`, so a freshly
@@ -320,7 +325,8 @@ export function Activity() {
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
         {(basis, oneDayRange) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
-            basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
+            basis={basis} delta={deltaFor(t, metric, values(points), polarity)}
+            lastYear={lastYear.summarise(metric, (earlier) => format(sum(values(earlier))))}>
             {oneDayRange ? <ChartNote /> : BAR_METRICS.has(metric) ? (
               <DailyBars values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
@@ -333,6 +339,7 @@ export function Activity() {
                 onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             ) : (
               <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
+                lastYear={lastYear.alignedOf(metric)}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}
                 onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
@@ -346,7 +353,7 @@ export function Activity() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
         stoppedSources={stoppedSources} />
       <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>

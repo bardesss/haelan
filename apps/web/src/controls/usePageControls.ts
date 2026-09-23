@@ -40,6 +40,13 @@ export interface PageControlsState {
   // just draws no points there), and narrowing it would change what every chart on the range
   // actually shows.
   historicalTo: string
+  /**
+   * Whether the tiles also draw the same days a year earlier (`?compare=year`). In the URL like
+   * the range, so it follows the reader from page to page and survives a reload. Optional so a
+   * caller building controls by hand (a test's stub) is not made to name it.
+   */
+  compareYear?: boolean
+  setCompareYear?: (on: boolean) => void
   setTab: (tab: RangeKey) => void
   setAnchor: (anchor: string) => void
   step: (direction: -1 | 1) => void
@@ -101,6 +108,11 @@ export function usePageControls(): PageControlsState {
     // datesFor), so clamping today to at most `to` and at least `from`, in either order, lands on
     // the same value; capping first reads closer to "today, unless the period has already ended".
     historicalTo: today > to ? to : today < from ? from : today,
+    // Off on a Day range, where a tile draws no line to compare against.
+    compareYear: controls.tab !== 'day' && new URLSearchParams(search).get('compare') === 'year',
+    // Replaces rather than pushes: it changes how the period is drawn, not which period it is,
+    // the same ruling the stepper takes.
+    setCompareYear: (on) => { go({ compare: on ? 'year' : null }, true) },
     // A tab change is a place the reader can go back from, so it pushes. A stepper click is not.
     //
     // The write sits in the handler, next to the navigation it accompanies, not in an effect

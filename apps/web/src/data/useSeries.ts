@@ -88,6 +88,9 @@ export function denseSeries(
  */
 export function useSeries(
   metrics: string[], range: SeriesRange, agg = 'sum',
+  // False asks for nothing: the year-over-year comparison's own reads (data/lastYear.ts) are
+  // mounted on every page but only go out while the reader has the comparison switched on.
+  enabled = true,
 ): UseQueryResult<Record<string, MetricSeries>> {
   const session = useSession()
   const personId = session.data?.personId
@@ -95,7 +98,7 @@ export function useSeries(
     queryKey: queryKeys.resource(personId ?? '', 'series', { metrics, ...range, agg }),
     // Without this the hook would request /api/v1/p/undefined/series on first render, which the
     // server answers 404 for and which then sits in the cache under a key naming no person.
-    enabled: personId !== undefined,
+    enabled: enabled && personId !== undefined,
     queryFn: () => apiGet<Record<string, MetricSeries>>(seriesPath(personId!, metrics, range, agg)),
   })
 }

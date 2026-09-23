@@ -18,7 +18,7 @@ const EMPTY = Object.freeze([]) as never[]
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, height = 34, annotations = EMPTY, excluded = EMPTY,
-  onPointClick, episodic = false, trend,
+  onPointClick, episodic = false, trend, lastYear,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
@@ -84,6 +84,11 @@ export function Sparkline({
   // readings across 236 days is exactly the sparse history a smooth line over would look identical
   // for a dense month and a sparse one if it replaced the readings instead of sitting under them.
   trend?: (number | null)[]
+  // The same days a year earlier (data/lastYear.ts), dense over the same labels, with null for a
+  // day that had no reading then and for a leap day, which has no partner. Drawn first and dashed
+  // in the muted tone, so this year's line sits on top and reads as the news; undefined while the
+  // reader has the comparison off, which leaves the chart exactly as it was.
+  lastYear?: (number | null)[]
   // False everywhere but Weight: default false is what keeps every chart already on a page reading
   // exactly as it did before this prop existed. A metric taken by hand (weight: 130 readings across
   // 236 days) has no data quality problem on a day nobody weighed in, unlike Activity, Sleep or
@@ -115,6 +120,8 @@ export function Sparkline({
   // nothing on the card saying why. With nothing to draw, this chart is exactly the chart every
   // other Sparkline caller gets.
   const hasTrend = trend !== undefined && trend.some((v) => v !== null)
+  // Drawn only when a year earlier holds something; the tile says so in words when it holds nothing.
+  const comparing = lastYear !== undefined && lastYear.some((v) => v !== null)
 
   // One formatter, read by the canvas's tooltip and by every table row, rather than two built the
   // same way: `formatValue` is the override for a caller whose displayed unit differs from the
@@ -133,7 +140,7 @@ export function Sparkline({
   const tooltipRef = useRef<DayTooltipInput | null>(null)
   useLayoutEffect(() => {
     tooltipRef.current = {
-      values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t,
+      values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t, lastYear: comparing ? lastYear : undefined,
     }
   })
 
@@ -154,6 +161,8 @@ export function Sparkline({
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
     yAxis: { type: 'value' as const, show: false, scale: true },
     series: [
+      ...(comparing ? [{ type: 'line' as const, data: lastYear, showSymbol: false, connectNulls: episodic, silent: true,
+        lineStyle: { width: STROKE.sparkline, color: tokens.muted, type: 'dashed' as const } }] : []),
       // Under the reading series below (drawn first, so echarts paints it first and the readings
       // land on top of it): trend's own dense array is null everywhere trendOf had no reading to
       // smooth, and connectNulls is unconditionally true here regardless of `episodic`, since a
@@ -202,7 +211,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, marks, episodic, trend, hasTrend])
+  }), [values, labels, baseline, marks, episodic, trend, hasTrend, comparing, lastYear])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
@@ -232,12 +241,12 @@ export function Sparkline({
           // same canvas-and-table split the band toggle one card away was built to close. Absent
           // (and only then) the columns are exactly what every other caller has always had, so no
           // chart without a trend grows an empty column.
-          columns: hasTrend
-            ? [t('charts.columns.date'), unit, t('charts.columns.trend'), t('charts.columns.note')]
-            : [t('charts.columns.date'), unit, t('charts.columns.note')],
+          columns: [t('charts.columns.date'), unit, ...(hasTrend ? [t('charts.columns.trend')] : []),
+            ...(comparing ? [t('charts.columns.lastYear')] : []), t('charts.columns.note')],
           // dayTableRows (base.ts): shared with DailyBars' own accessible table, which needs
           // neither the trend column nor the episodic filter, so both default off there.
-          rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend }),
+          rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend,
+            lastYear: comparing ? lastYear : undefined }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can

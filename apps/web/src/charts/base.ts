@@ -257,8 +257,10 @@ export function dayTableRows(input: {
   episodic?: boolean
   trend?: readonly (number | null)[]
   hasTrend?: boolean
+  /** A column for the same days a year earlier, when the reader is comparing (Sparkline). */
+  lastYear?: readonly (number | null)[]
 }): (string | number)[][] {
-  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false } = input
+  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear } = input
   return values
     .map((v, i) => [v, i] as const)
     // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
@@ -281,6 +283,7 @@ export function dayTableRows(input: {
       const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
       const cell = format(v, absent)
       return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
+        ...(lastYear !== undefined ? [format(lastYear[i] ?? null, t('charts.absence.noReading'))] : []),
         [isExcluded ? t('charts.absence.excluded') : '',
           // filter, not find: several annotations can land on the same date now that day level
           // marks join the per-metric ones, and a single find() here would silently show only the

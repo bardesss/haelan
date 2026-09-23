@@ -212,6 +212,15 @@ describe('the capture sweep', () => {
       }
     }
 
+    // The year-over-year comparison on the default Month view, so a demo visitor who switches it
+    // on sees it work. Month only: the capture already sits near MAX_CAPTURE_BYTES, and every other
+    // range doubled would cross it. Elsewhere the comparison's reads miss the manifest, which
+    // data/lastYear.ts answers by drawing nothing rather than claiming an empty year.
+    for (const route of ROUTES) {
+      if (route.path.includes(':') || !usesPageControls(route.path) || route.path === '/notes') continue
+      await mount(`${route.path}?range=month&on=${DEMO_DATE}&compare=year`)
+    }
+
     const wideFrom = addDays(DEMO_DATE, -(seededDays - 1))
 
     // Real source ids this seed produced, discovered from the server rather than guessed at:
