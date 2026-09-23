@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { useGlance } from '../src/data/useGlance.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
+import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -38,20 +39,15 @@ const PERSON: Session = {
 }
 
 /**
- * Mounts the component with a seeded session in the QueryClient.
+ * The component inside a fresh QueryClient, with the person's session seeded or not. The client
+ * comes back with the tree so a test can flush() on it: waiting on the queries themselves, rather
+ * than on a fixed 50ms that a loaded machine can outrun, is what makes a pass here mean the request
+ * settled and a "no request" mean the session query settled without one.
  */
-function withSession(node: ReactNode): ReactNode {
+function withClient(node: ReactNode, session: boolean): { client: QueryClient, tree: ReactNode } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  client.setQueryData(queryKeys.session(), PERSON)
-  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
-}
-
-/**
- * Mounts the component with no session cached, so the query is disabled.
- */
-function withoutSession(node: ReactNode): ReactNode {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+  if (session) client.setQueryData(queryKeys.session(), PERSON)
+  return { client, tree: <QueryClientProvider client={client}>{node}</QueryClientProvider> }
 }
 
 describe('useGlance', () => {
@@ -142,8 +138,9 @@ describe('useGlance', () => {
       return <div data-testid="pending">pending</div>
     }
 
-    mount(withSession(<Probe />))
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    const { client, tree } = withClient(<Probe />, true)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     globalThis.fetch = originalFetch
 
@@ -170,8 +167,12 @@ describe('useGlance', () => {
       return null
     }
 
-    mount(withoutSession(<Probe />))
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    const { client, tree } = withClient(<Probe />, false)
+    mount(tree)
+    // Settled means the session query came back, which is the moment a glance request would have
+    // been issued had the hook not waited for a person.
+    await flush(client, () => container!.innerHTML)
+    expect(fetchCalls.some((call) => call.url.includes('/api/auth/me'))).toBe(true)
 
     globalThis.fetch = originalFetch
     // The session query itself fires exactly once. What must not fire is a glance request for
