@@ -71,7 +71,7 @@ export function clockHours(startMinute: number, endMinute: number): number[] {
   return out
 }
 
-export function Hypnogram({ segments, startLabel, label, startClock }: {
+export function Hypnogram({ segments, startLabel, label, startClock, totals: showTotals = true }: {
   // startMs/endMs: raw milliseconds from the night's own start, not pre-rounded minutes. Sleep.tsx
   // and Dashboard.tsx used to round each boundary to a whole minute before building this prop; that
   // rounding now happens only here, per displayed value (the axis, a table cell), never before a
@@ -86,6 +86,10 @@ export function Hypnogram({ segments, startLabel, label, startClock }: {
   // midnight of the date the night ended, so 23:40 is -20). With it the axis reads clock time on
   // whole hours; without it - a night whose bed time was never recorded - elapsed hours, as before.
   startClock?: number | null
+  // False drops the stage totals row and its awake note. The glance passes it: its Sleep column
+  // prints the night's asleep total already, the row made that column much taller than its
+  // neighbours, and the awake note explains a disagreement with a card the glance never shows.
+  totals?: boolean
 }) {
   const { t } = useTranslation()
   const origin = startClock ?? null
@@ -201,9 +205,15 @@ export function Hypnogram({ segments, startLabel, label, startClock }: {
           staging happened, not that staging happened and found nothing. A blank row or three
           invented zeros would claim a measurement that was never taken, so this states the
           absence instead. */}
-      <p className="hypnogram-totals">
-        {totals.length === 0 ? t('charts.absence.notStaged') : `${totalsRow}.${awakeNote}`}
-      </p>
+      {showTotals ? (
+        <p className="hypnogram-totals">
+          {totals.length === 0 ? t('charts.absence.notStaged') : `${totalsRow}.${awakeNote}`}
+        </p>
+      ) : totals.length === 0 && (
+        // Without its totals row a chart of an unstaged night would be an empty plot with nothing
+        // to say why, so the absence sentence stays even where the totals themselves are dropped.
+        <p className="hypnogram-absence">{t('charts.absence.notStaged')}</p>
+      )}
     </>
   )
 }

@@ -112,13 +112,13 @@ export function Dashboard() {
     : recovery.index.asOfDate !== null && recovery.index.asOfDate === yesterdayOf(glance.today)
       ? t('glance.subtitle.yesterday')
       : null
-  // The breathing rate is in the payload only on a day it sits above its usual, as a warning; on
-  // any other day the note, if any, is why the index has no number.
+  // The breathing rate is in the payload only on a day it sits above its usual, as a warning. Why
+  // an unscored index has no number is the card's empty line (below), not a note, so it is said once.
   const respiratory = recovery.respiratoryRate
   const respiratoryValue = respiratory === null ? null : formatFigure(respiratory, language)
   const recoveryNote = respiratoryValue !== null
     ? t('glance.recovery.respiratory', { value: `${respiratoryValue} ${t('recovery.units.breathsPerMinuteShort')}` })
-    : recovery.index.value === null ? t('glance.recovery.unscored') : null
+    : null
 
   return (
     <>
@@ -137,29 +137,34 @@ export function Dashboard() {
           ]}
           stripLabel={t('glance.sleep.strip')}
           stripCaption={t('glance.sleep.caption')}
-          // Described for a screen reader only: the headline's own as-of line already names the
-          // night where a sighted reader looks for it, and the same words twice would be noise.
+          // Described for a screen reader only: the subtitle already names the night where a
+          // sighted reader looks for it, and the same words twice would be noise.
           chart={sleep === null ? undefined : (
             <Described hidden text={t('sleep.sleepStages.basis', { date: sleep.localDate })}>
-              <Hypnogram segments={segments} startLabel={startLabel} startClock={bedMinutes}
+              <Hypnogram segments={segments} startLabel={startLabel} startClock={bedMinutes} totals={false}
                 label={t('sleep.sleepStages.chartLabel', { date: sleep.localDate })} />
             </Described>
           )}
           link={sleep === null
             ? { to: '/sleep', text: t('glance.sleep.viewSleep') }
             : { to: `/sleep/night/${sleep.localDate}`, text: t('glance.sleep.link') }}
-          today={glance.today} timezone={timezone} night
+          // The subtitle is the night's own dates, so the headline's "night of ..." would repeat it.
+          today={glance.today} timezone={timezone} night dayInSubtitle
         />
         <GlanceCard
           title={t('glance.recovery.title')}
           subtitle={recoverySubtitle}
           // The index carries no baseline of its own (it is already a comparison with the person's
           // usual), so its band is the line under it, in the words Recovery's index card uses.
-          headline={{
+          // An unscored index is no headline at all: the card prints its empty line, the one
+          // sentence saying why, where a "No reading yet" headline and a note beneath it said the
+          // same thing twice. The resting heart rate and HRV pairs still draw below it.
+          headline={recovery.index.value === null ? null : {
             label: t('glance.recovery.index'), figure: recovery.index,
             usual: recovery.band === null ? undefined : t(`recoveryIndex.band.${recovery.band}`),
           }}
           emptyLine={t('glance.recovery.unscored')}
+          dayInSubtitle={recoverySubtitle !== null}
           secondary={[
             { label: t('glance.recovery.rhr'), unit: t('charts.units.bpm'), figure: recovery.restingHeartRate },
             { label: t('glance.recovery.hrv'), unit: t('charts.units.milliseconds'), figure: recovery.hrv },

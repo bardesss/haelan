@@ -59,6 +59,13 @@ describe('the night stages card', () => {
     expect(html).not.toContain('sleep.stage.light')
   })
 
+  // The glance turns the totals row off (Hypnogram's `totals` prop); the night page is where the
+  // stage totals are read, so it keeps the default.
+  it('keeps the stage totals row under its hypnogram', () => {
+    const night = { ...BASE, segments: [segment('DEEP', 0, 60)] }
+    expect(renderToStaticMarkup(<NightStages night={night} />)).toMatch(/<p class="hypnogram-totals">sleep\.stage\.deep [^<]+<\/p>/)
+  })
+
   it('lists a nap by its own clock time', () => {
     const night = {
       ...BASE,

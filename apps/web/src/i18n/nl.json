@@ -1362,14 +1362,14 @@
     "span": "Afgelopen nacht, en vandaag tot {{time}}",
     "spanNoTime": "Afgelopen nacht, en vandaag tot nu toe",
     "usual": {
-      "within": "binnen je gebruikelijke {{low}} – {{high}}",
-      "above": "boven je gebruikelijke {{low}} – {{high}}",
-      "below": "onder je gebruikelijke {{low}} – {{high}}",
+      "within": "binnen je gebruikelijke bereik {{low}} – {{high}}",
+      "above": "boven je gebruikelijke bereik {{low}} – {{high}}",
+      "below": "onder je gebruikelijke bereik {{low}} – {{high}}",
       "thin": "nog te weinig geschiedenis voor een gebruikelijke waarde",
-      "partial": "tot nu toe; je gebruikelijke dag {{center}}"
+      "partial": "tot nu toe; op een gewone dag {{center}}"
     },
     "asOf": {
-      "time": "om {{time}}",
+      "time": "bijgewerkt om {{time}}",
       "today": "vandaag",
       "yesterday": "gisteren",
       "night": "nacht van {{date}}"

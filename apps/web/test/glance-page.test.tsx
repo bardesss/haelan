@@ -156,8 +156,31 @@ describe('GlanceCard', () => {
     expect(html.match(/class="source-warning"/g)).toHaveLength(1)
     const sentence = 'My watch has not reported since Sep 10, 2026; it usually reports daily.'
     expect(html).toContain(`<span class="source-warning" title="${sentence}">`)
-    // Inside the title, so the mark sits beside the column's name rather than floating in the card.
-    expect(html).toMatch(/<h2 class="glance-card-title"><strong>Today<\/strong> <span>so far<\/span><span class="source-warning"/)
+    // Right after the heading, on its row, so the mark sits beside the column's name rather than
+    // floating in the card, and outside the h2 so its sentence is not part of the heading's name.
+    expect(html).toMatch(/<div class="glance-card-head"><h2 class="glance-card-title"><strong>Today<\/strong> <span>so far<\/span><\/h2><span class="source-warning"/)
+  })
+
+  it('keeps the warning\'s sentence out of the heading\'s accessible name', () => {
+    const host = document.createElement('div')
+    host.innerHTML = render({ headline: { label: 'Steps', figure: figure({ staleSources: [WATCH] }) } })
+    expect(host.querySelector('.source-warning')).not.toBeNull()
+    expect(host.querySelector('h2')?.textContent).toBe('Today so far')
+  })
+
+  it('prints no headline as-of line when the subtitle already names the day', () => {
+    const html = render({
+      subtitle: 'today', dayInSubtitle: true,
+      headline: { label: 'Recovery index', figure: figure({ metric: 'recovery_index', value: 42, baseline: null, asOfMs: null }) },
+      secondary: [
+        { label: 'Resting HR', unit: 'bpm', figure: figure({ metric: 'resting_heart_rate', value: 62, baseline: null, asOfMs: null }) },
+        { label: 'HRV', unit: 'ms', figure: figure({ metric: 'daily_hrv', value: 51, baseline: null, asOfDate: '2026-09-22', asOfMs: null }) },
+      ],
+    })
+    expect(html).toContain('<div class="value">42</div></div>')
+    // A pair on the headline's day is covered by the subtitle; one on another day still names it.
+    expect(html).toContain('<div><span class="label">Resting HR</span><b>62 bpm</b></div>')
+    expect(html).toContain('<div><span class="label">HRV</span><b>51 ms</b><span class="glance-asof">yesterday</span></div>')
   })
 
   it('counts the chart\'s own stale sources toward the warning', () => {
@@ -357,12 +380,70 @@ describe('the glance Dashboard', () => {
     } finally { restore() }
   })
 
-  it('says why recovery is unscored when the index has no value', async () => {
+  // Once: the card's empty line, not a "No reading yet" headline with the same fact again as a note.
+  it('says why recovery is unscored once, and still shows the resting heart rate and HRV', async () => {
     const body = glanceBody()
     body.recovery.index = glanceFigure({ metric: 'recovery_index', value: null, unit: 'score', asOfDate: null })
     const { restore } = await mountPage(body)
     try {
-      expect(cards()[1]!.querySelector('.glance-note')?.textContent).toBe('Not enough readings to score yet.')
+      const recovery = cards()[1]!
+      expect(recovery.textContent!.split('Not enough readings to score yet.')).toHaveLength(2)
+      expect(recovery.querySelector('.glance-empty')?.textContent).toBe('Not enough readings to score yet.')
+      expect(recovery.querySelector('.glance-note')).toBeNull()
+      expect(recovery.textContent).not.toContain('No reading yet')
+      const pairs = [...recovery.querySelectorAll('.glance-mini > div')].map((d) => [d.querySelector('.label')?.textContent, d.querySelector('b')?.textContent])
+      expect(pairs).toEqual([['Resting HR', '62 bpm'], ['HRV', '51 ms']])
+    } finally { restore() }
+  })
+
+  // The subtitle names the day (Recovery's "today") or the night (Sleep's dates), so the headline
+  // under it does not name it again.
+  it('names each card\'s day once, in the subtitle', async () => {
+    const { restore } = await mountPage()
+    try {
+      const [sleep, recovery, today] = cards()
+      expect(recovery!.querySelector('.glance-card-title span')?.textContent).toBe('today')
+      expect(recovery!.querySelector('.value ~ .glance-asof')).toBeNull()
+      expect(recovery!.textContent!.split('today')).toHaveLength(2)
+      // Not the card's whole text: the chart's own screen-reader description names the night too.
+      expect(sleep!.querySelector('.value ~ .glance-asof')).toBeNull()
+      expect([...sleep!.querySelectorAll('.glance-asof')].map((p) => p.textContent)).toEqual(['last 7 nights'])
+      // Today's subtitle is "so far", which names no moment, so its as-of time stays.
+      expect(today!.querySelector('.value ~ .glance-asof')?.textContent).toBe('as of 11:32')
+    } finally { restore() }
+  })
+
+  it('keeps a recovery pair\'s own day when it is not the index\'s', async () => {
+    const body = glanceBody()
+    body.recovery.hrv = { ...body.recovery.hrv, asOfDate: '2026-09-22' }
+    const { restore } = await mountPage(body)
+    try {
+      const hrv = [...cards()[1]!.querySelectorAll('.glance-mini > div')].find((d) => d.querySelector('.label')?.textContent === 'HRV')
+      expect(hrv?.querySelector('.glance-asof')?.textContent).toBe('yesterday')
+    } finally { restore() }
+  })
+
+  // The glance's Sleep column prints the asleep total already; the per-stage row under the chart
+  // made it much taller than its neighbours, and the awake note explains a card the glance lacks.
+  it('draws the hypnogram without its stage totals row', async () => {
+    const { restore } = await mountPage()
+    try {
+      const sleep = cards()[0]!
+      expect(sleep.querySelector('[role="img"][aria-label^="Sleep stages"]')).not.toBeNull()
+      expect(sleep.querySelector('.hypnogram-totals')).toBeNull()
+      expect(sleep.querySelector('.hypnogram-absence')).toBeNull()
+    } finally { restore() }
+  })
+
+  // A classic night (ASLEEP and RESTLESS only) draws an empty chart, which must still say why.
+  it('still says an unstaged night was not staged', async () => {
+    const body = glanceBody()
+    body.sleep = { ...body.sleep!, segments: body.sleep!.segments.map((s) => ({ ...s, stage: 'ASLEEP' })) }
+    const { restore } = await mountPage(body)
+    try {
+      const sleep = cards()[0]!
+      expect(sleep.querySelector('.hypnogram-totals')).toBeNull()
+      expect(sleep.querySelector('.hypnogram-absence')?.textContent).toBe('This night was not staged, so there is nothing to total.')
     } finally { restore() }
   })
 
@@ -374,7 +455,7 @@ describe('the glance Dashboard', () => {
       const [sleep, recovery, today] = cards()
       expect(sleep!.querySelector('.source-warning')).toBeNull()
       expect(recovery!.querySelector('.source-warning')).toBeNull()
-      expect(today!.querySelector('.glance-card-title .source-warning')?.getAttribute('title'))
+      expect(today!.querySelector('.glance-card-head > .source-warning')?.getAttribute('title'))
         .toBe('My watch has not reported since Sep 10, 2026; it usually reports daily.')
     } finally { restore() }
   })
@@ -415,6 +496,12 @@ describe('the glance Dashboard', () => {
       expect(container!.querySelector('.all-time-span')?.textContent).toBe('Afgelopen nacht, en vandaag tot 11:38')
       expect(container!.textContent).toContain('Stappen')
       expect(container!.textContent).not.toMatch(/\bglance\.[a-zA-Z]/)
+      // One usual line and one as-of line, read whole: the parity guard never renders, and these
+      // once ended on a bare adjective ("boven je gebruikelijke 52 – 60") with every test green.
+      const [, recovery, today] = cards()
+      const rhr = [...recovery!.querySelectorAll('.glance-mini > div')].find((d) => d.querySelector('.label')?.textContent === 'Rusthartslag')
+      expect(rhr?.querySelector('em')?.textContent).toBe('boven je gebruikelijke bereik 52 – 60')
+      expect(today!.querySelector('.value ~ .glance-asof')?.textContent).toBe('bijgewerkt om 11:32')
     } finally { restore() }
   })
 

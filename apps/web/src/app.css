@@ -616,8 +616,9 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 
 /* Hypnogram.tsx's own per-stage totals row (or its not-staged state), sitting directly beneath
    the chart it summarises. Same small, muted caption treatment as .chart-note, a distinct rule
-   rather than a shared class because the two components have nothing else in common to couple. */
-.hypnogram-totals { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
+   rather than a shared class because the two components have nothing else in common to couple.
+   .hypnogram-absence is the not-staged sentence alone, for a caller that turns the totals off. */
+.hypnogram-totals, .hypnogram-absence { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 
 /* NightStages.tsx's own nap line, beneath the hypnogram and above NightExcludedSessions' own
    .chart-note - a step up from .hypnogram-totals' caption size, since this is body text stating a
@@ -682,9 +683,13 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 /* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
    regular weight to put the muted subtitle back to, so the heading is left at the body's weight
    and only the title is raised. */
+/* The heading and the stale-source mark on one line: the mark lives outside the h2 so its sentence
+   stays out of the heading's accessible name (GlanceTitle's comment), and this row puts it back
+   where it sat when it was inside. */
+.glance-card-head { display: flex; align-items: center; }
 .glance-card-title { margin: 0; font-size: var(--font-size-sm); }
 .glance-card-title strong { font-weight: var(--weight-semibold); }
-.glance-card-title > span:not(.source-warning) { margin-left: var(--space-1); color: var(--text-muted); }
+.glance-card-title > span { margin-left: var(--space-1); color: var(--text-muted); }
 .glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
 .glance-mini { display: flex; flex-wrap: wrap; gap: var(--space-5); }
 .glance-mini > div { display: flex; flex-direction: column; gap: 2px; }

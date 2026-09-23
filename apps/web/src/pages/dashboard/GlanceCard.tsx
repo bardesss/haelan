@@ -58,13 +58,18 @@ function valueText(item: GlanceCardFigure, language: string): string | null {
 // A component of its own rather than markup inline in GlanceCard, because the mark arrives through
 // Card's context (this card passes Card no label, so Card hands the warning down instead of drawing
 // it), and a context is only readable from inside the provider Card renders around its children.
+// The mark sits after the heading rather than inside it: its sentence is read out through an
+// sr-only span, and inside the h2 that sentence became part of the heading's accessible name, so a
+// screen reader listing headings heard a whole warning where the column's name should be.
 function GlanceTitle({ title, subtitle }: { title: string, subtitle: string | null }) {
   const warning = useUnshownCardWarning()
   return (
-    <h2 className="glance-card-title">
-      <strong>{title}</strong>{subtitle !== null && <>{' '}<span>{subtitle}</span></>}
+    <div className="glance-card-head">
+      <h2 className="glance-card-title">
+        <strong>{title}</strong>{subtitle !== null && <>{' '}<span>{subtitle}</span></>}
+      </h2>
       {warning !== null && <SourceWarning text={warning} />}
-    </h2>
+    </div>
   )
 }
 
@@ -86,11 +91,12 @@ export function Described({ text, hidden = false, children }: { text: string, hi
   )
 }
 
-function Headline({ item, today, timezone, night, t, language }: {
+function Headline({ item, today, timezone, night, dayInSubtitle, t, language }: {
   item: GlanceCardFigure
   today: string
   timezone: string
   night: boolean
+  dayInSubtitle: boolean
   t: Translate
   language: string
 }) {
@@ -108,7 +114,10 @@ function Headline({ item, today, timezone, night, t, language }: {
     )
   }
   const usual = usualLine(item.figure, t, language) ?? item.usual ?? null
-  const asOf = asOfLine(item.figure, { today, timezone, night }, t, language)
+  // No as-of line when the column's subtitle already names the headline's day: "today" above the
+  // title and "today" again under the number, or the night's dates and then "night of 23 Sep", was
+  // the card saying one day twice.
+  const asOf = dayInSubtitle ? null : asOfLine(item.figure, { today, timezone, night }, t, language)
   return (
     <div>
       <span className="label">{item.label}</span>
@@ -129,10 +138,15 @@ function Headline({ item, today, timezone, night, t, language }: {
  */
 export function GlanceCard({
   title, subtitle, headline, emptyLine, secondary, stripLabel, stripCaption, chart, chartStaleSources = NO_SOURCES,
-  note, link, today, timezone, night = false,
+  note, link, today, timezone, night = false, dayInSubtitle = false,
 }: {
   title: string
   subtitle: string | null
+  /**
+   * The subtitle names the headline's own day (Recovery's "today", Sleep's night), so the headline
+   * prints no as-of line of its own. Secondary figures still name theirs when it differs.
+   */
+  dayInSubtitle?: boolean
   /** Null when the column has nothing to show at all, and the card prints `emptyLine` instead. */
   headline: GlanceCardFigure | null
   emptyLine: string
@@ -188,7 +202,8 @@ export function GlanceCard({
         <GlanceTitle title={title} subtitle={subtitle} />
         {headline === null
           ? <p className="glance-empty">{emptyLine}</p>
-          : <Headline item={headline} today={today} timezone={timezone} night={night} t={t} language={language} />}
+          : <Headline item={headline} today={today} timezone={timezone} night={night}
+            dayInSubtitle={dayInSubtitle} t={t} language={language} />}
         {chart}
         {secondary.length > 0 && (
           <div className="glance-mini">
