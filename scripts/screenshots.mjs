@@ -27,7 +27,7 @@ export const SCREENSHOTS = [
   {
     file: 'dashboard.png',
     title: 'Dashboard',
-    alt: 'The Hælan dashboard: a recovery index, daily steps, resting heart rate, sleep and mean heart rate, each with a chart for the month and a comparison against the period before it.',
+    alt: 'The Hælan dashboard in three columns: last night with its sleep stages, recovery today with resting heart rate and heart rate variability, and today so far with steps, heart rate and active minutes, each against your own usual.',
     role: 'hero',
     readme: 'inline',
   },
@@ -48,7 +48,7 @@ export const SCREENSHOTS = [
   {
     file: 'recovery.png',
     title: 'Recovery',
-    alt: 'The Recovery page: a recovery index against your own last sixty days, with the four measures that moved it, beside resting heart rate, heart rate variability and respiratory rate against their own baselines.',
+    alt: 'The Recovery page: a recovery index against your own last sixty days, with the four measures that moved it, beside resting heart rate, heart rate variability and respiratory rate against their own baselines, and the daily heart rate range beneath them.',
     role: 'gallery',
     readme: 'link',
   },
