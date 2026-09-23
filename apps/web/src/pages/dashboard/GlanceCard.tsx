@@ -185,8 +185,8 @@ export function GlanceCard({
     values: (strip ?? []).map((day) => day.value),
     labels: (strip ?? []).map((day) => day.localDate),
   }), [strip])
-  // One reported day is a dot rather than a line, the same judgement RecoveryIndexTile makes for
-  // its own sparkline: fewer than two values is not a trend, so the strip and its caption both go.
+  // One reported day is a dot rather than a line: fewer than two values is not a trend, so the
+  // strip and its caption both go.
   const drawStrip = headline !== null && values.filter((value) => value !== null).length > 1
 
   // The accessible table under the strip formats each day the way the headline prints its value,

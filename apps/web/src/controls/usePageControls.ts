@@ -15,8 +15,8 @@ export interface PageControlsState {
   /**
    * The person's today, resolved from their session timezone (falling back to the browser's own
    * when a session has not loaded one yet), not the machine's UTC date. Callers that need to
-   * compare "today" against a scored or fetched date - the recovery tile's `asOfLabel` is the
-   * first - read this rather than computing their own: `new Date().toISOString().slice(0, 10)` is
+   * compare "today" against a scored or fetched date - RecoveryIndexCard's `asOfLabel` is one
+   * - read this rather than computing their own: `new Date().toISOString().slice(0, 10)` is
    * the UTC date, which disagrees with this value for part of every day, and this codebase already
    * had one bug from exactly that (`historicalTo` below existed to fix it for range clamping; this
    * field exists so a caller outside that clamp never has to reach for the UTC shortcut either).
