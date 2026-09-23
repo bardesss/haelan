@@ -4,9 +4,10 @@ import { ALL_SOURCES } from '../controls/source.js'
 import { oneNightPerDate } from '@haelan/core/nights'
 
 // oneNightPerDate and stageOf lived, byte-identical, in Dashboard.tsx and Sleep.tsx, one copy
-// each. The night detail page is a third caller, and a third copy is what makes the duplication
-// worth ending rather than repeating: both moved here verbatim, comments included, from
-// Dashboard.tsx.
+// each. The night detail page is a third caller, and a third copy is what made the duplication
+// worth ending rather than repeating: both moved here verbatim from Dashboard.tsx. stageOf still
+// lives here; oneNightPerDate has since moved on to @haelan/core/nights (see the re-export below),
+// and this file only passes it through.
 
 // packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGES recognise six stage values
 // (DEEP, LIGHT, REM, AWAKE, ASLEEP, RESTLESS), the derive layer's `recognised` guard refusing to
