@@ -133,6 +133,14 @@ export const instanceSettings = sqliteTable('instance_settings', {
  * nobody can set is a flag that cannot be set wrong later. Writes, if they are ever wanted, arrive
  * with their own migration.
  */
+/**
+ * `manual` is the owner pressing Revoke. `password_changed` is the owner changing their own
+ * password, and `password_reset` is somebody else setting it - an admin in Settings, or the console
+ * tool - which is the case its owner most needs told, since they did not do it themselves.
+ */
+export const MCP_TOKEN_REVOKE_REASONS = ['manual', 'password_changed', 'password_reset'] as const
+export type McpTokenRevokeReason = (typeof MCP_TOKEN_REVOKE_REASONS)[number]
+
 export const mcpTokens = sqliteTable('mcp_tokens', {
   id: text('id').primaryKey(),
   // An account, never a person. The person comes from accounts.person_id, which is notNull and
@@ -152,6 +160,11 @@ export const mcpTokens = sqliteTable('mcp_tokens', {
   // A stamp rather than a delete, so mcp_calls rows still name something after a revocation - and
   // so the one place an attack shows up does not erase itself when the attack is stopped.
   revokedAtMs: integer('revoked_at_ms'),
+  // Why, beside when. A password change revokes every live token on the account, on the owner's
+  // behalf, and a date alone left them no way to connect "my agent went dark" to "somebody reset
+  // my password last week". Null while the token is live, and null too on a row revoked before
+  // this column existed - that reason was never recorded and is not guessed at now.
+  revokedReason: text('revoked_reason', { enum: MCP_TOKEN_REVOKE_REASONS }),
 })
 
 export const MCP_CALL_OUTCOMES = ['ok', 'error', 'refused'] as const

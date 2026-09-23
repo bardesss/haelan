@@ -10,6 +10,8 @@ export interface McpTokenRow {
   expiresAtMs: number
   lastUsedAtMs: number | null
   revokedAtMs: number | null
+  // Null while live, and on a row revoked before the server recorded why.
+  revokedReason: 'manual' | 'password_changed' | 'password_reset' | null
 }
 
 export interface McpCallRow {
