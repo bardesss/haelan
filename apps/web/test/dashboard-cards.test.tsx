@@ -191,40 +191,6 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
   return () => { globalThis.fetch = original }
 }
 
-/**
- * The same session/series/nights/baselines/insights routes stubFetch answers, plus explicit
- * /events, /notes and /overrides handlers stubFetch itself leaves to its own `{}` fallback: the
- * flagged days card is the one card on this page reading events rather than a metric's own
- * points, so this is the one stub the test file needs that can hand it real rows, with notes and
- * overrides answered in the real `{ items: [] }` shape rather than the fallback's bare `{}`.
- */
-function stubFetchWithEvents(items: unknown[]): () => void {
-  const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-    if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/series')) {
-      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
-      const body: Record<string, unknown> = {}
-      for (const metric of metrics) body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
-      return json(body)
-    }
-    if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
-    if (url.includes('/baselines')) return json({ baseline: null })
-    if (url.includes('/insights')) return json(insightBody(url))
-    if (url.includes('/events')) return json({ items })
-    if (url.includes('/notes')) return json({ items: [] })
-    if (url.includes('/overrides')) return json({ items: [] })
-    if (url.includes('/api/sync/status')) {
-      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
-    }
-    return json({})
-  }) as typeof fetch
-  return () => { globalThis.fetch = original }
-}
-
 describe('a card whose request failed', () => {
   // The rule the whole branch is about, applied to the one case nothing on the page handled: a
   // 500 is not a statement about somebody's health record, and "Nothing has been recorded for
@@ -513,9 +479,10 @@ describe('a day whose exclusion has applied', () => {
 })
 
 describe('the remaining Dashboard cards', () => {
-  // B3: this card now reads real events (see 'the flagged days card' below for the full
-  // coverage), and stubFetch's default fallback answers no items for /events, so the honest
-  // empty state is what a real, eventless period actually renders here too.
+  // B3: this card now reads real events (see flagged-days-card.test.tsx's own 'the flagged days
+  // card' describe block for the full coverage, moved there in M9b), and stubFetch's default
+  // fallback answers no items for /events, so the honest empty state is what a real, eventless
+  // period actually renders here too.
   it('shows flagged days as empty rather than wiring it to something event shaped', async () => {
     const restore = stubFetch({ baseline: null })
     // Through a real I18nProvider rather than asserting on the raw key: initReactI18next installs
@@ -813,49 +780,9 @@ describe('the recovery card', () => {
   })
 })
 
-describe('the flagged days card', () => {
-  // Zero flagged days in the period is the honest empty state ("nothing is flagged"), not the old
-  // false one ("nothing connected reports events"): M3c made the reader the source of events, and
-  // this card now reads overridesQuery.events, the same query the chart annotations already fetch.
-  it('reports no events for the period rather than claiming nothing is connected', async () => {
-    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
-    // stubFetchWithEvents([]), not stubFetch's own `{}` fallback: the real /events route answers
-    // `{ items: [] }` for an eventless period, and a test resting on `{}` only passes because
-    // `overridesQuery.events.data?.items ?? []` happens to read a missing `items` the same as an
-    // empty one, which would stay green even if that optional chaining were ever tightened.
-    const restore = stubFetchWithEvents([])
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Flagged days')
-    expect(card?.querySelector('.empty')?.textContent).toContain('No flagged days in this period.')
-    expect(container!.textContent).not.toContain('nothing connected reports')
-    restore()
-  })
-
-  // Distinct dates, not a raw event count: two events landing on one day (e.g. illness logged
-  // from two different chart clicks) are one flagged day to a reader scanning this card, not two.
-  it('counts distinct flagged days, not raw events, when the period has some', async () => {
-    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
-    const restore = stubFetchWithEvents([
-      { id: 'e1', kind: 'illness', startedAtMs: 0, startedAtOffsetMinutes: 0, endedAtMs: null,
-        endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-05' },
-      { id: 'e2', kind: 'travel', startedAtMs: 0, startedAtOffsetMinutes: 0, endedAtMs: null,
-        endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-05' },
-      { id: 'e3', kind: 'caffeine', startedAtMs: 0, startedAtOffsetMinutes: 0, endedAtMs: null,
-        endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-12' },
-    ])
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Flagged days')
-    expect(card?.querySelector('.value')?.textContent).toBe('2')
-    expect(card?.querySelector('.basis')?.textContent).toBe('2 days flagged in this period')
-    restore()
-  })
-})
+// The flagged days card's own two cases (empty state; distinct day count) moved to
+// flagged-days-card.test.tsx in M9b, mounted directly against FlaggedDaysCard: see that file's
+// own 'the flagged days card' describe block and its own copy of stubFetchWithEvents.
 
 describe('the anomalies card', () => {
   /*

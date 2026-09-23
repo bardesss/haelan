@@ -213,14 +213,6 @@
       "restingHr": "Resting heart rate, this period against the last",
       "sleep": "Sleep, this period against the last"
     },
-    "flaggedDays": {
-      "label": "Flagged days",
-      "emptyTitle": "No flagged days in this period.",
-      "emptyDetail": "No events have been logged for this period. Click any chart to add one.",
-      "basis_one": "{{count}} day flagged in this period",
-      "basis_other": "{{count}} days flagged in this period",
-      "viewAll": "View notes"
-    },
     "sleepStages": {
       "label": "Sleep stages",
       "basis": "most recent night, {{date}}",
@@ -977,6 +969,14 @@
     "title": "Notes",
     "list": {
       "title": "Notes and events"
+    },
+    "flaggedDays": {
+      "label": "Flagged days",
+      "emptyTitle": "No flagged days in this period.",
+      "emptyDetail": "No events have been logged for this period. Click any chart to add one.",
+      "basis_one": "{{count}} day flagged in this period",
+      "basis_other": "{{count}} days flagged in this period",
+      "viewAll": "View notes"
     },
     "empty": {
       "title": "No notes or events yet",

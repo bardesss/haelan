@@ -9,7 +9,6 @@ import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { InsightCard } from '../components/InsightCard.js'
-import { EmptyState } from '../components/EmptyState.js'
 import { ChartNote } from '../components/ChartNote.js'
 import { AgainstUsual } from '../components/AgainstUsual.js'
 import { Loading } from '../components/Loading.js'
@@ -42,6 +41,7 @@ import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
 import { HeartRateCard } from './recovery/HeartRateCard.js'
+import { FlaggedDaysCard } from './notes/FlaggedDaysCard.js'
 import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, deltaFor, formatMetricValue } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
@@ -260,17 +260,6 @@ export function Dashboard() {
   // useMemo calls copied into all four pages.
   const { dayAnnotations, dayAnnotationsByMetric } =
     useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
-
-  // The flagged days card below reads events, not notes: "flagged" is this card's own label for a
-  // day carrying one, not a word AnnotatePanel itself uses (its own control there is "Add an
-  // event", annotate.actions.event); a plain note carries no kind or value to flag anything with,
-  // which is the actual distinction this card is drawing. Distinct dates, not a count of events,
-  // since two events on one day (illness logged from two different chart clicks) are one flagged
-  // day to a reader scanning a calendar, not two.
-  const flaggedDates = useMemo(
-    () => [...new Set((overridesQuery.events.data?.items ?? []).map((e) => e.localDate))],
-    [overridesQuery.events.data],
-  )
 
   // Fixed groups, not derived from a response: useMetricGroups runs one useSeries call per entry
   // in GROUPS, in the same order, on every render regardless of what any of them returns. min and
@@ -612,37 +601,16 @@ export function Dashboard() {
             scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
           })}
           span={8} />
-        {/* Real since M3c: the reader is the source of events (AnnotatePanel's chart-click flow),
-            so this reads overridesQuery.events, already fetched above for the chart annotations,
-            rather than the hardcoded EmptyState that predated the write path and never came back
-            for it. Not a MetricCard: an event carries a localDate, not a metric and a series of
-            points, so there is no `points` array or catalogue entry for emptyStateFor to gate on;
-            the three query states are handled by hand instead, the same shape the sleep stages
-            card below already uses for the same reason (gated on useNights, not a metric). Zero
-            flagged days in the period renders the empty state honestly rather than falsely: it
-            says nothing is flagged, not that nothing could be.
-            ambient: this card reads the reader's own annotations, not the period's data, so it
-            renders on a day where nothing was synced at all. Counting like any other card, it
-            alone would hold the Dashboard's tally above zero and make the page level empty state
-            unreachable here, on the one page that prompted the whole change. See Card.tsx's own
-            prop comment. */}
-        <Card span={4} ambient label={t('dashboard.flaggedDays.label')}>
-          {overridesQuery.events.isError ? <ErrorState onRetry={() => void overridesQuery.events.refetch()} error={overridesQuery.events.error} />
-            : overridesQuery.events.isPending ? <Loading />
-            : flaggedDates.length === 0 ? (
-              <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
-            ) : (
-              <>
-                <div className="value">{flaggedDates.length}</div>
-                <p className="basis">
-                  {t('dashboard.flaggedDays.basis', { count: flaggedDates.length })}
-                </p>
-              </>
-            )}
+        {/* Moved into its own component in M9b (pages/notes/FlaggedDaysCard.tsx), verbatim: the
+            flagged days card is now shared with Notes, which mounts the same component above its
+            own list. It owns its own useAnnotations(range) call rather than reading
+            overridesQuery.events, the same range key that query already uses, so this costs no
+            request of its own on this page either. */}
+        <FlaggedDaysCard range={range} span={4} link={
           <Link to={deepLink('/notes', resolved)} className="card-link">
-            {t('dashboard.flaggedDays.viewAll')}
+            {t('notes.flaggedDays.viewAll')}
           </Link>
-        </Card>
+        } />
 
         {/* The date comes off the night being drawn, never off the range end: this card used to
             head an empty state with the range's own last date, naming a night it was not drawing
