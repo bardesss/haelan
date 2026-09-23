@@ -651,8 +651,8 @@
     },
     "balance": {
       "label": "Slaapbalans",
-      "basisTarget": "{{reported}} van {{total}} nachten tegen je doel van {{target}}",
-      "basisBaseline": "{{reported}} van {{total}} nachten tegen je gebruikelijke {{target}}, 60 dagen voor {{on}}",
+      "basisTarget": "{{reported}} van {{total}} nachten, {{perNight}} per nacht, tegen je doel van {{target}}",
+      "basisBaseline": "{{reported}} van {{total}} nachten, {{perNight}} per nacht, tegen je gebruikelijke {{target}}, 60 dagen voor {{on}}",
       "chartLabel": "Slaapbalans per nacht in {{period}}",
       "columnUnit": "Minuten over of onder"
     },

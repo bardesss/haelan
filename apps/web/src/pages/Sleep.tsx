@@ -459,6 +459,23 @@ export function Sleep() {
     return balance.labels.map((date) => byDate.get(date)).filter((point) => point !== undefined)
   }, [sumSeries.data, balance.labels])
 
+  // The per-night mean, and what lets the headline stay a cumulative total. A signed sum is the
+  // right subject for the card, but it grows by widening the picker alone, so a Year tab's figure
+  // says as much about the range as about the sleep in it. Stating both is the answer rather than
+  // switching framing at some tab: the big number stays the period's running balance and this sits
+  // beside the night count underneath it, where a reader comparing a week to a year has one figure
+  // that does not move with the window.
+  //
+  // Over the nights actually drawn, not the days in the range, which is the same denominator the
+  // basis line's own `reported` counts (MetricCard takes it from `points`, and `balancePoints` is
+  // what it is handed). A silent night is absent from both, so it drags this toward neither zero
+  // nor anything else, the rule the rest of the card is built on.
+  //
+  // Null rather than zero for an empty range, because the mean of no nights is not a number.
+  // MetricCard hides the whole card on that input, but this is computed before it decides, so
+  // without the guard a NaN would reach formatSignedDuration instead of its absent branch.
+  const balancePerNight = balancePoints.length === 0 ? null : balanceTotal / balancePoints.length
+
   // No local "nothing readable in the range" gate, and its absence is deliberate rather than an
   // omission. The rule is that the card renders nothing at all rather than an empty shell,
   // and routing this card through MetricCard is what delivers it: every night absent means
@@ -574,7 +591,8 @@ export function Sleep() {
           query={metricGroups.queryFor('sleep_asleep_minutes')} points={balancePoints}
           basisKey={balanceZeroLine.source === 'baseline' ? 'sleep.balance.basisBaseline' : 'sleep.balance.basisTarget'}
           basisWornKey={balanceZeroLine.source === 'baseline' ? 'sleep.balance.basisBaseline' : 'sleep.balance.basisTarget'}
-          basisValues={{ total: rangeDates.length, target: formatDuration(balanceZeroLine.minutes), on: controls.historicalTo }}
+          basisValues={{ total: rangeDates.length, target: formatDuration(balanceZeroLine.minutes),
+            on: controls.historicalTo, perNight: formatSignedDuration(balancePerNight, '') }}
           oneDayRange={controls.tab === 'day'}>
           {(basis, oneDayRange) => (
             <StatTile label={t('sleep.balance.label')} value={formatSignedDuration(balanceTotal, '')} basis={basis}>
