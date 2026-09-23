@@ -46,6 +46,7 @@
     "pickDate": "Kies een datum",
     "sources": "Bronnen",
     "sourceStopped": "Gestopt met rapporteren tijdens deze periode: {{sources}}.",
+    "trendNote": "Elk percentage vergelijkt de tweede helft van de metingen op die kaart met de eerste helft.",
     "sourceAll": "Alle bronnen",
     "downloadTotals": "Dagtotalen downloaden",
     "periodSheetTitle": "Periode",
@@ -128,6 +129,8 @@
     "above": "{{amount}} boven je gemiddelde over {{days}} dagen"
   },
   "insightCard": {
+    "current": "Deze periode",
+    "previous": "Vorige periode",
     "summary": "{{current}} gemiddeld ({{currentFrom}} tot en met {{currentTo}}) tegenover {{previous}} gemiddeld in de vorige periode ({{previousFrom}} tot en met {{previousTo}}), een verandering van {{delta}}.",
     "thinCoverage": {
       "title": "Onvoldoende dekking van het apparaat om samen te vatten",

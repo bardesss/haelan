@@ -45,6 +45,54 @@ describe('InsightCard', () => {
     expect(html).toContain('Aug 3, 2026')
   })
 
+  // The figures a reader sees, as opposed to the sentence a screen reader hears. Asserted cell by
+  // cell rather than as substrings of the whole card, which would pass on the sentence alone.
+  describe('the drawn comparison', () => {
+    const drawn = (insight: Insight, extra: Partial<Parameters<typeof InsightCard>[0]> = {}) => {
+      const html = renderToStaticMarkup(
+        <I18nProvider lng="en"><InsightCard {...props} {...extra} insight={insight} /></I18nProvider>,
+      )
+      const cells = (cls: string) => [...html.matchAll(new RegExp(`<span class="${cls}">([^<]*)</span>`, 'g'))].map((m) => m[1])
+      const badge = html.match(/<span class="delta insight-delta" data-dir="(\w+)" data-tone="(\w+)">([^<]*)<\/span>/)
+      return { html, values: cells('insight-value'), labels: cells('insight-period-label'), ranges: cells('insight-range'), badge }
+    }
+
+    it('draws this period and the previous one as two figures with their windows', () => {
+      const { values, labels, ranges } = drawn({ ...base, current: 8668, previous: 8522, delta: 146 })
+      expect(labels).toEqual(['This period', 'Previous period'])
+      expect(values).toEqual(['8,668', '8,522'])
+      // One range each, with the month and year said once: the locale's own range shortening
+      // (Intl formatRange), whose exact spacing ICU decides, so the parts are asserted rather than
+      // the separator's code point.
+      expect(ranges).toHaveLength(2)
+      expect(ranges[0]).toMatch(/^Aug 10\s*[–-]\s*16, 2026$/)
+      expect(ranges[1]).toMatch(/^Aug 3\s*[–-]\s*9, 2026$/)
+    })
+
+    it('signs a rise with a plus and a fall with a real minus sign', () => {
+      expect(drawn({ ...base, current: 110, previous: 100, delta: 10 }).badge![3]).toBe('+10')
+      expect(drawn({ ...base, current: 90, previous: 100, delta: -10 }).badge![3]).toBe('−10')
+    })
+
+    it('colours the badge by the polarity the caller passes, and not at all without one', () => {
+      const fall = { ...base, current: 54, previous: 57, delta: -3 }
+      expect(drawn(fall, { metric: 'resting_heart_rate', polarity: 'lower-is-better' }).badge!.slice(1, 3)).toEqual(['down', 'good'])
+      expect(drawn(fall, { metric: 'resting_heart_rate' }).badge!.slice(1, 3)).toEqual(['down', 'neutral'])
+    })
+
+    it('draws both bars on one scale, the larger filling its track', () => {
+      const { html } = drawn({ ...base, current: 50, previous: 100, delta: -50 })
+      const widths = [...html.matchAll(/<span class="insight-bar[^"]*"><span style="width:([\d.]+)%"><\/span><\/span>/g)].map((m) => Number(m[1]))
+      expect(widths).toEqual([50, 100])
+    })
+
+    it('hides the drawn figures from a screen reader, which hears the sentence instead', () => {
+      const { html } = drawn({ ...base, current: 110, previous: 100, delta: 10 })
+      expect(html).toContain('<div class="insight-compare" aria-hidden="true">')
+      expect(html).toContain('<p class="insight-summary sr-only">110 on average')
+    })
+  })
+
   // thin-days says wait, which is not news, and on a Day tab all three of these land in it at
   // once. render() returns markup, so an absent card is the empty string.
   it('renders nothing when the server suppressed on thin-days', () => {

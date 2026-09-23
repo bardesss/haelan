@@ -353,7 +353,7 @@ export function Recovery() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('recovery.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
       <CardGrid>
         <RecoveryIndexCard from={controls.from} to={controls.to} source={source} today={controls.today} span={8} />
@@ -379,7 +379,7 @@ export function Recovery() {
             ambiguous, the same collision Dashboard.tsx's own comment on INSIGHTS explains at more
             length. */}
         <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
-          label={t('recovery.insights.restingHeartRate')} formatValue={restingHrInsightFormat} />
+          label={t('recovery.insights.restingHeartRate')} formatValue={restingHrInsightFormat} polarity="lower-is-better" />
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

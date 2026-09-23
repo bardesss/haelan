@@ -507,7 +507,7 @@ export function Sleep() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
       <CardGrid>
         {/* Not a MetricCard: gated on a night from useNights, not a metric and its points, the
@@ -530,7 +530,7 @@ export function Sleep() {
               // is repeated here, right beside the read, for the narrowing itself.
               : nights.isPending ? <Loading /> : lastNight && (
               <>
-                <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
+                <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel} startClock={lastNightBedMinutes}
                   label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
                 <NightExcludedSessions count={lastNight.excludedSessions.length} />
               </>
@@ -556,7 +556,7 @@ export function Sleep() {
               : t('sleep.sleepSchedule.basis', { count: drawnNights })}>
             {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} error={lastSeries.error} />
               : lastSeries.isPending ? <Loading /> : (
-              <SleepSchedule nights={scheduleNights} showNaps={nights.isSuccess} axisWindow={WIDE_WINDOW}
+              <SleepSchedule nights={scheduleNights} showNaps={nights.isSuccess}
                 label={t('common.bedWakeChartLabel', { period })} />
             )}
           </Card>
@@ -669,7 +669,7 @@ export function Sleep() {
             keeps a negative delta (a period where mean sleep fell) from printing two minus signs,
             shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
-          label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} />
+          label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} polarity="higher-is-better" />
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

@@ -345,7 +345,7 @@ export function Activity() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
       <CardGrid>
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
@@ -451,18 +451,11 @@ export function Activity() {
             return { metric, nameKey, points, delta: deltaFor(t, metric, points, 'higher-is-better') }
           })
 
-          // The delta sentence, said once for the card rather than once per tile.
-          //
-          // Three tiles each carrying their own delta put four basis lines in one card - the
-          // card's own, then the identical "change is the mean of the last N readings against the
-          // first N" under every figure. pages.test.tsx caught it, and it is the exact thing
-          // StatTile's own `basis` prop was added for: a card whose tiles share one sentence says
-          // it once, above them. So the deltas keep their badges (the arrow and the percentage,
-          // which differ per zone and are the point) and hand their basis up to the card.
-          const deltaBasis = zones.find((zone) => zone.delta?.basis !== undefined)?.delta?.basis
-          const azmBasis = [t('activity.activeZoneMinutes.basis', { total: rangeDates.length }), deltaBasis]
-            .filter((part): part is string => part !== undefined && part !== '')
-            .join('; ')
+          // The card's own coverage, and nothing about the deltas: each badge carries its own
+          // "change is the mean of..." sentence as its tooltip and its spoken text (StatTile), so
+          // three tiles no longer need their shared sentence handed up to the card to avoid saying
+          // it three times in print.
+          const azmBasis = t('activity.activeZoneMinutes.basis', { total: rangeDates.length })
 
           return (
             <Card span={12} label={t('activity.activeZoneMinutes.label')} basis={azmBasis}>
@@ -480,7 +473,7 @@ export function Activity() {
                       <StatTile label={t(nameKey)}
                         value={formatMetricValue(sum(points), metric, i18n.language, '')}
                         unit={t('activity.units.activeZoneMinutesShort')}
-                        delta={delta === undefined ? undefined : { ...delta, basis: '' }} />
+                        delta={delta} />
                     </div>
                   ))}
                 </div>
@@ -505,7 +498,7 @@ export function Activity() {
             formatMetricValue(v, 'steps', i18n.language, '') with no unit appended either, the
             exact call InsightCard's own default makes without a formatValue override. */}
         <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
-          label={t('activity.insights.steps')} />
+          label={t('activity.insights.steps')} polarity="higher-is-better" />
 
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}

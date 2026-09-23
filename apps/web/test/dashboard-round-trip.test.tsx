@@ -355,9 +355,13 @@ describe('the Dashboard round trip', () => {
     expect(container!.querySelectorAll('.card')).toHaveLength(11)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
-    // Not just absent text: no delta chip should exist at all for a window with one point, since
-    // there is no earlier half to compare it against.
-    expect(container!.querySelectorAll('.delta')).toHaveLength(0)
+    // Not just absent text: no trend chip should exist at all for a window with one point, since
+    // there is no earlier half to compare it against. The comparison cards' own badges are left
+    // out of the count on purpose: they set this period against the previous one, which a Day
+    // range has as much as any other, and they are asserted present so the exclusion cannot hide
+    // a page that drew neither.
+    expect(container!.querySelectorAll('.delta:not(.insight-delta)')).toHaveLength(0)
+    expect(container!.querySelectorAll('.insight-delta')).toHaveLength(3)
     restore()
   })
 

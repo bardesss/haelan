@@ -46,6 +46,7 @@
     "pickDate": "Pick a date",
     "sources": "Sources",
     "sourceStopped": "Stopped reporting during this range: {{sources}}.",
+    "trendNote": "Each percentage compares the later half of that card's readings with the earlier half.",
     "sourceAll": "All sources",
     "downloadTotals": "Download daily totals",
     "periodSheetTitle": "Period",
@@ -128,6 +129,8 @@
     "above": "{{amount}} above your {{days}}-day average"
   },
   "insightCard": {
+    "current": "This period",
+    "previous": "Previous period",
     "summary": "{{current}} on average ({{currentFrom}} to {{currentTo}}) against {{previous}} on average in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
     "thinCoverage": {
       "title": "Not enough device coverage to summarise",

@@ -510,10 +510,13 @@ describe('the Sleep page', () => {
   // regression at the layer the screenshot actually showed it, by reading the real chart's own
   // built option (echarts draws to an SVG host happy-dom applies no stylesheet to, so a wrong
   // axis renders silently otherwise) rather than trusting that wiring the pure function in was
-  // enough on its own. Sleep.tsx passes WIDE_WINDOW, not SleepSchedule's own DEFAULT_WINDOW
-  // default, so this also pins that the six-hour interval - not the default's four-hour one -
-  // reaches the chart this page actually renders.
-  it('wires the wide window\'s own tick interval into the schedule chart, not ECharts\'s automatic one', async () => {
+  // enough on its own.
+  //
+  // The page used to draw the whole of WIDE_WINDOW, 36 hours, and a 36 hour axis prints noon and
+  // midnight twice each. It now places nights in that frame but draws only the span they and their
+  // naps occupy, so what is pinned here is the shape of the drawn axis: no more than a day tall,
+  // whole-hour ticks from axisTickInterval dividing it evenly, and no clock label printed twice.
+  it('draws the schedule on an axis of at most a day, with whole-hour ticks and no repeated label', async () => {
     const restore = stubSleep([])
     const { client, tree } = withQuery(<Sleep />)
     mount(tree)
@@ -521,11 +524,23 @@ describe('the Sleep page', () => {
     const host = container!.querySelector<HTMLDivElement>('div[role="img"][aria-label="common.bedWakeChartLabel"]')
     expect(host, container!.innerHTML).not.toBeNull()
     const option = echarts.getInstanceByDom(host!)?.getOption() as
-      { yAxis?: { min?: number, max?: number, interval?: number }[] } | undefined
+      { yAxis?: { min?: number, max?: number, interval?: number, axisLabel?: { showMaxLabel?: boolean } }[] } | undefined
     const yAxis = option?.yAxis?.[0]
-    expect(yAxis?.min).toBe(WIDE_WINDOW.min)
-    expect(yAxis?.max).toBe(WIDE_WINDOW.max)
-    expect(yAxis?.interval).toBe(axisTickInterval(WIDE_WINDOW))
+    const min = yAxis!.min!
+    const max = yAxis!.max!
+    const interval = yAxis!.interval!
+    expect(max - min).toBeGreaterThan(0)
+    expect(max - min).toBeLessThanOrEqual(1440)
+    expect(min >= WIDE_WINDOW.min && max <= WIDE_WINDOW.max).toBe(true)
+    expect(interval).toBe(axisTickInterval({ min, max }))
+    expect(interval % 60).toBe(0)
+    expect((max - min) % interval).toBe(0)
+    const printed = []
+    for (let v = min; v <= max; v += interval) {
+      if (v === max && yAxis!.axisLabel?.showMaxLabel === false) continue
+      printed.push(((v % 1440) + 1440) % 1440)
+    }
+    expect(new Set(printed).size).toBe(printed.length)
     restore()
   })
 
@@ -713,7 +728,7 @@ describe('the Sleep page', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
     expect(card?.querySelector('.insight-summary')?.textContent).toBe(
       '1h 10m on average (Aug 1, 2026 to Aug 31, 2026) against 1h 00m on average in the previous period '
-      + '(Jul 1, 2026 to Jul 31, 2026), a change of 0h 10m.',
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 10m.',
     )
     restore()
   })
@@ -733,7 +748,7 @@ describe('the Sleep page', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
     expect(card?.querySelector('.insight-summary')?.textContent).toBe(
       '6h 41m on average (Aug 1, 2026 to Aug 31, 2026) against 6h 48m on average in the previous period '
-      + '(Jul 1, 2026 to Jul 31, 2026), a change of -0h 07m.',
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of -7m.',
     )
     restore()
   })

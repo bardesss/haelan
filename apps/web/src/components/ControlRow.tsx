@@ -36,7 +36,7 @@ const listFormat = (language: string): Intl.ListFormat =>
  * action and must not cost a sheet.
  */
 export function ControlRow({
-  controls, sources, exportPath, stoppedSources = EMPTY_SOURCES,
+  controls, sources, exportPath, stoppedSources = EMPTY_SOURCES, trendNote = false,
 }: {
   controls: PageControlsState
   sources: string[]
@@ -52,6 +52,12 @@ export function ControlRow({
   // Optional rather than required: a page with no range of its own has no export to offer, and
   // the link is left out rather than rendered with no href.
   exportPath?: string
+  /**
+   * For a page whose tiles carry change badges: says once, under the controls, what every badge's
+   * percentage compares. Each badge still carries its own exact numbers as its tooltip and spoken
+   * text (StatTile); this is the sentence a reader needs before pointing at any of them.
+   */
+  trendNote?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const { nameOf } = useSourceNames()
@@ -116,6 +122,8 @@ export function ControlRow({
     </p>
   )
 
+  const note = trendNote && <p className="control-row-note">{t('controlRow.trendNote')}</p>
+
   if (isPhone) {
     return (
       <div className="controls controls-phone">
@@ -139,6 +147,7 @@ export function ControlRow({
         </div>
         <PeriodSheet controls={controls} sources={sources} exportPath={exportPath} label={period}
           open={sheetOpen} onClose={() => setSheetOpen(false)} />
+        {note}
         {stopped}
       </div>
     )
@@ -166,8 +175,18 @@ export function ControlRow({
         <span className="stepper-label" title={exactBounds}>{period}</span>
         <button type="button" className="icon-button" aria-label={t('controlRow.nextPeriod')}
           onClick={() => controls.step(1)}><Icon name="chevronRight" /></button>
-        <input type="date" className="date-picker" aria-label={t('controlRow.pickDate')}
-          value={controls.anchor} onChange={(e) => controls.setAnchor(e.currentTarget.value)} />
+        {/* An icon rather than a second field. The picker's own text ("15-08-2026") sat beside the
+            label and read as a second period, when on every tab but Day it was only whichever day
+            inside the period the anchor happened to be. The input stays - it is what keyboard and
+            assistive tech reach, and what opens the browser's own calendar - laid transparent over
+            the icon, and showPicker() is called because a click on a date input's text opens
+            nothing in Chromium. */}
+        <span className="date-pick" title={t('controlRow.pickDate')}>
+          <Icon name="calendar" />
+          <input type="date" className="date-pick-input" aria-label={t('controlRow.pickDate')}
+            value={controls.anchor} onChange={(e) => controls.setAnchor(e.currentTarget.value)}
+            onClick={(e) => { try { e.currentTarget.showPicker?.() } catch { /* not allowed here; focus stands */ } }} />
+        </span>
       </div>
 
       <div className="controls-end">
@@ -198,6 +217,7 @@ export function ControlRow({
           </a>
         )}
       </div>
+      {note}
       {stopped}
     </div>
   )

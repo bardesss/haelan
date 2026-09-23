@@ -129,6 +129,29 @@ describe('ControlRow', () => {
     expect(picked).toEqual(['2026-09-02'])
   })
 
+  // The anchor date used to print beside the period's own label ("August 2026  15-08-2026") and
+  // read as a second period. The picker is now an icon with the input laid transparent over it:
+  // the input still exists, labelled, for a keyboard and a screen reader, but it prints nothing.
+  it('prints the period once, with the date picker as an icon rather than a second date', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['merged']} />))
+    const picker = container!.querySelector('.stepper .date-pick')
+    expect(picker, container!.innerHTML).not.toBeNull()
+    expect(picker!.querySelector('svg')).not.toBeNull()
+    const input = picker!.querySelector('input[type="date"]') as HTMLInputElement
+    expect(input.className).toBe('date-pick-input')
+    expect(input.getAttribute('aria-label')).toBe('Pick a date')
+    // The icon's wrapper is not a button, so the stepper's two icon buttons are still the arrows.
+    expect(container!.querySelectorAll('.stepper .icon-button')).toHaveLength(2)
+  })
+
+  it('says what the change badges compare only on a page that asks for it', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['merged']} trendNote />))
+    expect(container!.querySelector('.control-row-note')?.textContent)
+      .toBe("Each percentage compares the later half of that card's readings with the earlier half.")
+    act(() => { root?.render(<I18nProvider lng="en">{withQuery(<ControlRow controls={stubControls()} sources={['merged']} />)}</I18nProvider>) })
+    expect(container!.querySelector('.control-row-note')).toBeNull()
+  })
+
   it('offers the all sources sentinel plus every source the person has, and marks the chosen one', () => {
     mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch', 'phone']} />))
     const select = container!.querySelector('select') as HTMLSelectElement

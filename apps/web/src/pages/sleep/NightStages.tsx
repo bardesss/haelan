@@ -53,6 +53,7 @@ export function NightStages({ night }: { night: Night }) {
         <Hypnogram
           segments={segments}
           startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
+          startClock={bedMinutes}
           label={t('sleep.night.stages.label')}
         />
       )}

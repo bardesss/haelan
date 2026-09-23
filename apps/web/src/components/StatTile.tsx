@@ -17,15 +17,22 @@ export function StatTile({ label, value, unit, basis, delta, children }: {
   children?: React.ReactNode
 }) {
   const basisId = useId()
-  // Both halves optional, so a delta's own basis can never be concatenated onto an absent one and
-  // render the word "undefined" at a reader.
-  const parts = [basis, delta?.basis].filter((part): part is string => part !== undefined && part !== '')
-  const fullBasis = parts.length > 0 ? parts.join('; ') : null
+  // The printed line is the tile's own coverage only. The delta's method sentence ("change is the
+  // mean of the last 16 readings against the first 15") used to follow it, and on a page of nine
+  // tiles that was the same sentence nine times with only its numbers changing. It now belongs to
+  // the badge it explains: its tooltip for a pointer, and its spoken text for a screen reader, so
+  // what the percentage compared is still said wherever the percentage is.
+  const fullBasis = basis !== undefined && basis !== '' ? basis : null
+  const method = delta?.basis !== undefined && delta.basis !== '' ? delta.basis : null
   return (
     <>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span className="label">{label}</span>
-        {delta && <span className="delta" data-dir={delta.dir} data-tone={toneOf(delta)}>{delta.text}</span>}
+        {delta && (
+          <span className="delta" data-dir={delta.dir} data-tone={toneOf(delta)} title={method ?? undefined}>
+            {delta.text}{method !== null && <span className="sr-only">; {method}</span>}
+          </span>
+        )}
       </header>
       <div className="value">{value}{unit && <span style={{ fontSize: 'var(--font-size-lg)', color: 'var(--text-muted)' }}> {unit}</span>}</div>
       {fullBasis !== null && <p className="basis" id={basisId}>{fullBasis}</p>}

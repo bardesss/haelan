@@ -6,7 +6,7 @@ import type { ChartTokens } from './tokens.js'
 import type { Stage } from '../fixtures/july.js'
 import { stageMark, STAGE_LABEL_KEY } from './stage.js'
 import { ChartFigure } from './ChartFigure.js'
-import { formatDuration } from '../format.js'
+import { formatClock, formatDuration } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
 import { hypnogramTooltip } from './hypnogramTooltip.js'
 
@@ -55,7 +55,23 @@ export function stageTotals(
   return [...msByStage].map(([stage, ms]) => ({ stage, minutes: Math.round(ms / MINUTE_MS) }))
 }
 
-export function Hypnogram({ segments, startLabel, label }: {
+/**
+ * The whole clock hours strictly inside a night, in the clock-minute frame the axis plots: every
+ * hour for a night up to ten hours, every second hour beyond that so the labels keep their room.
+ * Strictly inside, because the bed-time end is rarely a whole hour and the "Bed 23:54" text above
+ * the chart already names it. Exported so a test can pin the ticks without reading them back out
+ * of a rendered chart.
+ */
+export function clockHours(startMinute: number, endMinute: number): number[] {
+  const step = endMinute - startMinute > 10 * 60 ? 120 : 60
+  const out: number[] = []
+  for (let v = Math.floor(startMinute / step) * step + step; v < endMinute; v += step) {
+    if (v > startMinute) out.push(v)
+  }
+  return out
+}
+
+export function Hypnogram({ segments, startLabel, label, startClock }: {
   // startMs/endMs: raw milliseconds from the night's own start, not pre-rounded minutes. Sleep.tsx
   // and Dashboard.tsx used to round each boundary to a whole minute before building this prop; that
   // rounding now happens only here, per displayed value (the axis, a table cell), never before a
@@ -66,11 +82,33 @@ export function Hypnogram({ segments, startLabel, label }: {
   segments: { stage: Stage; startMs: number; endMs: number }[]
   startLabel: string
   label: string
+  // The local clock minute the night began at, in the bed-time convention (minutes from the local
+  // midnight of the date the night ended, so 23:40 is -20). With it the axis reads clock time on
+  // whole hours; without it - a night whose bed time was never recorded - elapsed hours, as before.
+  startClock?: number | null
 }) {
   const { t } = useTranslation()
+  const origin = startClock ?? null
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
+    const spanMinutes = (segments.at(-1)?.endMs ?? 480 * MINUTE_MS) / MINUTE_MS
+    const shift = origin ?? 0
+    // Clock time on whole hours. The axis is plotted in clock minutes, and the ticks are handed to
+    // ECharts as the whole hours inside the night rather than left to an interval: an interval
+    // counts from the axis minimum, so a 23:54 bed time ticked 23:54, 00:54, 01:54. The old axis
+    // let ECharts pick its own spacing in minutes since bed, which is what printed "0h 1h 3h 5h".
+    const xAxis = origin === null
+      ? { type: 'value' as const, min: 0, max: spanMinutes,
+          axisLabel: { ...base.axisLabel, formatter: (v: number) => `${Math.floor(v / 60)}h` },
+          splitLine: base.splitLine }
+      : (() => {
+          const hours = clockHours(shift, shift + spanMinutes)
+          return { type: 'value' as const, min: shift, max: shift + spanMinutes,
+            axisTick: { customValues: hours },
+            axisLabel: { ...base.axisLabel, customValues: hours, formatter: (v: number) => formatClock(v) },
+            splitLine: base.splitLine }
+        })()
     return {
       grid: base.grid({ left: 46, top: 10 }),
       tooltip: {
@@ -80,12 +118,10 @@ export function Hypnogram({ segments, startLabel, label }: {
         trigger: 'item' as const,
         formatter: (params: unknown) => {
           const p = Array.isArray(params) ? params[0] : params
-          return hypnogramTooltip(segments, (p as { dataIndex?: number } | undefined)?.dataIndex, t)
+          return hypnogramTooltip(segments, (p as { dataIndex?: number } | undefined)?.dataIndex, t, origin)
         },
       },
-      xAxis: { type: 'value' as const, min: 0, max: (segments.at(-1)?.endMs ?? 480 * MINUTE_MS) / MINUTE_MS,
-        axisLabel: { ...base.axisLabel, formatter: (v: number) => `${Math.floor(v / 60)}h` },
-        splitLine: base.splitLine },
+      xAxis,
       yAxis: { type: 'category' as const, data: [...LANES].reverse(),
         axisLabel: base.axisLabel, ...base.hiddenAxis },
       series: [{
@@ -111,12 +147,15 @@ export function Hypnogram({ segments, startLabel, label }: {
         // starting at 1.5 minutes lands between the 1 and 2 minute gridlines) draws exactly as
         // accurately as a rounded one and does not get summed, so there is no rounding rule to
         // protect here the way there is in stageTotals below.
-        data: segments.map((s) => [s.startMs / MINUTE_MS, s.endMs / MINUTE_MS, LANES.length - 1 - LANES.indexOf(s.stage)]),
+        data: segments.map((s) => [shift + s.startMs / MINUTE_MS, shift + s.endMs / MINUTE_MS, LANES.length - 1 - LANES.indexOf(s.stage)]),
       }],
       graphic: [{ type: 'text' as const, left: 46, top: 0,
         style: { text: startLabel, fill: tokens.muted, fontSize: base.axisLabel.fontSize } }],
     }
-  }, [segments, startLabel, t])
+  }, [segments, startLabel, origin, t])
+
+  // The table's From and To say what the axis says: clock times when the night's start is known.
+  const at = (ms: number) => origin === null ? formatDuration(ms / MINUTE_MS) : formatClock(origin + ms / MINUTE_MS)
 
   const { host, style } = useChart(build, 130)
 
@@ -152,7 +191,7 @@ export function Hypnogram({ segments, startLabel, label }: {
           // here rounds independently for display, the same as the axis above; it is never summed,
           // so it carries none of the accumulation risk stageTotals' own comment describes.
           rows: segments.map((s) => [
-            formatDuration(s.startMs / MINUTE_MS), formatDuration(s.endMs / MINUTE_MS),
+            at(s.startMs), at(s.endMs),
             t(STAGE_LABEL_KEY[s.stage]), formatDuration((s.endMs - s.startMs) / MINUTE_MS),
           ]),
         }} />

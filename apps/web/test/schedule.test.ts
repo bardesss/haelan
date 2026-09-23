@@ -367,4 +367,29 @@ describe('fitWindow', () => {
     const fitted = fitWindow([shiftWorker])
     expect(withinSchedule(shiftWorker.bed, shiftWorker.wake, fitted).bed).not.toBeNull()
   })
+
+  // Six equal whole-hour steps is what axisTickInterval draws, so a span that is not a multiple of
+  // six hours leaves the last gap short: the uneven end tick that function exists to prevent.
+  it('spans a whole number of six hour blocks, so every tick gap is equal', () => {
+    for (const nights of [[night(-30, 420)], [night(-37, 433)], [night(-236, 266), night(276, 652)], [night(-30, 60)]]) {
+      const fitted = fitWindow(nights)
+      const span = fitted.max - fitted.min
+      expect(span % 360, JSON.stringify(nights)).toBe(0)
+      expect(span % axisTickInterval(fitted)).toBe(0)
+    }
+  })
+
+  // Naps arrive already placed by napInWindow, in the frame the nights were placed in. The Sleep
+  // page draws them, so an axis fitted to the nights alone would clip the afternoon nap it shows.
+  it('reaches an afternoon nap when naps are drawn, and ignores it when they are not', () => {
+    // 23:30 to 07:00, then a nap at 15:00 the same day: placed at 1440 + 900.
+    const withNap = [{ bed: -30, wake: 420, naps: [2340] }]
+    expect(fitWindow(withNap, { naps: true }).max).toBeGreaterThanOrEqual(2340)
+    expect(fitWindow(withNap).max).toBeLessThan(2340)
+  })
+
+  it('stays within a day for an ordinary night and its afternoon nap, so no label repeats', () => {
+    const fitted = fitWindow([{ bed: -30, wake: 420, naps: [2340] }], { naps: true })
+    expect(fitted.max - fitted.min).toBeLessThanOrEqual(1440)
+  })
 })

@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import {
   formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset,
-  formatNumber, formatMetricValue, formatLocalDate,
+  formatNumber, formatMetricValue, formatLocalDate, formatSignedDuration,
 } from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
@@ -27,6 +27,29 @@ describe('formatDuration', () => {
     expect(formatDuration(0)).toBe('0h 00m')
     expect(formatDuration(419)).toBe('6h 59m')
     expect(formatDuration(480)).toBe('8h 00m')
+  })
+})
+
+describe('formatSignedDuration', () => {
+  it('drops the hours under an hour, in both directions', () => {
+    expect(formatSignedDuration(-7, '')).toBe('-7m')
+    expect(formatSignedDuration(23, '')).toBe('23m')
+    expect(formatSignedDuration(-22.5, '')).toBe('-23m')
+  })
+
+  it('keeps hours and padded minutes from an hour up, with one leading minus', () => {
+    expect(formatSignedDuration(-67, '')).toBe('-1h 07m')
+    expect(formatSignedDuration(393, '')).toBe('6h 33m')
+    expect(formatSignedDuration(59.6, '')).toBe('1h 00m')
+  })
+
+  it('carries no sign on a value that rounds to no minutes at all', () => {
+    expect(formatSignedDuration(-0.4, '')).toBe('0m')
+    expect(formatSignedDuration(0, '')).toBe('0m')
+  })
+
+  it('answers the absent text for null', () => {
+    expect(formatSignedDuration(null, '-')).toBe('-')
   })
 })
 

@@ -168,12 +168,12 @@ describe('BalanceBars', () => {
   it('labels the value axis as a signed deviation', () => {
     const option = mount()
     expect(option.yAxis.axisLabel!.formatter!(-105)).toBe('-1h 45m')
-    expect(option.yAxis.axisLabel!.formatter!(45)).toBe('0h 45m')
+    expect(option.yAxis.axisLabel!.formatter!(45)).toBe('45m')
   })
 
   it('states a signed balance per readable night in its accessible table', () => {
     mount()
-    expect(tableRowFor('2026-08-10')).toEqual(['2026-08-10', '0h 45m', ''])
+    expect(tableRowFor('2026-08-10')).toEqual(['2026-08-10', '45m', ''])
     expect(tableRowFor('2026-08-12')).toEqual(['2026-08-12', '-1h 45m', ''])
   })
 
@@ -184,7 +184,7 @@ describe('BalanceBars', () => {
     const row = tableRowFor('2026-08-11')
     expect(row).toBeDefined()
     expect(row![1]).toBe('no reading')
-    expect(row![1]).not.toBe('0h 00m')
+    expect(row![1]).not.toMatch(/^(0h 00m|0m)$/)
   })
 
   // A night the reader excluded is a different sentence from one the device never reported, and

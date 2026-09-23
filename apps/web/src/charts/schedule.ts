@@ -46,12 +46,22 @@ export const MIN_FITTED_SPAN = 12 * 60
  * 23:47 gives six ticks nobody can read.
  */
 export function fitWindow(
-  nights: readonly { bed: number | null, wake: number | null }[],
+  nights: readonly { bed: number | null, wake: number | null, naps?: readonly number[] }[],
+  // Naps count toward the fit when the chart draws them. They arrive already placed in the
+  // caller's frame (napInWindow), the same frame the nights' own bed and wake were placed in, so
+  // they are read as they are rather than shifted again.
+  { naps = false }: { naps?: boolean } = {},
 ): { min: number, max: number } {
   let low = Infinity
   let high = -Infinity
 
   for (const night of nights) {
+    if (naps) {
+      for (const nap of night.naps ?? []) {
+        if (nap < low) low = nap
+        if (nap > high) high = nap
+      }
+    }
     if (night.bed === null || night.wake === null || night.wake <= night.bed) continue
     // The same frame shift withinSchedule applies, so the bounds are in the coordinates the spans
     // will actually be drawn in. A window derived from anything else would be a window that then
@@ -74,6 +84,16 @@ export function fitWindow(
   if (short > 0) {
     min -= Math.floor(short / 2 / 60) * 60
     max += Math.ceil(short / 2 / 60) * 60
+  }
+  // A whole number of six hour blocks, so axisTickInterval's six equal steps each land on a whole
+  // hour: a 17 hour fit would otherwise tick every 3 hours and leave its last gap 2 hours wide,
+  // the uneven end tick that function exists to prevent. Grown alternately at the top and the
+  // bottom, an hour at a time, so the band stays centred.
+  let growTop = true
+  while ((max - min) % (6 * 60) !== 0) {
+    if (growTop) max += 60
+    else min -= 60
+    growTop = !growTop
   }
   return { min, max }
 }

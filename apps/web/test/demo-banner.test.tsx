@@ -69,6 +69,33 @@ describe('the banner', () => {
       document.documentElement.style.removeProperty('--chrome-above')
     }
   })
+
+  // Closing the notice has to give its height back too: --chrome-above left at the banner's height
+  // would keep the rail pushed down under a banner that is no longer drawn.
+  it('closes on its button, gives its height back, and stays closed for the rest of the tab', () => {
+    const original = HTMLElement.prototype.getBoundingClientRect
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      if (this.hasAttribute('data-demo-banner')) return { height: this.childNodes.length > 0 ? 42 : 0 } as DOMRect
+      return original.call(this)
+    }
+    try {
+      act(() => { mountDemoBanner() })
+      const host = document.querySelector('[data-demo-banner]')!
+      expect(document.documentElement.style.getPropertyValue('--chrome-above')).toBe('42px')
+      const close = host.querySelector('button')!
+      expect(close.getAttribute('aria-label')).toBe('Dismiss the demo notice')
+      act(() => { close.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+      expect(host.textContent).toBe('')
+      expect(document.documentElement.style.getPropertyValue('--chrome-above')).toBe('0px')
+      // A fresh render in the same tab reads the choice back rather than showing it again.
+      act(() => { root?.render(<DemoBanner />) })
+      expect(container?.textContent).toBe('')
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original
+      document.documentElement.style.removeProperty('--chrome-above')
+      window.sessionStorage.clear()
+    }
+  })
 })
 
 describe('the banner in the visitor\'s own language', () => {
