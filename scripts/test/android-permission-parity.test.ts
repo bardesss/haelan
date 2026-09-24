@@ -13,6 +13,15 @@ import { describe, it, expect } from 'vitest'
 // every GPS workout answers ConsentRequired and no route is ever sent. Every test stayed green
 // because they all construct their own records and never cross this boundary.
 //
+// The fix for that then overshot, and this guard helped it: it demanded the route permission be
+// REQUESTED, and Health Connect ignores that request by design ("Attempts to request the permission
+// by applications will be ignored", HealthPermissions#READ_EXERCISE_ROUTES; the controller filters
+// the string out of every request). With the rest granted, the request screen found nothing to ask,
+// returned at once, and the app went on counting routes as missing: a permission button that did
+// nothing, with no route permission to find anywhere. So there are two sets now - what is
+// requested, and what is only declared because something else grants it - and the manifest must
+// equal their union while the two stay apart.
+//
 // Same idiom as companion-stale-source-drift.test.ts: read both real files, compare them here, so
 // the drift fails at the seam rather than on a phone.
 const root = new URL('../../', import.meta.url)
@@ -59,31 +68,43 @@ const RECORD_PERMISSIONS: Record<string, string> = {
   ElevationGainedRecord: 'READ_ELEVATION_GAINED',
 }
 
-function readPermissionsBody(): string {
-  const start = engine.indexOf('fun readPermissions()')
+function setBody(fn: string): string {
+  const start = engine.indexOf(`fun ${fn}()`)
   expect(
     start,
-    `${ENGINE_PATH}: 'readPermissions()' not found - has it moved or been renamed? This guard `
+    `${ENGINE_PATH}: '${fn}()' not found - has it moved or been renamed? This guard `
     + 'cannot compare a set it cannot find, and must say so rather than compare an empty one.',
   ).toBeGreaterThan(-1)
   const end = engine.indexOf('\n    )', start)
   expect(
     end,
-    `${ENGINE_PATH}: could not find the end of 'readPermissions()' - its closing paren is no longer `
+    `${ENGINE_PATH}: could not find the end of '${fn}()' - its closing paren is no longer `
     + 'on its own line at the expected indent.',
   ).toBeGreaterThan(-1)
   return engine.slice(start, end)
 }
 
+/** What the permission screen sends to Health Connect's request contract. */
 function requested(): Set<string> {
-  const body = readPermissionsBody()
+  return namesIn(setBody('readPermissions'))
+}
+
+/**
+ * What the manifest declares and the request must NOT carry: permissions the household grants
+ * somewhere other than the request screen (READ_EXERCISE_ROUTES, from the route request activity).
+ */
+function declaredOnly(): Set<string> {
+  return namesIn(setBody('declaredOnlyPermissions'))
+}
+
+function namesIn(body: string): Set<string> {
   const names = new Set<string>()
   for (const match of body.matchAll(/getReadPermission\((\w+)::class\)/g)) {
     const record = match[1]!
     const permission = RECORD_PERMISSIONS[record]
     expect(
       permission,
-      `${ENGINE_PATH}: readPermissions() asks for '${record}', which this guard has no permission `
+      `${ENGINE_PATH}: a permission set asks for '${record}', which this guard has no permission `
       + 'name for. Add it to RECORD_PERMISSIONS with the name Health Connect resolves it to, taken '
       + 'from the manifest entry you added alongside it. Guessing the name from the class would '
       + 'make this guard agree with itself and prove nothing.',
@@ -100,7 +121,7 @@ function requested(): Set<string> {
     const literal = new RegExp(`const val ${match[1]!} = "android\\.permission\\.health\\.([A-Z_0-9]+)"`).exec(engine)
     expect(
       literal,
-      `${ENGINE_PATH}: readPermissions() names '${match[1]!}', but no 'const val ${match[1]!}' with `
+      `${ENGINE_PATH}: a permission set names '${match[1]!}', but no 'const val ${match[1]!}' with `
       + 'a health permission string was found to resolve it to.',
     ).not.toBeNull()
     names.add(literal![1]!)
@@ -117,11 +138,11 @@ function requested(): Set<string> {
  * the two files would have stayed green on it - this was confirmed by deleting both entries and
  * watching the parity tests pass.
  *
- * So the reading is tied to the asking. The subject is the code that consumes a route, not a
+ * So the reading is tied to the declaring. The subject is the code that consumes a route, not a
  * permission list, because that is the thing whose presence means the permission is needed.
  */
-describe('Android health permissions: reading a route means asking for it', () => {
-  it('requests READ_EXERCISE_ROUTES whenever the app reads exerciseRouteResult', () => {
+describe('Android health permissions: reading a route means declaring it, and not requesting it', () => {
+  it('declares READ_EXERCISE_ROUTES, as declared-only, whenever the app reads exerciseRouteResult', () => {
     const readsRoutes = engine.includes('exerciseRouteResult')
     expect(
       readsRoutes,
@@ -130,36 +151,46 @@ describe('Android health permissions: reading a route means asking for it', () =
       + 'only source.',
     ).toBe(true)
     expect(
-      requested().has('READ_EXERCISE_ROUTES'),
-      `${ENGINE_PATH} reads 'exerciseRouteResult' but readPermissions() never asks for `
-      + 'READ_EXERCISE_ROUTES. Health Connect answers ConsentRequired for every GPS workout to a '
-      + 'reader without it, so routeJson returns null on its first line and no route is ever sent: '
-      + 'a feature that ships, passes every test, and does nothing on a real phone. The permission '
-      + 'is real - android.health.connect.HealthPermissions.READ_EXERCISE_ROUTES on android-36 - '
-      + 'even though connect-client 1.1.0 has no constant for it, so it is asked for as a literal.',
+      declared().has('READ_EXERCISE_ROUTES') && declaredOnly().has('READ_EXERCISE_ROUTES'),
+      `${ENGINE_PATH} reads 'exerciseRouteResult' but READ_EXERCISE_ROUTES is not both declared in `
+      + `${MANIFEST_PATH} and listed in declaredOnlyPermissions(). Health Connect's route request `
+      + 'activity - the one place this permission is granted from, via "Always allow" - finishes '
+      + 'cancelled for a caller that does not declare it, so every GPS workout stays ConsentRequired.',
     ).toBe(true)
+  })
+
+  it('never sends READ_EXERCISE_ROUTES, or any declared-only permission, to the request screen', () => {
+    const overlap = [...declaredOnly()].filter((name) => requested().has(name)).sort()
+    expect(
+      overlap,
+      `${ENGINE_PATH}: readPermissions() requests ${overlap.join(', ')}, which declaredOnlyPermissions() `
+      + 'says the request screen cannot grant. Health Connect drops it from the request, so it is '
+      + 'never in the answer, and the screen counts it as missing for ever: with everything else '
+      + 'granted the button returns at once and looks dead. That is the bug this guard was widened for.',
+    ).toEqual([])
   })
 })
 
-describe('Android health permissions: the manifest and the requested set agree', () => {
-  it('declares every permission the app asks for', () => {
-    const missing = [...requested()].filter((name) => !declared().has(name)).sort()
+describe('Android health permissions: the manifest and the two sets agree', () => {
+  it('declares every permission the app asks for or relies on', () => {
+    const wanted = new Set([...requested(), ...declaredOnly()])
+    const missing = [...wanted].filter((name) => !declared().has(name)).sort()
     expect(
       missing,
-      `${MANIFEST_PATH} does not declare ${missing.join(', ')}, which readPermissions() asks for. `
-      + 'The platform refuses an undeclared permission, so the consent screen cannot grant it and '
+      `${MANIFEST_PATH} does not declare ${missing.join(', ')}, which ${ENGINE_PATH} asks for or `
+      + 'relies on. The platform refuses an undeclared permission, so nothing can grant it and '
       + 'every read of that data is answered as though the household said no.',
     ).toEqual([])
   })
 
-  it('asks for every permission it declares', () => {
-    const unused = [...declared()].filter((name) => !requested().has(name)).sort()
+  it('asks for every permission it declares, unless it is declared-only', () => {
+    const unused = [...declared()].filter((name) => !requested().has(name) && !declaredOnly().has(name)).sort()
     expect(
       unused,
-      `${MANIFEST_PATH} declares ${unused.join(', ')}, which readPermissions() never asks for. A `
-      + 'declared permission is never granted on its own: the consent screen only offers what the '
-      + 'set sends. This is how routes shipped reading nothing - the data was mapped, stored and '
-      + 'drawn, and the permission behind it was never requested.',
+      `${MANIFEST_PATH} declares ${unused.join(', ')}, which readPermissions() never asks for and `
+      + 'declaredOnlyPermissions() does not account for. A declared permission is never granted on '
+      + 'its own: the consent screen only offers what the set sends. This is how routes first '
+      + 'shipped reading nothing. If it is granted somewhere else, list it as declared-only.',
     ).toEqual([])
   })
 })

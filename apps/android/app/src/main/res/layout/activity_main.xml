@@ -126,6 +126,42 @@
                     android:text="@string/perm_action"
                     app:cornerRadius="8dp"
                     style="@style/Widget.Material3.Button.OutlinedButton" />
+
+                <!-- Routes are the one thing the button above cannot grant: Health Connect only
+                     releases another app's route from its own per-workout screen, so this part
+                     of the card appears when a sync has met a route it was not given. -->
+                <LinearLayout
+                    android:id="@+id/routesBlock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/routesStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/routes_hint"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/buttonRoutes"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/routes_action"
+                        app:cornerRadius="8dp"
+                        style="@style/Widget.Material3.Button.OutlinedButton" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
