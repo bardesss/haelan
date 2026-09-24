@@ -399,12 +399,12 @@ describe('the glance Dashboard', () => {
   })
 
   // The locale parity guard compares key sets and never renders, so the Dutch page is rendered
-  // once here to see that it reads as Dutch. The week card's title is left out until its Dutch
-  // lands (the next task); the three titles and lines below already have theirs.
+  // once here to see that it reads as Dutch.
   it('renders in Dutch', async () => {
     const { restore } = await mountPage(glanceBody(), { lng: 'nl' })
     try {
-      expect(titles().slice(0, 3)).toEqual(['Afgelopen nacht', 'Herstel', 'Vandaag'])
+      expect(container!.querySelector('h1')?.textContent).toBe('Goedemorgen')
+      expect(titles()).toEqual(['Afgelopen nacht', 'Herstel', 'Vandaag', 'Deze week'])
       expect(dateLine()).toBe('woensdag 23 september · afgelopen nacht, en vandaag tot 11:38')
       expect(container!.textContent).toContain('Stappen')
       expect(container!.textContent).not.toMatch(/\bglance\.[a-zA-Z]/)

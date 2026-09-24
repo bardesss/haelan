@@ -1390,6 +1390,13 @@
   "glance": {
     "span": "afgelopen nacht, en vandaag tot {{time}}",
     "spanNoTime": "afgelopen nacht, en vandaag tot nu toe",
+    "spanNoNight": "afgelopen nacht niet gemeten · vandaag tot {{time}}",
+    "spanNoNightNoTime": "afgelopen nacht niet gemeten · vandaag tot nu toe",
+    "greeting": {
+      "morning": "Goedemorgen",
+      "afternoon": "Goedemiddag",
+      "evening": "Goedenavond"
+    },
     "usual": {
       "within": "binnen je gebruikelijke bereik {{low}} – {{high}}",
       "above": "boven je gebruikelijke bereik {{low}} – {{high}}",
@@ -1404,6 +1411,12 @@
       "night": "nacht van {{date}}"
     },
     "noReading": "Nog geen meting",
+    "pace": {
+      "ahead": "Voor op je gebruikelijke tempo",
+      "on": "Op je gebruikelijke tempo",
+      "behind": "Achter op je gebruikelijke tempo",
+      "usualBy": "normaal zit je om {{time}} op {{value}}"
+    },
     "sleep": {
       "title": "Afgelopen nacht",
       "asleep": "Slaaptijd",
@@ -1412,7 +1425,19 @@
       "woke": "Wakker",
       "strip": "Tijd geslapen, laatste 7 nachten",
       "caption": "laatste 7 nachten",
-      "link": "Bekijk deze nacht"
+      "link": "Bekijk deze nacht",
+      "efficiencyStanding": {
+        "above": "hoger dan gewoonlijk",
+        "below": "lager dan gewoonlijk"
+      },
+      "bedStanding": {
+        "above": "later dan gewoonlijk",
+        "below": "eerder dan gewoonlijk"
+      },
+      "wokeStanding": {
+        "above": "later dan gewoonlijk",
+        "below": "eerder dan gewoonlijk"
+      }
     },
     "recovery": {
       "title": "Herstel",
@@ -1421,6 +1446,8 @@
       "hrv": "HRV",
       "respiratory": "Ademhaling {{value}}, boven je gebruikelijke waarde",
       "unscored": "Nog niet genoeg metingen om te scoren.",
+      "notScored": "Geen score",
+      "score": "Score",
       "strip": "Herstelindex, laatste 7 dagen",
       "caption": "laatste 7 dagen",
       "link": "Bekijk herstel"
@@ -1438,6 +1465,17 @@
     },
     "workouts": {
       "title": "Activiteiten van vandaag"
+    },
+    "week": {
+      "title": "Deze week",
+      "subtitle": "laatste 7 dagen",
+      "steps": "Stappen",
+      "active": "Actief",
+      "asleep": "Slaaptijd",
+      "perDay": "per dag",
+      "perNight": "per nacht",
+      "barsLabel": "{{what}}, laatste 7 dagen; het gemiddelde telt alleen volle dagen mee, vandaag dus nog niet",
+      "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde"
     },
     "subtitle": {
       "today": "vandaag",
