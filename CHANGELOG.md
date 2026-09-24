@@ -9,6 +9,20 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.8.0](https://github.com/bardesss/haelan/compare/v2.7.0...v2.8.0) (2026-09-24)
+
+
+### Features
+
+* one workout per event, and today's activities on the dashboard ([#359](https://github.com/bardesss/haelan/issues/359)) ([e5316f6](https://github.com/bardesss/haelan/commit/e5316f6bb33d3de7541bf7e53c77d436a494346f))
+
+
+### Bug Fixes
+
+* **android:** stop requesting the route permission, and release withheld routes one workout at a time ([#357](https://github.com/bardesss/haelan/issues/357)) ([0c299c1](https://github.com/bardesss/haelan/commit/0c299c1bc1330bb1ea4eb669a9b4eed1a4cafb22))
+* **core:** a stale source whose data carries on elsewhere stops warning ([#358](https://github.com/bardesss/haelan/issues/358)) ([99b7718](https://github.com/bardesss/haelan/commit/99b7718ded5dc6e7477be1004bf6b7d68f8c2120))
+* **web:** a finished sync refreshes the page it ran for ([#356](https://github.com/bardesss/haelan/issues/356)) ([1ee14ba](https://github.com/bardesss/haelan/commit/1ee14bac97f48cd647d83640c4e4265bc978b85c))
+
 ## [2.7.0](https://github.com/bardesss/haelan/compare/v2.6.0...v2.7.0) (2026-09-24)
 
 
