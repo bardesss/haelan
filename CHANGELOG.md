@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.7.0](https://github.com/bardesss/haelan/compare/v2.6.0...v2.7.0) (2026-09-24)
+
+
+### Features
+
+* **web:** the dashboard becomes the glance (M9b) ([#354](https://github.com/bardesss/haelan/issues/354)) ([9d7a44a](https://github.com/bardesss/haelan/commit/9d7a44a44e088938be11193ecd1015c589308937))
+
 ## [2.6.0](https://github.com/bardesss/haelan/compare/v2.5.0...v2.6.0) (2026-09-23)
 
 
