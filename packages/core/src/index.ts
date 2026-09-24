@@ -76,7 +76,7 @@ export {
   SettingsStore, setupStep, DEFAULT_BACKUP_KEEP, DEFAULT_BACKUP_INTERVAL_HOURS,
 } from './store/settings.ts'
 export type {
-  InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps, BackupPolicy,
+  InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps, BackupPolicy, LastSync,
 } from './store/settings.ts'
 export { CONSENT_PATHS } from './db/schema/accounts.ts'
 export type { ConsentPath } from './db/schema/accounts.ts'
