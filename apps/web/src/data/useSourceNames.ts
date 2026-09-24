@@ -45,8 +45,11 @@ export interface SourceActivityFields {
   /**
    * A stale source whose routine metrics all kept arriving from other sources since it stopped -
    * a device the provider renamed, or whose data moved to another path. Still `stale` here,
-   * because the id did stop; only the cards' warnings skip it, since nothing they show is
-   * missing. Computed by the server for the same reason as `reportingNow`.
+   * because the id did stop. Nothing in this app reads it any more: the cards' warnings that
+   * skipped such a source are gone, and the status panel, which now carries the warning, gets the
+   * same verdict already applied by the server (composeStatus). Kept in the type because the
+   * response still carries it. Computed by the server for
+   * the same reason as `reportingNow`.
    */
   continuedElsewhere: boolean
   /**

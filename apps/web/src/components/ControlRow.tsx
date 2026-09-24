@@ -12,16 +12,6 @@ import { useIsPhone } from '../ui/breakpoint.js'
 import { RebuildNotice } from './RebuildNotice.js'
 import { useShortcutKeys } from '../ui/shortcuts.js'
 
-// A frozen module constant, not a fresh `[]` default: a new array identity on every render is
-// what chart-lifecycle.test.tsx exists to catch elsewhere in this app, and a default parameter
-// expression runs on every call.
-const EMPTY_SOURCES: string[] = Object.freeze([]) as never[]
-
-// Built per language and cached by Intl itself. "Watch and scale" in English, "Watch en scale" in
-// Dutch, and neither spelling hardcoded here.
-const listFormat = (language: string): Intl.ListFormat =>
-  new Intl.ListFormat(language, { style: 'long', type: 'conjunction' })
-
 /**
  * Which range, which period, which source - and on a phone, one row instead of five.
  *
@@ -30,6 +20,12 @@ const listFormat = (language: string): Intl.ListFormat =>
  * page: a sync is an instance-wide action and had no business being the loudest control on a
  * page about September. Losing it is most of why the phone layout below is possible at all.
  *
+ * It also used to end in a line naming the sources that went quiet inside the range ("Stopped
+ * reporting during this range: ..."), worked out from the points the page had loaded. That line and
+ * the triangle each card carried both said a source had stopped, on every page, in slightly
+ * different terms; the status panel now says it once, beside the person's name, with what each
+ * quiet device stopped sending (StatusPanel.tsx).
+ *
  * Two layouts, chosen by the same breakpoint the rail uses. Above it, one line: the five ranges,
  * the stepper with its date picker, the source picker, and the export. Below it, one line of a
  * different shape - the stepper arrows either side of a chip naming the period, with everything
@@ -37,19 +33,10 @@ const listFormat = (language: string): Intl.ListFormat =>
  * action and must not cost a sheet.
  */
 export function ControlRow({
-  controls, sources, exportPath, stoppedSources = EMPTY_SOURCES, trendNote = false, yearCompare = false,
+  controls, sources, exportPath, trendNote = false, yearCompare = false,
 }: {
   controls: PageControlsState
   sources: string[]
-  /**
-   * Sources that fed this range and then went quiet inside it, from
-   * `sourcesStoppedInRange` (data/pageShell.ts). Defaulted, so a page that has not adopted it
-   * renders exactly as it did before rather than being forced to pass an empty array.
-   *
-   * Passed in rather than computed here: this component has no series, and the question is about
-   * the points a page has already loaded.
-   */
-  stoppedSources?: string[]
   // Optional rather than required: a page with no range of its own has no export to offer, and
   // the link is left out rather than rendered with no href.
   exportPath?: string
@@ -123,25 +110,6 @@ export function ControlRow({
     />
   )
 
-  const stopped = stoppedSources.length > 0 && (
-    /* The answer to what a thinning chart actually raises: did the person do less, or did the
-       device stop. Said once for the page rather than on each card, because every card on a
-       page reads the same range and would otherwise repeat one sentence up to twelve times.
-       Named, because "a source stopped" sends the reader to Settings to find out which.
-
-       The names never begin the sentence, which is why the copy reads "Stopped reporting
-       during this range: X" rather than "X stopped reporting". A source is called whatever
-       its device or its owner called it - "com.lyfta", "My watch" - so a sentence-initial
-       name either renders lowercase mid-sentence or gets capitalised into something nobody
-       typed. */
-    <p className="control-row-stopped">
-      {t('controlRow.sourceStopped', {
-        sources: listFormat(i18n.language).format(stoppedSources.map(nameOf)),
-        count: stoppedSources.length,
-      })}
-    </p>
-  )
-
   const note = trendNote && <p className="control-row-note">{t('controlRow.trendNote')}</p>
 
   // Only on a page whose tiles draw the comparison, and never on Day, where a tile has no line.
@@ -177,7 +145,6 @@ export function ControlRow({
         <PeriodSheet controls={controls} sources={sources} exportPath={exportPath} label={period} yearCompare={yearCompare}
           open={sheetOpen} onClose={() => setSheetOpen(false)} />
         {note}
-        {stopped}
       </div>
     )
   }
@@ -258,7 +225,6 @@ export function ControlRow({
         )}
       </div>
       {note}
-      {stopped}
     </div>
   )
 }

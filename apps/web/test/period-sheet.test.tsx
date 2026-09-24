@@ -169,12 +169,6 @@ describe('the control row on a phone', () => {
     click(chip())
     expect(container!.querySelector('.period-sheet select')).toBeNull()
   })
-
-  // Said once for the page, and it has to survive the row being rebuilt around it.
-  it('still names a source that stopped inside the range', () => {
-    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} stoppedSources={['watch']} />))
-    expect(container!.querySelector('.control-row-stopped')!.textContent).toContain('watch')
-  })
 })
 
 describe('the control row above the breakpoint', () => {

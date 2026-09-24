@@ -70,7 +70,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone }: {
   ) : null
   return (
     <DashCard span={span} title={t('glance.recovery.title')} subtitle={subtitle} className={wide ? 'dash-recovery is-wide' : 'dash-recovery'}
-      link={{ to: '/recovery', text: t('glance.recovery.link') }} staleFigures={[index, recovery.restingHeartRate, recovery.hrv]}>
+      link={{ to: '/recovery', text: t('glance.recovery.link') }}>
       <div className="dash-recovery-row">{dials}{strip}</div>
       <p className="dash-recovery-words">{score === null ? t('glance.recovery.unscored') : bandWords}</p>
       {recovery.respiratoryRate !== null && (

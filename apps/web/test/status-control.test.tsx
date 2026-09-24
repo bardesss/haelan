@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { StatusControl, placementFor } from '../src/components/StatusControl.js'
+import { StatusControl } from '../src/components/StatusControl.js'
 import { dayLabel } from '../src/components/StatusPanel.js'
 import { navigate } from '../src/router.js'
 import { statusKey } from '../src/data/useStatusPanel.js'
@@ -83,17 +83,24 @@ function google(over: Partial<StatusConnection> = {}): StatusConnection {
   return {
     kind: 'google', lastDeliveryAtMs: NOW - 7 * 60_000, problem: null,
     devices: [
-      { sourceId: 'watch', name: 'Pixel Watch 4', lastReportedDate: '2026-09-24', stale: false, choice: null },
-      { sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-09-20', stale: false, choice: null },
+      { sourceId: 'watch', name: 'Pixel Watch 4', lastReportedDate: '2026-09-24', stale: false, choice: null, metrics: [] },
+      { sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-09-20', stale: false, choice: null, metrics: [] },
     ],
     ...over,
   }
 }
 
+// A watch gone quiet, as composeStatus sends it: its routine metrics are catalogue keys, two
+// sleep metrics among them that are one data type to a reader, and one key nothing names.
+const QUIET_WATCH = {
+  sourceId: 'watch', name: 'Pixel Watch 4', lastReportedDate: '2026-08-21', stale: true, choice: null,
+  metrics: ['heart_rate', 'not_a_metric', 'sleep_asleep_minutes', 'sleep_deep_minutes', 'steps', 'vo2_max'],
+}
+
 function phoneConnection(over: Partial<StatusConnection> = {}): StatusConnection {
   return {
     kind: 'phone', lastDeliveryAtMs: NOW - 55 * 60_000, problem: null,
-    devices: [{ sourceId: 'hc', name: 'Health Connect', lastReportedDate: '2026-09-23', stale: false, choice: null }],
+    devices: [{ sourceId: 'hc', name: 'Health Connect', lastReportedDate: '2026-09-23', stale: false, choice: null, metrics: [] }],
     ...over,
   }
 }
@@ -457,11 +464,43 @@ describe('the panel content', () => {
   })
 
   it('marks a stale device', () => {
-    mount(panel({ connections: [google({ devices: [{ sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-08-01', stale: true, choice: null }] })], problems: 1 }))
+    mount(panel({ connections: [google({ devices: [{ sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-08-01', stale: true, choice: null, metrics: [] }] })], problems: 1 }))
     press(icon())
     const row = popover()!.querySelector('.status-device')!
     expect(row.getAttribute('data-stale')).toBe('true')
-    expect(row.textContent).toContain('gone quiet')
+    // Since when, in the words, not only on a hover title a phone never shows. The year appears
+    // only once the test clock has left 2026, which is dayLabel's own rule, not this row's.
+    expect(row.children[1]!.textContent).toMatch(/^gone quiet since Aug 1(, 2026)?$/)
+  })
+
+  // The panel is the one place a quiet source is announced since the cards' triangles and the
+  // control row's line went, so its row has to say what they said: which data stopped arriving.
+  it('names what a stale device stopped sending, after its gone-quiet text', () => {
+    mount(panel({ connections: [google({ devices: [QUIET_WATCH] })], problems: 1 }))
+    press(icon())
+    const row = popover()!.querySelector('.status-device')!
+    // Read in the order a reader meets it: the device, that it went quiet, then what stopped.
+    const [name, quiet, metrics, ...rest] = [...row.children].map((child) => child.textContent)
+    expect(rest).toEqual([])
+    expect(name).toBe('Pixel Watch 4')
+    expect(quiet).toMatch(/^gone quiet since Aug 21(, 2026)?$/)
+    expect(metrics).toBe('Heart rate (continuous), sleep, steps, VO2 max')
+  })
+
+  it('leaves a metric the catalogue has no name for out, and prints no line when none has one', () => {
+    const unnamed = { ...QUIET_WATCH, sourceId: 'odd', name: 'Odd device', metrics: ['not_a_metric', 'also_unknown'] }
+    mount(panel({ connections: [google({ devices: [QUIET_WATCH, unnamed] })], problems: 2 }))
+    press(icon())
+    const [watch, odd] = [...popover()!.querySelectorAll('.status-device')]
+    expect(watch!.textContent).not.toContain('not_a_metric')
+    expect(odd!.querySelector('.status-device-metrics')).toBeNull()
+    expect(odd!.children).toHaveLength(2)
+  })
+
+  it('lists nothing under a device that is still reporting', () => {
+    mount(panel({ connections: [google({ devices: [{ ...QUIET_WATCH, stale: false, lastReportedDate: '2026-09-24' }] })] }))
+    press(icon())
+    expect(popover()!.querySelector('.status-device-metrics')).toBeNull()
   })
 
   it('counts hidden sources and links to where they are chosen', () => {
@@ -515,6 +554,17 @@ describe('in Dutch', () => {
     press(icon())
     expect(syncButton()!.textContent).toBe('Net gesynchroniseerd')
     expect(icon().getAttribute('aria-label')).toBe('Status: alle bronnen zijn bijgewerkt')
+  })
+
+  it('names what a stale device stopped sending in Dutch, sorted and lowered the Dutch way', () => {
+    mount(panel({ connections: [google({ devices: [QUIET_WATCH] })], problems: 1 }), 'nl')
+    press(icon())
+    const row = popover()!.querySelector('.status-device')!
+    const [name, quiet, metrics, ...rest] = [...row.children].map((child) => child.textContent)
+    expect(rest).toEqual([])
+    expect(name).toBe('Pixel Watch 4')
+    expect(quiet).toMatch(/^stilgevallen sinds 21 aug( 2026)?$/)
+    expect(metrics).toBe('Hartslag (doorlopend), slaap, stappen, VO2 max')
   })
 
   it('says nothing is connected rather than all up to date, with no connections at all', () => {
@@ -620,26 +670,6 @@ describe('the popover\'s placement', () => {
     press(icon())
     press(syncButton()!)
     expect(popover()).not.toBeNull()
-  })
-})
-
-describe('placementFor', () => {
-  const viewport = { width: 1000, height: 800 }
-  const trigger = { left: 150, top: 700, right: 180, bottom: 730 }
-
-  it('keeps an expanded-rail popover inside the viewport on both axes', () => {
-    // A foot starting past where a 320px popover would fit is pulled back in from the right.
-    expect(placementFor({ trigger, anchorLeft: 900, stripRight: 186, collapsed: false, size: { width: 320, height: 400 }, viewport }))
-      .toEqual({ left: 1000 - 320 - 6, bottom: 800 - 700 + 6 })
-    // Too tall to fit above the icon: pinned so its top stays inside the viewport.
-    expect(placementFor({ trigger, anchorLeft: 12, stripRight: 186, collapsed: false, size: { width: 320, height: 790 }, viewport }).bottom)
-      .toBe(800 - 790 - 6)
-  })
-
-  it('keeps a collapsed-rail popover from running off the top', () => {
-    const high = { left: 15, top: 40, right: 45, bottom: 70 }
-    expect(placementFor({ trigger: high, anchorLeft: 8, stripRight: 60, collapsed: true, size: { width: 320, height: 400 }, viewport }))
-      .toEqual({ left: 66, bottom: 800 - 400 - 6 })
   })
 })
 

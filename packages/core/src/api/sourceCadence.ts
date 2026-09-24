@@ -2,10 +2,13 @@
  * Whether a source is still reporting, judged against its OWN cadence rather than a fixed number
  * of days.
  *
- * Pure, and in `api/` rather than `query/` so the browser can import it through its own subpath:
- * the settings card asks the server this question about a person's whole history, and a page asks
- * the same question about the range on screen. Two copies of one rule is how a threshold drifts,
- * so there is one, and `query/sourceActivity.ts` is a database read that ends in a call to this.
+ * Pure, and in `api/` rather than `query/` so the browser can import it through its own subpath.
+ * The range pages used to ask the same question about the range on screen, for a "stopped in
+ * this range" line under their control row; that line is gone, and the status panel reads the
+ * server's verdict instead, so today only the server asks; the browser subpath is kept, unused by
+ * the web for now, rather than removed in the same change. Two copies of one rule is
+ * how a threshold drifts, so there is one, and `query/sourceActivity.ts` is a database read that
+ * ends in a call to this.
  *
  * Measured against a real household archive 2026-09-15: a flat seven day threshold flags 13 of 17
  * sources, because most are apps that reported for two days and stopped, and one manual source
@@ -71,6 +74,40 @@ export function routineWindowStart(lastReportedDate: string): string {
 }
 
 /**
+ * The metrics a stopped source reported routinely in its last active week: those it reported on
+ * at least half of its own reporting dates inside the ROUTINE_WINDOW_DAYS ending on its last one.
+ * Sorted, so two callers asking about the same rows get the same list.
+ *
+ * One rule with two readers. `continuedElsewhere` asks whether every one of these kept arriving
+ * from somewhere else, and the status panel (statusPanel.ts) prints them beside a device that has
+ * gone quiet, so a reader learns what stopped arriving as well as which device stopped sending it.
+ * Why "routine" rather than every metric of that week is given on `continuedElsewhere`: a workout
+ * on one day of it would otherwise be listed, and held open, as something the watch sends.
+ *
+ * `reports` need not be narrowed: rows of other sources, and rows of this one outside its window,
+ * are ignored, so a caller holding a wider read can pass it as it is.
+ */
+export function routineMetrics(
+  sourceId: string, lastReportedDate: string, reports: Iterable<SourceReport>,
+): string[] {
+  const windowStart = routineWindowStart(lastReportedDate)
+  const ownDates = new Set<string>()
+  const datesByMetric = new Map<string, Set<string>>()
+  for (const report of reports) {
+    if (report.source !== sourceId) continue
+    if (report.date < windowStart || report.date > lastReportedDate) continue
+    ownDates.add(report.date)
+    const dates = datesByMetric.get(report.metric)
+    if (dates) dates.add(report.date)
+    else datesByMetric.set(report.metric, new Set([report.date]))
+  }
+  return [...datesByMetric]
+    .filter(([, dates]) => dates.size * 2 >= ownDates.size)
+    .map(([metric]) => metric)
+    .sort()
+}
+
+/**
  * Whether everything a stopped source routinely reported has gone on arriving from other sources
  * since it stopped - in which case its silence costs the reader nothing, and a card saying it
  * stopped is a false alarm.
@@ -91,7 +128,8 @@ export function routineWindowStart(lastReportedDate: string): string {
  * rate, so requiring EVERY routine metric keeps that warning. Why "routine" rather than every
  * metric of the final week: a workout on one of those days would otherwise hold a renamed watch
  * as stopped until the household next exercised. A metric is routine when the source reported it
- * on at least half of its own reporting dates inside ROUTINE_WINDOW_DAYS ending on its last one.
+ * on at least half of its own reporting dates inside ROUTINE_WINDOW_DAYS ending on its last one
+ * (`routineMetrics`, shared with the status panel's list of what a quiet device stopped sending).
  *
  * Why not link the two ids as one device instead: the payload carries no device id to link on,
  * so linking would mean matching one model name against another (a brand prefix and a case size
@@ -106,25 +144,15 @@ export function routineWindowStart(lastReportedDate: string): string {
 export function continuedElsewhere(
   sourceId: string, lastReportedDate: string, reports: Iterable<SourceReport>,
 ): boolean {
-  const windowStart = routineWindowStart(lastReportedDate)
-  const ownDates = new Set<string>()
-  const datesByMetric = new Map<string, Set<string>>()
+  // Materialised once: `reports` is an Iterable, and routineMetrics walks it before the loop
+  // below does, so a one-shot generator would reach the second walk empty.
+  const all = [...reports]
+  const routine = routineMetrics(sourceId, lastReportedDate, all)
   const arrivingSince = new Set<string>()
-  for (const report of reports) {
-    if (report.source === 'merged' || report.source === 'provider') continue
-    if (report.source === sourceId) {
-      if (report.date < windowStart || report.date > lastReportedDate) continue
-      ownDates.add(report.date)
-      const dates = datesByMetric.get(report.metric)
-      if (dates) dates.add(report.date)
-      else datesByMetric.set(report.metric, new Set([report.date]))
-    } else if (report.date > lastReportedDate) {
-      arrivingSince.add(report.metric)
-    }
+  for (const report of all) {
+    if (report.source === 'merged' || report.source === 'provider' || report.source === sourceId) continue
+    if (report.date > lastReportedDate) arrivingSince.add(report.metric)
   }
-  const routine = [...datesByMetric]
-    .filter(([, dates]) => dates.size * 2 >= ownDates.size)
-    .map(([metric]) => metric)
   return routine.length > 0 && routine.every((metric) => arrivingSince.has(metric))
 }
 
@@ -133,9 +161,9 @@ export function continuedElsewhere(
  * distinct; a caller assembling them from a chart's points has neither guarantee, and a
  * last-reported date read off an unsorted array is wrong silently rather than loudly.
  *
- * `asOf` is whatever the caller is judging against: today for the settings card, the last day of
- * the range on screen for a chart, which is what makes "stopped inside this range" the same
- * question as "stopped" asked over a shorter history.
+ * `asOf` is whatever the caller is judging against. Today, for every caller there is now; the
+ * range pages once passed the last day of the range on screen, which is what made "stopped inside
+ * this range" the same question as "stopped" asked over a shorter history.
  */
 export function cadenceOf(dates: readonly string[], asOf: string): SourceCadence {
   const distinct = [...new Set(dates)].sort()

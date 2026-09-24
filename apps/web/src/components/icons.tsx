@@ -153,13 +153,6 @@ const PATHS: Record<string, React.ReactNode> = {
   sessionOther: <path d="M4 19v-6M9.3 19V6M14.7 19v-9M20 19v-4" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
-  // A source that stopped reporting (SourceWarning.tsx): a triangle with its mark.
-  warning: (
-    <>
-      <path d="M10.3 4.2 2.9 17.3A2 2 0 0 0 4.6 20.3h14.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z" />
-      <path d="M12 9.5v4.2M12 16.8v.1" />
-    </>
-  ),
 }
 
 export function Icon({ name }: { name: string }) {

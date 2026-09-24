@@ -43,8 +43,7 @@ export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span
   const isAhead = pace?.standing === 'ahead'
   return (
     <DashCard span={span} title={t('glance.today.title')} subtitle={t('glance.today.subtitle')}
-      link={{ to: '/activity', text: t('glance.today.link') }}
-      staleFigures={[day.steps, day.activeMinutes]} staleExtra={day.heartRate.staleSources}>
+      link={{ to: '/activity', text: t('glance.today.link') }}>
       <div>
         <div className="dash-today-figures">
           <div>

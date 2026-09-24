@@ -45,7 +45,6 @@
     "nextPeriod": "Next period",
     "pickDate": "Pick a date",
     "sources": "Sources",
-    "sourceStopped": "Stopped reporting during this range: {{sources}}.",
     "compareYear": "Compare with last year",
     "trendNote": "Each percentage compares the later half of that card's readings with the earlier half.",
     "sourceAll": "All sources",
@@ -71,12 +70,6 @@
       "note": "The period keys work on pages that have a period to step. None of these keys do anything while you are typing in a field."
     }
   },
-  "staleSource": {
-    "sentence": "{{name}} has not reported since {{date}}; {{usual}}.",
-    "sentenceNoCadence": "{{name}} has not reported since {{date}}.",
-    "daily": "it usually reports daily",
-    "every": "it usually reports every {{count}} days"
-  },
   "lastYear": {
     "value": "Last year: {{value}}",
     "none": "Nothing recorded a year earlier"
@@ -101,7 +94,7 @@
       "never": "nothing yet"
     },
     "lastDay": "{{day}}",
-    "stale": "gone quiet",
+    "stale": "gone quiet since {{day}}",
     "problem": {
       "revoked": "Google access was withdrawn. Connect again under Account.",
       "credentials_unreadable": "The Google connection cannot be read on this server. Connect again under Account.",

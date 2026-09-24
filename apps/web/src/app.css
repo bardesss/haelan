@@ -142,8 +142,8 @@ body {
 /* The desktop rail's menu: portalled to the body and fixed, not absolute inside the rail, for the
    reason .status-popover is. The rail is a scroll container, and on a collapsed rail the menu
    opened to the right of the 60px strip - entirely outside the box that clips - so none of it was
-   painted. Sidebar.tsx places it inline from the name's rectangle (placementFor, the popover's own
-   function): above the name when expanded, past the strip's right edge when collapsed, which is
+   painted. Sidebar.tsx places it inline from the name's rectangle (placementFor in
+   ui/placement.ts, which places the popover too): above the name when expanded, past the strip's right edge when collapsed, which is
    the only direction with room there. min-width drops the 100% .rail-menu has, because fixed makes
    that the viewport; the name row's width comes across inline instead when there is one to match.
    The phone drawer keeps .rail-menu as it is, inside its modal dialog. */
@@ -431,7 +431,7 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    count rides on the button's accessible name instead. */
 .status-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--negative); }
 /* Fixed and portalled to the body, not absolute inside the rail: the rail is a scroll container,
-   and a 20rem box inside it was clipped at its 186px edge. StatusControl.tsx's placementFor sets
+   and a 20rem box inside it was clipped at its 186px edge. StatusControl.tsx sets, through placementFor,
    left and bottom inline from the icon's rectangle - above the icon on an expanded rail, to the
    strip's right on a collapsed one - so no rule here says where it goes, only what it is. The
    width gives way on a window narrower than 20rem plus the clamp's margin either side. Card
@@ -468,8 +468,12 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .status-problem { font-size: var(--font-size-xs); color: var(--negative); margin: var(--space-1) 0 0; }
 .status-result { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
 .status-devices { list-style: none; margin: var(--space-2) 0 0; padding: 0 0 0 var(--space-3); }
-.status-device { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); padding: 2px 0; }
+.status-device { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); padding: 2px 0; }
 .status-device[data-stale='true'] { color: var(--negative); }
+/* A quiet device's metrics, on a line of their own under its name: the panel is narrow, and beside
+   "gone quiet" a list of three data types would squeeze the device's name into a column. Muted
+   rather than negative, because the row above already says something is wrong and this says what. */
+.status-device-metrics { flex-basis: 100%; color: var(--text-muted); }
 .status-foot { display: flex; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); font-size: var(--font-size-micro); color: var(--text-faint); }
 /* The browser's own link blue was all this link had, measured in Chromium; the accent in the
    register .card-link uses for a card's own way onward. */
@@ -632,13 +636,6 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .workout-comparison { margin: 0; padding-left: var(--space-4); }
 
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
-/* SourceWarning.tsx: a source feeding this card has gone quiet. Beside the card's title, sized to
-   it, in the negative tone the rebuild and connect warnings use; the sentence is its tooltip. */
-.source-warning {
-  display: inline-flex; vertical-align: -3px; margin-left: var(--space-2); color: var(--negative);
-  cursor: help; text-transform: none; letter-spacing: normal;
-}
-.source-warning svg { width: 14px; height: 14px; }
 .value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }
@@ -761,9 +758,7 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .dash-card-title > span { margin-left: var(--space-1); color: var(--text-muted); }
 
 /* cardShared.tsx: the shared head row and body wrapper every dashboard card wears. The head row
-   holds the heading, the stale-source mark and the link on one line: the mark lives outside the h2
-   so its sentence stays out of the heading's accessible name (DashTitle's comment), and this row
-   puts it back beside the title where a sighted reader looks for it. */
+   holds the heading and the link on one line, the link pushed to the far end. */
 .dash-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .dash-card-head { display: flex; align-items: center; gap: var(--space-2); }
 .dash-card-head > .card-link { margin: 0 0 0 auto; }
@@ -1214,13 +1209,8 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 }
 .milestone-date { color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 7rem; }
 .milestone-label { color: var(--text-primary); }
-.control-row-stopped {
-  margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-muted);
-  line-height: var(--leading-normal);
-}
 /* What every change badge on the page compares, said once instead of under every tile. A line of
-   its own, the full width of the wrapping row, and quieter than the stopped-source notice beside
-   it: this one is a method, that one is a warning. */
+   its own, the full width of the wrapping row, and quiet: it is a method, not a warning. */
 .control-row-note {
   flex-basis: 100%; margin: 0; font-size: var(--font-size-xs); color: var(--text-muted);
   line-height: var(--leading-normal);

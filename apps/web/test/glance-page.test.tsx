@@ -359,17 +359,26 @@ describe('the glance Dashboard', () => {
     } finally { restore() }
   })
 
-  // Steps feeds both the Today card and the Week card's own steps row, so a source gone quiet on
-  // it marks both - never a card that never draws on it (Recovery, Night).
-  it('puts a stale source on steps beside the Today and Week cards\' titles, and nowhere else', async () => {
+  // A quiet source is announced once, in the status panel (StatusPanel.tsx), as on every range page
+  // (stale-source-warnings.test.tsx). The payload still carries staleSources for the server's other
+  // clients; no dashboard card reads them, whether the quiet source is behind a figure, behind the
+  // heart rate trace, or behind the night and recovery figures the Week card also draws on.
+  it('puts no stale-source mark on any card, whatever the payload says went quiet', async () => {
+    const quiet = [{ sourceId: 's1', name: 'My watch', lastReportedDate: '2026-09-10', medianGapDays: 1 }]
     const body = glanceBody()
-    body.day.steps = { ...body.day.steps, staleSources: [{ sourceId: 's1', name: 'My watch', lastReportedDate: '2026-09-10', medianGapDays: 1 }] }
+    body.day.steps = { ...body.day.steps, staleSources: quiet }
+    body.day.activeMinutes = { ...body.day.activeMinutes, staleSources: quiet }
+    body.day.heartRate = { ...body.day.heartRate, staleSources: quiet }
+    body.sleep = { ...body.sleep!, asleep: { ...body.sleep!.asleep, staleSources: quiet } }
+    body.recovery = { ...body.recovery, restingHeartRate: { ...body.recovery.restingHeartRate, staleSources: quiet } }
     const { restore } = await mountPage(body)
     try {
-      expect(container!.querySelectorAll('.source-warning')).toHaveLength(2)
-      const sentence = 'My watch has not reported since Sep 10, 2026; it usually reports daily.'
-      expect(cardTitled('Today')!.querySelector('.dash-card-head > .source-warning')?.getAttribute('title')).toBe(sentence)
-      expect(cardTitled('This week')!.querySelector('.dash-card-head > .source-warning')?.getAttribute('title')).toBe(sentence)
+      expect(titles()).toEqual(['Last night', 'Recovery', 'Today', 'This week'])
+      // A card's head row is its title and its link, and nothing between them.
+      expect(cards().map((card) => [...card.querySelector('.dash-card-head')!.children].map((child) => child.tagName)))
+        .toEqual([['H2', 'A'], ['H2', 'A'], ['H2', 'A'], ['H2']])
+      expect(container!.querySelectorAll('.source-warning')).toHaveLength(0)
+      expect(container!.textContent).not.toMatch(/has not reported/)
     } finally { restore() }
   })
 

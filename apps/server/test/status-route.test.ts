@@ -9,10 +9,10 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 const ORIGIN = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 
 /** A daily row for one source on one date, the minimum readSourceActivity needs to see it. */
-function seedDaily(h: Harness, input: { personId: string, sourceId: string, localDate: string }): void {
+function seedDaily(h: Harness, input: { personId: string, sourceId: string, localDate: string, metric?: string }): void {
   h.app.haelan.instance.db.insert(schema.daily).values({
     personId: input.personId, localDate: input.localDate,
-    metric: 'steps', agg: 'sum', source: input.sourceId, value: 1000, coverage: 0.9,
+    metric: input.metric ?? 'steps', agg: 'sum', source: input.sourceId, value: 1000, coverage: 0.9,
     sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
   }).run()
 }
@@ -54,6 +54,34 @@ describe('GET /api/status', () => {
     expect(body.connections.map((c) => c.kind)).toEqual(['google'])
     expect(body.connections[0]!.devices.map((d) => d.sourceId)).toEqual(['watch'])
     expect(body.sync).toMatchObject({ running: false, cooldownRemainingMs: 0 })
+  })
+
+  it('names what a stale device reported routinely, and nothing for one still reporting', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const token = await harness.signIn()
+    seedSource(harness, 'p1', 'watch')
+    seedSource(harness, 'p1', 'scale')
+    // Synthetic: a watch reporting steps and heart rate daily through 2026-01-12, then silent for
+    // three weeks (past its 14 day floor, inside the panel's 30 day default), with one workout in
+    // its final week that is not routine. The scale reported today.
+    for (let day = 1; day <= 20; day += 1) {
+      const localDate = new Date(Date.UTC(2025, 11, 23 + day)).toISOString().slice(0, 10)
+      seedDaily(harness, { personId: 'p1', sourceId: 'watch', localDate, metric: 'steps' })
+      seedDaily(harness, { personId: 'p1', sourceId: 'watch', localDate, metric: 'heart_rate' })
+    }
+    seedDaily(harness, { personId: 'p1', sourceId: 'watch', localDate: '2026-01-10', metric: 'workout_count' })
+    seedDaily(harness, { personId: 'p1', sourceId: 'scale', localDate: TODAY, metric: 'weight' })
+
+    const response = await status(harness, token)
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as {
+      connections: { devices: { sourceId: string, lastReportedDate: string, stale: boolean, metrics: string[] }[] }[]
+    }
+    expect(body.connections[0]!.devices.map((d) => [d.sourceId, d.lastReportedDate, d.stale, d.metrics])).toEqual([
+      ['scale', TODAY, false, []],
+      ['watch', '2026-01-12', true, ['heart_rate', 'steps']],
+    ])
   })
 
   it('attributes a companion-uploaded source to the phone', async () => {

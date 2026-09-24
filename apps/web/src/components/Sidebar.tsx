@@ -6,8 +6,8 @@ import { BrandMark } from './BrandMark.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
 import { readCollapsed, writeCollapsed } from '../ui/railState.js'
-import { placementFor } from './StatusControl.js'
-import type { Placement } from './StatusControl.js'
+import { placementFor } from '../ui/placement.js'
+import type { Placement } from '../ui/placement.js'
 
 const GROUPS = [
   {

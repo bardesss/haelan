@@ -3,6 +3,7 @@ import { Icon } from './icons.js'
 import { Link } from '../router.js'
 import { formatSince } from '../format.js'
 import { addDays } from '../controls/range.js'
+import { dataTypeForMetric } from '@haelan/core/metric-data-type'
 import type { StatusPanel as StatusPanelData, StatusConnection } from '../data/useStatusPanel.js'
 
 /**
@@ -21,8 +22,13 @@ export type SyncOutcome = 'failed' | 'nothingNew' | 'newData' | 'alreadyRunning'
  *
  * Everything it shows is already decided on the server (composeStatus in
  * packages/core/src/api/statusPanel.ts): which devices are visible, which count as stale, which
- * connection has a problem. This only spells those answers out. The one judgement made here is
- * how to say a date, because that is a question about the reader's language rather than the data.
+ * connection has a problem, and what a quiet device routinely sent. This only spells those answers
+ * out. The judgements made here are how to say a date and what to call a metric, because both are
+ * questions about the reader's language rather than the data.
+ *
+ * It is also the only place a quiet source is announced. The range pages used to say it on every
+ * card the source fed, and again under their control row; the same fact said a dozen times a page
+ * read as a dozen problems, so it is said here, once, beside the name it belongs to.
  */
 export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
   status: StatusPanelData
@@ -67,16 +73,26 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
           {connection.devices.length > 0 && (
             <ul className="status-devices">
               {connection.devices.map((device) => {
-                const day = device.lastReportedDate === null
-                  ? t('status.delivered.never')
-                  : t('status.lastDay', { day: dayLabel(device.lastReportedDate, today, language) })
+                const label = device.lastReportedDate === null ? null : dayLabel(device.lastReportedDate, today, language)
+                const day = label === null ? t('status.delivered.never') : t('status.lastDay', { day: label })
                 return (
                   <li key={device.sourceId} className="status-device" data-stale={device.stale ? 'true' : undefined}>
                     <span>{device.name}</span>
-                    {/* A stale device says so in place of its date, with the date kept on the
-                        title: "gone quiet" is the fact that needs reading at a glance, and the
-                        day it went quiet is the detail a reader hovers for. */}
-                    <span title={device.stale ? day : undefined}>{device.stale ? t('status.stale') : day}</span>
+                    {/* A stale device says so in place of its date, and says since when in the same
+                        breath: "gone quiet since 21 Aug". The date used to live only on a hover
+                        title, but now that the cards no longer warn, this row is the only place a
+                        reader learns how long a device has been silent, and a title never reaches
+                        a phone. dayLabel is the same formatter the other rows use; a stale device
+                        is at least two weeks quiet, so it always lands on the short date, with the
+                        year only when it is not this one. The server never calls a source stale
+                        without a last date, and the null arm is only there because the type
+                        allows it. */}
+                    <span>{device.stale && label !== null ? t('status.stale', { day: label }) : day}</span>
+                    {/* What stopped arriving, under the row it belongs to. This is the one place a
+                        quiet source is announced now - the cards' triangles and the control row's
+                        "stopped in this range" line are gone - so it has to carry what those told
+                        the reader: which of their charts the silence reaches. */}
+                    {device.stale && <QuietMetrics metrics={device.metrics} />}
                   </li>
                 )
               })}
@@ -87,6 +103,48 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
       <Foot hiddenDevices={status.hiddenDevices} />
     </>
   )
+}
+
+function QuietMetrics({ metrics }: { metrics: readonly string[] }) {
+  const { t, i18n } = useTranslation()
+  const text = metricNames(metrics, t, i18n.language)
+  return text === null ? null : <span className="status-device-metrics">{text}</span>
+}
+
+/**
+ * A quiet device's routine metrics as a reader would say them: "Heart rate (continuous), sleep,
+ * steps". Null when none of them has a name, so the row prints nothing rather than an empty line.
+ *
+ * Named through the data type each metric comes from (`dataTypeForMetric`, then the catalogue's
+ * `dataTypes.<id>` labels that the sync picker already shows), because that is the one set of
+ * names this app keeps for everything a device can send. It also folds a family into one word:
+ * a watch's eleven sleep metrics are one data type, so the list says "sleep" once instead of
+ * spelling out stage minutes nobody thinks of as separate things a watch stopped doing.
+ *
+ * Not dataTypeName.ts: that falls back to the raw id, which is right on a picker listing every
+ * type, and wrong here, where a catalogue key nobody has named yet is a string of snake case in
+ * the middle of a sentence. An unnamed metric is left out instead.
+ *
+ * Sorted by name in the reader's language, and every name after the first lowered at its first
+ * letter so the list reads as one phrase - except a name whose second letter is not lowercase
+ * ("VO2 max", "ECG"), which is an abbreviation and keeps its capital. Joined with Intl's unit
+ * list, which in English and Dutch alike is plain commas: "and" would make a list of what stopped
+ * read like a sentence missing its verb.
+ */
+export function metricNames(metrics: readonly string[], t: Translate, language: string): string | null {
+  const names = new Set<string>()
+  for (const metric of metrics) {
+    const type = dataTypeForMetric(metric)
+    if (type === null) continue
+    const key = `dataTypes.${type}`
+    const name = t(key)
+    if (name !== key) names.add(name)
+  }
+  if (names.size === 0) return null
+  const phrased = [...names]
+    .sort((a, b) => a.localeCompare(b, language))
+    .map((name, i) => (i === 0 || !/^.\p{Ll}/u.test(name) ? name : name.charAt(0).toLocaleLowerCase(language) + name.slice(1)))
+  return new Intl.ListFormat(language, { type: 'unit', style: 'short' }).format(phrased)
 }
 
 function Foot({ hiddenDevices }: { hiddenDevices: number }) {

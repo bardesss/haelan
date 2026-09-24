@@ -1,6 +1,6 @@
 import { useTranslation } from '../../i18n/index.js'
 import { formatNumber, formatDuration } from '../../format.js'
-import type { Glance, GlanceFigure } from '../../data/useGlance.js'
+import type { Glance } from '../../data/useGlance.js'
 import { DashCard } from './cardShared.js'
 import { WeekBars } from './WeekBars.js'
 import { hasWeek } from './dashboardRows.js'
@@ -29,7 +29,6 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
     values: (number | null)[], value: string, per: string, withTotal: boolean,
     labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelNights',
   }[] = []
-  const staleFigures: GlanceFigure[] = []
   const count = (value: number) => formatNumber(Math.round(value), 0, language, '')
   if (glance.week.steps !== null) {
     rows.push({
@@ -39,7 +38,6 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       per: t('glance.week.perDay', { value: count(glance.week.steps.perDay) }),
       labelKey: 'glance.week.barsLabel',
     })
-    staleFigures.push(glance.day.steps)
   }
   if (glance.week.activeMinutes !== null) {
     rows.push({
@@ -49,7 +47,6 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       per: t('glance.week.perDay', { value: `${Math.round(glance.week.activeMinutes.perDay)} ${t('activity.units.min')}` }),
       labelKey: 'glance.week.barsLabel',
     })
-    staleFigures.push(glance.day.activeMinutes)
   }
   if (glance.week.asleep !== null && glance.sleep !== null) {
     rows.push({
@@ -61,10 +58,9 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       // already counts it - so this row's aria-label says the opposite of the other two rows'.
       per: t('glance.week.perNight'), labelKey: 'glance.week.barsLabelNights',
     })
-    staleFigures.push(glance.sleep.asleep)
   }
   return (
-    <DashCard span={span} title={t('glance.week.title')} subtitle={t('glance.week.subtitle')} staleFigures={staleFigures}>
+    <DashCard span={span} title={t('glance.week.title')} subtitle={t('glance.week.subtitle')}>
       {rows.map((row) => (
         <div className="dash-week-row" key={row.key}>
           <div>

@@ -83,8 +83,7 @@ export function NightCard({ sleep, span, timezone }: {
   ]
   return (
     <DashCard span={span} title={t('glance.sleep.title')} subtitle={nightSpan(sleep, language, timezone)}
-      link={{ to: `/sleep/night/${sleep.localDate}`, text: t('glance.sleep.link') }}
-      staleFigures={[sleep.asleep, sleep.efficiency, sleep.bedtime, sleep.waketime]}>
+      link={{ to: `/sleep/night/${sleep.localDate}`, text: t('glance.sleep.link') }}>
       <div className="dash-lead">
         <div>
           <div className="dash-headline">{formatFigure(sleep.asleep, language) ?? t('glance.noReading')}</div>
