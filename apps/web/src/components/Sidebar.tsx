@@ -111,17 +111,17 @@ function isVisible(path: string, excluded: ReadonlySet<string>): boolean {
 }
 
 
-export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true, excludedDataTypes, sync }: {
+export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true, excludedDataTypes, status }: {
   active: string
   person: string
   onSignOut: () => void
   signOutError?: string | null
-  // The sync control, or nothing. A node rather than a component this renders itself, for the
-  // reason excludedDataTypes gives just below and one more: SyncControl reads two queries, and
+  // The status icon, or nothing. A node rather than a component this renders itself, for the
+  // reason excludedDataTypes gives just below and one more: StatusControl reads queries, and
   // this component is mounted by a handful of tests with no QueryClientProvider above it. Shell
   // builds the element, where a client is guaranteed; every other caller leaves it out and gets
   // the rail it always had.
-  sync?: ReactNode
+  status?: ReactNode
   // False inside the drawer, where the rail is already as wide as the drawer and the icon strip
   // has nothing to save. The stored preference is still read and still never written here, so a
   // reader who crosses back above the breakpoint finds the rail as they left it.
@@ -244,44 +244,47 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
         </div>
       ))}
       <div className="rail-foot">
-        {/* Above the account rather than below it, because the account is the last thing in the
-            rail by design and a housekeeping control should not come after a reader's own name.
+        {/* The name and the status icon share one row. The sync control used to sit above the
+            name as a row of its own, a button and two freshness fragments; the status icon that
+            replaced it is a single glyph, and beside the name it costs the foot no height at all.
             Absent entirely when no node is passed, which is every caller but the shell. */}
-        {sync}
-        {/* The reader's own name, and now the only way to their own page.
-            It was a Link to /account while the Settings group above also listed Account, which is
-            one destination wearing two controls; the old comment here explained that the name
-            carried no aria-current because the rail item already did, which is the duplication
-            stated as a rule rather than removed. The nav keeps app-wide settings, the name keeps
-            what belongs to the person, and signing out moves in here with them: it was a
-            permanently visible full-width button for an action taken once a session, sitting
-            below the reader's own name in a rail that had already run out of room.
+        <div className="rail-foot-row">
+          {/* The reader's own name, and now the only way to their own page.
+              It was a Link to /account while the Settings group above also listed Account, which is
+              one destination wearing two controls; the old comment here explained that the name
+              carried no aria-current because the rail item already did, which is the duplication
+              stated as a rule rather than removed. The nav keeps app-wide settings, the name keeps
+              what belongs to the person, and signing out moves in here with them: it was a
+              permanently visible full-width button for an action taken once a session, sitting
+              below the reader's own name in a rail that had already run out of room.
 
-            aria-current moves onto this button, since it is what leads to /account now. A button
-            rather than a Link even though one of its two items navigates: what it does on click is
-            open a menu. */}
-        <div className="rail-person-menu" ref={menuRef}>
-          <button type="button" className="rail-person"
-            aria-haspopup="menu" aria-expanded={menuOpen}
-            aria-current={active === '/account' ? 'page' : undefined}
-            title={hoverName(person)}
-            onClick={() => setMenuOpen((open) => !open)}>
-            <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
-          </button>
-          {menuOpen && (
-            <div className="rail-menu" role="menu">
-              {/* No onClick closing the menu: router.tsx's Link forwards no onClick, and it does
-                  not need to. The effect above closes on `active` changing, which is the same
-                  event by a more reliable route - it also fires for a navigation that started
-                  somewhere else entirely. */}
-              <Link to="/account" className="rail-menu-item" role="menuitem">
-                <Icon name="account" />{t('sidebar.items.account')}
-              </Link>
-              <button type="button" className="rail-menu-item" role="menuitem" onClick={onSignOut}>
-                <Icon name="signOut" />{t('shell.signOut')}
-              </button>
-            </div>
-          )}
+              aria-current moves onto this button, since it is what leads to /account now. A button
+              rather than a Link even though one of its two items navigates: what it does on click is
+              open a menu. */}
+          <div className="rail-person-menu" ref={menuRef}>
+            <button type="button" className="rail-person"
+              aria-haspopup="menu" aria-expanded={menuOpen}
+              aria-current={active === '/account' ? 'page' : undefined}
+              title={hoverName(person)}
+              onClick={() => setMenuOpen((open) => !open)}>
+              <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
+            </button>
+            {menuOpen && (
+              <div className="rail-menu" role="menu">
+                {/* No onClick closing the menu: router.tsx's Link forwards no onClick, and it does
+                    not need to. The effect above closes on `active` changing, which is the same
+                    event by a more reliable route - it also fires for a navigation that started
+                    somewhere else entirely. */}
+                <Link to="/account" className="rail-menu-item" role="menuitem">
+                  <Icon name="account" />{t('sidebar.items.account')}
+                </Link>
+                <button type="button" className="rail-menu-item" role="menuitem" onClick={onSignOut}>
+                  <Icon name="signOut" />{t('shell.signOut')}
+                </button>
+              </div>
+            )}
+          </div>
+          {status}
         </div>
         {/* Outside the menu, so it survives the menu closing. onSignOut is what fails, and the
             menu shuts on the click that called it. */}

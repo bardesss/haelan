@@ -81,18 +81,46 @@
     "value": "Vorig jaar: {{value}}",
     "none": "Een jaar eerder niets vastgelegd"
   },
-  "sync": {
-    "run": "Synchroniseren",
-    "ago": "Gesynchroniseerd {{count}} min geleden",
-    "never": "Nog nooit gesynchroniseerd",
-    "statusUnknown": "Synchronisatiestatus onbekend",
-    "agoShort": "{{count}}m",
-    "neverShort": "–",
-    "statusUnknownShort": "–",
-    "alreadyRunning": "Er loopt al een synchronisatie.",
-    "failed": "Synchroniseren is niet gestart.",
-    "phoneAgo": "Telefoon stuurde {{count}} min geleden",
-    "phoneAgoShort": "{{count}}m tel."
+  "status": {
+    "title": "Status",
+    "label": "Status: {{state}}",
+    "state": {
+      "ok": "alle bronnen zijn bijgewerkt",
+      "syncing": "bezig met synchroniseren",
+      "problems_one": "{{count}} probleem",
+      "problems_other": "{{count}} problemen"
+    },
+    "connection": {
+      "google": "Google Health",
+      "phone": "Telefoon-app"
+    },
+    "delivered": {
+      "google": "gesynchroniseerd {{when}}",
+      "phone": "geüpload {{when}}",
+      "never": "nog niets"
+    },
+    "lastDay": "{{day}}",
+    "stale": "is stil gevallen",
+    "problem": {
+      "revoked": "De toegang tot Google is ingetrokken. Maak opnieuw verbinding onder Account.",
+      "credentials_unreadable": "Deze server kan de Google-koppeling niet lezen. Maak opnieuw verbinding onder Account.",
+      "sync_failed": "Een deel van de laatste synchronisatie is mislukt.",
+      "phone_quiet": "De telefoon heeft al meer dan een dag niets geüpload."
+    },
+    "sync": {
+      "run": "Nu synchroniseren",
+      "running": "Bezig met synchroniseren…",
+      "cooldown": "Net gesynchroniseerd",
+      "nothingNew": "Niets nieuws.",
+      "newData": "Nieuwe gegevens binnen.",
+      "failed": "De synchronisatie is met fouten afgerond.",
+      "alreadyRunning": "Er loopt al een synchronisatie.",
+      "didNotStart": "De synchronisatie is niet gestart."
+    },
+    "hidden_one": "{{count}} bron verborgen",
+    "hidden_other": "{{count}} bronnen verborgen",
+    "choose": "Bronnen kiezen…",
+    "empty": "Er is nog niets gekoppeld."
   },
   "sidebar": {
     "sectionsLabel": "Secties",
