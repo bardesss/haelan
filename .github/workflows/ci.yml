@@ -90,6 +90,16 @@ jobs:
       # broken emitter fails here rather than in someone's browser.
       - run: pnpm build
 
+      # MapLibre builds its worker's URL from strings at runtime, which the bundler cannot see, so
+      # a build can succeed with no worker in it and every workout map then draws its tiles and
+      # never its route. loadMapLibre.ts hands it the one Vite emits; this checks there is one.
+      - name: Check the MapLibre worker was emitted
+        run: |
+          if ! ls apps/web/dist/assets | grep -q '^maplibre-gl-worker-.*\.js$'; then
+            echo "apps/web/dist/assets has no maplibre-gl-worker bundle; workout maps would draw no route"
+            exit 1
+          fi
+
       - name: Check the generated stylesheet is not committed
         run: |
           if git ls-files --error-unmatch apps/web/src/theme.generated.css > /dev/null 2>&1; then

@@ -117,6 +117,8 @@ export default defineConfig({
   // layout:check times out waiting for <main> rather than reporting anything useful.
   // app-version-define.test.ts holds all four configs to this.
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+  // The same module worker vite.config.ts builds for MapLibre (loadMapLibre.ts).
+  worker: { format: 'es' },
   // The prefix the demo is served under. One variable, so a custom domain later is a one-line
   // change: the site publishes the demo at <base>/demo/.
   base: process.env.DEMO_BASE ?? '/haelan/demo/',
