@@ -148,16 +148,31 @@ describe('a finished sync', () => {
     expect(client.getQueryState(OTHER_PERSON_KEY)!.isInvalidated).toBe(false)
   })
 
-  // An idle status answered again is not a run finishing. Without this guard every status fetch
-  // would throw away every chart on the page.
-  it('leaves the data alone when an idle status is answered again', async () => {
+  // The same lastFinishedAtMs answered again is not a run finishing. Without this guard every
+  // status fetch would throw away every chart on the page.
+  it('leaves the data alone when the same lastFinishedAtMs is read again', async () => {
     const client = seeded(false)
+    client.setQueryData(statusKey(PERSON.personId), statusBody(false, 1_000))
     mount(client)
-    await pollAnswers(statusBody(false, Date.now()), client)
-    // Proof the harness did see the new answer, without which the line after this proves nothing.
-    expect(client.getQueryData<StatusPanel>(statusKey(PERSON.personId))!.sync!.lastFinishedAtMs).not.toBe(null)
+    await pollAnswers(statusBody(false, 1_000), client)
     expect(container!.querySelector('.probe')!.textContent).toBe('idle')
     expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(false)
+  })
+
+  // The bug: the panel used to notice a run only by watching running go true then false, so a
+  // scheduled run this tab's five-minute idle poll never caught mid-flight - started and finished
+  // between two reads - never refreshed anything. lastFinishedAtMs rising is true of every run
+  // that ends, seen running or not.
+  it('invalidates when lastFinishedAtMs rises without ever seeing running=true', async () => {
+    const client = seeded(false)
+    client.setQueryData(statusKey(PERSON.personId), statusBody(false, 1_000))
+    mount(client)
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(false)
+
+    await pollAnswers(statusBody(false, 2_000), client)
+
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(true)
+    expect(statusReads).toBe(0)
   })
 
   // A run with little to fetch can finish before the status re-read that follows the 202 gets its

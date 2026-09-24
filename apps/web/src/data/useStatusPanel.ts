@@ -32,6 +32,9 @@ export function statusKey(personId: string): readonly unknown[] {
  */
 export const STATUS_POLL_MS = 3_000
 
+/** How often the status is re-read while idle, so a run the poll never caught still surfaces. */
+const IDLE_REFETCH_MS = 5 * 60_000
+
 /**
  * Everything a finished run can have changed for this person, which is everything cached under
  * their prefix - the same whole-person invalidation useSetSourcePriority makes after a re-rank,
@@ -77,7 +80,11 @@ export function useStatusPanel(): UseQueryResult<StatusPanel> {
       const sync = query.state.data?.sync
       if (sync?.running === true) return STATUS_POLL_MS
       if ((sync?.cooldownRemainingMs ?? 0) > 0) return Math.min(sync!.cooldownRemainingMs + 250, 60_000)
-      return false
+      // Idle otherwise, but not silent: a scheduled run this tab never saw start and finish (no
+      // click here, no poll catching 'running') would otherwise leave the panel and every chart
+      // showing stale data until the next reload. Five minutes, the same idle refresh the rest of
+      // the app already accepts elsewhere.
+      return IDLE_REFETCH_MS
     },
   })
 }
@@ -127,20 +134,31 @@ export function useRunSync(): UseMutationResult<unknown, ApiError, void> {
  * caller would refresh the page once each; StatusControl, which renders exactly once in the shell
  * and is mounted whether or not its panel is open, is the one caller.
  *
- * The ref starts at whatever the first render saw, so mounting onto an idle status is not a
- * transition, and neither is an idle status answered again.
+ * Keyed on lastFinishedAtMs rising rather than on running going true then false: the five-minute
+ * idle poll above can land after a scheduled run has both started and finished, so this tab never
+ * observes running === true for it at all, and a running-to-idle transition would miss it
+ * entirely. lastFinishedAtMs moving forward is true of every run that ends, seen or not.
+ *
+ * The ref starts at whatever the first render saw, so mounting onto an already-finished status is
+ * not a transition, and neither is the same finish time answered again.
  */
 export function useRefreshOnSyncFinish(status: StatusPanel | undefined): void {
   const session = useSession()
   const personId = session.data?.personId
   const queryClient = useQueryClient()
-  const running = status?.sync?.running
-  const wasRunning = useRef(running)
+  const lastFinishedAtMs = status?.sync?.lastFinishedAtMs
+  const previous = useRef(lastFinishedAtMs)
+  // The first effect run is always "the first read": whatever value mount happened to see is a
+  // baseline, never a rise, no matter what it is (null or an old real timestamp alike).
+  const seen = useRef(false)
   useEffect(() => {
-    const was = wasRunning.current
-    wasRunning.current = running
-    if (was === true && running === false && personId !== undefined) refreshPersonData(queryClient, personId)
-  }, [running, personId, queryClient])
+    const was = previous.current
+    previous.current = lastFinishedAtMs
+    if (!seen.current) { seen.current = true; return }
+    if (lastFinishedAtMs != null && (was == null || lastFinishedAtMs > was) && personId !== undefined) {
+      refreshPersonData(queryClient, personId)
+    }
+  }, [lastFinishedAtMs, personId, queryClient])
 }
 
 /**

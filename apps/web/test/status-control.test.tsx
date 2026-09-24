@@ -104,11 +104,13 @@ function panel(over: Partial<StatusPanel> = {}, sync: Partial<NonNullable<Status
 let serverStatus: StatusPanel = panel()
 let runAnswer: { status: number, body: unknown } = { status: 202, body: { started: true } }
 let posts: string[] = []
+let statusGets = 0
 let originalFetch: typeof fetch
 beforeEach(() => {
   serverStatus = panel()
   runAnswer = { status: 202, body: { started: true } }
   posts = []
+  statusGets = 0
   originalFetch = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -116,6 +118,7 @@ beforeEach(() => {
       posts.push(url)
       return new Response(JSON.stringify(runAnswer.body), { status: runAnswer.status, headers: { 'content-type': 'application/json' } })
     }
+    if (url === '/api/status') statusGets += 1
     const body = url === '/api/status' ? serverStatus : {}
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -194,7 +197,7 @@ describe('the status icon', () => {
   it('refreshes the person\'s data when a run ends, with the panel closed', async () => {
     const client = mount(panel({}, { running: true }))
     expect(popover()).toBeNull()
-    await pollAnswers(panel({}, { running: false }), client)
+    await pollAnswers(panel({}, { running: false, lastFinishedAtMs: Date.now() }), client)
     expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(true)
   })
 })
@@ -223,6 +226,17 @@ describe('the popover, on a desktop', () => {
     mount(panel())
     press(icon())
     expect(popover()!.contains(document.activeElement)).toBe(true)
+  })
+
+  // A panel left closed for a while is refreshed only by the five-minute idle poll; opening it is
+  // when a reader actually wants the current answer, not whatever that poll last landed on.
+  it('refetches the status when the panel opens', async () => {
+    mount(panel())
+    await settle()
+    statusGets = 0
+    press(icon())
+    await settle()
+    expect(statusGets).toBeGreaterThan(0)
   })
 
   // preventDefault for the reason the person menu gives: inside the phone drawer a layer on top of
@@ -321,9 +335,13 @@ describe('the sync button', () => {
 
   it('says nothing new arrived when the run it watched wrote no rows', async () => {
     const client = mount(panel({}, { running: true }))
+    // Opening the panel refetches (see 'refetches the status when the panel opens' above), so the
+    // server's own answer is set to the finished state before the press that opens it - a value
+    // set only after press() would lose a race against that refetch's own in-flight read.
+    serverStatus = panel({}, { running: false, lastRowsWritten: 0, lastFinishedAtMs: Date.now() })
     press(icon())
     expect(popover()!.querySelector('.status-result')).toBeNull()
-    await pollAnswers(panel({}, { running: false, lastRowsWritten: 0, lastFinishedAtMs: Date.now() }), client)
+    await pollAnswers(serverStatus, client)
     expect(popover()!.querySelector('.status-result')!.textContent).toBe('Nothing new.')
   })
 
@@ -539,8 +557,11 @@ describe('closing', () => {
 
   it('forgets a watched run\'s result once the panel closes', async () => {
     const client = mount(panel({}, { running: true }))
+    // Set before press(), for the reason the previous describe block's version of this test gives:
+    // the open-panel refetch reads serverStatus synchronously as it fires.
+    serverStatus = panel({}, { running: false, lastRowsWritten: 0, lastFinishedAtMs: Date.now() })
     press(icon())
-    await pollAnswers(panel({}, { running: false, lastRowsWritten: 0, lastFinishedAtMs: Date.now() }), client)
+    await pollAnswers(serverStatus, client)
     expect(popover()!.querySelector('.status-result')!.textContent).toBe('Nothing new.')
     act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })) })
     press(icon())

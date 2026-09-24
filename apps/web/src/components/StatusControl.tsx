@@ -48,6 +48,11 @@ export function StatusControl() {
   useRefreshOnSyncFinish(status.data)
 
   const [open, setOpen] = useState(false)
+
+  // A panel opened after sitting idle should show the current state, not whatever the five-minute
+  // background poll last landed on - which can be stale by up to that whole interval.
+  useEffect(() => { if (open) void status.refetch() }, [open])
+
   const [placement, setPlacement] = useState<Placement | null>(null)
   const wrapper = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
