@@ -375,6 +375,35 @@ describe('a session-scope exclusion', () => {
     expect(restored).toEqual(REAL_SESSION_DETAIL)
   })
 
+  // The dashboard's "Today's activities" reads the same merged rows out of /glance's day.workouts,
+  // not out of /sessions, so an overlay that marked only the two session routes left the dashboard
+  // listing the workout unmarked right after the visitor excluded it. The rest of the glance is
+  // captured figures and is left exactly as recorded; only the rows' two recorded fields change.
+  it('marks the same workout in the glance, so the dashboard list agrees with the workout page', () => {
+    const overlay = createOverlay()
+    const glanceUrl = `/api/v1/p/${PERSON}/glance`
+    const other = { ...REAL_SESSION_ROW, id: 'some-other-session' }
+    const captured = {
+      sleep: null,
+      recovery: { score: 71 },
+      day: { steps: { value: 8123 }, workouts: [REAL_SESSION_ROW, other] },
+    }
+    const written = writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {
+      scope: 'session', targetKey: sessionTarget(SESSION_ID), action: 'exclude', reason: 'GPS lost signal',
+    }, overlay) as { id: string }
+
+    const glance = applyOverlay(glanceUrl, captured, overlay) as typeof captured
+    expect(glance.day.workouts[0]).toEqual({ ...REAL_SESSION_ROW, excluded: true, excludeReason: 'GPS lost signal' })
+    expect(glance.day.workouts[1]).toEqual(other)
+    expect(glance.day.steps).toEqual(captured.day.steps)
+    expect(glance.recovery).toEqual(captured.recovery)
+    // The captured object itself is untouched: the manifest's response is shared by every read.
+    expect(captured.day.workouts[0]!.excluded).toBe(false)
+
+    writeThrough('DELETE', `/api/v1/p/${PERSON}/overrides/${written.id}`, undefined, overlay)
+    expect(applyOverlay(glanceUrl, captured, overlay)).toBe(captured)
+  })
+
   it('leaves an unrelated session out of the exclusion', () => {
     const overlay = createOverlay()
     writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {
