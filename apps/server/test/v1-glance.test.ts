@@ -103,6 +103,35 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(body.day.heartRate.points[0].mean).toBe(64)
   })
 
+  // roundFigure rebuilds each strip day to round its value; a rebuild that named only `value`
+  // would silently drop `standing`. roundGlance also rebuilds `recovery.restingHeartRate` through
+  // `roundFigure`, so its own `standing` must survive the same way, not merely by luck of `...figure`.
+  it('carries a strip day\'s standing through the route\'s rounding, and the recovery figure\'s own standing', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    const row = (metric: string, agg: string, localDate: string, value: number) => db.insert(schema.daily).values({
+      personId: 'p1', localDate, metric, agg, source: 'merged', value, coverage: 1, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
+      if (localDate === '2026-08-18') continue
+      row('steps', 'sum', localDate, 8000)
+      row('resting_heart_rate', 'last', localDate, 55 + (i % 3))
+    }
+    // A day pushed above the steps band; today's resting heart rate back within its own.
+    row('steps', 'sum', '2026-08-18', 20000)
+    row('steps', 'sum', '2026-08-20', 8000)
+    row('resting_heart_rate', 'last', '2026-08-20', 56)
+    const body = (await get(harness, token, '/glance')).json()
+    const stepsStrip = body.day.steps.strip as Array<{ localDate: string, standing: string | null }>
+    expect(stepsStrip.find((d) => d.localDate === '2026-08-18')?.standing).toBe('above')
+    expect(body.recovery.restingHeartRate.standing).toBe('within')
+  })
+
   it('carries a steps pace once today has a step sample, rounded to a whole step', async () => {
     harness = await withServer()
     harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
@@ -139,9 +168,11 @@ describe('GET /api/v1/p/:personId/glance', () => {
     const token = await harness.signIn()
     const db = harness.app.haelan.instance.db
     db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    // 06:00Z at +02:00 is 08:00 local, before today's 09:00-local cutoff, so every baseline day's
+    // reading reaches the band. Today's own sample is later, so its pace has something to compare.
     for (let i = 0; i < 60; i += 1) {
       const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
-      insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse(`${localDate}T09:00:00Z`), tzOffsetMinutes: 120, value: 1000 })
+      insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse(`${localDate}T06:00:00Z`), tzOffsetMinutes: 120, value: 1000 })
       db.insert(schema.daily).values({
         personId: 'p1', localDate, metric: 'steps', agg: 'sum', source: 'merged', value: 1000, coverage: 1, sourceMix: null,
         derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
@@ -154,6 +185,7 @@ describe('GET /api/v1/p/:personId/glance', () => {
     }).run()
     const first = await get(harness, token, '/glance')
     expect(first.statusCode).toBe(200)
+    expect(first.json().day.stepsPace).not.toBeNull()
     harness.clock.nowMs += 60_000
     const again = await harness.app.inject({
       method: 'GET', url: '/api/v1/p/p1/glance',

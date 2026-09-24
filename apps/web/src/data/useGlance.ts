@@ -23,12 +23,13 @@ export interface GlanceBaseline {
   thin: boolean
 }
 
+export type GlanceStanding = 'within' | 'above' | 'below'
+
 export interface GlanceStripDay {
   localDate: string
   value: number | null
+  standing: GlanceStanding | null
 }
-
-export type GlanceStanding = 'within' | 'above' | 'below'
 
 export interface GlanceFigure {
   metric: string
@@ -95,6 +96,7 @@ export interface GlanceDay {
 export interface GlanceWeekFigure {
   perDay: number
   days: number
+  total: number
 }
 
 export interface GlanceWeek {

@@ -291,7 +291,7 @@ describe('readRecovery', () => {
     expect(recovery.band).not.toBeNull()
     expect(recovery.missing).toBeNull()
     // The strip is the index's week, still ending on today, where today is a gap.
-    expect(recovery.index.strip.at(-1)).toEqual({ localDate: TODAY, value: null })
+    expect(recovery.index.strip.at(-1)).toEqual({ localDate: TODAY, value: null, standing: null })
     expect(recovery.index.strip.at(-2)!.value).toBe(recovery.index.value)
   })
 
@@ -335,6 +335,62 @@ it('dailyFigure carries its standing', () => {
   expect(dailyFigure(ctx(), { metric: 'resting_heart_rate', agg: 'last', on: TODAY, partial: false, asOfMs: null }).standing).toBe('above')
 })
 
+describe('strip standing', () => {
+  it('carries within, above and below per strip day, against the figure\'s own band', () => {
+    // A steady band of 55-57ish (thin: false once sixty days are seeded), with three of the seven
+    // strip days pushed outside it on purpose: 2026-08-16 low, 2026-08-18 high, the rest within.
+    for (const date of datesEnding('2026-08-19', 60)) {
+      if (date === '2026-08-16' || date === '2026-08-18') continue
+      insert({ metric: 'resting_heart_rate', agg: 'last', localDate: date, value: 55 + (Number(date.slice(-1)) % 3) })
+    }
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: '2026-08-16', value: 10 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: '2026-08-18', value: 200 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: TODAY, value: 56 })
+    const figure = dailyFigure(ctx(), { metric: 'resting_heart_rate', agg: 'last', on: TODAY, partial: false, asOfMs: null })
+    expect(figure.baseline!.thin).toBe(false)
+    const byDate = new Map(figure.strip.map((d) => [d.localDate, d.standing]))
+    expect(byDate.get('2026-08-16')).toBe('below')
+    expect(byDate.get('2026-08-18')).toBe('above')
+    expect(byDate.get('2026-08-17')).toBe('within')
+    expect(byDate.get(TODAY)).toBe('within')
+  })
+
+  it('has no standing on a thin band, anywhere in the strip', () => {
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: '2026-08-19', value: 55 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: TODAY, value: 55 })
+    const figure = dailyFigure(ctx(), { metric: 'resting_heart_rate', agg: 'last', on: TODAY, partial: false, asOfMs: null })
+    expect(figure.baseline!.thin).toBe(true)
+    expect(figure.strip.every((d) => d.standing === null)).toBe(true)
+  })
+
+  it('leaves the running day null while earlier finished days in the same strip still get a verdict', () => {
+    for (const date of datesEnding('2026-08-19', 60)) {
+      if (date === '2026-08-18') continue
+      insert({ metric: 'steps', localDate: date, value: 8000 })
+    }
+    insert({ metric: 'steps', localDate: '2026-08-18', value: 20000 })
+    insert({ metric: 'steps', localDate: TODAY, value: 1 })
+    const figure = dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: null })
+    const byDate = new Map(figure.strip.map((d) => [d.localDate, d.standing]))
+    expect(byDate.get('2026-08-18')).toBe('above')
+    expect(byDate.get(TODAY)).toBeNull()
+  })
+
+  it('has no standing on the recovery index strip, which carries no band', () => {
+    for (const date of datesEnding('2026-08-19', 60)) {
+      insert({ metric: 'daily_hrv', agg: 'last', localDate: date, value: 40 + (Number(date.slice(8)) % 5) })
+      insert({ metric: 'resting_heart_rate', agg: 'last', localDate: date, value: 55 + (Number(date.slice(8)) % 3) })
+      insert({ metric: 'sleep_asleep_minutes', localDate: date, value: 420 })
+      insert({ metric: 'sleep_bedtime_minutes', agg: 'last', localDate: date, value: -30 })
+    }
+    insert({ metric: 'daily_hrv', agg: 'last', localDate: TODAY, value: 44 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: TODAY, value: 55 })
+    const recovery = readRecovery(ctx())
+    expect(recovery.index.strip.some((d) => d.value !== null)).toBe(true)
+    expect(recovery.index.strip.every((d) => d.standing === null)).toBe(true)
+  })
+})
+
 describe('readGlance', () => {
   it('answers a person with no data at all with every section present and empty, not an error', () => {
     const glance = readGlance(new PersonQuery(test.db, 'p1'), { today: TODAY, nowMs: NOW, nameOf: (id) => id })
@@ -352,21 +408,24 @@ describe('readGlance', () => {
 })
 
 describe('weekOf', () => {
-  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value }))
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, standing: null }))
   it('averages the six finished days and never today', () => {
-    expect(weekOf(strip([1, 2, 3, 4, 5, 6, 1000]))).toEqual({ perDay: 3.5, days: 6 })
+    expect(weekOf(strip([1, 2, 3, 4, 5, 6, 1000]))).toEqual({ perDay: 3.5, days: 6, total: 1021 })
   })
   it('leaves a silent day out rather than counting a zero', () => {
-    expect(weekOf(strip([2, null, 4, null, null, null, 9]))).toEqual({ perDay: 3, days: 2 })
+    expect(weekOf(strip([2, null, 4, null, null, null, 9]))).toEqual({ perDay: 3, days: 2, total: 15 })
   })
   it('is null with no finished day', () => {
     expect(weekOf(strip([null, null, null, null, null, null, 5]))).toBeNull()
   })
+  it('includes the figure\'s own day in the total, so far included', () => {
+    expect(weekOf(strip([1, 2, 3, 4, 5, 6, 1000]))!.total).toBe(1021)
+  })
 })
 
 describe('weekOfFinished', () => {
-  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value }))
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, standing: null }))
   it('averages all seven days, the last included, because a night strip ends on a finished night', () => {
-    expect(weekOfFinished(strip([1, 2, 3, 4, 5, 6, 7]))).toEqual({ perDay: 4, days: 7 })
+    expect(weekOfFinished(strip([1, 2, 3, 4, 5, 6, 7]))).toEqual({ perDay: 4, days: 7, total: 28 })
   })
 })

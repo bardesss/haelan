@@ -10,7 +10,7 @@ export const GLANCE_TODAY = '2026-09-23'
 const DATES = ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23']
 
 function strip(values: (number | null)[]): GlanceFigure['strip'] {
-  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null }))
+  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null, standing: null }))
 }
 
 export function glanceFigure(over: Partial<GlanceFigure> & Pick<GlanceFigure, 'metric'>): GlanceFigure {
@@ -88,6 +88,7 @@ export function glanceBody(): Glance {
       // before the card existed; glance-page.test.tsx's own workout cases add one.
       workouts: [],
     },
-    week: { steps: { perDay: 8000, days: 6 }, activeMinutes: null, asleep: null },
+    // total is the whole strip's sum (8900+7400+10100+8300+9700+8800+4820), today's so-far included.
+    week: { steps: { perDay: 8000, days: 6, total: 58020 }, activeMinutes: null, asleep: null },
   }
 }

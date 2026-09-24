@@ -33,7 +33,7 @@ export interface GlanceStaleSource { sourceId: string, name: string, lastReporte
 /** A figure's baseline as the band a client draws: centre, and one spread either side. */
 export interface GlanceBaseline { center: number, low: number, high: number, thin: boolean }
 
-export interface GlanceStripDay { localDate: string, value: number | null }
+export interface GlanceStripDay { localDate: string, value: number | null, standing: GlanceStanding | null }
 
 export interface GlanceFigure {
   metric: string
@@ -65,6 +65,22 @@ export function standingOf(value: number | null, baseline: GlanceBaseline | null
   if (value < baseline.low) return 'below'
   if (value > baseline.high) return 'above'
   return 'within'
+}
+
+/**
+ * A strip of days, each carrying its own verdict against `band`: `partial` applies only to
+ * `ownDate`, the figure's own day, never to an earlier finished day in the same strip. One
+ * implementation for dailyFigure, activeMinutesFigure and the recovery index strip, so the three
+ * cannot drift onto different rules for what a strip day's standing means.
+ */
+function stripOf(
+  dates: readonly string[], valueOf: (localDate: string) => number | null,
+  band: GlanceBaseline | null, ownDate: string, partial: boolean,
+): GlanceStripDay[] {
+  return dates.map((localDate) => {
+    const value = valueOf(localDate)
+    return { localDate, value, standing: standingOf(value, band, partial && localDate === ownDate) }
+  })
 }
 
 /** What every section reads: the person's query, their today, now, and who has gone quiet. */
@@ -168,7 +184,7 @@ export function dailyFigure(
     asOfMs: onDay === undefined ? null : o.asOfMs,
     partial: o.partial,
     staleSources: staleFeeding(ctx, points.flatMap(sourcesOf)),
-    strip: dates.map((localDate) => ({ localDate, value: byDate.get(localDate)?.value ?? null })),
+    strip: stripOf(dates, (localDate) => byDate.get(localDate)?.value ?? null, band, o.on, o.partial),
     standing: standingOf(onDay?.value ?? null, band, o.partial),
   }
 }
@@ -272,7 +288,7 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
     asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
     partial: true,
     staleSources: staleFeeding(ctx, feeding),
-    strip: dates.map((localDate) => ({ localDate, value: sums.get(localDate) ?? null })),
+    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, band, ctx.today, true),
     standing: standingOf(value, band, true),
   }
 }
@@ -390,10 +406,10 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
       asOfMs: null,
       partial: false,
       staleSources: staleFeeding(ctx, [...restingHeartRate.staleSources, ...hrv.staleSources].map((s) => s.sourceId)),
-      strip: dates.map((localDate) => {
+      strip: stripOf(dates, (localDate) => {
         const day = series.get(localDate)
-        return { localDate, value: day !== undefined && day.enough ? day.score : null }
-      }),
+        return day !== undefined && day.enough ? day.score : null
+      }, null, ctx.today, false),
       standing: null,
     },
     band: scored === null ? null : bandOf(scored.score),
@@ -424,16 +440,21 @@ export function readDay(ctx: GlanceContext): GlanceDay {
   }
 }
 
-export interface GlanceWeekFigure { perDay: number, days: number }
+export interface GlanceWeekFigure { perDay: number, days: number, total: number }
 
 /** The last seven days as averages over the finished ones; today is drawn by the client, never counted (spec: WeekCard). */
 export interface GlanceWeek { steps: GlanceWeekFigure | null, activeMinutes: GlanceWeekFigure | null, asleep: GlanceWeekFigure | null }
+
+/** The sum of every strip day with a value, the figure's own day included (for today's steps/active that is "so far"). */
+function stripTotal(strip: readonly GlanceStripDay[]): number {
+  return strip.map((d) => d.value).filter((v): v is number => v !== null).reduce((s, v) => s + v, 0)
+}
 
 /** A strip's finished days averaged. The last entry is the figure's own day and is left out: on the today figures it is still running. */
 export function weekOf(strip: readonly GlanceStripDay[]): GlanceWeekFigure | null {
   const finished = strip.slice(0, -1).map((d) => d.value).filter((v): v is number => v !== null)
   if (finished.length === 0) return null
-  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length }
+  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length, total: stripTotal(strip) }
 }
 
 /**
@@ -443,7 +464,7 @@ export function weekOf(strip: readonly GlanceStripDay[]): GlanceWeekFigure | nul
 export function weekOfFinished(strip: readonly GlanceStripDay[]): GlanceWeekFigure | null {
   const finished = strip.map((d) => d.value).filter((v): v is number => v !== null)
   if (finished.length === 0) return null
-  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length }
+  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length, total: stripTotal(strip) }
 }
 
 export interface Glance {

@@ -267,7 +267,7 @@ function renderWeek(props: Partial<Parameters<typeof WeekCard>[0]> = {}): string
 
 describe('WeekCard', () => {
   it('shows each row\'s per-day average with its bars, and leaves out a row with no data', () => {
-    const g = { ...glanceBody(), week: { steps: { perDay: 8205.4, days: 6 }, activeMinutes: { perDay: 36, days: 6 }, asleep: null } }
+    const g = { ...glanceBody(), week: { steps: { perDay: 8205.4, days: 6, total: 49232 }, activeMinutes: { perDay: 36, days: 6, total: 216 }, asleep: null } }
     const html = renderWeek({ glance: g })
     expect(html).toContain('8,205')
     expect(html).toContain('36 min')
@@ -280,7 +280,7 @@ describe('WeekCard', () => {
   })
 
   it('labels the sleep row\'s bars as including last night, distinct from the steps row\'s days label', () => {
-    const g = { ...glanceBody(), week: { steps: { perDay: 8000, days: 6 }, activeMinutes: null, asleep: { perDay: 393, days: 7 } } }
+    const g = { ...glanceBody(), week: { steps: { perDay: 8000, days: 6, total: 48000 }, activeMinutes: null, asleep: { perDay: 393, days: 7, total: 2751 } } }
     const html = renderWeek({ glance: g })
     expect(html).toContain('aria-label="Asleep, last 7 nights; the average includes last night"')
     expect(html).toContain('aria-label="Steps, last 7 days; the average counts finished days only, today not counted"')

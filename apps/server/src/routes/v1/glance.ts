@@ -31,9 +31,11 @@ function roundFigure(figure: GlanceFigure): GlanceFigure {
   }
 }
 
-/** A week figure's `perDay` rounded to its metric's catalogue precision; `days` is a count, never rounded. */
+/** A week figure's `perDay` and `total`, each rounded to its metric's catalogue precision; `days` is a count, never rounded. */
 function roundWeekFigure(metric: string, figure: GlanceWeekFigure | null): GlanceWeekFigure | null {
-  return figure === null ? null : { ...figure, perDay: roundMetricValue(metric, figure.perDay) }
+  return figure === null ? null : {
+    ...figure, perDay: roundMetricValue(metric, figure.perDay), total: roundMetricValue(metric, figure.total),
+  }
 }
 
 /**
