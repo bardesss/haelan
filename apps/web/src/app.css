@@ -484,6 +484,9 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .main { flex: 1; padding: var(--space-5); min-width: 0; max-width: 1500px; margin-inline: auto; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
 .card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
+/* An id-carrying card is a jump target (the status panel's "Choose sources…" link lands on
+   #sources); without this, the phone's sticky .top-bar covers the card's own top edge on arrival. */
+.card[id] { scroll-margin-top: 56px; }
 /* A card that holds reading matter rather than a chart stops at a measure.
    A list of rows has a natural width the way a paragraph does, and a `span={12}` card is about
    1400px of frame on a wide monitor around content that wants half of it - which is what put a
