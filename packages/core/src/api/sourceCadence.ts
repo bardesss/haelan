@@ -56,6 +56,79 @@ const daysBetween = (from: string, to: string): number =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS)
 
 /**
+ * How far back from its last reporting date a stopped source's routine is read, in days,
+ * that date included. See `continuedElsewhere`.
+ */
+export const ROUTINE_WINDOW_DAYS = 7
+
+/** One source reporting one metric on one local date. */
+export interface SourceReport { source: string, date: string, metric: string }
+
+/** The first date of a source's routine window, for a caller narrowing a read to it. */
+export function routineWindowStart(lastReportedDate: string): string {
+  return new Date(Date.parse(`${lastReportedDate}T00:00:00Z`) - (ROUTINE_WINDOW_DAYS - 1) * DAY_MS)
+    .toISOString().slice(0, 10)
+}
+
+/**
+ * Whether everything a stopped source routinely reported has gone on arriving from other sources
+ * since it stopped - in which case its silence costs the reader nothing, and a card saying it
+ * stopped is a false alarm.
+ *
+ * The case that made this necessary: the Google Health API identifies a device by nothing but its
+ * `displayName` (store/sources.ts), and it named one household's watch two ways - a single fetch
+ * attributed a stretch of its history to a longer model name, and every fetch since uses a
+ * shorter one. One watch became two source rows, the older one silent ever after, and every card
+ * whose baseline reached back into that stretch told its reader a watch that reports daily had
+ * stopped. The same
+ * shape follows from a device's data moving to another path (the companion app's Health Connect
+ * source instead of the API's) and from a replacement device, and all three are the same answer:
+ * nothing the reader was getting stopped arriving.
+ *
+ * Why not "some other source reported the same metric since": a phone keeps counting steps after
+ * the watch on the same wrist dies, and that dead watch is the case the whole warning exists for -
+ * the step chart thins without any day being wrong. The phone does not carry on with the heart
+ * rate, so requiring EVERY routine metric keeps that warning. Why "routine" rather than every
+ * metric of the final week: a workout on one of those days would otherwise hold a renamed watch
+ * as stopped until the household next exercised. A metric is routine when the source reported it
+ * on at least half of its own reporting dates inside ROUTINE_WINDOW_DAYS ending on its last one.
+ *
+ * Why not link the two ids as one device instead: the payload carries no device id to link on,
+ * so linking would mean matching one model name against another (a brand prefix and a case size
+ * on one, neither on the other), which is a guess, or asking the household to link them in settings, which is a feature. This
+ * asks only what the warning is about - is data missing - and needs neither.
+ *
+ * `reports` need not be narrowed: rows of this source outside its routine window, and rows of
+ * other sources on or before its last date, are ignored here. Overlap proves nothing, since both
+ * ids of a renamed watch commonly cover the same days for a while. `merged` and `provider` are
+ * derivation restating what devices sent, so they can continue nothing.
+ */
+export function continuedElsewhere(
+  sourceId: string, lastReportedDate: string, reports: Iterable<SourceReport>,
+): boolean {
+  const windowStart = routineWindowStart(lastReportedDate)
+  const ownDates = new Set<string>()
+  const datesByMetric = new Map<string, Set<string>>()
+  const arrivingSince = new Set<string>()
+  for (const report of reports) {
+    if (report.source === 'merged' || report.source === 'provider') continue
+    if (report.source === sourceId) {
+      if (report.date < windowStart || report.date > lastReportedDate) continue
+      ownDates.add(report.date)
+      const dates = datesByMetric.get(report.metric)
+      if (dates) dates.add(report.date)
+      else datesByMetric.set(report.metric, new Set([report.date]))
+    } else if (report.date > lastReportedDate) {
+      arrivingSince.add(report.metric)
+    }
+  }
+  const routine = [...datesByMetric]
+    .filter(([, dates]) => dates.size * 2 >= ownDates.size)
+    .map(([metric]) => metric)
+  return routine.length > 0 && routine.every((metric) => arrivingSince.has(metric))
+}
+
+/**
  * `dates` need be neither sorted nor deduplicated. The database read hands them over sorted and
  * distinct; a caller assembling them from a chart's points has neither guarantee, and a
  * last-reported date read off an unsorted array is wrong silently rather than loudly.

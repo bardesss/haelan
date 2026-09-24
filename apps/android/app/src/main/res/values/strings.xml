@@ -44,6 +44,13 @@
     <string name="perm_already">All permissions are already granted.</string>
     <string name="perm_missing">Still missing: %1$s</string>
     <string name="perm_unavailable">Health Connect is not available here. Install it first.</string>
+    <plurals name="routes_withheld">
+        <item quantity="one">%d workout has a route Health Connect is holding back.</item>
+        <item quantity="other">%d workouts have a route Health Connect is holding back.</item>
+    </plurals>
+    <string name="routes_hint">Health Connect asks for each workout. Choose Always allow and every sync while Hælan is open brings routes along.</string>
+    <string name="routes_action">Release routes</string>
+    <string name="routes_stopped">Route not released.</string>
 
     <string name="sync_title">Sync</string>
     <string name="sync_body">Sends what is new since the last sync, or the last 30 days the first time.</string>

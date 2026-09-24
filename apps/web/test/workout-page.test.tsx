@@ -72,8 +72,9 @@ const NO_GPS: WorkoutSession = {
 }
 
 /** A companion session whose route Health Connect would not release: no points, and a flag saying
- *  a track exists behind a per-session consent the headless sync cannot ask for. The one case with
- *  no points that still has something true to say. */
+ *  a track exists and Health Connect answered ConsentRequired for it - route access not granted to
+ *  Haelan, or granted per workout rather than always. The one case with no points that still has
+ *  something true to say. */
 const WITHHELD: WorkoutSession = {
   ...RUN, id: 'withheld', attrs: { exerciseType: 'RUNNING', routeConsentRequired: true },
 }
@@ -306,7 +307,7 @@ describe('the workout page', () => {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(container?.querySelector('.workout-gps')?.textContent).toBe(
-        'A GPS route was recorded for this workout. Health Connect only releases a route after a separate confirmation for that one workout, which the phone sync cannot ask for on its own, so there is no map.',
+        'A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Open Haelan on the phone and tap Release routes to hand it over.',
       )
     } finally { restore() }
   })

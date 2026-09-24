@@ -110,7 +110,10 @@ describe('SyncEngine.kt: session name stays a sibling of its payload', () => {
   })
 
   it('exercise: name is not nested inside the exercise object', () => {
-    assertNameIsSiblingOfPayload('toExercisePoints', 'exercise')
+    // exercisePoint, not toExercisePoints: the per-record builder moved there so a route released
+    // one workout at a time (MainActivity's route walk) travels in the very same shape, and
+    // toExercisePoints is now only its map over a page.
+    assertNameIsSiblingOfPayload('exercisePoint', 'exercise')
   })
 })
 
@@ -129,12 +132,12 @@ describe('SyncEngine.kt: session name stays a sibling of its payload', () => {
  * `exerciseType`.
  */
 describe('SyncEngine.kt: the route keys sit on the exercise payload', () => {
-  const body = functionBody('toExercisePoints')
+  const body = functionBody('exercisePoint')
 
   it.each(['route', 'routeConsentRequired'])("puts %s on the payload, not on the point", (key) => {
     expect(
       body.includes(`exercise.put("${key}"`),
-      `${SYNC_ENGINE_PATH}: 'toExercisePoints' does not call 'exercise.put("${key}", ...)'. That `
+      `${SYNC_ENGINE_PATH}: 'exercisePoint' does not call 'exercise.put("${key}", ...)'. That `
       + 'call is what puts the key on the exercise payload object, the level mapSessions.ts reads '
       + 'it at. If it moved to the point-level chain it is now a sibling of "exercise" rather than '
       + 'a field inside it, core will never look there, and nothing else in this repository would '

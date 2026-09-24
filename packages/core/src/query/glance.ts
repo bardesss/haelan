@@ -69,6 +69,9 @@ export function contextFor(
   const stale = new Map<string, { lastReportedDate: string, medianGapDays: number | null }>()
   for (const activity of q.sourceActivity({ today: input.today })) {
     if (activity.status !== 'stale' || activity.lastReportedDate === null) continue
+    // A source whose data kept arriving under another id (a renamed watch) is not missing from
+    // any figure, so no figure warns about it. See sourceActivity.ts.
+    if (activity.continuedElsewhere) continue
     stale.set(activity.sourceId, { lastReportedDate: activity.lastReportedDate, medianGapDays: activity.medianGapDays })
   }
   return { q, today: input.today, nowMs: input.nowMs, stale, nameOf: input.nameOf }

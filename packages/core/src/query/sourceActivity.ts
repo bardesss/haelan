@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { cadenceOf } from '../api/sourceCadence.ts'
-import type { SourceCadence, SourceStatus } from '../api/sourceCadence.ts'
+import { cadenceOf, continuedElsewhere, routineWindowStart } from '../api/sourceCadence.ts'
+import type { SourceCadence, SourceReport, SourceStatus } from '../api/sourceCadence.ts'
 import type { DbOrTx } from '../db/open.ts'
 
 /**
@@ -43,6 +43,17 @@ export type { SourceStatus }
 
 export interface SourceActivity extends SourceCadence {
   sourceId: string
+  /**
+   * A stale source whose routine metrics have all gone on arriving from other sources since
+   * (api/sourceCadence.ts's `continuedElsewhere`): a device the provider renamed, or whose data
+   * moved to another path. Always false for a source that is not stale.
+   *
+   * A separate field rather than a fourth status, because `stale` stays true of the id - it did
+   * stop, and the settings card and describe_person say so - while the thing a card warns about,
+   * data the reader is no longer getting, is not. So every surface that WARNS skips these, and
+   * every surface that LISTS still reports the id as stopped.
+   */
+  continuedElsewhere: boolean
 }
 
 export function readSourceActivity(
@@ -62,7 +73,37 @@ export function readSourceActivity(
     else bySource.set(row.source, [row.localDate])
   }
 
-  return [...bySource].map(([sourceId, dates]) => ({
-    sourceId, ...cadenceOf(dates, input.today),
+  const activities = [...bySource].map(([sourceId, dates]) => ({
+    sourceId, ...cadenceOf(dates, input.today), continuedElsewhere: false,
   }))
+
+  // Only stale sources are asked whether they carried on, so a household with none pays nothing
+  // beyond the read above.
+  const stale = activities.filter((a) => a.status === 'stale' && a.lastReportedDate !== null)
+  if (stale.length === 0) return activities
+
+  // Of every other source, only whether it reported a metric after a given date matters, so each
+  // (source, metric) pair's latest date stands in for all its rows. Measured against a real
+  // archive with a source stale for months: a few dozen times fewer rows, in about a third of the
+  // time, than reading the distinct (source, date, metric) rows over the same span. One read
+  // serves every stale source, from the earliest routine window any of them needs, on the (person_id,
+  // local_date, ...) unique index.
+  const from = stale.map((a) => routineWindowStart(a.lastReportedDate!)).sort()[0]!
+  const latest = db.all<SourceReport>(sql`
+    SELECT source, metric, MAX(local_date) AS date FROM daily
+     WHERE person_id = ${personId} AND local_date >= ${from} AND source NOT IN ('merged', 'provider')
+     GROUP BY source, metric`)
+  for (const activity of stale) {
+    // The stale source's own final week does need every date, since "routine" counts them. Seven
+    // days of one source on the same index.
+    const own = db.all<{ date: string, metric: string }>(sql`
+      SELECT DISTINCT local_date AS date, metric FROM daily
+       WHERE person_id = ${personId} AND source = ${activity.sourceId}
+         AND local_date BETWEEN ${routineWindowStart(activity.lastReportedDate!)} AND ${activity.lastReportedDate!}`)
+    activity.continuedElsewhere = continuedElsewhere(activity.sourceId, activity.lastReportedDate!, [
+      ...own.map((row) => ({ source: activity.sourceId, ...row })),
+      ...latest.filter((row) => row.source !== activity.sourceId),
+    ])
+  }
+  return activities
 }
