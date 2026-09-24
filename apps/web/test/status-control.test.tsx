@@ -468,7 +468,9 @@ describe('the panel content', () => {
     press(icon())
     const row = popover()!.querySelector('.status-device')!
     expect(row.getAttribute('data-stale')).toBe('true')
-    expect(row.textContent).toContain('gone quiet')
+    // Since when, in the words, not only on a hover title a phone never shows. The year appears
+    // only once the test clock has left 2026, which is dayLabel's own rule, not this row's.
+    expect(row.children[1]!.textContent).toMatch(/^gone quiet since Aug 1(, 2026)?$/)
   })
 
   // The panel is the one place a quiet source is announced since the cards' triangles and the
@@ -478,9 +480,11 @@ describe('the panel content', () => {
     press(icon())
     const row = popover()!.querySelector('.status-device')!
     // Read in the order a reader meets it: the device, that it went quiet, then what stopped.
-    expect([...row.children].map((child) => child.textContent)).toEqual([
-      'Pixel Watch 4', 'gone quiet', 'Heart rate (continuous), sleep, steps, VO2 max',
-    ])
+    const [name, quiet, metrics, ...rest] = [...row.children].map((child) => child.textContent)
+    expect(rest).toEqual([])
+    expect(name).toBe('Pixel Watch 4')
+    expect(quiet).toMatch(/^gone quiet since Aug 21(, 2026)?$/)
+    expect(metrics).toBe('Heart rate (continuous), sleep, steps, VO2 max')
   })
 
   it('leaves a metric the catalogue has no name for out, and prints no line when none has one', () => {
@@ -490,7 +494,7 @@ describe('the panel content', () => {
     const [watch, odd] = [...popover()!.querySelectorAll('.status-device')]
     expect(watch!.textContent).not.toContain('not_a_metric')
     expect(odd!.querySelector('.status-device-metrics')).toBeNull()
-    expect(odd!.textContent).toBe('Odd devicegone quiet')
+    expect(odd!.children).toHaveLength(2)
   })
 
   it('lists nothing under a device that is still reporting', () => {
@@ -556,9 +560,11 @@ describe('in Dutch', () => {
     mount(panel({ connections: [google({ devices: [QUIET_WATCH] })], problems: 1 }), 'nl')
     press(icon())
     const row = popover()!.querySelector('.status-device')!
-    expect([...row.children].map((child) => child.textContent)).toEqual([
-      'Pixel Watch 4', 'is stilgevallen', 'Hartslag (doorlopend), slaap, stappen, VO2 max',
-    ])
+    const [name, quiet, metrics, ...rest] = [...row.children].map((child) => child.textContent)
+    expect(rest).toEqual([])
+    expect(name).toBe('Pixel Watch 4')
+    expect(quiet).toMatch(/^stilgevallen sinds 21 aug( 2026)?$/)
+    expect(metrics).toBe('Hartslag (doorlopend), slaap, stappen, VO2 max')
   })
 
   it('says nothing is connected rather than all up to date, with no connections at all', () => {

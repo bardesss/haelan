@@ -73,16 +73,21 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
           {connection.devices.length > 0 && (
             <ul className="status-devices">
               {connection.devices.map((device) => {
-                const day = device.lastReportedDate === null
-                  ? t('status.delivered.never')
-                  : t('status.lastDay', { day: dayLabel(device.lastReportedDate, today, language) })
+                const label = device.lastReportedDate === null ? null : dayLabel(device.lastReportedDate, today, language)
+                const day = label === null ? t('status.delivered.never') : t('status.lastDay', { day: label })
                 return (
                   <li key={device.sourceId} className="status-device" data-stale={device.stale ? 'true' : undefined}>
                     <span>{device.name}</span>
-                    {/* A stale device says so in place of its date, with the date kept on the
-                        title: "gone quiet" is the fact that needs reading at a glance, and the
-                        day it went quiet is the detail a reader hovers for. */}
-                    <span title={device.stale ? day : undefined}>{device.stale ? t('status.stale') : day}</span>
+                    {/* A stale device says so in place of its date, and says since when in the same
+                        breath: "gone quiet since 21 Aug". The date used to live only on a hover
+                        title, but now that the cards no longer warn, this row is the only place a
+                        reader learns how long a device has been silent, and a title never reaches
+                        a phone. dayLabel is the same formatter the other rows use; a stale device
+                        is at least two weeks quiet, so it always lands on the short date, with the
+                        year only when it is not this one. The server never calls a source stale
+                        without a last date, and the null arm is only there because the type
+                        allows it. */}
+                    <span>{device.stale && label !== null ? t('status.stale', { day: label }) : day}</span>
                     {/* What stopped arriving, under the row it belongs to. This is the one place a
                         quiet source is announced now - the cards' triangles and the control row's
                         "stopped in this range" line are gone - so it has to carry what those told

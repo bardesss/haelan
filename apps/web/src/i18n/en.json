@@ -94,7 +94,7 @@
       "never": "nothing yet"
     },
     "lastDay": "{{day}}",
-    "stale": "gone quiet",
+    "stale": "gone quiet since {{day}}",
     "problem": {
       "revoked": "Google access was withdrawn. Connect again under Account.",
       "credentials_unreadable": "The Google connection cannot be read on this server. Connect again under Account.",

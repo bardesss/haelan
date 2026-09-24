@@ -94,7 +94,7 @@
       "never": "nog niets"
     },
     "lastDay": "{{day}}",
-    "stale": "is stilgevallen",
+    "stale": "stilgevallen sinds {{day}}",
     "problem": {
       "revoked": "De toegang tot Google is ingetrokken. Maak opnieuw verbinding onder Account.",
       "credentials_unreadable": "Deze server kan de Google-koppeling niet lezen. Maak opnieuw verbinding onder Account.",
