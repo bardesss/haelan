@@ -113,7 +113,7 @@
       "running": "Bezig met synchroniseren…",
       "cooldown": "Net gesynchroniseerd",
       "nothingNew": "Niets nieuws.",
-      "newData": "Nieuwe gegevens binnen.",
+      "newData": "Er zijn nieuwe gegevens binnengekomen.",
       "failed": "De synchronisatie is met fouten afgerond.",
       "alreadyRunning": "Er loopt al een synchronisatie.",
       "didNotStart": "De synchronisatie is niet gestart."
