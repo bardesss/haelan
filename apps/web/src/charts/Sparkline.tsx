@@ -17,7 +17,7 @@ const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
-  values, labels, label, unit, metric, formatValue, baseline, height = 34, annotations = EMPTY, excluded = EMPTY,
+  values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
   onPointClick, episodic = false, trend, lastYear,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
@@ -63,6 +63,11 @@ export function Sparkline({
   // from thirty real days, not less, so the caller (Recovery.tsx) only ever hands this over once
   // its own baseline query has cleared the thin check.
   baseline?: { low: number, high: number }
+  // Text for the band's own low and high, anchored at the band's edges on the chart's right side.
+  // Undefined (the default, every caller before NightCard) draws the band exactly as it always
+  // has: shaded, and unlabelled everywhere but the accessible table, which already prints the
+  // baseline in words through usualLine. Ignored with no `baseline` to anchor against.
+  bandLabels?: { low: string, high: string }
   height?: number
   // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart type
   // the same annotations/excluded values instead of building a different shape per chart. Optional
@@ -145,7 +150,9 @@ export function Sparkline({
   })
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
-    grid: { left: 0, right: 0, top: 4, bottom: 4 },
+    // Room on the right for the band's own edge labels, drawn past the last day's point: with no
+    // right margin (every other caller) that text would sit flush against, or past, the container.
+    grid: { left: 0, right: bandLabels ? 40 : 0, top: 4, bottom: 4 },
     tooltip: {
       ...chartBase(tokens).tooltip,
       trigger: 'axis' as const,
@@ -191,7 +198,25 @@ export function Sparkline({
           // day with no value left to `atDate`, where it is drawn by position instead of being
           // silently lost, so everything left here is a day whose number is still on the chart with
           // the mark sitting on top of it.
-          data: marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })) },
+          //
+          // The band's own low/high labels ride the same markPoint rather than a separate series or
+          // a `graphic` element: `graphic` positions in pixels, with no way to ask for "the y a
+          // value of 9,500 maps to" short of reading the chart instance back out after it renders,
+          // where markPoint's xAxis/yAxis pair is a data coordinate echarts resolves against
+          // whatever extent the axis actually fits, the same as every excluded mark below it. Each
+          // is invisible (symbolSize 0) and anchored at the last day's index, the chart's right
+          // edge, with its own text as a label rather than a symbol.
+          data: [
+            ...marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })),
+            ...(bandLabels && baseline ? [
+              { name: 'band-high', xAxis: values.length - 1, yAxis: baseline.high, symbolSize: 0,
+                label: { show: true, position: 'right' as const, color: tokens.muted,
+                  fontSize: chartBase(tokens).axisLabel.fontSize, formatter: () => bandLabels.high } },
+              { name: 'band-low', xAxis: values.length - 1, yAxis: baseline.low, symbolSize: 0,
+                label: { show: true, position: 'right' as const, color: tokens.muted,
+                  fontSize: chartBase(tokens).axisLabel.fontSize, formatter: () => bandLabels.low } },
+            ] : []),
+          ] },
         markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
           label: { show: false },
           // An excluded day with no value left overrides the dashed annotation styling with the

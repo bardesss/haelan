@@ -1384,7 +1384,19 @@
       "strip": "Time asleep, last 7 nights",
       "caption": "last 7 nights",
       "link": "View this night",
-      "viewSleep": "View sleep"
+      "viewSleep": "View sleep",
+      "efficiencyStanding": {
+        "above": "higher than usual",
+        "below": "lower than usual"
+      },
+      "bedStanding": {
+        "above": "later than usual",
+        "below": "earlier than usual"
+      },
+      "wokeStanding": {
+        "above": "later than usual",
+        "below": "earlier than usual"
+      }
     },
     "recovery": {
       "title": "Recovery",

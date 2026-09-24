@@ -718,6 +718,18 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .dash-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .dash-card-head { display: flex; align-items: center; gap: var(--space-2); }
 .dash-card-head > .card-link { margin: 0 0 0 auto; }
+
+/* NightCard.tsx: the lead row, headline figure and secondary strip of minutes/bed/wake pairs. */
+.dash-lead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
+.dash-lead > div:first-child { flex: 0 1 auto; }
+.dash-lead-strip { flex: 1 1 16rem; min-width: 0; }
+.dash-headline { font-size: var(--font-size-display); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -.03em; }
+.dash-minis { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin-top: var(--space-2); font-size: var(--font-size-xs); }
+.dash-mini { display: inline-flex; align-items: baseline; gap: var(--space-1); }
+.dash-mini-label { color: var(--text-faint); }
+.dash-mini-value { font-size: var(--font-size-md); font-weight: var(--weight-semibold); }
+.dash-mini-value.is-out, .dash-mini-note { color: var(--negative); }
+.dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 .glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
 .glance-mini { display: flex; flex-wrap: wrap; gap: var(--space-5); }
 .glance-mini > div { display: flex; flex-direction: column; gap: 2px; }
