@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.8.1](https://github.com/bardesss/haelan/compare/v2.8.0...v2.8.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **web:** the route draws on a themed map, and today's workouts sit in the today column ([#362](https://github.com/bardesss/haelan/issues/362)) ([42974ee](https://github.com/bardesss/haelan/commit/42974ee84514b6f0bdf09f1b780b2fba4a6d4560))
+
 ## [2.8.0](https://github.com/bardesss/haelan/compare/v2.7.0...v2.8.0) (2026-09-24)
 
 
