@@ -484,8 +484,12 @@ describe('showing a source in the status panel', () => {
     globalThis.fetch = (() => new Promise<Response>(() => {})) as typeof fetch
     mountForWrites([namedSource({ lastReportedDate: RECENT, panelChoice: null })])
     expect(toggle().disabled).toBe(false)
-    // Async, so the mutation has started and reported itself pending before the assertion.
     await act(async () => { toggle().click() })
+    // TanStack Query's notifyManager delivers the pending state on a scheduled timer tick, not a
+    // microtask, so a single act() can win the race on a slow runner; pump bounded ticks instead.
+    for (let i = 0; i < 40 && !toggle().disabled; i += 1) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+    }
     expect(toggle().disabled).toBe(true)
   })
 
