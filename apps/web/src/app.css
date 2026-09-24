@@ -1674,4 +1674,10 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
      display on the base rule, so it is set here too rather than assumed from the browser's own
      button rendering. */
   .setup-horizon li button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* The status sheet's own "Choose sources…" link measured 90x16 - .status-foot's micro font size
+     and text-only content give it no box of its own beyond its text. layout:check caught it, the
+     way it caught the source order buttons above: a control that opens the account page from a
+     modal a finger only ever taps into deserves the same 44px it gets everywhere else. */
+  .status-foot a { min-height: 44px; display: flex; align-items: center; }
 }
