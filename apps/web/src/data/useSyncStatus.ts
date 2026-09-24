@@ -77,10 +77,11 @@ export function syncPollInterval(status: SyncStatus | undefined): number | false
 }
 
 /**
- * One query key, shared with the sync mutation's invalidation in SyncControl (ControlRow's until
- * M10): both have to agree on exactly this key, or a successful run would invalidate a cache entry
- * nothing is reading. SyncControl also excludes it by this key from the whole-person refresh a
- * finished run makes, since it sits under queryKeys.person like every other resource.
+ * One query key for this cache entry, shared with the tests that seed it. The sync button that
+ * used to invalidate it (SyncControl, ControlRow's until M10) is gone: the status panel starts
+ * runs now and watches them end through its own query (useStatusPanel.ts's statusKey), so this
+ * entry is only read - by RebuildNotice and ControlRow - and a finished run's whole-person
+ * refresh sweeps it up along with every other resource under queryKeys.person.
  * personId comes from the session, never from a parameter, for the same reason useSeries does
  * this: an account owns exactly one person, and taking it as an argument would let a caller name
  * someone else's.

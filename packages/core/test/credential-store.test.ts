@@ -119,6 +119,29 @@ describe('CredentialStore', () => {
     expect(db.all(sql`select 1 from credentials`)).toHaveLength(0)
   })
 
+  // hasRevokedRow exists for a caller that must never decrypt: /api/status has to tell a revoked
+  // connection apart from every other state even when the row's token cannot be opened at all (a
+  // revoked grant, then a backup restored without instance.key). getRefreshToken()?.revokedAtMs
+  // would decrypt to answer that and throw CredentialsUnreadableError first; this reads only the
+  // column.
+  it('reports a revoked row by column alone, decrypting nothing', () => {
+    expect(store.hasRevokedRow('p1')).toBe(false)
+    store.putRefreshToken({ personId: 'p1', refreshToken: 'rt', scopes: [], nowMs: 1 })
+    expect(store.hasRevokedRow('p1')).toBe(false)
+    store.markRevoked('p1', 100)
+    expect(store.hasRevokedRow('p1')).toBe(true)
+  })
+
+  it('answers true for a revoked row even when this key cannot decrypt its token', () => {
+    store.putRefreshToken({ personId: 'p1', refreshToken: 'rt', scopes: [], nowMs: 1 })
+    store.markRevoked('p1', 100)
+    const other = new CredentialStore(db, Buffer.alloc(32, 4))
+    // The control: this key genuinely cannot read the token, the same state a restore without
+    // instance.key produces.
+    expect(() => other.getRefreshToken('p1')).toThrow(CredentialsUnreadableError)
+    expect(other.hasRevokedRow('p1')).toBe(true)
+  })
+
   it('lists only people whose credentials are not revoked, because sync pauses per person', () => {
     db.insert(people).values({
       id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', createdAtMs: 0,

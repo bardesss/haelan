@@ -7,6 +7,7 @@ interface PersonParams { personId: string }
 interface SourceParams extends PersonParams { sourceId: string }
 interface AliasBody { alias?: unknown }
 interface PriorityBody { sourceIds?: unknown }
+interface PanelBody { visible?: unknown }
 
 /**
  * The listing this project has never had, and the rename it enables.
@@ -37,6 +38,10 @@ export function registerSourceRoutes(app: FastifyInstance): void {
     const activity = new Map(
       readSourceActivity(app.haelan.instance.db, personId, { today }).map((a) => [a.sourceId, a]),
     )
+    // Read once per request, like activity above: the status panel's own choice per source,
+    // folded into this same listing so the settings card can show the panel's current state
+    // without a second round trip.
+    const choices = app.haelan.instance.sourceVisibility.list(personId)
     const items = aliases().listNamed(personId).map((source) => {
       // A source with no daily row at all is not left out and not crashed on: it is reported as
       // having never reported, which is a real state - the archive measured had a source row
@@ -50,6 +55,10 @@ export function registerSourceRoutes(app: FastifyInstance): void {
         status: seen?.status ?? 'unjudged',
         reportingNow: seen?.reportingNow ?? false,
         continuedElsewhere: seen?.continuedElsewhere ?? false,
+        // null means "follow the default", the same meaning absence carries in
+        // SourceVisibilityStore itself - never coerced to false, which would read as an explicit
+        // hide nobody chose.
+        panelChoice: choices.get(source.id) ?? null,
       }
     })
     return sendHashed(reply, request, { items })
@@ -77,6 +86,31 @@ export function registerSourceRoutes(app: FastifyInstance): void {
     if (!getSource(app.haelan.instance.db, personId, sourceId)) return notThere(reply, sourceId)
     aliases().clear({ personId, sourceId })
     return reply.send({ name: currentName(app, personId, sourceId) })
+  })
+
+  /**
+   * The status panel's own switch, per source: show it, hide it, or say nothing and let
+   * shownByDefault (packages/core/src/api/statusPanel.ts) decide from the source's own recent
+   * activity. A boolean row is a person overriding that default in either direction; DELETE
+   * removes the override and goes back to it, the same "absence is the default" shape
+   * SourceVisibilityStore documents on itself.
+   */
+  app.put<{ Params: SourceParams, Body: PanelBody }>('/p/:personId/sources/:sourceId/panel', async (request, reply) => {
+    const { personId, sourceId } = request.params
+    const { visible } = request.body ?? {}
+    if (typeof visible !== 'boolean') {
+      return reply.code(statusFor('config')).send(errorBody('config', 'config', 'visible must be true or false'))
+    }
+    if (!getSource(app.haelan.instance.db, personId, sourceId)) return notThere(reply, sourceId)
+    app.haelan.instance.sourceVisibility.put({ personId, sourceId, visible, nowMs: app.haelan.now() })
+    return reply.send({ visible })
+  })
+
+  app.delete<{ Params: SourceParams }>('/p/:personId/sources/:sourceId/panel', async (request, reply) => {
+    const { personId, sourceId } = request.params
+    if (!getSource(app.haelan.instance.db, personId, sourceId)) return notThere(reply, sourceId)
+    app.haelan.instance.sourceVisibility.clear({ personId, sourceId })
+    return reply.send({ visible: null })
   })
 
   /**

@@ -65,6 +65,10 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M18.1 2.5v3.6h-3.6M5.9 21.5v-3.6h3.6" />
     </>
   ),
+  // The status panel's trigger beside the reader's name (StatusControl.tsx): a pulse line, since
+  // what it opens is whether the data is still arriving. The sync arrows above stay, on the
+  // panel's own Sync button, where they mean the action rather than the state.
+  status: <path d="M3 12h4.2l2.3-5.5 5 11 2.3-5.5H21" />,
   chevronLeft: <path d="M14.5 5.5 8 12l6.5 6.5" />,
   chevronRight: <path d="M9.5 5.5 16 12l-6.5 6.5" />,
   chevronDown: <path d="M5.5 9.5 12 16l6.5-6.5" />,

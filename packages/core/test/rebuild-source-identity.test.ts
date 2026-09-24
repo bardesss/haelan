@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
 import { sourceAliases, sources } from '../src/db/schema/index.ts'
 import { SourceAliasStore } from '../src/store/sourceAliases.ts'
+import { SourceVisibilityStore } from '../src/store/sourceVisibility.ts'
 import { insertSample, openRebuildLab, readSamples, seedRebuildable } from '../src/testing/fixtures.ts'
 import type { Rebuildable } from '../src/testing/fixtures.ts'
 
@@ -294,5 +295,23 @@ describe('a source a rebuild drops takes its name with it', () => {
 
     expect(report.people[0]!.sourcesRemoved).toBe(1)
     expect(report.people[0]!.aliasesRemoved).toBe(0)
+  })
+
+  // A choice about a source that no longer exists has nothing to apply to, and the foreign key
+  // would refuse the source's delete above while it stayed. Unlike aliases, there is no count to
+  // report: a lost choice falls back to a sensible default, so there is nothing for an operator
+  // to redo.
+  test('drops a visibility choice along with the source it names', () => {
+    h = seedRebuildable()
+    h.db.insert(sources).values([
+      { id: 'stale', personId: h.personId, externalId: 'OLD:phone', displayName: 'phone', kind: 'app', createdAtMs: 0 },
+    ]).run()
+    const visibility = new SourceVisibilityStore(h.db)
+    visibility.put({ personId: h.personId, sourceId: 'stale', visible: false, nowMs: 0 })
+
+    const report = runRebuild({ ...h.deps, nowMs: 1, force: true })
+
+    expect(report.people[0]!.sourcesRemoved).toBe(1)
+    expect(visibility.list(h.personId).has('stale')).toBe(false)
   })
 })

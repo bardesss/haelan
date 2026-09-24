@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { useTranslation } from '../i18n/index.js'
+import { scrollToHashTarget } from '../router.js'
 import { Card } from '../components/Card.js'
 import { ConnectGoogle } from '../auth/ConnectGoogle.js'
 import { Profile } from './settings/Profile.js'
@@ -26,6 +28,10 @@ import { DataTypes } from './settings/DataTypes.js'
  */
 export function Account() {
   const { t } = useTranslation()
+  // Arriving at /account#sources from the status panel's "Choose sources…" link: the router's
+  // pushState moves the URL without scrolling to the fragment, so the page asks on mount. See
+  // scrollToHashTarget in router.tsx for why the browser does not do this itself here.
+  useEffect(() => { scrollToHashTarget() }, [])
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('account.title')}</h1>
@@ -56,7 +62,7 @@ export function Account() {
         <Card span={12} label={t('settings.overrides.title')}>
           <OverrideList />
         </Card>
-        <Card span={12} label={t('settings.sourceNames.title')}>
+        <Card span={12} label={t('settings.sourceNames.title')} id="sources">
           <SourceNames />
         </Card>
       </div>

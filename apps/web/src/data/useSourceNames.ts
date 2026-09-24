@@ -49,6 +49,12 @@ export interface SourceActivityFields {
    * missing. Computed by the server for the same reason as `reportingNow`.
    */
   continuedElsewhere: boolean
+  /**
+   * Whether the person chose to show (true) or hide (false) this source in the status panel, or
+   * null when it follows the default rule - shownByDefault in @haelan/core/status-panel, which
+   * the source list imports rather than restating, for the reason `reportingNow` gives above.
+   */
+  panelChoice: boolean | null
 }
 
 export type NamedSourceWithActivity = NamedSource & SourceActivityFields

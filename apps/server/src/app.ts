@@ -13,6 +13,7 @@ import { registerAuth } from './routes/auth.ts'
 import { registerSetup } from './routes/setup.ts'
 import { registerOauth } from './routes/oauth.ts'
 import { registerSync } from './routes/sync.ts'
+import { registerStatus } from './routes/status.ts'
 import { registerSettings } from './routes/settings.ts'
 import { registerMaintenance } from './routes/maintenance.ts'
 import { registerMemberRoutes } from './routes/members.ts'
@@ -187,6 +188,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerSetup(app)
   registerOauth(app)
   registerSync(app)
+  registerStatus(app)
   registerSettings(app)
   registerMaintenance(app)
   registerMemberRoutes(app)

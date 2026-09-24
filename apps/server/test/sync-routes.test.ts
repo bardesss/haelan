@@ -98,6 +98,20 @@ describe('sync routes', () => {
     await settle(harness)
   })
 
+  it('answers 429 cooldown with retry-after inside the cooldown', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const cookie = await sessionCookie(harness)
+    const now = harness.clock.nowMs
+    harness.app.haelan.stores.settings.putLastSync({ finishedAtMs: now - 20_000, rowsWritten: 0, failed: 0 }, now)
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/sync/run', headers, cookies: { haelan_session: cookie },
+    })
+    expect(response.statusCode).toBe(429)
+    expect(response.json().error.code).toBe('cooldown')
+    expect(response.headers['retry-after']).toBe('40')
+  })
+
   it('refuses the stream without a session', async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()

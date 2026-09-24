@@ -20,7 +20,7 @@ import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/us
  *
  * Dropping the control row costs this page nothing else: the sync button used to live in
  * ControlRow, which left this page without one when it was designed, but it has since moved to the
- * shell's rail (SyncControl.tsx), which every page shows.
+ * shell's rail (StatusControl.tsx, the status panel beside the reader's name), which every page shows.
  */
 export function Records() {
   const { t, i18n } = useTranslation()

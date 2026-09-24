@@ -18,16 +18,17 @@ import { useRoute } from '../router.js'
  * backdrop handler below are. Everything the element itself offers - Escape, and the close request
  * a CloseWatcher raises from an Android back gesture - assumes hardware an iPhone does not have.
  */
-export function RailDrawer({ active, person, onSignOut, signOutError, sync }: {
+export function RailDrawer({ active, person, onSignOut, signOutError, status }: {
   active: string
   person: string
   onSignOut: () => void
   signOutError?: string | null
-  // Rendered in the top bar rather than forwarded into the nav below, so it is reachable without
-  // opening the drawer first: a reader who wants to know how fresh the numbers in front of them
-  // are should not have to open a navigation menu to find out. Not passed on to the Sidebar
-  // inside the dialog either, or the same control would exist twice on one page.
-  sync?: ReactNode
+  // The status icon. Rendered in the top bar rather than forwarded into the nav below, so it is
+  // reachable without opening the drawer first: a reader who wants to know whether the numbers in
+  // front of them are still arriving should not have to open a navigation menu to find out. Not
+  // passed on to the Sidebar inside the dialog either, or the same control would exist twice on
+  // one page.
+  status?: ReactNode
 }) {
   const { t } = useTranslation()
   const dialog = useRef<HTMLDialogElement>(null)
@@ -90,7 +91,7 @@ export function RailDrawer({ active, person, onSignOut, signOutError, sync }: {
         <div className="brand"><BrandMark />Hælan</div>
         {/* Pushed to the far end by .top-bar-end's auto margin, so the hamburger and the wordmark
             keep the positions a reader already knows. */}
-        {sync !== undefined && <div className="top-bar-end">{sync}</div>}
+        {status !== undefined && <div className="top-bar-end">{status}</div>}
       </div>
       {/*
         The click handler is the backdrop tap. A click whose target is the dialog element itself

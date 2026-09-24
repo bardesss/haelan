@@ -26,9 +26,9 @@ const listFormat = (language: string): Intl.ListFormat =>
  * Which range, which period, which source - and on a phone, one row instead of five.
  *
  * Until M10 this row also carried the sync button and its freshness line. Both have moved to the
- * shell (SyncControl.tsx), where they render once rather than once per page: a sync is an
- * instance-wide action and had no business being the loudest control on a page about September.
- * Losing it is most of why the phone layout below is possible at all.
+ * shell (now the status panel, StatusControl.tsx), where they render once rather than once per
+ * page: a sync is an instance-wide action and had no business being the loudest control on a
+ * page about September. Losing it is most of why the phone layout below is possible at all.
  *
  * Two layouts, chosen by the same breakpoint the rail uses. Above it, one line: the five ranges,
  * the stepper with its date picker, the source picker, and the export. Below it, one line of a

@@ -69,14 +69,16 @@ function mountSection(sources: NamedSourceWithActivity[]): void {
   })
 }
 
+// The name fields only. Each row also carries a "Show in status panel" checkbox now, which is an
+// <input> too; a bare 'input' selector would hand the name tests a checkbox reading 'on'.
 const inputElements = (): HTMLInputElement[] =>
-  [...container!.querySelectorAll('input')] as HTMLInputElement[]
+  [...container!.querySelectorAll('input[type="text"]')] as HTMLInputElement[]
 
 const inputValues = (): string[] =>
   inputElements().map((i) => i.value)
 
 const placeholders = (): string[] =>
-  [...container!.querySelectorAll('input')].map((i) => i.getAttribute('placeholder') ?? '')
+  [...container!.querySelectorAll('input[type="text"]')].map((i) => i.getAttribute('placeholder') ?? '')
 
 const rowDetail = (index: number): string =>
   [...container!.querySelectorAll('.source-name-detail')][index]?.textContent ?? ''
@@ -194,7 +196,7 @@ const SOURCE: NamedSourceWithActivity = {
   id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4',
   alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0,
   lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
-  status: 'reporting', reportingNow: true, continuedElsewhere: false,
+  status: 'reporting', reportingNow: true, continuedElsewhere: false, panelChoice: null,
 }
 
 const namedSource = (over: Partial<NamedSourceWithActivity> = {}): NamedSourceWithActivity => ({ ...SOURCE, ...over })
@@ -415,5 +417,99 @@ describe('what a live source says about itself', () => {
       .map((child) => child.className)
       .filter((name) => name.startsWith('source-name-'))
     expect(classes).toEqual(['source-name-kind', 'source-name-volume', 'source-name-detail'])
+  })
+})
+
+/**
+ * The status panel's own switch, one per row.
+ *
+ * With no explicit choice a source follows the default the panel itself applies - reported within
+ * the last thirty days - so the switch has to draw that default, not a blanket "off". Otherwise the
+ * two surfaces would disagree about the same source on the same day: the panel listing a watch
+ * whose switch here reads unchecked. The rule comes from @haelan/core/status-panel, the same
+ * function composeStatus uses on the server.
+ */
+describe('showing a source in the status panel', () => {
+  // Yesterday by the UTC clock, which is inside the thirty-day window in whatever timezone the
+  // person's today is computed in, so this does not depend on where the suite runs.
+  const RECENT = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+  const LONG_AGO = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10)
+
+  let requests: { method: string, url: string, body: unknown }[] = []
+  let original: typeof fetch
+  beforeEach(() => {
+    requests = []
+    original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      const url = String(input)
+      const body = init?.body ? JSON.parse(String(init.body)) as { visible: boolean } : undefined
+      requests.push({ method, url, body })
+      const payload = url.endsWith('/panel') ? { visible: method === 'DELETE' ? null : body!.visible } : { items: [] }
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+  })
+  afterEach(() => { globalThis.fetch = original })
+
+  const toggle = (index = 0): HTMLInputElement =>
+    [...container!.querySelectorAll<HTMLInputElement>('.source-panel-toggle input[type="checkbox"]')][index]!
+  const automatic = (): HTMLButtonElement | null =>
+    [...container!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Back to automatic') ?? null
+  const panelWrites = () => requests.filter((r) => r.url.endsWith('/panel'))
+
+  it('draws a recent source with no choice as shown, and an old one as hidden', () => {
+    mountSection([
+      namedSource({ id: 'watch', lastReportedDate: RECENT, panelChoice: null }),
+      namedSource({ id: 'old', name: 'Old scale', alias: 'Old scale', lastReportedDate: LONG_AGO, panelChoice: null }),
+    ])
+    expect(toggle(0).checked).toBe(true)
+    expect(toggle(1).checked).toBe(false)
+    expect(container!.querySelector('.source-panel-toggle')!.textContent).toBe('Show in status panel')
+    // No choice has been made, so there is nothing to go back from.
+    expect(automatic()).toBeNull()
+  })
+
+  // Seventeen rows each carrying "Show in status panel" is seventeen identical names to a screen
+  // reader; the source's own name is what tells them apart. The visible words lead the name, so
+  // a voice-control user saying what they see still reaches the control.
+  it('names the source in the switch and the way back, for a screen reader', () => {
+    mountSection([namedSource({ lastReportedDate: RECENT, panelChoice: false })])
+    expect(toggle().getAttribute('aria-label')).toBe('Show in status panel: My watch')
+    expect(automatic()!.getAttribute('aria-label')).toBe('Back to automatic: My watch')
+  })
+
+  // A second press while the first is in flight would race it, and the switch would flicker
+  // between the two answers as they land.
+  it('holds the switch still while a choice is being saved', async () => {
+    globalThis.fetch = (() => new Promise<Response>(() => {})) as typeof fetch
+    mountForWrites([namedSource({ lastReportedDate: RECENT, panelChoice: null })])
+    expect(toggle().disabled).toBe(false)
+    await act(async () => { toggle().click() })
+    // TanStack Query's notifyManager delivers the pending state on a scheduled timer tick, not a
+    // microtask, so a single act() can win the race on a slow runner; pump bounded ticks instead.
+    for (let i = 0; i < 40 && !toggle().disabled; i += 1) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+    }
+    expect(toggle().disabled).toBe(true)
+  })
+
+  it('follows an explicit choice over the default', () => {
+    mountSection([namedSource({ lastReportedDate: RECENT, panelChoice: false })])
+    expect(toggle().checked).toBe(false)
+  })
+
+  it('sends the choice when the switch is turned off', async () => {
+    const client = mountForWrites([namedSource({ lastReportedDate: RECENT, panelChoice: null })])
+    act(() => { toggle().click() })
+    await flush(client, () => container!.innerHTML)
+    expect(panelWrites()).toEqual([{ method: 'PUT', url: '/api/v1/p/p1/sources/watch/panel', body: { visible: false } }])
+  })
+
+  it('offers the way back to automatic once a choice is made, and it forgets the choice', async () => {
+    const client = mountForWrites([namedSource({ lastReportedDate: RECENT, panelChoice: false })])
+    expect(automatic()).not.toBeNull()
+    act(() => { automatic()!.click() })
+    await flush(client, () => container!.innerHTML)
+    expect(panelWrites()).toEqual([{ method: 'DELETE', url: '/api/v1/p/p1/sources/watch/panel', body: undefined }])
   })
 })

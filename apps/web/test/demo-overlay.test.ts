@@ -128,6 +128,76 @@ describe('an unrelated read', () => {
   })
 })
 
+describe('the status panel', () => {
+  // Shaped like composeStatus's own answer (packages/core/src/api/statusPanel.ts), trimmed to the
+  // fields this overlay actually reads or rewrites - real fields (sync, lastDeliveryAtMs) carry no
+  // signal for these tests, the same trimming the sessions fixture below applies to its own capture.
+  const CAPTURED_STATUS = {
+    connections: [
+      {
+        kind: 'google',
+        problem: null,
+        devices: [
+          { sourceId: 'watch-1', name: 'Watch', lastReportedDate: '2026-09-20', stale: false, choice: null },
+          { sourceId: 'watch-2', name: 'Old watch', lastReportedDate: '2026-08-01', stale: true, choice: null },
+        ],
+      },
+    ],
+    sync: null,
+    problems: 1,
+    hiddenDevices: 3,
+  }
+
+  it('answers the captured body untouched when nobody has written a choice', () => {
+    const overlay = createOverlay()
+    expect(applyOverlay('/api/status', CAPTURED_STATUS, overlay)).toBe(CAPTURED_STATUS)
+  })
+
+  it('removes a hidden source from the next /api/status read, and drops its stale count too', () => {
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/sources/watch-2/panel`, { visible: false }, overlay)
+
+    const composed = applyOverlay('/api/status', CAPTURED_STATUS, overlay) as typeof CAPTURED_STATUS
+    expect(composed.connections[0]?.devices.map((d) => d.sourceId)).toEqual(['watch-1'])
+    // watch-2 was the panel's one stale device - removing it leaves nothing to report a problem.
+    expect(composed.problems).toBe(0)
+    expect(composed.hiddenDevices).toBe(4)
+    // The captured object itself is never mutated - a second read of the same fixture must still
+    // answer the untouched capture, the way composeSeries' own clone-not-mutate comment explains.
+    expect(CAPTURED_STATUS.connections[0]?.devices).toHaveLength(2)
+  })
+
+  it('marks a shown source with its choice without hiding an already-visible one', () => {
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/sources/watch-1/panel`, { visible: true }, overlay)
+
+    const composed = applyOverlay('/api/status', CAPTURED_STATUS, overlay) as typeof CAPTURED_STATUS
+    const devices = composed.connections[0]?.devices ?? []
+    expect(devices.map((d) => d.sourceId)).toEqual(['watch-1', 'watch-2'])
+    expect(devices[0]?.choice).toBe(true)
+  })
+
+  it('clearing a choice back to the default answers the captured row again', () => {
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/sources/watch-2/panel`, { visible: false }, overlay)
+    writeThrough('DELETE', `/api/v1/p/${PERSON}/sources/watch-2/panel`, undefined, overlay)
+
+    const composed = applyOverlay('/api/status', CAPTURED_STATUS, overlay) as typeof CAPTURED_STATUS
+    expect(composed.connections[0]?.devices.map((d) => d.sourceId)).toEqual(['watch-1', 'watch-2'])
+    expect(composed.connections[0]?.devices[1]?.choice).toBeNull()
+  })
+
+  it('folds the same choice into the /sources listing as panelChoice', () => {
+    const overlay = createOverlay()
+    const captured = { items: [{ id: 'watch-2', displayName: 'Old watch', alias: null }] }
+    writeThrough('PUT', `/api/v1/p/${PERSON}/sources/watch-2/panel`, { visible: false }, overlay)
+
+    const composed = applyOverlay(`/api/v1/p/${PERSON}/sources?activity=1`, captured, overlay) as
+      { items: { panelChoice: boolean | null }[] }
+    expect(composed.items[0]?.panelChoice).toBe(false)
+  })
+})
+
 // Every fixture below this line is copied verbatim (trimmed of provider-attribute noise that
 // carries no signal for these tests) from a real file under demo/capture/out/, not hand built:
 // the review that approved this task found every composer's shape tolerance untested against the

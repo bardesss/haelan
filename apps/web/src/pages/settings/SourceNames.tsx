@@ -9,6 +9,9 @@ import { Loading } from '../../components/Loading.js'
 import { sourceActivityKey, useClearSourceName, useRenameSource, useSourcesWithActivity } from '../../data/useSourceNames.js'
 import type { NamedSourceWithActivity } from '../../data/useSourceNames.js'
 import { useSetSourcePriority, useSourcePriority } from '../../data/useSourcePriority.js'
+import { useSetPanelChoice } from '../../data/useStatusPanel.js'
+import { localToday } from '../../controls/range.js'
+import { shownByDefault } from '@haelan/core/status-panel'
 
 /**
  * Mirrors MAX_ALIAS_LENGTH in packages/core/src/store/sourceAliases.ts. A local constant rather
@@ -142,16 +145,20 @@ export function SourceNames() {
     })
   }
 
+  // The person's today, for the status panel switch's default below: the same derivation the
+  // panel itself makes, so the two agree about which day "the last thirty days" ends on.
+  const today = localToday(session.data?.timezone)
+
   return (
     <>
       <ul className="source-name-list">
-        {live.map((source) => <SourceNameRow key={source.id} source={source} />)}
+        {live.map((source) => <SourceNameRow key={source.id} source={source} today={today} />)}
       </ul>
       {dormant.length > 0 && (
         <>
           <h3 className="source-names-dormant-heading">{t('settings.sourceNames.dormantHeading')}</h3>
           <ul className="source-name-list source-names-dormant">
-            {dormant.map((source) => <SourceNameRow key={source.id} source={source} />)}
+            {dormant.map((source) => <SourceNameRow key={source.id} source={source} today={today} />)}
           </ul>
         </>
       )}
@@ -232,10 +239,17 @@ function moved(order: readonly string[], at: number, by: -1 | 1): string[] {
   return next
 }
 
-function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
+function SourceNameRow({ source, today }: { source: NamedSourceWithActivity, today: string }) {
   const { t, i18n } = useTranslation()
   const rename = useRenameSource()
   const clear = useClearSourceName()
+  const setChoice = useSetPanelChoice()
+  // What the status panel does with this source right now: the person's own choice when they made
+  // one, and otherwise the panel's default - reported within the last thirty days. The default is
+  // shownByDefault itself, imported from @haelan/core/status-panel, not a second copy of the
+  // window: a switch drawn unchecked beside a source the panel is listing would be a control that
+  // misreports the very thing it controls.
+  const shown = source.panelChoice ?? shownByDefault(source.lastReportedDate, today)
   // The field is uncontrolled between edits: `draft` starts from what the server says and is only
   // pushed back on blur or Enter, so a slow round trip never fights the reader's typing.
   const [draft, setDraft] = useState(source.alias ?? '')
@@ -247,7 +261,7 @@ function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
     else rename.mutate({ sourceId: source.id, alias: next })
   }
 
-  const failed = rename.isError || clear.isError
+  const failed = rename.isError || clear.isError || setChoice.isError
   const fallbackLabel = source.displayName === '' ? source.id : source.displayName
 
   return (
@@ -265,6 +279,31 @@ function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
         />
       </label>
+      {/* Beside the name, because both are things a reader decides about a source, where
+          everything after them on the row is something the card reports about it. Changing it
+          records an explicit choice even when it lands on what the default already was: the
+          reader has said what they want, and a later change in the source's activity should not
+          quietly overrule it. */}
+      {/* Both controls carry the source's name for a screen reader, the way the name field above
+          does: every row says "Show in status panel", so the visible words alone name seventeen
+          controls identically. The visible words lead, so what a voice-control user reads off the
+          screen is still the start of the name. Disabled while a choice is in flight, so a second
+          press cannot race the first and the switch does not flicker between the two answers. */}
+      <label className="source-panel-toggle">
+        <input type="checkbox" checked={shown} disabled={setChoice.isPending}
+          aria-label={t('settings.sourceNames.showInPanelLabel', { source: source.name })}
+          onChange={(e) => setChoice.mutate({ sourceId: source.id, visible: e.currentTarget.checked })} />
+        {t('settings.sourceNames.showInPanel')}
+      </label>
+      {/* Only once a choice exists: with none, the switch already follows the default and there is
+          nothing to go back to. */}
+      {source.panelChoice !== null && (
+        <button type="button" className="source-panel-default" disabled={setChoice.isPending}
+          aria-label={t('settings.sourceNames.panelDefaultLabel', { source: source.name })}
+          onClick={() => setChoice.mutate({ sourceId: source.id, visible: null })}>
+          {t('settings.sourceNames.panelDefault')}
+        </button>
+      )}
       <span className="source-name-kind">{t(`settings.sourceNames.kind.${source.kind}`)}</span>
       {/* How much this source has actually produced, on every row rather than only the stale ones.
           The card's rule for the stale line - a source reporting normally needs no line, since its

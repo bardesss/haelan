@@ -8,7 +8,7 @@ import { ErrorBoundary } from './ErrorBoundary.js'
 import { useCardPresence } from './CardGrid.js'
 import { SourceWarning, CardWarningContext } from './SourceWarning.js'
 
-export function Card({ span, label, basis, measured = false, ambient, warning, children }: {
+export function Card({ span, label, basis, measured = false, ambient, warning, id, children }: {
   span: number
   label?: string
   basis?: string
@@ -44,6 +44,13 @@ export function Card({ span, label, basis, measured = false, ambient, warning, c
    * to the tile inside, which draws its own title (SourceWarning.tsx).
    */
   warning?: string
+  /**
+   * An anchor for a link that lands on this card, like the status panel's "Choose sources…",
+   * which opens /account#sources. On the section itself rather than a wrapper around the card: a
+   * wrapper div would become the grid item, and the card's own span would then size it inside a
+   * one-column box.
+   */
+  id?: string
   children: React.ReactNode
 }) {
   // Reports this card to the enclosing CardGrid, so a page whose cards have all hidden themselves
@@ -58,7 +65,7 @@ export function Card({ span, label, basis, measured = false, ambient, warning, c
     // span to exist as something a selector can match. The inline style stays because it is what
     // sets the span at every other width, and deriving it from the attribute instead would put the
     // whole grid behind a stylesheet rule that a missing class would silently drop.
-    <section className={measured ? 'card card-measured' : 'card'} data-span={span}
+    <section id={id} className={measured ? 'card card-measured' : 'card'} data-span={span}
       style={{ gridColumn: `span ${span}` }}>
       {label && <span className="label">{label}{warning && <SourceWarning text={warning} />}</span>}
       {basis && <p className="basis" id={basisId}>{basis}</p>}

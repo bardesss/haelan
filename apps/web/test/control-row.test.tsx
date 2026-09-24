@@ -261,14 +261,16 @@ describe('ControlRow', () => {
     expect(container!.querySelector('select')).toBeNull()
   })
 
-  // Every assertion about the sync button and its freshness line moved to sync-control.test.tsx
-  // when M10 moved the control itself out of this row and into the shell. What belongs here now
-  // is the opposite claim: that this row no longer carries either of them.
-  it('carries no sync control of its own', () => {
+  // Every assertion about the sync button moved out of this file when M10 moved the control into
+  // the shell, and on again to status-control.test.tsx when the status panel replaced it. What
+  // belongs here is the opposite claim: that this row carries neither the status icon nor the
+  // panel's sync button. The class names are the status panel's own, not SyncControl's - those
+  // classes no longer exist anywhere, so asserting their absence would pass on any row at all.
+  it('carries no status control or sync button of its own', () => {
     mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} />))
-    expect(container!.querySelector('.sync-control')).toBeNull()
-    expect(container!.querySelector('.synced')).toBeNull()
-    expect(container!.textContent).not.toContain('Synced')
+    expect(container!.querySelector('.status-control')).toBeNull()
+    expect(container!.querySelector('.status-sync')).toBeNull()
+    expect(container!.textContent).not.toContain('Sync now')
   })
 
   // A page has one accent-filled control at most, and this row's job is choosing what to look at.

@@ -38,6 +38,18 @@ function isRealDate(date: string): boolean {
   return day >= 1 && day <= daysInMonth(year, month)
 }
 
+/**
+ * The person's today as YYYY-MM-DD, in their session timezone (the browser's own when there is
+ * none yet). en-CA formats as YYYY-MM-DD, which is the shape every local date in this system
+ * already has. usePageControls makes the same derivation inline; the status panel and the source
+ * list's "Show in status panel" switch share this one, because both compare a source's last
+ * reported date against today and must agree about which day that is.
+ */
+export function localToday(timezone: string | undefined, now: Date = new Date()): string {
+  const options: Intl.DateTimeFormatOptions = timezone === undefined ? {} : { timeZone: timezone }
+  return new Intl.DateTimeFormat('en-CA', { ...options, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+}
+
 /** Shifts by whole days. Safe across month and year boundaries because it goes through epoch ms.
  *  Exported for the workout page's comparison window, its second caller: the ninety trailing days
  *  before a workout's own local date, computed the same way stepAnchor already shifts an anchor. */

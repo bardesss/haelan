@@ -81,18 +81,47 @@
     "value": "Last year: {{value}}",
     "none": "Nothing recorded a year earlier"
   },
-  "sync": {
-    "run": "Sync",
-    "ago": "Synced {{count}} min ago",
-    "never": "Never synced",
-    "statusUnknown": "Sync status unknown",
-    "agoShort": "{{count}}m",
-    "neverShort": "–",
-    "statusUnknownShort": "–",
-    "alreadyRunning": "A sync is already running.",
-    "failed": "Sync did not start.",
-    "phoneAgo": "Phone sent {{count}} min ago",
-    "phoneAgoShort": "{{count}}m phone"
+  "status": {
+    "title": "Status",
+    "label": "Status: {{state}}",
+    "state": {
+      "ok": "all sources up to date",
+      "syncing": "syncing",
+      "problems_one": "{{count}} problem",
+      "problems_other": "{{count}} problems",
+      "none": "nothing connected yet"
+    },
+    "connection": {
+      "google": "Google Health",
+      "phone": "Phone app"
+    },
+    "delivered": {
+      "google": "synced {{when}}",
+      "phone": "uploaded {{when}}",
+      "never": "nothing yet"
+    },
+    "lastDay": "{{day}}",
+    "stale": "gone quiet",
+    "problem": {
+      "revoked": "Google access was withdrawn. Connect again under Account.",
+      "credentials_unreadable": "The Google connection cannot be read on this server. Connect again under Account.",
+      "sync_failed": "Part of the last sync failed.",
+      "phone_quiet": "The phone has not uploaded for over a day."
+    },
+    "sync": {
+      "run": "Sync now",
+      "running": "Syncing…",
+      "cooldown": "Synced just now",
+      "nothingNew": "Nothing new.",
+      "newData": "New data arrived.",
+      "failed": "The sync finished with errors.",
+      "alreadyRunning": "A sync is already running.",
+      "didNotStart": "The sync did not start."
+    },
+    "hidden_one": "{{count}} source hidden",
+    "hidden_other": "{{count}} sources hidden",
+    "choose": "Choose sources…",
+    "empty": "Nothing is connected yet."
   },
   "sidebar": {
     "sectionsLabel": "Sections",
@@ -1154,7 +1183,11 @@
       "stopped": "Stopped reporting — last was {{date}}",
       "unjudged": "Too little history to judge — last was {{date}}",
       "volume_one": "{{count}} day reported",
-      "volume_other": "{{count}} days reported"
+      "volume_other": "{{count}} days reported",
+      "showInPanel": "Show in status panel",
+      "panelDefault": "Back to automatic",
+      "showInPanelLabel": "Show in status panel: {{source}}",
+      "panelDefaultLabel": "Back to automatic: {{source}}"
     },
     "sourceOrder": {
       "title": "Which source wins",
