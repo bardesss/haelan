@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react'
+import { useId, useLayoutEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DEMO_CLOCK_MS } from './instant.js'
 import { detectDemoLang } from './lang.js'
@@ -52,10 +52,11 @@ const BANNER_REST: Record<DemoLang, string> = {
     `vastgelegd (nog een periode terug, nog een nacht) toont niets, geen storing.`,
 }
 
-// The phone-only disclosure's own label - the demo banner's per-language table, same exception
-// no-hardcoded-strings.test.ts already leaves this file (see BANNER_LEAD's own comment on why
-// nothing here routes through i18n).
+// The phone-only disclosure's own button label, open and closed - the demo banner's per-language
+// table, same exception no-hardcoded-strings.test.ts already leaves this file (see BANNER_LEAD's
+// own comment on why nothing here routes through i18n).
 const MORE_LABEL: Record<DemoLang, string> = { en: 'More', nl: 'Meer' }
+const LESS_LABEL: Record<DemoLang, string> = { en: 'Less', nl: 'Minder' }
 
 // Intl locale to format DEMO_CLOCK_MS's date in, one per DemoLang - kept alongside BANNER_TEXT
 // rather than derived from it, so a date embedded mid-sentence never ends up in a script the rest
@@ -81,6 +82,15 @@ function rememberDismissed(): void {
 export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
   const lang = detectDemoLang()
   const [dismissed, setDismissed] = useState(readDismissed)
+  // Below the phone breakpoint only - app.css hides `.demo-banner-toggle` above it, where the rest
+  // of the notice is simply shown regardless of this flag. Real React state, not a native
+  // `<details>`: a closed `<details>` hides its own children in a way author CSS on the child
+  // cannot override (Chromium: `details.open === false` makes the child fail
+  // `checkVisibility()` even when a rule sets `display: inline` on it), which is what silently
+  // hid the rest of the notice from every desktop visitor - screen readers included - after this
+  // banner first grew a disclosure. A plain toggled element has no such hidden layer.
+  const [open, setOpen] = useState(false)
+  const restId = useId()
   const dateLabel = new Date(DEMO_CLOCK_MS).toLocaleDateString(DATE_LOCALE[lang], {
     timeZone: 'Europe/Amsterdam',
     year: 'numeric',
@@ -105,16 +115,22 @@ export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
   return (
     <div role="note" lang={lang} className="demo-banner">
       <p className="demo-banner-lead">{BANNER_LEAD[lang](dateLabel)}</p>
-      {/* A native disclosure rather than a button-plus-state: `<details>` carries its own open/
-          closed semantics (aria-expanded is implicit on `<summary>`) for free, and needs no
-          `useState` here to track. app.css's phone media query is what makes this the only place
-          the rest of the notice is reachable below that width; above it, the same CSS hides the
-          `<summary>` and forces `.demo-banner-rest` to show regardless of `open`, so a desktop
-          reader sees the notice exactly as before. */}
-      <details className="demo-banner-more">
-        <summary>{MORE_LABEL[lang]}</summary>
-        <p className="demo-banner-rest">{BANNER_REST[lang]}</p>
-      </details>
+      {/* No `<details>`: a closed one hides its own children in a way author CSS on the child
+          cannot override (see the `open` state's own comment above), so the rest of the notice is
+          a plain paragraph, collapsed by CSS class rather than by a native element's hidden
+          internals. `.demo-banner-toggle` is likewise plain markup throughout, hidden above the
+          phone breakpoint by app.css rather than left unrendered, so its aria-expanded/aria-controls
+          pair is always real even on a width where nothing shows the button itself. */}
+      <p id={restId} className={open ? 'demo-banner-rest' : 'demo-banner-rest is-collapsed'}>{BANNER_REST[lang]}</p>
+      <button
+        type="button"
+        className="demo-banner-toggle"
+        aria-expanded={open}
+        aria-controls={restId}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {open ? LESS_LABEL[lang] : MORE_LABEL[lang]}
+      </button>
       <button
         type="button"
         className="demo-banner-close"

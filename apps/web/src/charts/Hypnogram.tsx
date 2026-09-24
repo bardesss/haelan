@@ -98,8 +98,9 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   // whole hours; without it - a night whose bed time was never recorded - elapsed hours, as before.
   startClock?: number | null
   // False drops the stage totals row and its awake note, for a card that prints the night's asleep
-  // total already. Nothing passes it since the dashboard's night card became the page's lead and
-  // kept the row; the absence sentence below is what a caller that drops it still gets.
+  // total already. Nothing passes it: the dashboard's night card became the page's lead and now
+  // draws `compact` instead, which keeps a totals line but drops the awake note from it; the
+  // absence sentence below is what a caller that drops `totals` outright still gets.
   totals?: boolean
   // The dashboard's form (spec amendment 2026-09-24): the stage blocks and nothing else on the plot
   // (no lane labels, no time axis, no bed label), no visible "show numbers" control (the table stays
