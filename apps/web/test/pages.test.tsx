@@ -587,20 +587,38 @@ describe('Dashboard (the glance)', () => {
     expect([...glance.matchAll(/<table class="sr-only">/g)].length).toBe(hosts.length)
   })
 
+  // The figure classes the dashboard's cards print their numbers in. Each is required to be on the
+  // page first, so a card renaming one makes this fail rather than go on checking a class nobody
+  // draws (the fate of the old `<div class="value">` check once the redesign stopped using it).
+  const FIGURE_CLASSES = ['dash-headline', 'dash-headline-sm', 'dash-week-value', 'dash-mini-value', 'usual-gauge-value', 'score-ring-value']
+
   it('never renders a null, undefined, NaN, raw key or absent zero', () => {
     expect(glance).not.toMatch(/>(null|undefined|NaN)</)
     expect(glance).not.toContain('NaN')
-    expect(glance).not.toMatch(/<div class="value">0(<|&nbsp;| )/)
+    for (const name of FIGURE_CLASSES) {
+      const figure = new RegExp(`class="(?:[^"]* )?${name}(?: [^"]*)?"[^>]*>`)
+      expect(glance, `no element with class ${name} on the page`).toMatch(figure)
+      const zero = new RegExp(`class="(?:[^"]* )?${name}(?: [^"]*)?"[^>]*>0(<|&nbsp;| )`)
+      expect(glance, `${name} prints a bare 0`).not.toMatch(zero)
+    }
     expect(glance).not.toMatch(/\b(dashboard|glance|sleep|common|charts|activity|recovery|emptyState|errorState)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
   })
 
   // Labels are unique within a card, not across the page: Today's steps and the week's steps are
   // both "Steps", each under its own card's heading, which is what tells them apart.
-  it('draws at most one basis line per card, and no two labels alike in one card', () => {
+  //
+  // The usual sentence is visible at most once per card. This replaces "at most one <p class=basis>
+  // per card", which no dashboard card can fail since none hands Card a basis. The redesign's point
+  // (R3) is that the usual range is drawn behind the strips, not written under every figure; the
+  // sentence stays for screen readers (sr-only descriptions, aria-labels), which are stripped first.
+  it('writes the usual sentence at most once per card, and no two labels alike in one card', () => {
     const cards = [...glance.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
     expect(cards).toHaveLength(4)
     for (const card of cards) {
-      expect([...card.matchAll(/<p class="basis"/g)].length, card).toBeLessThanOrEqual(1)
+      const visible = card
+        .replace(/<(p|span|div|table) class="sr-only"[^>]*>[\s\S]*?<\/\1>/g, '')
+        .replace(/<[^>]*>/g, ' ')
+      expect(visible.match(/your usual/g)?.length ?? 0, visible).toBeLessThanOrEqual(1)
       const labels = [...card.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
       expect(new Set(labels).size, card).toBe(labels.length)
     }

@@ -356,7 +356,7 @@ describe('the glance Dashboard', () => {
     const { restore } = await mountPage()
     try {
       // 09:38 UTC is 11:38 in Amsterdam; the steps' own 09:32 must not be the one it reads.
-      expect(dateLine()).toBe('Wednesday, September 23 · Last night, and today until 11:38')
+      expect(dateLine()).toBe('Wednesday, September 23 · last night, and today until 11:38')
     } finally { restore() }
   })
 
@@ -365,7 +365,7 @@ describe('the glance Dashboard', () => {
     body.day.heartRate = { ...body.day.heartRate, asOfMs: null }
     const stepsOnly = await mountPage(body)
     try {
-      expect(dateLine()).toBe('Wednesday, September 23 · Last night, and today until 11:32')
+      expect(dateLine()).toBe('Wednesday, September 23 · last night, and today until 11:32')
     } finally { stepsOnly.restore() }
     act(() => { root!.unmount() })
     root = createRoot(container!)
@@ -375,7 +375,7 @@ describe('the glance Dashboard', () => {
     none.day.steps = { ...none.day.steps, asOfMs: null }
     const neither = await mountPage(none)
     try {
-      expect(dateLine()).toBe('Wednesday, September 23 · Last night, and today so far')
+      expect(dateLine()).toBe('Wednesday, September 23 · last night, and today so far')
     } finally { neither.restore() }
   })
 
@@ -405,7 +405,7 @@ describe('the glance Dashboard', () => {
     const { restore } = await mountPage(glanceBody(), { lng: 'nl' })
     try {
       expect(titles().slice(0, 3)).toEqual(['Afgelopen nacht', 'Herstel', 'Vandaag'])
-      expect(dateLine()).toBe('woensdag 23 september · Afgelopen nacht, en vandaag tot 11:38')
+      expect(dateLine()).toBe('woensdag 23 september · afgelopen nacht, en vandaag tot 11:38')
       expect(container!.textContent).toContain('Stappen')
       expect(container!.textContent).not.toMatch(/\bglance\.[a-zA-Z]/)
       // One usual sentence and one as-of line, read whole: the parity guard never renders, and
@@ -414,6 +414,23 @@ describe('the glance Dashboard', () => {
       expect(rhr?.getAttribute('aria-label')).toBe('Rusthartslag 62 bpm, boven je gebruikelijke bereik 52 – 60')
       expect(cardTitled('Vandaag')!.querySelector('.glance-asof')?.textContent).toBe('bijgewerkt om 11:38')
     } finally { restore() }
+  })
+
+  // The clock and the zone are known before the glance arrives, so the greeting does not wait for it.
+  it('shows the loading state under the greeting while the glance is on its way', async () => {
+    const original = globalThis.fetch
+    // A /glance that never answers, so the page stays in its loading branch.
+    globalThis.fetch = (() => new Promise<Response>(() => {})) as typeof fetch
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+      client.setQueryData(queryKeys.session(), PERSON)
+      act(() => {
+        root!.render(<I18nProvider lng="en"><QueryClientProvider client={client}><Dashboard /></QueryClientProvider></I18nProvider>)
+      })
+      expect(container!.querySelector('h1')?.textContent).toBe('Good morning')
+      expect(container!.querySelector('.empty')?.textContent).toBe('Loading')
+      expect(container!.querySelectorAll('.card')).toHaveLength(0)
+    } finally { globalThis.fetch = original }
   })
 
   it('shows the error state, under the greeting, with a retry that asks again', async () => {

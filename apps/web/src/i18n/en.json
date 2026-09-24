@@ -1388,8 +1388,8 @@
     "points": "{{points}} points"
   },
   "glance": {
-    "span": "Last night, and today until {{time}}",
-    "spanNoTime": "Last night, and today so far",
+    "span": "last night, and today until {{time}}",
+    "spanNoTime": "last night, and today so far",
     "spanNoNight": "no night recorded · today until {{time}}",
     "spanNoNightNoTime": "no night recorded · today so far",
     "greeting": {

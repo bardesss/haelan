@@ -38,7 +38,7 @@ function longDate(localDate: string, language: string): string {
  * or today by definition, so a range picker would be a control that either lies or does nothing,
  * and a source picker would pick among merged figures the payload has already chosen. The span line
  * under the greeting does the one job the control row did, telling the reader what they are looking
- * at ("Last night, and today until 11:40").
+ * at ("last night, and today until 11:40").
  *
  * **One read.** Everything on the page comes from GET /glance, assembled on the server in the
  * person's own zone, so the cards cannot disagree about which day it is and the phone app
@@ -73,7 +73,7 @@ export function Dashboard() {
 
   // The latest instant anything on the page was read at: the heart rate trace samples most often,
   // and steps stand in on a day the watch sent steps but no heart rate. With no night, the line
-  // says so rather than opening on "Last night" for a night the page does not have.
+  // says so rather than opening on "last night" for a night the page does not have.
   const asOfMs = day.heartRate.asOfMs ?? day.steps.asOfMs
   const time = asOfMs === null ? null : formatTimeOfDay(asOfMs, language, timezone)
   const span = sleep === null
@@ -82,10 +82,10 @@ export function Dashboard() {
 
   const card = (slot: DashCardSlot) => {
     switch (slot.kind) {
-      case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span as 8 | 12} today={glance.today} timezone={timezone} />
-      case 'recovery': return <RecoveryCard key="recovery" recovery={recovery} span={slot.span as 4 | 12} wide={slot.wide} today={glance.today} timezone={timezone} />
-      case 'today': return <TodayCard key="today" day={day} span={slot.span as 8 | 12} timezone={timezone} />
-      case 'week': return <WeekCard key="week" glance={glance} span={4} />
+      case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} timezone={timezone} />
+      case 'recovery': return <RecoveryCard key="recovery" recovery={recovery} span={slot.span} wide={slot.wide} today={glance.today} timezone={timezone} />
+      case 'today': return <TodayCard key="today" day={day} span={slot.span} timezone={timezone} />
+      case 'week': return <WeekCard key="week" glance={glance} span={slot.span} />
     }
   }
 

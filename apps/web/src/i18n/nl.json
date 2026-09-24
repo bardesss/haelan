@@ -1388,8 +1388,8 @@
     "points": "{{points}} punten"
   },
   "glance": {
-    "span": "Afgelopen nacht, en vandaag tot {{time}}",
-    "spanNoTime": "Afgelopen nacht, en vandaag tot nu toe",
+    "span": "afgelopen nacht, en vandaag tot {{time}}",
+    "spanNoTime": "afgelopen nacht, en vandaag tot nu toe",
     "usual": {
       "within": "binnen je gebruikelijke bereik {{low}} – {{high}}",
       "above": "boven je gebruikelijke bereik {{low}} – {{high}}",

@@ -1,7 +1,14 @@
 import type { Glance } from '../../data/useGlance.js'
 
-export type DashCardKind = 'night' | 'recovery' | 'today' | 'week'
-export interface DashCardSlot { kind: DashCardKind, span: 4 | 8 | 12, wide: boolean }
+// One variant per kind, each with only the spans its card takes, so the page hands `slot.span`
+// straight to the card's own prop without a cast. `wide` is on every variant (false outside
+// recovery) so a reader of the rows can ask it of any slot.
+export type DashCardSlot =
+  | { kind: 'night', span: 8 | 12, wide: false }
+  | { kind: 'recovery', span: 4 | 12, wide: boolean }
+  | { kind: 'today', span: 8 | 12, wide: false }
+  | { kind: 'week', span: 4, wide: false }
+export type DashCardKind = DashCardSlot['kind']
 
 export function hasRecovery(glance: Glance): boolean {
   const { index, restingHeartRate, hrv } = glance.recovery
