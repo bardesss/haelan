@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
-import { localDateInZone } from '@haelan/core'
-import type { Glance, GlanceFigure, GlanceWeekFigure } from '@haelan/core'
+import { localDateInZone, standingOf } from '@haelan/core'
+import type { Glance, GlanceFigure, GlanceStepsPace, GlanceWeekFigure } from '@haelan/core'
 import { personQueryOf, roundMetricValue, roundMetricValueOrNull, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
@@ -14,21 +14,58 @@ interface PersonParams { personId: string }
  */
 const ROUNDED_AS: Readonly<Record<string, string>> = { active_minutes: 'active_minutes_light' }
 
-/** A figure's value, band and strip, each to its metric's catalogue precision. */
+/**
+ * A figure's value, band and strip, each to its metric's catalogue precision, with every verdict
+ * recomputed from those same rounded numbers (Task 19a): `standingOf` runs on unrounded values in
+ * core, so a value that only clears its baseline's high before rounding (or only after) would
+ * otherwise disagree with the band a reader is actually shown, e.g. "60 bpm, above your usual
+ * 52 - 60". One rule (`standingOf`), reapplied here at the wire's own precision; core's callers
+ * (MCP and others) keep the unrounded figure, so their own comparisons stay internally consistent.
+ */
 function roundFigure(figure: GlanceFigure): GlanceFigure {
   const metric = ROUNDED_AS[figure.metric] ?? figure.metric
   const { baseline } = figure
+  const band = baseline === null ? null : {
+    ...baseline,
+    center: roundMetricValue(metric, baseline.center),
+    low: roundMetricValue(metric, baseline.low),
+    high: roundMetricValue(metric, baseline.high),
+  }
+  const value = roundMetricValueOrNull(metric, figure.value)
+  // The figure's own day is always the strip's last entry (stripDates ends on `on`); `partial`
+  // never applies to an earlier, already-finished day in the same strip (glance.ts's stripOf).
+  const ownDate = figure.strip.at(-1)?.localDate ?? null
   return {
     ...figure,
-    value: roundMetricValueOrNull(metric, figure.value),
-    baseline: baseline === null ? null : {
-      ...baseline,
-      center: roundMetricValue(metric, baseline.center),
-      low: roundMetricValue(metric, baseline.low),
-      high: roundMetricValue(metric, baseline.high),
-    },
-    strip: figure.strip.map((day) => ({ ...day, value: roundMetricValueOrNull(metric, day.value) })),
+    value,
+    baseline: band,
+    strip: figure.strip.map((day) => {
+      const dayValue = roundMetricValueOrNull(metric, day.value)
+      return { ...day, value: dayValue, standing: standingOf(dayValue, band, figure.partial && day.localDate === ownDate) }
+    }),
+    standing: standingOf(value, band, figure.partial),
   }
+}
+
+/**
+ * The pace band and its own count, each to steps precision, with `standing` recomputed from those
+ * rounded numbers through the same `standingOf` used everywhere else, its `within/above/below`
+ * mapped onto the pace's own `on/ahead/behind` words. Null stays null: `standingOf` alone already
+ * covers a thin band, and a pace core decided is too early to judge (`readStepsPace`'s
+ * `PACE_MIN_DAY_SHARE` gate) is never sent with a non-null standing for rounding to disturb.
+ */
+function roundPace(pace: GlanceStepsPace | null): GlanceStepsPace | null {
+  if (pace === null) return null
+  const band = {
+    center: roundMetricValue('steps', pace.center),
+    low: roundMetricValue('steps', pace.low),
+    high: roundMetricValue('steps', pace.high),
+    thin: pace.thin,
+  }
+  const value = roundMetricValue('steps', pace.value)
+  const verdict = pace.standing === null ? null : standingOf(value, band, false)
+  const standing = verdict === null ? null : verdict === 'above' ? 'ahead' : verdict === 'below' ? 'behind' : 'on'
+  return { ...pace, ...band, value, standing }
 }
 
 /** A week figure's `perDay` and `total`, each rounded to its metric's catalogue precision; `days` is a count, never rounded. */
@@ -67,12 +104,7 @@ function roundGlance(glance: Glance): Glance {
     day: {
       ...day,
       steps: roundFigure(day.steps),
-      stepsPace: day.stepsPace === null ? null : {
-        ...day.stepsPace,
-        center: roundMetricValue('steps', day.stepsPace.center),
-        low: roundMetricValue('steps', day.stepsPace.low),
-        high: roundMetricValue('steps', day.stepsPace.high),
-      },
+      stepsPace: roundPace(day.stepsPace),
       activeMinutes: roundFigure(day.activeMinutes),
       heartRate: {
         ...day.heartRate,

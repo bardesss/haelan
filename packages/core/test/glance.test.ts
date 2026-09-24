@@ -405,6 +405,19 @@ describe('readGlance', () => {
     const q = new PersonQuery(test.db, 'p1')
     expect(q.glance({ today: TODAY, nowMs: NOW })).toEqual(readGlance(q, { today: TODAY, nowMs: NOW, nameOf: (id) => id }))
   })
+
+  // Task 19a, item 1: before the watch has synced this morning, `sleep` is null, but the six
+  // already-finished nights before it must not fall out of the week card for want of a seventh.
+  it('still averages the week\'s asleep figure over the finished nights when there is no last night yet', () => {
+    // Seven nights ending yesterday (2026-08-19); 2026-08-15 stays silent, so six of the seven count.
+    for (const date of datesEnding('2026-08-19', 7)) {
+      if (date === '2026-08-15') continue
+      insert({ metric: 'sleep_asleep_minutes', localDate: date, value: 400 })
+    }
+    const glance = readGlance(new PersonQuery(test.db, 'p1'), { today: TODAY, nowMs: NOW, nameOf: (id) => id })
+    expect(glance.sleep).toBeNull()
+    expect(glance.week.asleep).toEqual({ perDay: 400, days: 6, total: 2400 })
+  })
 })
 
 describe('weekOf', () => {

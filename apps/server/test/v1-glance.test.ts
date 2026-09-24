@@ -132,6 +132,32 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(body.recovery.restingHeartRate.standing).toBe('within')
   })
 
+  // Task 19a, item 3: standing is computed in core on unrounded numbers, but the route rounds the
+  // band it sends; a value that only clears an unrounded high must not disagree with the rounded
+  // band the reader is actually shown once both round to the same whole number.
+  it('recomputes standing from the rounded numbers, so a value just above an unrounded high comes back within once both round the same', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    const row = (localDate: string, value: number) => db.insert(schema.daily).values({
+      personId: 'p1', localDate, metric: 'resting_heart_rate', agg: 'last', source: 'merged', value, coverage: 1, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    // Sixty days at 59.6: an unrounded high of 59.6 (spread 0), which rounds to 60. Today's 59.8 is
+    // unrounded-above that high, but also rounds to 60 - the standing must follow the rounded pair.
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
+      row(localDate, 59.6)
+    }
+    row('2026-08-20', 59.8)
+    const body = (await get(harness, token, '/glance')).json()
+    expect(body.recovery.restingHeartRate.value).toBe(60)
+    expect(body.recovery.restingHeartRate.baseline.high).toBe(60)
+    expect(body.recovery.restingHeartRate.standing).toBe('within')
+  })
+
   it('carries a steps pace once today has a step sample, rounded to a whole step', async () => {
     harness = await withServer()
     harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')

@@ -117,4 +117,28 @@ describe('stepsPace', () => {
     expect(p.thin).toBe(false)
     expect(p.center).toBe(1000)
   })
+
+  // Task 19a, item 2: just after midnight the usual count by now is a sliver of the usual whole
+  // day, so a handful of steps must not read "ahead" of it.
+  it('gives no verdict when the usual count by the cutoff time is a sliver of the usual whole day', () => {
+    // Every baseline day's activity happens at 09:00, well after today's cutoff, so the usual
+    // count "by now" is zero for all sixty of them - a thin-looking band that is not actually thin
+    // (60 days, no missing fraction), which is exactly the case PACE_MIN_DAY_SHARE guards.
+    for (const date of dates('2026-08-19', 60)) day(date, [['watch', '09:00', 8000]], 8000)
+    day(TODAY, [['watch', '00:01', 2]], 2)
+    const p = pace()!
+    expect(p.thin).toBe(false)
+    expect(p.center).toBe(0)
+    expect(p.standing).toBeNull()
+  })
+
+  it('still gives a verdict once the usual count by the cutoff time is a normal share of the usual day', () => {
+    // Each baseline day totals 8000 (5000 by noon, 3000 more by evening); today's cutoff is noon,
+    // and 5000 by noon is well over 5% of 8000, so the gate above must not apply here.
+    for (const date of dates('2026-08-19', 60)) day(date, [['watch', '12:00', 5000], ['watch', '18:00', 3000]], 8000)
+    day(TODAY, [['watch', '12:00', 5200]], 5200)
+    const p = pace()!
+    expect(p.center).toBe(5000)
+    expect(p.standing).toBe('ahead')
+  })
 })

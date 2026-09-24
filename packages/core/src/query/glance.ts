@@ -195,10 +195,18 @@ export interface GlanceStepsPace {
   low: number
   high: number
   thin: boolean
+  /** Today's own count, cut at the same minute as the band: what `standing` actually compares. */
+  value: number
   /** Today's last step reading: the instant the comparison is made at, never now. */
   atMs: number
   standing: 'ahead' | 'on' | 'behind' | null
 }
+
+/**
+ * Below this share of the day's usual whole-day total, the usual-by-now count is still near zero
+ * (just after midnight), so a handful of steps would otherwise read "ahead" of it.
+ */
+export const PACE_MIN_DAY_SHARE = 0.05
 
 /**
  * Today's steps against the person's usual count by the same minute of the day (spec: steps pace).
@@ -214,6 +222,11 @@ export interface GlanceStepsPace {
  * last reading" rule forbids. Pace is null only when there is no step sample today
  * (`stepsUpToMinute` returns null) or the baseline itself is (`baselineOf` returns null) - not on
  * whether the daily total has caught up yet.
+ *
+ * No verdict yet (`standing: null`, band still sent) while the usual-by-now count (`band.center`)
+ * sits under `PACE_MIN_DAY_SHARE` of the day's usual whole-day total: just after midnight the usual
+ * count by now is itself near zero, so even a handful of today's own steps would otherwise read
+ * "ahead".
  */
 export function readStepsPace(ctx: GlanceContext): GlanceStepsPace | null {
   const window = baselineWindow(ctx.today)
@@ -224,8 +237,10 @@ export function readStepsPace(ctx: GlanceContext): GlanceStepsPace | null {
   const baseline = baselineOf(values)
   if (baseline === null) return null
   const band = toGlanceBaseline(baseline)!
-  const standing = band.thin ? null : read.today > band.high ? 'ahead' : read.today < band.low ? 'behind' : 'on'
-  return { ...band, atMs: read.atMs, standing }
+  const dayBaseline = ctx.q.baseline({ metric: 'steps', agg: 'sum', on: ctx.today })
+  const tooEarly = dayBaseline === null || dayBaseline.thin || band.center < PACE_MIN_DAY_SHARE * dayBaseline.center
+  const standing = band.thin || tooEarly ? null : read.today > band.high ? 'ahead' : read.today < band.low ? 'behind' : 'on'
+  return { ...band, value: read.today, atMs: read.atMs, standing }
 }
 
 export interface GlanceHeartRate { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
@@ -483,10 +498,16 @@ export function readGlance(
   const ctx = contextFor(q, input)
   const sleep = readLastNight(ctx)
   const day = readDay(ctx)
+  // The week's asleep figure is computed from the seven nights ending on last night's own date
+  // when there is one, or on yesterday when the watch has not synced yet: a morning before it has
+  // must not drop six already-finished nights from the week card for want of a seventh (Task 19a).
+  const asleepStrip = sleep !== null
+    ? sleep.asleep.strip
+    : dailyFigure(ctx, { metric: 'sleep_asleep_minutes', agg: 'sum', on: shiftLocalDate(ctx.today, -1), partial: false, asOfMs: null }).strip
   const week: GlanceWeek = {
     steps: weekOf(day.steps.strip),
     activeMinutes: weekOf(day.activeMinutes.strip),
-    asleep: sleep === null ? null : weekOfFinished(sleep.asleep.strip),
+    asleep: weekOfFinished(asleepStrip),
   }
   // No generation time in the body: /glance is hashed for its ETag, and a stamp of now would make
   // every response differ, so no conditional request could ever answer 304.
