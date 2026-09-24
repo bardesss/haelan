@@ -63,6 +63,15 @@ export function NightCard({ sleep, span, timezone }: {
     values: sleep.asleep.strip.map((d) => d.value), labels: sleep.asleep.strip.map((d) => d.localDate),
   }), [sleep.asleep.strip])
   const band = sleep.asleep.baseline !== null && !sleep.asleep.baseline.thin ? sleep.asleep.baseline : undefined
+  // R3: the band is shaded behind the strip AND its two edges are labelled, so a reader is never
+  // left to guess what the shading means from colour alone. Memoised on band/language rather than
+  // built inline in the JSX below: a fresh object identity every render would fold into Sparkline's
+  // own `build` dependency array (bandLabels is now one of them) and rebuild the chart for a reason
+  // that has nothing to do with what it draws, the same defect chart-lifecycle.test.tsx guards.
+  const bandLabels = useMemo(() => band === undefined ? undefined : {
+    low: formatFigure({ ...sleep.asleep, value: band.low }, language) ?? '',
+    high: formatFigure({ ...sleep.asleep, value: band.high }, language) ?? '',
+  }, [band, language])
   const bedMinutes = inWindow(localMinutesOf(sleep.localDate, sleep.startMs, sleep.startOffsetMinutes), DEFAULT_WINDOW)
   const startLabel = bedMinutes !== null ? t('common.bedLabel', { time: formatClock(bedMinutes) }) : t('common.bedTimeNotRecorded')
   const minis = [
@@ -97,7 +106,7 @@ export function NightCard({ sleep, span, timezone }: {
           <div className="dash-lead-strip">
             <Described text={usualLine(sleep.asleep, t, language) ?? t('glance.sleep.caption')} hidden>
               <Sparkline values={values} labels={labels} label={t('glance.sleep.strip')} unit={t('glance.sleep.asleep')}
-                metric={sleep.asleep.metric} baseline={band} height={64}
+                metric={sleep.asleep.metric} baseline={band} bandLabels={bandLabels} height={64}
                 formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...sleep.asleep, value: v }, language) ?? absent)} />
             </Described>
             <p className="dash-caption">{t('glance.sleep.caption')}</p>

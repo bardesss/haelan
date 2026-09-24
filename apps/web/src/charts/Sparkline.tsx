@@ -236,7 +236,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, marks, episodic, trend, hasTrend, comparing, lastYear])
+  }), [values, labels, baseline, bandLabels, marks, episodic, trend, hasTrend, comparing, lastYear])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)

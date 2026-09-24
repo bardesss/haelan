@@ -79,6 +79,34 @@ describe('a sparkline across a rerender', () => {
     render()
     expect(dispose).not.toHaveBeenCalled()
   })
+
+  // The opposite pin, for the value fix round 1 made: `bandLabels` is read directly inside `build`
+  // (both the grid's right margin and the markPoint data below use it), so unlike `formatValue`
+  // above it belongs in `build`'s own dependency array, not behind a ref. Leaving it out would pass
+  // every other test in this file - nothing here calls setOption twice with different bandLabels and
+  // diffs the result - while quietly serving a stale band label from before the caller's baseline
+  // (and its low/high text) changed. Asserting the option updates is the only way to catch that a
+  // rebuild happened at all, since this mock's `dispose` is the sole rebuild signal this file has.
+  it('is disposed and rebuilt when bandLabels changes, since build reads it directly', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} />
+        </I18nProvider>,
+      )
+    })
+    dispose.mockClear()
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,100', high: '9,400' }} />
+        </I18nProvider>,
+      )
+    })
+    expect(dispose).toHaveBeenCalled()
+  })
 })
 
 function renderBars() {
