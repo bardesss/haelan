@@ -22,6 +22,11 @@ describe('UsualGauge', () => {
   it('scales around the band so the band sits in the middle fifth', () => {
     expect(gaugeScale({ low: 52, high: 58, center: 55 })).toEqual({ min: 47.5, max: 62.5 })
   })
+  it('still centres a zero-width band instead of collapsing to a point', () => {
+    const scale = gaugeScale({ low: 5, high: 5, center: 5 })
+    expect(scale).toEqual({ min: 2.5, max: 7.5 })
+    expect(gaugeFraction(5, scale)).toBe(0.5)
+  })
   it('clamps a far reading to the arc\'s end rather than off it', () => {
     expect(gaugeFraction(200, { min: 0, max: 100 })).toBe(1)
     expect(gaugeFraction(-5, { min: 0, max: 100 })).toBe(0)
