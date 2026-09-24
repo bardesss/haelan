@@ -18,11 +18,17 @@ import { useRoute } from '../router.js'
  * backdrop handler below are. Everything the element itself offers - Escape, and the close request
  * a CloseWatcher raises from an Android back gesture - assumes hardware an iPhone does not have.
  */
-export function RailDrawer({ active, person, onSignOut, signOutError, status }: {
+export function RailDrawer({ active, person, onSignOut, signOutError, excludedDataTypes, status }: {
   active: string
   person: string
   onSignOut: () => void
   signOutError?: string | null
+  // What this person switched off, forwarded untouched to the Sidebar inside the dialog so the
+  // phone menu leaves out the same pages the desktop rail does. It was once accepted by nothing
+  // here at all: Shell passes it to whichever rail it renders, TypeScript let the swap through,
+  // and the phone quietly showed every page a person had hidden. Optional for the reason Sidebar
+  // gives, since tests mount the drawer without it and an absent set means nothing is hidden.
+  excludedDataTypes?: ReadonlySet<string>
   // The status icon. Rendered in the top bar rather than forwarded into the nav below, so it is
   // reachable without opening the drawer first: a reader who wants to know whether the numbers in
   // front of them are still arriving should not have to open a navigation menu to find out. Not
@@ -122,7 +128,7 @@ export function RailDrawer({ active, person, onSignOut, signOutError, status }: 
           <Icon name="close" />
         </button>
         <Sidebar active={active} person={person} onSignOut={onSignOut}
-          signOutError={signOutError} collapsible={false} />
+          signOutError={signOutError} excludedDataTypes={excludedDataTypes} collapsible={false} />
       </dialog>
     </>
   )
