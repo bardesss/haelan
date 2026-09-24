@@ -10,6 +10,8 @@ import { useRoute, scrollToHashTarget } from '../router.js'
 import { localToday } from '../controls/range.js'
 import { useIsPhone } from '../ui/breakpoint.js'
 import { useStatusPanel, useRunSync, useRefreshOnSyncFinish } from '../data/useStatusPanel.js'
+import { placementFor } from '../ui/placement.js'
+import type { Placement } from '../ui/placement.js'
 
 /**
  * The status icon beside the reader's name, and the panel it opens.
@@ -36,7 +38,7 @@ import { useStatusPanel, useRunSync, useRefreshOnSyncFinish } from '../data/useS
  * overflow-x compute to auto too), and a 20rem popover inside it was clipped at the rail's 186px
  * edge: about 40px of it showed, the rail grew a sideways scrollbar, and on a collapsed rail
  * nothing showed at all. The person menu beside it had the same defect on a collapsed rail and now
- * floats the same way, through placementFor below (see Sidebar.tsx).
+ * floats the same way, through the same placementFor (ui/placement.ts; see Sidebar.tsx).
  */
 export function StatusControl() {
   const { t } = useTranslation()
@@ -351,44 +353,3 @@ export function StatusControl() {
 
 /** What counts as a control in the popover, for where focus lands on open and for its Tab edges. */
 const FOCUSABLE = 'a[href], button:not(:disabled)'
-
-/** The gap between the icon and the popover, and the popover's least distance from a viewport edge. */
-const GAP_PX = 6
-
-export interface Placement { left: number, bottom: number }
-
-/**
- * Where the fixed popover goes, as a left edge and a distance from the viewport's bottom.
- *
- * Bottom rather than top, because the popover opens upward and its height is its content's: pinned
- * by its bottom edge it grows away from the icon, which is how .rail-menu opens beside it. An
- * expanded rail puts it above the icon, its left edge on the rail foot's so it lines up with the
- * name beside it. A collapsed rail is a 60px strip with no room above for anything 20rem wide, so
- * it opens past the strip's right edge - the rail's, not the icon's, which sits inside the strip's
- * padding and would leave the popover lying over the strip's last 16px - its bottom level with the
- * icon's.
- *
- * Clamped both ways into the viewport by GAP_PX: pulled left when a narrow window would push it
- * off the right edge, and pinned below the top when it is taller than the room above the icon
- * (max-height: 70vh caps it, but a short window can still make 70vh more than there is).
- */
-export function placementFor({ trigger, anchorLeft, stripRight, collapsed, size, viewport }: {
-  trigger: { left: number, top: number, right: number, bottom: number }
-  /** Where an expanded rail's popover starts: the rail foot's left edge. */
-  anchorLeft: number
-  /** Where a collapsed rail's strip ends: the rail's right edge. */
-  stripRight: number
-  collapsed: boolean
-  size: { width: number, height: number }
-  viewport: { width: number, height: number }
-}): Placement {
-  const left = collapsed ? stripRight + GAP_PX : anchorLeft
-  const bottom = collapsed ? viewport.height - trigger.bottom : viewport.height - trigger.top + GAP_PX
-  return {
-    // Near edge first, then the far one, so when both cannot hold the far one wins: the right
-    // edge over the left, the top over the bottom. A popover cut at the top loses its first
-    // connection, the one a reader opened it to see.
-    left: Math.min(Math.max(GAP_PX, left), viewport.width - size.width - GAP_PX),
-    bottom: Math.min(Math.max(GAP_PX, bottom), viewport.height - size.height - GAP_PX),
-  }
-}

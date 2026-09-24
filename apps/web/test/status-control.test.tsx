@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { StatusControl, placementFor } from '../src/components/StatusControl.js'
+import { StatusControl } from '../src/components/StatusControl.js'
 import { dayLabel } from '../src/components/StatusPanel.js'
 import { navigate } from '../src/router.js'
 import { statusKey } from '../src/data/useStatusPanel.js'
@@ -620,26 +620,6 @@ describe('the popover\'s placement', () => {
     press(icon())
     press(syncButton()!)
     expect(popover()).not.toBeNull()
-  })
-})
-
-describe('placementFor', () => {
-  const viewport = { width: 1000, height: 800 }
-  const trigger = { left: 150, top: 700, right: 180, bottom: 730 }
-
-  it('keeps an expanded-rail popover inside the viewport on both axes', () => {
-    // A foot starting past where a 320px popover would fit is pulled back in from the right.
-    expect(placementFor({ trigger, anchorLeft: 900, stripRight: 186, collapsed: false, size: { width: 320, height: 400 }, viewport }))
-      .toEqual({ left: 1000 - 320 - 6, bottom: 800 - 700 + 6 })
-    // Too tall to fit above the icon: pinned so its top stays inside the viewport.
-    expect(placementFor({ trigger, anchorLeft: 12, stripRight: 186, collapsed: false, size: { width: 320, height: 790 }, viewport }).bottom)
-      .toBe(800 - 790 - 6)
-  })
-
-  it('keeps a collapsed-rail popover from running off the top', () => {
-    const high = { left: 15, top: 40, right: 45, bottom: 70 }
-    expect(placementFor({ trigger: high, anchorLeft: 8, stripRight: 60, collapsed: true, size: { width: 320, height: 400 }, viewport }))
-      .toEqual({ left: 66, bottom: 800 - 400 - 6 })
   })
 })
 
