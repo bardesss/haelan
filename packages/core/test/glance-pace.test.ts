@@ -72,7 +72,19 @@ describe('stepsPace', () => {
     expect(pace()!.standing).toBe('ahead')
   })
 
-  it('reads each sample under its own offset', () => {
+  it('says on when today\'s pace sits within the band', () => {
+    for (const [i, date] of dates('2026-08-19', 60).entries()) day(date, [['watch', '09:00', 900 + (i % 3) * 100]], 900 + (i % 3) * 100)
+    day(TODAY, [['watch', '12:00', 1000]], 1000)
+    expect(pace()!.standing).toBe('on')
+  })
+
+  it('says behind when today\'s pace sits below the band', () => {
+    for (const [i, date] of dates('2026-08-19', 60).entries()) day(date, [['watch', '09:00', 900 + (i % 3) * 100]], 900 + (i % 3) * 100)
+    day(TODAY, [['watch', '12:00', 50]], 50)
+    expect(pace()!.standing).toBe('behind')
+  })
+
+  it('reads each sample under its own offset, and answers a pace even when today has no daily row yet', () => {
     // 11:30Z at +02:00 is 13:30 local; 12:30Z at +00:00 is 12:30 local. Today's last reading is 13:00 local.
     for (const date of dates('2026-08-19', 60)) {
       insertSamples(test.db, [
@@ -81,11 +93,28 @@ describe('stepsPace', () => {
       ])
       test.db.insert(daily).values({ personId: 'p1', localDate: date, metric: 'steps', agg: 'sum', source: 'merged', value: 1000, coverage: 1, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 1 }).run()
     }
-    // A daily row for today too, the same as every day() call above: readStepsPace requires the
-    // steps figure itself to have a value (dailyFigure reads `daily`, not samples), and this case
-    // is about the historical band's own offset handling, not about today's total.
+    // No daily row for today at all: readStepsPace no longer gates on the steps figure's own
+    // value, only on stepsUpToMinute finding a sample and the baseline existing, so a pace shows
+    // up before the derivation queue has ever written today's daily row.
     insertSamples(test.db, [{ personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: iso(TODAY, '11:00'), tzOffsetMinutes: 120, value: 10 }])
-    test.db.insert(daily).values({ personId: 'p1', localDate: TODAY, metric: 'steps', agg: 'sum', source: 'merged', value: 10, coverage: 1, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 1 }).run()
     expect(pace()!.center).toBe(600)
+  })
+
+  it('compares against today\'s own samples, not a stale daily row', () => {
+    for (const date of dates('2026-08-19', 60)) day(date, [['watch', '09:00', 1000]], 1000)
+    // Today's samples say 5000 by noon, but the daily row is a stale 10 - as it would be while the
+    // derivation queue has not yet drained today's writes. The standing follows the samples.
+    insertSamples(test.db, [{ personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: iso(TODAY, '12:00'), value: 5000 }])
+    test.db.insert(daily).values({ personId: 'p1', localDate: TODAY, metric: 'steps', agg: 'sum', source: 'merged', value: 10, coverage: 1, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 1 }).run()
+    const p = pace()!
+    expect(p.standing).toBe('ahead')
+  })
+
+  it('never counts today\'s own date among the baseline sums, however different today is from the rest', () => {
+    for (const date of dates('2026-08-19', 45)) day(date, [['watch', '09:00', 1000]], 1000)
+    day(TODAY, [['watch', '12:00', 999_999]], 999_999)
+    const p = pace()!
+    expect(p.thin).toBe(false)
+    expect(p.center).toBe(1000)
   })
 })

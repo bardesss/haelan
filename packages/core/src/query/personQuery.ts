@@ -410,13 +410,21 @@ export class PersonQuery {
   /**
    * Steps counted up to one minute of the local day, per local date, for the glance's pace.
    *
-   * The minute is today's last step reading, read under its own offset, and every earlier date is
-   * cut at the same local minute. Each date's rows go through the overrides derivation applies and
-   * through selectHourWinners, so the count is the daily total's own arithmetic stopped early: a
-   * phone and a watch in one hour are counted once, by the person's priority. One range read for
-   * the whole window (drizzle prepares per .run(), and sixty per-day reads were the rebuild's OOM).
+   * The minute is today's last step reading, read under its own offset, and every earlier date -
+   * today included - is cut at the same local minute. `today` is returned separately from `sums`
+   * because the glance's pace compares itself against its own moment, not against `daily.steps`,
+   * which lags until the derivation queue drains: comparing today's *derived* total (as of
+   * whenever it last ran) against a band cut at the *sample* cutoff mixes two different instants
+   * and can call an ordinary lag "behind" (review round 1, finding 2).
+   *
+   * Each date's rows go through the overrides derivation applies, filtered to the two sample
+   * aggregates a daily sum actually feeds from (rollUpDay's FEEDS.sum: 'raw' and 'sum' - a mean or
+   * a max row must not be added into a step count), and through selectHourWinners, so the count is
+   * the daily total's own arithmetic stopped early: a phone and a watch in one hour are counted
+   * once, by the person's priority. One range read for the whole window (drizzle prepares per
+   * .run(), and sixty per-day reads were the rebuild's OOM).
    */
-  stepsUpToMinute(input: { today: string, from: string, to: string }): { atMs: number, minuteOfDay: number, sums: Map<string, number> } | null {
+  stepsUpToMinute(input: { today: string, from: string, to: string }): { atMs: number, minuteOfDay: number, today: number, sums: Map<string, number> } | null {
     const keys = new SampleKeys(this.#db)
     const personRef = keys.personRefIfKnown(this.#personId)
     const metricRef = keys.metricRefIfKnown('steps')
@@ -429,7 +437,10 @@ export class PersonQuery {
     const overrides: OverrideLike[] = this.#db.select().from(overridesTable)
       .where(and(eq(overridesTable.personId, this.#personId), eq(overridesTable.scope, 'sample'))).all()
       .map((row) => ({ scope: row.scope, targetKey: row.targetKey, action: row.action, correctedValue: row.correctedValue ?? null }))
-    const kept = applyToSamples(rows, overrides)
+    // 'raw' and 'sum' only: the same two sample aggregates rollUpDay's own FEEDS.sum reads for the
+    // daily total (derive/rollup.ts), so a source that also reports a min/mean/max row for steps
+    // cannot double count here what the daily total never counted from it either.
+    const kept = applyToSamples(rows, overrides).filter((r) => r.agg === 'raw' || r.agg === 'sum')
     const byDate = new Map<string, SampleLike[]>()
     for (const row of kept) {
       const date = localDateOf(row.utcMs, row.tzOffsetMinutes)
@@ -441,13 +452,16 @@ export class PersonQuery {
     if (last === null) return null
     const minuteOfDay = localMinuteOf(last.utcMs, last.tzOffsetMinutes)
     const priority = loadPriority(this.#db, this.#personId)
+    const sumAt = (dayRows: SampleLike[]): number => {
+      const early = dayRows.filter((r) => localMinuteOf(r.utcMs, r.tzOffsetMinutes) <= minuteOfDay)
+      return selectHourWinners(early, priority).winning.reduce((s, r) => s + (r.value ?? 0), 0)
+    }
     const sums = new Map<string, number>()
     for (const [date, dayRows] of byDate) {
       if (date < input.from || date > input.to) continue
-      const early = dayRows.filter((r) => localMinuteOf(r.utcMs, r.tzOffsetMinutes) <= minuteOfDay)
-      sums.set(date, selectHourWinners(early, priority).winning.reduce((s, r) => s + (r.value ?? 0), 0))
+      sums.set(date, sumAt(dayRows))
     }
-    return { atMs: last.utcMs, minuteOfDay, sums }
+    return { atMs: last.utcMs, minuteOfDay, today: sumAt(byDate.get(input.today)!), sums }
   }
 
   /** The person's sleep nights in a local date range. See `readSleepNights` for the grouping. */
