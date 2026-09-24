@@ -4,7 +4,7 @@ import { mountDemoBanner } from './DemoBanner.js'
 import { demoRefusalMessage } from './client.js'
 
 // DEMO_CLOCK_MS, not DEMO_INSTANT_MS. The recorder swept every page with its DOM clock started at
-// DEMO_CLOCK_MS (instant.ts: 23:30 on the last day the seed actually wrote data for, which
+// DEMO_CLOCK_MS (instant.ts: midday of the last day the seed actually wrote data for, which
 // formats as 2026-09-06), so every url in the manifest was computed from that date.
 // DEMO_INSTANT_MS is the archive's own exclusive close, formatting as 2026-09-07, and starting the
 // browser there would make every range-dependent read ask for a day nobody recorded, opening the

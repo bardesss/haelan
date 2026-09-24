@@ -3,7 +3,7 @@ import { localMidnightMs as demoLocalMidnightMs, DEMO_INSTANT_MS, DEMO_CLOCK_MS,
 // A deliberate cross-package deep import, not '@haelan/core': `localMidnightMs` is a testing-only
 // helper the package's public index does not re-export, and this test's whole point is to reach
 // past apps/web/src/demo/instant.ts's own reimplementation and check it against the real thing.
-import { localMidnightMs as seedLocalMidnightMs, seedArchive } from '../../../packages/core/src/testing/seed.js'
+import { localMidnightMs as seedLocalMidnightMs } from '../../../packages/core/src/testing/seed.js'
 
 /**
  * instant.ts's own comment explains why its arithmetic is a deliberate copy of
@@ -49,43 +49,18 @@ describe('the demo instant agrees with the seed it is copied from', () => {
  * quietly changed the offset (a whole day, an hour) would still "look pinned" without this.
  */
 describe('DEMO_CLOCK_MS', () => {
-  it('starts half an hour before the close of the last day with data', () => {
-    // Not midday, which it was until the dashboard redesign: the seed writes the whole of that
-    // day, hourly readings through 23:00, and the capture server answers from this same clock, so
-    // a midday clock put "Good afternoon" over "today until 23:00". Pinned as an exact
-    // relationship so a future edit that quietly moved it (an hour, a day) cannot still look
-    // pinned. Not one millisecond before the close either: the clock advances (demoClock.ts says
-    // why) and loops back to here at the ceiling, so this is also how much day it replays.
-    expect(DEMO_CLOCK_MS).toBe(DEMO_INSTANT_MS - 30 * 60 * 1000)
-    const time = new Intl.DateTimeFormat('en-GB', {
-      hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Amsterdam',
-    })
-    expect(time.format(DEMO_CLOCK_MS)).toBe('23:30')
-  })
-
-  it('reads as later than every intraday reading the seed writes for that day', () => {
-    // Against the seed's real output rather than a copy of its hour arithmetic: the last day's
-    // heart rate and steps are what the glance reports "as of" and "today until", and a clock
-    // earlier than them shows a page whose data comes from its own future.
-    const puts: Array<{ dataType: string, body: unknown }> = []
-    const archive = { put: (row: { dataType: string, body: unknown }) => { puts.push(row) } }
-    type Archive = Parameters<typeof seedArchive>[0]['archive']
-    seedArchive({ archive: archive as unknown as Archive, personId: 'p', days: 1, endMs: DEMO_INSTANT_MS })
-    const readings = puts
-      .filter((row) => row.dataType === 'heart-rate' || row.dataType === 'steps')
-      .map((row) => (typeof row.body === 'string' ? row.body : JSON.stringify(row.body)))
-      // A heart-rate sample's physicalTime, a step interval's startTime: the instant the point is at.
-      .flatMap((text) => [...text.matchAll(/"(?:physicalTime|startTime)":"([^"]+)"/g)].map((m) => Date.parse(m[1]!)))
-    expect(readings.length).toBeGreaterThan(0)
-    const last = Math.max(...readings)
-    // The day really does run late: this is the gap the move closes, not a vacuous bound.
-    expect(last).toBeGreaterThanOrEqual(DEMO_INSTANT_MS - 60 * 60 * 1000)
-    expect(DEMO_CLOCK_MS).toBeGreaterThan(last)
+  it('starts at midday of the last day with data, leaving the clock room to run', () => {
+    // Twelve hours before the exclusive close, not one millisecond before it. The clock advances
+    // now (demoClock.ts says why: a constant stalls every chart animation, so bars stayed at
+    // height zero and lines stayed clipped to nothing), and an anchor a millisecond before
+    // midnight would tick straight into DEMO_END_DATE, a day the seed wrote nothing for, taking
+    // every url computed from today off the manifest with it.
+    expect(DEMO_CLOCK_MS).toBe(DEMO_INSTANT_MS - 12 * 60 * 60 * 1000)
   })
 
   it('may not run past the day it starts in', () => {
-    // The ceiling is the last millisecond of that same day, so a tab left open past midnight
-    // cannot cross into a date with no fixtures.
+    // The ceiling is the last millisecond of that same day, so a tab left open all afternoon
+    // cannot cross midnight into a date with no fixtures.
     expect(DEMO_CLOCK_CEILING_MS).toBe(DEMO_INSTANT_MS - 1)
     expect(DEMO_CLOCK_CEILING_MS).toBeGreaterThan(DEMO_CLOCK_MS)
   })

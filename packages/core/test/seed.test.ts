@@ -194,4 +194,62 @@ describe('seedArchive', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  describe('lastDayUntilMs', () => {
+    // A stand-in archive that keeps every put in order, so two runs can be compared put by put.
+    interface Put { dataType: string, windowStartMs: number, body: string }
+    const run = (input: { days: number, lastDayUntilMs?: number }): Put[] => {
+      const puts: Put[] = []
+      const archive = { put: (row: Put) => { puts.push({ dataType: row.dataType, windowStartMs: row.windowStartMs, body: row.body }) } }
+      seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', endMs: END, demoRoute: true, ...input })
+      return puts
+    }
+    // The latest instant anywhere in a point: its end for an interval, a night or a workout (its
+    // stages and route points sit inside it), its own time for a sample.
+    const pointEnds = (put: Put): number[] => {
+      const parsed = JSON.parse(put.body) as { dataPoints?: unknown[] }
+      return (parsed.dataPoints ?? []).map((point) => {
+        const instants = [...JSON.stringify(point).matchAll(/"(?:endTime|physicalTime|time)":"([^"]+)"/g)]
+          .map((m) => Date.parse(m[1]!))
+        return Math.max(...instants)
+      })
+    }
+    // Five days, so the final day (index 4) is a workout day and the workout's own cut is exercised.
+    const DAYS = 5
+    const FINAL_DAY_START = END - 86_400_000
+    const NOON = END - 12 * 3_600_000
+
+    it('leaves every earlier day byte for byte what it was, since it only filters', () => {
+      const whole = run({ days: DAYS })
+      const cut = run({ days: DAYS, lastDayUntilMs: NOON })
+      expect(cut.length).toBe(whole.length)
+      const changed = cut.flatMap((put, k) => (put.body === whole[k]!.body ? [] : [put]))
+      expect(changed.length).toBeGreaterThan(0)
+      for (const put of changed) expect(put.windowStartMs, put.dataType).toBe(FINAL_DAY_START)
+    })
+
+    it('ends every final-day reading at or before the cutoff, and keeps the ones that did', () => {
+      const cut = run({ days: DAYS, lastDayUntilMs: NOON })
+      const finalDay = cut.filter((put) => put.windowStartMs === FINAL_DAY_START)
+      for (const put of finalDay) {
+        for (const end of pointEnds(put)) expect(end, put.dataType).toBeLessThanOrEqual(NOON)
+      }
+      const count = (dataType: string): number =>
+        finalDay.filter((put) => put.dataType === dataType).reduce((n, put) => n + pointEnds(put).length, 0)
+      // The morning is still there: twelve whole hours of steps, twelve hourly heart-rate samples
+      // (noon's own is at the cutoff, so not before it), and the day's activity minutes, cut short.
+      expect(count('steps')).toBe(12)
+      expect(count('heart-rate')).toBe(12)
+      expect(count('active-minutes')).toBe(1)
+      // And the whole-day run really did run past noon, so the cut is not vacuous.
+      const whole = run({ days: DAYS }).filter((put) => put.windowStartMs === FINAL_DAY_START)
+      expect(Math.max(...whole.flatMap(pointEnds))).toBeGreaterThan(NOON)
+    })
+
+    it('refuses a cutoff outside the final day', () => {
+      expect(() => run({ days: DAYS, lastDayUntilMs: FINAL_DAY_START })).toThrow(/final day/)
+      expect(() => run({ days: DAYS, lastDayUntilMs: END + 1 })).toThrow(/final day/)
+      expect(() => run({ days: DAYS, lastDayUntilMs: END })).not.toThrow()
+    })
+  })
 })

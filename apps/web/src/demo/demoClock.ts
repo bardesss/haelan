@@ -22,15 +22,9 @@
 export function installDemoClock(startMs: number, ceilingMs = Number.POSITIVE_INFINITY): void {
   const RealDate = Date
   const origin = performance.now()
-  // Bounded, so a tab left open cannot tick past the last day the seed wrote data for: every url
+  // Clamped, so a tab left open cannot tick past the last day the seed wrote data for: every url
   // a page computes from today would miss the manifest, on a page that worked a moment earlier.
-  // Looped rather than clamped: the demo starts half an hour before its ceiling (instant.ts), and a
-  // clamp would hold the clock constant from then on, stalling every chart mounted afterwards - the
-  // defect described above. The one cost is an animation in flight at the instant of the loop,
-  // which waits for the clock to catch up with its start; every later one runs. Infinity % is
-  // the identity, so an unbounded clock is unaffected.
-  const span = ceilingMs - startMs + 1
-  const virtualNow = (): number => startMs + ((performance.now() - origin) % span)
+  const virtualNow = (): number => Math.min(startMs + (performance.now() - origin), ceilingMs)
 
   class DemoDate extends RealDate {
     constructor(...args: ConstructorParameters<typeof Date>) {
