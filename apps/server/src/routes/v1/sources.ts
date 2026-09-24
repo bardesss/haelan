@@ -49,6 +49,7 @@ export function registerSourceRoutes(app: FastifyInstance): void {
         medianGapDays: seen?.medianGapDays ?? null,
         status: seen?.status ?? 'unjudged',
         reportingNow: seen?.reportingNow ?? false,
+        continuedElsewhere: seen?.continuedElsewhere ?? false,
       }
     })
     return sendHashed(reply, request, { items })

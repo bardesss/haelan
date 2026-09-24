@@ -42,6 +42,13 @@ export interface SourceActivityFields {
    * drifts. See packages/core/src/api/sourceCadence.ts, which both sides share.
    */
   reportingNow: boolean
+  /**
+   * A stale source whose routine metrics all kept arriving from other sources since it stopped -
+   * a device the provider renamed, or whose data moved to another path. Still `stale` here,
+   * because the id did stop; only the cards' warnings skip it, since nothing they show is
+   * missing. Computed by the server for the same reason as `reportingNow`.
+   */
+  continuedElsewhere: boolean
 }
 
 export type NamedSourceWithActivity = NamedSource & SourceActivityFields

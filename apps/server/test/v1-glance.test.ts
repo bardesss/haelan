@@ -94,8 +94,16 @@ describe('GET /api/v1/p/:personId/glance', () => {
     // The shape derivation writes when a device stops: the watch and the phone both report through
     // July, and each day's merged row names both; from August on only the phone reports, and the
     // merged rows name only it. Nothing in the last week mentions the watch.
+    //
+    // The watch also measures heart rate and the phone does not. Without that the phone would
+    // carry on with everything the watch reported, which is a renamed device rather than a dead
+    // one, and no card warns about it (core's sourceActivity.ts, `continuedElsewhere`).
     for (let d = 1; d <= 31; d += 1) {
       const localDate = `2026-07-${String(d).padStart(2, '0')}`
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate, metric: 'heart_rate', agg: 'mean', source: 'w1', value: 60, coverage: 1, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
       row(localDate, 'w1', null)
       row(localDate, 'ph', null)
       row(localDate, 'merged', mix('w1', 'ph'))

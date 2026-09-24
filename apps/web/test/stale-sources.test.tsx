@@ -42,7 +42,7 @@ const PERSON: Session = {
 function source(id: string, name: string, over: Partial<NamedSourceWithActivity> = {}): NamedSourceWithActivity {
   return {
     id, name, kind: 'device', createdAtMs: 0,
-    lastReportedDate: '2026-08-12', reportingDates: 90, medianGapDays: 1, status: 'stale', reportingNow: false,
+    lastReportedDate: '2026-08-12', reportingDates: 90, medianGapDays: 1, status: 'stale', reportingNow: false, continuedElsewhere: false,
     ...over,
   } as NamedSourceWithActivity
 }
@@ -111,6 +111,16 @@ describe('the stale source warning', () => {
     act(() => { root!.render(tree(<StaleSourcesProvider rangeEnd="2026-08-31">{card(points(mix('watch', 'scale')))}</StaleSourcesProvider>, [
       source('watch', 'My watch', { status: 'reporting', reportingNow: true }),
       source('scale', 'Scale', { status: 'unjudged', medianGapDays: null }),
+    ])) })
+    expect(warnings()).toHaveLength(0)
+  })
+
+  it('says nothing about a stale source whose data carried on under another source', () => {
+    // A watch the provider renamed: the old id stopped, but everything it reported still arrives
+    // under the new one, so the card is missing nothing and a warning would be a false alarm.
+    act(() => { root!.render(tree(<StaleSourcesProvider rangeEnd="2026-08-31">{card(points(mix('watch-old-name', 'watch')))}</StaleSourcesProvider>, [
+      source('watch-old-name', 'Watch, long name', { continuedElsewhere: true }),
+      source('watch', 'Watch', { status: 'reporting', reportingNow: true, lastReportedDate: '2026-08-31' }),
     ])) })
     expect(warnings()).toHaveLength(0)
   })

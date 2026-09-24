@@ -11,13 +11,13 @@ afterEach(() => test.cleanup())
 
 /** `days` reporting dates from `from`, one every `everyDays` (default consecutive). */
 const seedDates = (o: {
-  sourceId: string, from: string, days: number, everyDays?: number, personId?: string,
+  sourceId: string, from: string, days: number, everyDays?: number, personId?: string, metric?: string,
 }) => {
   const start = Date.parse(`${o.from}T00:00:00Z`)
   for (let i = 0; i < o.days; i += 1) {
     const date = new Date(start + i * (o.everyDays ?? 1) * 86_400_000).toISOString().slice(0, 10)
     test.db.insert(daily).values({
-      personId: o.personId ?? 'p1', localDate: date, metric: 'steps', agg: 'sum',
+      personId: o.personId ?? 'p1', localDate: date, metric: o.metric ?? 'steps', agg: 'sum',
       source: o.sourceId, value: 1000, coverage: 0.9, sourceMix: null,
       derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
     }).run()
@@ -109,6 +109,66 @@ describe('readSourceActivity', () => {
     seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20 })
     expect(readSourceActivity(test.db, 'p1', { today: '2026-01-21' }).map((a) => a.sourceId))
       .toEqual(['s-watch'])
+  })
+
+  describe('a stale source whose data kept arriving under another source', () => {
+    const byId = (today: string) =>
+      new Map(readSourceActivity(test.db, 'p1', { today }).map((a) => [a.sourceId, a]))
+
+    it('is continued elsewhere when a renamed device carries on with everything it reported', () => {
+      // The shape the Google Health API produced: it names a device only by its displayName, and
+      // one fetch attributed a stretch of the watch's history to a longer name than every fetch
+      // since. Two source rows, one physical watch, and the old name silent ever after.
+      for (const metric of ['steps', 'heart_rate', 'daily_hrv']) {
+        seedDates({ sourceId: 's-watch-long-name', from: '2026-01-01', days: 20, metric })
+        seedDates({ sourceId: 's-watch', from: '2026-01-18', days: 23, metric })
+      }
+      const old = byId('2026-02-09').get('s-watch-long-name')!
+      // Still stale: the id really did stop, and the settings card says so truthfully.
+      expect(old.status).toBe('stale')
+      expect(old.continuedElsewhere).toBe(true)
+    })
+
+    it('is not continued when only part of what it reported carries on, as a phone does for a dead watch', () => {
+      // The case the warning exists for: the watch dies, the phone keeps counting steps, and the
+      // step chart thins with no day wrong. Nothing else measures the heart rate, so it warns.
+      seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20, metric: 'steps' })
+      seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20, metric: 'heart_rate' })
+      seedDates({ sourceId: 's-phone', from: '2026-01-01', days: 40, metric: 'steps' })
+      const watch = byId('2026-02-09').get('s-watch')!
+      expect(watch.status).toBe('stale')
+      expect(watch.continuedElsewhere).toBe(false)
+    })
+
+    it('does not let an occasional metric in its last week hold the verdict hostage', () => {
+      // A workout on one day of the final week is not part of the watch's routine; requiring a
+      // successor to have logged a workout since would keep a renamed watch warning until the
+      // household next exercised.
+      seedDates({ sourceId: 's-old', from: '2026-01-01', days: 20, metric: 'steps' })
+      seedDates({ sourceId: 's-old', from: '2026-01-19', days: 1, metric: 'workout_count' })
+      seedDates({ sourceId: 's-new', from: '2026-01-21', days: 20, metric: 'steps' })
+      expect(byId('2026-02-09').get('s-old')!.continuedElsewhere).toBe(true)
+    })
+
+    it('does not count rows the successor wrote before the silence began', () => {
+      // Overlap is normal (both names covered the same days for a while), and those days prove
+      // nothing about whether the data is still arriving now.
+      seedDates({ sourceId: 's-old', from: '2026-01-01', days: 20, metric: 'heart_rate' })
+      seedDates({ sourceId: 's-other', from: '2026-01-01', days: 20, metric: 'heart_rate' })
+      expect(byId('2026-02-09').get('s-old')!.continuedElsewhere).toBe(false)
+    })
+
+    it('is never continued by the derived tiers, which only restate what the devices sent', () => {
+      seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20 })
+      seedDates({ sourceId: 'merged', from: '2026-01-01', days: 40 })
+      seedDates({ sourceId: 'provider', from: '2026-01-01', days: 40 })
+      expect(byId('2026-02-09').get('s-watch')!.continuedElsewhere).toBe(false)
+    })
+
+    it('is false for a source that is not stale at all', () => {
+      seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20 })
+      expect(byId('2026-01-21').get('s-watch')!.continuedElsewhere).toBe(false)
+    })
   })
 
   it('reports a source with a single reporting date without dividing by a gap it has not got', () => {

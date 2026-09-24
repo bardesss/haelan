@@ -84,6 +84,11 @@ describe('staleness', () => {
    * after it stops, the merged rows name only the phone, which keeps reporting through TODAY. So
    * nothing in the last seven days mentions the watch at all, which is exactly why a figure has
    * to look back further than its strip to notice it went quiet.
+   *
+   * The watch also measures blood oxygen, which the phone never does (seeded once in beforeEach,
+   * since some tests call this for several metrics). A phone that went on reporting every metric
+   * the watch did would make the watch "continued elsewhere" (sourceActivity.ts), which is the
+   * renamed-device case below rather than a dead watch.
    */
   function seedWatchThenPhone(metric: string, agg: string) {
     for (const date of datesEnding('2026-07-31', 30)) {
@@ -99,6 +104,9 @@ describe('staleness', () => {
 
   beforeEach(() => {
     test.db.insert(sources).values({ id: 'phone', personId: 'p1', externalId: 'phone', displayName: 'Phone', kind: 'device', createdAtMs: 0 }).run()
+    for (const date of datesEnding('2026-07-31', 30)) {
+      insert({ metric: 'spo2', agg: 'mean', localDate: date, value: 1, source: 'watch', sourceMix: null })
+    }
   })
 
   it('names a stale source that fed the figure before it went quiet, and not one that is still reporting', () => {
@@ -115,6 +123,27 @@ describe('staleness', () => {
     const recovery = readRecovery(ctx())
     expect(recovery.restingHeartRate.staleSources).toEqual([watchStale])
     expect(recovery.index.staleSources).toEqual([watchStale])
+  })
+
+  it('names no source on the recovery card when the watch only changed its name', () => {
+    // The false positive this guards: the provider named the same watch two ways, so its first
+    // weeks sit under a source id that has been silent since, while the watch itself reports
+    // every day under the other. The recovery figures' baselines reach back into the old name's
+    // rows, so without the continuation check the card warned that a working watch had stopped.
+    test.db.insert(sources).values({ id: 'watch-renamed', personId: 'p1', externalId: 'watch-renamed', displayName: 'Watch, long name', kind: 'device', createdAtMs: 0 }).run()
+    for (const metric of ['resting_heart_rate', 'daily_hrv']) {
+      for (const date of datesEnding('2026-07-31', 30)) {
+        insert({ metric, agg: 'last', localDate: date, value: 1, source: 'watch-renamed', sourceMix: null })
+        insert({ metric, agg: 'last', localDate: date, value: 1, sourceMix: mix('watch-renamed') })
+      }
+      for (const date of datesEnding(TODAY, 20)) {
+        insert({ metric, agg: 'last', localDate: date, value: 1, source: 'watch', sourceMix: null })
+        insert({ metric, agg: 'last', localDate: date, value: 1, sourceMix: mix('watch') })
+      }
+    }
+    const recovery = readRecovery(ctx())
+    expect(recovery.restingHeartRate.staleSources).toEqual([])
+    expect(recovery.index.staleSources).toEqual([])
   })
 })
 

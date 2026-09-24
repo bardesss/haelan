@@ -59,6 +59,11 @@ export function StaleSourcesProvider({ rangeEnd, children }: { rangeEnd: string,
     const stale = new Map<string, StaleSource>()
     for (const item of items ?? []) {
       if (item.status !== 'stale' || item.lastReportedDate === null) continue
+      // Its data kept arriving under another source id, so no card is missing anything and a
+      // warning would tell the reader a working watch had stopped (packages/core's
+      // sourceActivity.ts). A response without the field reads as false, which is the old
+      // behaviour: a warning.
+      if (item.continuedElsewhere) continue
       stale.set(item.id, { sourceId: item.id, name: item.name, lastReportedDate: item.lastReportedDate, medianGapDays: item.medianGapDays })
     }
     return { stale, rangeEnd }

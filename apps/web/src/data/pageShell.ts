@@ -1,4 +1,5 @@
-import { cadenceOf } from '@haelan/core/source-cadence'
+import { cadenceOf, continuedElsewhere } from '@haelan/core/source-cadence'
+import type { SourceReport } from '@haelan/core/source-cadence'
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { MetricSeries } from './useSeries.js'
 import { sourceParam } from '../controls/source.js'
@@ -64,10 +65,12 @@ export function sourcesStoppedInRange(
   queries: readonly UseQueryResult<Record<string, MetricSeries>>[], rangeEnd: string,
 ): string[] {
   const datesBySource = new Map<string, string[]>()
+  const reports: SourceReport[] = []
   for (const query of queries) {
-    for (const series of Object.values(query.data ?? {})) {
+    for (const [metric, series] of Object.entries(query.data ?? {})) {
       for (const point of series.points) {
         for (const source of sourcesIn(point.sourceMix)) {
+          reports.push({ source, date: point.localDate, metric })
           // Duplicates are expected and harmless: one point per metric per day means the same
           // date arrives once per metric, and cadenceOf takes the distinct set.
           const dates = datesBySource.get(source)
@@ -78,7 +81,14 @@ export function sourcesStoppedInRange(
     }
   }
   return [...datesBySource]
-    .filter(([, dates]) => cadenceOf(dates, rangeEnd).status === 'stale')
+    .filter(([source, dates]) => {
+      const cadence = cadenceOf(dates, rangeEnd)
+      // A source whose metrics on this page all kept arriving under another id after it went
+      // quiet - a watch the provider renamed - thinned nothing here, so saying it stopped would
+      // be a false alarm. The same rule the server applies to the cards' warnings, over the
+      // metrics this page loaded rather than every metric the source ever sent.
+      return cadence.status === 'stale' && !continuedElsewhere(source, cadence.lastReportedDate!, reports)
+    })
     .map(([source]) => source)
     .sort()
 }

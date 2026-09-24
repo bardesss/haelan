@@ -46,7 +46,7 @@ const namedSource = (over: Partial<NamedSourceWithActivity> = {}): NamedSourceWi
   id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4',
   alias: null, name: 'My watch', kind: 'device', createdAtMs: 0,
   lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
-  status: 'reporting', reportingNow: true,
+  status: 'reporting', reportingNow: true, continuedElsewhere: false,
   ...over,
 })
 
