@@ -53,10 +53,12 @@ describe('the @haelan/core/metrics subpath', () => {
     // the two imports splitHeartRate.ts makes, into workoutSummary.ts and cardioLoad.ts;
     // source-cadence-subpath.test.ts allow-lists an empty list, since that module is arithmetic
     // over dates and imports nothing at all; and nights-subpath.test.ts holds ./nights, the
-    // one-night-per-date rule the glance and apps/web share, to the same empty list.
+    // one-night-per-date rule the glance and apps/web share, to the same empty list;
+    // status-panel-subpath.test.ts holds ./status-panel, whose 30-day default rule the server's
+    // panel and the source list's switch share, to that empty list too.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './cardio-load', './coverage-signal', './metric-data-type', SUBPATH,
-      './nights', './recovery-index', './source-cadence', './split-heart-rate', './target-key', './training-load',
+      './nights', './recovery-index', './source-cadence', './split-heart-rate', './status-panel', './target-key', './training-load',
       './workout-comparison', './workout-summary',
     ])
   })
