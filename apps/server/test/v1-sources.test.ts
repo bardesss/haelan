@@ -72,6 +72,19 @@ describe('GET /sources, the activity each one reports', () => {
     })
   })
 
+  // panelChoice rides along on this same listing, so the settings card can show the panel's
+  // current state without a second request. null is the default state (no row at all); a stored
+  // choice, true or false, comes back exactly as PUT /sources/:sourceId/panel wrote it.
+  it("carries each source's panel choice, or null for one that was never set", async () => {
+    seedDates('watch', '2026-01-01', 14)
+    h.app.haelan.instance.sourceVisibility.put({ personId: 'p1', sourceId: 'watch', visible: false, nowMs: 1 })
+    const items = (await listWithActivity()).json().items
+    const watch = items.find((i: { id: string }) => i.id === 'watch')
+    const app = items.find((i: { id: string }) => i.id === 'app')
+    expect(watch).toMatchObject({ panelChoice: false })
+    expect(app).toMatchObject({ panelChoice: null })
+  })
+
   it('says whether a stale source carried on under another id, which is what the cards read', async () => {
     // The app takes over the watch's one metric the day after it stops, as a renamed device's
     // new id does. The listing still calls the old id stale; the cards read the second field.
@@ -267,6 +280,65 @@ describe('PUT /source-priority', () => {
   it('needs a session', async () => {
     const response = await h.app.inject({
       method: 'PUT', url: '/api/v1/p/p1/source-priority', payload: { sourceIds: [] },
+    })
+    expect(response.statusCode).toBe(401)
+  })
+})
+
+describe('PUT /sources/:sourceId/panel and DELETE /sources/:sourceId/panel', () => {
+  it('records a panel choice and clears it back to the default', async () => {
+    const put = await h.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/sources/watch/panel',
+      headers: { ...auth(), 'content-type': 'application/json' },
+      payload: { visible: false },
+    })
+    expect(put.statusCode).toBe(200)
+    expect(put.json()).toEqual({ visible: false })
+    expect(h.app.haelan.instance.sourceVisibility.list('p1').get('watch')).toBe(false)
+
+    const del = await h.app.inject({
+      method: 'DELETE', url: '/api/v1/p/p1/sources/watch/panel', headers: auth(),
+    })
+    expect(del.statusCode).toBe(200)
+    expect(del.json()).toEqual({ visible: null })
+    expect(h.app.haelan.instance.sourceVisibility.list('p1').has('watch')).toBe(false)
+  })
+
+  it('refuses a non-boolean', async () => {
+    const put = await h.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/sources/watch/panel',
+      headers: { ...auth(), 'content-type': 'application/json' },
+      payload: { visible: 'yes' },
+    })
+    expect(put.statusCode).toBe(400)
+    expect(put.json().error.kind).toBe('config')
+  })
+
+  // The isolation rule: another person's source is indistinguishable from one that is not there,
+  // the same discipline the alias routes above already follow.
+  it('answers not_found for another person\'s source', async () => {
+    const other = await h.addPerson({ id: 'p2', displayName: 'Other', username: 'other' })
+    h.app.haelan.instance.db.insert(schema.sources).values({
+      id: 'theirs', personId: other.personId, externalId: 'x', displayName: 'Theirs', kind: 'device', createdAtMs: 0,
+    }).run()
+    const put = await h.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/sources/theirs/panel',
+      headers: { ...auth(), 'content-type': 'application/json' },
+      payload: { visible: false },
+    })
+    expect(put.statusCode).toBe(404)
+    expect(put.json().error.kind).toBe('not_found')
+
+    const del = await h.app.inject({
+      method: 'DELETE', url: '/api/v1/p/p1/sources/theirs/panel', headers: auth(),
+    })
+    expect(del.statusCode).toBe(404)
+    expect(del.json().error.kind).toBe('not_found')
+  })
+
+  it('needs a session', async () => {
+    const response = await h.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/sources/watch/panel', payload: { visible: true },
     })
     expect(response.statusCode).toBe(401)
   })

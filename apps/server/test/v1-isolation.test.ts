@@ -550,6 +550,8 @@ describe('the versioned surface, beyond the per-route table', () => {
     'DELETE /api/v1/p/:personId/events/:eventId',
     'PUT /api/v1/p/:personId/sources/:sourceId/alias',
     'DELETE /api/v1/p/:personId/sources/:sourceId/alias',
+    'PUT /api/v1/p/:personId/sources/:sourceId/panel',
+    'DELETE /api/v1/p/:personId/sources/:sourceId/panel',
     'PUT /api/v1/p/:personId/data-types',
     'PUT /api/v1/p/:personId/source-priority',
     'POST /api/v1/p/:personId/ingest/:dataTypeId',
@@ -1042,6 +1044,111 @@ describe('the versioned surface, beyond the per-route table', () => {
       expect(removed.statusCode).toBe(404)
       expect(removed.json()).toMatchObject({ error: { kind: 'not_found', code: 'no_such_source' } })
       expect(aliases.listNamed('p2').find((s) => s.id === 'theirs')?.alias).toBe('Theirs')
+    })
+  })
+
+  // The panel visibility routes: same shape as the alias family right above, and the same reason
+  // for the store read back rather than a response body needle - PUT answers { visible }, which a
+  // guard that acted against the wrong person and then refused would still get right for p1's own
+  // path, so what actually proves the isolation is what SourceVisibilityStore says afterwards.
+  describe('source panel visibility writes', () => {
+    it('answers 401 with no session at all, before touching anything', async () => {
+      harness = await withServer()
+      await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p1', 'mine')
+      seedSource(harness, 'p2', 'theirs')
+      const visibility = harness.app.haelan.instance.sourceVisibility
+      visibility.put({ personId: 'p2', sourceId: 'theirs', visible: false, nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/sources/mine/panel',
+        payload: { visible: true },
+      })
+      expect(written.statusCode).toBe(401)
+      expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+
+      const removed = await harness.app.inject({ method: 'DELETE', url: '/api/v1/p/p1/sources/mine/panel' })
+      expect(removed.statusCode).toBe(401)
+      expect(removed.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+
+      // p1, not p2: both requests above name p1 in the path, so a guard that failed open would
+      // touch p1's own choice, never p2's. p2's choice is read too, for the symmetry, but it was
+      // never the one a broken guard here would touch.
+      expect(visibility.list('p1').has('mine')).toBe(false)
+      expect(visibility.list('p2').get('theirs')).toBe(false)
+    })
+
+    it('refuses both writes against another person, and leaves their choice unchanged', async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p2', 'theirs')
+      const visibility = harness.app.haelan.instance.sourceVisibility
+      visibility.put({ personId: 'p2', sourceId: 'theirs', visible: false, nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p2/sources/theirs/panel',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { visible: true },
+      })
+      expect(written.statusCode).toBe(403)
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p2/sources/theirs/panel',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(403)
+      expect(removed.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+      expect(visibility.list('p2').get('theirs')).toBe(false)
+    })
+
+    it("sets and clears a choice for the session's own person", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      seedSource(harness, 'p1', 'mine')
+      const visibility = harness.app.haelan.instance.sourceVisibility
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/sources/mine/panel',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { visible: true },
+      })
+      expect(written.statusCode).toBe(200)
+      expect(visibility.list('p1').get('mine')).toBe(true)
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p1/sources/mine/panel',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(200)
+      expect(visibility.list('p1').has('mine')).toBe(false)
+    })
+
+    it("refuses to touch a source id that belongs to another person, and leaves its choice alone", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p2', 'theirs')
+      const visibility = harness.app.haelan.instance.sourceVisibility
+      visibility.put({ personId: 'p2', sourceId: 'theirs', visible: false, nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/sources/theirs/panel',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { visible: true },
+      })
+      expect(written.statusCode).toBe(404)
+      expect(written.json()).toMatchObject({ error: { kind: 'not_found', code: 'no_such_source' } })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p1/sources/theirs/panel',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(404)
+      expect(removed.json()).toMatchObject({ error: { kind: 'not_found', code: 'no_such_source' } })
+      expect(visibility.list('p2').get('theirs')).toBe(false)
     })
   })
 

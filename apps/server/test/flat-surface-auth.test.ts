@@ -135,6 +135,12 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   },
 
   {
+    route: 'GET /api/status',
+    auth: 'session',
+    why: 'the status panel\'s one read; it answers for the caller\'s own person, resolved from the session, never from a path segment',
+  },
+
+  {
     route: 'GET /api/settings/backfill-horizon',
     auth: 'session',
     why: 'reading the horizon tells a member how far their own history reaches; the PUT beside it is admin',

@@ -252,3 +252,12 @@ export type { DescribedPerson } from './query/personQuery.ts'
 export type {
   Glance, GlanceFigure, GlanceBaseline, GlanceStripDay, GlanceStaleSource, GlanceSleep, GlanceRecovery, GlanceDay, GlanceHeartRate,
 } from './query/glance.ts'
+
+// M9b/status-panel task 5. The status panel's own composition: connections, their devices and a
+// per-source panel choice, from facts the server already holds. Same discipline as the readers
+// above - only the pure composer and its shapes are exported, the server's own route assembles
+// StatusInput from stores this package does not reach.
+export { composeStatus, shownByDefault, PANEL_DEFAULT_WINDOW_DAYS, PHONE_QUIET_MS } from './api/statusPanel.ts'
+export type {
+  StatusPanel, StatusInput, StatusConnection, StatusDevice, StatusSync, ConnectionKind, ConnectionProblem,
+} from './api/statusPanel.ts'
