@@ -67,10 +67,12 @@ function points(sourceMix: string | null, source = 'merged'): SeriesPoint[] {
 
 const OK = { isError: false, isPending: false, refetch: () => {} }
 
+// The basis keys are activity.distance's because the dashboard.steps pair these cards used to borrow
+// left with the old Dashboard in M9b; distance's two templates have the same shape and placeholders.
 function card(pts: SeriesPoint[], label: string | undefined = 'Steps'): ReactNode {
   return (
     <MetricCard metric="steps" query={OK} points={pts} span={4} label={label} basisPlacement="header"
-      basisKey="dashboard.steps.basis" basisWornKey="dashboard.steps.basisWorn" basisValues={{ total: 31 }}>
+      basisKey="activity.distance.basis" basisWornKey="activity.distance.basisWorn" basisValues={{ total: 31 }}>
       {() => <p>chart</p>}
     </MetricCard>
   )
@@ -79,7 +81,7 @@ function card(pts: SeriesPoint[], label: string | undefined = 'Steps'): ReactNod
 function tile(pts: SeriesPoint[]): ReactNode {
   return (
     <MetricCard metric="steps" query={OK} points={pts} span={4} basisPlacement="body"
-      basisKey="dashboard.steps.basis" basisWornKey="dashboard.steps.basisWorn" basisValues={{ total: 31 }}>
+      basisKey="activity.distance.basis" basisWornKey="activity.distance.basisWorn" basisValues={{ total: 31 }}>
       {(basis) => <StatTile label="Steps" value="24,000" basis={basis} />}
     </MetricCard>
   )

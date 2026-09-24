@@ -9,7 +9,19 @@ import { Loading } from '../../components/Loading.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import { useRecoveryIndex } from '../../data/useRecoveryIndex.js'
 import { formatNumber, formatLocalDate } from '../../format.js'
-import { asOfLabel } from '../dashboard/RecoveryIndexTile.js'
+
+/**
+ * The scored date, or null when it IS today.
+ *
+ * Exported so the rule can be asserted without mounting. This archive routinely lags sync by
+ * several days, and a prominent number from last Sunday with nothing saying so is worse than a
+ * quiet one. The mechanism is the scored date itself, NOT M6a's staleness read: that judges
+ * whether a source has gone quiet against its own cadence, which is a different question and one
+ * this card does not need to ask.
+ */
+export function asOfLabel(scored: string, today: string): string | null {
+  return scored === today ? null : scored
+}
 
 export interface ContributionRow {
   key: RecoveryInput['key']
@@ -81,9 +93,8 @@ export function RecoveryIndexCard({ from, to, source, today, span = 8 }: {
   // back to `formatMetricValue(value, metric, ...)` when a caller omits `formatValue`.
   const formatScore = (value: number | null, absent: string): string => formatNumber(value, 0, i18n.language, absent)
 
-  // The same staleness the Dashboard tile already states (RecoveryIndexTile.tsx's own asOfLabel):
-  // this archive routinely lags sync by several days, and this card's headline used to say nothing
-  // about it even though the tile right next to it does.
+  // The scored day, when it is not today (asOfLabel above): this archive routinely lags sync by
+  // several days, and a headline that said nothing about it would pass last Sunday off as today.
   const asOf = asOfLabel(latest.date, today)
   const basis = [
     t('recoveryIndex.basis', { days: BASELINE_WINDOW_DAYS }),

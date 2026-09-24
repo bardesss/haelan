@@ -9,16 +9,18 @@ import { dayMetricTarget } from '@haelan/core/target-key'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
+import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
+import { glanceBody } from './glanceFixture.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
-// this, the same reason dashboard-round-trip.test.tsx sets them.
+// this.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 let container: HTMLDivElement | null = null
@@ -57,15 +59,17 @@ function stubFetch(): () => void {
     if (url.includes('/api/sync/status')) {
       return json({ running: false, lastFinishedAtMs: null, rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] } })
     }
-    // A real override (on steps, so the "metric already has annotations" branch of
-    // mergeDayAnnotations runs, not only the fallback every other metric takes) plus a real note
-    // and a real event, both on the same day: task 11b's own merge has to keep every one of these
-    // arrays stable across the rerender below, on both branches, not only on an empty page.
+    // A real override plus a real note and a real event, all on the same day: task 11b's own merge
+    // has to keep every one of these arrays stable across a rerender, on both branches, not only on
+    // an empty page. The override is on resting_heart_rate because Recovery's week tab draws that
+    // metric's sparkline (the case below that mounts it), so the "metric already has annotations"
+    // branch of mergeDayAnnotations, the one that concatenates a fresh array, reaches a chart. It
+    // used to sit on steps, which only the old Dashboard drew; the glance reads no annotations.
     if (url.includes('/overrides')) {
       return json({
         items: [{
           id: 'o1', scope: 'day_metric',
-          targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'steps' }),
+          targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'resting_heart_rate' }),
           action: 'exclude', correctedValue: null, reason: 'Watch left charging',
         }],
       })
@@ -99,7 +103,7 @@ function stubFetch(): () => void {
           startMs: start, endMs: start + 6 * 3_600_000,
           startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [],
           // Always present on the real route (packages/core/src/query/sleepNights.ts, empty is a
-          // measurement); Dashboard.tsx now reads its length unconditionally for the
+          // measurement), and the pages that draw a night read its length unconditionally for the
           // excluded-sessions line, the same field sleep-page.test.tsx's own fixture already sends.
           excludedSessions: [],
           segments: [{ stage: 'DEEP', startMs: start, endMs: start + 6 * 3_600_000 }],
@@ -108,8 +112,11 @@ function stubFetch(): () => void {
       })
     }
     if (url.includes('/insights')) return json(insightBody(url))
-    // Only reached on the Day tab: useSourceNames (IntradayHeartRate's own nameOf) and useIntraday
-    // both mount there and nowhere else on this page (Dashboard.tsx gates both on controls.tab).
+    // The glance Dashboard's one read, carrying a night (the hypnogram) and today's heart rate
+    // points (the trace), so both of its echarts instances mount.
+    if (url.includes('/glance')) return json(glanceBody())
+    // useSourceNames (IntradayHeartRate's own nameOf): reached by Recovery's Day tab and by the
+    // glance's Today card, the two places this file mounts that chart.
     if (url.includes('/sources')) {
       return json({
         items: [{
@@ -298,16 +305,18 @@ describe('the charts across a rerender', () => {
   // queries settling at different moments that is roughly eight teardowns and rebuilds of five
   // echarts instances on a single page load.
   //
-  // stubFetch above answers a real override, a real note and a real event now (task 11b), so this
-  // also exercises mergeDayAnnotations on both of its branches: steps carries an override plus the
-  // day level list concatenated onto it, and every other chart on the page falls back to the day
-  // level list by reference. A badly memoised merge on either branch (a fresh concat per render, or
-  // dayAnnotations rebuilt on a render that changed neither query) would fail this the same way the
-  // original defect did.
+  // The page is the glance since M9b: one read, and three kinds of chart built from it (the
+  // hypnogram from the night's segments made relative to its start, the heart rate trace from
+  // today's points, and a seven-day strip per card). The segments are mapped on the page, so a
+  // mapping recomputed on every render rather than memoised on the night would hand the hypnogram
+  // a new array each commit and fail this the same way the original defect did. The glance reads
+  // no annotations, so the annotation merge (mergeDayAnnotations) is not exercised here: the
+  // Recovery week-tab case below is the one that guards it.
   it('are not disposed and re-initialised when nothing they draw has changed', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', '/')
     const tree = (node: ReactNode): ReactNode => (
       <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
     )
@@ -316,7 +325,9 @@ describe('the charts across a rerender', () => {
     await flush(client, () => container!.innerHTML)
 
     const before = chartRoots()
-    expect(before.length).toBeGreaterThan(0)
+    // The hypnogram and the heart rate trace, by name, so this cannot pass on the strips alone.
+    expect(container!.querySelector('[role="img"][aria-label^="Sleep stages through the night of"]')).not.toBeNull()
+    expect(container!.querySelector('[role="img"][aria-label="Heart rate today"]')).not.toBeNull()
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled
@@ -332,29 +343,68 @@ describe('the charts across a rerender', () => {
     restore()
   })
 
-  // Finding 1 of the m5a source naming branch's final review: useSourceNames handed back a fresh
-  // object, and so a fresh `nameOf`, on every render. IntradayHeartRate's own `build` closes over
-  // `nameOf` and lists it in that useCallback's deps, and useChart keys its init/dispose effect on
-  // `build`, so a stable session and a stable query cache still tore the chart down and rebuilt it
-  // on every render -- the case above never caught it because it stays on the week tab, and
-  // Dashboard.tsx only mounts IntradayHeartRate on the Day tab.
-  it('are not disposed and re-initialised on the Day tab either, where IntradayHeartRate lives', async () => {
+  // The annotation merge's own guard. The stub puts an override on resting_heart_rate, so that
+  // metric's entry in mergeDayAnnotations' result is a concatenation (the override's reason plus the
+  // day's note and event) rather than the shared dayAnnotations array every other metric falls back
+  // to. A fresh concatenation is a fresh array, so if useDayAnnotations' memo on the merge were
+  // dropped the resting heart rate sparkline would be handed a new `annotations` on every render
+  // and be rebuilt; the fallback branch alone would never show it, because its array is shared.
+  it('are not disposed and re-initialised on Recovery\'s week tab, where an overridden metric\'s annotations are merged', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
-    window.history.replaceState(null, '', '/dashboard?range=day&on=2026-08-12')
+    window.history.replaceState(null, '', '/recovery?range=week&on=2026-08-12')
     const tree = (node: ReactNode): ReactNode => (
       <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
     )
 
-    act(() => { root!.render(tree(<Dashboard />)) })
+    act(() => { root!.render(tree(<Recovery />)) })
+    await flush(client, () => container!.innerHTML)
+
+    // The overridden metric's own chart is on the page, so the case cannot pass without it.
+    const hosts = [...container!.querySelectorAll('[role="img"]')]
+    expect(hosts.some((host) => (host.getAttribute('aria-label') ?? '').startsWith('Daily resting heart rate'))).toBe(true)
+    const before = chartRoots()
+    expect(before.every((node) => node !== null)).toBe(true)
+
+    act(() => { root!.render(tree(<Recovery />)) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    const after = chartRoots()
+    expect(after).toHaveLength(before.length)
+    for (let i = 0; i < before.length; i += 1) {
+      expect(after[i], `chart ${i} was re-initialised`).toBe(before[i])
+    }
+    restore()
+  })
+
+  // Finding 1 of the m5a source naming branch's final review: useSourceNames handed back a fresh
+  // object, and so a fresh `nameOf`, on every render. IntradayHeartRate's own `build` closes over
+  // `nameOf` and lists it in that useCallback's deps, and useChart keys its init/dispose effect on
+  // `build`, so a stable session and a stable query cache still tore the chart down and rebuilt it
+  // on every render -- the case above never caught it because it stays on the week tab, and the
+  // heart rate card only mounts IntradayHeartRate on the Day tab.
+  //
+  // Mounts Recovery, not Dashboard: HeartRateCard (pages/recovery/HeartRateCard.tsx) moved out of
+  // Dashboard.tsx in M9b and Recovery.tsx is now the only page that mounts it, which is where this
+  // defect would reopen on the page's own render loop just as readily as it did on Dashboard's.
+  it('are not disposed and re-initialised on the Day tab either, where IntradayHeartRate lives', async () => {
+    const restore = stubFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', '/recovery?range=day&on=2026-08-12')
+    const tree = (node: ReactNode): ReactNode => (
+      <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
+    )
+
+    act(() => { root!.render(tree(<Recovery />)) })
     await flush(client, () => container!.innerHTML)
 
     const before = chartRoots()
     expect(before.length).toBeGreaterThan(0)
     expect(before.every((node) => node !== null)).toBe(true)
 
-    act(() => { root!.render(tree(<Dashboard />)) })
+    act(() => { root!.render(tree(<Recovery />)) })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     const after = chartRoots()
@@ -370,8 +420,8 @@ describe('the charts across a rerender', () => {
   // a fresh `filter().map()` / `zoneRows(...)` call over it, so the workout page's two charts (the
   // zone bar and the heart rate trace) were disposed and reinitialised on every commit - window
   // focus, opening or closing the annotate panel, and the session-scope invalidation M8b itself
-  // added among them. This is the same defect the two Dashboard cases above guard, on a page
-  // neither of them ever mounts.
+  // added among them. This is the same defect the two cases above guard (the Dashboard, and
+  // Recovery's Day tab), on a page neither of them ever mounts.
   it('are not disposed and re-initialised on the workout page either, where WorkoutZones and WorkoutTrace live', async () => {
     const restore = stubWorkoutFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
@@ -410,7 +460,7 @@ describe('the charts across a rerender', () => {
   // and NightTrace's own `trace.points` (identically memo-free but sourced from a settled,
   // staleTime: Infinity query) and believes today's page is clean - this is the guard that would
   // have caught it if it were not, the same shape the three cases above already prove out on
-  // Dashboard and the workout page.
+  // the Dashboard, Recovery and the workout page.
   it('are not disposed and re-initialised on the night page either, where NightStages and NightTraces live', async () => {
     const restore = stubNightFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })

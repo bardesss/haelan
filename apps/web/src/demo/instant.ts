@@ -1,9 +1,10 @@
 /**
- * The instant the seeded archive's server clock is pinned to (`demo/capture/server.ts`'s own
- * `now`): the archive's exclusive close, the first instant with no data behind it. Nothing that
+ * The seeded archive's exclusive close, the first instant with no data behind it. Nothing that
  * needs a *calendar day* should read this one directly - see DEMO_CLOCK_MS below, which is what
- * both the recorder's DOM clock and, later, the browser's own clock (Task 5's demo entry) are
- * pinned to, and why the two are not the same instant.
+ * the recorder's DOM clock, the browser's own clock (Task 5's demo entry) and, since M9b, the
+ * capture server's `now` (`demo/capture/server.ts`) are all pinned to, and why the two are not
+ * the same instant. The server was pinned here until the glance began computing today from its
+ * clock, which on this instant reads as a day nothing was seeded for.
  *
  * `scripts/seed-demo.mjs` is the authority for this arithmetic: it anchors the seeded archive's
  * exclusive end at `localMidnightMs(DEMO_END_DATE)` (see its own comment, and

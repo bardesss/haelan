@@ -3,6 +3,7 @@ import { Card } from '../components/Card.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { NotesList } from './notes/NotesList.js'
+import { FlaggedDaysCard } from './notes/FlaggedDaysCard.js'
 
 /**
  * The reading surface for the write path M3c shipped: every note and event a reader has written,
@@ -19,6 +20,11 @@ import { NotesList } from './notes/NotesList.js'
  * No `source` dimension: a note or an event is not read off a device the way a metric sample is,
  * so ControlRow is handed no sources to choose between and no export, both of which describe a
  * series this page never requests.
+ *
+ * FlaggedDaysCard (pages/notes/FlaggedDaysCard.tsx), moved here from the Dashboard in M9b, sits
+ * above the list: it reads useAnnotations(range) itself, the same key NotesList below already
+ * calls with, so the two share one cache entry and this page pays no extra request for it. No
+ * `link` prop: a reader is already on the page that card's Dashboard copy would have sent them to.
  */
 export function Notes() {
   const { t } = useTranslation()
@@ -30,6 +36,7 @@ export function Notes() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('notes.title')}</h1>
       <ControlRow controls={controls} sources={[]} />
       <div className="grid">
+        <FlaggedDaysCard range={range} span={12} />
         <Card span={12} label={t('notes.list.title')}>
           <NotesList range={range} />
         </Card>

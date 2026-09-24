@@ -46,7 +46,7 @@ catching them is a standing part of how the project is built rather than a past 
      page is built from. Do not edit between the markers by hand: a test regenerates this and fails
      when it disagrees. -->
 <!-- screenshots:start -->
-![The Hælan dashboard: a recovery index, daily steps, resting heart rate, sleep and mean heart rate, each with a chart for the month and a comparison against the period before it.](assets/screenshots/dashboard.png)
+![The Hælan dashboard in three columns: last night with its sleep stages, today's recovery index with resting heart rate and heart rate variability, and today so far with steps, heart rate and active minutes, each against your own usual.](assets/screenshots/dashboard.png)
 
 ![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
@@ -534,12 +534,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 1029 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 1027 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 1029 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 1027 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.
