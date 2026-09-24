@@ -468,8 +468,12 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .status-problem { font-size: var(--font-size-xs); color: var(--negative); margin: var(--space-1) 0 0; }
 .status-result { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
 .status-devices { list-style: none; margin: var(--space-2) 0 0; padding: 0 0 0 var(--space-3); }
-.status-device { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); padding: 2px 0; }
+.status-device { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); padding: 2px 0; }
 .status-device[data-stale='true'] { color: var(--negative); }
+/* A quiet device's metrics, on a line of their own under its name: the panel is narrow, and beside
+   "gone quiet" a list of three data types would squeeze the device's name into a column. Muted
+   rather than negative, because the row above already says something is wrong and this says what. */
+.status-device-metrics { flex-basis: 100%; color: var(--text-muted); }
 .status-foot { display: flex; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); font-size: var(--font-size-micro); color: var(--text-faint); }
 /* The browser's own link blue was all this link had, measured in Chromium; the accent in the
    register .card-link uses for a card's own way onward. */
@@ -632,13 +636,6 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .workout-comparison { margin: 0; padding-left: var(--space-4); }
 
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
-/* SourceWarning.tsx: a source feeding this card has gone quiet. Beside the card's title, sized to
-   it, in the negative tone the rebuild and connect warnings use; the sentence is its tooltip. */
-.source-warning {
-  display: inline-flex; vertical-align: -3px; margin-left: var(--space-2); color: var(--negative);
-  cursor: help; text-transform: none; letter-spacing: normal;
-}
-.source-warning svg { width: 14px; height: 14px; }
 .value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }
@@ -1147,13 +1144,8 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 }
 .milestone-date { color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 7rem; }
 .milestone-label { color: var(--text-primary); }
-.control-row-stopped {
-  margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-muted);
-  line-height: var(--leading-normal);
-}
 /* What every change badge on the page compares, said once instead of under every tile. A line of
-   its own, the full width of the wrapping row, and quieter than the stopped-source notice beside
-   it: this one is a method, that one is a warning. */
+   its own, the full width of the wrapping row, and quiet: it is a method, not a warning. */
 .control-row-note {
   flex-basis: 100%; margin: 0; font-size: var(--font-size-xs); color: var(--text-muted);
   line-height: var(--leading-normal);

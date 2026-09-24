@@ -4,7 +4,6 @@ import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
-import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -29,7 +28,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
@@ -174,9 +173,6 @@ export function Recovery() {
   // picking a real device does not blank the selector that offers switching back.
   const sourceEnumeration = useSeries([...LAST_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'last')
   const sources = distinctSources([sourceEnumeration])
-  // Off the same all-sources enumeration the selector is built from, so this costs no
-  // request of its own: the mix is already on the points that query returned.
-  const stoppedSources = sourcesStoppedInRange([sourceEnumeration], controls.to)
   const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
@@ -362,9 +358,8 @@ export function Recovery() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('recovery.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
-        stoppedSources={stoppedSources} />
-      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare />
+      <CardGrid>
         <RecoveryIndexCard from={controls.from} to={controls.to} source={source} today={controls.today} span={8} />
         {card('resting_heart_rate', metricGroups.pointsOf('resting_heart_rate'),
           'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
@@ -405,7 +400,7 @@ export function Recovery() {
             scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
           })}
           span={12} />
-      </CardGrid></StaleSourcesProvider>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

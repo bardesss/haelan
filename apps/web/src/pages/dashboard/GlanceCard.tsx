@@ -1,10 +1,8 @@
 import { useId, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import type { GlanceFigure, GlanceStaleSource } from '../../data/useGlance.js'
+import type { GlanceFigure } from '../../data/useGlance.js'
 import { Card } from '../../components/Card.js'
 import { BasisContext } from '../../components/basis.js'
-import { SourceWarning, useUnshownCardWarning } from '../../components/SourceWarning.js'
-import { staleSentence } from '../../components/staleSentence.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import { Link } from '../../router.js'
 import { useTranslation } from '../../i18n/index.js'
@@ -30,22 +28,6 @@ export interface GlanceCardFigure {
   usual?: string
 }
 
-// A stable empty list for a card with no chart, so the union below is not rebuilt against a fresh
-// `[]` default on every render - the same device Sparkline.tsx's own EMPTY constant uses.
-const NO_SOURCES: readonly GlanceStaleSource[] = Object.freeze([])
-
-// Every stale source behind anything this card shows, once each. Keyed on sourceId rather than on
-// the name, because two sources can share a display name while being two separate devices that
-// each went quiet, and one watch feeding three of the card's figures must still read as one
-// sentence rather than the same sentence three times over.
-function staleUnion(figures: readonly GlanceCardFigure[], extra: readonly GlanceStaleSource[]): GlanceStaleSource[] {
-  const seen = new Map<string, GlanceStaleSource>()
-  for (const source of [...figures.flatMap((f) => f.figure.staleSources), ...extra]) {
-    if (!seen.has(source.sourceId)) seen.set(source.sourceId, source)
-  }
-  return [...seen.values()]
-}
-
 // The printed value with its unit, or null when the figure has no value yet. A space before the
 // unit, the convention StatTile's own `<span> {unit}</span>` and formatWithUnit share.
 function valueText(item: GlanceCardFigure, language: string): string | null {
@@ -54,21 +36,15 @@ function valueText(item: GlanceCardFigure, language: string): string | null {
   return item.unit ? `${value} ${item.unit}` : value
 }
 
-// The column's name and its muted span ("so far", "today"), and the stale-source mark beside them.
-// A component of its own rather than markup inline in GlanceCard, because the mark arrives through
-// Card's context (this card passes Card no label, so Card hands the warning down instead of drawing
-// it), and a context is only readable from inside the provider Card renders around its children.
-// The mark sits after the heading rather than inside it: its sentence is read out through an
-// sr-only span, and inside the h2 that sentence became part of the heading's accessible name, so a
-// screen reader listing headings heard a whole warning where the column's name should be.
+// The column's name and its muted span ("so far", "today"). The wrapper div once held a
+// stale-source mark beside the heading as well; that warning now lives in the status panel alone
+// (StatusPanel.tsx), and the wrapper stays so the heading's spacing in app.css is unchanged.
 function GlanceTitle({ title, subtitle }: { title: string, subtitle: string | null }) {
-  const warning = useUnshownCardWarning()
   return (
     <div className="glance-card-head">
       <h2 className="glance-card-title">
         <strong>{title}</strong>{subtitle !== null && <>{' '}<span>{subtitle}</span></>}
       </h2>
-      {warning !== null && <SourceWarning text={warning} />}
     </div>
   )
 }
@@ -137,7 +113,7 @@ function Headline({ item, today, timezone, night, dayInSubtitle, t, language }: 
  * lay a figure out, and the page knows what each column is called and what its empty day reads.
  */
 export function GlanceCard({
-  title, subtitle, headline, emptyLine, secondary, stripLabel, stripCaption, chart, chartStaleSources = NO_SOURCES,
+  title, subtitle, headline, emptyLine, secondary, stripLabel, stripCaption, chart,
   extra, note, link, today, timezone, night = false, dayInSubtitle = false,
 }: {
   title: string
@@ -158,12 +134,6 @@ export function GlanceCard({
   /** The hypnogram or the heart rate trace. */
   chart?: ReactNode
   /**
-   * Stale sources behind `chart`, which is not a GlanceFigure and so carries none of its own: the
-   * heart rate trace comes with a staleSources list of its own in the payload, and a quiet watch
-   * behind the only chart in a column must still put the mark beside that column's title.
-   */
-  chartStaleSources?: readonly GlanceStaleSource[]
-  /**
    * Anything a column lists under its figures, such as today's workouts in the today column. Its
    * own component decides whether it renders at all, so a column with nothing to list draws the
    * same card it always did.
@@ -179,9 +149,6 @@ export function GlanceCard({
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-
-  const shown = headline === null ? secondary : [headline, ...secondary]
-  const warning = staleSentence(staleUnion(shown, chartStaleSources), t, language)
 
   // Memoised on the strip itself: Sparkline's chart is rebuilt whenever its values or labels change
   // identity (chart-lifecycle.test.tsx guards exactly that), and arrays mapped fresh here on every
@@ -203,7 +170,7 @@ export function GlanceCard({
     value === null || headline === null ? absent : formatFigure({ ...headline.figure, value }, language) ?? absent
 
   return (
-    <Card span={4} warning={warning}>
+    <Card span={4}>
       <div className="glance-card">
         <GlanceTitle title={title} subtitle={subtitle} />
         {headline === null

@@ -9,6 +9,10 @@ import { useSession } from '../auth/session.js'
 // choice useAllTime.ts makes, and for the same reason: apps/web imports only @haelan/core's browser-safe
 // subpaths, never its root export, because the root pulls better-sqlite3 and drizzle into the browser bundle.
 
+// Mirrored and not read. The glance cards used to put a warning mark beside a column whose figures
+// came from a quiet source; that warning moved to the status panel (StatusPanel.tsx), which says it
+// once for the whole app. The fields stay in the payload, and so in this mirror of it, because the
+// payload is the server's answer for every client of /glance, not only for this page.
 export interface GlanceStaleSource {
   sourceId: string
   name: string

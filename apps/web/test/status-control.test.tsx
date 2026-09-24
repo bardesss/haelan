@@ -83,17 +83,24 @@ function google(over: Partial<StatusConnection> = {}): StatusConnection {
   return {
     kind: 'google', lastDeliveryAtMs: NOW - 7 * 60_000, problem: null,
     devices: [
-      { sourceId: 'watch', name: 'Pixel Watch 4', lastReportedDate: '2026-09-24', stale: false, choice: null },
-      { sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-09-20', stale: false, choice: null },
+      { sourceId: 'watch', name: 'Pixel Watch 4', lastReportedDate: '2026-09-24', stale: false, choice: null, metrics: [] },
+      { sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-09-20', stale: false, choice: null, metrics: [] },
     ],
     ...over,
   }
 }
 
+// A watch gone quiet, as composeStatus sends it: its routine metrics are catalogue keys, two
+// sleep metrics among them that are one data type to a reader, and one key nothing names.
+const QUIET_WATCH = {
+  sourceId: 'watch', name: 'Pixel Watch 4', lastReportedDate: '2026-08-21', stale: true, choice: null,
+  metrics: ['heart_rate', 'not_a_metric', 'sleep_asleep_minutes', 'sleep_deep_minutes', 'steps', 'vo2_max'],
+}
+
 function phoneConnection(over: Partial<StatusConnection> = {}): StatusConnection {
   return {
     kind: 'phone', lastDeliveryAtMs: NOW - 55 * 60_000, problem: null,
-    devices: [{ sourceId: 'hc', name: 'Health Connect', lastReportedDate: '2026-09-23', stale: false, choice: null }],
+    devices: [{ sourceId: 'hc', name: 'Health Connect', lastReportedDate: '2026-09-23', stale: false, choice: null, metrics: [] }],
     ...over,
   }
 }
@@ -457,11 +464,39 @@ describe('the panel content', () => {
   })
 
   it('marks a stale device', () => {
-    mount(panel({ connections: [google({ devices: [{ sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-08-01', stale: true, choice: null }] })], problems: 1 }))
+    mount(panel({ connections: [google({ devices: [{ sourceId: 'scale', name: 'Withings scale', lastReportedDate: '2026-08-01', stale: true, choice: null, metrics: [] }] })], problems: 1 }))
     press(icon())
     const row = popover()!.querySelector('.status-device')!
     expect(row.getAttribute('data-stale')).toBe('true')
     expect(row.textContent).toContain('gone quiet')
+  })
+
+  // The panel is the one place a quiet source is announced since the cards' triangles and the
+  // control row's line went, so its row has to say what they said: which data stopped arriving.
+  it('names what a stale device stopped sending, after its gone-quiet text', () => {
+    mount(panel({ connections: [google({ devices: [QUIET_WATCH] })], problems: 1 }))
+    press(icon())
+    const row = popover()!.querySelector('.status-device')!
+    // Read in the order a reader meets it: the device, that it went quiet, then what stopped.
+    expect([...row.children].map((child) => child.textContent)).toEqual([
+      'Pixel Watch 4', 'gone quiet', 'Heart rate (continuous), sleep, steps, VO2 max',
+    ])
+  })
+
+  it('leaves a metric the catalogue has no name for out, and prints no line when none has one', () => {
+    const unnamed = { ...QUIET_WATCH, sourceId: 'odd', name: 'Odd device', metrics: ['not_a_metric', 'also_unknown'] }
+    mount(panel({ connections: [google({ devices: [QUIET_WATCH, unnamed] })], problems: 2 }))
+    press(icon())
+    const [watch, odd] = [...popover()!.querySelectorAll('.status-device')]
+    expect(watch!.textContent).not.toContain('not_a_metric')
+    expect(odd!.querySelector('.status-device-metrics')).toBeNull()
+    expect(odd!.textContent).toBe('Odd devicegone quiet')
+  })
+
+  it('lists nothing under a device that is still reporting', () => {
+    mount(panel({ connections: [google({ devices: [{ ...QUIET_WATCH, stale: false, lastReportedDate: '2026-09-24' }] })] }))
+    press(icon())
+    expect(popover()!.querySelector('.status-device-metrics')).toBeNull()
   })
 
   it('counts hidden sources and links to where they are chosen', () => {
@@ -515,6 +550,15 @@ describe('in Dutch', () => {
     press(icon())
     expect(syncButton()!.textContent).toBe('Net gesynchroniseerd')
     expect(icon().getAttribute('aria-label')).toBe('Status: alle bronnen zijn bijgewerkt')
+  })
+
+  it('names what a stale device stopped sending in Dutch, sorted and lowered the Dutch way', () => {
+    mount(panel({ connections: [google({ devices: [QUIET_WATCH] })], problems: 1 }), 'nl')
+    press(icon())
+    const row = popover()!.querySelector('.status-device')!
+    expect([...row.children].map((child) => child.textContent)).toEqual([
+      'Pixel Watch 4', 'is stilgevallen', 'Hartslag (doorlopend), slaap, stappen, VO2 max',
+    ])
   })
 
   it('says nothing is connected rather than all up to date, with no connections at all', () => {

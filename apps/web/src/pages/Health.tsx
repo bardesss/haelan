@@ -3,7 +3,6 @@ import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
-import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -28,7 +27,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
 
 // Two cards is a slight page, and the reason is not that there is little here worth measuring:
@@ -101,9 +100,6 @@ export function Health() {
   // picking a real device does not blank the selector that offers switching back.
   const sourceEnumeration = useSeries([...LAST_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'last')
   const sources = distinctSources([sourceEnumeration])
-  // Off the same all-sources enumeration the selector is built from, so this costs no
-  // request of its own: the mix is already on the points that query returned.
-  const stoppedSources = sourcesStoppedInRange([sourceEnumeration], controls.to)
   const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
@@ -248,9 +244,8 @@ export function Health() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('health.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
-        stoppedSources={stoppedSources} />
-      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare />
+      <CardGrid>
         {/* basisPlacement 'header': the range chart carries no StatTile of its own to fold a basis
             into, the same reason Dashboard.tsx's heart rate range card takes 'header' rather than
             'body'. spo2 is an intraday metric (packages/core/src/api/catalogue.ts gives it `tier:
@@ -313,7 +308,7 @@ export function Health() {
             the same collision Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
         <InsightCard insight={dailySpo2Insight.data} query={dailySpo2Insight} metric="daily_spo2" span={12}
           label={t('health.insights.dailySpo2')} formatValue={dailySpo2InsightFormat} polarity="higher-is-better" />
-      </CardGrid></StaleSourcesProvider>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

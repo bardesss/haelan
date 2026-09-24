@@ -138,8 +138,8 @@ describe('the status panel', () => {
         kind: 'google',
         problem: null,
         devices: [
-          { sourceId: 'watch-1', name: 'Watch', lastReportedDate: '2026-09-20', stale: false, choice: null },
-          { sourceId: 'watch-2', name: 'Old watch', lastReportedDate: '2026-08-01', stale: true, choice: null },
+          { sourceId: 'watch-1', name: 'Watch', lastReportedDate: '2026-09-20', stale: false, choice: null, metrics: [] },
+          { sourceId: 'watch-2', name: 'Old watch', lastReportedDate: '2026-08-01', stale: true, choice: null, metrics: ['heart_rate', 'steps'] },
         ],
       },
     ],
@@ -175,6 +175,9 @@ describe('the status panel', () => {
     const devices = composed.connections[0]?.devices ?? []
     expect(devices.map((d) => d.sourceId)).toEqual(['watch-1', 'watch-2'])
     expect(devices[0]?.choice).toBe(true)
+    // A recomposed read still says what the quiet device stopped sending: the overlay rewrites
+    // `choice` and filters rows, and every other field the capture carried passes through as is.
+    expect(devices.map((d) => d.metrics)).toEqual([[], ['heart_rate', 'steps']])
   })
 
   it('clearing a choice back to the default answers the captured row again', () => {

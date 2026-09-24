@@ -45,7 +45,6 @@
     "nextPeriod": "Volgende periode",
     "pickDate": "Kies een datum",
     "sources": "Bronnen",
-    "sourceStopped": "Gestopt met rapporteren tijdens deze periode: {{sources}}.",
     "compareYear": "Vergelijk met vorig jaar",
     "trendNote": "Elk percentage vergelijkt de tweede helft van de metingen op die kaart met de eerste helft.",
     "sourceAll": "Alle bronnen",
@@ -70,12 +69,6 @@
       "close": "Een venster sluiten",
       "note": "De periodetoetsen werken op pagina's met een periode om door te bladeren. Geen van deze toetsen doet iets terwijl je in een veld typt."
     }
-  },
-  "staleSource": {
-    "sentence": "{{name}} heeft sinds {{date}} niets meer doorgegeven; {{usual}}.",
-    "sentenceNoCadence": "{{name}} heeft sinds {{date}} niets meer doorgegeven.",
-    "daily": "normaal gebeurt dat dagelijks",
-    "every": "normaal gebeurt dat elke {{count}} dagen"
   },
   "lastYear": {
     "value": "Vorig jaar: {{value}}",
