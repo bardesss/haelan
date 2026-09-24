@@ -650,6 +650,10 @@ interface OverlayStatusPanel {
  * every device this function has not this time filtered out is exactly the device the capture
  * itself carried, so a choice reversed later (hide, then show again) needs nothing undone here -
  * the next read starts over from the same source of truth every other read does.
+ *
+ * Every device field this does not rewrite is carried as captured, which is how a stale device's
+ * `metrics` (what it stopped sending, listed under its row in the panel) reaches the demo: the
+ * capture records the real server's answer, and the clone keeps it.
  */
 function composeStatusPanel(body: unknown, overlay: Overlay): unknown {
   if (overlay.panelChoices.size === 0) return body

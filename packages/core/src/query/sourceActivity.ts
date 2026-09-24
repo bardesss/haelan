@@ -1,14 +1,14 @@
 import { sql } from 'drizzle-orm'
-import { cadenceOf, continuedElsewhere, routineWindowStart } from '../api/sourceCadence.ts'
+import { cadenceOf, continuedElsewhere, routineMetrics, routineWindowStart } from '../api/sourceCadence.ts'
 import type { SourceCadence, SourceReport, SourceStatus } from '../api/sourceCadence.ts'
 import type { DbOrTx } from '../db/open.ts'
 
 /**
  * Each of a person's sources with its reporting cadence, over their whole history.
  *
- * The rule itself is `api/sourceCadence.ts`, shared with the browser, because a page asks the
- * same question about the range on screen. This file is the database half: which dates each
- * source reported on.
+ * The rule itself is `api/sourceCadence.ts`, pure and importable by the browser (the range pages
+ * once asked it about the range on screen). This file is the database half: which dates each
+ * source reported on, and for a stale source, what it reported in its last week.
  *
  * Reads `daily`, never `samples`. The same question costs 3,380 ms against 2.18M sample rows and
  * 23 ms against 29,676 daily rows, because `samples` is indexed (person_ref, metric_ref, utc_ms)
@@ -49,11 +49,20 @@ export interface SourceActivity extends SourceCadence {
    * moved to another path. Always false for a source that is not stale.
    *
    * A separate field rather than a fourth status, because `stale` stays true of the id - it did
-   * stop, and the settings card and describe_person say so - while the thing a card warns about,
-   * data the reader is no longer getting, is not. So every surface that WARNS skips these, and
-   * every surface that LISTS still reports the id as stopped.
+   * stop, and the settings card and describe_person say so - while the thing a warning is about,
+   * data the reader is no longer getting, is not. So every surface that WARNS skips these (the
+   * status panel, through composeStatus, and /glance's per-figure staleSources), and every
+   * surface that LISTS still reports the id as stopped.
    */
   continuedElsewhere: boolean
+  /**
+   * For a stale source, the metrics it reported routinely in its last active week
+   * (api/sourceCadence.ts's `routineMetrics`, the rule `continuedElsewhere` is judged over), so
+   * the status panel can say what stopped arriving rather than only which device stopped. Empty
+   * for every other source: they are never asked, because the rows this is read from are fetched
+   * for stale sources alone, and a household with none pays nothing for the field.
+   */
+  routineMetrics: string[]
 }
 
 export function readSourceActivity(
@@ -73,8 +82,8 @@ export function readSourceActivity(
     else bySource.set(row.source, [row.localDate])
   }
 
-  const activities = [...bySource].map(([sourceId, dates]) => ({
-    sourceId, ...cadenceOf(dates, input.today), continuedElsewhere: false,
+  const activities: SourceActivity[] = [...bySource].map(([sourceId, dates]) => ({
+    sourceId, ...cadenceOf(dates, input.today), continuedElsewhere: false, routineMetrics: [],
   }))
 
   // Only stale sources are asked whether they carried on, so a household with none pays nothing
@@ -100,8 +109,11 @@ export function readSourceActivity(
       SELECT DISTINCT local_date AS date, metric FROM daily
        WHERE person_id = ${personId} AND source = ${activity.sourceId}
          AND local_date BETWEEN ${routineWindowStart(activity.lastReportedDate!)} AND ${activity.lastReportedDate!}`)
+    const ownReports = own.map((row) => ({ source: activity.sourceId, ...row }))
+    // Off the same seven days just read, so the panel's list costs no read of its own.
+    activity.routineMetrics = routineMetrics(activity.sourceId, activity.lastReportedDate!, ownReports)
     activity.continuedElsewhere = continuedElsewhere(activity.sourceId, activity.lastReportedDate!, [
-      ...own.map((row) => ({ source: activity.sourceId, ...row })),
+      ...ownReports,
       ...latest.filter((row) => row.source !== activity.sourceId),
     ])
   }

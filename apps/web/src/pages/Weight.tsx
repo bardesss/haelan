@@ -3,7 +3,6 @@ import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
-import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -27,7 +26,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { deltaFor, formatMetricValue, formatNumber, formatWithUnit } from '../format.js'
 
 // weight and body_fat both carry `aggs: ['last', 'mean']` in packages/core/src/derive/metrics.ts;
@@ -85,9 +84,6 @@ export function Weight() {
   // sentinel so picking a real device does not blank the selector that offers switching back.
   const sourceEnumeration = useSeries([...LAST_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'last')
   const sources = distinctSources([sourceEnumeration])
-  // Off the same all-sources enumeration the selector is built from, so this costs no
-  // request of its own: the mix is already on the points that query returned.
-  const stoppedSources = sourcesStoppedInRange([sourceEnumeration], controls.to)
   const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
@@ -268,9 +264,8 @@ export function Weight() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('weight.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
-        stoppedSources={stoppedSources} />
-      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare />
+      <CardGrid>
         {card('weight', 'weight.weight.label', 'weight.weight.basis', 'weight.weight.readings',
           'weight.weight.chartLabel', 'weight.units.kilograms', 'weight.units.kg',
           // weight is stored in grams with precision 1 (METRICS.weight, declared in grams, the
@@ -307,7 +302,7 @@ export function Weight() {
             visible against data that has a gap in it. */}
         <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
           label={t('weight.insights.weight')} formatValue={weightInsightFormat} formatDelta={weightInsightFormatDelta} />
-      </CardGrid></StaleSourcesProvider>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

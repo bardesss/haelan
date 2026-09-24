@@ -204,7 +204,6 @@ export function Dashboard() {
               </Described>
             </div>
           ) : undefined}
-          chartStaleSources={day.heartRate.staleSources}
           extra={<TodayWorkouts workouts={day.workouts} />}
           link={{ to: '/activity', text: t('glance.today.link') }}
           today={glance.today} timezone={timezone}

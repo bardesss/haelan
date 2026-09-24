@@ -12,8 +12,10 @@ function input(over: Partial<StatusInput> = {}): StatusInput {
     ...over,
   }
 }
-const seen = (sourceId: string, lastReportedDate: string | null, status: 'reporting' | 'stale' | 'unjudged' = 'reporting', continuedElsewhere = false) =>
-  ({ sourceId, lastReportedDate, status, continuedElsewhere })
+const seen = (
+  sourceId: string, lastReportedDate: string | null, status: 'reporting' | 'stale' | 'unjudged' = 'reporting',
+  continuedElsewhere = false, routineMetrics: string[] = [],
+) => ({ sourceId, lastReportedDate, status, continuedElsewhere, routineMetrics })
 
 describe('shownByDefault', () => {
   it('shows a date exactly on the 30-day boundary', () => {
@@ -105,5 +107,20 @@ describe('composeStatus', () => {
       names: new Map([['a', 'Scale'], ['b', 'Watch']]),
     }))
     expect(panel.connections[0]!.devices.map((d) => d.name)).toEqual(['Watch', 'Scale'])
+  })
+
+  it('lists what a stale device reported routinely, and nothing for a device that is not stale', () => {
+    // 'renamed' carries a routine list too, since continuedElsewhere was judged over it, and
+    // 'reporting' is handed one to prove the gate is the verdict rather than the input's shape.
+    const panel = composeStatus(input({
+      activity: [
+        seen('dead', '2026-09-01', 'stale', false, ['heart_rate', 'steps']),
+        seen('renamed', '2026-09-01', 'stale', true, ['steps']),
+        seen('fine', '2026-09-24', 'reporting', false, ['steps']),
+      ],
+    }))
+    expect(panel.connections[0]!.devices.map((d) => [d.sourceId, d.metrics])).toEqual([
+      ['fine', []], ['dead', ['heart_rate', 'steps']], ['renamed', []],
+    ])
   })
 })

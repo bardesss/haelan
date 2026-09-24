@@ -149,24 +149,15 @@ describe('GlanceCard', () => {
     expect(html).toContain('<div class="value">42</div><p class="basis">Around your usual</p>')
   })
 
-  it('puts one source warning beside the title for a stale source on any shown figure, deduplicated', () => {
+  // A quiet source is announced in the status panel alone now (StatusPanel.tsx). The payload still
+  // carries each figure's staleSources, for the server's other clients, and this card reads none.
+  it('draws nothing beside the title when a shown figure\'s source has gone quiet', () => {
     const html = render({
       headline: { label: 'Steps', figure: figure({ staleSources: [WATCH] }) },
       secondary: [{ label: 'Active minutes', figure: figure({ metric: 'active_minutes', value: 18, staleSources: [WATCH] }) }],
     })
-    expect(html.match(/class="source-warning"/g)).toHaveLength(1)
-    const sentence = 'My watch has not reported since Sep 10, 2026; it usually reports daily.'
-    expect(html).toContain(`<span class="source-warning" title="${sentence}">`)
-    // Right after the heading, on its row, so the mark sits beside the column's name rather than
-    // floating in the card, and outside the h2 so its sentence is not part of the heading's name.
-    expect(html).toMatch(/<div class="glance-card-head"><h2 class="glance-card-title"><strong>Today<\/strong> <span>so far<\/span><\/h2><span class="source-warning"/)
-  })
-
-  it('keeps the warning\'s sentence out of the heading\'s accessible name', () => {
-    const host = document.createElement('div')
-    host.innerHTML = render({ headline: { label: 'Steps', figure: figure({ staleSources: [WATCH] }) } })
-    expect(host.querySelector('.source-warning')).not.toBeNull()
-    expect(host.querySelector('h2')?.textContent).toBe('Today so far')
+    expect(html).toContain('<div class="glance-card-head"><h2 class="glance-card-title"><strong>Today</strong> <span>so far</span></h2></div>')
+    expect(html).not.toContain('has not reported')
   })
 
   it('prints no headline as-of line when the subtitle already names the day', () => {
@@ -182,15 +173,6 @@ describe('GlanceCard', () => {
     // A pair on the headline's day is covered by the subtitle; one on another day still names it.
     expect(html).toContain('<div><span class="label">Resting HR</span><b>62 bpm</b></div>')
     expect(html).toContain('<div><span class="label">HRV</span><b>51 ms</b><span class="glance-asof">yesterday</span></div>')
-  })
-
-  it('counts the chart\'s own stale sources toward the warning', () => {
-    const html = render({ chartStaleSources: [WATCH] })
-    expect(html.match(/class="source-warning"/g)).toHaveLength(1)
-  })
-
-  it('draws no warning when nothing shown is stale', () => {
-    expect(render()).not.toContain('source-warning')
   })
 
   it('links to the given page with the given text', () => {
@@ -520,16 +502,20 @@ describe('the glance Dashboard', () => {
     } finally { restore() }
   })
 
-  it('puts a stale source on steps beside the Today card\'s title, and nowhere else', async () => {
+  // The status panel says a source went quiet, once, for the whole app; no glance column repeats
+  // it, whether the quiet source is behind a figure or behind the heart rate trace.
+  it('puts no stale-source mark on any column, whatever the payload says went quiet', async () => {
+    const quiet = [{ sourceId: 's1', name: 'My watch', lastReportedDate: '2026-09-10', medianGapDays: 1 }]
     const body = glanceBody()
-    body.day.steps = { ...body.day.steps, staleSources: [{ sourceId: 's1', name: 'My watch', lastReportedDate: '2026-09-10', medianGapDays: 1 }] }
+    body.day.steps = { ...body.day.steps, staleSources: quiet }
+    body.day.heartRate = { ...body.day.heartRate, staleSources: quiet }
     const { restore } = await mountPage(body)
     try {
-      const [sleep, recovery, today] = cards()
-      expect(sleep!.querySelector('.source-warning')).toBeNull()
-      expect(recovery!.querySelector('.source-warning')).toBeNull()
-      expect(today!.querySelector('.glance-card-head > .source-warning')?.getAttribute('title'))
-        .toBe('My watch has not reported since Sep 10, 2026; it usually reports daily.')
+      expect(cards()).toHaveLength(3)
+      for (const card of cards()) {
+        expect([...card.querySelector('.glance-card-head')!.children].map((child) => child.tagName)).toEqual(['H2'])
+      }
+      expect(container!.textContent).not.toContain('has not reported')
     } finally { restore() }
   })
 

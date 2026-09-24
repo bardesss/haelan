@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { formatFigure, usualLine, asOfLine } from '../src/pages/dashboard/glanceText.js'
-import { staleSentence } from '../src/components/staleSentence.js'
 import { initI18n } from '../src/i18n/index.js'
 import type { GlanceFigure } from '../src/data/useGlance.js'
 import type { Translate } from '../src/format.js'
@@ -163,48 +162,5 @@ describe('glanceText with real translations', () => {
     expect(asOfLine(figure({ value: 8000, asOfDate: '2026-09-23', asOfMs: null }), opts, t, language)).toBe(today)
     expect(asOfLine(figure({ value: 8000, asOfDate: '2026-09-22', asOfMs: null }), opts, t, language)).toBe(yesterday)
     expect(asOfLine(figure({ value: 419, asOfDate: '2026-09-22', asOfMs: ms }), { ...opts, night: true }, t, language)).toBe(night)
-  })
-})
-
-describe('staleSentence', () => {
-  it('answers undefined for no sources', () => {
-    const { t } = stubT()
-    expect(staleSentence([], t, 'en')).toBeUndefined()
-  })
-
-  // Matches stale-sources.test.tsx's own expectation for a single stale source, so the glance and
-  // the metric cards say the same words about the same source.
-  it('names one source by its own cadence', () => {
-    const t = realT('en')
-    expect(staleSentence(
-      [{ name: 'My watch', lastReportedDate: '2026-08-12', medianGapDays: 1 }], t, 'en',
-    )).toBe('My watch has not reported since Aug 12, 2026; it usually reports daily.')
-  })
-
-  it('joins two sources with a space, each in its own cadence', () => {
-    const t = realT('en')
-    expect(staleSentence(
-      [
-        { name: 'My watch', lastReportedDate: '2026-08-12', medianGapDays: 1 },
-        { name: 'Scale', lastReportedDate: '2026-06-01', medianGapDays: 7.4 },
-      ], t, 'en',
-    )).toBe(
-      'My watch has not reported since Aug 12, 2026; it usually reports daily. '
-      + 'Scale has not reported since Jun 1, 2026; it usually reports every 7 days.',
-    )
-  })
-
-  it('says it in Dutch', () => {
-    const t = realT('nl')
-    expect(staleSentence(
-      [{ name: 'Mijn horloge', lastReportedDate: '2026-08-12', medianGapDays: 1 }], t, 'nl',
-    )).toBe('Mijn horloge heeft sinds 12 aug 2026 niets meer doorgegeven; normaal gebeurt dat dagelijks.')
-  })
-
-  it('reads a source with no known cadence without a usual clause', () => {
-    const t = realT('en')
-    expect(staleSentence(
-      [{ name: 'Scale', lastReportedDate: '2026-08-12', medianGapDays: null }], t, 'en',
-    )).toBe('Scale has not reported since Aug 12, 2026.')
   })
 })

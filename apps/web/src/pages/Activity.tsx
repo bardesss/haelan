@@ -5,7 +5,6 @@ import type { Polarity } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { CardGrid } from '../components/CardGrid.js'
-import { StaleSourcesProvider } from '../data/staleSources.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -35,7 +34,7 @@ import { useMetricGroups } from '../data/useMetricGroups.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
-import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
 
 // Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
@@ -135,9 +134,6 @@ export function Activity() {
   // active and silently strand them on it.
   const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'sum')
   const sources = distinctSources([sourceEnumeration])
-  // Off the same all-sources enumeration the selector is built from, so this costs no
-  // request of its own: the mix is already on the points that query returned.
-  const stoppedSources = sourcesStoppedInRange([sourceEnumeration], controls.to)
   const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
@@ -353,9 +349,8 @@ export function Activity() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
-        stoppedSources={stoppedSources} />
-      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare />
+      <CardGrid>
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
           {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} error={stepsQuery.error} />
             : stepsQuery.isPending ? <Loading /> : (
@@ -508,7 +503,7 @@ export function Activity() {
         <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
           label={t('activity.insights.steps')} polarity="higher-is-better" />
 
-      </CardGrid></StaleSourcesProvider>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

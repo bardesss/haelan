@@ -1,7 +1,6 @@
 import { useId } from 'react'
 import { BasisContext } from './basis.js'
 import { useTranslation } from '../i18n/index.js'
-import { SourceWarning, useUnshownCardWarning } from './SourceWarning.js'
 import { toneOf, type Delta } from '../format.js'
 
 export function StatTile({ label, value, unit, basis, delta, lastYear, children }: {
@@ -26,9 +25,6 @@ export function StatTile({ label, value, unit, basis, delta, lastYear, children 
 }) {
   const basisId = useId()
   const { t } = useTranslation()
-  // A tile card has no Card label, so a stale-source warning on its card is drawn here, beside the
-  // title the tile itself prints (SourceWarning.tsx).
-  const warning = useUnshownCardWarning()
   // The printed line is the tile's own coverage only. The delta's method sentence ("change is the
   // mean of the last 16 readings against the first 15") used to follow it, and on a page of nine
   // tiles that was the same sentence nine times with only its numbers changing. It now belongs to
@@ -39,7 +35,7 @@ export function StatTile({ label, value, unit, basis, delta, lastYear, children 
   return (
     <>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span className="label">{label}{warning !== null && <SourceWarning text={warning} />}</span>
+        <span className="label">{label}</span>
         {delta && (
           <span className="delta" data-dir={delta.dir} data-tone={toneOf(delta)} title={method ?? undefined}>
             {delta.text}{method !== null && <span className="sr-only">; {method}</span>}

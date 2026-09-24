@@ -9,7 +9,6 @@ import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
 import { CardGrid } from '../components/CardGrid.js'
-import { StaleSourcesProvider } from '../data/staleSources.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
@@ -39,7 +38,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { formatDuration, formatSignedDuration, formatClock, deltaFor, formatMetricValue } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
@@ -150,9 +149,6 @@ export function Sleep() {
   // became active.
   const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'sum')
   const sources = distinctSources([sourceEnumeration])
-  // Off the same all-sources enumeration the selector is built from, so this costs no
-  // request of its own: the mix is already on the points that query returned.
-  const stoppedSources = sourcesStoppedInRange([sourceEnumeration], controls.to)
   const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
@@ -526,9 +522,8 @@ export function Sleep() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare
-        stoppedSources={stoppedSources} />
-      <StaleSourcesProvider rangeEnd={controls.to}><CardGrid>
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare />
+      <CardGrid>
         {/* Not a MetricCard: gated on a night from useNights, not a metric and its points, the
             same reason Dashboard's own hypnogram card stays outside it. The date names the night
             actually drawn, never the range end, so an empty range never claims a night it has no
@@ -689,7 +684,7 @@ export function Sleep() {
             shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
           label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} polarity="higher-is-better" />
-      </CardGrid></StaleSourcesProvider>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )
