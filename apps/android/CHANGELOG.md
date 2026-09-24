@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/bardesss/haelan/compare/android-v0.5.0...android-v0.5.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **android:** stop requesting the route permission, and release withheld routes one workout at a time ([#357](https://github.com/bardesss/haelan/issues/357)) ([0c299c1](https://github.com/bardesss/haelan/commit/0c299c1bc1330bb1ea4eb669a9b4eed1a4cafb22))
+
 ## [0.5.0](https://github.com/bardesss/haelan/compare/android-v0.4.0...android-v0.5.0) (2026-09-22)
 
 
