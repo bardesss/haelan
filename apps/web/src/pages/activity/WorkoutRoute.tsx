@@ -5,11 +5,12 @@ import { Card } from '../../components/Card.js'
 import { formatNumber } from '../../format.js'
 import { useRouteBasemapStatus } from '../../data/useRouteBasemap.js'
 import type { RoutePoint } from '../../data/useSessions.js'
+import { loadMapLibre } from './loadMapLibre.js'
 
 // `import type` only, above: erased entirely at compile time, so naming MapLibre's own type here
-// costs the off-by-default household nothing. The one place the library's *value* is named is the
-// dynamic import() inside the effect below, reached only when the setting this task adds is on -
-// see that effect's own comment for why a static import anywhere in this file would undo it.
+// costs the off-by-default household nothing. The library's *value* is reached only through
+// loadMapLibre's dynamic imports, called from the effect below once the setting this task adds is
+// on - see that effect's own comment for why a static import anywhere in this file would undo it.
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 
 /**
@@ -256,7 +257,9 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
     // The one place this file names MapLibre as a value rather than a type, and it is reached only
     // once basemapEnabled is true - see the module comment above for why a static import anywhere
     // else in this file would defeat the setting this effect exists to respect.
-    void import('maplibre-gl').then(({ Map }) => {
+    // loadMapLibre rather than importing maplibre-gl here: without the worker URL it sets, the
+    // tiles drew and the route line never did (see its own comment).
+    void loadMapLibre().then(({ Map }) => {
       if (cancelled || mapContainerRef.current === null) return
       const instance = new Map({
         container: mapContainerRef.current,

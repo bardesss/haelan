@@ -11,6 +11,9 @@ export default defineConfig({
   // browser. The root vitest.config.ts defines the same constant from the same helper, because
   // the suite does not load this file.
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+  // MapLibre starts its worker as a module worker (loadMapLibre.ts), so the bundle Vite emits for
+  // it has to be one.
+  worker: { format: 'es' },
   server: {
     proxy: {
       // changeOrigin stays false deliberately: the server compares Origin against Host, and
