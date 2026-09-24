@@ -818,7 +818,8 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .week-bar.is-today { opacity: 1; }
 .week-bars.is-steps .week-bar { fill: var(--accent); }
 .week-bars.is-active .week-bar { fill: var(--positive); }
-.week-bars.is-sleep .week-bar { fill: var(--chart-stage-rem); }
+/* Sleep bars use scale-4, readable on both light (deep azure) and dark (light azure) themes. */
+.week-bars.is-sleep .week-bar { fill: var(--chart-scale-4); }
 .dash-week-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
 .dash-week-figure { margin-top: var(--space-1); }
 .dash-week-value { font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
