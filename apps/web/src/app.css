@@ -1763,3 +1763,61 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
      modal a finger only ever taps into deserves the same 44px it gets everywhere else. */
   .status-foot a { min-height: 44px; display: flex; align-items: center; }
 }
+
+/* The demo's own banner (apps/web/src/demo/DemoBanner.tsx), styled through classes rather than the
+   inline style object it used to carry entirely: a phone-width override needs a selector CSS can
+   beat without `!important`, which an inline style has no room to leave for. Semantic tokens only,
+   the same as everywhere else no-raw-color.test.ts reaches - this is a demo-only element, not a
+   carve-out for it. */
+.demo-banner {
+  position: relative;
+  background: var(--surface-rail);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-normal);
+  /* Room on the right for the close button, on both sides so the centred text stays centred. */
+  padding: 0.6rem 2.75rem;
+  text-align: center;
+}
+.demo-banner-lead { margin: 0; }
+/* `display: contents` unwraps the <details> box on the desktop layout below, and its own summary
+   (the "More"/"Meer" disclosure, phone-only) is hidden here rather than left to draw a marker
+   nobody at this width needs to click. `.demo-banner-rest` is forced visible despite carrying no
+   `open` attribute: the UA stylesheet hides a closed `<details>`'s own children with a rule this
+   one is specific enough, and appears late enough in the cascade, to override without `!important` -
+   see the phone override below for the other half of the same mechanism. */
+.demo-banner-more { display: contents; }
+.demo-banner-more summary { display: none; }
+.demo-banner-rest { display: inline; margin: 0; }
+.demo-banner-close {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  /* 44px square: the notice spans the page on a phone too, and a close target that small screen's
+     thumb can miss is a banner nobody can get rid of there. */
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+}
+
+@media (max-width: 620px) {
+  /* Left-aligned and tighter than the desktop banner's centred, wider padding: four sentences of
+     prose centred in a phone's width reads as a wall of text, which is the whole reason this task
+     exists. The dismiss button's own size and position are unchanged. */
+  .demo-banner { text-align: left; padding: var(--space-2) 2.75rem var(--space-2) var(--space-3); }
+  .demo-banner-more summary { display: inline-block; margin-top: var(--space-1); cursor: pointer; color: var(--text-secondary); }
+  /* The other half of the desktop override above: below the breakpoint the rest of the banner's
+     text goes back to following the closed `<details>`'s own native behaviour, so only the lead
+     and the disclosure show until a tap opens it. */
+  .demo-banner-more:not([open]) .demo-banner-rest { display: none; }
+}

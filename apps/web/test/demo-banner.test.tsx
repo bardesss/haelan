@@ -33,6 +33,26 @@ describe('the banner', () => {
     expect(text).toMatch(/derived|cascade/i)    // the fidelity limit, said out loud
   })
 
+  // Task 18: at phone width the banner shows only its first two sentences and a disclosure for
+  // the rest, so the DOM has to carry both pieces separately rather than one paragraph - a native
+  // <details>/<summary> is what app.css's phone media query then shows or hides. The split has to
+  // land on the same words as before (verified above by the full text still containing every
+  // fidelity claim), just divided differently.
+  it('splits into a lead and a disclosed rest, behind a native details/summary', () => {
+    act(() => { root?.render(<DemoBanner />) })
+    const lead = container?.querySelector('.demo-banner-lead')
+    const more = container?.querySelector('details.demo-banner-more')
+    const summary = more?.querySelector('summary')
+    const rest = more?.querySelector('.demo-banner-rest')
+    expect(lead?.textContent).toMatch(/This is a demo\..*ends on/)
+    // The fidelity-limit sentence and the reload sentence are both in the disclosed rest, not the
+    // lead: a phone reader who never opens "More" still gets the two sentences the brief names.
+    expect(lead?.textContent).not.toMatch(/reload|derived/i)
+    expect(summary?.textContent).toBe('More')
+    expect(rest?.textContent).toMatch(/reload/i)
+    expect(rest?.textContent).toMatch(/derived/i)
+  })
+
   it('mounts exactly one host even if the entry runs twice', () => {
     mountDemoBanner()
     mountDemoBanner()
@@ -123,6 +143,7 @@ describe('the banner in the visitor\'s own language', () => {
     expect(text).toMatch(/herladen/i)      // writes live in this tab only
     expect(text).toMatch(/afgeleid/i)      // the fidelity limit, in Dutch
     expect(text).not.toMatch(/generated/i) // the English string must not also be present
+    expect(container?.querySelector('summary')?.textContent).toBe('Meer')
   })
 
   it('falls back to English for any browser language that is not Dutch', () => {
