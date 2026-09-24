@@ -1,6 +1,7 @@
 import { simulate } from '../src/color/cvd.js'
 import { lookup, resolveSemantic } from '../src/semantic.js'
 import { resolveChart } from '../src/chart.js'
+import { resolveMap } from '../src/map.js'
 
 // Not a vitest file: `pnpm typecheck` is what runs it. Every line below must stay
 // an error. The package's job is to be the typed source of truth, and the way it
@@ -18,3 +19,5 @@ resolveChart('dark')['stage-deeep']
 resolveSemantic('light')['text-fain']
 // @ts-expect-error there is no third theme
 resolveChart('sepia')
+// @ts-expect-error map token keys are a union, not string
+resolveMap('dark')['watr']

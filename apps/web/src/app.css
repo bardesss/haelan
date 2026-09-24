@@ -555,8 +555,25 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    the svg trace above. A fixed height rather than `height: auto`: there is no viewBox to size this
    one from, and MapLibre itself needs the element to already have real pixel dimensions before it
    reads them to size its own canvas. position: relative is MapLibre's own requirement - its
-   attribution and zoom controls are absolutely positioned children of this box. */
-.workout-route-map { width: 100%; height: 320px; position: relative; border-radius: var(--radius-md); overflow: hidden; }
+   attribution and zoom controls are absolutely positioned children of this box. The background is
+   the map's own land colour, so the beat before the first tiles arrive is the map's ground rather
+   than a flash of the card. */
+.workout-route-map { width: 100%; height: 320px; position: relative; border-radius: var(--radius-md); overflow: hidden; background: var(--map-land); }
+
+/* OpenFreeMap's credit, in the page's tokens rather than MapLibre's own white box, which sat on the
+   dark theme's map as the one light rectangle on the page. MapLibre's stylesheet (loaded with the
+   library, loadMapLibre.ts) still positions it; these rules only recolour and shrink it. The
+   selectors are MapLibre's own class names, scoped under the map's box to keep them from reaching
+   anything else, and one class heavier than MapLibre's own: its stylesheet arrives after this one,
+   so at equal weight its white would win. */
+.workout-route-map .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background: var(--surface-card);
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  border-top-left-radius: var(--radius-sm);
+}
+.workout-route-map .maplibregl-ctrl-attrib a { color: var(--text-muted); }
+.workout-route-map .maplibregl-ctrl-attrib a:hover { color: var(--text-primary); }
 
 /* WorkoutComparison.tsx's own sentence list, one per compared facet - a plain list, not a table,
    since each row is a full sentence rather than a value under a column header. */

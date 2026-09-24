@@ -218,7 +218,7 @@ describe('what the card says about the route basemap', () => {
   // address, and nobody can decide against a sentence they would only see after saying yes.
   it('tells an admin what turning the basemap on costs, plainly, before they can switch it on', () => {
     const html = render(<About />, { session: { isAdmin: true } })
-    expect(html).toContain('fetches map tiles from a third-party map provider')
+    expect(html).toContain('fetches map tiles from OpenFreeMap, a third-party map provider')
     expect(html).toContain('sees the coordinates of every route it draws')
   })
 

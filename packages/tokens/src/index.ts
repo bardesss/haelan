@@ -5,7 +5,8 @@ export {
   type Theme, type SemanticToken,
 } from './semantic.js'
 export { chartTokens, resolveChart, STAGE_KEYS, SCALE_KEYS, CHART_KEYS, type ChartToken } from './chart.js'
-export { emitCss, semanticVar, chartVar, themeVarNames } from './emit.js'
+export { mapTokens, resolveMap, MAP_KEYS, type MapToken } from './map.js'
+export { emitCss, semanticVar, chartVar, mapVar, themeVarNames } from './emit.js'
 export {
   emitAndroidColors, androidColorFiles, resolveAndroidColors, ANDROID_COLOR_NAMES,
   type AndroidColorName,

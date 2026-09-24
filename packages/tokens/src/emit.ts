@@ -1,6 +1,7 @@
 import { primitives } from './primitives.js'
 import { resolveSemantic, SEMANTIC_KEYS, type SemanticToken } from './semantic.js'
 import { resolveChart, CHART_KEYS, type ChartToken } from './chart.js'
+import { resolveMap, MAP_KEYS, type MapToken } from './map.js'
 
 function block(selector: string, lines: string[], indent = ''): string {
   return `${indent}${selector} {\n${lines.map((l) => `${indent}  ${l}`).join('\n')}\n${indent}}\n`
@@ -15,8 +16,12 @@ export function chartVar(token: ChartToken): string {
   return `--chart-${token}`
 }
 
+export function mapVar(token: MapToken): string {
+  return `--map-${token}`
+}
+
 export function themeVarNames(): string[] {
-  return [...SEMANTIC_KEYS.map(semanticVar), ...CHART_KEYS.map(chartVar)]
+  return [...SEMANTIC_KEYS.map(semanticVar), ...CHART_KEYS.map(chartVar), ...MAP_KEYS.map(mapVar)]
 }
 
 function scales(): string[] {
@@ -41,9 +46,11 @@ function scales(): string[] {
 function themeLines(theme: 'dark' | 'light'): string[] {
   const s = resolveSemantic(theme)
   const c = resolveChart(theme)
+  const m = resolveMap(theme)
   return [
     ...SEMANTIC_KEYS.map((k) => `${semanticVar(k)}: ${s[k]};`),
     ...CHART_KEYS.map((k) => `${chartVar(k)}: ${c[k]};`),
+    ...MAP_KEYS.map((k) => `${mapVar(k)}: ${m[k]};`),
   ]
 }
 

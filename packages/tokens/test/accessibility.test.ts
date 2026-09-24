@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolveChart, CHART_KEYS, STAGE_KEYS, SCALE_KEYS, type ChartToken } from '../src/chart.js'
+import { resolveMap, MAP_KEYS, type MapToken } from '../src/map.js'
 import { resolveSemantic, SEMANTIC_KEYS, SURFACE_KEYS, TEXT_KEYS, THEMES, type SemanticToken } from '../src/semantic.js'
 import { deltaE, toLab, hexToRgb, rgbToHex } from '../src/color/convert.js'
 import { simulate, minSeparation, CVD_KINDS } from '../src/color/cvd.js'
@@ -267,6 +268,41 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
   })
 })
 
+// The workout page's basemap (map.ts). Every fill the route can cross, since a run goes over
+// parks, water and roads alike: the line is the one mark on that card carrying meaning, so it is
+// the one held to the WCAG 1.4.11 floor against all of them. The fills themselves are backdrop and
+// answer to a smaller question, whether each is actually a different colour from the land.
+const MAP_FILL_KEYS = ['land', 'water', 'park', 'building', 'road', 'road-major'] as const satisfies readonly MapToken[]
+
+describe.each(THEMES)('%s map palette', (theme) => {
+  const m = resolveMap(theme)
+  const s = resolveSemantic(theme)
+
+  it.each(MAP_FILL_KEYS)('holds the route line to the non-text floor over %s', (fill) => {
+    expect(contrast(s.accent, m[fill]), `accent over map ${fill}`).toBeGreaterThanOrEqual(3)
+  })
+
+  // Labels are drawn on their halo, and the halo is what they are read against wherever they
+  // land - over a road, a park or the water - so that pair is the one text contrast has to hold.
+  it('keeps map labels readable on their own halo, and the halo the colour of the land', () => {
+    expect(contrast(m.label, m['label-halo']), 'map label on its halo').toBeGreaterThanOrEqual(4.5)
+    expect(m['label-halo'], 'a halo off the land colour draws a visible box round every label').toBe(m.land)
+  })
+
+  // Buildings are the quietest by design, drawn only once the map is close enough to show them,
+  // so they get the lower floor; everything else has to be seen without looking for it.
+  it('draws every map feature as a colour distinct from the land', () => {
+    for (const fill of ['water', 'park', 'road', 'road-major'] as const) {
+      expect(deltaE(m[fill], m.land), `map ${fill} vs land`).toBeGreaterThanOrEqual(5)
+    }
+    expect(deltaE(m.building, m.land), 'map building vs land').toBeGreaterThanOrEqual(2)
+  })
+
+  it('sets a major road further from the land than a minor one', () => {
+    expect(deltaE(m['road-major'], m.land)).toBeGreaterThan(deltaE(m.road, m.land))
+  })
+})
+
 // The suite's coverage used to end wherever someone stopped typing token names:
 // `accent-soft` coloured the navigation and `band-baseline` backed every chart,
 // and neither appeared in a single assertion. This guard does not prove a token
@@ -290,5 +326,10 @@ describe('assertion coverage', () => {
 
   it('holds every chart token to at least one assertion', () => {
     expect([...CHART_KEYS].sort()).toEqual([...ASSERTED_CHART].sort())
+  })
+
+  it('holds every map token to at least one assertion', () => {
+    const asserted: readonly MapToken[] = [...MAP_FILL_KEYS, 'label', 'label-halo']
+    expect([...MAP_KEYS].sort()).toEqual([...asserted].sort())
   })
 })

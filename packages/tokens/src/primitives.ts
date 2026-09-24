@@ -27,7 +27,10 @@ export const primitives = {
   amber: { 500: '#F0A202', 700: '#B45309' },
   // Reserved for the absence marker; its separation from every other chart colour is measured, not chosen by eye (see chart.ts).
   plum: { 300: '#C1A2BC', 800: '#523145' },
-  mint: { 400: '#5EC9A0', 700: '#166F52' },
+  // 100 and 950 are the basemap's park, one per theme (map.ts): the land's own lightness with a
+  // little of the mint's hue, so green space is there when looked for and never competes with the
+  // route drawn over it.
+  mint: { 100: '#D9EFE4', 400: '#5EC9A0', 700: '#166F52', 950: '#0F1F1B' },
   coral: { 400: '#E8846B', 700: '#AB432A' },
   slate: {
     50: '#FFFFFF',

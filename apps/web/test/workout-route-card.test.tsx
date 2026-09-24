@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
-import { WorkoutRoute, projectRoute, basemapStyle, routeBounds, routeGeoJSON, routeLineColor, basemapAllowed, isDarkTheme, DARK_RASTER_PAINT } from '../src/pages/activity/WorkoutRoute.js'
+import { WorkoutRoute, projectRoute, basemapAllowed } from '../src/pages/activity/WorkoutRoute.js'
 import { routeBasemapStatusKey, ROUTE_BASEMAP_FRESHNESS } from '../src/data/useRouteBasemap.js'
 import { createQueryClient } from '../src/api/queryClient.js'
 import { queryKeys } from '../src/api/queryKeys.js'
@@ -21,9 +21,10 @@ import type { RoutePoint } from '../src/data/useSessions.js'
 // polyline even if it did - the same gap that shipped an unassertable filled-day marker and an icon
 // nobody caught rendering at the height of its card. What is asserted below is what a test actually
 // can reach: the accessible description text (the one thing a screen reader gets for the drawing),
-// the card's presence and absence, which of the two states rendered, and the pure projection and
-// basemap maths in isolation. The drawn shape's real look on a real screen, and MapLibre's own
-// rendered tiles, are not covered anywhere in this suite.
+// the card's presence and absence, which of the two states rendered, and the pure projection in
+// isolation. The basemap's style and its theme handling are basemap.test.ts's. The drawn shape's
+// real look on a real screen, and MapLibre's own rendered tiles, are not covered anywhere in this
+// suite.
 
 function point(overrides: Partial<RoutePoint> = {}): RoutePoint {
   return {
@@ -174,7 +175,7 @@ describe('the basemap setting', () => {
     const card = renderCard([NEAR, FAR], false)
     expect(card!.querySelector('svg')).not.toBeNull()
     expect(card!.querySelector('.workout-route-map')).toBeNull()
-    expect(card!.innerHTML).not.toContain('tile.openstreetmap.org')
+    expect(card!.innerHTML).not.toContain('openfreemap')
     expect(card!.innerHTML).not.toContain('maplibre')
   })
 
@@ -190,7 +191,7 @@ describe('the basemap setting', () => {
     const card = renderCard([NEAR, FAR], true)
     expect(card!.querySelector('svg')).not.toBeNull()
     expect(card!.querySelector('.workout-route-map')).toBeNull()
-    expect(card!.innerHTML).not.toContain('tile.openstreetmap.org')
+    expect(card!.innerHTML).not.toContain('openfreemap')
   })
 
   it('carries the same accessible description whichever of the two it drew', () => {
@@ -213,83 +214,6 @@ describe('the basemap setting', () => {
       </QueryClientProvider>,
     )
     expect(host.firstElementChild!.querySelector('.workout-route-map')).toBeNull()
-  })
-})
-
-/**
- * The pure maths the on-state effect hands to MapLibre, tested directly rather than through a
- * mounted map: this suite has no WebGL canvas to mount one onto, and the whole reason these are
- * exported functions rather than object literals built inline in the effect is so what a household
- * that switches this on is actually pointed at can be asserted without one.
- */
-describe('basemapStyle, routeBounds and routeGeoJSON', () => {
-  it('points MapLibre at OpenStreetMap\'s own raster tiles', () => {
-    const style = basemapStyle([NEAR, FAR], { lineColor: '#123456', dark: false })
-    const osm = style.sources.osm as { type: string, tiles: string[] }
-    expect(osm.type).toBe('raster')
-    expect(osm.tiles).toEqual(['https://tile.openstreetmap.org/{z}/{x}/{y}.png'])
-    expect(style.layers.map((layer) => layer.id)).toContain('osm')
-  })
-
-  // The route rides in the style itself. Added from a 'load' handler it waited on every tile in
-  // view, and OpenStreetMap's slow tiles left the household looking at bare streets.
-  it('carries the route in the style, drawn above the tiles in the colour it is given', () => {
-    const style = basemapStyle([NEAR, FAR], { lineColor: '#123456', dark: false })
-    const route = style.sources['workout-route'] as { type: string, data: { geometry: { coordinates: number[][] } } }
-    expect(route.type).toBe('geojson')
-    expect(route.data.geometry.coordinates).toEqual([[5, 52], [5, 52.01]])
-    expect(style.layers.map((layer) => layer.id)).toEqual(['osm', 'workout-route-line'])
-    const line = style.layers[1] as { type: string, source: string, paint: Record<string, unknown> }
-    expect(line.type).toBe('line')
-    expect(line.source).toBe('workout-route')
-    expect(line.paint).toEqual({ 'line-color': '#123456', 'line-width': 3 })
-  })
-
-  it('leaves the line colour to MapLibre when the accent could not be read', () => {
-    const style = basemapStyle([NEAR, FAR], { lineColor: '', dark: false })
-    expect((style.layers[1] as { paint: Record<string, unknown> }).paint).toEqual({ 'line-width': 3 })
-  })
-
-  it('darkens the tiles on a dark page and leaves them alone on a light one', () => {
-    const paintOf = (dark: boolean) =>
-      (basemapStyle([NEAR, FAR], { lineColor: '#123456', dark }).layers[0] as { paint: Record<string, unknown> }).paint
-    expect(paintOf(true)).toEqual({ ...DARK_RASTER_PAINT })
-    expect(paintOf(false)).toEqual({})
-  })
-
-  it('bounds a route by its own extremes, west/south before east/north', () => {
-    const bounds = routeBounds([point({ latitude: 52, longitude: 5 }), point({ latitude: 52.01, longitude: 5.02 })])
-    expect(bounds).toEqual([[5, 52], [5.02, 52.01]])
-  })
-
-  it('carries every point into one LineString, longitude before latitude', () => {
-    const feature = routeGeoJSON([NEAR, FAR])
-    expect(feature.type).toBe('Feature')
-    expect(feature.geometry.coordinates).toEqual([[5, 52], [5, 52.01]])
-  })
-})
-
-
-/**
- * MapLibre cannot resolve `var(--accent)`, so the route line's colour is read off the document and
- * handed over resolved. What is worth asserting is the reading, not a value: a test that pinned the
- * blue would be a second copy of the token and would go green on exactly the drift it exists to
- * catch, since the literal that shipped here first matched neither theme's accent.
- */
-describe('routeLineColor', () => {
-  it('reads the accent token off the element it is given', () => {
-    const root = document.createElement('div')
-    root.style.setProperty('--accent', 'rgb(35, 118, 233)')
-    document.body.append(root)
-    expect(routeLineColor(root)).toBe('rgb(35, 118, 233)')
-    root.remove()
-  })
-
-  it('answers empty when no stylesheet has set the token, so the caller can omit the colour', () => {
-    const root = document.createElement('div')
-    document.body.append(root)
-    expect(routeLineColor(root)).toBe('')
-    root.remove()
   })
 })
 
@@ -337,21 +261,5 @@ describe('the basemap setting is not cached like derived data', () => {
     const client = createQueryClient(() => {})
     const shared = client.getDefaultOptions().queries?.staleTime
     expect(shared, 'the shared default no longer caches, so this override may be redundant now').toBe(60_000)
-  })
-})
-
-describe('isDarkTheme', () => {
-  it('follows an explicit data-theme over the system preference', () => {
-    const root = document.createElement('div')
-    root.setAttribute('data-theme', 'light')
-    expect(isDarkTheme(root, () => true)).toBe(false)
-    root.setAttribute('data-theme', 'dark')
-    expect(isDarkTheme(root, () => false)).toBe(true)
-  })
-
-  it('falls back to the system preference when no theme is pinned', () => {
-    const root = document.createElement('div')
-    expect(isDarkTheme(root, () => true)).toBe(true)
-    expect(isDarkTheme(root, () => false)).toBe(false)
   })
 })

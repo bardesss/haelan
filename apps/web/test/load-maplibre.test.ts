@@ -7,6 +7,13 @@ import { describe, expect, it, vi } from 'vitest'
 const setWorkerUrl = vi.fn()
 vi.mock('maplibre-gl', () => ({ setWorkerUrl, Map: class {} }))
 vi.mock('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url', () => ({ default: '/assets/maplibre-gl-worker-test.js' }))
+// A plain flag rather than a vi.fn(): the factory runs once per file, and the suite clears mock
+// calls between tests, so a spy would forget the load by the time a later test asked about it.
+const imported = vi.hoisted(() => ({ stylesheet: false }))
+vi.mock('maplibre-gl/dist/maplibre-gl.css', () => {
+  imported.stylesheet = true
+  return {}
+})
 
 const { loadMapLibre } = await import('../src/pages/activity/loadMapLibre.js')
 
@@ -20,6 +27,13 @@ describe('loadMapLibre', () => {
     const maplibre = await loadMapLibre()
     expect(setWorkerUrl).toHaveBeenCalledExactlyOnceWith('/assets/maplibre-gl-worker-test.js')
     expect(typeof maplibre.Map).toBe('function')
+  })
+
+  // MapLibre lays out its attribution control with its own stylesheet and inlines none of it, so
+  // a map built without it credits OpenFreeMap in bare, unpositioned links.
+  it('brings MapLibre\'s own stylesheet with it', async () => {
+    await loadMapLibre()
+    expect(imported.stylesheet).toBe(true)
   })
 })
 
