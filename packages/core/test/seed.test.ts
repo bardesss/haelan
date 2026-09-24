@@ -219,13 +219,83 @@ describe('seedArchive', () => {
     const FINAL_DAY_START = END - 86_400_000
     const NOON = END - 12 * 3_600_000
 
-    it('leaves every earlier day byte for byte what it was, since it only filters', () => {
+    // The final day's civil date, the key a rollup window carries instead of an instant.
+    const FINAL_DATE = { year: 2026, month: 2, day: 28 }
+    const ROLLUPS = new Set(['total-calories', 'floors'])
+    // A rollup payload's windows, by civil date, each as the payload key's own value object.
+    const rollupValues = (put: Put): Map<string, Record<string, unknown>> => {
+      const parsed = JSON.parse(put.body) as { rollupDataPoints: Array<Record<string, unknown>> }
+      return new Map(parsed.rollupDataPoints.map((point) => {
+        const date = (point.civilStartTime as { date: unknown }).date
+        const key = Object.keys(point).find((k) => k !== 'civilStartTime' && k !== 'civilEndTime')!
+        return [JSON.stringify(date), point[key] as Record<string, unknown>]
+      }))
+    }
+
+    it('leaves every earlier day byte for byte what it was, since it only filters and scales', () => {
       const whole = run({ days: DAYS })
       const cut = run({ days: DAYS, lastDayUntilMs: NOON })
       expect(cut.length).toBe(whole.length)
-      const changed = cut.flatMap((put, k) => (put.body === whole[k]!.body ? [] : [put]))
+      const changed = cut.flatMap((put, k) => (put.body === whole[k]!.body ? [] : [{ put, was: whole[k]! }]))
       expect(changed.length).toBeGreaterThan(0)
-      for (const put of changed) expect(put.windowStartMs, put.dataType).toBe(FINAL_DAY_START)
+      for (const { put, was } of changed) {
+        if (!ROLLUPS.has(put.dataType)) {
+          expect(put.windowStartMs, put.dataType).toBe(FINAL_DAY_START)
+          continue
+        }
+        // A rollup payload spans several days; only the final day's window may differ.
+        const now = rollupValues(put)
+        const before = rollupValues(was)
+        now.delete(JSON.stringify(FINAL_DATE))
+        before.delete(JSON.stringify(FINAL_DATE))
+        expect(now, put.dataType).toEqual(before)
+      }
+    })
+
+    it("scales the final day's whole-day totals by the share of the day that has passed", () => {
+      const share = (NOON - FINAL_DAY_START) / 86_400_000
+      const finalPuts = (puts: Put[], dataType: string): Put[] =>
+        puts.filter((put) => put.dataType === dataType && put.windowStartMs === FINAL_DAY_START)
+      const points = (puts: Put[], dataType: string): Array<Record<string, unknown>> =>
+        finalPuts(puts, dataType).flatMap((put) => (JSON.parse(put.body) as { dataPoints: Array<Record<string, unknown>> }).dataPoints)
+      const byLevel = (puts: Put[]): Record<string, number> => Object.fromEntries(
+        (points(puts, 'active-minutes')[0]!.activeMinutes as { activeMinutesByActivityLevel: Array<{ activityLevel: string, activeMinutes: string }> })
+          .activeMinutesByActivityLevel.map((l) => [l.activityLevel, Number(l.activeMinutes)]),
+      )
+      const byZone = (puts: Put[]): Record<string, number> => Object.fromEntries(points(puts, 'active-zone-minutes').map((p) => {
+        const z = p.activeZoneMinutes as { heartRateZone: string, activeZoneMinutes: string }
+        return [z.heartRateZone, Number(z.activeZoneMinutes)]
+      }))
+      const rollup = (puts: Put[], dataType: string): Record<string, unknown> => {
+        const put = puts.find((p) => p.dataType === dataType && rollupValues(p).has(JSON.stringify(FINAL_DATE)))!
+        return rollupValues(put).get(JSON.stringify(FINAL_DATE))!
+      }
+
+      const whole = run({ days: DAYS })
+      const cut = run({ days: DAYS, lastDayUntilMs: NOON })
+      const scaled = (n: number): number => Math.round(n * share)
+
+      // Ambient minutes, scaled. Large enough whole-day figures that a missing scale cannot
+      // round its way to the same number.
+      expect(byLevel(whole).LIGHT).toBeGreaterThan(2)
+      expect(byLevel(cut).LIGHT).toBe(scaled(byLevel(whole).LIGHT!))
+      expect(byZone(whole).FAT_BURN).toBeGreaterThan(2)
+      expect(byZone(cut).FAT_BURN).toBe(scaled(byZone(whole).FAT_BURN!))
+      // A workout's minutes are whole if the workout finished before the cutoff, and zero if not.
+      const workoutKept = points(cut, 'exercise').length > 0
+      for (const level of ['MODERATE', 'VIGOROUS'] as const) {
+        expect(byLevel(cut)[level], level).toBe(workoutKept ? byLevel(whole)[level] : 0)
+      }
+      for (const zone of ['CARDIO', 'PEAK'] as const) {
+        expect(byZone(cut)[zone], zone).toBe(workoutKept ? byZone(whole)[zone] : 0)
+      }
+
+      // The two daily rollups, scaled the same way.
+      const kcal = (puts: Put[]): number => Number(rollup(puts, 'total-calories').kcalSum)
+      expect(kcal(whole)).toBeGreaterThan(2)
+      expect(kcal(cut)).toBe(scaled(kcal(whole)))
+      const floors = (puts: Put[]): number => Number(rollup(puts, 'floors').countSum)
+      expect(floors(cut)).toBe(scaled(floors(whole)))
     })
 
     it('ends every final-day reading at or before the cutoff, and keeps the ones that did', () => {

@@ -368,19 +368,28 @@ export interface SeedArchiveInput {
    * here, the way a real archive's today stops at the moment it was last synced. Every reading on
    * that day that has not finished by this instant is left out: a sample at or after it, and an
    * interval or session ending after it. An hourly interval that straddles it is dropped rather
-   * than truncated, because nothing here models a partial hour. The one exception is the two
-   * whole-day activity-minutes intervals (active-minutes, active-zone-minutes), which would
-   * otherwise take the day's figure with them; those are cut to end here, their minutes scaled by
-   * the share of the day that has passed.
+   * than truncated, because nothing here models a partial hour.
+   *
+   * The exceptions are the day's whole-day totals, which the day has not reached by this instant
+   * but which dropping would take away entirely. Each is scaled by the share of the day that has
+   * passed, `Math.round(wholeDay * share)`:
+   * - active-minutes and active-zone-minutes, one interval each for the whole day, are also cut to
+   *   end here. Only their ambient minutes (LIGHT, FAT_BURN) are scaled; a workout's minutes
+   *   (MODERATE, VIGOROUS, CARDIO, PEAK) are kept whole if the workout itself finished before
+   *   this instant, and are zero if it did not.
+   * - total-calories and floors, the daily rollups. Their window stays the whole civil day, because
+   *   that is the only window dailyRollUp answers with: a real rollup fetched mid-day carries the
+   *   running total under a whole-day window. So for these two, the amount is the only thing cut.
    *
    * The same rule covers the day's other timed readings: weight's 07:00 sample, the night that
    * ends that morning, a workout, the 20:00 mood. A payload whose every point was cut is still
    * written, empty, the way a sync of an hour with nothing in it would be.
    *
-   * Filters only: every value is still drawn from the PRNG exactly as it would be without this
-   * option, so no other day in the span changes. The civil-date figures (resting heart rate, HRV,
-   * respiratory rate) and the daily rollups (floors, total calories) carry no time of day and are
-   * kept as they are.
+   * Resting heart rate, HRV and respiratory rate are left as they are. Each is a once-a-day figure
+   * read off the night before, so by midday it already exists in full.
+   *
+   * Filters and scales only: every value is still drawn from the PRNG exactly as it would be
+   * without this option, so no other day in the span changes.
    *
    * scripts/seed-demo.mjs is the one caller, passing the demo's pinned clock (DEMO_CLOCK_MS in
    * apps/web/src/demo/instant.ts) so the captured Dashboard never shows data from its own future.
@@ -661,9 +670,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const lightMinutes = Math.round(range(rand, 40, 90) * (isSunday ? 0.7 : 1))
     const moderateMinutes = workout ? Math.round(workoutMinutesToday * range(rand, 0.3, 0.5)) : 0
     const vigorousMinutes = workout ? Math.round(workoutMinutesToday * range(rand, 0.3, 0.5)) : 0
-    // lastDayUntilMs's one truncation: these two types are one interval for the whole day, so
-    // dropping the straddler would drop the day's figure. Cut to end at the cutoff instead, the
-    // ambient minutes scaled to the share of the day that has passed, and the workout's minutes
+    // lastDayUntilMs's whole-day totals (see its comment): these two types are one interval for
+    // the whole day, so dropping the straddler would drop the day's figure. Cut to end at the
+    // cutoff instead, the ambient minutes scaled to the share of the day that has passed (soFar,
+    // which the two rollups further down use too), and the workout's minutes
     // kept only if the workout itself finished before it.
     const minutesEndMs = cutoff ?? dayEnd
     const dayShare = (minutesEndMs - dayStart) / DAY_MS
@@ -703,10 +713,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const activeCaloriesToday = range(rand, 200, 500) * (isSunday ? 0.7 : 1)
       + (workout ? range(rand, 200, 450) : 0)
     totalCaloriesWindows.push({
-      date: civilDate, value: { kcalSum: Math.round(restingCaloriesToday + activeCaloriesToday) },
+      date: civilDate, value: { kcalSum: soFar(Math.round(restingCaloriesToday + activeCaloriesToday)) },
     })
     const floorsToday = Math.round(range(rand, 0, 6) + (rand() < 0.25 ? range(rand, 6, 16) : 0))
-    floorsWindows.push({ date: civilDate, value: { countSum: String(floorsToday) } })
+    floorsWindows.push({ date: civilDate, value: { countSum: String(soFar(floorsToday)) } })
 
     const night = nights[i]!
     const sleepPoints = [sleepPoint({
