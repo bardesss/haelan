@@ -27,11 +27,12 @@ export const AXIS_FONT_SIZE = 12
 
 /**
  * A day's verdict against its usual, as the server sends it (`GlanceStripDay.standing`). An alias
- * for `GlanceStanding | null` rather than a second declaration of the same union: IntradayHeartRate
- * already imports types from data/useGlance.js (its own IntradayPoint/IntradayResult come from
- * data/useIntraday.js), so a chart importing from data/ is not new here, and redeclaring the union
- * risked the two drifting apart the moment either side grew a value the other did not know about.
- * Defined here rather than in Sparkline.tsx, the one caller that draws it as a dot, because
+ * for `GlanceStanding | null` rather than a second declaration of the same union: a chart importing
+ * types from data/ is not new (IntradayHeartRate already imports IntradayPoint/IntradayResult from
+ * data/useIntraday.js), though this is the first from data/useGlance.js specifically - safe, since
+ * useGlance.ts imports nothing from charts/, so there is no circular import. Redeclaring the union
+ * here risked the two drifting apart the moment either side grew a value the other did not know
+ * about. Defined here rather than in Sparkline.tsx, the one caller that draws it as a dot, because
  * dayTableRows below reads it too and base.ts already sits under Sparkline.tsx in the import graph.
  */
 export type PointStanding = GlanceStanding | null
