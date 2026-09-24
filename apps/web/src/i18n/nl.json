@@ -1416,7 +1416,7 @@
     },
     "noReading": "Nog geen meting",
     "pace": {
-      "ahead": "Voor op je gebruikelijke tempo",
+      "ahead": "Vóór op je gebruikelijke tempo",
       "on": "Op je gebruikelijke tempo",
       "behind": "Achter op je gebruikelijke tempo",
       "usualBy": "normaal zit je om {{time}} op {{value}}"

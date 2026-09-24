@@ -46,7 +46,7 @@ catching them is a standing part of how the project is built rather than a past 
      page is built from. Do not edit between the markers by hand: a test regenerates this and fails
      when it disagrees. -->
 <!-- screenshots:start -->
-![The Hælan dashboard: last night's time asleep, sleep stages and week against your usual, beside a recovery score with resting heart rate and HRV against their usual ranges; below them, today's steps and their pace against your usual, heart rate and workouts, beside the week's daily averages.](assets/screenshots/dashboard.png)
+![The Hælan dashboard: last night's time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today's steps with their pace against your usual, active minutes, heart rate and workouts, beside the week's totals and averages.](assets/screenshots/dashboard.png)
 
 ![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
@@ -535,12 +535,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 1075 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 1079 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 1075 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 1079 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

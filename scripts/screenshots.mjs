@@ -27,7 +27,7 @@ export const SCREENSHOTS = [
   {
     file: 'dashboard.png',
     title: 'Dashboard',
-    alt: 'The Hælan dashboard: last night\'s time asleep, sleep stages and week against your usual, beside a recovery score with resting heart rate and HRV against their usual ranges; below them, today\'s steps and their pace against your usual, heart rate and workouts, beside the week\'s daily averages.',
+    alt: 'The Hælan dashboard: last night\'s time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today\'s steps with their pace against your usual, active minutes, heart rate and workouts, beside the week\'s totals and averages.',
     role: 'hero',
     readme: 'inline',
   },
