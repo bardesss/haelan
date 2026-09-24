@@ -1411,6 +1411,8 @@
       "hrv": "HRV",
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",
+      "notScored": "Not scored",
+      "score": "Score",
       "strip": "Recovery index, last 7 days",
       "caption": "last 7 days",
       "link": "View recovery"

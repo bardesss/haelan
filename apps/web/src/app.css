@@ -758,6 +758,16 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .usual-gauge-marker.is-out { fill: var(--negative); }
 .usual-gauge-value { fill: var(--text-primary); font-size: var(--font-size-md); font-weight: var(--weight-bold); }
 .usual-gauge-unit { fill: var(--text-muted); font-size: var(--font-size-micro); }
+
+.dash-dials { display: flex; justify-content: space-around; align-items: flex-end; gap: var(--space-2); }
+.dash-dial { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); min-width: 0; }
+.dash-recovery-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-7); }
+.dash-recovery-strip { display: none; flex: 1 1 16rem; min-width: 0; }
+.dash-recovery.is-wide .dash-recovery-strip { display: block; }
+.dash-recovery-row > .dash-dials { flex: 0 0 30rem; max-width: 100%; }
+.dash-recovery-words { margin: 0; text-align: center; font-size: var(--font-size-xs); color: var(--text-muted); }
+.dash-recovery.is-wide .dash-recovery-words { text-align: left; }
+@media (max-width: 620px) { .dash-dials .usual-gauge { width: 92px; height: auto; } .dash-dials .score-ring { width: 108px; height: auto; } }
 .week-bar { opacity: .55; }
 .week-bar.is-today { opacity: 1; }
 .week-bars.is-steps .week-bar { fill: var(--accent); }
