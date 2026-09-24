@@ -101,6 +101,59 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(body.day.heartRate.points[0].mean).toBe(64)
   })
 
+  it('carries a steps pace once today has a step sample, rounded to a whole step', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
+      insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse(`${localDate}T09:00:00Z`), tzOffsetMinutes: 120, value: 1000.4 })
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate, metric: 'steps', agg: 'sum', source: 'merged', value: 1000.4, coverage: 1, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+    insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse('2026-08-20T07:00:00Z'), tzOffsetMinutes: 120, value: 500 })
+    db.insert(schema.daily).values({
+      personId: 'p1', localDate: '2026-08-20', metric: 'steps', agg: 'sum', source: 'merged', value: 500, coverage: 1, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    const body = (await get(harness, token, '/glance')).json()
+    expect(body.day.stepsPace).not.toBeNull()
+    expect(Number.isInteger(body.day.stepsPace.center)).toBe(true)
+  })
+
+  it('answers 304 to a repeat request carrying the first one\'s ETag, once a steps pace is present', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
+      insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse(`${localDate}T09:00:00Z`), tzOffsetMinutes: 120, value: 1000 })
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate, metric: 'steps', agg: 'sum', source: 'merged', value: 1000, coverage: 1, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+    insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse('2026-08-20T07:00:00Z'), tzOffsetMinutes: 120, value: 500 })
+    db.insert(schema.daily).values({
+      personId: 'p1', localDate: '2026-08-20', metric: 'steps', agg: 'sum', source: 'merged', value: 500, coverage: 1, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    const first = await get(harness, token, '/glance')
+    expect(first.statusCode).toBe(200)
+    harness.clock.nowMs += 60_000
+    const again = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/glance',
+      headers: { authorization: `Bearer ${token}`, 'if-none-match': first.headers.etag as string },
+    })
+    expect(again.statusCode).toBe(304)
+  })
+
   it('names a stale source that fed the figure before it went quiet, by the name the person gave it', async () => {
     harness = await withServer()
     // Set before signIn for the same reason the first case does.

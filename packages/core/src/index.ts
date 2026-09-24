@@ -250,6 +250,6 @@ export type { DescribedPerson } from './query/personQuery.ts'
 // reachable only through PersonQuery.glance.
 export type {
   Glance, GlanceFigure, GlanceBaseline, GlanceStripDay, GlanceStaleSource, GlanceSleep, GlanceRecovery, GlanceDay, GlanceHeartRate,
-  GlanceStanding,
+  GlanceStanding, GlanceStepsPace,
 } from './query/glance.ts'
 export { standingOf } from './query/glance.ts'

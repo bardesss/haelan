@@ -173,9 +173,40 @@ export function dailyFigure(
   }
 }
 
+export interface GlanceStepsPace {
+  /** The usual steps by `atMs`'s local minute, as a band. */
+  center: number
+  low: number
+  high: number
+  thin: boolean
+  /** Today's last step reading: the instant the comparison is made at, never now. */
+  atMs: number
+  standing: 'ahead' | 'on' | 'behind' | null
+}
+
+/**
+ * Today's steps against the person's usual count by the same minute of the day (spec: steps pace).
+ * Measured at the last reading rather than at now, because a count synced at 13:52 compared with
+ * the usual at 14:05 would call every unsynced minute a shortfall. Only baseline days that kept a
+ * daily steps row count, so an excluded or silent day is absent rather than a zero.
+ */
+export function readStepsPace(ctx: GlanceContext, steps: GlanceFigure): GlanceStepsPace | null {
+  const window = baselineWindow(ctx.today)
+  const read = ctx.q.stepsUpToMinute({ today: ctx.today, ...window })
+  if (read === null || steps.value === null) return null
+  const withRow = new Set(ctx.q.series({ metric: 'steps', agg: 'sum', ...window }).points.map((p) => p.localDate))
+  const values = [...read.sums].filter(([date]) => withRow.has(date)).map(([, sum]) => sum)
+  const baseline = baselineOf(values)
+  if (baseline === null) return null
+  const band = toGlanceBaseline(baseline)!
+  const standing = band.thin ? null : steps.value > band.high ? 'ahead' : steps.value < band.low ? 'behind' : 'on'
+  return { ...band, atMs: read.atMs, standing }
+}
+
 export interface GlanceHeartRate { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
 export interface GlanceDay {
   steps: GlanceFigure
+  stepsPace: GlanceStepsPace | null
   activeMinutes: GlanceFigure
   heartRate: GlanceHeartRate
   /**
@@ -372,8 +403,10 @@ export function readDay(ctx: GlanceContext): GlanceDay {
   // Stale sources from heart rate's daily rows over the look-back, not from today's samples: a
   // source with a sample today is reporting by definition, so today's samples could never name one.
   const heartFeeding = lookBackPoints(ctx, 'heart_rate', 'mean', ctx.today).flatMap(sourcesOf)
+  const steps = dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) })
   return {
-    steps: dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) }),
+    steps,
+    stepsPace: readStepsPace(ctx, steps),
     activeMinutes: activeMinutesFigure(ctx),
     heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heartFeeding) },
     // Filed under the date a workout ended on, the same key the Activity list groups by, so a run

@@ -60,6 +60,12 @@ function roundGlance(glance: Glance): Glance {
     day: {
       ...day,
       steps: roundFigure(day.steps),
+      stepsPace: day.stepsPace === null ? null : {
+        ...day.stepsPace,
+        center: roundMetricValue('steps', day.stepsPace.center),
+        low: roundMetricValue('steps', day.stepsPace.low),
+        high: roundMetricValue('steps', day.stepsPace.high),
+      },
       activeMinutes: roundFigure(day.activeMinutes),
       heartRate: {
         ...day.heartRate,

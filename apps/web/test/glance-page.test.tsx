@@ -359,7 +359,7 @@ describe('the glance Dashboard', () => {
         respiratoryRate: null,
       },
       day: {
-        steps: empty(body.day.steps), activeMinutes: empty(body.day.activeMinutes),
+        steps: empty(body.day.steps), stepsPace: null, activeMinutes: empty(body.day.activeMinutes),
         heartRate: { points: [], asOfMs: null, staleSources: [] },
         workouts: [],
       },
@@ -432,7 +432,7 @@ describe('the glance Dashboard', () => {
         respiratoryRate: null,
       },
       day: {
-        steps: empty(body.day.steps), activeMinutes: empty(body.day.activeMinutes),
+        steps: empty(body.day.steps), stepsPace: null, activeMinutes: empty(body.day.activeMinutes),
         heartRate: { points: [], asOfMs: null, staleSources: [] },
         workouts: [TODAY_RUN],
       },

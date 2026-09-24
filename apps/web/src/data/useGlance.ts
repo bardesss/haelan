@@ -74,8 +74,18 @@ export interface GlanceRecovery {
   respiratoryRate: GlanceFigure | null
 }
 
+export interface GlanceStepsPace {
+  center: number
+  low: number
+  high: number
+  thin: boolean
+  atMs: number
+  standing: 'ahead' | 'on' | 'behind' | null
+}
+
 export interface GlanceDay {
   steps: GlanceFigure
+  stepsPace: GlanceStepsPace | null
   activeMinutes: GlanceFigure
   heartRate: { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
   /** Today's workouts, oldest first, merged across sources: the Activity list's own row shape. */

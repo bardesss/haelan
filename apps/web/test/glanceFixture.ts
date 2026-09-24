@@ -72,6 +72,7 @@ export function glanceBody(): Glance {
         asOfMs: Date.UTC(2026, 8, 23, 9, 32),
         strip: strip([8900, 7400, 10100, 8300, 9700, 8800, 4820]),
       }),
+      stepsPace: null,
       activeMinutes: glanceFigure({ metric: 'active_minutes', value: 18, unit: 'minutes', partial: true }),
       heartRate: {
         points: [

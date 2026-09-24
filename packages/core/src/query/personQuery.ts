@@ -4,9 +4,10 @@ import { readSourceActivity } from './sourceActivity.ts'
 import { readAllTime } from './allTime.ts'
 import type { AllTime } from './allTime.ts'
 import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
-import { daily, people, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
+import { daily, people, samples, overrides as overridesTable, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
+import type { SampleLike } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { nameFor } from '../store/sourceAliases.ts'
 import { ConfigError } from '../errors.ts'
@@ -18,11 +19,16 @@ import { coverageIsMeaningful } from './coverageSignal.ts'
 // confusing to read.
 import { comparePeriods as comparePeriodPoints, INSIGHT_MIN_COVERAGE } from './insights.ts'
 import type { Insight, PeriodPoint } from './insights.ts'
-import { shiftLocalDate } from '../derive/localDay.ts'
+import { localDateOf, localMinuteOf, shiftLocalDate, widenedUtcWindow } from '../derive/localDay.ts'
 import { thin } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
 import { readIntraday, readIntradayWindow } from './intraday.ts'
 import type { IntradayResult } from './intraday.ts'
+import { SampleKeys } from '../db/keys.ts'
+import { applyToSamples } from '../derive/overrides.ts'
+import type { OverrideLike } from '../derive/overrides.ts'
+import { selectHourWinners } from '../derive/merge.ts'
+import { loadPriority } from '../store/sourcePriority.ts'
 import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
@@ -399,6 +405,49 @@ export class PersonQuery {
       points: input.points,
       sourceId: input.sourceId,
     })
+  }
+
+  /**
+   * Steps counted up to one minute of the local day, per local date, for the glance's pace.
+   *
+   * The minute is today's last step reading, read under its own offset, and every earlier date is
+   * cut at the same local minute. Each date's rows go through the overrides derivation applies and
+   * through selectHourWinners, so the count is the daily total's own arithmetic stopped early: a
+   * phone and a watch in one hour are counted once, by the person's priority. One range read for
+   * the whole window (drizzle prepares per .run(), and sixty per-day reads were the rebuild's OOM).
+   */
+  stepsUpToMinute(input: { today: string, from: string, to: string }): { atMs: number, minuteOfDay: number, sums: Map<string, number> } | null {
+    const keys = new SampleKeys(this.#db)
+    const personRef = keys.personRefIfKnown(this.#personId)
+    const metricRef = keys.metricRefIfKnown('steps')
+    if (personRef === undefined || metricRef === undefined) return null
+    const rows = this.#db.select().from(samples).where(and(
+      eq(samples.personRef, personRef), eq(samples.metricRef, metricRef),
+      gte(samples.utcMs, widenedUtcWindow(input.from).start), lte(samples.utcMs, widenedUtcWindow(input.today).end),
+    )).all().map((row) => keys.sampleText(row))
+    // The same sample-scope overrides derivation applies, read the way readWindow reads them.
+    const overrides: OverrideLike[] = this.#db.select().from(overridesTable)
+      .where(and(eq(overridesTable.personId, this.#personId), eq(overridesTable.scope, 'sample'))).all()
+      .map((row) => ({ scope: row.scope, targetKey: row.targetKey, action: row.action, correctedValue: row.correctedValue ?? null }))
+    const kept = applyToSamples(rows, overrides)
+    const byDate = new Map<string, SampleLike[]>()
+    for (const row of kept) {
+      const date = localDateOf(row.utcMs, row.tzOffsetMinutes)
+      const list = byDate.get(date)
+      if (list) list.push(row)
+      else byDate.set(date, [row])
+    }
+    const last = (byDate.get(input.today) ?? []).reduce<SampleLike | null>((best, r) => (best === null || r.utcMs > best.utcMs ? r : best), null)
+    if (last === null) return null
+    const minuteOfDay = localMinuteOf(last.utcMs, last.tzOffsetMinutes)
+    const priority = loadPriority(this.#db, this.#personId)
+    const sums = new Map<string, number>()
+    for (const [date, dayRows] of byDate) {
+      if (date < input.from || date > input.to) continue
+      const early = dayRows.filter((r) => localMinuteOf(r.utcMs, r.tzOffsetMinutes) <= minuteOfDay)
+      sums.set(date, selectHourWinners(early, priority).winning.reduce((s, r) => s + (r.value ?? 0), 0))
+    }
+    return { atMs: last.utcMs, minuteOfDay, sums }
   }
 
   /** The person's sleep nights in a local date range. See `readSleepNights` for the grouping. */
