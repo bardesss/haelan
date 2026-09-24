@@ -594,13 +594,17 @@ describe('Dashboard (the glance)', () => {
     expect(glance).not.toMatch(/\b(dashboard|glance|sleep|common|charts|activity|recovery|emptyState|errorState)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
   })
 
-  it('draws at most one basis line per card, and no two labels alike', () => {
+  // Labels are unique within a card, not across the page: Today's steps and the week's steps are
+  // both "Steps", each under its own card's heading, which is what tells them apart.
+  it('draws at most one basis line per card, and no two labels alike in one card', () => {
     const cards = [...glance.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
-    expect(cards).toHaveLength(3)
-    for (const card of cards) expect([...card.matchAll(/<p class="basis"/g)].length, card).toBeLessThanOrEqual(1)
-    const labels = [...glance.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
-    expect(labels.length).toBeGreaterThan(0)
-    expect(new Set(labels).size).toBe(labels.length)
+    expect(cards).toHaveLength(4)
+    for (const card of cards) {
+      expect([...card.matchAll(/<p class="basis"/g)].length, card).toBeLessThanOrEqual(1)
+      const labels = [...card.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
+      expect(new Set(labels).size, card).toBe(labels.length)
+    }
+    expect([...glance.matchAll(/<span class="label">([^<]+)<\/span>/g)].length).toBeGreaterThan(0)
   })
 })
 

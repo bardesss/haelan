@@ -86,9 +86,9 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   // midnight of the date the night ended, so 23:40 is -20). With it the axis reads clock time on
   // whole hours; without it - a night whose bed time was never recorded - elapsed hours, as before.
   startClock?: number | null
-  // False drops the stage totals row and its awake note. The glance passes it: its Sleep column
-  // prints the night's asleep total already, the row made that column much taller than its
-  // neighbours, and the awake note explains a disagreement with a card the glance never shows.
+  // False drops the stage totals row and its awake note, for a card that prints the night's asleep
+  // total already. Nothing passes it since the dashboard's night card became the page's lead and
+  // kept the row; the absence sentence below is what a caller that drops it still gets.
   totals?: boolean
 }) {
   const { t } = useTranslation()

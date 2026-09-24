@@ -25,7 +25,7 @@ function staleUnion(figures: readonly GlanceFigure[], extra: readonly GlanceStal
 }
 
 // The column's name and its muted span ("so far", "today"), and the stale-source mark beside them.
-// A component of its own rather than markup inline in GlanceCard, because the mark arrives through
+// A component of its own rather than markup inline in DashCard, because the mark arrives through
 // Card's context (this card passes Card no label, so Card hands the warning down instead of drawing
 // it), and a context is only readable from inside the provider Card renders around its children.
 // The mark sits after the heading rather than inside it: its sentence is read out through an

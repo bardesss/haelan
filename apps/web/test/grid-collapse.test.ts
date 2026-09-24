@@ -123,4 +123,32 @@ describe('the grid-collapse rule', () => {
         .toMatch(/!important/)
     }
   })
+
+  // The dashboard's own mid-band rule: between 901px and 1200px every dashboard card takes the row,
+  // since an 8 + 4 pair halved by the app-wide rule above leaves the recovery dials in a column too
+  // narrow for three of them. `.dashboard-grid [data-span]` has the same specificity as the app-wide
+  // `.grid [data-span='4']`, so it wins only by coming later in the file; both are asserted.
+  it('gives every dashboard card the whole row in the mid band, after the app-wide rule', () => {
+    const query = '@media (width > 900px) and (max-width: 1200px)'
+    const blocks: { at: number, body: string }[] = []
+    for (let at = css.indexOf(query); at !== -1; at = css.indexOf(query, at + 1)) {
+      const open = css.indexOf('{', at)
+      let depth = 0
+      for (let i = open; i < css.length; i += 1) {
+        if (css[i] === '{') depth += 1
+        else if (css[i] === '}') {
+          depth -= 1
+          if (depth === 0) { blocks.push({ at, body: css.slice(open + 1, i) }); break }
+        }
+      }
+    }
+    const appWide = blocks.findIndex((b) => rules(b.body).some((r) => parts(r.selector).includes(".grid [data-span='4']")))
+    const dashboard = blocks.findIndex((b) => rules(b.body).some((r) => parts(r.selector).includes('.dashboard-grid [data-span]')))
+    expect(appWide, 'the app-wide mid-band block should still exist').toBeGreaterThan(-1)
+    expect(dashboard, 'a mid-band block should carry a .dashboard-grid [data-span] rule').toBeGreaterThan(-1)
+    expect(dashboard, 'the dashboard rule must come after the app-wide one to win at equal specificity')
+      .toBeGreaterThan(appWide)
+    const rule = rules(blocks[dashboard]!.body).find((r) => parts(r.selector).includes('.dashboard-grid [data-span]'))!
+    expect(rule.body).toMatch(/^grid-column:\s*span 12 !important;?$/)
+  })
 })

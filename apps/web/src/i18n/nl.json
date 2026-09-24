@@ -195,9 +195,6 @@
       "detail": "Dit apparaat heeft niet genoeg van deze dagen geregistreerd om ze te vergelijken. Vaker dragen dicht dit gat, langer wachten niet."
     }
   },
-  "dashboard": {
-    "title": "Dashboard"
-  },
   "recovery": {
     "title": "Herstel",
     "units": {
@@ -1409,15 +1406,13 @@
     "noReading": "Nog geen meting",
     "sleep": {
       "title": "Afgelopen nacht",
-      "empty": "Geen nacht vastgelegd in de afgelopen anderhalve dag.",
       "asleep": "Slaaptijd",
       "efficiency": "Efficiëntie",
       "bed": "Naar bed",
       "woke": "Wakker",
       "strip": "Tijd geslapen, laatste 7 nachten",
       "caption": "laatste 7 nachten",
-      "link": "Bekijk deze nacht",
-      "viewSleep": "Bekijk slaap"
+      "link": "Bekijk deze nacht"
     },
     "recovery": {
       "title": "Herstel",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatFigure, usualLine, asOfLine, paceKey } from '../src/pages/dashboard/glanceText.js'
+import { formatFigure, usualLine, asOfLine, paceKey, greetingKey } from '../src/pages/dashboard/glanceText.js'
 import { staleSentence } from '../src/components/staleSentence.js'
 import { initI18n } from '../src/i18n/index.js'
 import type { GlanceFigure } from '../src/data/useGlance.js'
@@ -181,6 +181,15 @@ describe('paceKey', () => {
     expect(paceKey({ ...pace, standing: 'behind' })).toBe('glance.pace.behind')
     expect(paceKey({ ...pace, thin: true, standing: null })).toBeNull()
     expect(paceKey(null)).toBeNull()
+  })
+})
+
+describe('greetingKey', () => {
+  it('greets by the hour in the person\'s own zone', () => {
+    expect(greetingKey(Date.UTC(2026, 8, 24, 4, 0), 'Europe/Amsterdam')).toBe('glance.greeting.morning') // 06:00 local
+    expect(greetingKey(Date.UTC(2026, 8, 24, 10, 0), 'Europe/Amsterdam')).toBe('glance.greeting.afternoon') // 12:00 local
+    expect(greetingKey(Date.UTC(2026, 8, 24, 16, 0), 'Europe/Amsterdam')).toBe('glance.greeting.evening') // 18:00 local
+    expect(greetingKey(Date.UTC(2026, 8, 24, 1, 0), 'Europe/Amsterdam')).toBe('glance.greeting.evening') // 03:00 local
   })
 })
 

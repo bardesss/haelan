@@ -11,9 +11,7 @@ import { formatFigure, usualLine } from './glanceText.js'
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
 // (see the "does not import the fixtures" test): a local, structurally identical union avoids
-// that import for the one type this file needs from it. Copied from Dashboard.tsx rather than
-// moved: that page still builds its own hypnogram until a later task rebuilds it on top of the
-// redesigned cards.
+// that import for the one type this file needs from it.
 type Stage = 'deep' | 'light' | 'rem' | 'awake'
 type Segment = { stage: Stage, startMs: number, endMs: number }
 

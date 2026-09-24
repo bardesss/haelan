@@ -195,9 +195,6 @@
       "detail": "This device did not record enough of these days to compare them. Wearing it more consistently closes this gap; waiting longer will not."
     }
   },
-  "dashboard": {
-    "title": "Dashboard"
-  },
   "recovery": {
     "title": "Recovery",
     "units": {
@@ -1393,6 +1390,13 @@
   "glance": {
     "span": "Last night, and today until {{time}}",
     "spanNoTime": "Last night, and today so far",
+    "spanNoNight": "no night recorded · today until {{time}}",
+    "spanNoNightNoTime": "no night recorded · today so far",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
     "usual": {
       "within": "within your usual {{low}} – {{high}}",
       "above": "above your usual {{low}} – {{high}}",
@@ -1415,7 +1419,6 @@
     },
     "sleep": {
       "title": "Last night",
-      "empty": "No night recorded in the last day and a half.",
       "asleep": "Time asleep",
       "efficiency": "Efficiency",
       "bed": "Bed",
@@ -1423,7 +1426,6 @@
       "strip": "Time asleep, last 7 nights",
       "caption": "last 7 nights",
       "link": "View this night",
-      "viewSleep": "View sleep",
       "efficiencyStanding": {
         "above": "higher than usual",
         "below": "lower than usual"

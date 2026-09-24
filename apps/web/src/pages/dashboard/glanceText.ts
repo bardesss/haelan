@@ -92,6 +92,19 @@ export function formatTimeOfDay(atMs: number, language: string, timezone: string
   return new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone }).format(new Date(atMs))
 }
 
+/**
+ * The greeting by the hour in the person's zone: morning 05-12, afternoon 12-18, evening otherwise.
+ * The zone rather than the browser's, for the reason formatTimeOfDay gives: the page's clock times
+ * are the person's, and a greeting that disagreed with the "today until 11:40" beside it would read
+ * as a second clock.
+ */
+export function greetingKey(nowMs: number, timezone: string): 'glance.greeting.morning' | 'glance.greeting.afternoon' | 'glance.greeting.evening' {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: timezone }).format(new Date(nowMs)))
+  if (hour >= 5 && hour < 12) return 'glance.greeting.morning'
+  if (hour >= 12 && hour < 18) return 'glance.greeting.afternoon'
+  return 'glance.greeting.evening'
+}
+
 // A local date as "5 Sep", the short form a "night of ..." clause reads best in - formatLocalDate's
 // own `dateStyle: 'medium'` carries the year, which a night from this week does not need to state.
 // Same UTC-midnight anchoring as formatLocalDate, for the same reason: the day printed must not

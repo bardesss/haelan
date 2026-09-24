@@ -44,7 +44,9 @@ export function useCardPresence(counts: boolean): void {
   }, [register, id, counts])
 }
 
-export function CardGrid({ children }: { children: ReactNode }): ReactNode {
+// `className` is appended to the grid's own, so a page can scope rules to its grid (the Dashboard's
+// mid-band span, app.css) without a wrapper element between the grid and its cards.
+export function CardGrid({ children, className }: { children: ReactNode, className?: string }): ReactNode {
   const { t } = useTranslation()
   const [present, setPresent] = useState<ReadonlySet<string>>(() => new Set())
   // Distinct from `present.size === 0`, and the difference is the whole of the no-flash rule: on
@@ -69,7 +71,7 @@ export function CardGrid({ children }: { children: ReactNode }): ReactNode {
   useEffect(() => { setMeasured(true) }, [])
 
   return (
-    <div className="grid">
+    <div className={className === undefined ? 'grid' : `grid ${className}`}>
       <CardPresence.Provider value={register}>{children}</CardPresence.Provider>
       {/* Inside the grid so its own `gridColumn: span 12` means something, outside the provider
           so it never registers: inside, it would take the count to one, stop rendering, drop the
