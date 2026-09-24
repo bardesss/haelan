@@ -189,17 +189,26 @@ export interface GlanceStepsPace {
  * Measured at the last reading rather than at now, because a count synced at 13:52 compared with
  * the usual at 14:05 would call every unsynced minute a shortfall. Only baseline days that kept a
  * daily steps row count, so an excluded or silent day is absent rather than a zero.
+ *
+ * Compared against `read.today` - the same samples, cut at the same minute, through the same
+ * selectHourWinners arithmetic as every baseline day - never against the `steps` figure's own
+ * `value`. That value is `daily.steps`, which is only as fresh as the last time the derivation
+ * queue drained; comparing a possibly-stale derived total against a band cut at the sample cutoff
+ * mixes two different instants and can call an ordinary lag "behind" the spec's "measured at the
+ * last reading" rule forbids. Pace is null only when there is no step sample today
+ * (`stepsUpToMinute` returns null) or the baseline itself is (`baselineOf` returns null) - not on
+ * whether the daily total has caught up yet.
  */
-export function readStepsPace(ctx: GlanceContext, steps: GlanceFigure): GlanceStepsPace | null {
+export function readStepsPace(ctx: GlanceContext): GlanceStepsPace | null {
   const window = baselineWindow(ctx.today)
   const read = ctx.q.stepsUpToMinute({ today: ctx.today, ...window })
-  if (read === null || steps.value === null) return null
+  if (read === null) return null
   const withRow = new Set(ctx.q.series({ metric: 'steps', agg: 'sum', ...window }).points.map((p) => p.localDate))
   const values = [...read.sums].filter(([date]) => withRow.has(date)).map(([, sum]) => sum)
   const baseline = baselineOf(values)
   if (baseline === null) return null
   const band = toGlanceBaseline(baseline)!
-  const standing = band.thin ? null : steps.value > band.high ? 'ahead' : steps.value < band.low ? 'behind' : 'on'
+  const standing = band.thin ? null : read.today > band.high ? 'ahead' : read.today < band.low ? 'behind' : 'on'
   return { ...band, atMs: read.atMs, standing }
 }
 
@@ -406,7 +415,7 @@ export function readDay(ctx: GlanceContext): GlanceDay {
   const steps = dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) })
   return {
     steps,
-    stepsPace: readStepsPace(ctx, steps),
+    stepsPace: readStepsPace(ctx),
     activeMinutes: activeMinutesFigure(ctx),
     heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heartFeeding) },
     // Filed under the date a workout ended on, the same key the Activity list groups by, so a run
