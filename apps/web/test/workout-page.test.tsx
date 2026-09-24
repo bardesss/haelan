@@ -118,6 +118,22 @@ function stub(sessions: Record<string, WorkoutSession>): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/** `stub`, with the person's sources answered by name rather than as an empty list. */
+function stubWithSources(
+  sessions: Record<string, WorkoutSession>, named: { id: string, name: string }[],
+): () => void {
+  const restoreInner = stub(sessions)
+  const inner = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!String(input).includes('/sources')) return inner(input, init)
+    const items = named.map(({ id, name }) => ({
+      id, externalId: id, displayName: name, alias: null, name, kind: 'device', createdAtMs: 0,
+    }))
+    return new Response(JSON.stringify({ items }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return restoreInner
+}
+
 /**
  * Answers the session request with an HTTP status rather than a session, everything else as
  * `stub` above. Used for the error and not-found branches: `stub` can only ever answer 200, since
@@ -191,6 +207,62 @@ describe('the workout page', () => {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(html()).toContain('Morning run')
+    } finally { restore() }
+  })
+
+  // The route answers one workout for a run two sources recorded (mergedWorkouts.ts), and the
+  // heading names the primary's source as it always has. The other copy is named on a line of its
+  // own, by the name the person gave it, so the reader can see the phone saw this run too.
+  it('names the other sources that recorded the same workout', async () => {
+    const merged: WorkoutSession = { ...RUN, sources: ['watch', 'phone'], alternateIds: ['phone-run'] }
+    const restore = stubWithSources({ run1: merged }, [
+      { id: 'watch', name: 'Pixel Watch' }, { id: 'phone', name: 'Pixel phone' },
+    ])
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      await pumpUntil(() => html().includes('Pixel phone'), 'the source names to arrive')
+      expect(container!.querySelector('.workout-also')!.textContent).toBe('Also recorded by Pixel phone')
+    } finally { restore() }
+  })
+
+  // The page is what knows the other copies' ids, so it is what has to hand them to the panel:
+  // the panel alone cannot find them, and an exclusion of the primary only would leave the phone's
+  // copy standing as the workout (AnnotatePanel's own test says why).
+  it('excludes every copy of a merged workout from its annotate button', async () => {
+    const merged: WorkoutSession = { ...RUN, sources: ['watch', 'phone'], alternateIds: ['phone-run'] }
+    const restore = stubWithSources({ run1: merged }, [])
+    const inner = globalThis.fetch
+    const posted: string[] = []
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method !== 'POST') return inner(input, init)
+      posted.push(String((JSON.parse(String(init.body)) as { targetKey: string }).targetKey))
+      return new Response(JSON.stringify({ id: 'o1', affected: null, applied: true }),
+        { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      act(() => { (container!.querySelector('.workout-actions button') as HTMLButtonElement).click() })
+      const reason = container!.querySelector('.annotate-panel input') as HTMLInputElement
+      act(() => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(reason, 'duplicate')
+        reason.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      act(() => { (container!.querySelector('.annotate-panel button[type="submit"]') as HTMLButtonElement).click() })
+      await pumpUntil(() => posted.length === 2, 'both exclusions to be sent')
+      expect(posted).toEqual([JSON.stringify({ session: 'run1' }), JSON.stringify({ session: 'phone-run' })])
+    } finally { restore() }
+  })
+
+  it('says nothing more for a workout one source recorded', async () => {
+    const restore = stubWithSources({ run1: { ...RUN, sources: ['watch'], alternateIds: [] } }, [
+      { id: 'watch', name: 'Pixel Watch' },
+    ])
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container!.querySelector('.workout-also')).toBeNull()
     } finally { restore() }
   })
 

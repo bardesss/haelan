@@ -95,6 +95,11 @@ function paginate<T>(items: readonly T[], input: {
  * one gets that device's. See personQuery.ts, readSleepNights and readSessions for the reasoning
  * this route must not undo by merging, deduplicating or picking a winner on the way out.
  *
+ * One exception, made in core rather than here: exercise sessions with no source named answer one
+ * workout per event (query/mergedWorkouts.ts), grouped by the same priority list and overlap ratio
+ * `workout_count` is derived with, so the list and the count agree. It is still not this route's
+ * choice - personQuery.sessions and sessionById make it, and the MCP tools read the same answer.
+ *
  * Each handler stays a parameter check, one core call and a serialiser: no try/catch, because
  * registerV1's setErrorHandler turns whatever PersonQuery throws into the right response.
  */
@@ -215,6 +220,10 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const personQuery = personQueryOf(request)
     const sessionId = request.params.sessionId
 
+    // A merged workout for an exercise id, including an id naming a copy that was merged into
+    // another: the answer's own `id` is then the primary's, not the one in the path. Answered in
+    // place rather than redirected, so a link made before the merge keeps working with no second
+    // round trip, and everything joined below is read for the merged workout rather than the copy.
     const session: WorkoutSession | null = personQuery.sessionById({ sessionId })
     // 404 for an id that names nothing and for one belonging to somebody else alike. readSession
     // is scoped by person, so this handler never learns which of the two it is, and therefore

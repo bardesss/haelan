@@ -27,6 +27,7 @@ import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
+import { mergedWorkoutFor, mergeRuleFor, readMergedWorkouts } from './mergedWorkouts.ts'
 import { readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute } from './workoutDerived.ts'
 import type { CardioLoad } from '../api/cardioLoad.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
@@ -444,6 +445,19 @@ export class PersonQuery {
       throw new ConfigError(`kind 'sleep' has no exercise type to filter on, so '${input.type}' would match nothing. Use kind 'exercise' to filter by type.`)
     }
     requireOptionalPositiveInteger('last', input.last)
+    // Exercise with no source named is the one read that merges: one workout per event, whichever
+    // sources recorded it (mergedWorkouts.ts). Naming a source is asking for that device's own
+    // rows, so it keeps the raw answer it always had, and sleep keeps its own nightly merge.
+    if (input.kind === 'exercise' && input.sourceId === undefined) {
+      return readMergedWorkouts(this.#db, {
+        personId: this.#personId,
+        from: input.from,
+        to: input.to,
+        type: input.type,
+        last: input.last,
+        rule: mergeRuleFor(this.#db, this.#personId),
+      })
+    }
     return readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
@@ -461,10 +475,19 @@ export class PersonQuery {
    *
    * No requireSource call: the session's own row names its source, and a caller who has the id
    * is not choosing between devices. No requireSessionKind either; see readSession.
+   *
+   * An exercise session answers as the merged workout it belongs to, the same object the list
+   * answers for it, even when the id names an alternate (mergedWorkoutFor says why old links need
+   * that). cardioLoad, workoutSplits and workoutRoute below all start here, so each of them reads
+   * the merged workout too rather than one copy of it.
    */
   sessionById(input: { sessionId: string }): WorkoutSession | null {
     if (input.sessionId.trim() === '') throw new ConfigError('sessionId is required')
-    return readSession(this.#db, { personId: this.#personId, sessionId: input.sessionId })
+    const session = readSession(this.#db, { personId: this.#personId, sessionId: input.sessionId })
+    if (session === null || session.kind !== 'exercise') return session
+    return mergedWorkoutFor(this.#db, {
+      personId: this.#personId, session, rule: mergeRuleFor(this.#db, this.#personId),
+    })
   }
 
   /**

@@ -477,6 +477,9 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    source order, so every child of .workout-header keeps the plain `margin: 0` the others already
    carry, with spacing between them coming only from .workout-header's own flex `gap`. */
 .basis.workout-gps { margin: 0; }
+/* The "also recorded by" line under the when line, a `.basis` for the same reason and with the
+   same two-class selector for the same cascade reason as .basis.workout-gps just above. */
+.basis.workout-also { margin: 0; }
 
 /* WorkoutDetail.tsx's own control row, between the heading and the grid: this page has exactly
    one action (open the annotate panel at session scope), right-aligned rather than centered or

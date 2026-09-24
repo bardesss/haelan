@@ -8,6 +8,33 @@ import { priorityFrom } from '../derive/priority.ts'
 import type { Priority, SourceFacts } from '../derive/priority.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 
+/**
+ * A person's priority, read straight from the store.
+ *
+ * Free-standing as well as a method, because a reader has no business constructing the store:
+ * SourcePriorityStore also owns the derive queue its writes mark dirty, and the merged workout
+ * list (query/mergedWorkouts.ts) needs the ranking and nothing else. One function behind both, so
+ * the list and the derivation that counts the same workouts cannot come to rank sources
+ * differently.
+ */
+export function loadPriority(db: DbOrTx, personId: string): Priority {
+  const lists = new Map<string, string[]>()
+  const rows = db.select().from(sourcePriority)
+    .where(eq(sourcePriority.personId, personId))
+    .orderBy(asc(sourcePriority.metric), asc(sourcePriority.rank))
+    .all()
+  for (const row of rows) {
+    const list = lists.get(row.metric)
+    if (list) list.push(row.sourceId)
+    else lists.set(row.metric, [row.sourceId])
+  }
+
+  const facts = db.select({ id: sources.id, kind: sources.kind }).from(sources)
+    .where(eq(sources.personId, personId)).all() as SourceFacts[]
+
+  return priorityFrom({ lists, sources: facts })
+}
+
 export interface StoredList {
   metric: string
   sourceIds: string[]
@@ -29,17 +56,7 @@ export class SourcePriorityStore {
   }
 
   load(personId: string): Priority {
-    const lists = new Map<string, string[]>()
-    for (const row of this.#rows(personId)) {
-      const list = lists.get(row.metric)
-      if (list) list.push(row.sourceId)
-      else lists.set(row.metric, [row.sourceId])
-    }
-
-    const facts = this.#db.select({ id: sources.id, kind: sources.kind }).from(sources)
-      .where(eq(sources.personId, personId)).all() as SourceFacts[]
-
-    return priorityFrom({ lists, sources: facts })
+    return loadPriority(this.#db, personId)
   }
 
   lists(personId: string): StoredList[] {

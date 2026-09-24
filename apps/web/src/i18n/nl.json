@@ -395,7 +395,7 @@
       "countFiltered": "{{shown}} van de {{total}} geregistreerde sessies in deze periode",
       "daySummary_one": "{{count}} sessie · {{duration}}",
       "daySummary_other": "{{count}} sessies · {{duration}}",
-      "basis": "Eén rij per geregistreerde sessie. De tegel Work-outs telt een work-out één keer, ook als twee apparaten dezelfde registreerden, dus die kan lager uitvallen.",
+      "basis": "Eén rij per work-out. Een work-out die twee apparaten registreerden, staat er één keer in, zoals de tegel Work-outs hem telt.",
       "filterLabel": "Filter op type",
       "allTypes": "Alle types",
       "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",
@@ -407,6 +407,7 @@
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "alsoRecordedBy": "Ook geregistreerd door {{sources}}",
       "annotate": "Uitsluiten of een notitie toevoegen",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
       "gpsDrawn": "Er is een GPS-route opgenomen voor deze training, hieronder getekend.",

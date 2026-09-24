@@ -395,7 +395,7 @@
       "countFiltered": "{{shown}} of {{total}} recorded sessions in this period",
       "daySummary_one": "{{count}} session · {{duration}}",
       "daySummary_other": "{{count}} sessions · {{duration}}",
-      "basis": "One row per recorded session. The Workouts tile counts a workout once even when two devices recorded it, so it can read lower.",
+      "basis": "One row per workout. A workout two devices recorded is shown once, the way the Workouts tile counts it.",
       "filterLabel": "Filter by type",
       "allTypes": "All types",
       "emptyPeriodTitle": "No activities recorded in this period.",
@@ -407,6 +407,7 @@
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "alsoRecordedBy": "Also recorded by {{sources}}",
       "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
       "gpsDrawn": "A GPS route was recorded for this workout, drawn below.",

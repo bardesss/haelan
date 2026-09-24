@@ -26,7 +26,14 @@ export type AnnotateTarget =
   // The workout page's own target. It carries localDate because the note action writes against a
   // day whatever the target named, exactly as the other two variants do, and sessionId because
   // that is what an exclusion at this scope actually names: a recorded session, not a derived day.
-  | { scope: 'session', localDate: string, sessionId: string }
+  //
+  // alsoSessionIds are the other copies of the same workout, the ones the server merged into
+  // sessionId (packages/core/src/query/mergedWorkouts.ts). An exclusion writes one override per
+  // copy: the server calls a merged workout excluded only once every copy is, because that is when
+  // workout_count stops counting it - derivation drops an excluded session before it groups, so
+  // excluding the primary alone would hand the event to the phone's copy and the workout would
+  // stay on the list under a different id.
+  | { scope: 'session', localDate: string, sessionId: string, alsoSessionIds?: readonly string[] }
 
 type Action = 'exclude' | 'correct' | 'note' | 'event'
 
@@ -114,9 +121,25 @@ export function AnnotatePanel({ target, onClose }: {
     if (!canSubmit) return
 
     if (action === 'exclude') {
-      writeOverride.mutate({ scope: target.scope, targetKey, action: 'exclude', reason }, {
-        onSuccess: (result) => { if (result.applied) onClose() },
-      })
+      // One key everywhere but a merged workout, which excludes each of its copies in turn (the
+      // comment on AnnotateTarget's session variant says why). In turn rather than at once: each
+      // write drains the derive queue before it answers, and the panel closes only once every one
+      // of them says it applied, so a reader is never told the count moved while one copy still
+      // holds it up.
+      const keys = [
+        targetKey,
+        ...(target.scope === 'session' ? (target.alsoSessionIds ?? []).map((id) => sessionTarget(id)) : []),
+      ]
+      const writeFrom = (at: number, appliedSoFar: boolean): void => {
+        writeOverride.mutate({ scope: target.scope, targetKey: keys[at]!, action: 'exclude', reason }, {
+          onSuccess: (result) => {
+            const applied = appliedSoFar && result.applied
+            if (at + 1 < keys.length) writeFrom(at + 1, applied)
+            else if (applied) onClose()
+          },
+        })
+      }
+      writeFrom(0, true)
     } else if (action === 'correct') {
       // Reachable only when actionsFor offered this segment, which only happens at sample scope
       // (target.n === 1), so target.scope is always 'sample' here; OverrideStore.validate would

@@ -165,10 +165,10 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
       </div>
       {/* The Workouts tile at the top of this page sums merged `daily` workout_count, which
           deriveExerciseDay writes from groupSessions: the same run recorded by a watch and a
-          phone is one workout there and two rows here. Over the reporting household's seven
-          months that is 186 against 192, differing on six days, so on an all sources Month the
-          tile can sit lower than the rows beneath it. The two are different quantities, and this
-          line is what says so, since nothing else on the page distinguishes them. */}
+          phone is one workout there. It used to be two rows here, and this line explained why
+          the tile read lower. The route now groups with the same rule (packages/core/src/query/
+          mergedWorkouts.ts), so the rows are workouts too and the line says so instead; the other
+          recording is named on the workout's own page. */}
       <p className="basis">{t('activity.sessions.basis')}</p>
       {filtered.length === 0 ? (
         <EmptyState title={t('activity.sessions.emptyFilteredTitle', { type: selectedLabel })}

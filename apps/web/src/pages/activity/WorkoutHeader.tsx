@@ -77,6 +77,12 @@ export function WorkoutHeader({ session, detail, timezone, route }: {
   // thing twice on the 197 of 197 sessions that carry a displayName.
   const title = detail.displayName ?? exerciseTypeLabel(t, summary.exerciseType)
   const gpsKey = gpsSentenceKey(detail, (route ?? []).length)
+  // The other sources that recorded this workout, by the names the person gave them. The server
+  // answers a run the watch and the phone both delivered as one workout (mergedWorkouts.ts), the
+  // primary's source already named in the line above; this is the rest, so a reader can see the
+  // second copy exists without the list showing the run twice. Filtered on the primary's id rather
+  // than sliced off the front, so a response that lists the primary anywhere still reads right.
+  const others = (session.sources ?? []).filter((id) => id !== session.sourceId)
 
   return (
     <header className="workout-header">
@@ -89,6 +95,13 @@ export function WorkoutHeader({ session, detail, timezone, route }: {
           source: nameOf(session.sourceId),
         })}
       </p>
+      {others.length > 0 && (
+        <p className="workout-also basis">
+          {t('activity.workout.alsoRecordedBy', {
+            sources: new Intl.ListFormat(language, { type: 'conjunction' }).format(others.map(nameOf)),
+          })}
+        </p>
+      )}
       {session.excluded && (
         <p className="workout-excluded">
           {session.excludeReason !== null

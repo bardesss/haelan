@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, people, sessionRoutes } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
@@ -120,15 +120,26 @@ export function readWorkoutRoute(db: DbOrTx, input: {
   session: WorkoutSession
 }): RoutePoint[] {
   if (input.session.kind !== 'exercise') return []
-  return db.select({
+  // A merged workout's route is its first member's that has one, in the same best-first order its
+  // attrs were filled in (mergedWorkouts.ts): Google never sends a route, so a run the priority
+  // list credits to Google still draws the track the phone recorded for it. Whole routes, never
+  // points from two members interleaved, for the reason a split list is never merged either.
+  //
+  // One read for every member rather than one per member, grouped here: a workout has two or three
+  // copies at most, but a query per candidate is the shape drizzle-prepares-per-run warned about.
+  const order = [input.session.id, ...input.session.alternateIds]
+  const rows = db.select({
+    sessionId: sessionRoutes.sessionId,
     atMs: sessionRoutes.atMs,
     latitude: sessionRoutes.latitude,
     longitude: sessionRoutes.longitude,
     altitudeMetres: sessionRoutes.altitudeMetres,
     horizontalAccuracyMetres: sessionRoutes.horizontalAccuracyMetres,
     verticalAccuracyMetres: sessionRoutes.verticalAccuracyMetres,
-  }).from(sessionRoutes).where(eq(sessionRoutes.sessionId, input.session.id))
+  }).from(sessionRoutes).where(inArray(sessionRoutes.sessionId, order))
     .orderBy(asc(sessionRoutes.ordinal)).all()
+  const owner = order.find((id) => rows.some((row) => row.sessionId === id))
+  return rows.filter((row) => row.sessionId === owner).map(({ sessionId: _, ...point }) => point)
 }
 
 function readBanister(db: DbOrTx, input: { personId: string, session: WorkoutSession }) {

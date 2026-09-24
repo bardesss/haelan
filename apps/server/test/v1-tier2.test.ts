@@ -174,6 +174,26 @@ describe('GET /sessions', () => {
     expect([...first.items, ...second.items, ...third.items]).toEqual(whole)
   })
 
+  // The companion app and the Google Health API both deliver every run the watch records. The
+  // list answers the event once, named by the primary and saying who else recorded it; a caller
+  // that names a source is asking for that device's rows and still gets them unmerged.
+  it('lists a run two sources recorded as one workout, and each source\'s own row when asked', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, { localDate: '2026-08-01', sourceId: 'google', exerciseType: 'RUNNING' })
+    seedWorkout(harness, { localDate: '2026-08-01', sourceId: 'phone', exerciseType: 'RUNNING' })
+    const range = '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31'
+
+    // Both sources are devices with no list configured, so the fallback order ranks them by id:
+    // google ahead of phone.
+    const merged = (await get(harness, token, range)).json().items
+    expect(merged.map((s: { id: string, sources: string[], alternateIds: string[] }) => [s.id, s.sources, s.alternateIds]))
+      .toEqual([[`workout-${workoutCounter - 1}`, ['google', 'phone'], [`workout-${workoutCounter}`]]])
+
+    const phone = (await get(harness, token, `${range}&source=phone`)).json().items
+    expect(phone.map((s: { id: string, sources: string[], alternateIds: string[] }) => [s.id, s.sources, s.alternateIds]))
+      .toEqual([[`workout-${workoutCounter}`, ['phone'], []]])
+  })
+
   it('filters to one exercise type when asked', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedWorkout(harness, { localDate: '2026-08-01', exerciseType: 'RUNNING' })
