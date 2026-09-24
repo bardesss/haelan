@@ -51,9 +51,18 @@ export function registerSync(app: FastifyInstance): void {
     // answer rather than a race, and the stream and the status route carry the rest.
     const outcome = app.haelan.runner.tryStart('manual')
     if (outcome.started) return reply.code(202).send({ started: true })
-    // Neither refusal means setup is incomplete: a run is already going, or the instance is on
-    // its way down, and in both cases the honest answer is to try again shortly - which is what
-    // 'transient' means. The code still carries which of the two it was.
+    // A cooldown is a different shape of "not now" than the other two: it names when a retry
+    // would succeed rather than only that one would eventually, so it gets its own status and a
+    // retry-after header rather than folding into the 409 below.
+    if (outcome.reason === 'cooldown') {
+      const seconds = Math.ceil((outcome.retryAfterMs ?? 0) / 1000)
+      return reply.code(429).header('retry-after', String(seconds)).send(errorBody(
+        'transient', 'cooldown', `a sync finished moments ago; try again in ${seconds}s`,
+      ))
+    }
+    // Neither remaining refusal means setup is incomplete: a run is already going, or the
+    // instance is on its way down, and in both cases the honest answer is to try again shortly -
+    // which is what 'transient' means. The code still carries which of the two it was.
     return reply.code(409).send(errorBody(
       'transient',
       outcome.reason ?? 'busy',
