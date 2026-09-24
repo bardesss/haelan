@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ConfigError } from '@haelan/core'
+import type { PersonQuery } from '@haelan/core'
 import { workoutSummary, workoutDetail } from '@haelan/core/workout-summary'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, untrusted, DEFAULT_INTRADAY_POINTS, REDUCTION, SUMMARY, UNTRUSTED } from '../contract.ts'
@@ -32,6 +33,28 @@ function summaryFields(attrs: unknown) {
   }
 }
 
+// Every source that recorded the event, the primary first, on both tools. A workout two devices
+// recorded is answered once (packages/core/src/query/mergedWorkouts.ts), and `sourceId` names only
+// the primary; the HTTP routes carry the rest in `sources`, and until this the tools dropped it,
+// so an agent asked "did my phone record this run too?" had nothing to answer from but a guess.
+// The id comes with each name because it is what `source` accepts on either tool, which is how an
+// agent asks for one device's own copy. The name runs through describe()'s alias-then-display-name
+// choice, the one every other surface uses, and sits in the untrusted envelope for the reason
+// describe_person gives: a device chose it, or the person typed it.
+const WORKOUT_SOURCES = z.array(z.object({ sourceId: z.string(), name: UNTRUSTED })).describe(
+  'Every source that recorded this workout, the one `sourceId` names first. More than one when '
+  + 'two devices recorded the same event and it is answered once; `sourceId` is what the `source` '
+  + 'argument takes, to read one device\'s own copy.',
+)
+
+/** Source id to the name this person sees for it, read once per tool call. */
+function sourceNamesOf(q: PersonQuery): (sourceId: string) => { sourceId: string, name: ReturnType<typeof untrusted> } {
+  const names = new Map(q.describe().sources.map((s) => [s.id, s.name]))
+  // An id with no registered source falls back to the id itself, as nameFor does for a source with
+  // no display name: a name that says nothing is still better than dropping the source.
+  return (sourceId) => ({ sourceId, name: untrusted(names.get(sourceId) ?? sourceId) })
+}
+
 export const getWorkouts = defineTool({
   name: 'get_workouts',
   description:
@@ -40,7 +63,8 @@ export const getWorkouts = defineTool({
     + 'id in before calling get_workout for the full detail. With no `source`, a workout two '
     + 'sources recorded is answered once, under the id of the source the person ranks first, with '
     + 'fields that source left empty filled from the other; with a `source`, that device\'s own '
-    + 'sessions come back as recorded. `type` filters exercise sessions to '
+    + 'sessions come back as recorded. `sources` names every source that recorded each one, the '
+    + 'primary first. `type` filters exercise sessions to '
     + 'one provider exercise type (e.g. RUNNING) and is refused together with kind sleep, which '
     + 'has none. `last` takes the N most recent matches after that filter, so "my last run" is '
     + '`type: \'RUNNING\', last: 1` rather than a second, narrower parameter. excludeReason is '
@@ -61,6 +85,7 @@ export const getWorkouts = defineTool({
     workouts: z.array(z.object({
       sessionId: z.string(),
       sourceId: z.string(),
+      sources: WORKOUT_SOURCES,
       localDate: z.string(),
       startMs: z.number(),
       endMs: z.number(),
@@ -69,21 +94,26 @@ export const getWorkouts = defineTool({
       ...WORKOUT_SUMMARY_FIELDS,
     })),
   },
-  run: (q, args) => ({
-    workouts: q.sessions({
+  run: (q, args) => {
+    const sessions = q.sessions({
       kind: args.kind, from: args.from, to: args.to,
       sourceId: args.source, type: args.type, last: args.last,
-    }).map((session) => ({
-      sessionId: session.id,
-      sourceId: session.sourceId,
-      localDate: session.localDate,
-      startMs: session.startMs,
-      endMs: session.endMs,
-      excluded: session.excluded,
-      excludeReason: untrusted(session.excludeReason),
-      ...summaryFields(session.attrs),
-    })),
-  }),
+    })
+    const named = sourceNamesOf(q)
+    return {
+      workouts: sessions.map((session) => ({
+        sessionId: session.id,
+        sourceId: session.sourceId,
+        sources: session.sources.map(named),
+        localDate: session.localDate,
+        startMs: session.startMs,
+        endMs: session.endMs,
+        excluded: session.excluded,
+        excludeReason: untrusted(session.excludeReason),
+        ...summaryFields(session.attrs),
+      })),
+    }
+  },
 })
 
 const WORKOUT_SPLIT = z.object({
@@ -179,7 +209,8 @@ const DEFAULT_TRACE_METRIC = 'heart_rate'
 export const getWorkout = defineTool({
   name: 'get_workout',
   description:
-    'One workout in full: the session\'s own span and source, workoutSummary\'s headline numbers, '
+    'One workout in full: the session\'s own span and source, every source that recorded it '
+    + '(`sources`, the primary first, the same as get_workouts), workoutSummary\'s headline numbers, '
     + 'and everything else its attrs carry — heart rate zones, mobility metrics for an advanced '
     + 'run, automatic splits, recorded laps, and START/STOP/PAUSE markers — plus a trace over the '
     + 'session\'s own span for `metrics` (default heart_rate, the one metric stored downsampled to '
@@ -223,6 +254,7 @@ export const getWorkout = defineTool({
   outputSchema: {
     sessionId: z.string(),
     sourceId: z.string(),
+    sources: WORKOUT_SOURCES,
     localDate: z.string(),
     startMs: z.number(),
     endMs: z.number(),
@@ -269,6 +301,7 @@ export const getWorkout = defineTool({
     return {
       sessionId: session.id,
       sourceId: session.sourceId,
+      sources: session.sources.map(sourceNamesOf(q)),
       localDate: session.localDate,
       startMs: session.startMs,
       endMs: session.endMs,

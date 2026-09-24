@@ -32,11 +32,11 @@ import { useStatusPanel, useRunSync, useRefreshOnSyncFinish } from '../data/useS
  * anchored in a 44px top bar has nowhere to open on a 375px screen.
  *
  * The popover is portalled to document.body and placed with position: fixed, not absolutely
- * positioned inside the rail like the person menu. The rail is a scroll container (overflow-y:
- * auto, which makes overflow-x compute to auto too), and a 20rem popover inside it was clipped at
- * the rail's 186px edge: about 40px of it showed, the rail grew a sideways scrollbar, and on a
- * collapsed rail nothing showed at all. The person menu gets away with it only because it is no
- * wider than the foot it opens from.
+ * positioned inside the rail. The rail is a scroll container (overflow-y: auto, which makes
+ * overflow-x compute to auto too), and a 20rem popover inside it was clipped at the rail's 186px
+ * edge: about 40px of it showed, the rail grew a sideways scrollbar, and on a collapsed rail
+ * nothing showed at all. The person menu beside it had the same defect on a collapsed rail and now
+ * floats the same way, through placementFor below (see Sidebar.tsx).
  */
 export function StatusControl() {
   const { t } = useTranslation()

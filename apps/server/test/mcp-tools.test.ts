@@ -550,6 +550,67 @@ describe('get_workouts', () => {
   })
 })
 
+// A workout two devices recorded is answered once (mergedWorkouts.ts), and both tools used to say
+// only which device the merged row came from. The HTTP routes carry every source the event was
+// recorded by; the tools dropped it, so an agent asked "did my phone record this run as well?" had
+// no way to answer but to guess from sourceId. Both tools now name every source, the primary
+// first, through the same alias-then-display-name choice describe_person makes.
+describe('get_workouts and get_workout, a workout two sources recorded', () => {
+  const START = Date.UTC(2026, 7, 12, 7, 0)
+  const END = START + 30 * 60_000
+
+  beforeEach(() => {
+    test.db.insert(schema.sources).values({
+      id: 'phone', personId: 'robin', externalId: 'phone', displayName: 'Pixel',
+      kind: 'device', createdAtMs: 1,
+    }).run()
+    // The phone ranks first for exercise, so the primary is not simply the older source: the
+    // order below has to come from the person's own ranking to pass.
+    test.db.insert(schema.sourcePriority).values([
+      { personId: 'robin', metric: 'exercise', sourceId: 'phone', rank: 0 },
+      { personId: 'robin', metric: 'exercise', sourceId: 'watch', rank: 1 },
+    ]).run()
+    test.db.insert(schema.sourceAliases).values({
+      personId: 'robin', sourceId: 'phone', alias: 'My phone', updatedAtMs: 0,
+    }).run()
+    seedExerciseSession({
+      id: 'run-watch', sourceId: 'watch', startMs: START, endMs: END, localDate: '2026-08-12',
+      attrs: { exerciseType: 'RUNNING' },
+    })
+    seedExerciseSession({
+      id: 'run-phone', sourceId: 'phone', startMs: START + 60_000, endMs: END, localDate: '2026-08-12',
+      attrs: { exerciseType: 'RUNNING' },
+    })
+  })
+
+  const BOTH = [
+    { sourceId: 'phone', name: { untrustedText: 'My phone', truncated: false } },
+    { sourceId: 'watch', name: { untrustedText: 'Fitbit Sense', truncated: false } },
+  ]
+
+  it('names both sources on the one merged row get_workouts answers, the primary first', () => {
+    const out = tool('get_workouts').run(q(), {
+      kind: 'exercise', from: '2026-08-12', to: '2026-08-12',
+    }) as { workouts: { sessionId: string, sourceId: string, sources: unknown }[] }
+    expect(out.workouts).toHaveLength(1)
+    expect(out.workouts[0]!.sessionId).toBe('run-phone')
+    expect(out.workouts[0]!.sources).toEqual(BOTH)
+  })
+
+  it('names both sources on get_workout, even when asked by the alternate copy\'s id', () => {
+    const out = tool('get_workout').run(q(), { sessionId: 'run-watch' }) as { sourceId: string, sources: unknown }
+    expect(out.sourceId).toBe('phone')
+    expect(out.sources).toEqual(BOTH)
+  })
+
+  it('names the one source of a device\'s own sessions when a source is given', () => {
+    const out = tool('get_workouts').run(q(), {
+      kind: 'exercise', from: '2026-08-12', to: '2026-08-12', source: 'watch',
+    }) as { workouts: { sources: unknown }[] }
+    expect(out.workouts.map((w) => w.sources)).toEqual([[BOTH[1]]])
+  })
+})
+
 describe('get_workout', () => {
   const START = Date.UTC(2026, 7, 10, 7, 0)
   const END = START + 10 * 60_000

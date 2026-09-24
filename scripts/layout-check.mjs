@@ -78,7 +78,9 @@ function check(condition, label) {
  * right portion is gone - `nearRightEdge` is what catches that. `selector` is looked up fresh
  * against `document`, not scoped under `.rail-foot` or `.rail`, so this also survives the popover
  * moving into a portal under `document.body` in a later change - only how the element is found
- * would need to differ then, not this check.
+ * would need to differ then, not this check. The same `selector` is what the painted element is
+ * walked up against, so one probe serves every floating layer: the status popover and the person
+ * menu beside it (`.rail-menu`) are both checked with it.
  */
 async function paintableAt(page, selector, box) {
   return page.evaluate(({ selector, box }) => {
@@ -90,7 +92,7 @@ async function paintableAt(page, selector, box) {
     ]
     return points.every(({ x, y }) => {
       const painted = document.elementFromPoint(x, y)
-      return painted !== null && painted.closest('.status-popover') === target
+      return painted !== null && painted.closest(selector) === target
     })
   }, { selector, box })
 }
@@ -99,6 +101,8 @@ async function paintableAt(page, selector, box) {
 // line below reads this after the try/finally has run, and a `let` scoped to the try block would
 // not reach that far.
 let statusPanelsOpened = 0
+// The person menu's own count, at module scope for the same reason: the summary line reads it.
+let personMenusOpened = 0
 
 // Every control `isExemptInlineLink` excused from the 44px rule across this whole run, with the
 // sweep that found it. An exemption that nothing counts is an exemption that can widen in
@@ -672,6 +676,59 @@ try {
     }
   }
 
+  // The person menu, on the same 900x380 rail and at both widths. It shares the status popover's
+  // geometry problem exactly: it opens out of the rail's foot, and `.rail`'s overflow-y: auto makes
+  // overflow-x compute to auto as well, so anything absolutely positioned inside the rail is cut at
+  // the rail's own edge. Collapsed is the case that matters - `.rail-collapsed .rail-menu` opens to
+  // the right of the 60px strip, which is entirely outside the box doing the clipping - and
+  // expanded is checked as well so that a fix for one width cannot quietly break the other.
+  // `paintableAt` rather than a boundingBox, for the reason its own comment gives: a clipped menu
+  // still reports a perfectly good box.
+  //
+  // Escape first, because the block above leaves the collapsed status popover open. Collapsed is
+  // checked first because that is how the block above leaves the rail, and expanded last so the
+  // rail is back at its default width for anything added after this.
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(SETTLE_MS)
+  for (const width of ['collapsed', 'expanded']) {
+    const wantCollapsed = width === 'collapsed'
+    const isCollapsed = await page.locator('.rail.rail-collapsed').isVisible().catch(() => false)
+    if (isCollapsed !== wantCollapsed) {
+      await page.locator('.rail-toggle').click()
+      await page.waitForTimeout(SETTLE_MS)
+    }
+    const nowCollapsed = await page.locator('.rail.rail-collapsed').isVisible().catch(() => false)
+    check(nowCollapsed === wantCollapsed, `the rail is not ${width} for the person menu check at 900x380`)
+    const person = page.locator('.rail-foot .rail-person')
+    if (!(await person.isVisible().catch(() => false))) {
+      check(false, `no person button in the rail foot at 900x380 ${width}`)
+      continue
+    }
+    await person.click()
+    const menu = page.locator('.rail-menu')
+    const menuShown = await menu.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(menuShown, `the person menu did not open at 900x380 ${width}`)
+    if (menuShown) {
+      personMenusOpened += 1
+      const viewport = page.viewportSize()
+      const box = await menu.boundingBox()
+      check(
+        box !== null && viewport !== null && box.y >= 0 && box.x + box.width <= viewport.width + 1,
+        `the person menu is outside the viewport at 900x380 ${width}: ${box === null ? 'unmeasurable'
+          : `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}`}`,
+      )
+      check(
+        box !== null && await paintableAt(page, '.rail-menu', box),
+        `the person menu is clipped or covered at 900x380 ${width}`,
+      )
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(SETTLE_MS)
+      check(!(await menu.isVisible().catch(() => false)), `Escape did not close the person menu at 900x380 ${width}`)
+    }
+  }
+  // Pinned, so a renamed class that stops the menu opening cannot skip both probes in silence.
+  check(personMenusOpened === 2, `the person menu was opened ${personMenusOpened} of 2 times (collapsed, expanded)`)
+
   // Pinned for the same reason PANEL_OPENERS' own count is: a renamed trigger class or a panel
   // that stops opening would otherwise skip every status-panel assertion above and say nothing.
   // Three, not two: the phone sheet, the desktop popover, and the same popover again once the
@@ -721,6 +778,7 @@ console.log(
     + `hit areas on each of them with the drawer shut and again with it open, `
     + `the annotate panel opened and swept on ${PANEL_OPENERS.length} routes, `
     + `${BAND_ROUTE} across the rest of the band, the same routes rotated across the breakpoint, `
-    + 'the drawer and its three ways out, the rail foot, and the status panel opened '
-    + `${statusPanelsOpened} times (phone sheet, desktop popover, collapsed-rail popover).`,
+    + 'the drawer and its three ways out, the rail foot, the status panel opened '
+    + `${statusPanelsOpened} times (phone sheet, desktop popover, collapsed-rail popover), `
+    + `and the person menu opened ${personMenusOpened} times (collapsed and expanded rail).`,
 )
