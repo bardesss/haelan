@@ -579,6 +579,40 @@ describe('the popover\'s placement', () => {
     expect(popover()!.style.bottom).toBe(`${window.innerHeight - 500 + 6}px`)
   })
 
+  // The popover's height is its content's, and the content grows after it opens: the open's own
+  // refetch lands, a result line appears under the Sync button. Placed only on open and on a
+  // window resize, a popover that grew past the room above the icon on a short window kept the
+  // bottom it was given while short, and its top ran off the viewport - the clamp in placementFor
+  // only works on a height it has been told about.
+  it('places itself again when its own content grows', () => {
+    const observers: Array<{ callback: ResizeObserverCallback, targets: Element[] }> = []
+    const realResizeObserver = window.ResizeObserver
+    window.ResizeObserver = class {
+      readonly entry: { callback: ResizeObserverCallback, targets: Element[] }
+      constructor(callback: ResizeObserverCallback) {
+        this.entry = { callback, targets: [] }
+        observers.push(this.entry)
+      }
+      observe(target: Element) { this.entry.targets.push(target) }
+      unobserve() {}
+      disconnect() { this.entry.targets = [] }
+    } as unknown as typeof ResizeObserver
+    try {
+      mount(panel())
+      stubRects(rect(150, 700, 30, 30), rect(12, 690, 162, 60))
+      press(icon())
+      expect(popover()!.style.bottom).toBe(`${window.innerHeight - 700 + 6}px`)
+      const watching = observers.find((o) => o.targets.includes(popover()!))
+      expect(watching).toBeDefined()
+      // Taller than the whole window less the gap: the clamp has to pin its top instead.
+      popover()!.getBoundingClientRect = () => rect(12, 0, 320, window.innerHeight - 20)
+      act(() => { watching!.callback([], {} as ResizeObserver) })
+      expect(popover()!.style.bottom).toBe(`${20 - 6}px`)
+    } finally {
+      window.ResizeObserver = realResizeObserver
+    }
+  })
+
   // Portalled, it is no longer inside the wrapper, so the outside-press test has to count it as
   // inside explicitly - or a press on the Sync button would close the popover before its click.
   it('still counts a press inside the portalled popover as inside', () => {

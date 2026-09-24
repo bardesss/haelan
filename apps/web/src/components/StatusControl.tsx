@@ -165,7 +165,22 @@ export function StatusControl() {
     }
     place()
     window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
+    // And again whenever the popover's own size changes. Its height is its content's, and the
+    // content grows after it opens - the open's refetch lands, a result line appears under the
+    // Sync button - so a popover placed while short, on a window too short for its final height,
+    // kept that bottom and ran its top off the viewport: placementFor's top clamp only works on a
+    // height it was given. A ResizeObserver rather than a dependency on the data, because the size
+    // is what matters and many things change it (the language, a font arriving, a device row).
+    // It cannot loop: place() moves the box (left, bottom) and never resizes it, and an observer
+    // fires on size alone. Guarded for the environments without one, where the open and resize
+    // placements are still what they were.
+    const box = popover.current
+    const observer = box !== null && typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null
+    if (box !== null) observer?.observe(box)
+    return () => {
+      window.removeEventListener('resize', place)
+      observer?.disconnect()
+    }
   }, [open, isPhone])
 
   // Focus moves into the popover on open, so a keyboard reader lands on the panel they asked for
