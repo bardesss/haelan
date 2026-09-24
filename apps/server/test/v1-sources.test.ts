@@ -72,6 +72,18 @@ describe('GET /sources, the activity each one reports', () => {
     })
   })
 
+  it('says whether a stale source carried on under another id, which is what the cards read', async () => {
+    // The app takes over the watch's one metric the day after it stops, as a renamed device's
+    // new id does. The listing still calls the old id stale; the cards read the second field.
+    seedDates('watch', '2026-01-01', 14)
+    seedDates('app', '2026-01-15', 19)
+    const items = (await listWithActivity()).json().items
+    const watch = items.find((i: { id: string }) => i.id === 'watch')
+    expect(watch).toMatchObject({ status: 'stale', continuedElsewhere: true })
+    const app = items.find((i: { id: string }) => i.id === 'app')
+    expect(app).toMatchObject({ status: 'reporting', continuedElsewhere: false })
+  })
+
   it('leaves a source that is still reporting alone', async () => {
     seedDates('watch', '2026-01-20', 14)
     const [watch] = (await listWithActivity()).json().items

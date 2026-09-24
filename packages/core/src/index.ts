@@ -198,8 +198,9 @@ export type { Run } from './api/runs.ts'
 export type { SourceActivity } from './query/sourceActivity.ts'
 export {
   cadenceOf, MIN_REPORTING_DATES, STALE_GAP_MULTIPLIER, STALE_FLOOR_DAYS, UNJUDGED_FLOOR_DAYS,
+  continuedElsewhere, ROUTINE_WINDOW_DAYS,
 } from './api/sourceCadence.ts'
-export type { SourceCadence, SourceStatus } from './api/sourceCadence.ts'
+export type { SourceCadence, SourceStatus, SourceReport } from './api/sourceCadence.ts'
 export { comparePeriods, INSIGHT_MIN_DAY_FRACTION, INSIGHT_MIN_COVERAGE } from './query/insights.ts'
 export type { Insight, PeriodPoint, SuppressionReason, DateRange } from './query/insights.ts'
 export { coverageIsMeaningful } from './query/coverageSignal.ts'

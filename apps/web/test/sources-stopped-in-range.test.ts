@@ -39,11 +39,29 @@ describe('sourcesStoppedInRange', () => {
   })
 
   it('names only the one that stopped when another kept going', () => {
-    const points = [
+    // The watch also measured heart rate, which the phone never does. Were the phone carrying on
+    // with everything the watch reported, the watch would be continued elsewhere (the renamed
+    // device below) rather than stopped.
+    const steps = [
       ...run('2026-01-01', 20).map((d) => point(d, ['watch', 'phone'])),
       ...run('2026-01-21', 20).map((d) => point(d, ['phone'])),
     ]
-    expect(sourcesStoppedInRange([query(points)], '2026-02-09')).toEqual(['watch'])
+    const heart = run('2026-01-01', 20).map((d) => point(d, ['watch']))
+    const both = { data: { steps: { points: steps }, heart_rate: { points: heart } } } as unknown as
+      UseQueryResult<Record<string, MetricSeries>>
+    expect(sourcesStoppedInRange([both], '2026-02-09')).toEqual(['watch'])
+  })
+
+  it('does not name a device that only changed its name, when the new name carries on with all of it', () => {
+    // The false positive a provider's rename produced: one watch under two source ids, the older
+    // one silent since the rename, the newer one reporting every metric the older one did.
+    const points = [
+      ...run('2026-01-01', 20).map((d) => point(d, ['watch-old-name'])),
+      ...run('2026-01-21', 20).map((d) => point(d, ['watch'])),
+    ]
+    const renamed = { data: { steps: { points }, heart_rate: { points } } } as unknown as
+      UseQueryResult<Record<string, MetricSeries>>
+    expect(sourcesStoppedInRange([renamed], '2026-02-09')).toEqual([])
   })
 
   it('counts a day once when several metrics report it', () => {
