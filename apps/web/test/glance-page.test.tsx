@@ -336,14 +336,17 @@ describe('the glance Dashboard', () => {
     } finally { restore() }
   })
 
-  it('puts a stale source on steps beside the Today card\'s title, and nowhere else', async () => {
+  // Steps feeds both the Today card and the Week card's own steps row, so a source gone quiet on
+  // it marks both - never a card that never draws on it (Recovery, Night).
+  it('puts a stale source on steps beside the Today and Week cards\' titles, and nowhere else', async () => {
     const body = glanceBody()
     body.day.steps = { ...body.day.steps, staleSources: [{ sourceId: 's1', name: 'My watch', lastReportedDate: '2026-09-10', medianGapDays: 1 }] }
     const { restore } = await mountPage(body)
     try {
-      expect(container!.querySelectorAll('.source-warning')).toHaveLength(1)
-      expect(cardTitled('Today')!.querySelector('.dash-card-head > .source-warning')?.getAttribute('title'))
-        .toBe('My watch has not reported since Sep 10, 2026; it usually reports daily.')
+      expect(container!.querySelectorAll('.source-warning')).toHaveLength(2)
+      const sentence = 'My watch has not reported since Sep 10, 2026; it usually reports daily.'
+      expect(cardTitled('Today')!.querySelector('.dash-card-head > .source-warning')?.getAttribute('title')).toBe(sentence)
+      expect(cardTitled('This week')!.querySelector('.dash-card-head > .source-warning')?.getAttribute('title')).toBe(sentence)
     } finally { restore() }
   })
 

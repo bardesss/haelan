@@ -1474,7 +1474,8 @@
       "asleep": "Asleep",
       "perDay": "a day",
       "perNight": "a night",
-      "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted"
+      "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted",
+      "barsLabelNights": "{{what}}, last 7 nights; the average includes last night"
     },
     "subtitle": {
       "today": "today",

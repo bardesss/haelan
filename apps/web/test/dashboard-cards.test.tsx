@@ -278,4 +278,17 @@ describe('WeekCard', () => {
     const html = renderWeek()
     expect(html).toContain('today not counted')
   })
+
+  it('labels the sleep row\'s bars as including last night, distinct from the steps row\'s days label', () => {
+    const g = { ...glanceBody(), week: { steps: { perDay: 8000, days: 6 }, activeMinutes: null, asleep: { perDay: 393, days: 7 } } }
+    const html = renderWeek({ glance: g })
+    expect(html).toContain('aria-label="Asleep, last 7 nights; the average includes last night"')
+    expect(html).toContain('aria-label="Steps, last 7 days; the average counts finished days only, today not counted"')
+  })
+
+  it('marks the card when a figure a row draws on is stale', () => {
+    const g = { ...glanceBody(), day: { ...glanceBody().day, steps: { ...glanceBody().day.steps, staleSources: [WATCH] } } }
+    const html = renderWeek({ glance: g })
+    expect(html).toContain('class="source-warning"')
+  })
 })
