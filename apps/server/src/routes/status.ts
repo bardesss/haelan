@@ -7,13 +7,17 @@ import { errorBody } from '../api/envelope.ts'
  * answers for the caller's own person, resolved from the session, never from a path segment.
  *
  * google.state's three non-'connected' branches read in the order they can each occur: an
- * unreadable row is checked first because CredentialStore.isConnected and getRefreshToken cannot
- * be trusted to answer it (both treat a row that fails to decrypt the same as one that answers
- * false / null), and once that branch has ruled a row unreadable out, the rest of this function
- * never calls getRefreshToken on a row it has not already proven readable: isConnected already
- * decrypted it once (successfully, to get past the first check), so getRefreshToken's own
- * decrypt cannot throw here. See CredentialStore's own comments on isConnected and
- * isCredentialsUnreadable for why the two checks are separate methods rather than one.
+ * unreadable row is checked first, and then a revoked one - by hasRevokedRow, not by
+ * getRefreshToken()?.revokedAtMs. Both isCredentialsUnreadable and isConnected answer false the
+ * moment a row's revokedAtMs is set, before either attempts to decrypt, so a row that is both
+ * revoked AND undecryptable (a revoked grant, then a backup restored without instance.key) would
+ * reach getRefreshToken here - which decrypts and throws CredentialsUnreadableError on exactly
+ * that row. This route sits outside registerV1's error handler, so that throw would surface as
+ * an unhandled 500 rather than the 'revoked' state this person actually has (a review round
+ * found this the hard way - see task-5-report.md's fix entry). hasRevokedRow reads only the
+ * column and never decrypts, which is what makes it safe to call before isCredentialsUnreadable
+ * has ruled anything out. See CredentialStore's own comments on isConnected,
+ * isCredentialsUnreadable and hasRevokedRow for why the three are separate methods.
  */
 export function registerStatus(app: FastifyInstance): void {
   app.get('/api/status', { preHandler: [app.requireSession] }, async (request, reply) => {
@@ -28,7 +32,7 @@ export function registerStatus(app: FastifyInstance): void {
     const credentials = stores.credentials
     const google = credentials.isCredentialsUnreadable(personId) ? 'credentials_unreadable' as const
       : credentials.isConnected(personId) ? 'connected' as const
-        : credentials.getRefreshToken(personId)?.revokedAtMs != null ? 'revoked' as const
+        : credentials.hasRevokedRow(personId) ? 'revoked' as const
           : 'none' as const
 
     // Every companion row this person has archived carries the source it resolved to

@@ -82,6 +82,32 @@ describe('GET /api/status', () => {
     expect(phone!.devices).toHaveLength(1)
   })
 
+  // The gap the review found: a row that is BOTH revoked and undecryptable (a revoked grant, then
+  // a backup restored without instance.key). isCredentialsUnreadable and isConnected both return
+  // false the moment revokedAtMs is set, before ever attempting to decrypt - so this row reaches
+  // the third branch of the ternary in status.ts, which used to read
+  // getRefreshToken(personId)?.revokedAtMs and would throw CredentialsUnreadableError instead of
+  // answering. That throw is unhandled here: this route sits outside registerV1's error handler,
+  // so it would have surfaced as a 500, not the 'revoked' problem this test wants.
+  it('reports revoked, not a 500, for a connection that is revoked AND undecryptable', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const token = await harness.signIn()
+    harness.app.haelan.instance.credentials.markRevoked('p1', harness.clock.nowMs)
+    // Corrupts the stored ciphertext directly, the same state a backup restored without
+    // instance.key leaves a still-revoked row in: nothing sealed by this instance's own key can
+    // read it back.
+    harness.app.haelan.instance.db.$client
+      .prepare("update credentials set refresh_token_encrypted = 'not valid ciphertext' where person_id = 'p1'")
+      .run()
+
+    const response = await status(harness, token)
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as { connections: { kind: string, problem: string | null }[] }
+    const google = body.connections.find((c) => c.kind === 'google')
+    expect(google?.problem).toBe('revoked')
+  })
+
   it("never shows another person's sources", async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()

@@ -191,6 +191,20 @@ export class CredentialStore {
     return !this.#readable(row.refreshTokenEncrypted)
   }
 
+  // The one credentials read that never decrypts, for a caller that must never throw:
+  // isConnected and isCredentialsUnreadable both return false the moment revokedAtMs is set,
+  // before either attempts a decrypt, so a row that is both revoked and undecryptable (a revoked
+  // grant, then a backup restored without instance.key) answers false from both and would only
+  // be told apart from "never connected" by decrypting - which is exactly the one thing this
+  // state cannot do. getRefreshToken()?.revokedAtMs used to be how a caller asked; it throws
+  // CredentialsUnreadableError on this exact row instead of answering. This reads the column
+  // and nothing else.
+  hasRevokedRow(personId: string): boolean {
+    const row = this.#db.select({ revokedAtMs: credentials.revokedAtMs })
+      .from(credentials).where(eq(credentials.personId, personId)).get()
+    return row?.revokedAtMs != null
+  }
+
   #readable(encrypted: string): boolean {
     try {
       unseal(this.#key, encrypted)
