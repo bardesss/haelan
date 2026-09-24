@@ -84,6 +84,8 @@ export interface GlanceStepsPace {
   low: number
   high: number
   thin: boolean
+  /** Today's own count, cut at the same minute as the band: what `standing` actually compares. */
+  value: number
   atMs: number
   standing: 'ahead' | 'on' | 'behind' | null
 }

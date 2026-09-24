@@ -182,6 +182,15 @@ describe('Hypnogram, compact', () => {
     expect(option.graphic).toEqual([])
   })
 
+  // Task 19b: the dashboard's night card asks for 112px instead of the compact default 96px when it
+  // has the row to itself (span 12); the compact default itself stays 96 unless asked otherwise.
+  it('grows to 112px when the card asks for the tall form, and stays 96 otherwise', () => {
+    const plain = mount(<Hypnogram segments={SEGMENTS} startLabel="Bed 23:10" startClock={-50} label="stages" compact />)
+    expect((plain.querySelector('[role="img"]') as HTMLElement).style.height).toBe('96px')
+    const tall = mount(<Hypnogram segments={SEGMENTS} startLabel="Bed 23:10" startClock={-50} label="stages" compact tall />)
+    expect((tall.querySelector('[role="img"]') as HTMLElement).style.height).toBe('112px')
+  })
+
   it('ends in one faint line of totals, no awake note, and no visible control', () => {
     const host = compact()
     const totals = host.querySelectorAll('.hypnogram-totals')

@@ -28,6 +28,10 @@ const COMPACT_JOIN = ' · '
 // axis under them, so the chart is shorter than the full form's 130 and each block is taller in its
 // lane, the approved dashboard mockup's proportions.
 const COMPACT_HEIGHT = 96
+// Spec amendment 2026-09-24 (T2): the night card's compact hypnogram grows to 112px when the card
+// has a wide row to itself (span 12) rather than sharing one with another card (span 8, or phone,
+// where the compact default above stays) - the approved mockup's own proportions for that layout.
+const COMPACT_HEIGHT_TALL = 112
 const BLOCK_SHARE = { full: 0.45, compact: 0.75 } as const
 
 /**
@@ -82,7 +86,7 @@ export function clockHours(startMinute: number, endMinute: number): number[] {
   return out
 }
 
-export function Hypnogram({ segments, startLabel, label, startClock, totals: showTotals = true, compact = false }: {
+export function Hypnogram({ segments, startLabel, label, startClock, totals: showTotals = true, compact = false, tall = false }: {
   // startMs/endMs: raw milliseconds from the night's own start, not pre-rounded minutes. Sleep.tsx
   // and Dashboard.tsx used to round each boundary to a whole minute before building this prop; that
   // rounding now happens only here, per displayed value (the axis, a table cell), never before a
@@ -107,6 +111,10 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   // for a screen reader), and the totals as one faint line without the awake note, which stays on
   // the Sleep and night pages. False, the default, is the chart every other page draws.
   compact?: boolean
+  // Compact only: 112px instead of the compact default 96, for the dashboard's night card when it
+  // has the row to itself (span 12) rather than sharing one (span 8, or phone). Ignored without
+  // `compact` - the full form's height is fixed at 130 regardless.
+  tall?: boolean
 }) {
   const { t } = useTranslation()
   const origin = startClock ?? null
@@ -181,7 +189,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   // The table's From and To say what the axis says: clock times when the night's start is known.
   const at = (ms: number) => origin === null ? formatDuration(ms / MINUTE_MS) : formatClock(origin + ms / MINUTE_MS)
 
-  const { host, style } = useChart(build, compact ? COMPACT_HEIGHT : 130)
+  const { host, style } = useChart(build, compact ? (tall ? COMPACT_HEIGHT_TALL : COMPACT_HEIGHT) : 130)
 
   // The same segments the chart above draws, in the same raw milliseconds they already carry: no
   // conversion needed here, since stageTotals sums milliseconds itself. Never the daily

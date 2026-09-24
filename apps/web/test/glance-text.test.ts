@@ -175,7 +175,7 @@ describe('glanceText with real translations', () => {
 
 describe('paceKey', () => {
   it('words the pace from the server\'s verdict, and says nothing on a thin one', () => {
-    const pace = { center: 5900, low: 5000, high: 6800, thin: false, atMs: 0, standing: 'ahead' as const }
+    const pace = { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: 0, standing: 'ahead' as const }
     expect(paceKey(pace)).toBe('glance.pace.ahead')
     expect(paceKey({ ...pace, standing: 'behind' })).toBe('glance.pace.behind')
     expect(paceKey({ ...pace, thin: true, standing: null })).toBeNull()

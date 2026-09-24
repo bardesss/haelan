@@ -155,6 +155,15 @@ describe('NightCard', () => {
     expect(sparklineProps?.tableToggle).toBe(false)
   })
 
+  // Task 19b: the compact hypnogram grows to 112px when the night card has the row to itself (span
+  // 12), and stays at the compact default 96px otherwise (span 8, or phone).
+  it('draws its compact hypnogram taller when it has the row to itself', () => {
+    // Sparkline is the mocked spy in this file (returns null), so the strip never reaches static
+    // markup and the hypnogram is the only chart host either render produces.
+    expect(renderNight({ span: 8 })).toMatch(/role="img"[^>]*style="[^"]*height:96px/)
+    expect(renderNight({ span: 12 })).toMatch(/role="img"[^>]*style="[^"]*height:112px/)
+  })
+
   it('hands the strip a dot per night and the server\'s verdict for each', () => {
     const base = sleepFixture()
     const sleep = sleepFixture({
@@ -277,7 +286,7 @@ function renderToday(props: Partial<Parameters<typeof TodayCard>[0]> = {}): stri
 
 describe('TodayCard', () => {
   it('says the pace against the usual by the last reading\'s time', () => {
-    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, atMs: Date.UTC(2026, 8, 23, 11, 52), standing: 'ahead' } })
+    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: Date.UTC(2026, 8, 23, 11, 52), standing: 'ahead' } })
     const html = renderToday({ day, timezone: 'Europe/Amsterdam' })
     expect(html).toContain('Ahead of your usual pace')
     expect(html).toContain('usual by 13:52 is 5,900')
@@ -285,7 +294,7 @@ describe('TodayCard', () => {
   })
 
   it('behind is plain text, never the warning colour', () => {
-    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, atMs: 0, standing: 'behind' } })
+    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: 0, standing: 'behind' } })
     expect(renderToday({ day })).not.toContain('is-out')
   })
 
@@ -295,7 +304,7 @@ describe('TodayCard', () => {
   })
 
   it('says behind in plain words, exactly, at the last reading\'s time', () => {
-    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, atMs: Date.UTC(2026, 8, 23, 11, 52), standing: 'behind' } })
+    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: Date.UTC(2026, 8, 23, 11, 52), standing: 'behind' } })
     const html = renderToday({ day, timezone: 'Europe/Amsterdam' })
     expect(html).toContain('<p class="dash-pace"><span class="dash-pace-word">Behind your usual pace</span> · usual by 13:52 is 5,900</p>')
   })
@@ -336,6 +345,23 @@ describe('TodayCard', () => {
     expect(sparklineProps?.bandLabels).toEqual({ low: '8,000', high: '9,500' })
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual([null, 'below', null, null, null, null, null])
+  })
+
+  // Task 19b: with no pace verdict AND no usual line to fall back to (no baseline at all), there is
+  // nothing to print - render no <p class="dash-pace"> at all, rather than an empty paragraph.
+  it('renders no pace line at all when there is neither a verdict nor a usual to fall back to', () => {
+    const day = dayFixture({ stepsPace: null, steps: { baseline: null } })
+    expect(renderToday({ day })).not.toContain('dash-pace')
+  })
+
+  // Task 19a: `stepsPace.standing` can be null while the band is still present (no verdict before
+  // 5% of the usual day has passed). That is not "no pace object" - the so-far fallback still has
+  // to speak, exactly as it does with `stepsPace` null outright.
+  it('falls back to the so-far line when the pace has a band but no verdict yet', () => {
+    const day = dayFixture({ stepsPace: { center: 900, low: 700, high: 1100, thin: false, value: 200, atMs: 0, standing: null } })
+    const html = renderToday({ day })
+    expect(html).toContain('so far; your usual day')
+    expect(html).not.toContain('dash-pace-word')
   })
 
   it('hands the steps strip neither band nor labels on a thin baseline', () => {
@@ -392,6 +418,24 @@ describe('WeekCard', () => {
   // The dot between the total and the per-day average has to come from the catalogue, not a
   // literal in the component, so a translator can change or drop it: overriding the key here and
   // seeing the override land is what a hardcoded `· ${row.per}` in WeekCard.tsx could never pass.
+  // Task 19b: a screen reader gets each bar's own day and value, not just the row's one label -
+  // the steps strip's first day (Thu 17 Sep, 8,900) and last (today, Wed 23 Sep, 4,820), formatted
+  // the same way the row's own figures print (a plain count, no unit).
+  it('gives the steps strip\'s bars their day and value in words', () => {
+    const html = renderWeek()
+    expect(html).toContain('<title>Thu 8,900</title>')
+    expect(html).toContain('<title>Wed 4,820</title>')
+  })
+
+  // The active minutes row formats each bar's value the way its own per-day figure prints
+  // ("36 min a day"), not the plain count the steps row uses.
+  it('gives the active minutes strip\'s bars a minutes unit, not a bare count', () => {
+    const g = { ...glanceBody(), week: { steps: null, activeMinutes: { perDay: 30, days: 6, total: 180 }, asleep: null },
+      day: { ...glanceBody().day, activeMinutes: { ...glanceBody().day.activeMinutes, strip: glanceBody().day.steps.strip.map((d) => ({ ...d, value: d.value === null ? null : 30 })) } } }
+    const html = renderWeek({ glance: g })
+    expect(html).toContain('<title>Thu 30 min</title>')
+  })
+
   it('reads the total/per-day separator from the translation, not a literal', () => {
     const i18n = initI18n('en')
     i18n.addResourceBundle('en', 'translation', { glance: { week: { totalPer: '~ {{per}}' } } }, true, true)

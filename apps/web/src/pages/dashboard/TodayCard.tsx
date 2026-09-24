@@ -41,6 +41,12 @@ export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span
   const pace = day.stepsPace
   const key = paceKey(pace)
   const isAhead = pace?.standing === 'ahead'
+  // Task 19a's own note: `standing` can be null while the band is present (no verdict before 5% of
+  // the usual day), so `key === null` is not "no pace object" - it is "no verdict to word". Either
+  // way the so-far line is what falls back, and only when that itself has something to say: a day
+  // with no baseline at all would otherwise print an empty `<p class="dash-pace">`, which is worse
+  // for a screen reader than no paragraph at all.
+  const usual = usualLine(day.steps, t, language)
   return (
     <DashCard span={span} title={t('glance.today.title')} subtitle={t('glance.today.subtitle')}
       link={{ to: '/activity', text: t('glance.today.link') }}>
@@ -66,9 +72,9 @@ export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span
               value: formatFigure({ ...day.steps, value: pace.center }, language),
             })}
           </p>
-        ) : (
-          <p className="dash-pace">{usualLine(day.steps, t, language)}</p>
-        )}
+        ) : usual !== null ? (
+          <p className="dash-pace">{usual}</p>
+        ) : null}
       </div>
       {values.filter((v) => v !== null).length > 1 && (
         <div>

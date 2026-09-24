@@ -26,7 +26,8 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
   if (!hasWeek(glance)) return null
   const rows: {
     key: 'steps' | 'active' | 'asleep', tone: 'steps' | 'active' | 'sleep',
-    values: (number | null)[], value: string, per: string, withTotal: boolean,
+    values: (number | null)[], dates: string[], format: (value: number) => string,
+    value: string, per: string, withTotal: boolean,
     labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelNights',
   }[] = []
   const count = (value: number) => formatNumber(Math.round(value), 0, language, '')
@@ -34,6 +35,8 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
     rows.push({
       key: 'steps', tone: 'steps', withTotal: true,
       values: glance.day.steps.strip.map((d) => d.value),
+      dates: glance.day.steps.strip.map((d) => d.localDate),
+      format: (value: number) => count(value),
       value: count(glance.week.steps.total),
       per: t('glance.week.perDay', { value: count(glance.week.steps.perDay) }),
       labelKey: 'glance.week.barsLabel',
@@ -43,6 +46,8 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
     rows.push({
       key: 'active', tone: 'active', withTotal: true,
       values: glance.day.activeMinutes.strip.map((d) => d.value),
+      dates: glance.day.activeMinutes.strip.map((d) => d.localDate),
+      format: (value: number) => `${Math.round(value)} ${t('activity.units.min')}`,
       value: formatDuration(glance.week.activeMinutes.total),
       per: t('glance.week.perDay', { value: `${Math.round(glance.week.activeMinutes.perDay)} ${t('activity.units.min')}` }),
       labelKey: 'glance.week.barsLabel',
@@ -52,6 +57,8 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
     rows.push({
       key: 'asleep', tone: 'sleep', withTotal: false,
       values: glance.sleep.asleep.strip.map((d) => d.value),
+      dates: glance.sleep.asleep.strip.map((d) => d.localDate),
+      format: (value: number) => formatDuration(value),
       value: formatDuration(glance.week.asleep.perDay),
       // Unlike steps and active minutes (the server's weekOf drops today, which WeekBars still
       // highlights as the strip's last bar), the sleep strip ends on last night and weekOfFinished
@@ -70,7 +77,8 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
               <span className="dash-week-per">{row.withTotal ? t('glance.week.totalPer', { per: row.per }) : row.per}</span>
             </div>
           </div>
-          <WeekBars values={row.values} tone={row.tone} label={t(row.labelKey, { what: t(`glance.week.${row.key}`) })} />
+          <WeekBars values={row.values} dates={row.dates} tone={row.tone} language={language} format={row.format}
+            label={t(row.labelKey, { what: t(`glance.week.${row.key}`) })} />
         </div>
       ))}
     </DashCard>

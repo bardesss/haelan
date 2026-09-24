@@ -116,7 +116,7 @@ export function NightCard({ sleep, span, timezone }: {
         )}
       </div>
       <Described hidden text={t('sleep.sleepStages.basis', { date: sleep.localDate })}>
-        <Hypnogram segments={segments} startLabel={startLabel} startClock={bedMinutes} compact
+        <Hypnogram segments={segments} startLabel={startLabel} startClock={bedMinutes} compact tall={span === 12}
           label={t('sleep.sleepStages.chartLabel', { date: sleep.localDate })} />
       </Described>
     </DashCard>

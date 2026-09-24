@@ -1,6 +1,7 @@
 import type { ECElementEvent } from 'echarts'
 import type { ChartTokens } from './tokens.js'
 import type { Translate } from '../format.js'
+import type { GlanceStanding } from '../data/useGlance.js'
 
 export const STROKE = {
   sparkline: 1.6,
@@ -25,11 +26,15 @@ export const SYMBOL = {
 export const AXIS_FONT_SIZE = 12
 
 /**
- * A day's verdict against its usual, as the server sends it (`GlanceStripDay.standing`). Defined
- * here rather than in Sparkline.tsx, the one caller that draws it as a dot, because dayTableRows
- * below reads it too and base.ts already sits under Sparkline.tsx in the import graph.
+ * A day's verdict against its usual, as the server sends it (`GlanceStripDay.standing`). An alias
+ * for `GlanceStanding | null` rather than a second declaration of the same union: IntradayHeartRate
+ * already imports types from data/useGlance.js (its own IntradayPoint/IntradayResult come from
+ * data/useIntraday.js), so a chart importing from data/ is not new here, and redeclaring the union
+ * risked the two drifting apart the moment either side grew a value the other did not know about.
+ * Defined here rather than in Sparkline.tsx, the one caller that draws it as a dot, because
+ * dayTableRows below reads it too and base.ts already sits under Sparkline.tsx in the import graph.
  */
-export type PointStanding = 'within' | 'above' | 'below' | null
+export type PointStanding = GlanceStanding | null
 
 /**
  * Applies the reader's motion preference to a built option object.

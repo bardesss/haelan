@@ -39,10 +39,26 @@ describe('UsualGauge', () => {
   })
 })
 
+const WEEK_DATES = ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23']
+
 describe('WeekBars', () => {
   it('draws seven bars, today last and highlighted, a silent day as no bar', () => {
-    const html = renderToStaticMarkup(<WeekBars values={[1, 2, null, 4, 5, 6, 3]} tone="steps" label="Steps, last 7 days" />)
+    const html = renderToStaticMarkup(
+      <WeekBars values={[1, 2, null, 4, 5, 6, 3]} dates={WEEK_DATES} tone="steps" label="Steps, last 7 days"
+        language="en" format={(v) => String(v)} />,
+    )
     expect(html.match(/<rect/g)!.length).toBe(6)
     expect(html).toContain('week-bar is-today')
+  })
+
+  // Task 19b: each bar carries its own day and value in words for a screen reader, formatted the
+  // same way the row beside it prints its figure - not just the one label on the svg as a whole.
+  it('gives each bar its day and value in words, formatted the same way the row prints', () => {
+    const html = renderToStaticMarkup(
+      <WeekBars values={[8900, null, null, null, null, null, 4820]} dates={WEEK_DATES} tone="steps"
+        label="Steps, last 7 days" language="en" format={(v) => `${v} steps`} />,
+    )
+    expect(html).toContain('<title>Thu 8900 steps</title>')
+    expect(html).toContain('<title>Wed 4820 steps</title>')
   })
 })
