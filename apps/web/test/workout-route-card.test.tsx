@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
-import { WorkoutRoute, projectRoute, basemapStyle, routeBounds, routeGeoJSON, routeLineColor, basemapAllowed } from '../src/pages/activity/WorkoutRoute.js'
+import { WorkoutRoute, projectRoute, basemapStyle, routeBounds, routeGeoJSON, routeLineColor, basemapAllowed, isDarkTheme, DARK_RASTER_PAINT } from '../src/pages/activity/WorkoutRoute.js'
 import { routeBasemapStatusKey, ROUTE_BASEMAP_FRESHNESS } from '../src/data/useRouteBasemap.js'
 import { createQueryClient } from '../src/api/queryClient.js'
 import { queryKeys } from '../src/api/queryKeys.js'
@@ -224,11 +224,37 @@ describe('the basemap setting', () => {
  */
 describe('basemapStyle, routeBounds and routeGeoJSON', () => {
   it('points MapLibre at OpenStreetMap\'s own raster tiles', () => {
-    const style = basemapStyle()
+    const style = basemapStyle([NEAR, FAR], { lineColor: '#123456', dark: false })
     const osm = style.sources.osm as { type: string, tiles: string[] }
     expect(osm.type).toBe('raster')
     expect(osm.tiles).toEqual(['https://tile.openstreetmap.org/{z}/{x}/{y}.png'])
     expect(style.layers.map((layer) => layer.id)).toContain('osm')
+  })
+
+  // The route rides in the style itself. Added from a 'load' handler it waited on every tile in
+  // view, and OpenStreetMap's slow tiles left the household looking at bare streets.
+  it('carries the route in the style, drawn above the tiles in the colour it is given', () => {
+    const style = basemapStyle([NEAR, FAR], { lineColor: '#123456', dark: false })
+    const route = style.sources['workout-route'] as { type: string, data: { geometry: { coordinates: number[][] } } }
+    expect(route.type).toBe('geojson')
+    expect(route.data.geometry.coordinates).toEqual([[5, 52], [5, 52.01]])
+    expect(style.layers.map((layer) => layer.id)).toEqual(['osm', 'workout-route-line'])
+    const line = style.layers[1] as { type: string, source: string, paint: Record<string, unknown> }
+    expect(line.type).toBe('line')
+    expect(line.source).toBe('workout-route')
+    expect(line.paint).toEqual({ 'line-color': '#123456', 'line-width': 3 })
+  })
+
+  it('leaves the line colour to MapLibre when the accent could not be read', () => {
+    const style = basemapStyle([NEAR, FAR], { lineColor: '', dark: false })
+    expect((style.layers[1] as { paint: Record<string, unknown> }).paint).toEqual({ 'line-width': 3 })
+  })
+
+  it('darkens the tiles on a dark page and leaves them alone on a light one', () => {
+    const paintOf = (dark: boolean) =>
+      (basemapStyle([NEAR, FAR], { lineColor: '#123456', dark }).layers[0] as { paint: Record<string, unknown> }).paint
+    expect(paintOf(true)).toEqual({ ...DARK_RASTER_PAINT })
+    expect(paintOf(false)).toEqual({})
   })
 
   it('bounds a route by its own extremes, west/south before east/north', () => {
@@ -311,5 +337,21 @@ describe('the basemap setting is not cached like derived data', () => {
     const client = createQueryClient(() => {})
     const shared = client.getDefaultOptions().queries?.staleTime
     expect(shared, 'the shared default no longer caches, so this override may be redundant now').toBe(60_000)
+  })
+})
+
+describe('isDarkTheme', () => {
+  it('follows an explicit data-theme over the system preference', () => {
+    const root = document.createElement('div')
+    root.setAttribute('data-theme', 'light')
+    expect(isDarkTheme(root, () => true)).toBe(false)
+    root.setAttribute('data-theme', 'dark')
+    expect(isDarkTheme(root, () => false)).toBe(true)
+  })
+
+  it('falls back to the system preference when no theme is pinned', () => {
+    const root = document.createElement('div')
+    expect(isDarkTheme(root, () => true)).toBe(true)
+    expect(isDarkTheme(root, () => false)).toBe(false)
   })
 })

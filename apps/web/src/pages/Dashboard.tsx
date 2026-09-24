@@ -52,7 +52,7 @@ function Title() {
 
 /**
  * The glance: last night, recovery and today so far, one card per question, from one read, and
- * under them today's workouts when there are any (TodayWorkouts.tsx).
+ * inside the today column today's workouts when there are any (TodayWorkouts.tsx).
  *
  * **No control row**, for the reason Records.tsx gives for its own: every figure here is last night
  * or today by definition, so a range picker would be a control that either lies or does nothing,
@@ -205,10 +205,10 @@ export function Dashboard() {
             </div>
           ) : undefined}
           chartStaleSources={day.heartRate.staleSources}
+          extra={<TodayWorkouts workouts={day.workouts} />}
           link={{ to: '/activity', text: t('glance.today.link') }}
           today={glance.today} timezone={timezone}
         />
-        <TodayWorkouts workouts={day.workouts} />
       </CardGrid>
     </>
   )
