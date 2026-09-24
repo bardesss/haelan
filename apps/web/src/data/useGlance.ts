@@ -28,6 +28,8 @@ export interface GlanceStripDay {
   value: number | null
 }
 
+export type GlanceStanding = 'within' | 'above' | 'below'
+
 export interface GlanceFigure {
   metric: string
   value: number | null
@@ -38,6 +40,7 @@ export interface GlanceFigure {
   partial: boolean
   staleSources: GlanceStaleSource[]
   strip: GlanceStripDay[]
+  standing: GlanceStanding | null
 }
 
 export interface GlanceNightSegment {

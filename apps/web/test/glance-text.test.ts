@@ -25,7 +25,7 @@ function realT(language: string): Translate {
 function figure(over: Partial<GlanceFigure> = {}): GlanceFigure {
   return {
     metric: 'steps', value: 8000, unit: 'count', baseline: null,
-    asOfDate: '2026-09-23', asOfMs: null, partial: false, staleSources: [], strip: [],
+    asOfDate: '2026-09-23', asOfMs: null, partial: false, staleSources: [], strip: [], standing: null,
     ...over,
   }
 }
@@ -66,14 +66,22 @@ describe('usualLine', () => {
 
   it('reads within, above and below the usual band', () => {
     const { t, calls } = stubT()
-    expect(usualLine(figure({ value: 8500, baseline }), t, 'en')).toBe('t(glance.usual.within)')
-    expect(usualLine(figure({ value: 9500, baseline }), t, 'en')).toBe('t(glance.usual.above)')
-    expect(usualLine(figure({ value: 7000, baseline }), t, 'en')).toBe('t(glance.usual.below)')
+    expect(usualLine(figure({ value: 8500, baseline, standing: 'within' }), t, 'en')).toBe('t(glance.usual.within)')
+    expect(usualLine(figure({ value: 9500, baseline, standing: 'above' }), t, 'en')).toBe('t(glance.usual.above)')
+    expect(usualLine(figure({ value: 7000, baseline, standing: 'below' }), t, 'en')).toBe('t(glance.usual.below)')
     expect(calls).toEqual([
       ['glance.usual.within', { low: '8,000', high: '9,000' }],
       ['glance.usual.above', { low: '8,000', high: '9,000' }],
       ['glance.usual.below', { low: '8,000', high: '9,000' }],
     ])
+  })
+
+  // The verdict is the server's, not a re-comparison here: a value inside the band still reads
+  // above when standing says so, which would never happen from core's own honest computation but
+  // proves the web trusts the field rather than recomputing it from rounded numbers.
+  it('trusts the server\'s standing even when the value itself sits inside the band', () => {
+    const { t } = stubT()
+    expect(usualLine(figure({ value: 8500, baseline, standing: 'above' }), t, 'en')).toBe('t(glance.usual.above)')
   })
 
   it('reads thin as not enough history, regardless of value', () => {
@@ -146,9 +154,9 @@ describe('glanceText with real translations', () => {
       'nog te weinig geschiedenis voor een gebruikelijke waarde', 'tot nu toe; op een gewone dag 8.700'],
   ] as const)('reads within / above / below / thin / partial in %s', (language, within, above, below, thin, partial) => {
     const t = realT(language)
-    expect(usualLine(figure({ value: 8500, baseline }), t, language)).toBe(within)
-    expect(usualLine(figure({ value: 9500, baseline }), t, language)).toBe(above)
-    expect(usualLine(figure({ value: 7000, baseline }), t, language)).toBe(below)
+    expect(usualLine(figure({ value: 8500, baseline, standing: 'within' }), t, language)).toBe(within)
+    expect(usualLine(figure({ value: 9500, baseline, standing: 'above' }), t, language)).toBe(above)
+    expect(usualLine(figure({ value: 7000, baseline, standing: 'below' }), t, language)).toBe(below)
     expect(usualLine(figure({ value: 8500, baseline: { ...baseline, thin: true } }), t, language)).toBe(thin)
     expect(usualLine(figure({ value: 3000, baseline, partial: true }), t, language)).toBe(partial)
   })

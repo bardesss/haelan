@@ -49,6 +49,22 @@ export interface GlanceFigure {
   staleSources: GlanceStaleSource[]
   /** Seven entries, oldest first, ending on the figure's own date. */
   strip: GlanceStripDay[]
+  /** Where `value` sits against `baseline`; null when there is nothing honest to say. */
+  standing: GlanceStanding | null
+}
+
+/** Where a figure sits against its usual; the web and the phone both colour by it, so it is decided here once (M9d spec). */
+export type GlanceStanding = 'within' | 'above' | 'below'
+
+/**
+ * Null when there is nothing honest to say: no value, no band, a band too thin to stand on, or a day
+ * still running, which is never judged against a whole day's usual (a partial figure says "so far").
+ */
+export function standingOf(value: number | null, baseline: GlanceBaseline | null, partial: boolean): GlanceStanding | null {
+  if (value === null || baseline === null || baseline.thin || partial) return null
+  if (value < baseline.low) return 'below'
+  if (value > baseline.high) return 'above'
+  return 'within'
 }
 
 /** What every section reads: the person's query, their today, now, and who has gone quiet. */
@@ -142,16 +158,18 @@ export function dailyFigure(
   const byDate = new Map(points.map((point) => [point.localDate, point]))
   const onDay = byDate.get(o.on)
   const baseline = ctx.q.baseline({ metric: o.metric, agg: o.agg, on: o.on })
+  const band = toGlanceBaseline(baseline)
   return {
     metric: o.metric,
     value: onDay?.value ?? null,
     unit: METRICS[o.metric]?.unit ?? '',
-    baseline: toGlanceBaseline(baseline),
+    baseline: band,
     asOfDate: onDay === undefined ? null : o.on,
     asOfMs: onDay === undefined ? null : o.asOfMs,
     partial: o.partial,
     staleSources: staleFeeding(ctx, points.flatMap(sourcesOf)),
     strip: dates.map((localDate) => ({ localDate, value: byDate.get(localDate)?.value ?? null })),
+    standing: standingOf(onDay?.value ?? null, band, o.partial),
   }
 }
 
@@ -203,17 +221,19 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
   }
   const baselineValues = [...sums].filter(([date]) => date >= baselineFrom && date <= baselineTo).map(([, value]) => value)
   const baseline = baselineOf(baselineValues)
+  const band = toGlanceBaseline(baseline)
   const value = sums.get(ctx.today) ?? null
   return {
     metric: 'active_minutes',
     value,
     unit: 'minutes',
-    baseline: toGlanceBaseline(baseline),
+    baseline: band,
     asOfDate: value === null ? null : ctx.today,
     asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
     partial: true,
     staleSources: staleFeeding(ctx, feeding),
     strip: dates.map((localDate) => ({ localDate, value: sums.get(localDate) ?? null })),
+    standing: standingOf(value, band, true),
   }
 }
 
@@ -334,6 +354,7 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
         const day = series.get(localDate)
         return { localDate, value: day !== undefined && day.enough ? day.score : null }
       }),
+      standing: null,
     },
     band: scored === null ? null : bandOf(scored.score),
     // Reported only when neither day scored, and then with today's reasons: yesterday's score

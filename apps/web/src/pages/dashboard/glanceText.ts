@@ -63,8 +63,10 @@ export function usualLine(figure: GlanceFigure, t: Translate, language: string):
   }
   const low = formatValue(baseline.low, figure.metric, language)
   const high = formatValue(baseline.high, figure.metric, language)
-  if (figure.value < baseline.low) return t('glance.usual.below', { low, high })
-  if (figure.value > baseline.high) return t('glance.usual.above', { low, high })
+  // The verdict is the server's (GlanceFigure.standing); this only words it. A figure the server
+  // left without one here is one it could not judge, which reads as within rather than inventing a side.
+  if (figure.standing === 'below') return t('glance.usual.below', { low, high })
+  if (figure.standing === 'above') return t('glance.usual.above', { low, high })
   return t('glance.usual.within', { low, high })
 }
 

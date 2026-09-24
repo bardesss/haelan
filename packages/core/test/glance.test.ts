@@ -4,7 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources, sessions } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { contextFor, dailyFigure, readDay, readGlance, readLastNight, readRecovery } from '../src/query/glance.ts'
+import { contextFor, dailyFigure, readDay, readGlance, readLastNight, readRecovery, standingOf } from '../src/query/glance.ts'
 
 const TODAY = '2026-08-20'
 const NOW = Date.parse('2026-08-20T10:00:00Z')
@@ -311,6 +311,28 @@ describe('readRecovery', () => {
     expect(recovery.band).toBeNull()
     expect(recovery.missing).toEqual(expect.arrayContaining(['hrv', 'restingHeartRate']))
   })
+})
+
+describe('standingOf', () => {
+  const band = { center: 8000, low: 7000, high: 9000, thin: false }
+  it('says within, above or below against the band', () => {
+    expect(standingOf(8000, band, false)).toBe('within')
+    expect(standingOf(9500, band, false)).toBe('above')
+    expect(standingOf(6000, band, false)).toBe('below')
+    expect(standingOf(9000, band, false)).toBe('within')
+  })
+  it('has no verdict without a value, without a band, on a thin band, or on a running day', () => {
+    expect(standingOf(null, band, false)).toBeNull()
+    expect(standingOf(8000, null, false)).toBeNull()
+    expect(standingOf(8000, { ...band, thin: true }, false)).toBeNull()
+    expect(standingOf(1000, band, true)).toBeNull()
+  })
+})
+
+it('dailyFigure carries its standing', () => {
+  for (const date of datesEnding('2026-08-19', 60)) insert({ metric: 'resting_heart_rate', agg: 'last', localDate: date, value: 55 + (Number(date.slice(-1)) % 3) })
+  insert({ metric: 'resting_heart_rate', agg: 'last', localDate: TODAY, value: 70 })
+  expect(dailyFigure(ctx(), { metric: 'resting_heart_rate', agg: 'last', on: TODAY, partial: false, asOfMs: null }).standing).toBe('above')
 })
 
 describe('readGlance', () => {

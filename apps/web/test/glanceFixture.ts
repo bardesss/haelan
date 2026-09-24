@@ -16,7 +16,7 @@ function strip(values: (number | null)[]): GlanceFigure['strip'] {
 export function glanceFigure(over: Partial<GlanceFigure> & Pick<GlanceFigure, 'metric'>): GlanceFigure {
   return {
     value: null, unit: 'count', baseline: null, asOfDate: GLANCE_TODAY, asOfMs: null, partial: false,
-    staleSources: [], strip: [],
+    staleSources: [], strip: [], standing: null,
     ...over,
   }
 }
@@ -59,6 +59,7 @@ export function glanceBody(): Glance {
       missing: null,
       restingHeartRate: glanceFigure({
         metric: 'resting_heart_rate', value: 62, unit: 'bpm', baseline: { center: 56, low: 52, high: 60, thin: false },
+        standing: 'above',
       }),
       hrv: glanceFigure({ metric: 'daily_hrv', value: 51, unit: 'milliseconds', baseline: { center: 50, low: 44, high: 56, thin: false } }),
       respiratoryRate: null,

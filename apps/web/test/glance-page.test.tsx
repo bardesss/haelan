@@ -30,7 +30,7 @@ const TODAY = '2026-09-23'
 function figure(over: Partial<GlanceFigure> = {}): GlanceFigure {
   return {
     metric: 'steps', value: 4820, unit: 'count', baseline: { center: 8700, low: 8000, high: 9500, thin: false },
-    asOfDate: TODAY, asOfMs: Date.UTC(2026, 8, 23, 9, 32), partial: false, staleSources: [],
+    asOfDate: TODAY, asOfMs: Date.UTC(2026, 8, 23, 9, 32), partial: false, staleSources: [], standing: null,
     strip: [
       { localDate: '2026-09-17', value: 8900 }, { localDate: '2026-09-18', value: 7400 },
       { localDate: '2026-09-19', value: 10100 }, { localDate: '2026-09-20', value: 8300 },
@@ -64,7 +64,7 @@ function render(over: Partial<Props> = {}): string {
 
 describe('GlanceCard', () => {
   it('prints the headline label, its formatted value, the usual line and the as-of line', () => {
-    const html = render()
+    const html = render({ headline: { label: 'Steps', figure: figure({ standing: 'below' }) } })
     expect(html).toContain('<h2 class="glance-card-title"><strong>Today</strong> <span>so far</span></h2>')
     expect(html).toContain('<span class="label">Steps</span>')
     expect(html).toContain('<div class="value">4,820</div>')
@@ -105,7 +105,7 @@ describe('GlanceCard', () => {
     const html = render({
       secondary: [
         { label: 'Resting HR', unit: 'bpm', figure: figure({ metric: 'resting_heart_rate', value: 62,
-          baseline: { center: 56, low: 52, high: 60, thin: false } }) },
+          baseline: { center: 56, low: 52, high: 60, thin: false }, standing: 'above' }) },
         { label: 'HRV', unit: 'ms', figure: figure({ metric: 'daily_hrv', value: 51, baseline: null }) },
         { label: 'Efficiency', figure: figure({ metric: 'sleep_efficiency', value: null }) },
       ],
