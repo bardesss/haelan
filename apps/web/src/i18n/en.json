@@ -1464,6 +1464,16 @@
     "workouts": {
       "title": "Today's activities"
     },
+    "week": {
+      "title": "This week",
+      "subtitle": "last 7 days",
+      "steps": "Steps",
+      "active": "Active",
+      "asleep": "Asleep",
+      "perDay": "a day",
+      "perNight": "a night",
+      "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted"
+    },
     "subtitle": {
       "today": "today",
       "yesterday": "yesterday"

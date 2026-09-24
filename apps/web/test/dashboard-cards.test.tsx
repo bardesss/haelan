@@ -6,6 +6,7 @@ import { DashCard } from '../src/pages/dashboard/cardShared.js'
 import { NightCard } from '../src/pages/dashboard/NightCard.js'
 import { RecoveryCard } from '../src/pages/dashboard/RecoveryCard.js'
 import { TodayCard } from '../src/pages/dashboard/TodayCard.js'
+import { WeekCard } from '../src/pages/dashboard/WeekCard.js'
 import { formatFigure } from '../src/pages/dashboard/glanceText.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { GlanceFigure, GlanceSleep, GlanceStaleSource, GlanceRecovery, GlanceDay } from '../src/data/useGlance.js'
@@ -253,5 +254,28 @@ describe('TodayCard', () => {
   it('falls back to the so-far line without a pace', () => {
     const html = renderToday({ day: dayFixture({ stepsPace: null }) })
     expect(html).toContain('so far; your usual day')
+  })
+})
+
+function renderWeek(props: Partial<Parameters<typeof WeekCard>[0]> = {}): string {
+  return renderToStaticMarkup(
+    <I18nProvider lng="en">
+      <WeekCard glance={glanceBody()} span={4} {...props} />
+    </I18nProvider>,
+  )
+}
+
+describe('WeekCard', () => {
+  it('shows each row\'s per-day average with its bars, and leaves out a row with no data', () => {
+    const g = { ...glanceBody(), week: { steps: { perDay: 8205.4, days: 6 }, activeMinutes: { perDay: 36, days: 6 }, asleep: null } }
+    const html = renderWeek({ glance: g })
+    expect(html).toContain('8,205')
+    expect(html).toContain('36 min')
+    expect(html).not.toContain('week-bars is-sleep')
+  })
+
+  it('names the average\'s basis for a screen reader: finished days only', () => {
+    const html = renderWeek()
+    expect(html).toContain('today not counted')
   })
 })
