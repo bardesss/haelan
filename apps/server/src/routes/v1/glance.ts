@@ -55,7 +55,10 @@ function roundGlance(glance: Glance): Glance {
       hrv: roundFigure(recovery.hrv),
       respiratoryRate: recovery.respiratoryRate === null ? null : roundFigure(recovery.respiratoryRate),
     },
+    // Spread first, as sleep and recovery above are: `workouts` carries nothing to round, and a
+    // rebuild that named only the fields it rounds dropped it from the body entirely.
     day: {
+      ...day,
       steps: roundFigure(day.steps),
       activeMinutes: roundFigure(day.activeMinutes),
       heartRate: {

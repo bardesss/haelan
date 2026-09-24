@@ -1408,6 +1408,9 @@
       "caption": "laatste 7 dagen",
       "link": "Bekijk activiteit"
     },
+    "workouts": {
+      "title": "Activiteiten van vandaag"
+    },
     "subtitle": {
       "today": "vandaag",
       "yesterday": "gisteren"

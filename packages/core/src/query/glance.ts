@@ -9,6 +9,7 @@ import type { NightSegment } from './sleepNights.ts'
 import { recoveryIndexSeries, bandOf } from '../api/recoveryIndex.ts'
 import type { RecoveryBand } from '../api/recoveryIndex.ts'
 import { readRecoveryInput } from './recoveryInput.ts'
+import type { WorkoutSession } from './sessions.ts'
 
 /**
  * The glance: last night, today's recovery and today so far, as one person bound read (M9a).
@@ -152,7 +153,17 @@ export function dailyFigure(
 }
 
 export interface GlanceHeartRate { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
-export interface GlanceDay { steps: GlanceFigure, activeMinutes: GlanceFigure, heartRate: GlanceHeartRate }
+export interface GlanceDay {
+  steps: GlanceFigure
+  activeMinutes: GlanceFigure
+  heartRate: GlanceHeartRate
+  /**
+   * Today's workouts, oldest first, one per event however many sources recorded it: the same
+   * merged objects the Activity list answers (mergedWorkouts.ts), so a row here and a row there
+   * open the same page. Excluded ones included and marked, as the list marks them.
+   */
+  workouts: WorkoutSession[]
+}
 
 export const ACTIVE_MINUTE_METRICS: readonly string[] = ['active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous']
 
@@ -341,6 +352,9 @@ export function readDay(ctx: GlanceContext): GlanceDay {
     steps: dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) }),
     activeMinutes: activeMinutesFigure(ctx),
     heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heartFeeding) },
+    // Filed under the date a workout ended on, the same key the Activity list groups by, so a run
+    // that crosses midnight is today's once it is over rather than yesterday's.
+    workouts: ctx.q.sessions({ kind: 'exercise', from: ctx.today, to: ctx.today }),
   }
 }
 

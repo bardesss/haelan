@@ -158,6 +158,26 @@ describe('readDay', () => {
     expect(day.steps.value).toBeNull()
     expect(day.activeMinutes.value).toBeNull()
     expect(day.heartRate).toEqual({ points: [], asOfMs: null, staleSources: [] })
+    expect(day.workouts).toEqual([])
+  })
+
+  // The companion app and the Google Health API both deliver the morning's run, and the glance
+  // answers it once, the same merged workout the Activity list shows, with yesterday's left out.
+  it('lists today\'s workouts, one per event however many sources recorded it', () => {
+    test.db.insert(sources).values({ id: 'phone', personId: 'p1', externalId: 'phone', displayName: 'Phone', kind: 'app', createdAtMs: 0 }).run()
+    const workout = (id: string, sourceId: string, startMs: number, localDate: string, attrs: unknown) =>
+      test.db.insert(sessions).values({
+        id, personId: 'p1', sourceId, kind: 'exercise', externalId: id,
+        startMs, startOffsetMinutes: 120, endMs: startMs + 40 * 60_000, endOffsetMinutes: 120,
+        localDate, attrs: JSON.stringify(attrs), rawPayloadId: null,
+      }).run()
+    workout('yesterday-ride', 'watch', at(6) - 86_400_000, '2026-08-19', { exerciseType: 'BIKING' })
+    workout('watch-run', 'watch', at(6), TODAY, { exerciseType: 'RUNNING', displayName: 'Morning Run' })
+    workout('phone-run', 'phone', at(6, 1), TODAY, { exerciseType: 'RUNNING', displayName: null })
+
+    const { workouts } = readDay(ctx())
+    // The watch is a device and the phone an app, so with no list configured the watch ranks first.
+    expect(workouts.map((w) => [w.id, w.sources, w.alternateIds])).toEqual([['watch-run', ['watch', 'phone'], ['phone-run']]])
   })
 })
 

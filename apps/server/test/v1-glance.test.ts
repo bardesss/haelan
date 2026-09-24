@@ -30,6 +30,30 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(body).toHaveProperty('day.steps')
   })
 
+  // The route rebuilds `day` to round its figures, and a rebuild that named its fields one by one
+  // would drop any it did not know about. Today's workouts have nothing to round and must survive.
+  it('carries today\'s workouts through, merged across the sources that recorded them', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T10:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    for (const id of ['google', 'phone']) {
+      db.insert(schema.sources).values({ id, personId: 'p1', externalId: id, displayName: id, kind: 'device', createdAtMs: 0 }).run()
+    }
+    const startMs = Date.parse('2026-08-20T06:00:00Z')
+    for (const [id, sourceId] of [['google-run', 'google'], ['phone-run', 'phone']] as const) {
+      db.insert(schema.sessions).values({
+        id, personId: 'p1', sourceId, kind: 'exercise', externalId: id,
+        startMs, startOffsetMinutes: 120, endMs: startMs + 30 * 60_000, endOffsetMinutes: 120,
+        localDate: '2026-08-20', attrs: JSON.stringify({ exerciseType: 'RUNNING' }), rawPayloadId: null,
+      }).run()
+    }
+
+    const body = (await get(harness, token, '/glance')).json()
+    expect(body.day.workouts.map((w: { id: string, alternateIds: string[] }) => [w.id, w.alternateIds]))
+      .toEqual([['google-run', ['phone-run']]])
+  })
+
   it('answers 304 to a repeat request carrying the first one\'s ETag, a minute later', async () => {
     harness = await withServer()
     harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')

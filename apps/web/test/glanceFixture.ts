@@ -82,6 +82,9 @@ export function glanceBody(): Glance {
         asOfMs: Date.UTC(2026, 8, 23, 9, 38),
         staleSources: [],
       },
+      // None by default, so every test that is not about the workouts card sees the page it saw
+      // before the card existed; glance-page.test.tsx's own workout cases add one.
+      workouts: [],
     },
   }
 }

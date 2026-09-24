@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { IntradayPoint } from './useIntraday.js'
+import type { WorkoutSession } from './useSessions.js'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
@@ -74,6 +75,8 @@ export interface GlanceDay {
   steps: GlanceFigure
   activeMinutes: GlanceFigure
   heartRate: { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
+  /** Today's workouts, oldest first, merged across sources: the Activity list's own row shape. */
+  workouts: WorkoutSession[]
 }
 
 export interface Glance {
