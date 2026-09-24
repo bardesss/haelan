@@ -1374,6 +1374,12 @@
       "night": "night of {{date}}"
     },
     "noReading": "No reading yet",
+    "pace": {
+      "ahead": "Ahead of your usual pace",
+      "on": "On your usual pace",
+      "behind": "Behind your usual pace",
+      "usualBy": "usual by {{time}} is {{value}}"
+    },
     "sleep": {
       "title": "Last night",
       "empty": "No night recorded in the last day and a half.",

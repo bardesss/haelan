@@ -1,4 +1,4 @@
-import type { GlanceFigure } from '../../data/useGlance.js'
+import type { GlanceFigure, GlanceStepsPace } from '../../data/useGlance.js'
 import type { Translate } from '../../format.js'
 import { formatDuration, formatClock, formatMetricValue } from '../../format.js'
 
@@ -96,6 +96,15 @@ export function formatTimeOfDay(atMs: number, language: string, timezone: string
 // own `dateStyle: 'medium'` carries the year, which a night from this week does not need to state.
 // Same UTC-midnight anchoring as formatLocalDate, for the same reason: the day printed must not
 // depend on which zone the browser sits in.
+/**
+ * The pace line's key from the server's verdict; null on a thin or absent pace, where the so-far
+ * line speaks instead.
+ */
+export function paceKey(pace: GlanceStepsPace | null): 'glance.pace.ahead' | 'glance.pace.on' | 'glance.pace.behind' | null {
+  if (pace === null || pace.standing === null) return null
+  return `glance.pace.${pace.standing}`
+}
+
 function formatShortDate(date: string, language: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleString(language, { day: 'numeric', month: 'short', timeZone: 'UTC' })
 }

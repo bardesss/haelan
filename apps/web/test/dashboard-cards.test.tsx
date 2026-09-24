@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ComponentProps } from 'react'
 import { DashCard } from '../src/pages/dashboard/cardShared.js'
 import { NightCard } from '../src/pages/dashboard/NightCard.js'
+import { RecoveryCard } from '../src/pages/dashboard/RecoveryCard.js'
+import { TodayCard } from '../src/pages/dashboard/TodayCard.js'
 import { formatFigure } from '../src/pages/dashboard/glanceText.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import type { GlanceFigure, GlanceSleep, GlanceStaleSource } from '../src/data/useGlance.js'
+import type { GlanceFigure, GlanceSleep, GlanceStaleSource, GlanceRecovery, GlanceDay } from '../src/data/useGlance.js'
 import { glanceBody, glanceFigure, GLANCE_TODAY } from './glanceFixture.js'
 import type { Sparkline } from '../src/charts/Sparkline.js'
 
@@ -149,5 +152,106 @@ describe('NightCard', () => {
     const sleep = sleepFixture({ asleep: { baseline: { center: 400, low: 360, high: 440, thin: true } } })
     renderNight({ sleep })
     expect(sparklineProps?.bandLabels).toBeUndefined()
+  })
+})
+
+function recoveryFixture(over: {
+  index?: Partial<GlanceFigure>, restingHeartRate?: Partial<GlanceFigure>, hrv?: Partial<GlanceFigure>,
+  band?: GlanceRecovery['band'], respiratoryRate?: Partial<GlanceFigure> | null,
+} = {}): GlanceRecovery {
+  const recovery = glanceBody().recovery
+  return {
+    ...recovery,
+    index: { ...recovery.index, ...over.index },
+    restingHeartRate: { ...recovery.restingHeartRate, ...over.restingHeartRate },
+    hrv: { ...recovery.hrv, ...over.hrv },
+    band: 'band' in over ? over.band! : recovery.band,
+    respiratoryRate: 'respiratoryRate' in over
+      ? (over.respiratoryRate === null ? null : { ...recovery.restingHeartRate, ...over.respiratoryRate })
+      : recovery.respiratoryRate,
+  }
+}
+
+function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {}): string {
+  return renderToStaticMarkup(
+    <I18nProvider lng="en">
+      <RecoveryCard recovery={recoveryFixture()} span={4} wide={false} today={TODAY} timezone="UTC" {...props} />
+    </I18nProvider>,
+  )
+}
+
+describe('RecoveryCard', () => {
+  it('draws the score between the two gauges, each named by its usual sentence', () => {
+    const html = renderRecovery()
+    expect(html.indexOf('usual-gauge')).toBeLessThan(html.indexOf('score-ring'))
+    expect(html.lastIndexOf('usual-gauge')).toBeGreaterThan(html.indexOf('score-ring'))
+    expect(html).toMatch(/aria-label="Resting HR 62 bpm, above your usual/)
+  })
+
+  it('unscored: an empty ring, the reason once, and the gauges labelled yesterday', () => {
+    const recovery = recoveryFixture({
+      index: { value: null, asOfDate: null },
+      restingHeartRate: { asOfDate: '2026-09-22' },
+      hrv: { asOfDate: '2026-09-22' },
+    })
+    const html = renderRecovery({ recovery })
+    expect(html).toContain('>Not scored<')
+    expect(html.match(/Not enough readings to score yet\./g)).toHaveLength(1)
+    expect(html.match(/>yesterday</g)).toHaveLength(2)
+  })
+
+  it('wide: the card carries is-wide, which is what shows the seven-day strip', () => {
+    const html = renderRecovery({ span: 12, wide: true })
+    expect(html).toContain('dash-recovery is-wide')
+    expect(html).toContain('class="dash-recovery-strip"')
+  })
+
+  it('narrow: the strip is in the markup for the mid band, hidden by CSS otherwise', () => {
+    const html = renderRecovery()
+    expect(html).not.toContain('is-wide')
+    expect(html).toContain('class="dash-recovery-strip"')
+  })
+})
+
+function dayFixture(over: { steps?: Partial<GlanceFigure>, stepsPace?: GlanceDay['stepsPace'] } = {}): GlanceDay {
+  const day = glanceBody().day
+  return {
+    ...day,
+    steps: { ...day.steps, ...over.steps },
+    stepsPace: 'stepsPace' in over ? over.stepsPace! : day.stepsPace,
+  }
+}
+
+// IntradayHeartRate reads useSession (a useQuery) even though this file never lets that query
+// resolve: a QueryClientProvider is enough for renderToStaticMarkup, which never runs the effects
+// that would actually fetch. The same device heart-rate-card.test.tsx and glance-page.test.tsx use.
+function renderToday(props: Partial<Parameters<typeof TodayCard>[0]> = {}): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  return renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <I18nProvider lng="en">
+        <TodayCard day={dayFixture()} span={8} timezone="UTC" {...props} />
+      </I18nProvider>
+    </QueryClientProvider>,
+  )
+}
+
+describe('TodayCard', () => {
+  it('says the pace against the usual by the last reading\'s time', () => {
+    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, atMs: Date.UTC(2026, 8, 23, 11, 52), standing: 'ahead' } })
+    const html = renderToday({ day, timezone: 'Europe/Amsterdam' })
+    expect(html).toContain('Ahead of your usual pace')
+    expect(html).toContain('usual by 13:52 is 5,900')
+    expect(html).toContain('class="dash-pace is-ahead"')
+  })
+
+  it('behind is plain text, never the warning colour', () => {
+    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, atMs: 0, standing: 'behind' } })
+    expect(renderToday({ day })).not.toContain('is-out')
+  })
+
+  it('falls back to the so-far line without a pace', () => {
+    const html = renderToday({ day: dayFixture({ stepsPace: null }) })
+    expect(html).toContain('so far; your usual day')
   })
 })

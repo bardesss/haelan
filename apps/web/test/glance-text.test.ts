@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatFigure, usualLine, asOfLine } from '../src/pages/dashboard/glanceText.js'
+import { formatFigure, usualLine, asOfLine, paceKey } from '../src/pages/dashboard/glanceText.js'
 import { staleSentence } from '../src/components/staleSentence.js'
 import { initI18n } from '../src/i18n/index.js'
 import type { GlanceFigure } from '../src/data/useGlance.js'
@@ -171,6 +171,16 @@ describe('glanceText with real translations', () => {
     expect(asOfLine(figure({ value: 8000, asOfDate: '2026-09-23', asOfMs: null }), opts, t, language)).toBe(today)
     expect(asOfLine(figure({ value: 8000, asOfDate: '2026-09-22', asOfMs: null }), opts, t, language)).toBe(yesterday)
     expect(asOfLine(figure({ value: 419, asOfDate: '2026-09-22', asOfMs: ms }), { ...opts, night: true }, t, language)).toBe(night)
+  })
+})
+
+describe('paceKey', () => {
+  it('words the pace from the server\'s verdict, and says nothing on a thin one', () => {
+    const pace = { center: 5900, low: 5000, high: 6800, thin: false, atMs: 0, standing: 'ahead' as const }
+    expect(paceKey(pace)).toBe('glance.pace.ahead')
+    expect(paceKey({ ...pace, standing: 'behind' })).toBe('glance.pace.behind')
+    expect(paceKey({ ...pace, thin: true, standing: null })).toBeNull()
+    expect(paceKey(null)).toBeNull()
   })
 })
 

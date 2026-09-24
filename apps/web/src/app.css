@@ -730,6 +730,12 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .dash-mini-value { font-size: var(--font-size-md); font-weight: var(--weight-semibold); }
 .dash-mini-value.is-out, .dash-mini-note { color: var(--negative); }
 .dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
+
+/* TodayCard.tsx: the lead's two headline figures and the pace line under them. */
+.dash-headline-sm { font-size: var(--font-size-xl); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -.02em; }
+.dash-pace { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
+.dash-pace-word { font-weight: var(--weight-medium); }
+.dash-pace.is-ahead .dash-pace-word { color: var(--positive); }
 .glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
 .glance-mini { display: flex; flex-wrap: wrap; gap: var(--space-5); }
 .glance-mini > div { display: flex; flex-direction: column; gap: 2px; }
