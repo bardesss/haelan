@@ -64,6 +64,37 @@ function check(condition, label) {
   if (!condition) failures.push(label)
 }
 
+/**
+ * Whether `selector` is actually paintable at two points inside `box`, not merely positioned
+ * there. `boundingBox` reports layout geometry, which agrees with what CSS says the box should be
+ * even when an ancestor's `overflow` clips it away or something else paints over it - exactly what
+ * `.rail`'s own `overflow-y: auto` (app.css) does to the absolutely positioned `.status-popover`
+ * sitting inside it, at both the expanded and the collapsed rail width, and a `boundingBox`-only
+ * check cannot tell that apart from a popover that actually rendered on screen.
+ * `document.elementFromPoint` answers the honest question instead: what element the browser would
+ * actually deliver a click to at that pixel. Two points, not the centre alone: the popover's own
+ * left edge sits flush with the rail's padding, so a clip at the rail's right edge (the expanded
+ * case) can still leave the centre point inside the unclipped remainder while the popover's own
+ * right portion is gone - `nearRightEdge` is what catches that. `selector` is looked up fresh
+ * against `document`, not scoped under `.rail-foot` or `.rail`, so this also survives the popover
+ * moving into a portal under `document.body` in a later change - only how the element is found
+ * would need to differ then, not this check.
+ */
+async function paintableAt(page, selector, box) {
+  return page.evaluate(({ selector, box }) => {
+    const target = document.querySelector(selector)
+    if (target === null) return false
+    const points = [
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      { x: box.x + box.width - 2, y: box.y + box.height / 2 },
+    ]
+    return points.every(({ x, y }) => {
+      const painted = document.elementFromPoint(x, y)
+      return painted !== null && painted.closest('.status-popover') === target
+    })
+  }, { selector, box })
+}
+
 // Declared at module scope, unlike panelsOpened above it in the try block: the closing summary
 // line below reads this after the try/finally has run, and a `let` scoped to the try block would
 // not reach that far.
@@ -595,6 +626,10 @@ try {
         `the status popover is outside the viewport at 900x380: ${box === null ? 'unmeasurable'
           : `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}`}`,
       )
+      check(
+        box !== null && await paintableAt(page, '.status-popover', box),
+        'the status popover is clipped or covered at 900x380 expanded',
+      )
       await page.keyboard.press('Escape')
       await page.waitForTimeout(SETTLE_MS)
       check(!(await popover.isVisible().catch(() => false)), 'Escape did not close the status popover at 900x380')
@@ -627,6 +662,10 @@ try {
               && collapsedBox.y >= 0 && collapsedBox.x + collapsedBox.width <= collapsedViewport.width + 1,
             `the collapsed status popover is outside the viewport at 900x380: ${collapsedBox === null ? 'unmeasurable'
               : `${Math.round(collapsedBox.x)},${Math.round(collapsedBox.y)} ${Math.round(collapsedBox.width)}x${Math.round(collapsedBox.height)}`}`,
+          )
+          check(
+            collapsedBox !== null && await paintableAt(page, '.status-popover', collapsedBox),
+            'the status popover is clipped or covered at 900x380 collapsed',
           )
         }
       }
