@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.8.2](https://github.com/bardesss/haelan/compare/v2.8.1...v2.8.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **web:** bundle MapLibre's worker, so the route line draws ([#364](https://github.com/bardesss/haelan/issues/364)) ([d3d5438](https://github.com/bardesss/haelan/commit/d3d543859648fa3b33ab52c770ed91bc1ce88304))
+
 ## [2.8.1](https://github.com/bardesss/haelan/compare/v2.8.0...v2.8.1) (2026-09-24)
 
 
