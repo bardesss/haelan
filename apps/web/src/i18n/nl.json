@@ -88,7 +88,8 @@
       "ok": "alle bronnen zijn bijgewerkt",
       "syncing": "bezig met synchroniseren",
       "problems_one": "{{count}} probleem",
-      "problems_other": "{{count}} problemen"
+      "problems_other": "{{count}} problemen",
+      "none": "nog niets gekoppeld"
     },
     "connection": {
       "google": "Google Health",
@@ -100,7 +101,7 @@
       "never": "nog niets"
     },
     "lastDay": "{{day}}",
-    "stale": "is stil gevallen",
+    "stale": "is stilgevallen",
     "problem": {
       "revoked": "De toegang tot Google is ingetrokken. Maak opnieuw verbinding onder Account.",
       "credentials_unreadable": "Deze server kan de Google-koppeling niet lezen. Maak opnieuw verbinding onder Account.",
@@ -1184,7 +1185,9 @@
       "volume_one": "{{count}} dag gerapporteerd",
       "volume_other": "{{count}} dagen gerapporteerd",
       "showInPanel": "Tonen in statuspaneel",
-      "panelDefault": "Weer automatisch"
+      "panelDefault": "Weer automatisch",
+      "showInPanelLabel": "Tonen in statuspaneel: {{source}}",
+      "panelDefaultLabel": "Weer automatisch: {{source}}"
     },
     "sourceOrder": {
       "title": "Welke bron wint",

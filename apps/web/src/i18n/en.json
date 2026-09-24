@@ -88,7 +88,8 @@
       "ok": "all sources up to date",
       "syncing": "syncing",
       "problems_one": "{{count}} problem",
-      "problems_other": "{{count}} problems"
+      "problems_other": "{{count}} problems",
+      "none": "nothing connected yet"
     },
     "connection": {
       "google": "Google Health",
@@ -1184,7 +1185,9 @@
       "volume_one": "{{count}} day reported",
       "volume_other": "{{count}} days reported",
       "showInPanel": "Show in status panel",
-      "panelDefault": "Back to automatic"
+      "panelDefault": "Back to automatic",
+      "showInPanelLabel": "Show in status panel: {{source}}",
+      "panelDefaultLabel": "Back to automatic: {{source}}"
     },
     "sourceOrder": {
       "title": "Which source wins",

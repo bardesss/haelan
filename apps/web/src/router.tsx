@@ -121,7 +121,15 @@ export function subscribeForTest(listener: () => void): () => void {
  */
 export function scrollToHashTarget(): void {
   if (typeof window === 'undefined') return
-  const id = decodeURIComponent(window.location.hash.slice(1))
+  // decodeURIComponent throws URIError on a malformed escape (#%E0), and the fragment is whatever
+  // the address bar holds. The Account page calls this on mount, so a throw would take the page
+  // down for a typo in a URL; a fragment that cannot be decoded names no element anyway.
+  let id: string
+  try {
+    id = decodeURIComponent(window.location.hash.slice(1))
+  } catch {
+    return
+  }
   if (id === '') return
   document.getElementById(id)?.scrollIntoView({ block: 'start' })
 }

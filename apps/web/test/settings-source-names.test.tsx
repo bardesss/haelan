@@ -469,6 +469,26 @@ describe('showing a source in the status panel', () => {
     expect(automatic()).toBeNull()
   })
 
+  // Seventeen rows each carrying "Show in status panel" is seventeen identical names to a screen
+  // reader; the source's own name is what tells them apart. The visible words lead the name, so
+  // a voice-control user saying what they see still reaches the control.
+  it('names the source in the switch and the way back, for a screen reader', () => {
+    mountSection([namedSource({ lastReportedDate: RECENT, panelChoice: false })])
+    expect(toggle().getAttribute('aria-label')).toBe('Show in status panel: My watch')
+    expect(automatic()!.getAttribute('aria-label')).toBe('Back to automatic: My watch')
+  })
+
+  // A second press while the first is in flight would race it, and the switch would flicker
+  // between the two answers as they land.
+  it('holds the switch still while a choice is being saved', async () => {
+    globalThis.fetch = (() => new Promise<Response>(() => {})) as typeof fetch
+    mountForWrites([namedSource({ lastReportedDate: RECENT, panelChoice: null })])
+    expect(toggle().disabled).toBe(false)
+    // Async, so the mutation has started and reported itself pending before the assertion.
+    await act(async () => { toggle().click() })
+    expect(toggle().disabled).toBe(true)
+  })
+
   it('follows an explicit choice over the default', () => {
     mountSection([namedSource({ lastReportedDate: RECENT, panelChoice: false })])
     expect(toggle().checked).toBe(false)

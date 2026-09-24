@@ -148,5 +148,10 @@ export function dayLabel(date: string, today: string, language: string): string 
   if (date < today && date >= addDays(today, -6)) {
     return anchored.toLocaleString(language, { weekday: 'long', timeZone: 'UTC' })
   }
-  return anchored.toLocaleString(language, { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  // The year only when it is not this one: "Aug 1" is unambiguous in September, but a scale last
+  // heard from in December of last year would otherwise read as a date three months ahead.
+  const otherYear = date.slice(0, 4) !== today.slice(0, 4)
+  return anchored.toLocaleString(language, {
+    day: 'numeric', month: 'short', timeZone: 'UTC', ...(otherYear ? { year: 'numeric' } : {}),
+  })
 }

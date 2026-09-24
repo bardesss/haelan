@@ -284,15 +284,22 @@ function SourceNameRow({ source, today }: { source: NamedSourceWithActivity, tod
           records an explicit choice even when it lands on what the default already was: the
           reader has said what they want, and a later change in the source's activity should not
           quietly overrule it. */}
+      {/* Both controls carry the source's name for a screen reader, the way the name field above
+          does: every row says "Show in status panel", so the visible words alone name seventeen
+          controls identically. The visible words lead, so what a voice-control user reads off the
+          screen is still the start of the name. Disabled while a choice is in flight, so a second
+          press cannot race the first and the switch does not flicker between the two answers. */}
       <label className="source-panel-toggle">
-        <input type="checkbox" checked={shown}
+        <input type="checkbox" checked={shown} disabled={setChoice.isPending}
+          aria-label={t('settings.sourceNames.showInPanelLabel', { source: source.name })}
           onChange={(e) => setChoice.mutate({ sourceId: source.id, visible: e.currentTarget.checked })} />
         {t('settings.sourceNames.showInPanel')}
       </label>
       {/* Only once a choice exists: with none, the switch already follows the default and there is
           nothing to go back to. */}
       {source.panelChoice !== null && (
-        <button type="button" className="source-panel-default"
+        <button type="button" className="source-panel-default" disabled={setChoice.isPending}
+          aria-label={t('settings.sourceNames.panelDefaultLabel', { source: source.name })}
           onClick={() => setChoice.mutate({ sourceId: source.id, visible: null })}>
           {t('settings.sourceNames.panelDefault')}
         </button>

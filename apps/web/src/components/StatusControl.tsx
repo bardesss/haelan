@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { StatusPanel } from './StatusPanel.js'
@@ -29,6 +30,13 @@ import { useStatusPanel, useRunSync, useRefreshOnSyncFinish } from '../data/useS
  * A popover on a desktop, opening upward out of the rail's foot the way the person menu beside it
  * does; a bottom sheet on a phone, a <dialog> written the way PeriodSheet's is, because a popover
  * anchored in a 44px top bar has nowhere to open on a 375px screen.
+ *
+ * The popover is portalled to document.body and placed with position: fixed, not absolutely
+ * positioned inside the rail like the person menu. The rail is a scroll container (overflow-y:
+ * auto, which makes overflow-x compute to auto too), and a 20rem popover inside it was clipped at
+ * the rail's 186px edge: about 40px of it showed, the rail grew a sideways scrollbar, and on a
+ * collapsed rail nothing showed at all. The person menu gets away with it only because it is no
+ * wider than the foot it opens from.
  */
 export function StatusControl() {
   const { t } = useTranslation()
@@ -40,6 +48,7 @@ export function StatusControl() {
   useRefreshOnSyncFinish(status.data)
 
   const [open, setOpen] = useState(false)
+  const [placement, setPlacement] = useState<Placement | null>(null)
   const wrapper = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const popover = useRef<HTMLDivElement>(null)
@@ -49,14 +58,14 @@ export function StatusControl() {
   const running = sync?.running === true
   const problems = status.data?.problems ?? 0
 
-  // Whether this component has watched a run, so the result line describes a sync the reader saw
-  // happen rather than whichever one last finished - which could be the scheduler's, an hour ago.
-  // Set by observing the status running (a run from anywhere, seen while this tab was open) or by
-  // a press that succeeded (which covers the run so short it was over before the status re-read
-  // could see it going). Cleared by the next press, so a refused one does not inherit the last
-  // run's result.
+  // Whether the reader has watched a run, so the result line describes a sync they saw happen
+  // rather than whichever one last finished - which could be the scheduler's, an hour ago. Set by
+  // the status running while the panel is open (a run from anywhere, including one already going
+  // when the panel opened) or by a press that succeeded (which covers the run so short it was over
+  // before the status re-read could see it going). Cleared by the next press, so a refused one does
+  // not inherit the last run's result, and by closing the panel, below.
   const [watched, setWatched] = useState(false)
-  useEffect(() => { if (running) setWatched(true) }, [running])
+  useEffect(() => { if (running && open) setWatched(true) }, [running, open])
 
   const outcome: SyncOutcome | null = runSync.error instanceof ApiError
     // 429 is the server's minute of cooldown after a run, which means a run just finished: the
@@ -73,6 +82,16 @@ export function StatusControl() {
     runSync.mutate(undefined, { onSuccess: () => setWatched(true) })
   }
 
+  // An outcome belongs to the moment it was reported. Closing the panel forgets it - the mutation's
+  // error and the watched flag both - so "A sync is already running." or "Nothing new." does not
+  // greet a reader who opens the panel again an hour later. reset is stable across renders.
+  const resetRun = runSync.reset
+  useEffect(() => {
+    if (open) return
+    resetRun()
+    setWatched(false)
+  }, [open, resetRun])
+
   // The person's today, not the browser's, for "today" and "yesterday" on the device rows.
   // open is a dependency on purpose: a tab left open overnight re-reads the date when the panel
   // is opened, rather than calling yesterday "today" until a reload.
@@ -84,8 +103,8 @@ export function StatusControl() {
   // the account page its own link just opened.
   useEffect(() => { setOpen(false) }, [route])
 
-  // Escape and a press outside, registered only while the popover is open. The wrapper (icon and
-  // popover together) is the inside test, so a pointerdown on the Sync button does not tear the
+  // Escape and a press outside, registered only while the popover is open. The icon's wrapper and
+  // the portalled popover are both the inside test, so a pointerdown on the Sync button does not tear the
   // popover down before its click lands - the defect rail-menu.test.tsx's press() guards against
   // for the person menu. Escape is claimed (preventDefault, stopPropagation) so that inside the
   // phone drawer it closes this layer and not the <dialog> beneath it as well. The phone sheet is
@@ -101,7 +120,9 @@ export function StatusControl() {
     }
     const onDown = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Node && wrapper.current?.contains(target) === true) return
+      // Both the wrapper (the icon) and the popover count as inside: portalled to the body, the
+      // popover is no longer a descendant of the wrapper.
+      if (target instanceof Node && (wrapper.current?.contains(target) === true || popover.current?.contains(target) === true)) return
       setOpen(false)
     }
     document.addEventListener('keydown', onKey)
@@ -112,17 +133,49 @@ export function StatusControl() {
     }
   }, [open, isPhone])
 
+  // Where the popover goes, from the icon's own rectangle. Measured in a layout effect so the first
+  // painted frame is already in place, and again once the popover exists so its real size can keep
+  // it inside the viewport; again on every resize, since a fixed box does not follow the rail. The
+  // placement is dropped on close, so the next open never paints at a stale position first.
+  useLayoutEffect(() => {
+    if (!open || isPhone) { setPlacement(null); return }
+    const place = () => {
+      const button = trigger.current
+      if (!button) return
+      const box = popover.current?.getBoundingClientRect()
+      const foot = button.closest('.rail-foot')?.getBoundingClientRect()
+      const rail = button.closest('.rail')?.getBoundingClientRect()
+      const iconRect = button.getBoundingClientRect()
+      setPlacement(placementFor({
+        trigger: iconRect,
+        anchorLeft: foot?.left ?? iconRect.left,
+        stripRight: rail?.right ?? iconRect.right,
+        collapsed: button.closest('.rail-collapsed') !== null,
+        size: { width: box?.width ?? 0, height: box?.height ?? 0 },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+      }))
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [open, isPhone])
+
   // Focus moves into the popover on open, so a keyboard reader lands on the panel they asked for
   // rather than having to tab past the rest of the rail to reach it. The first enabled control, or
   // the popover itself when there is none (a disabled Sync button and no link cannot happen - the
   // footer link is always there - but a panel with nothing focusable should not strand focus).
+  //
+  // Only once placed: before that the popover is visibility: hidden, and a browser will not focus
+  // anything inside a hidden box. Keyed on whether it is placed rather than on where, so a resize
+  // that moves it does not pull focus back to the first control.
+  const placed = placement !== null
   useEffect(() => {
-    if (!open || isPhone) return
+    if (!open || isPhone || !placed) return
     const element = popover.current
     if (!element) return
     const first = element.querySelector<HTMLElement>('a[href], button:not(:disabled)')
     ;(first ?? element).focus({ preventScroll: true })
-  }, [open, isPhone])
+  }, [open, isPhone, placed])
 
   // The phone sheet: showModal and close are imperative, so state is the source of truth and this
   // makes the element agree, guarded both ways because showModal on an open dialog throws.
@@ -152,9 +205,12 @@ export function StatusControl() {
     mounted.current = true
   }, [open, isPhone])
 
+  // "All sources up to date" about a household with nothing connected is a claim about nothing, so
+  // that case gets its own neutral word.
   const state = running
     ? t('status.state.syncing')
-    : problems > 0 ? t('status.state.problems', { count: problems }) : t('status.state.ok')
+    : problems > 0 ? t('status.state.problems', { count: problems })
+      : status.data?.connections.length === 0 ? t('status.state.none') : t('status.state.ok')
 
   const content = status.data !== undefined && (
     <StatusPanel status={status.data} today={today} syncPending={runSync.isPending}
@@ -188,11 +244,15 @@ export function StatusControl() {
         <Icon name="status" />
         {problems > 0 && <span className="status-dot" aria-hidden="true" />}
       </button>
-      {!isPhone && open && (
+      {!isPhone && open && createPortal(
+        // Hidden until placed, so the one frame before the layout effect measures never shows it
+        // at the viewport's corner. Layout effects run before paint, so in practice it never shows.
         <div ref={popover} className="status-popover" role="dialog" aria-label={t('status.title')} tabIndex={-1}
+          style={placement === null ? { visibility: 'hidden' } : { left: `${placement.left}px`, bottom: `${placement.bottom}px` }}
           onClick={onPanelClick}>
           {content}
-        </div>
+        </div>,
+        document.body,
       )}
       {isPhone && (
         // The backdrop tap is a click whose target is the dialog itself, for the reason
@@ -213,4 +273,45 @@ export function StatusControl() {
       )}
     </div>
   )
+}
+
+/** The gap between the icon and the popover, and the popover's least distance from a viewport edge. */
+const GAP_PX = 6
+
+export interface Placement { left: number, bottom: number }
+
+/**
+ * Where the fixed popover goes, as a left edge and a distance from the viewport's bottom.
+ *
+ * Bottom rather than top, because the popover opens upward and its height is its content's: pinned
+ * by its bottom edge it grows away from the icon, which is how .rail-menu opens beside it. An
+ * expanded rail puts it above the icon, its left edge on the rail foot's so it lines up with the
+ * name beside it. A collapsed rail is a 60px strip with no room above for anything 20rem wide, so
+ * it opens past the strip's right edge - the rail's, not the icon's, which sits inside the strip's
+ * padding and would leave the popover lying over the strip's last 16px - its bottom level with the
+ * icon's.
+ *
+ * Clamped both ways into the viewport by GAP_PX: pulled left when a narrow window would push it
+ * off the right edge, and pinned below the top when it is taller than the room above the icon
+ * (max-height: 70vh caps it, but a short window can still make 70vh more than there is).
+ */
+export function placementFor({ trigger, anchorLeft, stripRight, collapsed, size, viewport }: {
+  trigger: { left: number, top: number, right: number, bottom: number }
+  /** Where an expanded rail's popover starts: the rail foot's left edge. */
+  anchorLeft: number
+  /** Where a collapsed rail's strip ends: the rail's right edge. */
+  stripRight: number
+  collapsed: boolean
+  size: { width: number, height: number }
+  viewport: { width: number, height: number }
+}): Placement {
+  const left = collapsed ? stripRight + GAP_PX : anchorLeft
+  const bottom = collapsed ? viewport.height - trigger.bottom : viewport.height - trigger.top + GAP_PX
+  return {
+    // Near edge first, then the far one, so when both cannot hold the far one wins: the right
+    // edge over the left, the top over the bottom. A popover cut at the top loses its first
+    // connection, the one a reader opened it to see.
+    left: Math.min(Math.max(GAP_PX, left), viewport.width - size.width - GAP_PX),
+    bottom: Math.min(Math.max(GAP_PX, bottom), viewport.height - size.height - GAP_PX),
+  }
 }
