@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { localDateInZone } from '@haelan/core'
-import type { Glance, GlanceFigure } from '@haelan/core'
+import type { Glance, GlanceFigure, GlanceWeekFigure } from '@haelan/core'
 import { personQueryOf, roundMetricValue, roundMetricValueOrNull, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
@@ -31,6 +31,11 @@ function roundFigure(figure: GlanceFigure): GlanceFigure {
   }
 }
 
+/** A week figure's `perDay` rounded to its metric's catalogue precision; `days` is a count, never rounded. */
+function roundWeekFigure(metric: string, figure: GlanceWeekFigure | null): GlanceWeekFigure | null {
+  return figure === null ? null : { ...figure, perDay: roundMetricValue(metric, figure.perDay) }
+}
+
 /**
  * The glance at catalogue precision, the same boundary /series and /intraday round at: core keeps
  * full precision (a baseline's centre is a mean, and a spread either side of it is rarely a round
@@ -38,7 +43,7 @@ function roundFigure(figure: GlanceFigure): GlanceFigure {
  * the body a client actually receives.
  */
 function roundGlance(glance: Glance): Glance {
-  const { sleep, recovery, day } = glance
+  const { sleep, recovery, day, week } = glance
   return {
     ...glance,
     sleep: sleep === null ? null : {
@@ -76,6 +81,11 @@ function roundGlance(glance: Glance): Glance {
           max: roundMetricValueOrNull('heart_rate', point.max),
         })),
       },
+    },
+    week: {
+      steps: roundWeekFigure('steps', week.steps),
+      activeMinutes: roundWeekFigure(ROUNDED_AS.active_minutes!, week.activeMinutes),
+      asleep: roundWeekFigure('sleep_asleep_minutes', week.asleep),
     },
   }
 }

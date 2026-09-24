@@ -28,6 +28,8 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(body.today).toBe('2026-08-20')
     expect(body).toHaveProperty('recovery.index')
     expect(body).toHaveProperty('day.steps')
+    expect(body).toHaveProperty('week')
+    expect(body.week).toEqual({ steps: null, activeMinutes: null, asleep: null })
   })
 
   // The route rebuilds `day` to round its figures, and a rebuild that named its fields one by one

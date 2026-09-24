@@ -424,19 +424,50 @@ export function readDay(ctx: GlanceContext): GlanceDay {
   }
 }
 
+export interface GlanceWeekFigure { perDay: number, days: number }
+
+/** The last seven days as averages over the finished ones; today is drawn by the client, never counted (spec: WeekCard). */
+export interface GlanceWeek { steps: GlanceWeekFigure | null, activeMinutes: GlanceWeekFigure | null, asleep: GlanceWeekFigure | null }
+
+/** A strip's finished days averaged. The last entry is the figure's own day and is left out: on the today figures it is still running. */
+export function weekOf(strip: readonly GlanceStripDay[]): GlanceWeekFigure | null {
+  const finished = strip.slice(0, -1).map((d) => d.value).filter((v): v is number => v !== null)
+  if (finished.length === 0) return null
+  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length }
+}
+
+/**
+ * The same average as `weekOf`, but over the whole strip: a sleep strip ends on last night, which
+ * has already finished, so there is no running day at the end to leave out.
+ */
+export function weekOfFinished(strip: readonly GlanceStripDay[]): GlanceWeekFigure | null {
+  const finished = strip.map((d) => d.value).filter((v): v is number => v !== null)
+  if (finished.length === 0) return null
+  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length }
+}
+
 export interface Glance {
   /** The local date this was assembled for, in the person's own zone. */
   today: string
   sleep: GlanceSleep | null
   recovery: GlanceRecovery
   day: GlanceDay
+  /** The last seven days' averages, alongside `day` and `sleep` rather than replacing them. */
+  week: GlanceWeek
 }
 
 export function readGlance(
   q: PersonQuery, input: { today: string, nowMs: number, nameOf: (id: string) => string },
 ): Glance {
   const ctx = contextFor(q, input)
+  const sleep = readLastNight(ctx)
+  const day = readDay(ctx)
+  const week: GlanceWeek = {
+    steps: weekOf(day.steps.strip),
+    activeMinutes: weekOf(day.activeMinutes.strip),
+    asleep: sleep === null ? null : weekOfFinished(sleep.asleep.strip),
+  }
   // No generation time in the body: /glance is hashed for its ETag, and a stamp of now would make
   // every response differ, so no conditional request could ever answer 304.
-  return { today: input.today, sleep: readLastNight(ctx), recovery: readRecovery(ctx), day: readDay(ctx) }
+  return { today: input.today, sleep, recovery: readRecovery(ctx), day, week }
 }

@@ -4,7 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources, sessions } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { contextFor, dailyFigure, readDay, readGlance, readLastNight, readRecovery, standingOf } from '../src/query/glance.ts'
+import { contextFor, dailyFigure, readDay, readGlance, readLastNight, readRecovery, standingOf, weekOf, weekOfFinished } from '../src/query/glance.ts'
 
 const TODAY = '2026-08-20'
 const NOW = Date.parse('2026-08-20T10:00:00Z')
@@ -348,5 +348,25 @@ describe('readGlance', () => {
   it('is what PersonQuery.glance returns', () => {
     const q = new PersonQuery(test.db, 'p1')
     expect(q.glance({ today: TODAY, nowMs: NOW })).toEqual(readGlance(q, { today: TODAY, nowMs: NOW, nameOf: (id) => id }))
+  })
+})
+
+describe('weekOf', () => {
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value }))
+  it('averages the six finished days and never today', () => {
+    expect(weekOf(strip([1, 2, 3, 4, 5, 6, 1000]))).toEqual({ perDay: 3.5, days: 6 })
+  })
+  it('leaves a silent day out rather than counting a zero', () => {
+    expect(weekOf(strip([2, null, 4, null, null, null, 9]))).toEqual({ perDay: 3, days: 2 })
+  })
+  it('is null with no finished day', () => {
+    expect(weekOf(strip([null, null, null, null, null, null, 5]))).toBeNull()
+  })
+})
+
+describe('weekOfFinished', () => {
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value }))
+  it('averages all seven days, the last included, because a night strip ends on a finished night', () => {
+    expect(weekOfFinished(strip([1, 2, 3, 4, 5, 6, 7]))).toEqual({ perDay: 4, days: 7 })
   })
 })

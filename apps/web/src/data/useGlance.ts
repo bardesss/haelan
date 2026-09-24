@@ -92,11 +92,23 @@ export interface GlanceDay {
   workouts: WorkoutSession[]
 }
 
+export interface GlanceWeekFigure {
+  perDay: number
+  days: number
+}
+
+export interface GlanceWeek {
+  steps: GlanceWeekFigure | null
+  activeMinutes: GlanceWeekFigure | null
+  asleep: GlanceWeekFigure | null
+}
+
 export interface Glance {
   today: string
   sleep: GlanceSleep | null
   recovery: GlanceRecovery
   day: GlanceDay
+  week: GlanceWeek
 }
 
 export function glanceKey(personId: string): readonly unknown[] {
