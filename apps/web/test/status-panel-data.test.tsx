@@ -217,6 +217,22 @@ describe('starting a sync', () => {
     expect(runSync!.error!.status).toBe(429)
     expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(false)
   })
+
+  // The cached cooldownRemainingMs this button read as over is now stale - a 429 could not have
+  // happened otherwise - so a re-read is what disables the button for the cooldown the server
+  // just proved is still running, rather than leaving it clickable for another refusal.
+  it('re-reads the status after a refused run, so the cooldown disables the button', async () => {
+    runAnswer = { status: 429, body: { error: { kind: 'transient', code: 'cooldown', message: 'cooldown' } } }
+    const client = seeded(false)
+    serverStatus = statusBody(false, null, { cooldownRemainingMs: 45_000 })
+    mount(client)
+    expect(statusReads).toBe(0)
+    act(() => { runSync!.mutate() })
+    await settle()
+
+    expect(statusReads).toBe(1)
+    expect(client.getQueryData<StatusPanel>(statusKey(PERSON.personId))?.sync?.cooldownRemainingMs).toBe(45_000)
+  })
 })
 
 describe('the panel choice', () => {

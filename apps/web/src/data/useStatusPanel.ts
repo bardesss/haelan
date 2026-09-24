@@ -121,6 +121,14 @@ export function useRunSync(): UseMutationResult<unknown, ApiError, void> {
         refreshPersonData(queryClient, personId)
       }
     },
+    // A 429 means the server's cooldown refused the click - cooldownRemainingMs on the status
+    // this panel is already showing is now stale (it read as over, or the click would not have
+    // been offered), so re-read it rather than leave the button enabled for a click that will
+    // only be refused again.
+    onError: async (error) => {
+      if (personId === undefined || error.status !== 429) return
+      await queryClient.invalidateQueries({ queryKey: statusKey(personId) })
+    },
   })
 }
 
