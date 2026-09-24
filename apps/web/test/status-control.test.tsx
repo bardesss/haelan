@@ -31,6 +31,12 @@ const realShowModal = HTMLDialogElement.prototype.showModal
 const realClose = HTMLDialogElement.prototype.close
 const realMatchMedia = window.matchMedia
 let phone = false
+let mediaListeners = new Set<() => void>()
+
+function crossBreakpoint(toPhone: boolean): void {
+  phone = toPhone
+  act(() => { for (const listener of mediaListeners) listener() })
+}
 
 beforeEach(() => {
   // happy-dom has no dialog implementation; these move the open attribute the way a browser does.
@@ -40,11 +46,14 @@ beforeEach(() => {
     this.dispatchEvent(new Event('close'))
   }
   phone = false
+  mediaListeners = new Set()
+  // matches is a getter and the change listeners are kept, so a test can cross the phone
+  // breakpoint mid-test the way a resized window does: flip `phone`, then crossBreakpoint().
   window.matchMedia = ((query: string) => ({
-    matches: phone && query === PHONE_MEDIA_QUERY,
+    get matches() { return phone && query === PHONE_MEDIA_QUERY },
     media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: (_type: string, listener: () => void) => { mediaListeners.add(listener) },
+    removeEventListener: (_type: string, listener: () => void) => { mediaListeners.delete(listener) },
   })) as unknown as typeof window.matchMedia
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -537,6 +546,24 @@ describe('closing', () => {
       expect(popover()).toBeNull()
     } finally {
       window.history.replaceState(null, '', before)
+    }
+  })
+
+  // The sheet's focus-return effect ran whenever isPhone changed, and on a phone with the panel
+  // closed it read as "the sheet just closed": narrowing a window into phone width moved focus
+  // off whatever the reader was typing in and onto this icon. Only a close hands focus back.
+  it('leaves focus alone when the window narrows into phone width with the panel closed', () => {
+    mount(panel())
+    const elsewhere = document.createElement('input')
+    document.body.appendChild(elsewhere)
+    try {
+      elsewhere.focus()
+      crossBreakpoint(true)
+      expect(document.activeElement).toBe(elsewhere)
+      crossBreakpoint(false)
+      expect(document.activeElement).toBe(elsewhere)
+    } finally {
+      elsewhere.remove()
     }
   })
 

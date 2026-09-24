@@ -205,12 +205,16 @@ export function StatusControl() {
   }, [isPhone])
 
   // Focus back to the icon when the sheet closes, which the browser does not do for a dialog closed
-  // by Escape. Skips the first run for the reason RailDrawer's identical effect gives: `open`
-  // starts false, and without the guard every mount would steal focus onto this icon.
-  const mounted = useRef(false)
+  // by Escape. Keyed on open having been true on the previous run, not merely on it being false
+  // now: the effect also runs when isPhone flips, and a window narrowed into phone width with the
+  // panel shut used to read as "the sheet just closed" and pull focus off whatever the reader was
+  // in (a mounted-once flag, which is what RailDrawer's identical effect uses, only rules out the
+  // first run, and RailDrawer has no second dependency to flip). The ref starts false, which also
+  // covers the mount RailDrawer's guard was for.
+  const wasOpen = useRef(false)
   useEffect(() => {
-    if (mounted.current && !open && isPhone) trigger.current?.focus({ preventScroll: true })
-    mounted.current = true
+    if (wasOpen.current && !open && isPhone) trigger.current?.focus({ preventScroll: true })
+    wasOpen.current = open
   }, [open, isPhone])
 
   // "All sources up to date" about a household with nothing connected is a claim about nothing, so
