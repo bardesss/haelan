@@ -77,8 +77,10 @@ export function syncPollInterval(status: SyncStatus | undefined): number | false
 }
 
 /**
- * One query key, shared with the sync mutation's invalidation in ControlRow: both have to agree
- * on exactly this key, or a successful run would invalidate a cache entry nothing is reading.
+ * One query key, shared with the sync mutation's invalidation in SyncControl (ControlRow's until
+ * M10): both have to agree on exactly this key, or a successful run would invalidate a cache entry
+ * nothing is reading. SyncControl also excludes it by this key from the whole-person refresh a
+ * finished run makes, since it sits under queryKeys.person like every other resource.
  * personId comes from the session, never from a parameter, for the same reason useSeries does
  * this: an account owns exactly one person, and taking it as an argument would let a caller name
  * someone else's.

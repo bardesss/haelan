@@ -234,3 +234,136 @@ describe('the sync control', () => {
     expect(container!.querySelector('.sync-button')).not.toBe(null)
   })
 })
+
+/**
+ * A finished run refreshing the page it ran for.
+ *
+ * Until this, the only thing a successful click invalidated was the sync status itself, so the
+ * run went, the button re-enabled, the freshness line said "0m" - and every chart and workout on
+ * the page went on showing what it showed before the click until the reader reloaded. From the
+ * chair that is indistinguishable from a button that does nothing, which is what it was reported
+ * as.
+ *
+ * The data query below is seeded and never observed, so invalidating it marks it and fetches
+ * nothing: isInvalidated is the whole signal, and no page component has to be mounted to read it.
+ */
+describe('a finished sync', () => {
+  const DATA_KEY = queryKeys.resource(PERSON.personId, 'series', { metric: 'steps' })
+  const OTHER_PERSON_KEY = queryKeys.resource('p2', 'series', { metric: 'steps' })
+
+  function statusBody(running: boolean, lastFinishedAtMs: number | null) {
+    return {
+      running, lastFinishedAtMs, rebuildInFlight: false,
+      rebuild: {
+        quarantined: false, awaitingRebuild: false, producedNothing: false, droppedPages: 0,
+        lastError: null, lastErrorAtMs: null, lastSuccessAtMs: null, drops: [],
+      },
+    }
+  }
+
+  // The server, for the whole of each test rather than around the click alone: a refresh that
+  // works refetches every observed query under the person - the phone line's included - and
+  // those requests must land here, not on a real socket. A 202 for the click, serverStatus for
+  // the status route, and an empty object for anything else the tree happens to ask.
+  let serverStatus = statusBody(false, null)
+  let statusReads = 0
+  let originalFetch: typeof fetch
+  beforeEach(() => {
+    statusReads = 0
+    originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const posted = init?.method === 'POST'
+      if (!posted && String(input) === '/api/sync/status') statusReads += 1
+      const body = posted ? {} : String(input) === '/api/sync/status' ? serverStatus : {}
+      return new Response(JSON.stringify(body), {
+        status: posted ? 202 : 200, headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+  })
+  afterEach(() => { globalThis.fetch = originalFetch })
+
+  // What the next poll would write. Written directly rather than waited for, because the poll's
+  // own wiring is sync-status.test.tsx's to guard, and three real seconds buy nothing here. The
+  // wait is not optional: react-query hands observers their notifications on a later tick, so a
+  // bare synchronous act() returns before the component has seen the new status at all - and the
+  // idle-to-idle test below would pass on a component that never looked.
+  async function pollAnswers(status: ReturnType<typeof statusBody>, client: QueryClient): Promise<void> {
+    await act(async () => {
+      client.setQueryData(syncStatusKey(PERSON.personId), status)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+  }
+
+  function seeded(running: boolean): QueryClient {
+    const client = clientWith({ running, lastFinishedAtMs: null })
+    client.setQueryData(DATA_KEY, { points: [] })
+    client.setQueryData(OTHER_PERSON_KEY, { points: [] })
+    // The phone line's query, seeded so the control asks the network for nothing on mount.
+    client.setQueryData(queryKeys.resource(PERSON.personId, 'history-start'), {
+      historyStartMs: null, googleConnected: true, lastIngestAtMs: null,
+    })
+    return client
+  }
+
+  async function click(): Promise<void> {
+    const button = container!.querySelector('.sync-button') as HTMLButtonElement
+    act(() => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+  }
+
+  // The ordinary case: a run that outlasts one poll, started by this button, the scheduler or
+  // another tab alike. Whoever started it, the poll is what sees it end.
+  it('invalidates this person\'s data when the status goes from running to idle', async () => {
+    const client = seeded(true)
+    mount(<QueryClientProvider client={client}><SyncControl /></QueryClientProvider>)
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(false)
+
+    await pollAnswers(statusBody(false, Date.now()), client)
+
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(true)
+    // The status itself lives under the same person prefix and was just answered; invalidating it
+    // too would refetch the thing that told us, for nothing. Counted at the network rather than
+    // read off isInvalidated, because the control observes the status, so an invalidation of it
+    // refetches at once and the flag is back to false before this line runs.
+    expect(statusReads).toBe(0)
+    // Somebody else's cache entry, in a tab that has switched accounts, is not this run's business.
+    expect(client.getQueryState(OTHER_PERSON_KEY)!.isInvalidated).toBe(false)
+  })
+
+  // An idle status answered again is not a run finishing. Without this guard every status fetch -
+  // one per mount, one per click - would throw away every chart on the page.
+  it('leaves the data alone when an idle status is answered again', async () => {
+    const client = seeded(false)
+    mount(<QueryClientProvider client={client}><SyncControl /></QueryClientProvider>)
+    await pollAnswers(statusBody(false, Date.now()), client)
+    // Proof the component did see the new answer, without which the line after this proves nothing.
+    expect(container!.querySelector('.synced')!.textContent).toBe('0m')
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(false)
+  })
+
+  // A run with little to fetch can finish before the status re-read that follows the 202 gets its
+  // answer. The status then goes from idle to idle, no transition is ever observed, and the case
+  // above never fires - so the click's own success path has to notice.
+  it('invalidates this person\'s data when the run is over before the status is re-read', async () => {
+    serverStatus = statusBody(false, Date.now())
+    const client = seeded(false)
+    mount(<QueryClientProvider client={client}><SyncControl /></QueryClientProvider>)
+    await click()
+
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(true)
+    expect(client.getQueryState(OTHER_PERSON_KEY)!.isInvalidated).toBe(false)
+  })
+
+  // The other half of the case above: a run still going when the status is re-read is left to the
+  // transition, and refreshing now would only re-read data the run is about to change.
+  it('waits for the run when the re-read after the click says it is still going', async () => {
+    serverStatus = statusBody(true, null)
+    const client = seeded(false)
+    mount(<QueryClientProvider client={client}><SyncControl /></QueryClientProvider>)
+    await click()
+
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(false)
+    await pollAnswers(statusBody(false, Date.now()), client)
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(true)
+  })
+})

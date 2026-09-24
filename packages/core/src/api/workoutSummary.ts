@@ -146,7 +146,9 @@ export interface WorkoutDetail {
    * `hasGps` cannot carry this. It is null for every companion session, because Health Connect has
    * no such field, and that null is the ordinary state rather than a signal. This is the phone
    * saying something specific: Health Connect answered ConsentRequired, so there IS a track and it
-   * is behind a per-session consent the headless sync cannot ask for.
+   * was not released. Since android 0.4.0 the app requests READ_EXERCISE_ROUTES, so this now means
+   * the household has not granted route access to Haelan (or grants it per workout, whose consent
+   * prompt the headless sync has no Activity to show), and the web sentence says how to fix that.
    *
    * false is the answer for every session that did not say so, including every Google one, which
    * is why it is a boolean rather than a third null: nothing else in the system can produce it.

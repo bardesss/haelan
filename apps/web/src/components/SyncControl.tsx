@@ -1,10 +1,33 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+import { hashKey, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { apiSend, ApiError } from '../api/client.js'
+import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
+import type { SyncStatus } from '../data/useSyncStatus.js'
 import { useHistoryStart } from '../data/useHistoryStart.js'
+
+/**
+ * Everything a finished run can have changed for this person, which is everything cached under
+ * their prefix - the same whole-person invalidation useSetSourcePriority makes after a re-rank,
+ * and for the same reason: a sync writes rows every card reads.
+ *
+ * Except the sync status itself, which lives under that prefix too (it is a queryKeys.resource)
+ * and has just been answered: it is the query that reported the run ending. Invalidating it would
+ * refetch it at once for nothing, and on a run that ends mid-poll it would do so every time.
+ * Compared by hash rather than by position, so a change to how resource keys are built cannot
+ * quietly turn this exclusion into a no-op.
+ */
+function refreshPersonData(queryClient: QueryClient, personId: string): void {
+  const statusHash = hashKey(syncStatusKey(personId))
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.person(personId),
+    predicate: (query) => query.queryHash !== statusHash,
+  })
+}
 
 /**
  * Kicking off a sync, and saying how fresh the data is.
@@ -51,12 +74,44 @@ export function SyncControl() {
   // (routes/sync.ts, runner.ts's tryStart), so this mutation's own pending state is only the
   // moment of that one request, not the run it kicks off. status.data?.running, refreshed by the
   // invalidation below, is what actually disables the button for the run's whole duration.
+  //
+  // Awaited, and then read back, for the one run the transition below cannot see: one with so
+  // little to fetch that it has finished before this re-read gets its answer. The status then goes
+  // from idle to idle, nothing is ever observed running, and without this the click would refresh
+  // the freshness line and nothing else - the very report that brought this code here. Idle on the
+  // re-read can only mean finished, not not-yet-started, because tryStart holds the mutex before
+  // the 202 is sent. Still running is left to the transition, which will see it end.
   const runSync = useMutation({
     mutationFn: () => apiSend('POST', '/api/sync/run'),
-    onSuccess: () => {
-      if (personId !== undefined) void queryClient.invalidateQueries({ queryKey: syncStatusKey(personId) })
+    onSuccess: async () => {
+      if (personId === undefined) return
+      await queryClient.invalidateQueries({ queryKey: syncStatusKey(personId) })
+      if (queryClient.getQueryData<SyncStatus>(syncStatusKey(personId))?.running === false) {
+        refreshPersonData(queryClient, personId)
+      }
     },
   })
+
+  // A run finishing is what makes every chart on the page stale, and until this nothing said so:
+  // the button re-enabled, the freshness line moved to "0m", and the workouts and charts beside it
+  // went on showing what they showed before the click until a reload - which from the chair reads
+  // as a button that does nothing.
+  //
+  // Keyed on the status going from running to idle rather than on the click, because the click
+  // is only one of three ways a run starts: the scheduler and another tab start them too, and the
+  // poll in useSyncStatus sees all three end the same way. Here rather than in useSyncStatus
+  // because ControlRow calls that hook as well, and every caller would refresh the page once
+  // each; this component renders exactly once, in the shell.
+  //
+  // The ref starts at whatever the first render saw, so mounting onto an idle status is not a
+  // transition, and neither is an idle status answered again.
+  const running = status.data?.running
+  const wasRunning = useRef(running)
+  useEffect(() => {
+    const was = wasRunning.current
+    wasRunning.current = running
+    if (was === true && running === false && personId !== undefined) refreshPersonData(queryClient, personId)
+  }, [running, personId, queryClient])
 
   // When this person's phone last delivered anything, and whether they are on the phone path at
   // all. Both come off the cursors query the range clamp already runs, so this costs no request.
