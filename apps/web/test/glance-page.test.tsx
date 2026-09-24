@@ -233,6 +233,9 @@ describe('the glance Dashboard', () => {
   })
 
   // One figure with a value is enough for the cards: the empty state is for a page with nothing.
+  // No night and no recovery reading at all, so the amendment applies and the top row is omitted
+  // rather than led by an empty Recovery card - the bottom row still draws, on the one figure
+  // (activeMinutes) this fixture leaves with a value.
   it('keeps the cards when a single figure has a value', async () => {
     const body = glanceBody()
     const empty = (f: GlanceFigure): GlanceFigure => ({ ...f, value: null })
@@ -244,7 +247,7 @@ describe('the glance Dashboard', () => {
     }
     const { restore } = await mountPage(oneFigure)
     try {
-      expect(titles()).toEqual(['Recovery', 'Today', 'This week'])
+      expect(titles()).toEqual(['Today', 'This week'])
     } finally { restore() }
   })
 

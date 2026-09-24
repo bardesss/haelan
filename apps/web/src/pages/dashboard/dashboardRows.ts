@@ -23,7 +23,10 @@ export function hasWeek(glance: Glance): boolean {
 /**
  * The page's rows and each card's span, decided here rather than by cards hiding themselves: a card
  * that vanished from an 8 + 4 row would leave a hole, which is the uniform-span rule's whole point.
- * Every row sums to twelve. The nothing-at-all case is the page's EmptyState and never reaches here.
+ * Every row sums to twelve, except the top row when there is neither a night nor any recovery
+ * reading: the amendment says to omit it rather than lead with an empty recovery card, and an empty
+ * row contributes nothing for `flat()` to draw regardless of what it would have summed to. The
+ * nothing-at-all case is the page's EmptyState and never reaches here.
  */
 export function dashboardRows(glance: Glance): DashCardSlot[][] {
   const night = glance.sleep !== null
@@ -31,9 +34,10 @@ export function dashboardRows(glance: Glance): DashCardSlot[][] {
   const top: DashCardSlot[] = night && recovery
     ? [{ kind: 'night', span: 8, wide: false }, { kind: 'recovery', span: 4, wide: false }]
     : night ? [{ kind: 'night', span: 12, wide: false }]
-      : [{ kind: 'recovery', span: 12, wide: true }]
+      : recovery ? [{ kind: 'recovery', span: 12, wide: true }]
+        : []
   const bottom: DashCardSlot[] = hasWeek(glance)
     ? [{ kind: 'today', span: 8, wide: false }, { kind: 'week', span: 4, wide: false }]
     : [{ kind: 'today', span: 12, wide: false }]
-  return [top, bottom]
+  return top.length === 0 ? [bottom] : [top, bottom]
 }
