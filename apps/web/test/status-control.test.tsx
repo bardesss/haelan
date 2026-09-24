@@ -260,6 +260,80 @@ describe('the popover, on a desktop', () => {
     expect(document.activeElement).toBe(icon())
   })
 
+  /**
+   * Portalled to the end of the body, the popover sits last in the document's tab order, far from
+   * the icon that opened it: Tab past its last control left the rail entirely for whatever came
+   * after it in the body, and Shift+Tab from its first control went to the page's last control
+   * rather than back to the icon. The keyboard order is restored as if the popover followed the
+   * icon. happy-dom performs no default Tab navigation, so these assert what the handler does to
+   * focus and to the event; the browser's own step past the icon is what the default does next.
+   */
+  function tab(from: HTMLElement, shiftKey = false): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })
+    act(() => { from.dispatchEvent(event) })
+    return event
+  }
+  const focusables = (): HTMLElement[] => [...popover()!.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)')]
+
+  it('goes back to the icon on Shift+Tab from the popover\'s first control', () => {
+    mount(panel())
+    press(icon())
+    const first = focusables()[0]!
+    expect(document.activeElement).toBe(first)
+    const event = tab(first, true)
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(icon())
+    expect(popover()).not.toBeNull()
+  })
+
+  it('goes into the popover on Tab from the icon while it is open', () => {
+    mount(panel())
+    press(icon())
+    act(() => { icon().focus() })
+    const event = tab(icon())
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(focusables()[0])
+  })
+
+  // Closes, and hands focus to the icon WITHOUT claiming the key: the browser's default Tab then
+  // runs from the icon and lands on whatever follows it in the rail, which is where Tab past the
+  // popover's end would go if the popover really sat after the icon.
+  it('closes on Tab past its last control, leaving the default Tab to step on from the icon', () => {
+    mount(panel())
+    press(icon())
+    const last = focusables().at(-1)!
+    act(() => { last.focus() })
+    const event = tab(last)
+    expect(event.defaultPrevented).toBe(false)
+    expect(popover()).toBeNull()
+    expect(document.activeElement).toBe(icon())
+  })
+
+  // Focus can sit on the popover box itself (a click on its padding does that, tabIndex -1). Its
+  // controls follow it in the document, so a Tab from there is not its end and must not close it.
+  it('does not close on Tab from the popover box itself while it holds controls', () => {
+    mount(panel())
+    press(icon())
+    act(() => { popover()!.focus() })
+    const event = tab(popover()!)
+    expect(event.defaultPrevented).toBe(false)
+    expect(popover()).not.toBeNull()
+    const back = tab(popover()!, true)
+    expect(back.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(icon())
+  })
+
+  it('leaves Tab between its own controls to the browser', () => {
+    mount(panel())
+    press(icon())
+    const [first] = focusables()
+    expect(focusables().length).toBeGreaterThan(1)
+    const event = tab(first!)
+    expect(event.defaultPrevented).toBe(false)
+    expect(popover()).not.toBeNull()
+    expect(document.activeElement).toBe(first)
+  })
+
   it('closes on a press outside it', () => {
     mount(panel())
     press(icon())

@@ -181,9 +181,56 @@ export function StatusControl() {
     if (!open || isPhone || !placed) return
     const element = popover.current
     if (!element) return
-    const first = element.querySelector<HTMLElement>('a[href], button:not(:disabled)')
+    const first = element.querySelector<HTMLElement>(FOCUSABLE)
     ;(first ?? element).focus({ preventScroll: true })
   }, [open, isPhone, placed])
+
+  // Keyboard order as if the popover followed the icon, which the portal broke: in the document it
+  // is the body's last child, so Tab past its last control left the rail for whatever the body
+  // held after it, and Shift+Tab from its first control went to the page's last control instead of
+  // back to the icon. Three edges are patched, and every Tab between the popover's own controls is
+  // left to the browser.
+  //
+  // Shift+Tab from the first control (or from the popover itself, which is where focus sits when
+  // there is nothing to focus) goes to the icon, and the popover stays open - stepping back to the
+  // thing that opened a disclosure does not dismiss it. Tab from the icon while open goes into the
+  // popover's first control, the forward half of the same illusion.
+  //
+  // Tab past the last control closes the popover and puts focus on the icon WITHOUT claiming the
+  // key. The browser's default Tab runs after the keydown handlers, from wherever focus is by then,
+  // so it steps from the icon to the next thing in the rail - exactly where the popover's end would
+  // lead if it really sat after the icon. That is the full answer to "the element after the icon"
+  // without this component having to compute tab order itself (tabindex, disabled, inert, hidden
+  // and display: none all bear on it, and the browser already knows). The fallback the plan
+  // allowed, closing and stopping on the icon, would cost the reader an extra Tab every time.
+  function onPopoverKeyDown(event: React.KeyboardEvent) {
+    if (event.key !== 'Tab') return
+    const element = popover.current
+    if (!element) return
+    const controls = [...element.querySelectorAll<HTMLElement>(FOCUSABLE)]
+    const active = document.activeElement
+    if (event.shiftKey) {
+      if (active === element || active === controls[0]) {
+        event.preventDefault()
+        trigger.current?.focus({ preventScroll: true })
+      }
+      return
+    }
+    // From the popover itself, a Tab forward is its end only when it holds no controls; otherwise
+    // the default already steps into its first one, which follows it in the document.
+    if (controls.length === 0 ? active === element : active === controls.at(-1)) {
+      trigger.current?.focus({ preventScroll: true })
+      setOpen(false)
+    }
+  }
+
+  function onTriggerKeyDown(event: React.KeyboardEvent) {
+    if (event.key !== 'Tab' || event.shiftKey || !open || isPhone) return
+    const first = popover.current?.querySelector<HTMLElement>(FOCUSABLE)
+    if (!first) return
+    event.preventDefault()
+    first.focus({ preventScroll: true })
+  }
 
   // The phone sheet: showModal and close are imperative, so state is the source of truth and this
   // makes the element agree, guarded both ways because showModal on an open dialog throws.
@@ -252,7 +299,7 @@ export function StatusControl() {
         aria-haspopup={isPhone ? 'dialog' : 'true'} aria-expanded={open}
         aria-label={status.data === undefined ? t('status.title') : t('status.label', { state })}
         data-running={running ? 'true' : undefined}
-        onClick={() => setOpen((current) => !current)}>
+        onClick={() => setOpen((current) => !current)} onKeyDown={onTriggerKeyDown}>
         <Icon name="status" />
         {problems > 0 && <span className="status-dot" aria-hidden="true" />}
       </button>
@@ -261,7 +308,7 @@ export function StatusControl() {
         // at the viewport's corner. Layout effects run before paint, so in practice it never shows.
         <div ref={popover} className="status-popover" role="dialog" aria-label={t('status.title')} tabIndex={-1}
           style={placement === null ? { visibility: 'hidden' } : { left: `${placement.left}px`, bottom: `${placement.bottom}px` }}
-          onClick={onPanelClick}>
+          onClick={onPanelClick} onKeyDown={onPopoverKeyDown}>
           {content}
         </div>,
         document.body,
@@ -286,6 +333,9 @@ export function StatusControl() {
     </div>
   )
 }
+
+/** What counts as a control in the popover, for where focus lands on open and for its Tab edges. */
+const FOCUSABLE = 'a[href], button:not(:disabled)'
 
 /** The gap between the icon and the popover, and the popover's least distance from a viewport edge. */
 const GAP_PX = 6
