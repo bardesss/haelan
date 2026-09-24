@@ -133,10 +133,13 @@ export function WorkoutDetail() {
         </button>
       </div>
       <div className="grid">
+        {/* First: where a workout went is what a reader looks for before any of its numbers, and
+            the card hides itself on a workout with no points, so an indoor session still opens on
+            its tiles. */}
+        <WorkoutRoute route={query.data.route} />
         <WorkoutTiles session={query.data} detail={detail} cardioLoad={query.data.cardioLoad} />
         <WorkoutZones detail={detail} />
         <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
-        <WorkoutRoute route={query.data.route} />
         <WorkoutSplits autoSplits={query.data.autoSplits} laps={query.data.laps} />
         <WorkoutDynamics detail={detail} />
         <WorkoutComparison session={query.data} />
