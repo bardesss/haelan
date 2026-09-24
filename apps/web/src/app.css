@@ -142,8 +142,8 @@ body {
 /* The desktop rail's menu: portalled to the body and fixed, not absolute inside the rail, for the
    reason .status-popover is. The rail is a scroll container, and on a collapsed rail the menu
    opened to the right of the 60px strip - entirely outside the box that clips - so none of it was
-   painted. Sidebar.tsx places it inline from the name's rectangle (placementFor, the popover's own
-   function): above the name when expanded, past the strip's right edge when collapsed, which is
+   painted. Sidebar.tsx places it inline from the name's rectangle (placementFor in
+   ui/placement.ts, which places the popover too): above the name when expanded, past the strip's right edge when collapsed, which is
    the only direction with room there. min-width drops the 100% .rail-menu has, because fixed makes
    that the viewport; the name row's width comes across inline instead when there is one to match.
    The phone drawer keeps .rail-menu as it is, inside its modal dialog. */
@@ -431,7 +431,7 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    count rides on the button's accessible name instead. */
 .status-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--negative); }
 /* Fixed and portalled to the body, not absolute inside the rail: the rail is a scroll container,
-   and a 20rem box inside it was clipped at its 186px edge. StatusControl.tsx's placementFor sets
+   and a 20rem box inside it was clipped at its 186px edge. StatusControl.tsx sets, through placementFor,
    left and bottom inline from the icon's rectangle - above the icon on an expanded rail, to the
    strip's right on a collapsed one - so no rule here says where it goes, only what it is. The
    width gives way on a window narrower than 20rem plus the clamp's margin either side. Card
