@@ -37,6 +37,13 @@
     <string name="perm_already">Alle toestemmingen zijn al gegeven.</string>
     <string name="perm_missing">Nog open: %1$s</string>
     <string name="perm_unavailable">Health Connect is hier niet beschikbaar. Installeer het eerst.</string>
+    <plurals name="routes_withheld">
+        <item quantity="one">%d training heeft een route die Health Connect achterhoudt.</item>
+        <item quantity="other">%d trainingen hebben een route die Health Connect achterhoudt.</item>
+    </plurals>
+    <string name="routes_hint">Health Connect vraagt het per training. Kies Altijd toestaan, dan neemt elke synchronisatie terwijl Hælan open is de routes mee.</string>
+    <string name="routes_action">Routes vrijgeven</string>
+    <string name="routes_stopped">Route niet vrijgegeven.</string>
 
     <string name="sync_title">Synchronisatie</string>
     <string name="sync_body">Verstuurt wat er nieuw is sinds de laatste synchronisatie, of de laatste 30 dagen de eerste keer.</string>

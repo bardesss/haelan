@@ -16,6 +16,10 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.contracts.ExerciseRouteRequestContract
+import androidx.health.connect.client.records.ExerciseRoute
+import androidx.health.connect.client.records.ExerciseRouteResult
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.Lifecycle
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -38,6 +42,9 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     companion object {
         /** Where the sync's own answers go, which is the only place a failure is written now. */
         private const val TAG = "haelan-sync"
+
+        /** The workout whose route Health Connect is being asked for, across a recreation. */
+        private const val STATE_PENDING_ROUTE = "pending_route_id"
     }
 
     private data class SyncOption(val key: String, val titleRes: Int)
@@ -139,6 +146,26 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         showPermissions(healthPermissions - granted, afterRequest = true)
     }
 
+    private lateinit var routesBlock: View
+    private lateinit var routesStatus: TextView
+
+    /**
+     * The workout the route request below was launched for. The contract answers with the route
+     * alone, not the id it was asked about, and the answer can arrive in a new instance of this
+     * screen when the phone turned while Health Connect's dialog was up - so it is kept in the
+     * saved state rather than in a closure.
+     */
+    private var pendingRouteId: String? = null
+
+    /** A walk through the withheld routes is going; a second tap would start a second one. */
+    private var releasing = false
+
+    private val routeLauncher = registerForActivityResult(ExerciseRouteRequestContract()) { route ->
+        val id = pendingRouteId
+        pendingRouteId = null
+        scope.launch { answerRoute(id, route) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -159,6 +186,7 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         server = session.server
         personId = session.personId
         cookie = session.cookie
+        pendingRouteId = savedInstanceState?.getString(STATE_PENDING_ROUTE)
 
         // The background sync lives as long as a sign-in does: keep the schedule on every start
         // (the first enqueue wins), and the sign-out needs no matching cancel because a worker
@@ -192,6 +220,13 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         findViewById<MaterialButton>(R.id.buttonPermissions).setOnClickListener {
             scope.launch { checkProviderThen { permissionLauncher.launch(healthPermissions) } }
         }
+        routesBlock = findViewById(R.id.routesBlock)
+        routesStatus = findViewById(R.id.routesStatus)
+        findViewById<MaterialButton>(R.id.buttonRoutes).setOnClickListener {
+            if (releasing) return@setOnClickListener
+            releasing = true
+            scope.launch { releaseNext() }
+        }
         syncButton.setOnClickListener { scope.launch { startSync() } }
         findViewById<MaterialButton>(R.id.buttonBattery).setOnClickListener { openBatterySettings() }
 
@@ -215,6 +250,7 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         }
         refreshSyncStatus()
         refreshBatteryCard()
+        refreshRoutes()
         scope.launch { syncIfStale() }
         scope.launch {
             val client = healthClient(silent = true) ?: return@launch
@@ -311,6 +347,172 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
             afterRequest -> getString(R.string.perm_already)
             else -> getString(R.string.perm_granted)
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingRouteId?.let { outState.putString(STATE_PENDING_ROUTE, it) }
+    }
+
+    // ---- Withheld routes: released one workout at a time, from the one screen that can ----
+
+    private fun engineSession() = SyncEngine.Session(server, personId, cookie)
+
+    /** The count comes from RouteLedger, which every run updates; nothing here keeps its own. */
+    private fun refreshRoutes() {
+        if (!::routesBlock.isInitialized) return
+        val count = RouteLedger.load(prefs(), RouteLedger.ownerOf(engineSession())).withheld.size
+        routesBlock.visibility = if (count > 0) View.VISIBLE else View.GONE
+        routesStatus.text = resources.getQuantityString(R.plurals.routes_withheld, count, count)
+    }
+
+    /**
+     * Walks the withheld list until it meets a route only the household can release, asks for
+     * that one, and stops there until the answer comes back to [answerRoute].
+     *
+     * Each id is read again first, in the foreground, because the answer may have changed since
+     * the sync that filed it: after one "Always allow" every other route in the list reads as
+     * `Data` here and goes without a dialog, and a workout deleted from Health Connect since is
+     * dropped rather than asked about. That read is also what keeps a stale id from blocking the
+     * walk: Health Connect's route screen finishes cancelled for a session it cannot find, which
+     * would look exactly like the household saying no.
+     */
+    private suspend fun releaseNext() {
+        releasing = true
+        val client = healthClient()
+        if (client == null) {
+            finishRelease()
+            return
+        }
+        val owner = RouteLedger.ownerOf(engineSession())
+        val ready = mutableListOf<Pair<ExerciseSessionRecord, ExerciseRoute>>()
+        for (id in RouteLedger.load(prefs(), owner).withheld.sorted()) {
+            val record = when (val read = readSession(client, id)) {
+                SessionRead.Gone -> {
+                    RouteLedger.forget(prefs(), owner, id)
+                    continue
+                }
+                // Not gone, only unreadable right now: left in the list for the next walk rather
+                // than forgotten, and not allowed to stop this one.
+                SessionRead.Failed -> continue
+                is SessionRead.Found -> read.record
+            }
+            when (val result = record.exerciseRouteResult) {
+                is ExerciseRouteResult.Data -> {
+                    if (result.exerciseRoute.route.isNotEmpty()) {
+                        ready += record to result.exerciseRoute
+                    } else {
+                        RouteLedger.record(prefs(), owner, mapOf(id to RouteLedger.Seen.NONE))
+                    }
+                }
+                is ExerciseRouteResult.ConsentRequired -> {
+                    // What is already in hand goes first, so a dialog the household walks away
+                    // from does not also cost the routes that needed none.
+                    if (!sendReleased(ready)) {
+                        finishRelease()
+                        return
+                    }
+                    pendingRouteId = id
+                    routeLauncher.launch(id)
+                    return
+                }
+                // The route is gone at the source: nothing is left to release.
+                else -> RouteLedger.record(prefs(), owner, mapOf(id to RouteLedger.Seen.NONE))
+            }
+        }
+        sendReleased(ready)
+        finishRelease()
+    }
+
+    /**
+     * Health Connect's answer for [id]. Null is every way of not releasing it - "Don't allow",
+     * the back button, a dialog that never drew - and all of them stop the walk: asking about the
+     * next workout straight after the household declined this one would be the app arguing.
+     */
+    private suspend fun answerRoute(id: String?, route: ExerciseRoute?) {
+        releasing = true
+        if (id == null || route == null) {
+            if (route == null) Toast.makeText(this, R.string.routes_stopped, Toast.LENGTH_SHORT).show()
+            finishRelease()
+            return
+        }
+        val client = healthClient()
+        if (client == null) {
+            finishRelease()
+            return
+        }
+        when (val read = readSession(client, id)) {
+            SessionRead.Gone -> RouteLedger.forget(prefs(), RouteLedger.ownerOf(engineSession()), id)
+            SessionRead.Failed -> {
+                finishRelease()
+                return
+            }
+            is SessionRead.Found -> if (!sendReleased(listOf(read.record to route))) {
+                finishRelease()
+                return
+            }
+        }
+        releaseNext()
+    }
+
+    private fun finishRelease() {
+        releasing = false
+        refreshRoutes()
+    }
+
+    private sealed interface SessionRead {
+        data class Found(val record: ExerciseSessionRecord) : SessionRead
+        data object Gone : SessionRead
+        data object Failed : SessionRead
+    }
+
+    /**
+     * One session by its id, telling "the workout is gone" apart from "it could not be read now":
+     * only the first may cost an id the household may still want released.
+     *
+     * Gone has one spelling per client. On Android 14 and later connect-client reads by id and,
+     * finding nothing, throws `RemoteException("No records")` itself
+     * (HealthConnectClientUpsideDownImpl.readRecord, connect-client 1.1.0) - the same class a
+     * provider that died mid-call throws, so the message is what tells them apart. The platform's
+     * own ERROR_INVALID_ARGUMENT arrives as an IllegalArgumentException (ExceptionConverter), which
+     * is an id Health Connect refuses outright. Everything else - a revoked permission, a
+     * restarting provider - is Failed.
+     */
+    private suspend fun readSession(
+        client: androidx.health.connect.client.HealthConnectClient,
+        id: String,
+    ): SessionRead = withContext(Dispatchers.IO) {
+        try {
+            SessionRead.Found(client.readRecord(ExerciseSessionRecord::class, id).record)
+        } catch (e: IllegalArgumentException) {
+            SessionRead.Gone
+        } catch (e: android.os.RemoteException) {
+            if (e.message == "No records") SessionRead.Gone else SessionRead.Failed
+        } catch (e: Exception) {
+            Log.w(TAG, "route session $id not read: ${e.message ?: e.javaClass.simpleName}")
+            SessionRead.Failed
+        }
+    }
+
+    /** Posts released routes; false when they did not land, having said why. */
+    private suspend fun sendReleased(released: List<Pair<ExerciseSessionRecord, ExerciseRoute>>): Boolean {
+        if (released.isEmpty()) return true
+        val outcome = SyncEngine.uploadReleased(engineSession(), packageName, prefs(), released) { path, payload ->
+            withContext(Dispatchers.IO) { InstanceClient.post(server, path, payload, cookie) { } }
+        }
+        if (outcome is InstanceClient.Outcome.Failed) {
+            val error = outcome.error
+            if (error is InstanceClient.InstanceHttpException && error.status == 401) {
+                // The same end a run's 401 gets: the cookie is forgotten and login says why.
+                SessionStore.clearSession(prefs())
+                goLogin(expired = true)
+                return false
+            }
+            Toast.makeText(this, getString(R.string.sync_failed, SyncRun.reasonFor(this, error)), Toast.LENGTH_LONG)
+                .show()
+            return false
+        }
+        return true
     }
 
     /**
@@ -534,6 +736,8 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
             group.bar.setIndicatorColor(getColor(if (failed) R.color.warning else R.color.accent))
         }
         refreshSyncStatus()
+        // A finished run may have met new withheld routes, or delivered some the list still named.
+        if (!status.running) refreshRoutes()
     }
 
     /**
