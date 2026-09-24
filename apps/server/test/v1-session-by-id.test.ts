@@ -209,6 +209,42 @@ describe('GET /sessions/:sessionId', () => {
     expect(session.laps).toEqual([])
   })
 
+  // Links made before workouts were merged name whichever copy the reader clicked, the phone's as
+  // often as Google's. Asked by the phone copy's id, the route answers the merged workout: the
+  // primary's id and times, Google's name filled in, and the phone's route drawn, since Google
+  // never sends one.
+  it('answers the merged workout for an alternate\'s id, joined detail included', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, {
+      id: 'google-run', sourceId: 'google',
+      attrs: {
+        exerciseType: 'RUNNING', displayName: 'Evening Run', routeConsentRequired: null,
+        metricsSummary: { heartRateZoneDurations: { lightTime: '600s', moderateTime: '600s', vigorousTime: '600s', peakTime: '600s' } },
+      },
+    })
+    seedWorkout(harness, {
+      id: 'phone-run', sourceId: 'phone',
+      attrs: { exerciseType: 'RUNNING', displayName: null, routeConsentRequired: null, metricsSummary: null },
+    })
+    harness.app.haelan.instance.db.insert(schema.sessionRoutes).values({
+      id: 'phone-run-route-0', sessionId: 'phone-run', ordinal: 0,
+      atMs: Date.parse('2026-08-18T09:05:00Z'), latitude: 52.1, longitude: 4.3,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }).run()
+
+    const res = await get(harness, token, '/sessions/phone-run')
+
+    expect(res.statusCode).toBe(200)
+    const session = res.json()
+    expect(session.id).toBe('google-run')
+    expect(session.sourceId).toBe('google')
+    expect(session.sources).toEqual(['google', 'phone'])
+    expect(session.alternateIds).toEqual(['phone-run'])
+    expect(session.attrs.displayName).toBe('Evening Run')
+    expect(session.cardioLoad).toEqual({ edwards: 100, banister: null, banisterBasis: null })
+    expect(session.route.map((p: { latitude: number }) => p.latitude)).toEqual([52.1])
+  })
+
   it('answers 404 for an ecg id, in the same envelope as an id that names nothing', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedOfKind(harness, { id: 'ecg1', kind: 'ecg' })

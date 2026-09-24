@@ -198,17 +198,17 @@ describe('SessionList', () => {
       .not.toContain('Geen activiteiten geregistreerd in deze periode.')
   })
   // The Workouts tile above this list sums merged `daily` workout_count, which counts a run
-  // recorded by a watch and a phone once; this list counts the rows the sessions table holds,
-  // which counts it twice. Live data: 186 against 192 over seven months, differing on six days.
-  // The two are different quantities and stay different quantities, so the list has to name its
-  // own rather than print a bare "2 sessions" a reader will read as the tile's word for them.
-  it('names its own quantity rather than the one the workout tile counts', () => {
-    mountWith([mergeable('a', 'watch'), mergeable('b', 'phone')], 'en')
-    expect(rows(), 'both rows are shown; only the tile above collapses them').toHaveLength(2)
+  // recorded by a watch and a phone once. The list used to count the sessions table's rows, twice,
+  // and needed a line explaining why it read higher. The route now answers the run once, merged
+  // (packages/core/src/query/mergedWorkouts.ts), naming the phone among its sources, so the two
+  // agree and the line says what a row is instead of apologising for a difference.
+  it('shows a workout two devices recorded as one row, and says so', () => {
+    mountWith([{ ...mergeable('a', 'watch'), sources: ['watch', 'phone'], alternateIds: ['b'] }], 'en')
+    expect(rows()).toHaveLength(1)
     expect(container!.querySelector('.session-list-count')!.textContent)
-      .toBe('2 recorded sessions in this period')
+      .toBe('1 recorded session in this period')
     expect(container!.querySelector('.session-list .basis')!.textContent)
-      .toBe('One row per recorded session. The Workouts tile counts a workout once even when two devices recorded it, so it can read lower.')
+      .toBe('One row per workout. A workout two devices recorded is shown once, the way the Workouts tile counts it.')
   })
   // The stranding case. SessionList deliberately never resets selectedType when the data changes
   // (the filtered-empty message depends on the selection outliving the rows it was built from),

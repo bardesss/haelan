@@ -23,6 +23,15 @@ export interface WorkoutSession {
    *  (packages/core/src/query/sessions.ts), so this and excludeReason reach the client for free. */
   excluded: boolean
   excludeReason: string | null
+  /**
+   * Every source that recorded this workout, its own `sourceId` first, and the ids of the other
+   * copies merged into it (packages/core/src/query/mergedWorkouts.ts). The server always sends
+   * both. Optional here all the same, and read with a fallback wherever they are read: a demo
+   * built from a capture older than the merge, or a response cached across the upgrade, carries
+   * neither, and "one source, no other copies" is exactly what such a response meant.
+   */
+  sources?: string[]
+  alternateIds?: string[]
 }
 
 /** One recorded GPS fix. Mirrors `RoutePoint` in packages/core/src/query/workoutDerived.ts field

@@ -5,7 +5,7 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { dayMetricTarget, sampleTarget } from '@haelan/core/target-key'
+import { dayMetricTarget, sampleTarget, sessionTarget } from '@haelan/core/target-key'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -314,6 +314,40 @@ describe('the overlay', () => {
     click(container!.querySelector('.annotate-panel') as HTMLElement)
     expect(closed).toBe(false)
     click(container!.querySelector('.annotate-overlay') as HTMLElement)
+    expect(closed).toBe(true)
+  })
+})
+
+// A merged workout is one event recorded by several sources (packages/core/src/query/
+// mergedWorkouts.ts), and the server marks it excluded only once every copy is, because that is
+// when workout_count stops counting it: derivation drops excluded sessions before grouping, so an
+// excluded primary just hands the event to the phone's copy. Excluding the workout from its page
+// therefore has to exclude every copy, or the reader's exclusion would appear to do nothing.
+describe('excluding a workout several sources recorded', () => {
+  it('excludes every copy, the workout\'s own id first, with the same reason', async () => {
+    const posted: Record<string, unknown>[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_input, init) => {
+      posted.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return respond(200, { id: `o${posted.length}`, affected: null, applied: true })
+    }) as typeof fetch
+
+    let closed = false
+    mount(withSession(<AnnotatePanel
+      target={{ scope: 'session', localDate: '2026-08-03', sessionId: 'google-run', alsoSessionIds: ['phone-run'] }}
+      onClose={() => { closed = true }} />))
+    type(fields()[0]!, 'treadmill glitch')
+    click(submitButton())
+    // One settle per write: the second is sent only once the first has answered.
+    await settle()
+    await settle()
+    await settle()
+    globalThis.fetch = original
+
+    expect(posted.map((body) => [body['scope'], body['targetKey'], body['action'], body['reason']])).toEqual([
+      ['session', sessionTarget('google-run'), 'exclude', 'treadmill glitch'],
+      ['session', sessionTarget('phone-run'), 'exclude', 'treadmill glitch'],
+    ])
     expect(closed).toBe(true)
   })
 })

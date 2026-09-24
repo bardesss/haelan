@@ -37,7 +37,10 @@ export const getWorkouts = defineTool({
   description:
     'Sessions of one kind — sleep or exercise — in a local date range, oldest first, with the '
     + 'headline numbers workoutSummary can read off each one. This is the list to find a session '
-    + 'id in before calling get_workout for the full detail. `type` filters exercise sessions to '
+    + 'id in before calling get_workout for the full detail. With no `source`, a workout two '
+    + 'sources recorded is answered once, under the id of the source the person ranks first, with '
+    + 'fields that source left empty filled from the other; with a `source`, that device\'s own '
+    + 'sessions come back as recorded. `type` filters exercise sessions to '
     + 'one provider exercise type (e.g. RUNNING) and is refused together with kind sleep, which '
     + 'has none. `last` takes the N most recent matches after that filter, so "my last run" is '
     + '`type: \'RUNNING\', last: 1` rather than a second, narrower parameter. excludeReason is '

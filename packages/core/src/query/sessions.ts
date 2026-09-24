@@ -32,6 +32,19 @@ export interface WorkoutSession {
   excluded: boolean
   /** The reason the person gave, so the list can say why rather than only that. */
   excludeReason: string | null
+  /**
+   * Every source that recorded this event, the one whose row this is first, each named once.
+   *
+   * A raw row read here is one source's recording, so this is always `[sourceId]` and
+   * `alternateIds` is always empty. mergedWorkouts.ts is what widens both: a workout two sources
+   * recorded answers as the primary's row with the other copy named here, which is how a reader
+   * learns that a second device saw the same run without being shown the run twice. Carried on
+   * the raw shape too, rather than only on a merged subtype, so every caller reads one shape
+   * whether or not it asked for a source by name.
+   */
+  sources: string[]
+  /** The ids of the other rows merged into this one, best ranked first. Empty for a raw row. */
+  alternateIds: string[]
 }
 
 /**
@@ -149,6 +162,8 @@ function toWorkoutSession(
     attrs: parseAttrs(row.attrs),
     excluded: excluded.has(row.id),
     excludeReason: excluded.get(row.id) ?? null,
+    sources: [row.sourceId],
+    alternateIds: [],
   }
 }
 

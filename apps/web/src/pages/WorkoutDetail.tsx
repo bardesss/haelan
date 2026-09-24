@@ -143,7 +143,12 @@ export function WorkoutDetail() {
       </div>
       {annotating && (
         <AnnotatePanel
-          target={{ scope: 'session', localDate: query.data.localDate, sessionId: query.data.id }}
+          // query.data.id rather than the URL's own id: an old link can name a copy the server has
+          // since merged into another workout, and the answer's id is the one that stands for it.
+          target={{
+            scope: 'session', localDate: query.data.localDate, sessionId: query.data.id,
+            alsoSessionIds: query.data.alternateIds ?? [],
+          }}
           onClose={() => setAnnotating(false)}
         />
       )}

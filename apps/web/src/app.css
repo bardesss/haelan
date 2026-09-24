@@ -477,6 +477,9 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    source order, so every child of .workout-header keeps the plain `margin: 0` the others already
    carry, with spacing between them coming only from .workout-header's own flex `gap`. */
 .basis.workout-gps { margin: 0; }
+/* The "also recorded by" line under the when line, a `.basis` for the same reason and with the
+   same two-class selector for the same cascade reason as .basis.workout-gps just above. */
+.basis.workout-also { margin: 0; }
 
 /* WorkoutDetail.tsx's own control row, between the heading and the grid: this page has exactly
    one action (open the annotate panel at session scope), right-aligned rather than centered or
@@ -1248,6 +1251,9 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    inside the card's grid column rather than pushing it wide, the same reason .card itself carries
    this. */
 .session-list { min-width: 0; }
+/* The Dashboard's list of today's workouts (TodayWorkouts.tsx): the same SessionRows as
+   .session-list, so the same min-width: 0 for the same reason. */
+.today-workouts { min-width: 0; }
 /* The count sits opposite the type filter (when there is one) rather than above the rows it
    describes, the same header row shape .card's own .label plays elsewhere. */
 .session-list-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }

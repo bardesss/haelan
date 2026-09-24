@@ -13,6 +13,7 @@ import type { GlanceSleep } from '../data/useGlance.js'
 import { stageOf } from '../data/nights.js'
 import { formatClock } from '../format.js'
 import { GlanceCard, Described } from './dashboard/GlanceCard.js'
+import { TodayWorkouts } from './dashboard/TodayWorkouts.js'
 import { formatFigure, formatTimeOfDay, yesterdayOf } from './dashboard/glanceText.js'
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
@@ -50,7 +51,8 @@ function Title() {
 }
 
 /**
- * The glance: last night, recovery and today so far, one card per question, from one read.
+ * The glance: last night, recovery and today so far, one card per question, from one read, and
+ * under them today's workouts when there are any (TodayWorkouts.tsx).
  *
  * **No control row**, for the reason Records.tsx gives for its own: every figure here is last night
  * or today by definition, so a range picker would be a control that either lies or does nothing,
@@ -88,7 +90,9 @@ export function Dashboard() {
   const figures = [
     recovery.index, recovery.restingHeartRate, recovery.hrv, recovery.respiratoryRate, day.steps, day.activeMinutes,
   ]
-  if (sleep === null && day.heartRate.points.length === 0 && figures.every((f) => f === null || f.value === null)) {
+  // A workout is something to show, so a day that holds only a run is not an empty page.
+  if (sleep === null && day.heartRate.points.length === 0 && day.workouts.length === 0
+    && figures.every((f) => f === null || f.value === null)) {
     return <><Title /><EmptyState title={t('glance.empty.title')} detail={t('glance.empty.detail')} /></>
   }
 
@@ -204,6 +208,7 @@ export function Dashboard() {
           link={{ to: '/activity', text: t('glance.today.link') }}
           today={glance.today} timezone={timezone}
         />
+        <TodayWorkouts workouts={day.workouts} />
       </CardGrid>
     </>
   )

@@ -17,6 +17,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { Session } from '../src/auth/session.js'
 import type { Glance, GlanceFigure, GlanceStaleSource } from '../src/data/useGlance.js'
+import type { WorkoutSession } from '../src/data/useSessions.js'
 import { glanceBody, glanceFigure } from './glanceFixture.js'
 import { flush } from './flush.js'
 
@@ -264,6 +265,15 @@ async function mountPage(body: Glance = glanceBody(), o: { lng?: string, status?
   return { seen, client, restore }
 }
 
+/** A run this morning, 08:00-08:45 in Amsterdam, as the glance's `day.workouts` carries one. */
+const TODAY_RUN: WorkoutSession = {
+  id: 'run1', sourceId: 'watch',
+  startMs: Date.UTC(2026, 8, 23, 6, 0), endMs: Date.UTC(2026, 8, 23, 6, 45),
+  startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: TODAY,
+  attrs: { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 412 } },
+  excluded: false, excludeReason: null, sources: ['watch'], alternateIds: [],
+}
+
 const cards = (): Element[] => [...container!.querySelectorAll('.glance-card')]
 const titles = (): string[] => [...container!.querySelectorAll('.glance-card-title strong')].map((el) => el.textContent ?? '')
 
@@ -351,6 +361,7 @@ describe('the glance Dashboard', () => {
       day: {
         steps: empty(body.day.steps), activeMinutes: empty(body.day.activeMinutes),
         heartRate: { points: [], asOfMs: null, staleSources: [] },
+        workouts: [],
       },
     }
     const { restore } = await mountPage(nothing)
@@ -377,6 +388,67 @@ describe('the glance Dashboard', () => {
     const { restore } = await mountPage(oneFigure)
     try {
       expect(cards()).toHaveLength(3)
+    } finally { restore() }
+  })
+
+  // "On the today tab, you should also see the activities you did." The glance carries today's
+  // workouts, already merged across sources by the server, and each row opens the workout's page.
+  it('lists today\'s workouts in a card of their own, each linking to its page', async () => {
+    const body = glanceBody()
+    body.day.workouts = [TODAY_RUN, { ...TODAY_RUN, id: 'swim1', startMs: TODAY_RUN.startMs + 4 * 3_600_000, endMs: TODAY_RUN.endMs + 4 * 3_600_000, attrs: { exerciseType: 'SWIMMING_POOL' } }]
+    const { restore } = await mountPage(body)
+    try {
+      const card = container!.querySelector('.today-workouts')!.closest('.card')!
+      expect(card.getAttribute('data-span')).toBe('12')
+      expect(card.querySelector('.label')?.textContent).toBe('Today\'s activities')
+      // Oldest first, the order the day happened in, rather than the Activity list's newest first.
+      expect([...card.querySelectorAll('a.session-row-link')].map((a) => a.getAttribute('href')))
+        .toEqual(['/activity/run1', '/activity/swim1'])
+      expect(card.querySelector('.session-row-type')?.textContent).toBe('Running')
+    } finally { restore() }
+  })
+
+  // Hidden, not an empty card: a morning before the run is not a morning with nothing to say, and
+  // the three columns above already say what the day holds so far.
+  it('draws no workouts card on a day with none', async () => {
+    const { restore } = await mountPage()
+    try {
+      expect(container!.querySelector('.today-workouts')).toBeNull()
+      expect(container!.querySelectorAll('.card')).toHaveLength(3)
+    } finally { restore() }
+  })
+
+  it('keeps the page when a workout is the only thing today holds', async () => {
+    const body = glanceBody()
+    const empty = (f: GlanceFigure): GlanceFigure => ({ ...f, value: null, asOfDate: null, asOfMs: null, strip: [] })
+    const onlyARun: Glance = {
+      ...body,
+      sleep: null,
+      recovery: {
+        ...body.recovery, band: null, missing: ['resting_heart_rate'],
+        index: empty(body.recovery.index), restingHeartRate: empty(body.recovery.restingHeartRate), hrv: empty(body.recovery.hrv),
+        respiratoryRate: null,
+      },
+      day: {
+        steps: empty(body.day.steps), activeMinutes: empty(body.day.activeMinutes),
+        heartRate: { points: [], asOfMs: null, staleSources: [] },
+        workouts: [TODAY_RUN],
+      },
+    }
+    const { restore } = await mountPage(onlyARun)
+    try {
+      expect(container!.querySelector('.today-workouts a.session-row-link')?.getAttribute('href')).toBe('/activity/run1')
+      expect(container!.textContent).not.toContain('Nothing here yet')
+    } finally { restore() }
+  })
+
+  it('names the workouts card in Dutch', async () => {
+    const body = glanceBody()
+    body.day.workouts = [TODAY_RUN]
+    const { restore } = await mountPage(body, { lng: 'nl' })
+    try {
+      expect(container!.querySelector('.today-workouts')!.closest('.card')!.querySelector('.label')?.textContent)
+        .toBe('Activiteiten van vandaag')
     } finally { restore() }
   })
 
