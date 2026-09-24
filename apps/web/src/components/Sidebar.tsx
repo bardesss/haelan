@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from '../i18n/index.js'
 import { BrandMark } from './BrandMark.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
 import { readCollapsed, writeCollapsed } from '../ui/railState.js'
+import { placementFor } from './StatusControl.js'
+import type { Placement } from './StatusControl.js'
 
 const GROUPS = [
   {
@@ -143,6 +146,23 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
   // The person menu at the foot, closed on mount.
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const personButton = useRef<HTMLButtonElement>(null)
+  const menuPanel = useRef<HTMLDivElement>(null)
+
+  // Whether the menu floats: portalled to document.body and placed with position: fixed, for the
+  // reason StatusControl's popover is. The rail is a scroll container (overflow-y: auto, which
+  // makes overflow-x compute to auto as well), and an absolutely positioned menu inside it is cut
+  // at the rail's own edge. Expanded, the menu happened to be no wider than the foot it opens
+  // from, so nothing showed it; collapsed, it opens to the right of the 60px strip, which is
+  // entirely outside the clipping box, and layout:check's paintableAt probe measured nothing of it
+  // painted at all - the reader pressed their name and got no menu.
+  //
+  // Keyed on `collapsible` because that prop is exactly "this is the desktop rail and not the
+  // phone drawer". The drawer must keep the menu where it is: it is a modal <dialog>, everything
+  // outside a modal dialog is inert, and a menu portalled to the body from in there would draw and
+  // then refuse every press. The drawer is also as wide as the screen, so nothing clips it.
+  const floating = collapsible
+  const [placement, setPlacement] = useState<(Placement & { anchorWidth: number | null }) | null>(null)
 
   // Navigating closes it. The rail is not unmounted by a route change and `Link` accepts no
   // onClick of its own (router.tsx omits it from the props it forwards, deliberately), so without
@@ -174,10 +194,17 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
       event.preventDefault()
       event.stopPropagation()
       setMenuOpen(false)
+      // Back to the name, for the floating menu, since the effect below moved focus into it and
+      // closing would otherwise drop focus on the body. The drawer's inline menu never took focus.
+      if (floating) personButton.current?.focus({ preventScroll: true })
     }
+    // The portalled menu counts as inside as well: it is no longer a descendant of the wrapper,
+    // and without this a press on Sign out would close the menu under itself exactly as the
+    // paragraph above describes.
     const onDown = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Node && menuRef.current?.contains(target) === true) return
+      if (target instanceof Node
+        && (menuRef.current?.contains(target) === true || menuPanel.current?.contains(target) === true)) return
       setMenuOpen(false)
     }
     document.addEventListener('keydown', onKey)
@@ -186,7 +213,55 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('pointerdown', onDown)
     }
-  }, [menuOpen])
+  }, [menuOpen, floating])
+
+  // Where the floating menu goes, from the name's own rectangle: above it on an expanded rail, its
+  // left edge on the wrapper's so it lines up with the name the way `left: 0` used to, and past the
+  // strip's right edge on a collapsed one, bottom level with the name. placementFor is the status
+  // popover's own function, so the two layers in the foot open from the same edges and clamp into
+  // the viewport the same way. A layout effect, so the first painted frame is already in place;
+  // again on resize, since a fixed box does not follow the rail. Dropped on close, so the next
+  // open never paints at a stale position first.
+  useLayoutEffect(() => {
+    if (!menuOpen || !floating) { setPlacement(null); return }
+    const place = () => {
+      const button = personButton.current
+      const wrapper = menuRef.current
+      if (!button || !wrapper) return
+      const anchor = wrapper.getBoundingClientRect()
+      const box = menuPanel.current?.getBoundingClientRect()
+      const rail = button.closest('.rail')?.getBoundingClientRect()
+      const nameRect = button.getBoundingClientRect()
+      setPlacement({
+        ...placementFor({
+          trigger: nameRect,
+          anchorLeft: anchor.left,
+          stripRight: rail?.right ?? nameRect.right,
+          collapsed,
+          size: { width: box?.width ?? 0, height: box?.height ?? 0 },
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+        }),
+        // The expanded menu was at least as wide as the name row (`min-width: max(100%, 10rem)`
+        // against the wrapper). Fixed, 100% would mean the viewport, so the row's width is carried
+        // across as a number instead. Collapsed, the strip is narrower than 10rem and has no width
+        // worth matching.
+        anchorWidth: collapsed ? null : anchor.width,
+      })
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [menuOpen, floating, collapsed])
+
+  // Focus into the floating menu once it is placed. Portalled to the end of the body, the menu is
+  // no longer next to the name in tab order, and a keyboard reader who opened it would otherwise
+  // have to tab through the whole page to reach Sign out. Only once placed, because before that
+  // the menu is visibility: hidden and a browser will not focus anything inside a hidden box.
+  const placed = placement !== null
+  useEffect(() => {
+    if (!menuOpen || !floating || !placed) return
+    menuPanel.current?.querySelector<HTMLElement>('.rail-menu-item')?.focus({ preventScroll: true })
+  }, [menuOpen, floating, placed])
 
   function toggle() {
     setStored((current) => {
@@ -209,6 +284,30 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
   // is what this restores. Undefined when expanded, where the label is already on screen and a
   // tooltip repeating it would only sit in the way of it.
   const hoverName = (text: string) => (collapsed ? text : undefined)
+
+  // Built once and placed by the caller below: inline for the drawer, portalled for the desktop
+  // rail. Hidden until placed when floating, so the one frame before the layout effect measures
+  // never shows it at the viewport's corner; layout effects run before paint, so in practice it
+  // never shows at all.
+  const menu = (
+    <div ref={menuPanel} className={floating ? 'rail-menu rail-menu-floating' : 'rail-menu'} role="menu"
+      style={!floating ? undefined : placement === null ? { visibility: 'hidden' } : {
+        left: `${placement.left}px`,
+        bottom: `${placement.bottom}px`,
+        minWidth: placement.anchorWidth === null ? undefined : `max(${placement.anchorWidth}px, 10rem)`,
+      }}>
+      {/* No onClick closing the menu: router.tsx's Link forwards no onClick, and it does
+          not need to. The effect above closes on `active` changing, which is the same
+          event by a more reliable route - it also fires for a navigation that started
+          somewhere else entirely. */}
+      <Link to="/account" className="rail-menu-item" role="menuitem">
+        <Icon name="account" />{t('sidebar.items.account')}
+      </Link>
+      <button type="button" className="rail-menu-item" role="menuitem" onClick={onSignOut}>
+        <Icon name="signOut" />{t('shell.signOut')}
+      </button>
+    </div>
+  )
 
   return (
     <nav className={collapsed ? 'rail rail-collapsed' : 'rail'} aria-label={t('sidebar.sectionsLabel')}>
@@ -262,27 +361,14 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
               rather than a Link even though one of its two items navigates: what it does on click is
               open a menu. */}
           <div className="rail-person-menu" ref={menuRef}>
-            <button type="button" className="rail-person"
+            <button ref={personButton} type="button" className="rail-person"
               aria-haspopup="menu" aria-expanded={menuOpen}
               aria-current={active === '/account' ? 'page' : undefined}
               title={hoverName(person)}
               onClick={() => setMenuOpen((open) => !open)}>
               <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
             </button>
-            {menuOpen && (
-              <div className="rail-menu" role="menu">
-                {/* No onClick closing the menu: router.tsx's Link forwards no onClick, and it does
-                    not need to. The effect above closes on `active` changing, which is the same
-                    event by a more reliable route - it also fires for a navigation that started
-                    somewhere else entirely. */}
-                <Link to="/account" className="rail-menu-item" role="menuitem">
-                  <Icon name="account" />{t('sidebar.items.account')}
-                </Link>
-                <button type="button" className="rail-menu-item" role="menuitem" onClick={onSignOut}>
-                  <Icon name="signOut" />{t('shell.signOut')}
-                </button>
-              </div>
-            )}
+            {menuOpen && (floating ? createPortal(menu, document.body) : menu)}
           </div>
           {status}
         </div>
