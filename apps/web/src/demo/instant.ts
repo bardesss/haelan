@@ -55,21 +55,29 @@ export function localMidnightMs(dateStr: string): number {
 export const DEMO_INSTANT_MS = localMidnightMs(DEMO_END_DATE)
 
 /**
- * The instant to freeze a clock to when what matters is *which calendar day it reads as*, not the
- * archive's own bookkeeping: one millisecond before DEMO_INSTANT_MS, the last millisecond of the
- * last day the seed actually wrote data for.
+ * The instant to start a clock at when what matters is *which calendar day it reads as*, not the
+ * archive's own bookkeeping: a moment before DEMO_INSTANT_MS, late on the last day the seed
+ * actually wrote data for.
  *
  * DEMO_INSTANT_MS cannot serve that purpose, and did not: it is the archive's exclusive close, the
  * first instant *without* data, and DEMO_END_DATE happens to be a Monday - so a clock pinned to it
  * reads `new Date()` as a day nothing was ever seeded for, and computes the current Week as
  * DEMO_END_DATE..DEMO_END_DATE+6, entirely past the last real row. The demo's own default Day and
  * Week views opened empty because of exactly this, on data that runRebuild had genuinely written.
- * Stepping back one millisecond crosses into the last real day without needing a second date
- * string to keep in sync with DEMO_END_DATE by hand.
+ * Stepping back from it crosses into the last real day without needing a second date string to
+ * keep in sync with DEMO_END_DATE by hand.
+ *
+ * Half an hour back, 23:30 in Amsterdam, because the seed writes that last day whole: hourly heart
+ * rate and steps through the 23:00 reading (packages/core/src/testing/seed.ts's 24-hour arrays).
+ * The capture server answers from this same clock (demo/capture/server.ts), and the glance does not
+ * cut a day's samples at its own now, so a clock earlier than 23:00 reads as a time the data has
+ * already gone past. It was midday until the dashboard redesign made that visible: "Good
+ * afternoon" over "today until 23:00", and a pulse "as of 23:00" on a page whose clock said noon.
+ * apps/web/test/demo-instant.test.ts checks this against the seed's real output.
  */
-const HALF_A_DAY_MS = 12 * 60 * 60 * 1000
+const HALF_AN_HOUR_MS = 30 * 60 * 1000
 
-export const DEMO_CLOCK_MS = DEMO_INSTANT_MS - HALF_A_DAY_MS
+export const DEMO_CLOCK_MS = DEMO_INSTANT_MS - HALF_AN_HOUR_MS
 
 /**
  * The furthest the demo's clock may run: the last millisecond of that same day.
@@ -77,8 +85,8 @@ export const DEMO_CLOCK_MS = DEMO_INSTANT_MS - HALF_A_DAY_MS
  * The clock advances (installDemoClock says why - zrender's animations stall on a constant), and
  * an advancing clock anchored at the last millisecond of the day would tick straight into
  * DEMO_END_DATE, which is the first day the seed wrote nothing for: every url a page computes from
- * today would then miss the manifest, on a page that had been working a moment earlier. Starting
- * at midday and refusing to cross midnight gives a reader twelve hours on the page and no way to
- * fall off the end of the data by leaving the tab open.
+ * today would then miss the manifest, on a page that had been working a moment earlier. At this
+ * ceiling installDemoClock starts the half hour over rather than stopping, so a tab left open
+ * neither falls off the end of the data nor freezes its charts.
  */
 export const DEMO_CLOCK_CEILING_MS = DEMO_INSTANT_MS - 1

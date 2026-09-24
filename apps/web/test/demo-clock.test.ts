@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { installDemoClock } from '../src/demo/demoClock.js'
 import { DEMO_CLOCK_MS } from '../src/demo/instant.js'
 
@@ -6,6 +6,7 @@ const NativeDate = Date
 
 afterEach(() => {
   globalThis.Date = NativeDate
+  vi.restoreAllMocks()
 })
 
 /**
@@ -57,5 +58,28 @@ describe('the demo clock', () => {
     installDemoClock(DEMO_CLOCK_MS)
     expect(Date.parse('2020-01-01T00:00:00Z')).toBe(1577836800000)
     expect(new Date() instanceof Date).toBe(true)
+  })
+
+  it('keeps advancing past its ceiling without leaving the day, by starting over', () => {
+    // DEMO_CLOCK_MS sits half an hour before midnight (instant.ts says why), so a tab left open
+    // reaches the ceiling within the half hour. A clamp there would freeze the clock and stall
+    // every chart that mounts afterwards, the defect this module exists to prevent; the clock
+    // loops back to its start instead, so it neither stops nor crosses into the next day.
+    let performanceNow = 1_000
+    vi.spyOn(performance, 'now').mockImplementation(() => performanceNow)
+    const start = DEMO_CLOCK_MS
+    const ceiling = start + 999
+    installDemoClock(start, ceiling)
+    expect(Date.now()).toBe(start)
+    performanceNow += 999
+    expect(Date.now()).toBe(ceiling)
+    performanceNow += 1
+    expect(Date.now()).toBe(start)
+    performanceNow += 10_500
+    const later = Date.now()
+    expect(later).toBeGreaterThanOrEqual(start)
+    expect(later).toBeLessThanOrEqual(ceiling - 16)
+    performanceNow += 16
+    expect(new Date().getTime()).toBe(later + 16)
   })
 })

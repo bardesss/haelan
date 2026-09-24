@@ -33,9 +33,9 @@ export async function startCaptureServer(dataDir: string): Promise<CaptureServer
     // Pinned, never Date.now(): a live clock would make the capture - and so the demo it feeds -
     // depend on the day it happened to run. DEMO_CLOCK_MS rather than DEMO_INSTANT_MS since M9b:
     // the glance computes today from this clock, and the archive's exclusive close reads as a day
-    // nothing was seeded for, so the Dashboard would have been captured for an empty day. Midday on
-    // the last seeded day is the instant the demo browser runs at too, so server and page agree
-    // on which day it is.
+    // nothing was seeded for, so the Dashboard would have been captured for an empty day. 23:30 on
+    // the last seeded day, after its last hourly reading, is the instant the demo browser runs at
+    // too, so server and page agree on which day it is and what time of it.
     now: () => DEMO_CLOCK_MS,
     // Nothing in a capture run may reach Google. The seeded refresh token is one Google never
     // issued (see seed-demo.mjs), so this turns an attempt into an immediate, loud failure rather
