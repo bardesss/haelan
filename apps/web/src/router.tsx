@@ -110,6 +110,30 @@ export function subscribeForTest(listener: () => void): () => void {
   return subscribe(listener)
 }
 
+/**
+ * Brings the element the URL's fragment names into view, if there is one.
+ *
+ * The browser does this itself only for a real page load or a plain anchor click; navigate() is
+ * pushState, which moves the URL and never scrolls. So a Link to "/account#sources" lands at the
+ * top of the account page unless something asks. Called by the page that owns the target when it
+ * mounts, and by the status panel after its own link, because with the reader already on /account
+ * nothing mounts and useRoute (pathname and search, no fragment) does not change either.
+ */
+export function scrollToHashTarget(): void {
+  if (typeof window === 'undefined') return
+  // decodeURIComponent throws URIError on a malformed escape (#%E0), and the fragment is whatever
+  // the address bar holds. The Account page calls this on mount, so a throw would take the page
+  // down for a typo in a URL; a fragment that cannot be decoded names no element anyway.
+  let id: string
+  try {
+    id = decodeURIComponent(window.location.hash.slice(1))
+  } catch {
+    return
+  }
+  if (id === '') return
+  document.getElementById(id)?.scrollIntoView({ block: 'start' })
+}
+
 export function useRoute(): string {
   return useSyncExternalStore(
     subscribe,

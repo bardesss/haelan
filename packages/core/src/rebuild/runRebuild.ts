@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Database, DbOrTx } from '../db/open.ts'
 import { checkpointTruncate } from '../db/open.ts'
 import {
-  daily, observations, samples, sessions, sources, sourceAliases, sourcePriority,
+  daily, observations, samples, sessions, sources, sourceAliases, sourcePriority, sourcePanelVisibility,
 } from '../db/schema/index.ts'
 import { SampleKeys } from '../db/keys.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
@@ -490,6 +490,13 @@ function dropUnreferencedSources(tx: DbOrTx, personId: string, keys: SampleKeys)
   const aliases = tx.select({ sourceId: sourceAliases.sourceId }).from(sourceAliases)
     .where(doomedAliases).all().length
   tx.delete(sourceAliases).where(doomedAliases).run()
+
+  // A choice about a source that no longer exists has nothing to apply to, and the foreign key
+  // would refuse the source's delete below while it stayed.
+  tx.delete(sourcePanelVisibility).where(and(
+    eq(sourcePanelVisibility.personId, personId),
+    inArray(sourcePanelVisibility.sourceId, stale),
+  )).run()
 
   tx.delete(sources).where(inArray(sources.id, stale)).run()
   return { sources: stale.length, rankings, aliases }

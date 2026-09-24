@@ -116,6 +116,12 @@ export const instanceSettings = sqliteTable('instance_settings', {
   // The step derivation reads it to skip the client and consent steps, and it stays readable
   // afterwards so the dashboard can say where this instance's data comes from.
   companionMode: integer('companion_mode', { mode: 'boolean' }).notNull().default(false),
+  // The last sync run that finished, instance-wide, because the runner is: it syncs every
+  // connected person in one run. Null until the first run ends. Persisted because the runner's own
+  // copy lived in memory and a restart made every status surface read "never synced".
+  lastSyncFinishedAtMs: integer('last_sync_finished_at_ms'),
+  lastSyncRowsWritten: integer('last_sync_rows_written'),
+  lastSyncFailed: integer('last_sync_failed'),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })
 

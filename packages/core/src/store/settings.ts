@@ -56,6 +56,10 @@ export interface InstanceSettingsRow {
    *  says so - see putRouteBasemapEnabled's own comment for why the default matters more here. */
   routeBasemapEnabled: boolean
   companionMode: boolean
+  /** Null until the first sync run ends. All three lastSync* columns are written together. */
+  lastSyncFinishedAtMs: number | null
+  lastSyncRowsWritten: number | null
+  lastSyncFailed: number | null
 }
 
 export interface PutSettingsInput {
@@ -65,6 +69,8 @@ export interface PutSettingsInput {
   backfillHorizonDays?: number
   nowMs: number
 }
+
+export interface LastSync { finishedAtMs: number, rowsWritten: number, failed: number }
 
 export class SettingsStore {
   readonly #db: DbOrTx
@@ -87,6 +93,9 @@ export class SettingsStore {
       updateCheckEnabled: row.updateCheckEnabled,
       routeBasemapEnabled: row.routeBasemapEnabled,
       companionMode: row.companionMode,
+      lastSyncFinishedAtMs: row.lastSyncFinishedAtMs ?? null,
+      lastSyncRowsWritten: row.lastSyncRowsWritten ?? null,
+      lastSyncFailed: row.lastSyncFailed ?? null,
     }
   }
 
@@ -229,6 +238,26 @@ export class SettingsStore {
   putRouteBasemapEnabled(enabled: boolean, nowMs: number): void {
     this.#db.update(instanceSettings).set({ routeBasemapEnabled: enabled, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  /** The last run that finished, or null before the first. All three columns are written together. */
+  lastSync(): LastSync | null {
+    const row = this.get()
+    if (row?.lastSyncFinishedAtMs == null) return null
+    return {
+      finishedAtMs: row.lastSyncFinishedAtMs,
+      rowsWritten: row.lastSyncRowsWritten ?? 0,
+      failed: row.lastSyncFailed ?? 0,
+    }
+  }
+
+  putLastSync(run: LastSync, nowMs: number): void {
+    this.#db.update(instanceSettings).set({
+      lastSyncFinishedAtMs: run.finishedAtMs,
+      lastSyncRowsWritten: run.rowsWritten,
+      lastSyncFailed: run.failed,
+      updatedAtMs: nowMs,
+    }).where(eq(instanceSettings.id, ROW_ID)).run()
   }
 
   putSessionOverlapRatio(ratio: number, nowMs: number): void {

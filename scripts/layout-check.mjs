@@ -64,6 +64,42 @@ function check(condition, label) {
   if (!condition) failures.push(label)
 }
 
+/**
+ * Whether `selector` is actually paintable at two points inside `box`, not merely positioned
+ * there. `boundingBox` reports layout geometry, which agrees with what CSS says the box should be
+ * even when an ancestor's `overflow` clips it away or something else paints over it - exactly what
+ * `.rail`'s own `overflow-y: auto` (app.css) does to the absolutely positioned `.status-popover`
+ * sitting inside it, at both the expanded and the collapsed rail width, and a `boundingBox`-only
+ * check cannot tell that apart from a popover that actually rendered on screen.
+ * `document.elementFromPoint` answers the honest question instead: what element the browser would
+ * actually deliver a click to at that pixel. Two points, not the centre alone: the popover's own
+ * left edge sits flush with the rail's padding, so a clip at the rail's right edge (the expanded
+ * case) can still leave the centre point inside the unclipped remainder while the popover's own
+ * right portion is gone - `nearRightEdge` is what catches that. `selector` is looked up fresh
+ * against `document`, not scoped under `.rail-foot` or `.rail`, so this also survives the popover
+ * moving into a portal under `document.body` in a later change - only how the element is found
+ * would need to differ then, not this check.
+ */
+async function paintableAt(page, selector, box) {
+  return page.evaluate(({ selector, box }) => {
+    const target = document.querySelector(selector)
+    if (target === null) return false
+    const points = [
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      { x: box.x + box.width - 2, y: box.y + box.height / 2 },
+    ]
+    return points.every(({ x, y }) => {
+      const painted = document.elementFromPoint(x, y)
+      return painted !== null && painted.closest('.status-popover') === target
+    })
+  }, { selector, box })
+}
+
+// Declared at module scope, unlike panelsOpened above it in the try block: the closing summary
+// line below reads this after the try/finally has run, and a `let` scoped to the try block would
+// not reach that far.
+let statusPanelsOpened = 0
+
 // Every control `isExemptInlineLink` excused from the 44px rule across this whole run, with the
 // sweep that found it. An exemption that nothing counts is an exemption that can widen in
 // silence - the caveat in the pull request body promises this number stays visible, and a
@@ -257,6 +293,11 @@ try {
   // chart click can produce three or four; the defect shape is the same at any of those counts
   // (n buttons in five fixed columns), and these two can be clicked by name.
   let panelsOpened = 0
+  // statusPanelsOpened (declared at module scope, above) is incremented further down: once for
+  // the phone sheet and twice for the desktop popover - once expanded, once with the rail
+  // collapsed, where app.css swaps which edge it opens from. The icon itself is one component,
+  // mounted once in the shell, so what differs between those opens is only which chrome renders
+  // it and which edge of the rail it opens from, never which page it is on.
   for (const { route, opener } of PANEL_OPENERS) {
     await open(route)
     const control = page.locator(opener).first()
@@ -479,6 +520,69 @@ try {
     )
   }
 
+  // The status sheet, still at phone width: a <dialog> the same way the rail drawer above is one,
+  // but opened from the top bar's own icon rather than the rail foot's - StatusControl.tsx renders
+  // one or the other depending on `useIsPhone`, never both. Reopened fresh on '/' rather than
+  // reusing whatever the drawer sweep left behind, so this does not inherit a focus or scroll state
+  // that sweep's own three-ways-out checks left the page in.
+  await page.setViewportSize(PHONE)
+  await open('/')
+  const statusButtonPhone = page.locator('.top-bar .status-button')
+  const statusButtonPhoneVisible = await statusButtonPhone.isVisible().catch(() => false)
+  check(statusButtonPhoneVisible, 'no status button in the top bar at phone width')
+  if (statusButtonPhoneVisible) {
+    await statusButtonPhone.click()
+    const sheet = page.locator('dialog.status-sheet[open]')
+    const sheetShown = await sheet.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(sheetShown, 'the status sheet did not open on a phone viewport')
+    if (sheetShown) {
+      statusPanelsOpened += 1
+      const inSheet = await smallTargets(page, 'dialog.status-sheet')
+      check(
+        inSheet.small.length === 0,
+        `the status sheet: ${inSheet.small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(inSheet.small)}`,
+      )
+      for (const target of inSheet.exempt) exempted.push({ where: 'the status sheet', target })
+
+      const sheetBox = await sheet.boundingBox()
+      const phoneViewport = page.viewportSize()
+      check(
+        sheetBox !== null && phoneViewport !== null
+          && sheetBox.x >= -1 && sheetBox.y >= -1
+          && sheetBox.x + sheetBox.width <= phoneViewport.width + 1
+          && sheetBox.y + sheetBox.height <= phoneViewport.height + 1,
+        `the status sheet is outside the viewport: ${sheetBox === null ? 'unmeasurable'
+          : `${Math.round(sheetBox.x)},${Math.round(sheetBox.y)} ${Math.round(sheetBox.width)}x${Math.round(sheetBox.height)}`}`,
+      )
+
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(SETTLE_MS)
+      check(!(await sheet.isVisible().catch(() => false)), 'Escape did not close the status sheet')
+      check(
+        await page.evaluate(() => document.activeElement?.classList.contains('status-button') === true),
+        'focus did not return to the status button after Escape',
+      )
+
+      // The backdrop tap: the same gesture, and the same reason, as the rail drawer's own check
+      // above - a native <dialog>'s onClick fires with the dialog itself as the target whenever the
+      // click lands outside its content box, which StatusControl.tsx's own handler reads to decide
+      // whether to close. The sheet is a bottom sheet (app.css's .status-sheet), never as tall as
+      // the viewport, so a point near the top of the screen is always outside its content.
+      await statusButtonPhone.click()
+      const reopened = await page.locator('dialog.status-sheet[open]')
+        .waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+      check(reopened, 'the status sheet did not reopen for the backdrop check')
+      if (reopened) {
+        await page.mouse.click(PHONE.width / 2, 20)
+        await page.waitForTimeout(SETTLE_MS)
+        check(
+          !(await page.locator('dialog.status-sheet[open]').isVisible().catch(() => false)),
+          'a tap on the backdrop did not close the status sheet',
+        )
+      }
+    }
+  }
+
   // The rail foot, at the size that reproduced the defect. Above the breakpoint, so this is the
   // rail rather than the drawer.
   await page.setViewportSize(SHORT)
@@ -498,6 +602,85 @@ try {
   check(footVisible !== null, 'no rail or rail foot found at 900x380')
   check(footVisible?.withinRail === true, 'the rail foot is not pinned to the bottom of its scroller at 900x380')
   check(footVisible?.onScreen === true, 'the rail foot sits below the fold of the viewport at 900x380')
+
+  // The status popover, on the same 900x380 rail: opened upward out of the rail foot (app.css's
+  // own comment on .status-popover - the foot is pinned to the bottom, so downward would open off
+  // screen), which is exactly the geometry the rail foot check above just confirmed leaves no room
+  // to spare. y >= 0 is the assertion that "opens upward" actually stayed on screen rather than
+  // merely stopped scrolling sideways, which boundingBox alone cannot tell apart from "opened
+  // upward and off the top".
+  const statusButtonDesktop = page.locator('.rail-foot .status-button')
+  const statusButtonDesktopVisible = await statusButtonDesktop.isVisible().catch(() => false)
+  check(statusButtonDesktopVisible, 'no status button in the rail foot at 900x380')
+  if (statusButtonDesktopVisible) {
+    await statusButtonDesktop.click()
+    const popover = page.locator('.status-popover')
+    const popoverShown = await popover.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(popoverShown, 'the status popover did not open at 900x380')
+    if (popoverShown) {
+      statusPanelsOpened += 1
+      const shortViewport = page.viewportSize()
+      const box = await popover.boundingBox()
+      check(
+        box !== null && shortViewport !== null && box.y >= 0 && box.x + box.width <= shortViewport.width + 1,
+        `the status popover is outside the viewport at 900x380: ${box === null ? 'unmeasurable'
+          : `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}`}`,
+      )
+      check(
+        box !== null && await paintableAt(page, '.status-popover', box),
+        'the status popover is clipped or covered at 900x380 expanded',
+      )
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(SETTLE_MS)
+      check(!(await popover.isVisible().catch(() => false)), 'Escape did not close the status popover at 900x380')
+    }
+
+    // Collapsed, the popover swaps which edge it opens from (app.css's `.rail-collapsed
+    // .status-popover` - to the right of the 60px icon strip rather than upward from it, the same
+    // direction `.rail-menu` opens in for the identical reason), so the geometry check above has to
+    // run a second time against a popover anchored on a completely different edge to mean anything.
+    const toggle = page.locator('.rail-toggle')
+    const toggleVisible = await toggle.isVisible().catch(() => false)
+    check(toggleVisible, 'no rail collapse toggle at 900x380')
+    if (toggleVisible) {
+      await toggle.click()
+      await page.waitForTimeout(SETTLE_MS)
+      const collapsed = await page.locator('.rail.rail-collapsed').isVisible().catch(() => false)
+      check(collapsed, 'the rail did not collapse at 900x380')
+      if (collapsed) {
+        await statusButtonDesktop.click()
+        const collapsedPopover = page.locator('.status-popover')
+        const collapsedShown = await collapsedPopover.waitFor({ state: 'visible', timeout: 10_000 })
+          .then(() => true).catch(() => false)
+        check(collapsedShown, 'the status popover did not open on a collapsed rail at 900x380')
+        if (collapsedShown) {
+          statusPanelsOpened += 1
+          const collapsedViewport = page.viewportSize()
+          const collapsedBox = await collapsedPopover.boundingBox()
+          check(
+            collapsedBox !== null && collapsedViewport !== null
+              && collapsedBox.y >= 0 && collapsedBox.x + collapsedBox.width <= collapsedViewport.width + 1,
+            `the collapsed status popover is outside the viewport at 900x380: ${collapsedBox === null ? 'unmeasurable'
+              : `${Math.round(collapsedBox.x)},${Math.round(collapsedBox.y)} ${Math.round(collapsedBox.width)}x${Math.round(collapsedBox.height)}`}`,
+          )
+          check(
+            collapsedBox !== null && await paintableAt(page, '.status-popover', collapsedBox),
+            'the status popover is clipped or covered at 900x380 collapsed',
+          )
+        }
+      }
+    }
+  }
+
+  // Pinned for the same reason PANEL_OPENERS' own count is: a renamed trigger class or a panel
+  // that stops opening would otherwise skip every status-panel assertion above and say nothing.
+  // Three, not two: the phone sheet, the desktop popover, and the same popover again once the
+  // rail has collapsed and it opens from the opposite edge.
+  check(
+    statusPanelsOpened === 3,
+    `the status panel was opened ${statusPanelsOpened} of 3 times (phone sheet, desktop popover, `
+      + 'collapsed-rail popover)',
+  )
 
   check(
     exempted.length === EXPECTED_EXEMPTIONS,
@@ -538,5 +721,6 @@ console.log(
     + `hit areas on each of them with the drawer shut and again with it open, `
     + `the annotate panel opened and swept on ${PANEL_OPENERS.length} routes, `
     + `${BAND_ROUTE} across the rest of the band, the same routes rotated across the breakpoint, `
-    + 'the drawer and its three ways out, and the rail foot.',
+    + 'the drawer and its three ways out, the rail foot, and the status panel opened '
+    + `${statusPanelsOpened} times (phone sheet, desktop popover, collapsed-rail popover).`,
 )

@@ -360,7 +360,7 @@ a.segment { text-decoration: none; display: inline-block; }
    element's own open state rather than a class, so a sheet closed by Escape - which never tells
    React anything - unlocks the page by the same declaration that locked it. The rail drawer takes
    this exact measure for the same reason. */
-html:has(dialog.period-sheet[open]) { overflow: hidden; }
+html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overflow: hidden; }
 
 .button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
 .button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
@@ -404,28 +404,72 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .button-primary svg { color: var(--accent); }
 .icon-button { display: inline-flex; padding: 5px; background: none; border: 0; color: var(--text-muted); }
 .icon-button:hover { color: var(--text-primary); }
-.synced { font-size: var(--font-size-micro); color: var(--text-faint); }
-
-/* The sync control, in the shell rather than in the control row since M10. Two placements, one
-   rule set: the rail's foot above the breakpoint, the drawer's top bar below it. */
-.sync-control { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.sync-button { flex: none; }
-/* The freshness has the rail's width to itself in the foot and wraps to a second line rather than
-   being clipped; in the top bar it is the compact spelling, which fits on one. */
-.sync-control .synced { min-width: 0; }
-/* Both sentences are the short spelling now (SyncControl's own comment says why), so the two of
-   them and the button fit on one row and the foot no longer stacks them. What this replaces was
-   `flex-wrap: wrap` with each sentence at `flex: 1 0 100%`: correct for two full sentences in a
-   186px rail, and five lines of muted grey once the phone line joined the Google one.
-   The separator is drawn rather than written, so neither catalogue has to carry a bullet. */
-.rail-foot .sync-control .synced + .synced::before {
-  content: '·'; color: var(--text-faint); margin-right: var(--space-1);
+/* The rail foot's row: the person menu and the status icon side by side. The status control sat
+   above the name as a row of its own until the status panel replaced it (StatusControl.tsx); an
+   icon beside the name costs the foot no height, and the foot is the one part of the rail that is
+   always on screen. Collapsed, the 60px strip has no room for two across, so they stack. */
+.rail-foot-row { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.rail-foot-row .rail-person-menu { flex: 1; min-width: 0; }
+.rail-collapsed .rail-foot-row { flex-direction: column; }
+/* Positioned for the popover, which is absolute against it for the reason .rail-person-menu gives:
+   it opens over the page rather than growing the sticky foot. */
+.status-control { position: relative; flex: none; }
+.status-button { position: relative; }
+.status-button svg { width: 17px; height: 17px; }
+/* Five times the slow duration rather than a number of its own, so the reduced-motion block that
+   zeroes every --duration-* token stops the spin too: a zero duration is no animation at all. */
+.status-button[data-running='true'] svg, .status-sync[data-running='true'] svg {
+  animation: status-spin calc(var(--duration-slow) * 5) linear infinite;
 }
-/* Collapsed, the rail is a 60px icon strip and the button is the whole of what a sighted reader
-   gets. The sentence survives on the button's own title and accessible name, which is the same
-   trade .rail-item makes with its sr-only label one rule group up. */
-.rail-collapsed .sync-control { justify-content: center; }
-.rail-collapsed .sync-control .synced, .rail-collapsed .sync-control .field-error { display: none; }
+@keyframes status-spin { to { transform: rotate(360deg); } }
+/* The one thing a sighted reader needs from the icon without opening it: something is wrong. The
+   count rides on the button's accessible name instead. */
+.status-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--negative); }
+/* Fixed and portalled to the body, not absolute inside the rail: the rail is a scroll container,
+   and a 20rem box inside it was clipped at its 186px edge. StatusControl.tsx's placementFor sets
+   left and bottom inline from the icon's rectangle - above the icon on an expanded rail, to the
+   strip's right on a collapsed one - so no rule here says where it goes, only what it is. The
+   width gives way on a window narrower than 20rem plus the clamp's margin either side. Card
+   surface and a border, no shadow, as .rail-menu's own comment argues. */
+.status-popover {
+  position: fixed; width: min(20rem, calc(100vw - 12px)); max-height: 70vh; overflow-y: auto;
+  padding: var(--space-3); background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); z-index: 30;
+}
+/* The phone's bottom sheet: .period-sheet's rules, repeated rather than shared through a class,
+   because the two sheets carry different content and a shared class would tie their futures
+   together for the sake of eight declarations. */
+.status-sheet {
+  margin: auto auto 0; padding: 0; border: 0; max-height: 85dvh;
+  width: 100%; max-width: none;
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-primary);
+}
+.status-sheet::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
+.status-sheet-body { padding: var(--space-3); }
+.status-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.status-sheet-title { font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
+.status-connection + .status-connection { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.status-connection-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
+.status-connection-name { font-weight: var(--weight-semibold); color: var(--text-primary); white-space: nowrap; }
+.status-connection-when { font-size: var(--font-size-micro); color: var(--text-faint); }
+/* One line each, measured in Chromium: at 20rem, "Nu synchroniseren" and "Google Health" both
+   wrapped to two lines and the header stood three lines tall. Unwrapped, the header row wraps
+   instead, and the button drops to a line of its own, still at the right, when the three do not
+   fit side by side. */
+.status-sync { margin-left: auto; white-space: nowrap; }
+.status-problem { font-size: var(--font-size-xs); color: var(--negative); margin: var(--space-1) 0 0; }
+.status-result { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
+.status-devices { list-style: none; margin: var(--space-2) 0 0; padding: 0 0 0 var(--space-3); }
+.status-device { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); padding: 2px 0; }
+.status-device[data-stale='true'] { color: var(--negative); }
+.status-foot { display: flex; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); font-size: var(--font-size-micro); color: var(--text-faint); }
+/* The browser's own link blue was all this link had, measured in Chromium; the accent in the
+   register .card-link uses for a card's own way onward. */
+.status-foot a { color: var(--accent-soft); text-decoration: none; }
+.status-foot a:hover { text-decoration: underline; }
 /* Pushed to the end of the top bar so the hamburger and the wordmark keep the positions a reader
    already knows. */
 .top-bar-end { margin-left: auto; display: flex; align-items: center; }
@@ -440,6 +484,9 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .main { flex: 1; padding: var(--space-5); min-width: 0; max-width: 1500px; margin-inline: auto; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
 .card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
+/* An id-carrying card is a jump target (the status panel's "Choose sources…" link lands on
+   #sources); without this, the phone's sticky .top-bar covers the card's own top edge on arrival. */
+.card[id] { scroll-margin-top: 56px; }
 /* A card that holds reading matter rather than a chart stops at a measure.
    A list of rows has a natural width the way a paragraph does, and a `span={12}` card is about
    1400px of frame on a wide monitor around content that wants half of it - which is what put a
@@ -1073,6 +1120,17 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    .source-name-detail beside it rather than shouting. A dead source is a fact to notice on the
    settings page, not an alarm to raise over the whole app. */
 .source-name-stale { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* The status panel switch beside the name field (SourceNames.tsx): the same small checkbox inside
+   its own label that the update switch on the Info tab uses, with the label as the hit area. */
+.source-panel-toggle { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); }
+/* Undoing a choice, shown only once one has been made. A bare text button in the register of
+   .chart-table-toggle rather than a .button: it is the quiet way back, not an action the row
+   invites. */
+.source-panel-default {
+  background: none; border: 0; padding: 2px 0; font: inherit; font-size: var(--font-size-xs);
+  color: var(--accent-soft); cursor: pointer;
+}
+.source-panel-default:hover { text-decoration: underline; }
 /* ControlRow.tsx: said under the controls rather than over the charts, because it explains the
    charts rather than replacing them. Muted for the same reason .source-name-stale is: a device
    that stopped is a fact to notice, not an alarm. */
@@ -1594,7 +1652,7 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 
   .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 
-  /* Everything from here to .synced below styles the row ControlRow renders when it has NOT taken
+  /* Everything from here to .controls-end below styles the row ControlRow renders when it has NOT taken
      its phone branch. That happens when matchMedia is unavailable - a sandboxed iframe, or static
      markup - where useIsPhone answers false and the desktop row renders at a phone's width. It is
      the fallback rather than the common case since M10, and it has to keep working: a reader whose
@@ -1634,10 +1692,6 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
   /* margin-left: auto stops applying: nothing in a one-column stack should push anything anywhere. */
   .controls-end { width: 100%; margin-left: 0; flex-wrap: wrap; }
   .controls-end .button { min-width: 0; flex: 1 1 auto; justify-content: center; }
-  /* The freshness used to take a line of its own at the end of that stack. It is not in the
-     control row at all any more - it is in the drawer's top bar, beside a hamburger and a
-     wordmark, where a full width line would push the bar's own contents apart. */
-  .sync-control .synced { width: auto; }
 
   /* A finger needs about 44px in its smaller dimension and a mouse does not, so every rule below
      applies only here. min-height rather than padding on .button and its siblings, because padding
@@ -1679,11 +1733,17 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
      though, which is why the shared rule matters more than usual: the demo the check drives opens
      /settings on its first tab and never captures the route this card reads, so the card renders
      nothing there to measure. */
-  .data-type-row, .data-type-row label, .about-update-toggle { min-height: 44px; }
-  .data-type-row input[type='checkbox'], .about-update-toggle input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
+  .data-type-row, .data-type-row label, .about-update-toggle, .source-panel-toggle, .source-panel-default { min-height: 44px; }
+  .data-type-row input[type='checkbox'], .about-update-toggle input[type='checkbox'], .source-panel-toggle input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
 
   /* The backfill horizon buttons measured 62-68 x 32: wide enough already, short by 12px. No
      display on the base rule, so it is set here too rather than assumed from the browser's own
      button rendering. */
   .setup-horizon li button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* The status sheet's own "Choose sources…" link measured 90x16 - .status-foot's micro font size
+     and text-only content give it no box of its own beyond its text. layout:check caught it, the
+     way it caught the source order buttons above: a control that opens the account page from a
+     modal a finger only ever taps into deserves the same 44px it gets everywhere else. */
+  .status-foot a { min-height: 44px; display: flex; align-items: center; }
 }

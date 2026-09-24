@@ -124,3 +124,14 @@ export const sourceAliases = sqliteTable('source_aliases', {
   primaryKey({ columns: [t.personId, t.sourceId] }),
   unique('source_aliases_person_alias').on(t.personId, t.alias),
 ])
+
+// Per person, whether a source appears in the status panel. Only an explicit choice is stored;
+// a source with no row follows the 30-day default the panel computes. Its own table for the
+// reason source_aliases is: a rebuild regenerates `sources`, and a choice a person made is the one
+// thing no rebuild can put back.
+export const sourcePanelVisibility = sqliteTable('source_panel_visibility', {
+  personId: text('person_id').notNull().references(() => people.id),
+  sourceId: text('source_id').notNull().references(() => sources.id),
+  visible: integer('visible', { mode: 'boolean' }).notNull(),
+  updatedAtMs: integer('updated_at_ms').notNull(),
+}, (t) => [primaryKey({ columns: [t.personId, t.sourceId] })])

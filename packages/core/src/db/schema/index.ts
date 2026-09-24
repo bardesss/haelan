@@ -1,7 +1,7 @@
 import { getTableColumns } from 'drizzle-orm'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
-export { people, sources, sourcePriority, sourceAliases } from './people.ts'
+export { people, sources, sourcePriority, sourceAliases, sourcePanelVisibility } from './people.ts'
 export { oauthClient, credentials } from './credentials.ts'
 export { notes, events, overrides } from './annotations.ts'
 export { rawPayloads } from './raw.ts'

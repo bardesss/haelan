@@ -76,7 +76,7 @@ export {
   SettingsStore, setupStep, DEFAULT_BACKUP_KEEP, DEFAULT_BACKUP_INTERVAL_HOURS,
 } from './store/settings.ts'
 export type {
-  InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps, BackupPolicy,
+  InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps, BackupPolicy, LastSync,
 } from './store/settings.ts'
 export { CONSENT_PATHS } from './db/schema/accounts.ts'
 export type { ConsentPath } from './db/schema/accounts.ts'
@@ -139,6 +139,7 @@ export { SourcePriorityStore } from './store/sourcePriority.ts'
 export type { StoredList } from './store/sourcePriority.ts'
 export { SourceAliasStore, nameFor, MAX_ALIAS_LENGTH } from './store/sourceAliases.ts'
 export type { NamedSource } from './store/sourceAliases.ts'
+export { SourceVisibilityStore } from './store/sourceVisibility.ts'
 export { ExcludedDataTypeStore } from './store/excludedDataTypes.ts'
 export { getSource } from './store/sources.ts'
 export type { SourceRow } from './store/sources.ts'
@@ -253,3 +254,12 @@ export type {
   GlanceStanding, GlanceStepsPace, GlanceWeek, GlanceWeekFigure,
 } from './query/glance.ts'
 export { standingOf } from './query/glance.ts'
+
+// M9b/status-panel task 5. The status panel's own composition: connections, their devices and a
+// per-source panel choice, from facts the server already holds. Same discipline as the readers
+// above - only the pure composer and its shapes are exported, the server's own route assembles
+// StatusInput from stores this package does not reach.
+export { composeStatus, shownByDefault, PANEL_DEFAULT_WINDOW_DAYS, PHONE_QUIET_MS } from './api/statusPanel.ts'
+export type {
+  StatusPanel, StatusInput, StatusConnection, StatusDevice, StatusSync, ConnectionKind, ConnectionProblem,
+} from './api/statusPanel.ts'

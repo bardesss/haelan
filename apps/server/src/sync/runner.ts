@@ -51,9 +51,19 @@ const MAX_DERIVE_BATCHES = 200
 
 export type RunReason = 'manual' | 'scheduled' | 'setup'
 
+/**
+ * How long after a run finishes a person may start another by hand. A run with nothing new to
+ * fetch ends in a moment, so without this every click started a fresh one against Google's quota;
+ * the button looked broken because each run finished before anybody saw it start. Scheduled runs
+ * ignore it: the scheduler is what the cooldown exists to leave room for.
+ */
+export const MANUAL_SYNC_COOLDOWN_MS = 60_000
+
 export interface RunOutcome {
   started: boolean
-  reason?: 'already_running' | 'shutting_down'
+  reason?: 'already_running' | 'shutting_down' | 'cooldown'
+  /** Only with reason 'cooldown': how long until a manual run would be accepted. */
+  retryAfterMs?: number
 }
 
 /**
@@ -158,6 +168,9 @@ export interface RunState {
   reason: RunReason | null
   startedAtMs: number | null
   lastFinishedAtMs: number | null
+  lastRowsWritten: number | null
+  lastFailed: number | null
+  cooldownRemainingMs: number
 }
 
 export interface RunnerStatus extends RunState {
@@ -226,6 +239,9 @@ export class SyncRunner {
    */
   readonly #reportedSkips = new Set<string>()
 
+  /** run_finished's totals for the run in flight; null until runSync reports them. */
+  #runTotals: { rowsWritten: number, failed: number } | null = null
+
   constructor(context: ServerContext) { this.#context = context }
 
   /**
@@ -272,13 +288,28 @@ export class SyncRunner {
       .filter((type) => only === undefined || only.includes(type.id))
   }
 
+  #cooldownRemainingMs(): number {
+    const last = this.#lastFinished()
+    if (last === null) return 0
+    return Math.max(0, MANUAL_SYNC_COOLDOWN_MS - (this.#context.now() - last))
+  }
+
+  /** In memory once this process has finished a run; the persisted one before that. */
+  #lastFinished(): number | null {
+    return this.lastFinishedAtMs ?? this.#context.stores.settings.lastSync()?.finishedAtMs ?? null
+  }
+
   /** The instance-wide facts, with nothing of anybody's data in them. */
   runState(): RunState {
+    const persisted = this.#context.stores.settings.lastSync()
     return {
       running: this.running,
       reason: this.reason,
       startedAtMs: this.startedAtMs,
-      lastFinishedAtMs: this.lastFinishedAtMs,
+      lastFinishedAtMs: this.#lastFinished(),
+      lastRowsWritten: persisted?.rowsWritten ?? null,
+      lastFailed: persisted?.failed ?? null,
+      cooldownRemainingMs: this.#cooldownRemainingMs(),
     }
   }
 
@@ -343,6 +374,10 @@ export class SyncRunner {
   tryStart(reason: RunReason): RunOutcome {
     if (this.#stopped) return { started: false, reason: 'shutting_down' }
     if (this.running) return { started: false, reason: 'already_running' }
+    if (reason === 'manual') {
+      const remaining = this.#cooldownRemainingMs()
+      if (remaining > 0) return { started: false, reason: 'cooldown', retryAfterMs: remaining }
+    }
     this.#inFlight = this.trigger(reason).catch(() => undefined)
     return { started: true }
   }
@@ -356,13 +391,26 @@ export class SyncRunner {
     this.#aborted = false
     this.reason = reason
     this.startedAtMs = this.#context.now()
+    this.#runTotals = null
+    let threw = false
     try {
       await this.run()
+    } catch (error) {
+      threw = true
+      throw error
     } finally {
       this.running = false
       this.reason = null
       this.startedAtMs = null
       this.lastFinishedAtMs = this.#context.now()
+      // failed counts jobs; a run that threw before runSync reported counts as one failure, so
+      // the panel never reads a crashed run as "nothing new".
+      const totals = this.#runTotals ?? { rowsWritten: 0, failed: 0 }
+      this.#context.stores.settings.putLastSync({
+        finishedAtMs: this.lastFinishedAtMs,
+        rowsWritten: totals.rowsWritten,
+        failed: threw && totals.failed === 0 ? 1 : totals.failed,
+      }, this.lastFinishedAtMs)
     }
     return { started: true }
   }
@@ -389,6 +437,7 @@ export class SyncRunner {
   }
 
   private emit(event: SyncProgress): void {
+    if (event.kind === 'run_finished') this.#runTotals = { rowsWritten: event.rowsWritten, failed: event.failed }
     for (const listener of this.listeners) {
       try {
         listener(event)

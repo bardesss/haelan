@@ -19,7 +19,8 @@
     "./training-load": "./src/api/trainingLoad.ts",
     "./recovery-index": "./src/api/recoveryIndex.ts",
     "./source-cadence": "./src/api/sourceCadence.ts",
-    "./nights": "./src/api/nights.ts"
+    "./nights": "./src/api/nights.ts",
+    "./status-panel": "./src/api/statusPanel.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"
