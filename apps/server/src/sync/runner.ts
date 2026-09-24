@@ -241,6 +241,25 @@ export class SyncRunner {
 
   /** run_finished's totals for the run in flight; null until runSync reports them. */
   #runTotals: { rowsWritten: number, failed: number } | null = null
+  /**
+   * What the run in flight's backfill passes wrote and failed, on top of #runTotals.
+   *
+   * run_finished is runSync's event, and runSync is only the trailing window. The sprint and the
+   * trickle come after it, through runBackfill, and nothing reports their totals as an event, so
+   * when the persisted last sync was run_finished's alone, a run whose only new data was history
+   * - every first sync's sprint, and every trickle after a quiet day - was stored as zero rows
+   * and the panel read it as "Nothing new." Tallied in #backfillPass from runBackfill's own
+   * result rather than summed from job_finished events: those fire inside runSync too, so a sum
+   * of them would count the trailing window twice, and runSync's rollup types emit none at all,
+   * so a sum replacing run_finished would drop them.
+   *
+   * Failures are a set of person/type keys, not a count, because the sprint offers a type failing
+   * every window to each of its passes in turn, and failed counts jobs - one broken type is one
+   * failure however many passes tried it. A type that also failed in the trailing window is
+   * counted there and here both; failed is read as zero-or-not (StatusControl's 'failed'), and
+   * runSync reports no identities to de-duplicate against.
+   */
+  #backfillTotals = { rowsWritten: 0, failed: new Set<string>() }
 
   constructor(context: ServerContext) { this.#context = context }
 
@@ -392,6 +411,7 @@ export class SyncRunner {
     this.reason = reason
     this.startedAtMs = this.#context.now()
     this.#runTotals = null
+    this.#backfillTotals = { rowsWritten: 0, failed: new Set<string>() }
     let threw = false
     try {
       await this.run()
@@ -405,7 +425,11 @@ export class SyncRunner {
       this.lastFinishedAtMs = this.#context.now()
       // failed counts jobs; a run that threw before runSync reported counts as one failure, so
       // the panel never reads a crashed run as "nothing new".
-      const totals = this.#runTotals ?? { rowsWritten: 0, failed: 0 }
+      const trailing = this.#runTotals ?? { rowsWritten: 0, failed: 0 }
+      const totals = {
+        rowsWritten: trailing.rowsWritten + this.#backfillTotals.rowsWritten,
+        failed: trailing.failed + this.#backfillTotals.failed.size,
+      }
       this.#context.stores.settings.putLastSync({
         finishedAtMs: this.lastFinishedAtMs,
         rowsWritten: totals.rowsWritten,
@@ -682,6 +706,10 @@ export class SyncRunner {
           const cursor = state?.backfillCursorMs
           if (cursor != null && cursor <= floorMs) continue
         }
+        // The same signal runSync uses to count a failed job: the type's failure counter moved.
+        // Drift (an unreadable body) stops a backfill with 'error' but moves no counter, and
+        // runSync does not count it as a failure either, so stoppedBecause alone is not it.
+        const failuresBefore = state?.consecutiveFailures ?? 0
         try {
           const result = await runBackfill({
             personId, timezone: person.timezone, dataType, nowMs: this.#context.now(),
@@ -691,6 +719,7 @@ export class SyncRunner {
               : { batchDays: this.#context.backfillBatchDays }),
             deps,
           })
+          this.#backfillTotals.rowsWritten += result.rowsWritten
           // stoppedBecause 'error' or 'revoked' does not mean the cursor never moved - runBackfill
           // writes the cursor after every window it completes and only reports the error from a
           // later one, so a call that walked four windows before failing on the fifth already has
@@ -718,6 +747,9 @@ export class SyncRunner {
             error: error instanceof Error ? error : new Error(String(error)),
             nowMs: this.#context.now(),
           })
+        }
+        if ((this.#context.stores.syncState.get(personId, dataType.id)?.consecutiveFailures ?? 0) > failuresBefore) {
+          this.#backfillTotals.failed.add(`${personId}:${dataType.id}`)
         }
       }
     }
