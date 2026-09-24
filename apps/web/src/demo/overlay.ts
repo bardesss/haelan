@@ -102,6 +102,7 @@ const SERIES = /^\/api\/v1\/p\/[^/]+\/series$/
 const INTRADAY = /^\/api\/v1\/p\/[^/]+\/intraday(?:\/window)?$/
 const SESSIONS_LIST = /^\/api\/v1\/p\/[^/]+\/sessions$/
 const SESSION_ITEM = /^\/api\/v1\/p\/[^/]+\/sessions\/([^/]+)$/
+const GLANCE = /^\/api\/v1\/p\/[^/]+\/glance$/
 
 function splitUrl(url: string): { path: string, params: URLSearchParams } {
   const [path = '', search = ''] = url.split('?')
@@ -127,6 +128,7 @@ export function applyOverlay(url: string, body: unknown, overlay: Overlay): unkn
   if (SESSIONS_LIST.test(path)) return composeSessionsList(body, overlay)
   const sessionItem = path.match(SESSION_ITEM)
   if (sessionItem) return composeSessionDetail(sessionItem[1]!, body, overlay)
+  if (GLANCE.test(path)) return composeGlance(body, overlay)
   return body
 }
 
@@ -503,15 +505,44 @@ function composeSessionDetail(sessionId: string, body: unknown, overlay: Overlay
   return { ...(body as Record<string, unknown>), ...excludedFieldsFor(override) }
 }
 
-function composeSessionsList(body: unknown, overlay: Overlay): unknown {
-  const anySessionOverride = [...overlay.overrides.values()].some((o) => o.scope === 'session')
-  if (!anySessionOverride) return body
-  const typed = body as { items: Record<string, unknown>[] }
-  const items = typed.items.map((item) => {
-    const override = sessionOverrideFor(overlay, item['id'] as string)
-    return override ? { ...item, ...excludedFieldsFor(override) } : item
+function hasSessionOverride(overlay: Overlay): boolean {
+  return [...overlay.overrides.values()].some((o) => o.scope === 'session')
+}
+
+/** Marks every row an override names, leaving the rest as the capture recorded them. */
+function markSessionRows(rows: Record<string, unknown>[], overlay: Overlay): Record<string, unknown>[] {
+  return rows.map((row) => {
+    const override = sessionOverrideFor(overlay, row['id'] as string)
+    return override ? { ...row, ...excludedFieldsFor(override) } : row
   })
-  return { ...typed, items }
+}
+
+function composeSessionsList(body: unknown, overlay: Overlay): unknown {
+  if (!hasSessionOverride(overlay)) return body
+  const typed = body as { items: Record<string, unknown>[] }
+  return { ...typed, items: markSessionRows(typed.items, overlay) }
+}
+
+/**
+ * The dashboard's "Today's activities" is the third place a workout is drawn, and it reads neither
+ * session route: it lists `day.workouts` out of the one /glance response (TodayWorkouts.tsx), the
+ * same merged rows the Activity list gets (packages/core/src/query/glance.ts reads them through
+ * the same sessions query), with `excluded` and `excludeReason` on each. Marking only the two
+ * session routes left the dashboard listing a workout the visitor had just excluded as if nothing
+ * had happened, while the workout page and the Activity list both said excluded.
+ *
+ * Only those two recorded fields on the matching rows change, for the fidelity reason
+ * sessionOverrideFor gives: the rest of the glance (today's steps, active minutes, heart rate, last
+ * night, recovery) is captured as a real instance derived it, and none of it is recomputed here.
+ * Copied along the path it changes and nowhere else, since the manifest's object is shared by every
+ * read of this URL; untouched, and the same object back, when there is no session override at all.
+ */
+function composeGlance(body: unknown, overlay: Overlay): unknown {
+  if (!hasSessionOverride(overlay)) return body
+  const typed = body as { day?: { workouts?: Record<string, unknown>[] } }
+  const workouts = typed.day?.workouts
+  if (!Array.isArray(workouts)) return body
+  return { ...typed, day: { ...typed.day, workouts: markSessionRows(workouts, overlay) } }
 }
 
 // ---- source aliases -----------------------------------------------------------------------------

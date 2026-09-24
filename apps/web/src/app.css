@@ -139,10 +139,15 @@ body {
   border-radius: var(--radius-md);
   z-index: 2;
 }
-/* left: 0 would put the menu inside the 60px strip when the rail is collapsed, which is narrower
-   than the shortest of its two labels. Opening it to the right of the strip is the only direction
-   with room. */
-.rail-collapsed .rail-menu { left: calc(100% + var(--space-1)); bottom: 0; }
+/* The desktop rail's menu: portalled to the body and fixed, not absolute inside the rail, for the
+   reason .status-popover is. The rail is a scroll container, and on a collapsed rail the menu
+   opened to the right of the 60px strip - entirely outside the box that clips - so none of it was
+   painted. Sidebar.tsx places it inline from the name's rectangle (placementFor, the popover's own
+   function): above the name when expanded, past the strip's right edge when collapsed, which is
+   the only direction with room there. min-width drops the 100% .rail-menu has, because fixed makes
+   that the viewport; the name row's width comes across inline instead when there is one to match.
+   The phone drawer keeps .rail-menu as it is, inside its modal dialog. */
+.rail-menu-floating { position: fixed; min-width: 10rem; z-index: 30; }
 .rail-menu-item {
   display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left;
   padding: 8px var(--space-2); border-radius: 5px;

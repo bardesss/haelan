@@ -308,9 +308,15 @@ export function useWriteOverride(): UseMutationResult<OverrideWriteResult, ApiEr
       // comments named, and it is narrower than teaching overlapsAffected a sessionId: a millisecond
       // window is not a date range, and pretending it is would make that helper answer a question
       // it does not actually know how to answer.
+      //
+      // The glance is the third resource with the same blind spot. The dashboard's "Today's
+      // activities" lists day.workouts out of it (TodayWorkouts.tsx), its key carries no range at
+      // all, and so after an exclusion the dashboard went on listing the workout unmarked for up to
+      // a minute while the workout page and the Activity list had already changed.
       if (input.scope === 'session') {
         invalidateResource(queryClient, personId, 'session')
         invalidateResource(queryClient, personId, 'intraday-window')
+        invalidateResource(queryClient, personId, 'glance')
       }
     },
   })
@@ -343,6 +349,9 @@ export function useRemoveOverride(): UseMutationResult<OverrideWriteResult, ApiE
       // next to leaving a reader who just un-excluded a session staring at a stale excluded: true.
       invalidateResource(queryClient, personId, 'session')
       invalidateResource(queryClient, personId, 'intraday-window')
+      // And the glance, for the reason useWriteOverride gives: un-excluding a workout has to reach
+      // the dashboard's list of today's workouts as well.
+      invalidateResource(queryClient, personId, 'glance')
     },
   })
 }

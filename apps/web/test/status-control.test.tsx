@@ -31,6 +31,12 @@ const realShowModal = HTMLDialogElement.prototype.showModal
 const realClose = HTMLDialogElement.prototype.close
 const realMatchMedia = window.matchMedia
 let phone = false
+let mediaListeners = new Set<() => void>()
+
+function crossBreakpoint(toPhone: boolean): void {
+  phone = toPhone
+  act(() => { for (const listener of mediaListeners) listener() })
+}
 
 beforeEach(() => {
   // happy-dom has no dialog implementation; these move the open attribute the way a browser does.
@@ -40,11 +46,14 @@ beforeEach(() => {
     this.dispatchEvent(new Event('close'))
   }
   phone = false
+  mediaListeners = new Set()
+  // matches is a getter and the change listeners are kept, so a test can cross the phone
+  // breakpoint mid-test the way a resized window does: flip `phone`, then crossBreakpoint().
   window.matchMedia = ((query: string) => ({
-    matches: phone && query === PHONE_MEDIA_QUERY,
+    get matches() { return phone && query === PHONE_MEDIA_QUERY },
     media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: (_type: string, listener: () => void) => { mediaListeners.add(listener) },
+    removeEventListener: (_type: string, listener: () => void) => { mediaListeners.delete(listener) },
   })) as unknown as typeof window.matchMedia
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -251,6 +260,80 @@ describe('the popover, on a desktop', () => {
     expect(document.activeElement).toBe(icon())
   })
 
+  /**
+   * Portalled to the end of the body, the popover sits last in the document's tab order, far from
+   * the icon that opened it: Tab past its last control left the rail entirely for whatever came
+   * after it in the body, and Shift+Tab from its first control went to the page's last control
+   * rather than back to the icon. The keyboard order is restored as if the popover followed the
+   * icon. happy-dom performs no default Tab navigation, so these assert what the handler does to
+   * focus and to the event; the browser's own step past the icon is what the default does next.
+   */
+  function tab(from: HTMLElement, shiftKey = false): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })
+    act(() => { from.dispatchEvent(event) })
+    return event
+  }
+  const focusables = (): HTMLElement[] => [...popover()!.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)')]
+
+  it('goes back to the icon on Shift+Tab from the popover\'s first control', () => {
+    mount(panel())
+    press(icon())
+    const first = focusables()[0]!
+    expect(document.activeElement).toBe(first)
+    const event = tab(first, true)
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(icon())
+    expect(popover()).not.toBeNull()
+  })
+
+  it('goes into the popover on Tab from the icon while it is open', () => {
+    mount(panel())
+    press(icon())
+    act(() => { icon().focus() })
+    const event = tab(icon())
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(focusables()[0])
+  })
+
+  // Closes, and hands focus to the icon WITHOUT claiming the key: the browser's default Tab then
+  // runs from the icon and lands on whatever follows it in the rail, which is where Tab past the
+  // popover's end would go if the popover really sat after the icon.
+  it('closes on Tab past its last control, leaving the default Tab to step on from the icon', () => {
+    mount(panel())
+    press(icon())
+    const last = focusables().at(-1)!
+    act(() => { last.focus() })
+    const event = tab(last)
+    expect(event.defaultPrevented).toBe(false)
+    expect(popover()).toBeNull()
+    expect(document.activeElement).toBe(icon())
+  })
+
+  // Focus can sit on the popover box itself (a click on its padding does that, tabIndex -1). Its
+  // controls follow it in the document, so a Tab from there is not its end and must not close it.
+  it('does not close on Tab from the popover box itself while it holds controls', () => {
+    mount(panel())
+    press(icon())
+    act(() => { popover()!.focus() })
+    const event = tab(popover()!)
+    expect(event.defaultPrevented).toBe(false)
+    expect(popover()).not.toBeNull()
+    const back = tab(popover()!, true)
+    expect(back.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(icon())
+  })
+
+  it('leaves Tab between its own controls to the browser', () => {
+    mount(panel())
+    press(icon())
+    const [first] = focusables()
+    expect(focusables().length).toBeGreaterThan(1)
+    const event = tab(first!)
+    expect(event.defaultPrevented).toBe(false)
+    expect(popover()).not.toBeNull()
+    expect(document.activeElement).toBe(first)
+  })
+
   it('closes on a press outside it', () => {
     mount(panel())
     press(icon())
@@ -315,13 +398,23 @@ describe('the sync button', () => {
     expect(posts).toEqual(['/api/sync/run'])
   })
 
-  it('reads a 429 as the cooldown, not a failure', async () => {
+  // A 429 is the server's cooldown, which the button already says ("Synced just now", disabled)
+  // once useRunSync's onError has re-read the status. A result line saying it too put the same
+  // three words in the panel twice, one under the other; the button carries it alone.
+  it('reads a 429 as the cooldown, said once, on the button', async () => {
     runAnswer = { status: 429, body: { error: { kind: 'transient', code: 'cooldown', message: 'cooldown' } } }
     mount(panel())
     press(icon())
+    // The open's own refetch settles first, on the idle answer, so the press below is offered;
+    // only then does the server start answering with the cooldown the 429 implies.
+    await settle()
+    serverStatus = panel({}, { cooldownRemainingMs: 55_000 })
     press(syncButton()!)
     await settle()
-    expect(popover()!.querySelector('.status-result')!.textContent).toBe('Synced just now')
+    expect(syncButton()!.textContent).toBe('Synced just now')
+    expect(syncButton()!.disabled).toBe(true)
+    expect(popover()!.querySelector('.status-result')).toBeNull()
+    expect(popover()!.textContent!.split('Synced just now')).toHaveLength(2)
   })
 
   it('reads a 409 as a run already going', async () => {
@@ -486,6 +579,40 @@ describe('the popover\'s placement', () => {
     expect(popover()!.style.bottom).toBe(`${window.innerHeight - 500 + 6}px`)
   })
 
+  // The popover's height is its content's, and the content grows after it opens: the open's own
+  // refetch lands, a result line appears under the Sync button. Placed only on open and on a
+  // window resize, a popover that grew past the room above the icon on a short window kept the
+  // bottom it was given while short, and its top ran off the viewport - the clamp in placementFor
+  // only works on a height it has been told about.
+  it('places itself again when its own content grows', () => {
+    const observers: Array<{ callback: ResizeObserverCallback, targets: Element[] }> = []
+    const realResizeObserver = window.ResizeObserver
+    window.ResizeObserver = class {
+      readonly entry: { callback: ResizeObserverCallback, targets: Element[] }
+      constructor(callback: ResizeObserverCallback) {
+        this.entry = { callback, targets: [] }
+        observers.push(this.entry)
+      }
+      observe(target: Element) { this.entry.targets.push(target) }
+      unobserve() {}
+      disconnect() { this.entry.targets = [] }
+    } as unknown as typeof ResizeObserver
+    try {
+      mount(panel())
+      stubRects(rect(150, 700, 30, 30), rect(12, 690, 162, 60))
+      press(icon())
+      expect(popover()!.style.bottom).toBe(`${window.innerHeight - 700 + 6}px`)
+      const watching = observers.find((o) => o.targets.includes(popover()!))
+      expect(watching).toBeDefined()
+      // Taller than the whole window less the gap: the clamp has to pin its top instead.
+      popover()!.getBoundingClientRect = () => rect(12, 0, 320, window.innerHeight - 20)
+      act(() => { watching!.callback([], {} as ResizeObserver) })
+      expect(popover()!.style.bottom).toBe(`${20 - 6}px`)
+    } finally {
+      window.ResizeObserver = realResizeObserver
+    }
+  })
+
   // Portalled, it is no longer inside the wrapper, so the outside-press test has to count it as
   // inside explicitly - or a press on the Sync button would close the popover before its click.
   it('still counts a press inside the portalled popover as inside', () => {
@@ -527,6 +654,24 @@ describe('closing', () => {
       expect(popover()).toBeNull()
     } finally {
       window.history.replaceState(null, '', before)
+    }
+  })
+
+  // The sheet's focus-return effect ran whenever isPhone changed, and on a phone with the panel
+  // closed it read as "the sheet just closed": narrowing a window into phone width moved focus
+  // off whatever the reader was typing in and onto this icon. Only a close hands focus back.
+  it('leaves focus alone when the window narrows into phone width with the panel closed', () => {
+    mount(panel())
+    const elsewhere = document.createElement('input')
+    document.body.appendChild(elsewhere)
+    try {
+      elsewhere.focus()
+      crossBreakpoint(true)
+      expect(document.activeElement).toBe(elsewhere)
+      crossBreakpoint(false)
+      expect(document.activeElement).toBe(elsewhere)
+    } finally {
+      elsewhere.remove()
     }
   })
 

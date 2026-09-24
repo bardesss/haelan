@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Sidebar, RAIL_PATHS, PAGE_DATA_TYPES, railItemsFor } from '../src/components/Sidebar.js'
+import { RailDrawer } from '../src/components/RailDrawer.js'
 
 /**
  * The catalogue's own ids, read out of its source.
@@ -86,5 +87,19 @@ describe('which pages the rail offers', () => {
     )
     expect(html).not.toContain('href="/nutrition"')
     expect(html).toContain('href="/sleep"')
+  })
+
+  // The phone drawer is the same rail inside a dialog, and Shell swaps one for the other by
+  // breakpoint while passing both the same props. The drawer used to accept the exclusions and
+  // drop them on the floor, so a page a person had switched off vanished from the desktop rail and
+  // came straight back on their phone. Rendered here the same way as the desktop case above, so
+  // the two cannot drift apart again without one of these going red.
+  it('renders the phone drawer without the hidden page', () => {
+    const html = renderToStaticMarkup(
+      <RailDrawer person="Wilma" active="/" onSignOut={() => {}}
+        excludedDataTypes={new Set(PAGE_DATA_TYPES['/nutrition'])} />,
+    )
+    expect(html).toContain('href="/sleep"')
+    expect(html).not.toContain('href="/nutrition"')
   })
 })

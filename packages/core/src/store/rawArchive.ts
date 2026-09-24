@@ -48,6 +48,22 @@ export interface ArchivedPayload {
   fetchEpisodeId: string | null
 }
 
+// RawArchive.lastFetchedByDataSource's statement, outside the class only so its prepared type
+// can be named for the field that caches it.
+function prepareLastFetchedByDataSource(db: DbOrTx) {
+  return db.select({
+    dataSource: sql<string | null>`json_extract(${rawPayloads.requestParams}, '$.dataSource')`,
+    lastFetchedAtMs: sql<number>`max(${rawPayloads.fetchedAtMs})`,
+  }).from(rawPayloads)
+    .where(and(
+      eq(rawPayloads.personId, sql.placeholder('personId')),
+      eq(rawPayloads.httpStatus, 200),
+      sql`json_valid(${rawPayloads.requestParams}) AND json_extract(${rawPayloads.requestParams}, '$.source') = ${sql.placeholder('source')}`,
+    ))
+    .groupBy(sql`1`)
+    .prepare()
+}
+
 export class RawArchive {
   readonly #db: DbOrTx
 
@@ -175,6 +191,36 @@ export class RawArchive {
       .orderBy(asc(rawPayloads.fetchedAtMs), asc(rawPayloads.id))
       .all()
   }
+
+  /**
+   * The newest fetch per `requestParams.dataSource`, among one person's rows archived under
+   * `source` - for the status panel, which needs to know when the phone last uploaded and which
+   * of the person's sources its uploads resolved to (ingest writes the resolved source id there).
+   *
+   * One aggregate query, because GET /api/status asks this every three seconds for as long as a
+   * sync runs, and the loop it replaced walked listForSource's whole answer and JSON.parse'd every
+   * row: a phone that has synced for a year is tens of thousands of rows, all read to produce a
+   * handful of ids and one timestamp. SQLite does the grouping over the same predicate
+   * listForSource uses (the json_valid guard and the 200-only narrowing included, for the reasons
+   * given there), and hands back one row per data source.
+   *
+   * A row with no dataSource groups under null rather than being dropped: it is still an upload,
+   * and its fetch time still counts towards "when did the phone last sync". A caller that wants
+   * only the ids filters the nulls itself.
+   *
+   * The statement is prepared once, on first use, and kept for the instance's life. A drizzle
+   * query built inside the method would compile and prepare a fresh better-sqlite3 statement on
+   * every call (see the samples insert in rebuild/replay.ts for what that cost at scale); a
+   * three-second poll is nowhere near that scale, but it is also no reason to pay it. Lazily
+   * rather than in the constructor, because most RawArchive instances - one per ingest
+   * transaction - never ask this.
+   */
+  lastFetchedByDataSource(personId: string, source: string): Array<{ dataSource: string | null, lastFetchedAtMs: number }> {
+    this.#lastFetchedByDataSource ??= prepareLastFetchedByDataSource(this.#db)
+    return this.#lastFetchedByDataSource.all({ personId, source })
+  }
+
+  #lastFetchedByDataSource: ReturnType<typeof prepareLastFetchedByDataSource> | undefined
 
   // The person is part of the lookup rather than checked after it, so a caller cannot forget.
   // Every surface in section 11 reads through this, and there is no sharing mechanism in v1.
