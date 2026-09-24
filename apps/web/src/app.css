@@ -719,6 +719,25 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .glance-note { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
 .glance-empty { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 
+/* Dashboard dials. Colours through the chart and semantic tokens only: the ring is recovery's own
+   positive colour, the gauge band is the same baseline band the charts shade, and a reading outside
+   its usual takes --negative, which is also said in words beside it so colour is never the only signal. */
+.score-ring, .usual-gauge, .week-bars { display: block; }
+.score-ring-track, .usual-gauge-track { stroke: var(--surface-inset); }
+.score-ring-fill { stroke: var(--positive); }
+.score-ring-value { fill: var(--text-primary); font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
+.score-ring-empty { fill: var(--text-muted); font-size: var(--font-size-xs); font-weight: var(--weight-medium); }
+.usual-gauge-band { stroke: var(--border-chosen); }
+.usual-gauge-marker { fill: var(--text-primary); stroke: var(--surface-card); }
+.usual-gauge-marker.is-out { fill: var(--negative); }
+.usual-gauge-value { fill: var(--text-primary); font-size: var(--font-size-md); font-weight: var(--weight-bold); }
+.usual-gauge-unit { fill: var(--text-muted); font-size: var(--font-size-micro); }
+.week-bar { opacity: .55; }
+.week-bar.is-today { opacity: 1; }
+.week-bars.is-steps .week-bar { fill: var(--accent); }
+.week-bars.is-active .week-bar { fill: var(--positive); }
+.week-bars.is-sleep .week-bar { fill: var(--chart-stage-rem); }
+
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
