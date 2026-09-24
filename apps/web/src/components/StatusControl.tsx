@@ -5,7 +5,8 @@ import { StatusPanel } from './StatusPanel.js'
 import type { SyncOutcome } from './StatusPanel.js'
 import { ApiError } from '../api/client.js'
 import { useSession } from '../auth/session.js'
-import { useRoute } from '../router.js'
+import { useRoute, scrollToHashTarget } from '../router.js'
+import { localToday } from '../controls/range.js'
 import { useIsPhone } from '../ui/breakpoint.js'
 import { useStatusPanel, useRunSync, useRefreshOnSyncFinish } from '../data/useStatusPanel.js'
 
@@ -72,16 +73,11 @@ export function StatusControl() {
     runSync.mutate(undefined, { onSuccess: () => setWatched(true) })
   }
 
-  // The person's today, not the browser's, for "today" and "yesterday" on the device rows - the
-  // same derivation usePageControls makes. en-CA formats as YYYY-MM-DD.
+  // The person's today, not the browser's, for "today" and "yesterday" on the device rows.
+  // open is a dependency on purpose: a tab left open overnight re-reads the date when the panel
+  // is opened, rather than calling yesterday "today" until a reload.
   const timezone = session.data?.timezone
-  const today = useMemo(() => {
-    const options: Intl.DateTimeFormatOptions = timezone === undefined ? {} : { timeZone: timezone }
-    return new Intl.DateTimeFormat('en-CA', { ...options, year: 'numeric', month: '2-digit', day: '2-digit' })
-      .format(new Date())
-    // open is a dependency on purpose: a tab left open overnight re-reads the date when the
-    // panel is opened, rather than calling yesterday "today" until a reload.
-  }, [timezone, open])
+  const today = useMemo(() => localToday(timezone), [timezone, open])
 
   // Navigating closes it, for the reason the person menu gives: the rail is not unmounted by a
   // route change, and the footer's link navigates, so without this the panel would hang open over
@@ -165,6 +161,19 @@ export function StatusControl() {
       outcome={outcome} onSync={startSync} />
   )
 
+  // A press on a link inside the panel ("Choose sources…"), caught as it bubbles past - router.tsx's
+  // Link forwards no onClick of its own. Link has already navigated by the time this runs. Closing
+  // here rather than leaving it to the route effect above, because a reader already on /account
+  // changes no route at all (useRoute leaves the fragment out), and the panel would stay open over
+  // the card its link was meant to show. For the same reason the scroll is asked for here: nothing
+  // mounts, so the account page's own mount-time scroll never runs. A frame later, so the popover
+  // has gone and the phone sheet's scroll lock has let go of the page before it moves.
+  function onPanelClick(event: React.MouseEvent) {
+    if (!(event.target instanceof Element) || event.target.closest('a[href]') === null) return
+    setOpen(false)
+    requestAnimationFrame(() => scrollToHashTarget())
+  }
+
   return (
     <div className="status-control" ref={wrapper}>
       {/* aria-haspopup="dialog" on a phone, where what opens is a modal sheet; "true" on a desktop,
@@ -180,7 +189,8 @@ export function StatusControl() {
         {problems > 0 && <span className="status-dot" aria-hidden="true" />}
       </button>
       {!isPhone && open && (
-        <div ref={popover} className="status-popover" role="dialog" aria-label={t('status.title')} tabIndex={-1}>
+        <div ref={popover} className="status-popover" role="dialog" aria-label={t('status.title')} tabIndex={-1}
+          onClick={onPanelClick}>
           {content}
         </div>
       )}
@@ -189,7 +199,7 @@ export function StatusControl() {
         // RailDrawer's comment gives; the close button is the way out a finger can find.
         <dialog ref={sheet} className="status-sheet" aria-label={t('status.title')}
           onClick={(event) => { if (event.target === sheet.current) setOpen(false) }}>
-          <div className="status-sheet-body">
+          <div className="status-sheet-body" onClick={onPanelClick}>
             <div className="status-sheet-head">
               <span className="status-sheet-title">{t('status.title')}</span>
               <button type="button" className="icon-button" data-testid="status-sheet-close"

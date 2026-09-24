@@ -1182,7 +1182,9 @@
       "stopped": "Rapporteert niet meer — laatst op {{date}}",
       "unjudged": "Te weinig historie om te beoordelen — laatst op {{date}}",
       "volume_one": "{{count}} dag gerapporteerd",
-      "volume_other": "{{count}} dagen gerapporteerd"
+      "volume_other": "{{count}} dagen gerapporteerd",
+      "showInPanel": "Tonen in statuspaneel",
+      "panelDefault": "Weer automatisch"
     },
     "sourceOrder": {
       "title": "Welke bron wint",

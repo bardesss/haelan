@@ -1054,6 +1054,17 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    .source-name-detail beside it rather than shouting. A dead source is a fact to notice on the
    settings page, not an alarm to raise over the whole app. */
 .source-name-stale { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* The status panel switch beside the name field (SourceNames.tsx): the same small checkbox inside
+   its own label that the update switch on the Info tab uses, with the label as the hit area. */
+.source-panel-toggle { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); }
+/* Undoing a choice, shown only once one has been made. A bare text button in the register of
+   .chart-table-toggle rather than a .button: it is the quiet way back, not an action the row
+   invites. */
+.source-panel-default {
+  background: none; border: 0; padding: 2px 0; font: inherit; font-size: var(--font-size-xs);
+  color: var(--accent-soft); cursor: pointer;
+}
+.source-panel-default:hover { text-decoration: underline; }
 /* ControlRow.tsx: said under the controls rather than over the charts, because it explains the
    charts rather than replacing them. Muted for the same reason .source-name-stale is: a device
    that stopped is a fact to notice, not an alarm. */
@@ -1656,8 +1667,8 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
      though, which is why the shared rule matters more than usual: the demo the check drives opens
      /settings on its first tab and never captures the route this card reads, so the card renders
      nothing there to measure. */
-  .data-type-row, .data-type-row label, .about-update-toggle { min-height: 44px; }
-  .data-type-row input[type='checkbox'], .about-update-toggle input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
+  .data-type-row, .data-type-row label, .about-update-toggle, .source-panel-toggle, .source-panel-default { min-height: 44px; }
+  .data-type-row input[type='checkbox'], .about-update-toggle input[type='checkbox'], .source-panel-toggle input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
 
   /* The backfill horizon buttons measured 62-68 x 32: wide enough already, short by 12px. No
      display on the base rule, so it is set here too rather than assumed from the browser's own

@@ -357,6 +357,22 @@ describe('the panel content', () => {
     expect(link.textContent).toBe('Choose sources…')
   })
 
+  // The link changes no route when the reader is already on /account (useRoute leaves the
+  // fragment out), so the route effect cannot be what closes the panel after it; the click is.
+  it('closes when its link is followed, even with the route unchanged', () => {
+    const before = window.location.pathname + window.location.search + window.location.hash
+    window.history.replaceState(null, '', '/account')
+    try {
+      mount(panel())
+      press(icon())
+      press(popover()!.querySelector<HTMLAnchorElement>('.status-foot a')!)
+      expect(popover()).toBeNull()
+      expect(window.location.pathname + window.location.hash).toBe('/account#sources')
+    } finally {
+      window.history.replaceState(null, '', before)
+    }
+  })
+
   it('leaves the hidden count out when nothing is hidden', () => {
     mount(panel())
     press(icon())
