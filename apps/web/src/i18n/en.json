@@ -564,6 +564,10 @@
       "sat": "Sat",
       "sun": "Sun"
     },
+    "standing": {
+      "above": "above your usual",
+      "below": "below your usual"
+    },
     "absence": {
       "notWorn": "not worn",
       "noReading": "no reading",
@@ -1448,6 +1452,7 @@
       "unscored": "Not enough readings to score yet.",
       "notScored": "Not scored",
       "score": "Score",
+      "scoreUnscored": "Score, not scored",
       "strip": "Recovery index, last 7 days",
       "caption": "last 7 days",
       "link": "View recovery"
@@ -1474,6 +1479,7 @@
       "asleep": "Asleep",
       "perDay": "{{value}} a day",
       "perNight": "a night",
+      "totalPer": "· {{per}}",
       "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted",
       "barsLabelNights": "{{what}}, last 7 nights; the average includes last night"
     },

@@ -140,6 +140,26 @@ describe('Sparkline dots', () => {
     const host = mount(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps" tableToggle={false} />)
     expectTableForAssistiveTechOnly(host, 7)
   })
+
+  // The colour alone is invisible to a screen reader, so the day's own verdict has to reach the
+  // accessible table in words too, not just as a dot on the canvas.
+  it('says a day\'s verdict in words in the accessible table, not by colour alone', () => {
+    const host = mount(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
+      baseline={{ low: 100, high: 160 }} dots pointStandings={standings} tableToggle={false} />)
+    const rows = [...host.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td')].at(-1)?.textContent)
+    expect(rows[2]).toBe('above your usual')
+    expect(rows[3]).toBe('below your usual')
+    // A day with no verdict ('within', or none at all) states nothing about it.
+    expect(rows[0]).toBe('')
+    expect(rows[5]).toBe('')
+  })
+
+  it('says nothing about a verdict when dots are off, even if the caller still passed one', () => {
+    const host = mount(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
+      dots={false} pointStandings={standings} tableToggle={false} />)
+    const rows = [...host.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td')].at(-1)?.textContent)
+    expect(rows.every((note) => note === '')).toBe(true)
+  })
 })
 
 describe('Hypnogram, compact', () => {

@@ -8,7 +8,8 @@ import { RecoveryCard } from '../src/pages/dashboard/RecoveryCard.js'
 import { TodayCard } from '../src/pages/dashboard/TodayCard.js'
 import { WeekCard } from '../src/pages/dashboard/WeekCard.js'
 import { formatFigure } from '../src/pages/dashboard/glanceText.js'
-import { I18nProvider } from '../src/i18n/index.js'
+import { I18nextProvider } from 'react-i18next'
+import { I18nProvider, initI18n } from '../src/i18n/index.js'
 import type { GlanceFigure, GlanceSleep, GlanceStaleSource, GlanceRecovery, GlanceDay } from '../src/data/useGlance.js'
 import { glanceBody, glanceFigure, GLANCE_TODAY } from './glanceFixture.js'
 import type { Sparkline } from '../src/charts/Sparkline.js'
@@ -251,6 +252,10 @@ describe('RecoveryCard', () => {
     expect(html).toContain('>Not scored<')
     expect(html.match(/Not enough readings to score yet\./g)).toHaveLength(1)
     expect(html.match(/>yesterday</g)).toHaveLength(2)
+    // The ring's own accessible name, not just "Score": a screen reader on an unscored day has
+    // nothing else on the ring itself saying there is no score, unlike a sighted reader who sees
+    // the empty ring and "Not scored" beside it.
+    expect(html).toContain('aria-label="Score, not scored"')
   })
 
   it('wide: the card carries is-wide, which is what shows the seven-day strip', () => {
@@ -421,6 +426,19 @@ describe('WeekCard', () => {
     expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">57,432</span> <span class="dash-week-per">· 8,205 a day</span></div>')
     expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">4h 12m</span> <span class="dash-week-per">· 36 min a day</span></div>')
     expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">6h 58m</span> <span class="dash-week-per">a night</span></div>')
+  })
+
+  // The dot between the total and the per-day average has to come from the catalogue, not a
+  // literal in the component, so a translator can change or drop it: overriding the key here and
+  // seeing the override land is what a hardcoded `· ${row.per}` in WeekCard.tsx could never pass.
+  it('reads the total/per-day separator from the translation, not a literal', () => {
+    const i18n = initI18n('en')
+    i18n.addResourceBundle('en', 'translation', { glance: { week: { totalPer: '~ {{per}}' } } }, true, true)
+    const g = { ...glanceBody(), week: { steps: { perDay: 8205.4, days: 6, total: 57432 }, activeMinutes: null, asleep: null } }
+    const html = renderToStaticMarkup(
+      <I18nextProvider i18n={i18n}><WeekCard glance={g} span={4} /></I18nextProvider>,
+    )
+    expect(html).toContain('<span class="dash-week-per">~ 8,205 a day</span>')
   })
 
   it('marks the card when a figure a row draws on is stale', () => {

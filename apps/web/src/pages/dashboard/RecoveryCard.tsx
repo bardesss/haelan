@@ -46,7 +46,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone }: {
       {gauge('rhr', recovery.restingHeartRate, t('charts.units.bpm'))}
       <div className="dash-dial">
         <ScoreRing value={score} size={ringSize} emptyText={t('glance.recovery.notScored')}
-          label={score === null ? t('glance.recovery.score') : [`${t('glance.recovery.index')} ${Math.round(score)}`, bandWords].filter(Boolean).join(', ')} />
+          label={score === null ? t('glance.recovery.scoreUnscored') : [`${t('glance.recovery.index')} ${Math.round(score)}`, bandWords].filter(Boolean).join(', ')} />
         <span className="label">{t('glance.recovery.score')}</span>
       </div>
       {gauge('hrv', recovery.hrv, t('charts.units.milliseconds'))}

@@ -71,7 +71,7 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
             <span className="label">{t(`glance.week.${row.key}`)}</span>
             <div className="dash-week-figure">
               <span className="dash-week-value">{row.value}</span>{' '}
-              <span className="dash-week-per">{row.withTotal ? `· ${row.per}` : row.per}</span>
+              <span className="dash-week-per">{row.withTotal ? t('glance.week.totalPer', { per: row.per }) : row.per}</span>
             </div>
           </div>
           <WeekBars values={row.values} tone={row.tone} label={t(row.labelKey, { what: t(`glance.week.${row.key}`) })} />

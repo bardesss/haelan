@@ -564,6 +564,10 @@
       "sat": "Za",
       "sun": "Zo"
     },
+    "standing": {
+      "above": "boven je gebruikelijke waarde",
+      "below": "onder je gebruikelijke waarde"
+    },
     "absence": {
       "notWorn": "niet gedragen",
       "noReading": "geen meting",
@@ -1448,6 +1452,7 @@
       "unscored": "Nog niet genoeg metingen om te scoren.",
       "notScored": "Geen score",
       "score": "Score",
+      "scoreUnscored": "Score, niet gescoord",
       "strip": "Herstelindex, laatste 7 dagen",
       "caption": "laatste 7 dagen",
       "link": "Bekijk herstel"
@@ -1474,7 +1479,8 @@
       "asleep": "Slaaptijd",
       "perDay": "{{value}} per dag",
       "perNight": "per nacht",
-      "barsLabel": "{{what}}, laatste 7 dagen; het gemiddelde telt alleen volle dagen mee, vandaag dus nog niet",
+      "totalPer": "· {{per}}",
+      "barsLabel": "{{what}}, laatste 7 dagen; het gemiddelde telt alleen hele dagen mee, vandaag dus nog niet",
       "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde"
     },
     "subtitle": {

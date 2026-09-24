@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
 import { chartBase, dayMarks, dayPointDate, dayTableRows, STROKE, OPACITY, SYMBOL } from './base.js'
+import type { PointStanding } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
@@ -20,8 +21,9 @@ const EMPTY = Object.freeze([]) as never[]
 // lifted off the line rather than sitting on it.
 const DOT = { day: 6, latest: 11, rim: 2 } as const
 
-/** A day's verdict against its usual, as the server sends it (`GlanceStripDay.standing`). */
-export type PointStanding = 'within' | 'above' | 'below' | null
+// Re-exported from base.ts (defined there so dayTableRows can read it too) rather than defined
+// here a second time: every existing caller imports `PointStanding` from this module.
+export type { PointStanding } from './base.js'
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
@@ -310,7 +312,7 @@ export function Sparkline({
           // dayTableRows (base.ts): shared with DailyBars' own accessible table, which needs
           // neither the trend column nor the episodic filter, so both default off there.
           rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend,
-            lastYear: comparing ? lastYear : undefined }),
+            lastYear: comparing ? lastYear : undefined, standings: dots ? pointStandings : undefined }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can

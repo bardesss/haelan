@@ -25,6 +25,13 @@ export const SYMBOL = {
 export const AXIS_FONT_SIZE = 12
 
 /**
+ * A day's verdict against its usual, as the server sends it (`GlanceStripDay.standing`). Defined
+ * here rather than in Sparkline.tsx, the one caller that draws it as a dot, because dayTableRows
+ * below reads it too and base.ts already sits under Sparkline.tsx in the import graph.
+ */
+export type PointStanding = 'within' | 'above' | 'below' | null
+
+/**
  * Applies the reader's motion preference to a built option object.
  *
  * useChart re-runs setOption with notMerge on every theme change, so every chart on the page
@@ -259,8 +266,14 @@ export function dayTableRows(input: {
   hasTrend?: boolean
   /** A column for the same days a year earlier, when the reader is comparing (Sparkline). */
   lastYear?: readonly (number | null)[]
+  // One verdict per entry of `values` (Sparkline's own dots): a day the server calls 'above' or
+  // 'below' gets that said in words in the note cell, so a day out of band reads that way to a
+  // screen reader too rather than only by the dot's colour. Undefined for every caller but
+  // Sparkline's dashboard strips - see Sparkline's own `pointStandings` doc comment for why this
+  // is never worked out here from `values` and a baseline.
+  standings?: readonly PointStanding[]
 }): (string | number)[][] {
-  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear } = input
+  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear, standings } = input
   return values
     .map((v, i) => [v, i] as const)
     // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
@@ -284,7 +297,8 @@ export function dayTableRows(input: {
       const cell = format(v, absent)
       return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
         ...(lastYear !== undefined ? [format(lastYear[i] ?? null, t('charts.absence.noReading'))] : []),
-        [isExcluded ? t('charts.absence.excluded') : '',
+        [standings?.[i] === 'above' ? t('charts.standing.above') : standings?.[i] === 'below' ? t('charts.standing.below') : '',
+          isExcluded ? t('charts.absence.excluded') : '',
           // filter, not find: several annotations can land on the same date now that day level
           // marks join the per-metric ones, and a single find() here would silently show only the
           // first and drop the rest. ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate
