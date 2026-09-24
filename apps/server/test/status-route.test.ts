@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { schema, DERIVATION_VERSION, samplePoint } from '@haelan/core'
+import { schema, DERIVATION_VERSION, samplePoint, TransientError } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -106,6 +106,46 @@ describe('GET /api/status', () => {
     const body = response.json() as { connections: { kind: string, problem: string | null }[] }
     const google = body.connections.find((c) => c.kind === 'google')
     expect(google?.problem).toBe('revoked')
+  })
+
+  // The bug: run.lastFailed used to be passed straight through - the last run's instance-wide
+  // failure count across everyone it synced - so a housemate's failing sync marked THIS person's
+  // Google row 'sync_failed' too. Person A has a failing sync_state row of their own and should
+  // see 'sync_failed'; person B, signed in separately with no failing row, should not, even
+  // though the persisted run (shared across the instance) reports a nonzero failure count.
+  it("reports sync_failed from the caller's own failing sync, not a housemate's", async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const tokenA = await harness.signIn()
+    await harness.addPerson({ id: 'p2', displayName: 'Other', username: 'other' })
+    // Person B has their own Google connection too, so their status also carries a 'google'
+    // connection - just one with no failing sync_state row of its own.
+    harness.app.haelan.instance.credentials.putRefreshToken({
+      personId: 'p2', refreshToken: 'stub-refresh-token-2', scopes: [], nowMs: harness.clock.nowMs,
+    })
+    const tokenB = await harness.signIn('other', 'a good long password')
+
+    // Person A's own sync_state has a failing type.
+    harness.app.haelan.stores.syncState.recordFailure({
+      personId: 'p1', dataType: 'steps', error: new TransientError('nope'), nowMs: harness.clock.nowMs,
+    })
+    // The persisted, instance-wide last run reports a failure count too - the figure the old code
+    // read directly, which used to leak into every person's row regardless of whose sync failed.
+    harness.app.haelan.stores.settings.putLastSync(
+      { finishedAtMs: harness.clock.nowMs, rowsWritten: 10, failed: 1 }, harness.clock.nowMs,
+    )
+
+    const responseA = await status(harness, tokenA)
+    expect(responseA.statusCode).toBe(200)
+    const googleA = (responseA.json() as { connections: { kind: string, problem: string | null }[] })
+      .connections.find((c) => c.kind === 'google')
+    expect(googleA?.problem).toBe('sync_failed')
+
+    const responseB = await status(harness, tokenB)
+    expect(responseB.statusCode).toBe(200)
+    const googleB = (responseB.json() as { connections: { kind: string, problem: string | null }[] })
+      .connections.find((c) => c.kind === 'google')
+    expect(googleB?.problem).toBeNull()
   })
 
   it("never shows another person's sources", async () => {

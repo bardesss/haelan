@@ -50,6 +50,10 @@ export function registerStatus(app: FastifyInstance): void {
     }
 
     const run = runner.runState()
+    // run.lastFailed is instance-wide - the last run's failure count across everyone it synced -
+    // so passing it straight through would mark this person's row 'sync_failed' because a
+    // housemate's sync failed, not their own. freshnessFor's own failing count is per person.
+    const failing = stores.syncState.freshnessFor([personId]).get(personId)?.failing ?? 0
     return composeStatus({
       today,
       nowMs,
@@ -58,7 +62,7 @@ export function registerStatus(app: FastifyInstance): void {
         running: run.running,
         lastFinishedAtMs: run.lastFinishedAtMs,
         lastRowsWritten: run.lastRowsWritten,
-        lastFailed: run.lastFailed,
+        lastFailed: run.lastFailed === null ? null : failing,
         cooldownRemainingMs: run.cooldownRemainingMs,
       },
       phone: { lastUploadAtMs, sourceIds: phoneSources },
