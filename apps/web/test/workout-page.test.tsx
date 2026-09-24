@@ -235,7 +235,7 @@ describe('the workout page', () => {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(container?.querySelector('.workout-gps')?.textContent).toBe(
-        'A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Giving Haelan route access in Health Connect (Exercise routes → Always allow) and syncing again on the phone releases it.',
+        'A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Open Haelan on the phone and tap Release routes to hand it over.',
       )
     } finally { restore() }
   })

@@ -36,10 +36,11 @@ function clock(utcMs: number, timeZone: string, language: string): string {
  * and Health Connect would not release it, which is a different answer from "there was no route"
  * and the only one worth a sentence. The sentence used to add that the phone sync "cannot ask
  * for" the route, which stopped being true in android 0.4.0: the companion app requests
- * READ_EXERCISE_ROUTES (SyncEngine.kt), so what is left is a household that has not granted it,
- * or has granted it per workout rather than always. That is fixable from the reader's own phone,
- * so the sentence now says how - route access set to Always allow, then a sync on the phone -
- * instead of explaining why nothing can be done.
+ * READ_EXERCISE_ROUTES (SyncEngine.kt). Not as "grant it and sync again", though, which a first
+ * rewrite said: Health Connect ignores a request for that permission, and hands a background
+ * reader ConsentRequired for another app's routes even under Always allow. What does release one
+ * is the app's own Release routes button, which walks the withheld workouts in the foreground
+ * through Health Connect's per-workout route screen - so that is what the sentence points at.
  *
  * Everything else with no points says nothing. That is deliberate and it replaced a sentence that
  * said the wrong thing: `hasGps` is null for EVERY companion session, so "a GPS route may have

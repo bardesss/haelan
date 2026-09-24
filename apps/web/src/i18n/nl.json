@@ -410,7 +410,7 @@
       "annotate": "Uitsluiten of een notitie toevoegen",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
       "gpsDrawn": "Er is een GPS-route opgenomen voor deze training, hieronder getekend.",
-      "gpsConsentRequired": "Er is een GPS-route opgenomen voor deze training, maar Health Connect houdt die achter, dus er is geen kaart. Geef Haelan in Health Connect toegang tot routes (Trainingsroutes → Altijd toestaan) en synchroniseer opnieuw op de telefoon, dan komt de route alsnog binnen.",
+      "gpsConsentRequired": "Er is een GPS-route opgenomen voor deze training, maar Health Connect houdt die achter, dus er is geen kaart. Open Haelan op de telefoon en tik op Routes vrijgeven om die alsnog door te sturen.",
       "missingTitle": "Geen training gevonden",
       "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat.",
       "tiles": {

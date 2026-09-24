@@ -410,7 +410,7 @@
       "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
       "gpsDrawn": "A GPS route was recorded for this workout, drawn below.",
-      "gpsConsentRequired": "A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Giving Haelan route access in Health Connect (Exercise routes → Always allow) and syncing again on the phone releases it.",
+      "gpsConsentRequired": "A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Open Haelan on the phone and tap Release routes to hand it over.",
       "missingTitle": "No such workout",
       "missingDetail": "This link names a workout that is not in your data.",
       "tiles": {
