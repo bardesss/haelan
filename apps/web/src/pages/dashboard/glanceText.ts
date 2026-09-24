@@ -80,6 +80,30 @@ export function yesterdayOf(today: string): string {
   return date.toISOString().slice(0, 10)
 }
 
+// How far `timeZone` is ahead of UTC at the instant `utcMs`, in milliseconds: the zone's own wall
+// clock read back as if it were UTC, minus the instant itself.
+function zoneOffsetMs(utcMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(utcMs))
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)!.value)
+  const wall = Date.UTC(part('year'), part('month') - 1, part('day'), part('hour'), part('minute'), part('second'))
+  return wall - Math.floor(utcMs / 1000) * 1000
+}
+
+/**
+ * The instant local midnight opens `date` (YYYY-MM-DD) in `timeZone`, which is where the
+ * dashboard's heart rate trace starts (spec M1: its width is the day so far). The offset is read
+ * twice, the second time at the first answer, so a day whose offset changes during it (the clocks
+ * going forward or back) is answered with the offset midnight itself was in.
+ */
+export function localMidnightMs(date: string, timeZone: string): number {
+  const utcMidnight = Date.parse(`${date}T00:00:00Z`)
+  const guess = utcMidnight - zoneOffsetMs(utcMidnight, timeZone)
+  return utcMidnight - zoneOffsetMs(guess, timeZone)
+}
+
 // A moment (asOfMs) as a clock time in the person's own zone, not the browser's: two people
 // looking at the same glance in different zones must read different clock times for the same
 // instant, the way formatClock's own callers already do for a bed or wake time computed server

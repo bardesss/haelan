@@ -19,6 +19,17 @@ const MINUTE_MS = 60_000
 // the top of the plot, deep at the bottom).
 const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
 
+// The compact form's own separator for its one line of totals, the mockup's "Deep 1h 40m · Light
+// 3h 50m": a list of four short figures on a faint line, where the full form's ", " and closing
+// full stop read as the sentence its awake note continues.
+const COMPACT_JOIN = ' · '
+
+// The compact form's plot height and how much of each lane a block fills: stage blocks alone, no
+// axis under them, so the chart is shorter than the full form's 130 and each block is taller in its
+// lane, the approved dashboard mockup's proportions.
+const COMPACT_HEIGHT = 96
+const BLOCK_SHARE = { full: 0.45, compact: 0.75 } as const
+
 /**
  * Per-stage minutes from the segments a hypnogram draws, summed in milliseconds and rounded once
  * rather than rounded per segment and then summed. packages/core/src/derive/sleep.ts's own
@@ -71,7 +82,7 @@ export function clockHours(startMinute: number, endMinute: number): number[] {
   return out
 }
 
-export function Hypnogram({ segments, startLabel, label, startClock, totals: showTotals = true }: {
+export function Hypnogram({ segments, startLabel, label, startClock, totals: showTotals = true, compact = false }: {
   // startMs/endMs: raw milliseconds from the night's own start, not pre-rounded minutes. Sleep.tsx
   // and Dashboard.tsx used to round each boundary to a whole minute before building this prop; that
   // rounding now happens only here, per displayed value (the axis, a table cell), never before a
@@ -90,6 +101,11 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   // total already. Nothing passes it since the dashboard's night card became the page's lead and
   // kept the row; the absence sentence below is what a caller that drops it still gets.
   totals?: boolean
+  // The dashboard's form (spec amendment 2026-09-24): the stage blocks and nothing else on the plot
+  // (no lane labels, no time axis, no bed label), no visible "show numbers" control (the table stays
+  // for a screen reader), and the totals as one faint line without the awake note, which stays on
+  // the Sleep and night pages. False, the default, is the chart every other page draws.
+  compact?: boolean
 }) {
   const { t } = useTranslation()
   const origin = startClock ?? null
@@ -113,8 +129,11 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
             axisLabel: { ...base.axisLabel, customValues: hours, formatter: (v: number) => formatClock(v) },
             splitLine: base.splitLine }
         })()
+    // Compact: the same axes, hidden. They still carry the extent the blocks are placed against;
+    // `show: false` on an axis hides its line, ticks, labels and split lines together.
+    const shownX = compact ? { ...xAxis, show: false } : xAxis
     return {
-      grid: base.grid({ left: 46, top: 10 }),
+      grid: compact ? { left: 0, right: 0, top: 2, bottom: 2 } : base.grid({ left: 46, top: 10 }),
       tooltip: {
         ...base.tooltip,
         // 'item', not 'axis': this is a custom series of rects on a category y, so the thing a
@@ -125,9 +144,9 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
           return hypnogramTooltip(segments, (p as { dataIndex?: number } | undefined)?.dataIndex, t, origin)
         },
       },
-      xAxis,
+      xAxis: shownX,
       yAxis: { type: 'category' as const, data: [...LANES].reverse(),
-        axisLabel: base.axisLabel, ...base.hiddenAxis },
+        axisLabel: base.axisLabel, ...base.hiddenAxis, ...(compact && { show: false }) },
       series: [{
         type: 'custom' as const,
         renderItem: (_params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
@@ -138,7 +157,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
           // api.size() is typed number | number[] for other coord systems; a category/value grid always returns [x, y].
           const laneSize = api.size?.([0, 1]) ?? 20
           const laneHeight = (Array.isArray(laneSize) ? laneSize[1] : laneSize) ?? 20
-          const height = laneHeight * 0.45
+          const height = laneHeight * BLOCK_SHARE[compact ? 'compact' : 'full']
           const mark = stageMark(stage as Stage, tokens)
           return {
             type: 'rect',
@@ -153,15 +172,15 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
         // protect here the way there is in stageTotals below.
         data: segments.map((s) => [shift + s.startMs / MINUTE_MS, shift + s.endMs / MINUTE_MS, LANES.length - 1 - LANES.indexOf(s.stage)]),
       }],
-      graphic: [{ type: 'text' as const, left: 46, top: 0,
+      graphic: compact ? [] : [{ type: 'text' as const, left: 46, top: 0,
         style: { text: startLabel, fill: tokens.muted, fontSize: base.axisLabel.fontSize } }],
     }
-  }, [segments, startLabel, origin, t])
+  }, [segments, startLabel, origin, t, compact])
 
   // The table's From and To say what the axis says: clock times when the night's start is known.
   const at = (ms: number) => origin === null ? formatDuration(ms / MINUTE_MS) : formatClock(origin + ms / MINUTE_MS)
 
-  const { host, style } = useChart(build, 130)
+  const { host, style } = useChart(build, compact ? COMPACT_HEIGHT : 130)
 
   // The same segments the chart above draws, in the same raw milliseconds they already carry: no
   // conversion needed here, since stageTotals sums milliseconds itself. Never the daily
@@ -170,10 +189,10 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   // has had to repair three times already.
   const totals = stageTotals(segments)
   const minutesByStage = new Map(totals.map((total) => [total.stage, total.minutes]))
-  const totalsRow = STAGE_ORDER
+  const stageFigures = STAGE_ORDER
     .filter((stage) => minutesByStage.has(stage))
     .map((stage) => `${t(STAGE_LABEL_KEY[stage])} ${formatDuration(minutesByStage.get(stage)!)}`)
-    .join(ANNOTATION_JOIN)
+  const totalsRow = stageFigures.join(ANNOTATION_JOIN)
   // Said out loud, only on a night that actually has an awake total to be read the wrong way.
   //
   // The awake entry above is the one figure in this row that a metric card on the same page can
@@ -188,7 +207,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
 
   return (
     <>
-      <ChartFigure label={label} host={host} style={style}
+      <ChartFigure label={label} host={host} style={style} tableToggle={!compact}
         table={{
           columns: [t('charts.columns.from'), t('charts.columns.to'), t('charts.columns.stage'), t('charts.columns.duration')],
           // formatDuration rounds its own argument (Math.round(minutes) internally), so each cell
@@ -205,7 +224,13 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
           staging happened, not that staging happened and found nothing. A blank row or three
           invented zeros would claim a measurement that was never taken, so this states the
           absence instead. */}
-      {showTotals ? (
+      {compact ? (
+        // The same stageTotals as the full row above it would print, only joined as a list: the
+        // figures cannot drift apart between the dashboard and the Sleep page.
+        <p className="hypnogram-totals is-compact">
+          {totals.length === 0 ? t('charts.absence.notStaged') : stageFigures.join(COMPACT_JOIN)}
+        </p>
+      ) : showTotals ? (
         <p className="hypnogram-totals">
           {totals.length === 0 ? t('charts.absence.notStaged') : `${totalsRow}.${awakeNote}`}
         </p>

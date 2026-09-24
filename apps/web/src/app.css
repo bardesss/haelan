@@ -691,6 +691,8 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    rather than a shared class because the two components have nothing else in common to couple.
    .hypnogram-absence is the not-staged sentence alone, for a caller that turns the totals off. */
 .hypnogram-totals, .hypnogram-absence { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
+/* The dashboard's compact hypnogram: its totals as one faint line under the stage blocks. */
+.hypnogram-totals.is-compact { margin: 0; color: var(--text-faint); }
 
 /* NightStages.tsx's own nap line, beneath the hypnogram and above NightExcludedSessions' own
    .chart-note - a step up from .hypnogram-totals' caption size, since this is body text stating a
@@ -778,7 +780,8 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .dash-mini-value.is-out, .dash-mini-note { color: var(--negative); }
 .dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 
-/* TodayCard.tsx: the lead's two headline figures and the pace line under them. */
+/* TodayCard.tsx: the two headline figures side by side on one line, and the pace line under them. */
+.dash-today-figures { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-6); }
 .dash-headline-sm { font-size: var(--font-size-xl); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -.02em; }
 .dash-pace { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
 .dash-pace-word { font-weight: var(--weight-medium); }
@@ -817,7 +820,11 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .week-bars.is-active .week-bar { fill: var(--positive); }
 .week-bars.is-sleep .week-bar { fill: var(--chart-stage-rem); }
 .dash-week-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
+.dash-week-figure { margin-top: var(--space-1); }
 .dash-week-value { font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
+/* The per-day average after the week's total, a sibling of the figure rather than inside it: the
+   tokens carry no regular weight to put a child of the bold figure back to. */
+.dash-week-per { font-size: var(--font-size-xs); color: var(--text-faint); }
 
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */

@@ -15,10 +15,18 @@ import type { DayTooltipInput } from './dayTooltip.js'
 // what actually changed, which is precisely the defect chart-lifecycle.test.tsx guards against.
 const EMPTY = Object.freeze([]) as never[]
 
+// The dashboard's day dots (`dots` below): the latest day larger than the rest, both sizes in
+// pixels as echarts takes them, and the latest dot's rim in the card's own colour so it reads as
+// lifted off the line rather than sitting on it.
+const DOT = { day: 6, latest: 11, rim: 2 } as const
+
+/** A day's verdict against its usual, as the server sends it (`GlanceStripDay.standing`). */
+export type PointStanding = 'within' | 'above' | 'below' | null
+
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
-  onPointClick, episodic = false, trend, lastYear,
+  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
@@ -104,6 +112,18 @@ export function Sparkline({
   // prop), and a row-less table beside a mark that keeps asserting something would deny the one day
   // the reader actually acted on, table-only readers included.
   episodic?: boolean
+  // False drops the visible "show numbers" control under the strip and keeps the table for a
+  // screen reader (ChartFigure's own prop of the same name). Only the dashboard's strips pass it.
+  tableToggle?: boolean
+  // A dot on every day with a value, the latest one larger and in the primary text colour. Off
+  // (the default, every caller but the dashboard's three strips) draws the plain line it always has.
+  dots?: boolean
+  // One verdict per entry of `values`, from the server (GlanceStripDay.standing): a dot whose day
+  // is 'above' or 'below' takes the warning colour. Read, never worked out here: comparing a value
+  // against `baseline` in the client would be a second rule for the same verdict, and the server's
+  // own already knows what the client cannot (a thin band, a day still running). Ignored without
+  // `dots`; a missing entry is no verdict.
+  pointStandings?: readonly PointStanding[]
 }) {
   const { t, i18n } = useTranslation()
 
@@ -149,10 +169,18 @@ export function Sparkline({
     }
   })
 
+  // The last day with a value, which is the dot drawn large: "latest" is the newest reading on the
+  // strip, so a strip whose final day has nothing yet still highlights the day that does.
+  const latest = values.reduce<number>((found, v, i) => (v === null ? found : i), -1)
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     // Room on the right for the band's own edge labels, drawn past the last day's point: with no
     // right margin (every other caller) that text would sit flush against, or past, the container.
-    grid: { left: 0, right: bandLabels ? 40 : 0, top: 4, bottom: 4 },
+    // With dots, a margin of half the latest dot on every side, so a day at the strip's edge or
+    // its extreme is drawn whole rather than clipped by the grid.
+    grid: dots
+      ? { left: DOT.latest / 2, right: bandLabels ? 40 : DOT.latest / 2, top: DOT.latest / 2, bottom: DOT.latest / 2 }
+      : { left: 0, right: bandLabels ? 40 : 0, top: 4, bottom: 4 },
     tooltip: {
       ...chartBase(tokens).tooltip,
       trigger: 'axis' as const,
@@ -177,7 +205,18 @@ export function Sparkline({
       // exists, not a fact about whether the metric is taken by hand.
       ...(hasTrend ? [{ type: 'line' as const, data: trend, showSymbol: false, smooth: true,
         connectNulls: true, lineStyle: { width: STROKE.sparkline, color: tokens.seriesAlt } }] : []),
-      { type: 'line' as const, data: values,
+      { type: 'line' as const,
+        data: dots
+          ? values.map((v, i) => {
+            if (v === null) return null
+            const standing = pointStandings[i] ?? null
+            const out = standing === 'above' || standing === 'below'
+            const isLatest = i === latest
+            return { value: v, symbolSize: isLatest ? DOT.latest : DOT.day,
+              itemStyle: { color: out ? tokens.negative : isLatest ? tokens.primary : tokens.series,
+                borderColor: tokens.surface, borderWidth: isLatest ? DOT.rim : 0 } }
+          })
+          : values,
         // A trend line already supplies the connecting line once one is drawn, so the reading
         // series switches from a line to bare points: showSymbol true draws a marker at every
         // reading, and lineStyle opacity 0 (the same idiom IntradayHeartRate uses to hide a
@@ -185,7 +224,7 @@ export function Sparkline({
         // one. Unchanged (a plain connected line, no symbols) when there is no trend line to draw,
         // which is every caller but Weight's weight card and, on that card, every range whose own
         // trend query has not answered with a real point (see hasTrend above).
-        showSymbol: hasTrend, connectNulls: episodic,
+        showSymbol: hasTrend || dots, ...(dots && { symbol: 'circle' }), connectNulls: episodic,
         lineStyle: { width: STROKE.sparkline, color: tokens.series, ...(hasTrend && { opacity: 0 }) },
         // Same markArea shape HeartRateRange draws its band with: a rectangle between two y values,
         // unbounded on x, so it sits behind the line regardless of how many points there are.
@@ -236,7 +275,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, marks, episodic, trend, hasTrend, comparing, lastYear])
+  }), [values, labels, baseline, bandLabels, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
@@ -258,7 +297,7 @@ export function Sparkline({
   const { host, style, tap } = useChart(build, height, onPointClick ? { onClick, describe } : undefined)
   return (
     <>
-      <ChartFigure label={label} host={host} style={style} tap={tap}
+      <ChartFigure label={label} host={host} style={style} tap={tap} tableToggle={tableToggle}
         table={{
           // The trend gets a column of its own whenever it is drawn, between the reading and the
           // note. Without one, the smooth line existed only on the canvas: a table-only reader was

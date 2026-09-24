@@ -84,7 +84,7 @@ export function Dashboard() {
     switch (slot.kind) {
       case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} timezone={timezone} />
       case 'recovery': return <RecoveryCard key="recovery" recovery={recovery} span={slot.span} wide={slot.wide} today={glance.today} timezone={timezone} />
-      case 'today': return <TodayCard key="today" day={day} span={slot.span} timezone={timezone} />
+      case 'today': return <TodayCard key="today" day={day} span={slot.span} today={glance.today} timezone={timezone} />
       case 'week': return <WeekCard key="week" glance={glance} span={slot.span} />
     }
   }

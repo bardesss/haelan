@@ -132,6 +132,26 @@ describe('the glance Dashboard', () => {
     } finally { restore() }
   })
 
+  // Spec amendment 2026-09-24: no chart on a dashboard card shows the visible "show numbers"
+  // control, and every chart keeps its table for assistive tech. The whole page, with the real
+  // strips mounted, so a card that forgets the prop on any of its charts is caught here.
+  it('shows no show-numbers control on any card, and keeps one clipped table per chart', async () => {
+    const { restore } = await mountPage()
+    try {
+      const hosts = container!.querySelectorAll('div[role="img"]')
+      // The night strip and hypnogram, recovery's strip (in the markup for the mid band, hidden by
+      // CSS otherwise), today's strip and the heart rate trace.
+      expect(hosts).toHaveLength(5)
+      expect(container!.querySelectorAll('.chart-table-toggle')).toHaveLength(0)
+      const tables = [...container!.querySelectorAll('table')]
+      expect(tables).toHaveLength(hosts.length)
+      for (const table of tables) {
+        expect(table.className).toBe('sr-only')
+        expect(table.parentElement!.className).toBe('sr-only')
+      }
+    } finally { restore() }
+  })
+
   it('links the night card to the night it draws, and draws that night\'s hypnogram', async () => {
     const { restore } = await mountPage()
     try {
@@ -412,7 +432,13 @@ describe('the glance Dashboard', () => {
       // these once ended on a bare adjective ("boven je gebruikelijke 52 – 60") with every test green.
       const rhr = cardTitled('Herstel')!.querySelector('.usual-gauge')
       expect(rhr?.getAttribute('aria-label')).toBe('Rusthartslag 62 bpm, boven je gebruikelijke bereik 52 – 60')
-      expect(cardTitled('Vandaag')!.querySelector('.glance-asof')?.textContent).toBe('bijgewerkt om 11:38')
+      // The heart rate trace's as-of line, read for a screen reader only since the trace became the
+      // compact form (spec amendment 2026-09-24): reached through the chart's own aria-describedby,
+      // so it is the description the chart announces rather than any line that happens to match.
+      const trace = cardTitled('Vandaag')!.querySelector('[role="img"][aria-label="Hartslag vandaag"]')
+      const described = container!.querySelector(`[id="${trace?.getAttribute('aria-describedby')}"]`)
+      expect(described?.textContent).toBe('bijgewerkt om 11:38')
+      expect(described?.className).toBe('sr-only')
     } finally { restore() }
   })
 

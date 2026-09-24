@@ -54,14 +54,15 @@ export function RecoveryCard({ recovery, span, wide, today, timezone }: {
   )
   // The seven-day index strip. Always in the markup; CSS shows it only when the card has the row to
   // itself (.is-wide) or in the 900-1200px band, where the grid gives every dashboard card span 12.
-  const { values, labels } = useMemo(() => ({
+  const { values, labels, standings } = useMemo(() => ({
     values: index.strip.map((d) => d.value), labels: index.strip.map((d) => d.localDate),
+    standings: index.strip.map((d) => d.standing),
   }), [index.strip])
   const strip = values.filter((v) => v !== null).length > 1 ? (
     <div className="dash-recovery-strip">
       <Described text={t('glance.recovery.caption')} hidden>
         <Sparkline values={values} labels={labels} label={t('glance.recovery.strip')} unit={t('glance.recovery.index')}
-          metric={index.metric} height={64}
+          metric={index.metric} height={64} dots pointStandings={standings} tableToggle={false}
           formatValue={(v, absent) => (v === null ? absent : String(Math.round(v)))} />
       </Described>
       <p className="dash-caption">{t('glance.recovery.caption')}</p>

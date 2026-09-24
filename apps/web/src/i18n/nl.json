@@ -1457,7 +1457,7 @@
       "subtitle": "tot nu toe",
       "steps": "Stappen",
       "activeMinutes": "Actieve minuten",
-      "heartRate": "Hartslag",
+      "heartRateSinceMidnight": "Hartslag · 00:00 → nu",
       "heartRateChart": "Hartslag vandaag",
       "strip": "Stappen, laatste 7 dagen",
       "caption": "laatste 7 dagen",
@@ -1472,7 +1472,7 @@
       "steps": "Stappen",
       "active": "Actief",
       "asleep": "Slaaptijd",
-      "perDay": "per dag",
+      "perDay": "{{value}} per dag",
       "perNight": "per nacht",
       "barsLabel": "{{what}}, laatste 7 dagen; het gemiddelde telt alleen volle dagen mee, vandaag dus nog niet",
       "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde"

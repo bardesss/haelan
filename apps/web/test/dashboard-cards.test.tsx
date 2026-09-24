@@ -27,6 +27,15 @@ vi.mock('../src/charts/Sparkline.js', () => ({
   },
 }))
 
+// The markup's chart hosts and their accessible tables, counted the way pages.test.tsx's chart
+// rule counts them: one sr-only table per role="img" host.
+function chartHosts(html: string): number {
+  return [...html.matchAll(/<div[^>]*role="img"[^>]*>/g)].length
+}
+function srTables(html: string): number {
+  return [...html.matchAll(/<table class="sr-only">/g)].length
+}
+
 const WATCH: GlanceStaleSource = { sourceId: 's1', name: 'My watch', lastReportedDate: '2026-09-10', medianGapDays: 1 }
 
 function render(props: Partial<Parameters<typeof DashCard>[0]> = {}): string {
@@ -154,6 +163,45 @@ describe('NightCard', () => {
     renderNight({ sleep })
     expect(sparklineProps?.bandLabels).toBeUndefined()
   })
+
+  // Spec amendment 2026-09-24 (T2): the hypnogram's compact form ends in one faint line of stage
+  // totals, and the awake explanation the Sleep page prints under it does not come along. A night
+  // with an awake segment, since that is the only night the full form prints the note on.
+  it('ends the hypnogram in one faint line of stage totals, without the awake paragraph', () => {
+    const base = sleepFixture()
+    const start = base.startMs
+    const sleep: GlanceSleep = {
+      ...base,
+      segments: [
+        { stage: 'LIGHT', startMs: start, endMs: start + 60 * 60_000 },
+        { stage: 'AWAKE', startMs: start + 60 * 60_000, endMs: start + 67 * 60_000 },
+        { stage: 'DEEP', startMs: start + 67 * 60_000, endMs: start + 167 * 60_000 },
+        { stage: 'REM', startMs: start + 167 * 60_000, endMs: start + 214 * 60_000 },
+      ],
+    }
+    const html = renderNight({ sleep })
+    expect(html).toContain('<p class="hypnogram-totals is-compact">Deep 1h 40m · Light 1h 00m · REM 0h 47m · Awake 0h 07m</p>')
+    expect(html).not.toContain('class="hypnogram-totals"')
+    expect(html).not.toContain('Awake counts the awake stages')
+  })
+
+  it('draws no visible show-numbers control, and keeps each chart\'s table for assistive tech', () => {
+    const html = renderNight()
+    expect(html).not.toContain('chart-table-toggle')
+    expect(chartHosts(html)).toBe(1)
+    expect(srTables(html)).toBe(1)
+    expect(sparklineProps?.tableToggle).toBe(false)
+  })
+
+  it('hands the strip a dot per night and the server\'s verdict for each', () => {
+    const base = sleepFixture()
+    const sleep = sleepFixture({
+      asleep: { strip: base.asleep.strip.map((d, i) => ({ ...d, standing: i === 2 ? 'above' as const : null })) },
+    })
+    renderNight({ sleep })
+    expect(sparklineProps?.dots).toBe(true)
+    expect(sparklineProps?.pointStandings).toEqual([null, null, 'above', null, null, null, null])
+  })
 })
 
 function recoveryFixture(over: {
@@ -182,6 +230,10 @@ function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {})
 }
 
 describe('RecoveryCard', () => {
+  beforeEach(() => {
+    sparklineProps = null
+  })
+
   it('draws the score between the two gauges, each named by its usual sentence', () => {
     const html = renderRecovery()
     expect(html.indexOf('usual-gauge')).toBeLessThan(html.indexOf('score-ring'))
@@ -212,6 +264,26 @@ describe('RecoveryCard', () => {
     expect(html).not.toContain('is-wide')
     expect(html).toContain('class="dash-recovery-strip"')
   })
+
+  // A thin baseline is not the person's usual yet, so no gauge shades one. The default fixture's
+  // two gauges both draw a band, which is what makes the absence here mean something.
+  it('draws no usual band on a gauge whose baseline is thin', () => {
+    expect(renderRecovery().match(/class="usual-gauge-band"/g)).toHaveLength(2)
+    const recovery = recoveryFixture({
+      restingHeartRate: { baseline: { center: 56, low: 52, high: 60, thin: true } },
+      hrv: { baseline: { center: 50, low: 44, high: 56, thin: true } },
+    })
+    expect(renderRecovery({ recovery })).not.toContain('usual-gauge-band')
+  })
+
+  it('gives the score strip dots, the server\'s verdicts, and no visible show-numbers control', () => {
+    const base = recoveryFixture()
+    const recovery = recoveryFixture({ index: { strip: base.index.strip.map((d, i) => ({ ...d, standing: i === 0 ? 'below' as const : null })) } })
+    renderRecovery({ recovery, span: 12, wide: true })
+    expect(sparklineProps?.dots).toBe(true)
+    expect(sparklineProps?.pointStandings).toEqual(['below', null, null, null, null, null, null])
+    expect(sparklineProps?.tableToggle).toBe(false)
+  })
 })
 
 function dayFixture(over: { steps?: Partial<GlanceFigure>, stepsPace?: GlanceDay['stepsPace'] } = {}): GlanceDay {
@@ -231,7 +303,7 @@ function renderToday(props: Partial<Parameters<typeof TodayCard>[0]> = {}): stri
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <I18nProvider lng="en">
-        <TodayCard day={dayFixture()} span={8} timezone="UTC" {...props} />
+        <TodayCard day={dayFixture()} span={8} today={TODAY} timezone="UTC" {...props} />
       </I18nProvider>
     </QueryClientProvider>,
   )
@@ -254,6 +326,57 @@ describe('TodayCard', () => {
   it('falls back to the so-far line without a pace', () => {
     const html = renderToday({ day: dayFixture({ stepsPace: null }) })
     expect(html).toContain('so far; your usual day')
+  })
+
+  it('says behind in plain words, exactly, at the last reading\'s time', () => {
+    const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, atMs: Date.UTC(2026, 8, 23, 11, 52), standing: 'behind' } })
+    const html = renderToday({ day, timezone: 'Europe/Amsterdam' })
+    expect(html).toContain('<p class="dash-pace"><span class="dash-pace-word">Behind your usual pace</span> · usual by 13:52 is 5,900</p>')
+  })
+
+  // T2: steps and active minutes side by side on one line, each a label over its figure, then the
+  // pace line directly under them.
+  it('puts steps and active minutes in one row, the pace line under it', () => {
+    expect(renderToday()).toContain(
+      '<div class="dash-today-figures">'
+      + '<div><span class="label">Steps</span><div class="dash-headline-sm">4,820</div></div>'
+      + '<div><span class="label">Active minutes</span><div class="dash-headline-sm">18 <span class="glance-unit">min</span></div></div>'
+      + '</div><p class="dash-pace">',
+    )
+  })
+
+  it('labels the heart rate trace from midnight to now, and draws it compact', () => {
+    const html = renderToday()
+    expect(html).toContain('<span class="label">Heart rate · 00:00 → now</span>')
+    // Only the heart rate trace reaches static markup here (the strip's Sparkline is the spy); its
+    // host is the compact form's 84px rather than the full chart's 170.
+    expect(chartHosts(html)).toBe(1)
+    expect(html).toMatch(/<div role="img" aria-label="Heart rate today" aria-describedby="[^"]+" style="[^"]*height:84px/)
+  })
+
+  it('draws no visible show-numbers control, and keeps each chart\'s table for assistive tech', () => {
+    const html = renderToday()
+    expect(html).not.toContain('chart-table-toggle')
+    expect(chartHosts(html)).toBe(1)
+    expect(srTables(html)).toBe(1)
+    expect(sparklineProps?.tableToggle).toBe(false)
+  })
+
+  it('hands the steps strip its band, band labels, dots and the server\'s verdicts', () => {
+    const base = dayFixture()
+    const day = dayFixture({ steps: { strip: base.steps.strip.map((d, i) => ({ ...d, standing: i === 1 ? 'below' as const : null })) } })
+    renderToday({ day })
+    expect(sparklineProps?.baseline).toEqual(day.steps.baseline)
+    expect(sparklineProps?.bandLabels).toEqual({ low: '8,000', high: '9,500' })
+    expect(sparklineProps?.dots).toBe(true)
+    expect(sparklineProps?.pointStandings).toEqual([null, 'below', null, null, null, null, null])
+  })
+
+  it('hands the steps strip neither band nor labels on a thin baseline', () => {
+    renderToday({ day: dayFixture({ steps: { baseline: { center: 8700, low: 8000, high: 9500, thin: true } } }) })
+    expect(sparklineProps).not.toBeNull()
+    expect(sparklineProps?.baseline).toBeUndefined()
+    expect(sparklineProps?.bandLabels).toBeUndefined()
   })
 })
 
@@ -284,6 +407,20 @@ describe('WeekCard', () => {
     const html = renderWeek({ glance: g })
     expect(html).toContain('aria-label="Asleep, last 7 nights; the average includes last night"')
     expect(html).toContain('aria-label="Steps, last 7 days; the average counts finished days only, today not counted"')
+  })
+
+  // T2: steps and active time lead with the week's total, the per-day average after it; sleep keeps
+  // the per-night average alone.
+  it('shows the seven-day total with the per-day average after it, and sleep per night only', () => {
+    const g = { ...glanceBody(), week: {
+      steps: { perDay: 8205.4, days: 6, total: 57432 },
+      activeMinutes: { perDay: 36.2, days: 6, total: 252 },
+      asleep: { perDay: 418, days: 7, total: 2926 },
+    } }
+    const html = renderWeek({ glance: g })
+    expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">57,432</span> <span class="dash-week-per">· 8,205 a day</span></div>')
+    expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">4h 12m</span> <span class="dash-week-per">· 36 min a day</span></div>')
+    expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">6h 58m</span> <span class="dash-week-per">a night</span></div>')
   })
 
   it('marks the card when a figure a row draws on is stale', () => {

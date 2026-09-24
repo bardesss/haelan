@@ -35,6 +35,12 @@ const CHART_SOURCES = {
 const SEMANTIC_SOURCES = {
   muted: 'text-muted',
   surface: 'surface-card',
+  // The dashboard strips' day dots (Sparkline's `dots`): the latest day in the primary text colour,
+  // a day the server called outside its usual in the warning colour, the same --negative the
+  // cards' own out-of-range figures use. Semantic rather than new chart roles, because a dot that
+  // disagreed with the figure it stands beside would be a second vocabulary for one verdict.
+  primary: 'text-primary',
+  negative: 'negative',
 } as const satisfies Record<string, SemanticToken>
 
 export type ChartTokens = Record<keyof typeof CHART_SOURCES | keyof typeof SEMANTIC_SOURCES, string>

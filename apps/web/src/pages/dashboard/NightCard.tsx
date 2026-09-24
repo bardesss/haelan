@@ -40,7 +40,10 @@ function nightSpan(sleep: GlanceSleep, language: string, timeZone: string): stri
 
 /**
  * Last night as the page's lead: the time asleep in display type, efficiency, bed and wake in one
- * compact row, the seven-night strip with the usual shaded behind it, and the hypnogram full width.
+ * compact row, the seven-night strip with the usual shaded behind it and a dot per night, and the
+ * hypnogram full width in its compact form (stage blocks, then one faint line of stage totals), as
+ * the approved T2 mockup draws it. The awake note the Sleep page prints under its hypnogram stays
+ * there.
  *
  * The grey "within your usual range" line under every figure is gone from sight on purpose (the
  * redesign's point) and kept for a screen reader: the strip's description is usualLine's sentence.
@@ -57,8 +60,9 @@ export function NightCard({ sleep, span, timezone }: {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const segments = useMemo(() => hypnogramSegments(sleep), [sleep])
-  const { values, labels } = useMemo(() => ({
+  const { values, labels, standings } = useMemo(() => ({
     values: sleep.asleep.strip.map((d) => d.value), labels: sleep.asleep.strip.map((d) => d.localDate),
+    standings: sleep.asleep.strip.map((d) => d.standing),
   }), [sleep.asleep.strip])
   const band = sleep.asleep.baseline !== null && !sleep.asleep.baseline.thin ? sleep.asleep.baseline : undefined
   // R3: the band is shaded behind the strip AND its two edges are labelled, so a reader is never
@@ -105,6 +109,7 @@ export function NightCard({ sleep, span, timezone }: {
             <Described text={usualLine(sleep.asleep, t, language) ?? t('glance.sleep.caption')} hidden>
               <Sparkline values={values} labels={labels} label={t('glance.sleep.strip')} unit={t('glance.sleep.asleep')}
                 metric={sleep.asleep.metric} baseline={band} bandLabels={bandLabels} height={64}
+                dots pointStandings={standings} tableToggle={false}
                 formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...sleep.asleep, value: v }, language) ?? absent)} />
             </Described>
             <p className="dash-caption">{t('glance.sleep.caption')}</p>
@@ -112,7 +117,7 @@ export function NightCard({ sleep, span, timezone }: {
         )}
       </div>
       <Described hidden text={t('sleep.sleepStages.basis', { date: sleep.localDate })}>
-        <Hypnogram segments={segments} startLabel={startLabel} startClock={bedMinutes} totals
+        <Hypnogram segments={segments} startLabel={startLabel} startClock={bedMinutes} compact
           label={t('sleep.sleepStages.chartLabel', { date: sleep.localDate })} />
       </Described>
     </DashCard>
