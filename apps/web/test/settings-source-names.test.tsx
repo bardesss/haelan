@@ -513,3 +513,95 @@ describe('showing a source in the status panel', () => {
     expect(panelWrites()).toEqual([{ method: 'DELETE', url: '/api/v1/p/p1/sources/watch/panel', body: undefined }])
   })
 })
+
+/**
+ * Arriving at /account#sources from the status panel's "Choose sources…" link. The Account page
+ * scrolls to the card on mount, but on a cold load every card above it is still a spinner then,
+ * and they grow as their data lands: the page scrolled to where the card was, and the card moved
+ * down out from under it. This card asks again once its own list has arrived.
+ */
+describe('arriving at #sources', () => {
+  let original: typeof fetch
+  let before: string
+  let scrolledTo: string[] = []
+  const realScrollIntoView = HTMLElement.prototype.scrollIntoView
+  beforeEach(() => {
+    original = globalThis.fetch
+    before = window.location.pathname + window.location.search + window.location.hash
+    scrolledTo = []
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) { scrolledTo.push(this.id) }
+    // The list answers a little later, the way a cold load does.
+    globalThis.fetch = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15))
+      return new Response(JSON.stringify({ items: [namedSource()] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+  })
+  afterEach(() => {
+    globalThis.fetch = original
+    HTMLElement.prototype.scrollIntoView = realScrollIntoView
+    window.history.replaceState(null, '', before)
+  })
+
+  // The sources query left unseeded on purpose, so it is pending at mount and arrives later.
+  function mountCold(): void {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    client.setQueryData(sourcePriorityKey(PERSON.personId), seededPriority([namedSource()]))
+    act(() => {
+      root?.render(
+        <QueryClientProvider client={client}>
+          <I18nProvider lng="en"><div id="sources"><SourceNames /></div></I18nProvider>
+        </QueryClientProvider>,
+      )
+    })
+  }
+
+  // Bounded ticks, for the reason 'holds the switch still' gives: the query's success lands on a
+  // scheduled timer tick, not a microtask.
+  async function untilListed(): Promise<void> {
+    for (let i = 0; i < 40 && inputElements().length === 0; i += 1) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+    }
+    expect(inputElements()).toHaveLength(1)
+  }
+
+  it('scrolls to the card again once its list has arrived', async () => {
+    window.history.replaceState(null, '', '/account#sources')
+    mountCold()
+    expect(scrolledTo).toEqual([])
+    await untilListed()
+    expect(scrolledTo).toEqual(['sources'])
+  })
+
+  it('leaves the page where it is when the fragment names something else', async () => {
+    window.history.replaceState(null, '', '/account#elsewhere')
+    const elsewhere = document.createElement('div')
+    elsewhere.id = 'elsewhere'
+    document.body.appendChild(elsewhere)
+    try {
+      mountCold()
+      await untilListed()
+      expect(scrolledTo).toEqual([])
+    } finally {
+      elsewhere.remove()
+    }
+  })
+
+  // A list already cached at mount changes nothing after it, and the Account page's own mount
+  // scroll is what covers that case; asking again here would be a second jump for no reason.
+  it('does not scroll when its list was already there at mount', () => {
+    window.history.replaceState(null, '', '/account#sources')
+    // A target in the document, so the assertion below is about this card not asking, not about
+    // the fragment finding nothing to scroll to.
+    const target = document.createElement('div')
+    target.id = 'sources'
+    document.body.appendChild(target)
+    try {
+      mountSection([namedSource()])
+      expect(inputElements()).toHaveLength(1)
+      expect(scrolledTo).toEqual([])
+    } finally {
+      target.remove()
+    }
+  })
+})

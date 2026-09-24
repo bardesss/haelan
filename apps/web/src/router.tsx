@@ -117,9 +117,11 @@ export function subscribeForTest(listener: () => void): () => void {
  * pushState, which moves the URL and never scrolls. So a Link to "/account#sources" lands at the
  * top of the account page unless something asks. Called by the page that owns the target when it
  * mounts, and by the status panel after its own link, because with the reader already on /account
- * nothing mounts and useRoute (pathname and search, no fragment) does not change either.
+ * nothing mounts and useRoute (pathname and search, no fragment) does not change either. And by
+ * a target whose own content arrives late (SourceNames), with `only` naming it, because a mount
+ * time scroll on a cold load lands before the cards above have grown to their loaded height.
  */
-export function scrollToHashTarget(): void {
+export function scrollToHashTarget(only?: string): void {
   if (typeof window === 'undefined') return
   // decodeURIComponent throws URIError on a malformed escape (#%E0), and the fragment is whatever
   // the address bar holds. The Account page calls this on mount, so a throw would take the page
@@ -131,6 +133,9 @@ export function scrollToHashTarget(): void {
     return
   }
   if (id === '') return
+  // `only` is for a component asking on behalf of its own target (SourceNames, once its list has
+  // loaded): it must not move the page when the fragment names somewhere else.
+  if (only !== undefined && id !== only) return
   document.getElementById(id)?.scrollIntoView({ block: 'start' })
 }
 
