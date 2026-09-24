@@ -138,7 +138,7 @@ function Headline({ item, today, timezone, night, dayInSubtitle, t, language }: 
  */
 export function GlanceCard({
   title, subtitle, headline, emptyLine, secondary, stripLabel, stripCaption, chart, chartStaleSources = NO_SOURCES,
-  note, link, today, timezone, night = false, dayInSubtitle = false,
+  extra, note, link, today, timezone, night = false, dayInSubtitle = false,
 }: {
   title: string
   subtitle: string | null
@@ -163,6 +163,12 @@ export function GlanceCard({
    * behind the only chart in a column must still put the mark beside that column's title.
    */
   chartStaleSources?: readonly GlanceStaleSource[]
+  /**
+   * Anything a column lists under its figures, such as today's workouts in the today column. Its
+   * own component decides whether it renders at all, so a column with nothing to list draws the
+   * same card it always did.
+   */
+  extra?: ReactNode
   /** A line under everything else, such as an elevated breathing rate or why recovery is unscored. */
   note?: string | null
   link: { to: string, text: string }
@@ -234,6 +240,7 @@ export function GlanceCard({
               metric={headline.figure.metric} formatValue={formatStripValue} />
           </Described>
         )}
+        {extra}
         {note && <p className="glance-note">{note}</p>}
         <Link to={link.to} className="card-link">{link.text}</Link>
       </div>

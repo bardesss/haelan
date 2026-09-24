@@ -393,13 +393,15 @@ describe('the glance Dashboard', () => {
 
   // "On the today tab, you should also see the activities you did." The glance carries today's
   // workouts, already merged across sources by the server, and each row opens the workout's page.
-  it('lists today\'s workouts in a card of their own, each linking to its page', async () => {
+  it('lists today\'s workouts inside the today column, each linking to its page', async () => {
     const body = glanceBody()
     body.day.workouts = [TODAY_RUN, { ...TODAY_RUN, id: 'swim1', startMs: TODAY_RUN.startMs + 4 * 3_600_000, endMs: TODAY_RUN.endMs + 4 * 3_600_000, attrs: { exerciseType: 'SWIMMING_POOL' } }]
     const { restore } = await mountPage(body)
     try {
-      const card = container!.querySelector('.today-workouts')!.closest('.card')!
-      expect(card.getAttribute('data-span')).toBe('12')
+      // The today column's own card, not a fourth one: three span-4 columns and nothing under them.
+      expect(container!.querySelectorAll('.card')).toHaveLength(3)
+      const card = container!.querySelector('.today-workouts')!
+      expect(card.closest('.card')!.querySelector('a.card-link')?.getAttribute('href')).toBe('/activity')
       expect(card.querySelector('.label')?.textContent).toBe('Today\'s activities')
       // Oldest first, the order the day happened in, rather than the Activity list's newest first.
       expect([...card.querySelectorAll('a.session-row-link')].map((a) => a.getAttribute('href')))
@@ -447,8 +449,7 @@ describe('the glance Dashboard', () => {
     body.day.workouts = [TODAY_RUN]
     const { restore } = await mountPage(body, { lng: 'nl' })
     try {
-      expect(container!.querySelector('.today-workouts')!.closest('.card')!.querySelector('.label')?.textContent)
-        .toBe('Activiteiten van vandaag')
+      expect(container!.querySelector('.today-workouts .label')?.textContent).toBe('Activiteiten van vandaag')
     } finally { restore() }
   })
 
