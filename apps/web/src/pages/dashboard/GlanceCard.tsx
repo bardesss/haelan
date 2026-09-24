@@ -1,15 +1,14 @@
-import { useId, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import type { GlanceFigure, GlanceStaleSource } from '../../data/useGlance.js'
 import { Card } from '../../components/Card.js'
-import { BasisContext } from '../../components/basis.js'
-import { SourceWarning, useUnshownCardWarning } from '../../components/SourceWarning.js'
 import { staleSentence } from '../../components/staleSentence.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import { Link } from '../../router.js'
 import { useTranslation } from '../../i18n/index.js'
 import type { Translate } from '../../format.js'
 import { formatFigure, usualLine, asOfLine } from './glanceText.js'
+import { Described, DashTitle, staleUnion, NO_SOURCES } from './cardShared.js'
 
 /**
  * One figure as a glance card prints it. `unit` is display text the page has already translated
@@ -30,65 +29,12 @@ export interface GlanceCardFigure {
   usual?: string
 }
 
-// A stable empty list for a card with no chart, so the union below is not rebuilt against a fresh
-// `[]` default on every render - the same device Sparkline.tsx's own EMPTY constant uses.
-const NO_SOURCES: readonly GlanceStaleSource[] = Object.freeze([])
-
-// Every stale source behind anything this card shows, once each. Keyed on sourceId rather than on
-// the name, because two sources can share a display name while being two separate devices that
-// each went quiet, and one watch feeding three of the card's figures must still read as one
-// sentence rather than the same sentence three times over.
-function staleUnion(figures: readonly GlanceCardFigure[], extra: readonly GlanceStaleSource[]): GlanceStaleSource[] {
-  const seen = new Map<string, GlanceStaleSource>()
-  for (const source of [...figures.flatMap((f) => f.figure.staleSources), ...extra]) {
-    if (!seen.has(source.sourceId)) seen.set(source.sourceId, source)
-  }
-  return [...seen.values()]
-}
-
 // The printed value with its unit, or null when the figure has no value yet. A space before the
 // unit, the convention StatTile's own `<span> {unit}</span>` and formatWithUnit share.
 function valueText(item: GlanceCardFigure, language: string): string | null {
   const value = formatFigure(item.figure, language)
   if (value === null) return null
   return item.unit ? `${value} ${item.unit}` : value
-}
-
-// The column's name and its muted span ("so far", "today"), and the stale-source mark beside them.
-// A component of its own rather than markup inline in GlanceCard, because the mark arrives through
-// Card's context (this card passes Card no label, so Card hands the warning down instead of drawing
-// it), and a context is only readable from inside the provider Card renders around its children.
-// The mark sits after the heading rather than inside it: its sentence is read out through an
-// sr-only span, and inside the h2 that sentence became part of the heading's accessible name, so a
-// screen reader listing headings heard a whole warning where the column's name should be.
-function GlanceTitle({ title, subtitle }: { title: string, subtitle: string | null }) {
-  const warning = useUnshownCardWarning()
-  return (
-    <div className="glance-card-head">
-      <h2 className="glance-card-title">
-        <strong>{title}</strong>{subtitle !== null && <>{' '}<span>{subtitle}</span></>}
-      </h2>
-      {warning !== null && <SourceWarning text={warning} />}
-    </div>
-  )
-}
-
-/**
- * A chart and the line that describes it, wired the way Card and StatTile wire a basis line: the
- * line's id goes into BasisContext, and ChartFigure points the chart's aria-describedby at it. A
- * glance card hands Card no basis (its columns say what they are in their own words), so without
- * this a chart inside one had a name and no description, which pages.test.tsx's chart rule refuses.
- * `hidden` keeps the line for a screen reader only, for a chart whose card already prints the same
- * fact where a sighted reader looks for it.
- */
-export function Described({ text, hidden = false, children }: { text: string, hidden?: boolean, children: ReactNode }) {
-  const id = useId()
-  return (
-    <div>
-      <BasisContext.Provider value={id}>{children}</BasisContext.Provider>
-      <p className={hidden ? 'sr-only' : 'glance-asof'} id={id}>{text}</p>
-    </div>
-  )
 }
 
 function Headline({ item, today, timezone, night, dayInSubtitle, t, language }: {
@@ -181,7 +127,7 @@ export function GlanceCard({
   const language = i18n.language
 
   const shown = headline === null ? secondary : [headline, ...secondary]
-  const warning = staleSentence(staleUnion(shown, chartStaleSources), t, language)
+  const warning = staleSentence(staleUnion(shown.map((f) => f.figure), chartStaleSources), t, language)
 
   // Memoised on the strip itself: Sparkline's chart is rebuilt whenever its values or labels change
   // identity (chart-lifecycle.test.tsx guards exactly that), and arrays mapped fresh here on every
@@ -205,7 +151,7 @@ export function GlanceCard({
   return (
     <Card span={4} warning={warning}>
       <div className="glance-card">
-        <GlanceTitle title={title} subtitle={subtitle} />
+        <div className="glance-card-head"><DashTitle title={title} subtitle={subtitle} /></div>
         {headline === null
           ? <p className="glance-empty">{emptyLine}</p>
           : <Headline item={headline} today={today} timezone={timezone} night={night}

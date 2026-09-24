@@ -65,7 +65,7 @@ function render(over: Partial<Props> = {}): string {
 describe('GlanceCard', () => {
   it('prints the headline label, its formatted value, the usual line and the as-of line', () => {
     const html = render({ headline: { label: 'Steps', figure: figure({ standing: 'below' }) } })
-    expect(html).toContain('<h2 class="glance-card-title"><strong>Today</strong> <span>so far</span></h2>')
+    expect(html).toContain('<h2 class="dash-card-title"><strong>Today</strong> <span>so far</span></h2>')
     expect(html).toContain('<span class="label">Steps</span>')
     expect(html).toContain('<div class="value">4,820</div>')
     expect(html).toContain('<p class="basis">below your usual 8,000 – 9,500</p>')
@@ -159,7 +159,7 @@ describe('GlanceCard', () => {
     expect(html).toContain(`<span class="source-warning" title="${sentence}">`)
     // Right after the heading, on its row, so the mark sits beside the column's name rather than
     // floating in the card, and outside the h2 so its sentence is not part of the heading's name.
-    expect(html).toMatch(/<div class="glance-card-head"><h2 class="glance-card-title"><strong>Today<\/strong> <span>so far<\/span><\/h2><span class="source-warning"/)
+    expect(html).toMatch(/<div class="glance-card-head"><h2 class="dash-card-title"><strong>Today<\/strong> <span>so far<\/span><\/h2><span class="source-warning"/)
   })
 
   it('keeps the warning\'s sentence out of the heading\'s accessible name', () => {
@@ -275,7 +275,7 @@ const TODAY_RUN: WorkoutSession = {
 }
 
 const cards = (): Element[] => [...container!.querySelectorAll('.glance-card')]
-const titles = (): string[] => [...container!.querySelectorAll('.glance-card-title strong')].map((el) => el.textContent ?? '')
+const titles = (): string[] => [...container!.querySelectorAll('.dash-card-title strong')].map((el) => el.textContent ?? '')
 
 describe('the glance Dashboard', () => {
   it('draws three cards in order, one per question', async () => {
@@ -306,7 +306,7 @@ describe('the glance Dashboard', () => {
       const bedPair = [...sleep.querySelectorAll('.glance-mini > div')].find((d) => d.querySelector('.label')?.textContent === 'Bed')
       expect(bedPair?.querySelector('b')?.textContent).toBe('23:10')
       // The night spans two dates, and the subtitle names both.
-      expect(sleep.querySelector('.glance-card-title span')?.textContent).toMatch(/22.*23/)
+      expect(sleep.querySelector('.dash-card-title span')?.textContent).toMatch(/22.*23/)
     } finally { restore() }
   })
 
@@ -475,7 +475,7 @@ describe('the glance Dashboard', () => {
     const { restore } = await mountPage()
     try {
       const [sleep, recovery, today] = cards()
-      expect(recovery!.querySelector('.glance-card-title span')?.textContent).toBe('today')
+      expect(recovery!.querySelector('.dash-card-title span')?.textContent).toBe('today')
       expect(recovery!.querySelector('.value ~ .glance-asof')).toBeNull()
       expect(recovery!.textContent!.split('today')).toHaveLength(2)
       // Not the card's whole text: the chart's own screen-reader description names the night too.

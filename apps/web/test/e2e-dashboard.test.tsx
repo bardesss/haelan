@@ -181,7 +181,7 @@ describe('the end to end path: a real server behind a real render', () => {
       if (!stepsCard) {
         throw new Error(`no card labelled "Steps" among ${cards.length} rendered cards; got: ${container!.innerHTML}`)
       }
-      expect(stepsCard.querySelector('.glance-card-title strong')?.textContent).toBe('Today')
+      expect(stepsCard.querySelector('.dash-card-title strong')?.textContent).toBe('Today')
       const value = stepsCard.querySelector('.value')
       // The whole cell, not a substring: formatMetricValue rounds to steps' catalogue precision
       // (0 decimals, packages/core/src/derive/metrics.ts's TOTAL) and groups thousands for the
