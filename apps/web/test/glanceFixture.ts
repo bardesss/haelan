@@ -88,6 +88,6 @@ export function glanceBody(): Glance {
       // before the card existed; glance-page.test.tsx's own workout cases add one.
       workouts: [],
     },
-    week: { steps: null, activeMinutes: null, asleep: null },
+    week: { steps: { perDay: 8000, days: 6 }, activeMinutes: null, asleep: null },
   }
 }
