@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.9.0](https://github.com/bardesss/haelan/compare/v2.8.2...v2.9.0) (2026-09-24)
+
+
+### Features
+
+* **web:** draw the route basemap in our own tokens, from OpenFreeMap vector tiles ([#366](https://github.com/bardesss/haelan/issues/366)) ([94960ab](https://github.com/bardesss/haelan/commit/94960ab239ac6acae944119edf7badb72a83b0da))
+
 ## [2.8.2](https://github.com/bardesss/haelan/compare/v2.8.1...v2.8.2) (2026-09-24)
 
 
