@@ -165,6 +165,17 @@ describe('readSourceActivity', () => {
       expect(byId('2026-02-09').get('s-watch')!.continuedElsewhere).toBe(false)
     })
 
+    it("lists a stale source's routine metrics off its own last week, and none for a reporting source", () => {
+      // The watch: steps and heart rate daily, a workout on one day of its final week. The phone
+      // keeps reporting, so it is not stale and is never asked.
+      seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20, metric: 'steps' })
+      seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20, metric: 'heart_rate' })
+      seedDates({ sourceId: 's-watch', from: '2026-01-18', days: 1, metric: 'workout_count' })
+      seedDates({ sourceId: 's-phone', from: '2026-01-01', days: 40, metric: 'steps' })
+      expect(byId('2026-02-09').get('s-watch')!.routineMetrics).toEqual(['heart_rate', 'steps'])
+      expect(byId('2026-02-09').get('s-phone')!.routineMetrics).toEqual([])
+    })
+
     it('is false for a source that is not stale at all', () => {
       seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20 })
       expect(byId('2026-01-21').get('s-watch')!.continuedElsewhere).toBe(false)

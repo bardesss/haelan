@@ -11,6 +11,17 @@ export interface StatusDevice {
   stale: boolean
   /** Whether the person chose it (true/false) or it follows the default (null). */
   choice: boolean | null
+  /**
+   * For a stale device, the metrics it reported routinely in its last active week
+   * (sourceCadence.ts's `routineMetrics`): what the reader stopped getting when it went quiet.
+   * Catalogue keys, named for the reader by the web. Empty for every device that is not stale.
+   *
+   * Here because the panel is now the one place a quiet source is announced. The cards used to
+   * carry a warning triangle each and every range page a "stopped in this range" line, which said
+   * the same thing up to a dozen times a page; the panel says it once, and this list is what those
+   * per-card warnings told the reader that a device row alone did not - which charts it affects.
+   */
+  metrics: string[]
 }
 
 export interface StatusConnection {
@@ -43,7 +54,10 @@ export interface StatusInput {
   google: { state: 'none' | 'connected' | 'revoked' | 'credentials_unreadable' }
   run: StatusSync
   phone: { lastUploadAtMs: number | null, sourceIds: ReadonlySet<string> }
-  activity: ReadonlyArray<{ sourceId: string, lastReportedDate: string | null, status: 'reporting' | 'stale' | 'unjudged', continuedElsewhere: boolean }>
+  activity: ReadonlyArray<{
+    sourceId: string, lastReportedDate: string | null, status: 'reporting' | 'stale' | 'unjudged',
+    continuedElsewhere: boolean, routineMetrics: readonly string[],
+  }>
   names: ReadonlyMap<string, string>
   choices: ReadonlyMap<string, boolean>
 }
@@ -84,14 +98,19 @@ export function composeStatus(input: StatusInput): StatusPanel {
     const choice = input.choices.get(seen.sourceId) ?? null
     const byDefault = shownByDefault(seen.lastReportedDate, input.today)
     if (!(choice ?? byDefault)) { hiddenDevices += 1; continue }
+    // A source that continued reporting under a new source id (renamed/replaced device) isn't
+    // stale from the person's point of view: something is still reporting, just elsewhere.
+    const stale = seen.status === 'stale' && !seen.continuedElsewhere
     const device: StatusDevice = {
       sourceId: seen.sourceId,
       name: input.names.get(seen.sourceId) ?? seen.sourceId,
       lastReportedDate: seen.lastReportedDate,
-      // A source that continued reporting under a new source id (renamed/replaced device) isn't
-      // stale from the person's point of view: something is still reporting, just elsewhere.
-      stale: seen.status === 'stale' && !seen.continuedElsewhere,
+      stale,
       choice,
+      // Gated on `stale` here rather than trusted from the input: a renamed watch has a routine
+      // list too (it is what continuedElsewhere was judged over), and printing it beside a row
+      // that is not marked quiet would read as a list of what that device still sends.
+      metrics: stale ? [...seen.routineMetrics] : [],
     }
     ;(input.phone.sourceIds.has(seen.sourceId) ? phone : google).push(device)
   }
