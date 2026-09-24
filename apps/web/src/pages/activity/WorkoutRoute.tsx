@@ -1,121 +1,10 @@
 import { useEffect, useRef } from 'react'
-import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import { useTranslation } from '../../i18n/index.js'
 import { Card } from '../../components/Card.js'
 import { formatNumber } from '../../format.js'
 import { useRouteBasemapStatus } from '../../data/useRouteBasemap.js'
 import type { RoutePoint } from '../../data/useSessions.js'
-import { loadMapLibre } from './loadMapLibre.js'
-
-// `import type` only, above: erased entirely at compile time, so naming MapLibre's own type here
-// costs the off-by-default household nothing. The library's *value* is reached only through
-// loadMapLibre's dynamic imports, called from the effect below once the setting this task adds is
-// on - see that effect's own comment for why a static import anywhere in this file would undo it.
-const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-
-/**
- * OpenStreetMap's tiles darkened for a dark page, by MapLibre's own raster paint rather than a
- * second tile provider: a dark basemap from somebody else would be a new party learning where this
- * household runs, and About.tsx's sentence at the switch names OpenStreetMap and nobody else.
- *
- * brightness-min above brightness-max inverts the tile's lightness, the hue rotation puts water
- * back to blue after the inversion turned it orange, and the desaturation takes the result to a
- * near-neutral grey so the accent line is the most saturated thing on the card. Paint on the
- * raster layer only, which is the reason for doing it here rather than with a CSS filter on the
- * canvas: a filter would invert the route line along with the streets under it.
- */
-export const DARK_RASTER_PAINT = {
-  'raster-brightness-min': 0.85,
-  'raster-brightness-max': 0,
-  'raster-hue-rotate': 180,
-  'raster-saturation': -0.7,
-  'raster-contrast': -0.1,
-} as const
-
-/** The same five properties at MapLibre's own defaults, so a switch back to light resets them. */
-export const LIGHT_RASTER_PAINT = {
-  'raster-brightness-min': 0,
-  'raster-brightness-max': 1,
-  'raster-hue-rotate': 0,
-  'raster-saturation': 0,
-  'raster-contrast': 0,
-} as const
-
-/**
- * Whether the page is dark right now: an explicit `data-theme` on the root wins, and without one
- * the reader's system preference decides - the same two inputs, in the same order, useChart.ts
- * watches to recolour a chart.
- */
-export function isDarkTheme(
-  root: HTMLElement = document.documentElement,
-  prefersDark: () => boolean = () => window.matchMedia('(prefers-color-scheme: dark)').matches,
-): boolean {
-  const pinned = root.getAttribute('data-theme')
-  if (pinned === 'dark') return true
-  if (pinned === 'light') return false
-  return prefersDark()
-}
-
-/**
- * The style handed to MapLibre when the basemap setting is on: OpenStreetMap's own raster tiles,
- * and the route itself as a GeoJSON source with one line layer above them. A pure function and
- * exported, not built inline in the effect, so a test can assert what a household that switches
- * this on is actually pointed at without mounting a WebGL canvas to find out - this suite has no
- * browser layout coverage able to do that (WorkoutRoute.tsx's own module comment, further down,
- * names the same gap for the trace).
- *
- * The route is part of the style, not added afterwards. It used to be added in a 'load' handler,
- * and 'load' waits for every tile in view to finish: OpenStreetMap's tile server is slow enough
- * that the map sat there for many seconds as bare streets, and a tile that never answered kept the
- * route off it for good. In the style, it draws with the first frame the tiles do.
- *
- * `lineColor` empty drops the key rather than filling it - see routeLineColor.
- */
-export function basemapStyle(
-  route: readonly RoutePoint[],
-  options: { lineColor: string, dark: boolean },
-): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: [TILE_URL],
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors',
-      },
-      'workout-route': { type: 'geojson', data: routeGeoJSON(route) },
-    },
-    layers: [
-      { id: 'osm', type: 'raster', source: 'osm', paint: options.dark ? { ...DARK_RASTER_PAINT } : {} },
-      {
-        id: 'workout-route-line', type: 'line', source: 'workout-route',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: options.lineColor === ''
-          ? { 'line-width': 3 }
-          : { 'line-color': options.lineColor, 'line-width': 3 },
-      },
-    ],
-  }
-}
-
-/**
- * The colour the route line is drawn in, read from the same `--accent` token the SVG trace below
- * reaches through CSS.
- *
- * MapLibre parses colours itself and never resolves `var(--accent)`, so the token has to be read
- * off the document and handed over already resolved. That indirection is worth more than pinning a
- * copy here: packages/tokens emits a different `--accent` per theme, so any literal in this file is
- * wrong in at least one of them, and the literal that shipped here first was a third blue that
- * matched neither.
- *
- * An empty answer means no stylesheet has applied the token yet. The caller omits `line-color`
- * altogether in that case rather than substituting something, so MapLibre's own default draws the
- * line: a line in the wrong colour, which is still a route the household can see.
- */
-export function routeLineColor(root: HTMLElement = document.documentElement): string {
-  return getComputedStyle(root).getPropertyValue('--accent').trim()
-}
+import { mountBasemap } from './basemap.js'
 
 /**
  * Whether this render may draw a basemap, which is whether it may send coordinates to a tile
@@ -132,34 +21,6 @@ export function routeLineColor(root: HTMLElement = document.documentElement): st
  */
 export function basemapAllowed(status: { data?: { enabled: boolean }, isFetching: boolean }): boolean {
   return status.data?.enabled === true && !status.isFetching
-}
-
-/** The bounding box MapLibre fits the map to on load: every recorded point's own extremes, in the
- *  [[west, south], [east, north]] shape its own `bounds` option takes. */
-export function routeBounds(points: readonly RoutePoint[]): [[number, number], [number, number]] {
-  const lons = points.map((point) => point.longitude)
-  const lats = points.map((point) => point.latitude)
-  return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]
-}
-
-/** The one shape addSource's geojson data option needs, spelled out locally rather than pulled
- *  from @types/geojson: that package sits nested under maplibre-gl's own dependency tree, not
- *  hoisted anywhere this file's typeRoots would find it, and a LineString feature is small enough
- *  to write once rather than fight the module graph for. */
-interface RouteLineFeature {
-  type: 'Feature'
-  properties: Record<string, never>
-  geometry: { type: 'LineString', coordinates: [number, number][] }
-}
-
-/** The route as one GeoJSON LineString feature, the shape a `geojson` source takes. Longitude
- *  first, the same axis order projectRoute's own xs/ys keep, because GeoJSON's is [lon, lat]. */
-export function routeGeoJSON(points: readonly RoutePoint[]): RouteLineFeature {
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates: points.map((point) => [point.longitude, point.latitude]) },
-  }
 }
 
 /** The longer side of the drawn box, in view units. The shorter side is whatever the route's own
@@ -217,8 +78,9 @@ export function projectRoute(
  * a route's first and last point is usually this household's own address, and a tile request is
  * what tells a map provider where that is. See About.tsx's own sentence at the switch for what a
  * tile request sends; this file's job is only to never send one when the setting is off, which is
- * why MapLibre is reached exclusively through the dynamic import() inside the effect below rather
- * than a static import at the top of this module - a static one would ship the library to every
+ * why MapLibre is reached exclusively through loadMapLibre's dynamic import(), which only the
+ * effect below ever calls (by way of basemap.ts's mountBasemap), rather than a static import at
+ * the top of this module - a static one would ship the library to every
  * household that opens a workout page, on or off, undoing the whole point of Task 5 drawing the
  * trace by hand so that a household which never turns this on never downloads it.
  *
@@ -249,53 +111,12 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
   // hooks in the order a component declares them, on every render, and an early return ahead of
   // one would call it on some renders and not others.
   useEffect(() => {
-    if (!basemapEnabled || recorded.length === 0) return
-    let cancelled = false
-    let map: MapLibreMap | undefined
-    let themeObserver: MutationObserver | undefined
-    let unwatchScheme: (() => void) | undefined
-    // The one place this file names MapLibre as a value rather than a type, and it is reached only
-    // once basemapEnabled is true - see the module comment above for why a static import anywhere
-    // else in this file would defeat the setting this effect exists to respect.
-    // loadMapLibre rather than importing maplibre-gl here: without the worker URL it sets, the
-    // tiles drew and the route line never did (see its own comment).
-    void loadMapLibre().then(({ Map }) => {
-      if (cancelled || mapContainerRef.current === null) return
-      const instance = new Map({
-        container: mapContainerRef.current,
-        // Read at build time, not captured when the module loaded, and re-read by the observers
-        // below: a household that switches theme with this card open gets the new accent and the
-        // matching tiles without the map being rebuilt.
-        style: basemapStyle(recorded, { lineColor: routeLineColor(), dark: isDarkTheme() }),
-        bounds: routeBounds(recorded),
-        fitBoundsOptions: { padding: 24 },
-      })
-      map = instance
-      const retheme = () => {
-        if (cancelled) return
-        const paint = isDarkTheme() ? DARK_RASTER_PAINT : LIGHT_RASTER_PAINT
-        for (const property of Object.keys(paint) as (keyof typeof DARK_RASTER_PAINT)[]) {
-          instance.setPaintProperty('osm', property, paint[property])
-        }
-        const accent = routeLineColor()
-        if (accent !== '') instance.setPaintProperty('workout-route-line', 'line-color', accent)
-      }
-      // The two ways the effective theme changes, watched the way useChart.ts watches them.
-      themeObserver = new MutationObserver(retheme)
-      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-      const scheme = window.matchMedia('(prefers-color-scheme: dark)')
-      scheme.addEventListener('change', retheme)
-      unwatchScheme = () => scheme.removeEventListener('change', retheme)
-    })
-    // cancelled guards the promise continuation above against a component that unmounted, or a
-    // setting that flipped off, before the import resolved; map?.remove() tears down the one that
-    // did finish constructing, on the same cleanup path.
-    return () => {
-      cancelled = true
-      themeObserver?.disconnect()
-      unwatchScheme?.()
-      map?.remove()
-    }
+    if (!basemapEnabled || recorded.length === 0 || mapContainerRef.current === null) return
+    // The one path from this file to MapLibre, and it is reached only once basemapEnabled is true -
+    // see the module comment above for why a static import anywhere else would defeat the setting
+    // this effect exists to respect. mountBasemap owns the rest: the library through loadMapLibre,
+    // the style in the page's own tokens, and restyling it when the theme changes.
+    return mountBasemap(mapContainerRef.current, recorded)
   }, [basemapEnabled, recorded])
 
   if (recorded.length === 0) return null

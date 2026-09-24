@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { emitCss, themeVarNames, semanticVar, chartVar } from '../src/emit.js'
+import { emitCss, themeVarNames, semanticVar, chartVar, mapVar } from '../src/emit.js'
 import { resolveSemantic } from '../src/semantic.js'
 import { resolveChart } from '../src/chart.js'
+import { resolveMap, MAP_KEYS } from '../src/map.js'
 
 describe('css emitter', () => {
   const css = emitCss()
@@ -51,6 +52,17 @@ describe('css emitter', () => {
       expect(dark, `${name} missing from :root`).toContain(`${name}: `)
       expect(light, `${name} missing from the light theme`).toContain(`${name}: `)
     }
+  })
+
+  // The basemap reads these off the document the way the charts read theirs, so a map token that
+  // was defined and never emitted would fail at the first map a household opened, not here.
+  it('emits the map layer in both themes, with each theme\'s own values', () => {
+    const light = css.slice(css.indexOf("[data-theme='light']"))
+    for (const token of MAP_KEYS) {
+      expect(css, `${token} missing from :root`).toContain(`${mapVar(token)}: ${resolveMap('dark')[token]};`)
+      expect(light, `${token} missing from the light theme`).toContain(`${mapVar(token)}: ${resolveMap('light')[token]};`)
+    }
+    expect(themeVarNames()).toContain('--map-water')
   })
 
   it('records that the file is generated', () => {

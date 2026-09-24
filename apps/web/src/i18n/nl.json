@@ -1130,7 +1130,7 @@
       },
       "routeBasemap": {
         "toggle": "Toon een kaartondergrond onder de route van een training",
-        "sends": "Als dit aanstaat, haalt deze instantie kaarttegels op bij een externe kaartaanbieder om een kaartondergrond onder elke trainingsroute te tekenen. Die aanbieder ziet de coördinaten van elke getekende route, inclusief waar elke route begint en eindigt, meestal thuis."
+        "sends": "Als dit aanstaat, haalt deze instantie kaarttegels op bij OpenFreeMap, een externe kaartaanbieder met kaartgegevens van OpenStreetMap, om een kaartondergrond onder elke trainingsroute te tekenen. OpenFreeMap ziet de coördinaten van elke getekende route, inclusief waar elke route begint en eindigt, meestal thuis."
       },
       "documentation": "Documentatie",
       "changelog": "Wijzigingslogboek",

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { semantic, resolveSemantic, lookup, THEMES } from '../src/semantic.js'
 import { chartTokens, resolveChart } from '../src/chart.js'
+import { mapTokens, resolveMap } from '../src/map.js'
 import { primitives, COLOR_GROUPS, type ColorGroup, type ColorPath } from '../src/primitives.js'
 import { toLab, deltaE } from '../src/color/convert.js'
 
@@ -58,6 +59,21 @@ describe('token layering', () => {
     }
   })
 
+  it.each(THEMES)('defines %s map tokens only as primitive references', (theme) => {
+    for (const [name, value] of Object.entries(mapTokens[theme])) {
+      expect(isPrimitiveRef(value), `${theme}.${name} must reference a primitive: got ${String(value)}`).toBe(true)
+    }
+  })
+
+  // Load-bearing for the map in a way it is not for CSS: the web app hands these values to
+  // MapLibre, which parses colours itself and knows nothing of oklch() or color-mix(). A map token
+  // that resolved to either would draw nothing, with no error anywhere a test could see.
+  it.each(THEMES)('resolves every %s map token to a hex value', (theme) => {
+    for (const [name, value] of Object.entries(resolveMap(theme))) {
+      expect(value, `${theme}.${name}`).toMatch(/^#[0-9a-fA-F]{6}$/)
+    }
+  })
+
   it.each(THEMES)('resolves every %s semantic token to a hex value', (theme) => {
     for (const [name, value] of Object.entries(resolveSemantic(theme))) {
       expect(value, `${theme}.${name}`).toMatch(/^#[0-9a-fA-F]{6}$/)
@@ -73,6 +89,7 @@ describe('token layering', () => {
   it('defines the same token names in both themes', () => {
     expect(Object.keys(semantic.dark).sort()).toEqual(Object.keys(semantic.light).sort())
     expect(Object.keys(chartTokens.dark).sort()).toEqual(Object.keys(chartTokens.light).sort())
+    expect(Object.keys(mapTokens.dark).sort()).toEqual(Object.keys(mapTokens.light).sort())
   })
 
   it('throws when a token points at a missing primitive', () => {

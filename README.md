@@ -152,10 +152,11 @@ itself in the open ocean rather than anybody's real track.
 
 If you want streets under the line, **Settings -> Info -> "Show a basemap under a workout's
 route"** turns it on, and only an admin can. Switched on, the page fetches map tiles from
-OpenStreetMap. That provider then sees the coordinates of every route it draws, including where
-each one starts and ends, which is usually home. It is off by default, switching it back off stops
-it, and a tab left open on an instance where an admin has just switched it off checks again before
-it draws anything.
+[OpenFreeMap](https://openfreemap.org), whose map data comes from OpenStreetMap, and draws them in
+the dashboard's own colours in both themes. OpenFreeMap then sees the coordinates of every route it
+draws, including where each one starts and ends, which is usually home. It is off by default,
+switching it back off stops it, and a tab left open on an instance where an admin has just switched
+it off checks again before it draws anything.
 
 ## Deploy
 
