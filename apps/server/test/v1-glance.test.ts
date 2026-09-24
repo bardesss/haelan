@@ -107,9 +107,13 @@ describe('GET /api/v1/p/:personId/glance', () => {
     const token = await harness.signIn()
     const db = harness.app.haelan.instance.db
     db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    // 06:00Z at +02:00 is 08:00 local, before today's 09:00-local cutoff (07:00Z at +02:00), so
+    // every baseline day's reading actually reaches the band - at 09:00Z it would land at 11:00
+    // local, after the cutoff, and be excluded from every day's sum, leaving a vacuous band of
+    // zeros that Number.isInteger passes on even with the route's rounding deleted.
     for (let i = 0; i < 60; i += 1) {
       const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
-      insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse(`${localDate}T09:00:00Z`), tzOffsetMinutes: 120, value: 1000.4 })
+      insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'steps', utcMs: Date.parse(`${localDate}T06:00:00Z`), tzOffsetMinutes: 120, value: 1000.4 })
       db.insert(schema.daily).values({
         personId: 'p1', localDate, metric: 'steps', agg: 'sum', source: 'merged', value: 1000.4, coverage: 1, sourceMix: null,
         derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
@@ -122,7 +126,9 @@ describe('GET /api/v1/p/:personId/glance', () => {
     }).run()
     const body = (await get(harness, token, '/glance')).json()
     expect(body.day.stepsPace).not.toBeNull()
-    expect(Number.isInteger(body.day.stepsPace.center)).toBe(true)
+    // Every baseline day's own 1000.4 reaches the band unrounded; 1000 is what the route's own
+    // rounding at 'steps' precision must produce, not merely "some integer".
+    expect(body.day.stepsPace.center).toBe(1000)
   })
 
   it('answers 304 to a repeat request carrying the first one\'s ETag, once a steps pace is present', async () => {
