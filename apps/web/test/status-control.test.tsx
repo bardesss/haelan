@@ -315,13 +315,23 @@ describe('the sync button', () => {
     expect(posts).toEqual(['/api/sync/run'])
   })
 
-  it('reads a 429 as the cooldown, not a failure', async () => {
+  // A 429 is the server's cooldown, which the button already says ("Synced just now", disabled)
+  // once useRunSync's onError has re-read the status. A result line saying it too put the same
+  // three words in the panel twice, one under the other; the button carries it alone.
+  it('reads a 429 as the cooldown, said once, on the button', async () => {
     runAnswer = { status: 429, body: { error: { kind: 'transient', code: 'cooldown', message: 'cooldown' } } }
     mount(panel())
     press(icon())
+    // The open's own refetch settles first, on the idle answer, so the press below is offered;
+    // only then does the server start answering with the cooldown the 429 implies.
+    await settle()
+    serverStatus = panel({}, { cooldownRemainingMs: 55_000 })
     press(syncButton()!)
     await settle()
-    expect(popover()!.querySelector('.status-result')!.textContent).toBe('Synced just now')
+    expect(syncButton()!.textContent).toBe('Synced just now')
+    expect(syncButton()!.disabled).toBe(true)
+    expect(popover()!.querySelector('.status-result')).toBeNull()
+    expect(popover()!.textContent!.split('Synced just now')).toHaveLength(2)
   })
 
   it('reads a 409 as a run already going', async () => {

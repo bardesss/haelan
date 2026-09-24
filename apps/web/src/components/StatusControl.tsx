@@ -74,9 +74,12 @@ export function StatusControl() {
 
   const outcome: SyncOutcome | null = runSync.error instanceof ApiError
     // 429 is the server's minute of cooldown after a run, which means a run just finished: the
-    // true answer is "Synced just now", not a failure. 409 is a run already going, or the
-    // instance shutting down; either way nothing new was started by this press.
-    ? runSync.error.status === 429 ? 'cooldown' : runSync.error.status === 409 ? 'alreadyRunning' : 'didNotStart'
+    // true answer is "Synced just now", not a failure - and the button already says exactly that,
+    // disabled, once useRunSync's onError has re-read the status the 429 proved stale. A result
+    // line saying it as well put the same words in the panel twice, one under the other, so a
+    // 429 has no line at all and the button carries the cooldown alone. 409 is a run already
+    // going, or the instance shutting down; either way nothing new was started by this press.
+    ? runSync.error.status === 429 ? null : runSync.error.status === 409 ? 'alreadyRunning' : 'didNotStart'
     : runSync.isError ? 'didNotStart'
       : watched && sync !== null && !sync.running && sync.lastFinishedAtMs !== null
         ? (sync.lastFailed ?? 0) > 0 ? 'failed' : sync.lastRowsWritten === 0 ? 'nothingNew' : 'newData'
