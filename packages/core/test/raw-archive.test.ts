@@ -378,3 +378,90 @@ describe('listForSource', () => {
     expect(narrowing).not.toContain(COMPANION_SOURCE)
   })
 })
+
+/**
+ * The status panel's read of the phone: when it last uploaded, and which of the person's sources
+ * its uploads resolved to. GET /api/status asks this every three seconds while a run is going, so
+ * the answer has to come out of one aggregate query, not a walk over every companion row with a
+ * JSON.parse apiece - a phone that has synced for a year is tens of thousands of such rows.
+ */
+describe('lastFetchedByDataSource', () => {
+  let dir: string
+  let db: Database
+  let archive: RawArchive
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'haelan-'))
+    db = openDatabase(dir)
+    migrateToLatest(db)
+    for (const id of ['p1', 'p2']) {
+      db.insert(people).values({ id, displayName: id, timezone: 'Europe/Amsterdam', createdAtMs: 0 }).run()
+    }
+    archive = new RawArchive(db)
+  })
+  afterEach(() => { closeDatabase(db); rmSync(dir, { recursive: true, force: true }) })
+
+  const phoneRow = (personId: string, fetchedAtMs: number, dataSource?: string) => ({
+    personId, dataType: 'weight',
+    requestParams: dataSource === undefined
+      ? { source: COMPANION_SOURCE, dataType: 'weight' }
+      : { source: COMPANION_SOURCE, dataType: 'weight', dataSource },
+    windowStartMs: 3000 + fetchedAtMs, windowEndMs: 4000, fetchedAtMs, httpStatus: 200, body: `{"p":${fetchedAtMs}}`,
+  })
+
+  it('answers the newest fetch per data source, for this person and this source only', () => {
+    archive.put(phoneRow('p1', 10, 'src-a'))
+    archive.put(phoneRow('p1', 30, 'src-a'))
+    archive.put(phoneRow('p1', 20, 'src-b'))
+    archive.put(phoneRow('p2', 99, 'src-c'))
+    archive.put({
+      personId: 'p1', dataType: 'steps', requestParams: { filter: 'x', dataSource: 'google' },
+      windowStartMs: 1, windowEndMs: 2, fetchedAtMs: 500, httpStatus: 200, body: '{"g":1}',
+    })
+
+    const rows = archive.lastFetchedByDataSource('p1', COMPANION_SOURCE)
+
+    expect([...rows].sort((a, b) => a.lastFetchedAtMs - b.lastFetchedAtMs)).toEqual([
+      { dataSource: 'src-b', lastFetchedAtMs: 20 },
+      { dataSource: 'src-a', lastFetchedAtMs: 30 },
+    ])
+  })
+
+  it('keeps an upload that names no data source, so its fetch time still counts', () => {
+    archive.put(phoneRow('p1', 40))
+
+    expect(archive.lastFetchedByDataSource('p1', COMPANION_SOURCE)).toEqual([
+      { dataSource: null, lastFetchedAtMs: 40 },
+    ])
+  })
+
+  it('skips a row it cannot parse and leaves out non-200 responses, as listForSource does', () => {
+    db.insert(rawPayloads).values({
+      id: 'broken-0000-0000-0000-000000000000', personId: 'p1', dataType: 'steps',
+      requestParams: 'not json at all', windowStartMs: 1, windowEndMs: 2,
+      fetchedAtMs: 1, httpStatus: 200, bodyGzip: Buffer.from('{}'), bodyHash: 'h-broken', bodyBytes: 2,
+    }).run()
+    archive.put({ ...phoneRow('p1', 70, 'src-a'), httpStatus: 429, body: '{"error":"slow"}' })
+
+    expect(archive.lastFetchedByDataSource('p1', COMPANION_SOURCE)).toEqual([])
+  })
+
+  it('is one aggregate statement, prepared once and reused across calls', () => {
+    // What this pins is the cost, which no returned answer shows: a caller rewritten to walk
+    // listForSource and parse each row in JS would answer the same for this data, and so would
+    // a drizzle query built afresh per call, which prepares a new statement every time.
+    archive.put(phoneRow('p1', 10, 'src-a'))
+    const prepareSpy = vi.spyOn(db.$client, 'prepare')
+
+    archive.lastFetchedByDataSource('p1', COMPANION_SOURCE)
+    archive.lastFetchedByDataSource('p1', COMPANION_SOURCE)
+    archive.lastFetchedByDataSource('p2', COMPANION_SOURCE)
+
+    const statements = prepareSpy.mock.calls.map(([text]) => text as string)
+    expect(statements).toHaveLength(1)
+    expect(statements[0]).toMatch(/max\(/i)
+    expect(statements[0]).toMatch(/group by/i)
+    // Bound, not spliced, for the same reason as listForSource's.
+    expect(statements[0]).not.toContain(COMPANION_SOURCE)
+  })
+})

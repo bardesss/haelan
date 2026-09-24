@@ -38,15 +38,16 @@ export function registerStatus(app: FastifyInstance): void {
     // Every companion row this person has archived carries the source it resolved to
     // (requestParams.dataSource, a source id - see routes/v1/ingest.ts), which is how the phone's
     // devices are told apart from Google's without a column anywhere recording which connection a
-    // row came through. listForSource's own select list carries no bodyGzip, so this pays only
-    // for the small archive-metadata columns, the same cost /companion/cursors already pays for
-    // the same rows.
+    // row came through. This route is polled every three seconds while a run is going, so it asks
+    // SQLite for one row per data source (lastFetchedByDataSource) rather than walking every
+    // companion row and parsing each one's JSON here, which is what it did first: a phone that has
+    // synced for a year is tens of thousands of rows, read in full to produce a handful of ids.
+    // The null group is an upload that named no source - it still counts towards the upload time.
     let lastUploadAtMs: number | null = null
     const phoneSources = new Set<string>()
-    for (const row of stores.archive.listForSource(personId, COMPANION_SOURCE)) {
-      if (lastUploadAtMs === null || row.fetchedAtMs > lastUploadAtMs) lastUploadAtMs = row.fetchedAtMs
-      const params = JSON.parse(row.requestParams) as { dataSource?: unknown }
-      if (typeof params.dataSource === 'string') phoneSources.add(params.dataSource)
+    for (const row of stores.archive.lastFetchedByDataSource(personId, COMPANION_SOURCE)) {
+      if (lastUploadAtMs === null || row.lastFetchedAtMs > lastUploadAtMs) lastUploadAtMs = row.lastFetchedAtMs
+      if (typeof row.dataSource === 'string') phoneSources.add(row.dataSource)
     }
 
     const run = runner.runState()

@@ -12,6 +12,7 @@ import { useSetSourcePriority, useSourcePriority } from '../../data/useSourcePri
 import { useSetPanelChoice } from '../../data/useStatusPanel.js'
 import { localToday } from '../../controls/range.js'
 import { shownByDefault } from '@haelan/core/status-panel'
+import { scrollToHashTarget } from '../../router.js'
 
 /**
  * Mirrors MAX_ALIAS_LENGTH in packages/core/src/store/sourceAliases.ts. A local constant rather
@@ -88,6 +89,21 @@ export function SourceNames() {
     // settledCount is the trigger; setPriority.isPending is read, not depended on, since it is
     // already implied by settledCount having just changed.
   }, [settledCount])
+
+  // Arriving at /account#sources (the status panel's "Choose sources…" link) on a cold load: the
+  // Account page scrolls to this card on mount, but every card above it is a spinner then, and
+  // they grow as their data lands, so the card is pushed down out of the view the scroll found
+  // for it. Asked again here, once, when this card's own list arrives - the moment the reader is
+  // waiting to see, and by which the cards above have usually loaded too.
+  // Only for a list that arrives after mount: one already cached renders at once and changes
+  // nothing later, and Account's own mount call has that case. `only`, so a fragment naming any
+  // other card on the page is not overridden by this one.
+  const arrivedAfterMount = useRef(isPending)
+  useEffect(() => {
+    if (isPending || !arrivedAfterMount.current) return
+    arrivedAfterMount.current = false
+    scrollToHashTarget('sources')
+  }, [isPending])
 
   if (isPending) return <Loading />
   if (isError) {

@@ -9,8 +9,11 @@ import type { StatusPanel as StatusPanelData, StatusConnection } from '../data/u
  * What the sync button's last press, or the last run this panel watched, came to. Decided by
  * StatusControl, which is mounted for the whole session and so is the one that can know a run
  * started and ended - this component exists only while the panel is open.
+ *
+ * No 'cooldown': a press refused with 429 is said by the sync button itself ("Synced just now",
+ * disabled), and a result line repeating it printed the same words twice. See StatusControl.
  */
-export type SyncOutcome = 'failed' | 'nothingNew' | 'newData' | 'cooldown' | 'alreadyRunning' | 'didNotStart'
+export type SyncOutcome = 'failed' | 'nothingNew' | 'newData' | 'alreadyRunning' | 'didNotStart'
 
 /**
  * The panel's content, shared by the desktop popover and the phone sheet so the two cannot come
