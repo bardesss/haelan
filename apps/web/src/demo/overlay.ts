@@ -56,6 +56,14 @@ export interface Overlay {
   // capture can already carry an alias on a source this session clears, and only a stored null
   // can override that captured value back out at read time.
   aliases: Map<string, string | null>
+  // sourceId -> the status panel choice this session wrote: true (show), false (hide), or null
+  // once cleared back to "follow the default" - the same three-state shape SourceVisibilityStore
+  // itself documents, and the same reason `aliases` above stores an explicit null rather than
+  // deleting the key: a capture can already show a source under its own default, and only a
+  // stored null can tell composeSources and composeStatusPanel "no override, answer the captured
+  // default" apart from "never written at all", which behaves identically here but would not once
+  // a future write path needed to tell a visitor had touched this source at all.
+  panelChoices: Map<string, boolean | null>
   // sessionId -> the localDate its own captured detail read answered with, recorded by
   // composeSessionDetail on every read regardless of whether that session carries an override -
   // see affectedRangeFor's own comment for why a session-scope write needs this and has nowhere
@@ -72,6 +80,7 @@ export function createOverlay(): Overlay {
     overrides: new Map(),
     deletedOverrideIds: new Set(),
     aliases: new Map(),
+    panelChoices: new Map(),
     sessionLocalDates: new Map(),
   }
 }
@@ -84,6 +93,11 @@ const OVERRIDES_LIST = /^\/api\/v1\/p\/[^/]+\/overrides$/
 const OVERRIDE_ITEM = /^\/api\/v1\/p\/[^/]+\/overrides\/([^/]+)$/
 const SOURCES_LIST = /^\/api\/v1\/p\/[^/]+\/sources$/
 const SOURCE_ALIAS = /^\/api\/v1\/p\/[^/]+\/sources\/([^/]+)\/alias$/
+const SOURCE_PANEL = /^\/api\/v1\/p\/[^/]+\/sources\/([^/]+)\/panel$/
+// Flat, with no personId segment: apps/server/src/routes/status.ts's own doc comment on
+// /api/status says why - it answers for the caller's own person off the session, the same as
+// /api/sync/status beside it, never off a path segment the way every /p/:personId route is.
+const STATUS = /^\/api\/status$/
 const SERIES = /^\/api\/v1\/p\/[^/]+\/series$/
 const INTRADAY = /^\/api\/v1\/p\/[^/]+\/intraday(?:\/window)?$/
 const SESSIONS_LIST = /^\/api\/v1\/p\/[^/]+\/sessions$/
@@ -107,6 +121,7 @@ export function applyOverlay(url: string, body: unknown, overlay: Overlay): unkn
   if (EVENTS_LIST.test(path)) return composeEvents(params, body, overlay)
   if (OVERRIDES_LIST.test(path)) return composeOverrides(body, overlay)
   if (SOURCES_LIST.test(path)) return composeSources(body, overlay)
+  if (STATUS.test(path)) return composeStatusPanel(body, overlay)
   if (SERIES.test(path)) return composeSeries(body, overlay)
   if (INTRADAY.test(path)) return composeIntraday(params, body, overlay)
   if (SESSIONS_LIST.test(path)) return composeSessionsList(body, overlay)
@@ -132,6 +147,8 @@ export function writeThrough(method: string, url: string, payload: unknown, over
   if (method === 'DELETE' && (match = path.match(EVENT_ITEM))) return removeEvent(match[1]!, overlay)
   if (method === 'PUT' && (match = path.match(SOURCE_ALIAS))) return renameSource(match[1]!, payload, overlay)
   if (method === 'DELETE' && (match = path.match(SOURCE_ALIAS))) return clearSourceAlias(match[1]!, overlay)
+  if (method === 'PUT' && (match = path.match(SOURCE_PANEL))) return setPanelChoice(match[1]!, payload, overlay)
+  if (method === 'DELETE' && (match = path.match(SOURCE_PANEL))) return clearPanelChoice(match[1]!, overlay)
 
   // The recorder only ever captured GETs, and every write this build knows how to answer is
   // matched above - reaching here means either a route the app has grown since this file was
@@ -530,7 +547,7 @@ function clearSourceAlias(sourceId: string, overlay: Overlay): { name: string } 
 }
 
 function composeSources(body: unknown, overlay: Overlay): unknown {
-  if (overlay.aliases.size === 0) return body
+  if (overlay.aliases.size === 0 && overlay.panelChoices.size === 0) return body
   const items = (body as { items: Record<string, unknown>[] }).items.map((item) => {
     // The real wire field is `id` (useSourceNames.ts's NamedSource); read `sourceId` too, the
     // name this task's own fixture uses for the same row, for the reason removeSeriesPoints
@@ -538,10 +555,89 @@ function composeSources(body: unknown, overlay: Overlay): unknown {
     // side names the thing (`renameSource`'s `sourceId` parameter, taken straight off the URL)
     // without insisting the read side's capture spell it identically.
     const sourceId = (item['id'] ?? item['sourceId']) as string | undefined
-    if (sourceId === undefined || !overlay.aliases.has(sourceId)) return item
-    const alias = overlay.aliases.get(sourceId)!
-    const displayName = (item['displayName'] as string | undefined) ?? ''
-    return { ...item, alias, name: nameFor(sourceId, displayName, alias) }
+    if (sourceId === undefined) return item
+    let result = item
+    if (overlay.aliases.has(sourceId)) {
+      const alias = overlay.aliases.get(sourceId)!
+      const displayName = (item['displayName'] as string | undefined) ?? ''
+      result = { ...result, alias, name: nameFor(sourceId, displayName, alias) }
+    }
+    // The route's own field name (sources.ts's registerSourceRoutes) - a choice this session
+    // wrote (true, false, or an explicit null once cleared) always wins over whatever the capture
+    // answered, the same way an alias write above does.
+    if (overlay.panelChoices.has(sourceId)) {
+      result = { ...result, panelChoice: overlay.panelChoices.get(sourceId) ?? null }
+    }
+    return result
   })
   return { items }
+}
+
+// ---- status panel choices -----------------------------------------------------------------------
+
+function setPanelChoice(sourceId: string, payload: unknown, overlay: Overlay): { visible: boolean } {
+  const body = payload as { visible: boolean }
+  overlay.panelChoices.set(sourceId, body.visible)
+  return { visible: body.visible }
+}
+
+function clearPanelChoice(sourceId: string, overlay: Overlay): { visible: null } {
+  // Stored as an explicit null, not deleted - see the Overlay interface's own comment on
+  // `panelChoices` for why an absent key and a cleared one cannot be collapsed into each other.
+  overlay.panelChoices.set(sourceId, null)
+  return { visible: null }
+}
+
+interface OverlayStatusDevice { sourceId: string, choice: boolean | null, stale?: boolean, [key: string]: unknown }
+interface OverlayStatusConnection { problem: string | null, devices: OverlayStatusDevice[], [key: string]: unknown }
+interface OverlayStatusPanel {
+  connections: OverlayStatusConnection[]
+  hiddenDevices: number
+  problems: number
+  [key: string]: unknown
+}
+
+/**
+ * Applies every panel-choice write this session has made to the captured `/api/status` read.
+ *
+ * Hiding a device the capture already shows is the direction this can answer in full: the device
+ * is dropped from its connection's own list, `hiddenDevices` grows by one for it, and `problems`
+ * is recomputed from what is left (composeStatus's own formula - a connection with a problem plus
+ * every visible, stale device - recomputed rather than decremented ad hoc, so a later change to
+ * that formula in packages/core cannot quietly drift the two apart).
+ *
+ * Showing a device the capture already counted as hidden cannot be answered the same way:
+ * composeStatus's own doc comment says `hiddenDevices` is a count, never a list, so there is no
+ * name or lastReportedDate recorded anywhere in this response for a device that was never in it to
+ * begin with - the same fidelity limit `clearSourceAlias` above documents for a cleared alias
+ * whose fallback name this overlay was never told either. A visitor who un-hides an
+ * already-hidden device sees the choice recorded (a future capture that includes the device would
+ * honour it), but the row itself does not appear and `hiddenDevices` does not fall, rather than
+ * this module guessing whether the count it cannot itself verify still applies.
+ *
+ * Always recomposed from the untouched captured `body`, never from a previous call's own answer:
+ * every device this function has not this time filtered out is exactly the device the capture
+ * itself carried, so a choice reversed later (hide, then show again) needs nothing undone here -
+ * the next read starts over from the same source of truth every other read does.
+ */
+function composeStatusPanel(body: unknown, overlay: Overlay): unknown {
+  if (overlay.panelChoices.size === 0) return body
+  const clone = structuredClone(body) as OverlayStatusPanel
+  let hiddenDelta = 0
+  for (const connection of clone.connections) {
+    connection.devices = connection.devices.filter((device) => {
+      const choice = overlay.panelChoices.get(device.sourceId)
+      if (choice === undefined) return true
+      device.choice = choice
+      if (choice === false) { hiddenDelta += 1; return false }
+      return true
+    })
+  }
+  clone.hiddenDevices += hiddenDelta
+  clone.problems = clone.connections.reduce((total, connection) => {
+    const connectionProblem = connection.problem !== null ? 1 : 0
+    const staleDevices = connection.devices.filter((device) => device.stale === true).length
+    return total + connectionProblem + staleDevices
+  }, 0)
+  return clone
 }
