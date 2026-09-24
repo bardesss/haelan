@@ -13,6 +13,12 @@ export function localHourOf(utcMs: number, tzOffsetMinutes: number): number {
   return new Date(utcMs + tzOffsetMinutes * 60_000).getUTCHours()
 }
 
+/** The minute of the local day, 0-1439, under the row's own offset; the same arithmetic as localHourOf. */
+export function localMinuteOf(utcMs: number, tzOffsetMinutes: number): number {
+  const shifted = new Date(utcMs + tzOffsetMinutes * 60_000)
+  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes()
+}
+
 const HOUR_MS = 3_600_000
 
 /**
