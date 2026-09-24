@@ -1781,13 +1781,12 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
   text-align: center;
 }
 .demo-banner-lead { margin: 0; }
-/* `display: contents` unwraps the <details> box on the desktop layout below, and its own summary
-   (the "More"/"Meer" disclosure, phone-only) is hidden here rather than left to draw a marker
-   nobody at this width needs to click. `.demo-banner-rest` is forced visible despite carrying no
-   `open` attribute: the UA stylesheet hides a closed `<details>`'s own children with a rule this
-   one is specific enough, and appears late enough in the cascade, to override without `!important` -
-   see the phone override below for the other half of the same mechanism. */
-.demo-banner-more { display: contents; }
+/* `<details>` already renders as a plain block box with no border or marker of its own once its
+   `<summary>` (the "More"/"Meer" disclosure, phone-only) is hidden below, so nothing here needs to
+   unwrap it. `.demo-banner-rest` is forced visible despite carrying no `open` attribute: the UA
+   stylesheet hides a closed `<details>`'s own children with a rule this one is specific enough,
+   and appears late enough in the cascade, to override without `!important` - see the phone
+   override below for the other half of the same mechanism. */
 .demo-banner-more summary { display: none; }
 .demo-banner-rest { display: inline; margin: 0; }
 .demo-banner-close {
