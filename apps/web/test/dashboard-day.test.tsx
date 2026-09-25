@@ -121,4 +121,42 @@ describe('useDashboardDay', () => {
     await act(async () => { await Promise.resolve() })
     expect(window.history.length).toBe(before)
   })
+  it('cleans ?day=<today> to no parameter with a URL replace', async () => {
+    window.history.replaceState(null, '', `/?day=${TODAY}`)
+    const before = window.history.length
+    mountProbe()
+    await act(async () => { await Promise.resolve() })
+    expect(window.location.search).toBe('')
+    expect(window.history.length).toBe(before)
+    expect(seen!.day).toBeNull()
+  })
+
+  // Picking the shown day in the calendar, or Today while already on today, used to push a second
+  // identical entry, so Back seemed to do nothing.
+  it('pushes nothing when asked for the past day already shown', () => {
+    window.history.replaceState(null, '', '/?day=2020-01-15')
+    mountProbe()
+    const before = window.history.length
+    act(() => { seen!.setDay('2020-01-15') })
+    expect(window.history.length).toBe(before)
+    expect(window.location.search).toBe('?day=2020-01-15')
+  })
+
+  it('pushes nothing when asked for today while already on today, by null or by its date', () => {
+    window.history.replaceState(null, '', '/')
+    mountProbe()
+    const before = window.history.length
+    act(() => { seen!.setDay(null) })
+    act(() => { seen!.setDay(TODAY) })
+    expect(window.history.length).toBe(before)
+    expect(window.location.search).toBe('')
+  })
+
+  it('still pushes a step to a different day', () => {
+    window.history.replaceState(null, '', '/?day=2020-01-15')
+    mountProbe()
+    const before = window.history.length
+    act(() => { seen!.setDay('2020-01-14') })
+    expect(window.history.length).toBe(before + 1)
+  })
 })

@@ -1,22 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useRoute, navigate, withQuery, readQuery } from '../../router.js'
 import { useSession } from '../../auth/session.js'
-import { localToday } from '../../controls/range.js'
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-
-/**
- * A real calendar date, the same check `controls/range.ts`'s own (unexported) `isRealDate` makes:
- * the regex alone would accept '2026-02-30'. Not imported from there because that module has
- * nothing to do with the day-navigation URL, and its own check is private to it.
- */
-function isRealDate(date: string): boolean {
-  if (!DATE_PATTERN.test(date)) return false
-  const [year, month, day] = date.split('-').map(Number) as [number, number, number]
-  if (month < 1 || month > 12) return false
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return day >= 1 && day <= daysInMonth
-}
+import { isRealDate, localToday } from '../../controls/range.js'
 
 /**
  * The dashboard's own day, read from and written to `?day=` (M9c spec, "On screen": "URL:
@@ -40,7 +25,10 @@ export function useDashboardDay(): {
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
   const raw = readQuery(search).get('day')
   const valid = raw !== null && isRealDate(raw) && raw <= today
-  const invalid = raw !== null && !valid
+  // Today spelled out (`?day=<today>`, a bookmark from yesterday's today, say) is cleaned the same
+  // way: today has no parameter, so there is only ever one URL for it.
+  const unclean = raw !== null && (!valid || raw === today)
+  const day = valid && raw !== today ? raw : null
 
   // The one effect this hook needs, and it is not a mirror: `usePageControls` avoids an effect
   // because its state is always derivable from the URL as it stands, with nothing left to correct.
@@ -49,13 +37,17 @@ export function useDashboardDay(): {
   // fixing it up is inherently a write in reaction to what the reader (or a stale bookmark) already
   // put there, which is exactly what an effect is for.
   useEffect(() => {
-    if (invalid) navigate(withQuery(route, { day: null }), { replace: true })
-  }, [invalid, route])
+    if (unclean) navigate(withQuery(route, { day: null }), { replace: true })
+  }, [unclean, route])
 
   // Stable for as long as the route and today are, so a caller's effect can list it as a dependency.
-  const setDay = useCallback((day: string | null, opts?: { replace?: boolean }) => {
-    navigate(withQuery(route, { day: day === null || day === today ? null : day }), { replace: opts?.replace ?? false })
-  }, [route, today])
+  // Asking for the day already shown (the calendar's selected day, Today while on today) is a
+  // no-op: a push there would leave a Back that goes nowhere.
+  const setDay = useCallback((next: string | null, opts?: { replace?: boolean }) => {
+    const target = next === null || next === today ? null : next
+    if (target === day) return
+    navigate(withQuery(route, { day: target }), { replace: opts?.replace ?? false })
+  }, [route, today, day])
 
-  return { day: valid && raw !== today ? raw : null, setDay }
+  return { day, setDay }
 }
