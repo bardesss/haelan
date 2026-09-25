@@ -134,7 +134,7 @@ export function SourceNames() {
   // query from crashing the row rather than rendering it blank.
   const nameFor = (sourceId: string): string => {
     const source = sources.find((s) => s.id === sourceId)
-    return source === undefined ? sourceId : sourceLabel(source, t, i18n.language)
+    return source === undefined ? sourceId : sourceLabel(source, t, i18n.language, today)
   }
   const order = (priority.data?.order ?? []).map((entry) => entry.sourceId)
 
@@ -286,8 +286,8 @@ function SourceNameRow({ source, today }: { source: NamedSourceWithActivity, tod
   // is the second: an empty field means "no alias", and what the reader gets then is the known
   // app's readable default when there is one ("Health Connect (phone)"), not the package name the
   // detail line below still prints beside the id for whoever needs the raw identity.
-  const name = sourceLabel(source, t, i18n.language)
-  const unnamed = sourceLabel({ ...source, alias: null }, t, i18n.language)
+  const name = sourceLabel(source, t, i18n.language, today)
+  const unnamed = sourceLabel({ ...source, alias: null }, t, i18n.language, today)
 
   return (
     <li className="source-name-row">

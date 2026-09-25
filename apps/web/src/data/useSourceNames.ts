@@ -7,7 +7,9 @@ import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import { requirePersonId } from './useAnnotations.js'
 import { useTranslation } from '../i18n/index.js'
+import { formatShortDate } from '../format.js'
 import type { Translate } from '../format.js'
+import { localToday } from '../controls/range.js'
 
 // Mirrors NamedSource in packages/core/src/store/sourceAliases.ts, which the route sends whole,
 // the same choice useSyncStatus.ts makes for its own response type and for the same reason: the
@@ -53,14 +55,16 @@ export interface DefaultName {
  * `alias` as optional lets the status panel's rows use this too: the server sends those a null
  * `defaultName` whenever an alias is set, so the alias arrives as `name` and is printed as sent.
  *
- * The date is short, in the reader's locale, and carries the year only when it is not this one,
- * the same rule the status panel's day labels follow: "since 4 Sep" reads as this September, and a
- * source first seen last December must not read as three months ahead.
+ * The date is short, in the reader's locale, and carries the year only when it is not the year of
+ * `today`, the person's own local date: formatShortDate, the one helper the status panel's day
+ * labels use too, so the two never disagree about the year - which they did around New Year east
+ * of UTC while this read the browser's UTC clock (the review of PR 383).
  */
 export function sourceLabel(
   source: { name: string, alias?: string | null, defaultName?: DefaultName | null },
   t: Translate,
   language: string,
+  today: string,
 ): string {
   if (source.alias !== undefined && source.alias !== null) return source.alias
   const defaultName = source.defaultName
@@ -71,11 +75,7 @@ export function sourceLabel(
   if (base === key) return source.name
   let label = base
   if (defaultName.since !== null) {
-    const otherYear = defaultName.since.slice(0, 4) !== String(new Date().getUTCFullYear())
-    const date = new Date(`${defaultName.since}T00:00:00Z`).toLocaleString(language, {
-      day: 'numeric', month: 'short', timeZone: 'UTC', ...(otherYear ? { year: 'numeric' } : {}),
-    })
-    label = t('sourceDefaults.since', { name: label, date })
+    label = t('sourceDefaults.since', { name: label, date: formatShortDate(defaultName.since, today, language) })
   }
   return defaultName.tag === null ? label : t('sourceDefaults.tagged', { name: label, tag: defaultName.tag })
 }
@@ -170,6 +170,10 @@ export function useSourceNames(): SourceNames {
   const items = query.data?.items
   const { t, i18n } = useTranslation()
   const language = i18n.language
+  // The person's today, for the year rule in sourceLabel: read in their zone the way the status
+  // control and the Settings card read it. A string, so the memo below only rebuilds when the
+  // person's day actually changes.
+  const today = localToday(session.data?.timezone)
   // Memoised on the query's own data reference, not rebuilt as a fresh object literal every
   // render: `nameOf` sits in IntradayHeartRate's `build` useCallback deps, which useChart keys its
   // init/dispose effect on, so a fresh function here (even one that reads the same names) disposed
@@ -181,7 +185,7 @@ export function useSourceNames(): SourceNames {
     // Localised here, once per answer and per language, so every picker, legend and heading
     // that asks nameOf says a known app's default in the reader's words. `t` changes identity
     // only when the language does, so the memo holds for the reason the comment above gives.
-    const byId = new Map(sources.map((s) => [s.id, sourceLabel(s, t, language)]))
+    const byId = new Map(sources.map((s) => [s.id, sourceLabel(s, t, language, today)]))
     return {
       nameOf: (sourceId: string) => byId.get(sourceId) ?? sourceId,
       sources,
@@ -189,7 +193,7 @@ export function useSourceNames(): SourceNames {
       isError: query.isError,
       error: query.error,
     }
-  }, [items, t, language, query.isPending, query.isError, query.error])
+  }, [items, t, language, today, query.isPending, query.isError, query.error])
 }
 
 /**

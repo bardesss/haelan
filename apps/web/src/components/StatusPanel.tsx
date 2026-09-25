@@ -1,7 +1,7 @@
 import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
-import { formatSince } from '../format.js'
+import { formatShortDate, formatSince } from '../format.js'
 import { sourceLabel } from '../data/useSourceNames.js'
 import { addDays } from '../controls/range.js'
 import { dataTypeForMetric } from '@haelan/core/metric-data-type'
@@ -79,7 +79,7 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
               {connection.devices.map((device) => {
                 const label = device.lastReportedDate === null ? null : dayLabel(device.lastReportedDate, today, language)
                 const day = label === null ? t('status.delivered.never') : t('status.lastDay', { day: label })
-                const name = sourceLabel(device, t, language)
+                const name = sourceLabel(device, t, language, today)
                 return (
                   <li key={device.sourceId} className="status-device" data-stale={device.stale ? 'true' : undefined}>
                     {/* One line, cut with an ellipsis, the whole name on the title. A Health Connect
@@ -294,10 +294,6 @@ export function dayLabel(date: string, today: string, language: string): string 
   if (date < today && date >= addDays(today, -6)) {
     return anchored.toLocaleString(language, { weekday: 'long', timeZone: 'UTC' })
   }
-  // The year only when it is not this one: "Aug 1" is unambiguous in September, but a scale last
-  // heard from in December of last year would otherwise read as a date three months ahead.
-  const otherYear = date.slice(0, 4) !== today.slice(0, 4)
-  return anchored.toLocaleString(language, {
-    day: 'numeric', month: 'short', timeZone: 'UTC', ...(otherYear ? { year: 'numeric' } : {}),
-  })
+  // The year only when it is not this one - formatShortDate's rule, shared with sourceLabel.
+  return formatShortDate(date, today, language)
 }

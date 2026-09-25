@@ -5,6 +5,8 @@ import { Loading } from '../components/Loading.js'
 import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 import { useAllTime } from '../data/useAllTime.js'
 import { sourceLabel } from '../data/useSourceNames.js'
+import { useSession } from '../auth/session.js'
+import { localToday } from '../controls/range.js'
 import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/useAllTime.js'
 
 /**
@@ -135,6 +137,9 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
 function RecordRow({ record, t, language }: {
   record: MetricRecord, t: Translate, language: string
 }) {
+  // The person's today, for sourceLabel's year rule - their zone, as every other surface reads it.
+  const session = useSession()
+  const today = localToday(session.data?.timezone)
   return (
     // A data attribute rather than a `record-${metric}` class: a templated class name leaves a
     // bare `record-` that no stylesheet defines, which css-classes.test.ts is right to refuse,
@@ -151,7 +156,7 @@ function RecordRow({ record, t, language }: {
           to slide left past every other row's. Saying nothing and occupying nothing are different
           things, and only the first one was ever intended. */}
       <span className="record-source">
-        {record.sourceName === null ? '' : sourceLabel({ name: record.sourceName, defaultName: record.sourceDefaultName }, t, language)}
+        {record.sourceName === null ? '' : sourceLabel({ name: record.sourceName, defaultName: record.sourceDefaultName }, t, language, today)}
       </span>
       {/* The metric's own history, which is not the page's: floors and total_calories reach
           back further than steps do on a real archive, and a record means less without knowing

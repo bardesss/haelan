@@ -85,6 +85,24 @@ export function formatLocalDate(date: string, language: string): string {
 }
 
 /**
+ * A local date as a short day and month ("Aug 1", "1 aug"), with the year only when it is not the
+ * year of `today` - the person's own local date, never the browser's clock: around New Year east of
+ * UTC the two disagree, and a date said without its year is read as this one. "Aug 1" is
+ * unambiguous in September, but a scale last heard from in December of last year would otherwise
+ * read as a date three months ahead.
+ *
+ * Shared by the status panel's day labels (dayLabel) and a source's disambiguating "since" date
+ * (sourceLabel), so the two can never decide the year differently for the same reader on the same
+ * day - the review of PR 383 found them doing exactly that. Same UTC anchoring as formatLocalDate.
+ */
+export function formatShortDate(date: string, today: string, language: string): string {
+  const otherYear = date.slice(0, 4) !== today.slice(0, 4)
+  return new Date(`${date}T00:00:00Z`).toLocaleString(language, {
+    day: 'numeric', month: 'short', timeZone: 'UTC', ...(otherYear ? { year: 'numeric' } : {}),
+  })
+}
+
+/**
  * Two local dates as one range, the way the reader's locale shortens one: "Aug 1 – 31, 2026",
  * "1–31 aug 2026", with the month or year said once when both ends share it. formatLocalDate twice
  * with a dash between said the year twice and wrapped a four-column card onto two lines. Same UTC

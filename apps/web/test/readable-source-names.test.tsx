@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -14,6 +14,7 @@ import type { StatusPanel as StatusPanelData } from '../src/data/useStatusPanel.
 import { sourceActivityKey, sourceLabel, sourceNamesKey, useSourceNames } from '../src/data/useSourceNames.js'
 import type { NamedSourceWithActivity } from '../src/data/useSourceNames.js'
 import { sourcePriorityKey } from '../src/data/useSourcePriority.js'
+import { localToday } from '../src/controls/range.js'
 
 // A known app's default name is resolved by the server in English (NamedSource.name) and said
 // again here in the reader's language from `defaultName`. Synthetic sources only: the package
@@ -26,8 +27,10 @@ const PERSON: Session = {
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
-// This year, so the date is said without one - the rule sourceLabel shares with the panel's days.
-const YEAR = new Date().getUTCFullYear()
+// The person's this year, so the date is said without one - the rule sourceLabel shares with the
+// panel's days. Read in the person's zone, the way the Settings card and the panel read today.
+const YEAR = Number(localToday(PERSON.timezone).slice(0, 4))
+const TODAY = `${YEAR}-09-25`
 const SEP_4 = `${YEAR}-09-04`
 const LAST_YEAR_DEC_31 = `${YEAR - 1}-12-31`
 
@@ -61,24 +64,32 @@ describe('sourceLabel', () => {
   const nl = initI18n('nl').t
 
   it('says a known app in the reader\'s language', () => {
-    expect(sourceLabel(SOURCES[0]!, en, 'en')).toBe('Haelan (phone)')
-    expect(sourceLabel(SOURCES[0]!, nl, 'nl')).toBe('Haelan (telefoon)')
+    expect(sourceLabel(SOURCES[0]!, en, 'en', TODAY)).toBe('Haelan (phone)')
+    expect(sourceLabel(SOURCES[0]!, nl, 'nl', TODAY)).toBe('Haelan (telefoon)')
   })
 
   it('dates a disambiguated default in the reader\'s locale, with the year only when it is another', () => {
-    expect(sourceLabel(SOURCES[1]!, en, 'en')).toBe('Health Connect (phone), since Sep 4')
-    expect(sourceLabel(SOURCES[1]!, nl, 'nl')).toBe('Health Connect (telefoon), sinds 4 sep')
+    expect(sourceLabel(SOURCES[1]!, en, 'en', TODAY)).toBe('Health Connect (phone), since Sep 4')
+    expect(sourceLabel(SOURCES[1]!, nl, 'nl', TODAY)).toBe('Health Connect (telefoon), sinds 4 sep')
     const older = { name: 'x', defaultName: { key: 'healthConnectPhone', since: LAST_YEAR_DEC_31, tag: 'aaaa' } }
-    expect(sourceLabel(older, en, 'en')).toBe(`Health Connect (phone), since Dec 31, ${YEAR - 1} (aaaa)`)
+    expect(sourceLabel(older, en, 'en', TODAY)).toBe(`Health Connect (phone), since Dec 31, ${YEAR - 1} (aaaa)`)
+  })
+
+  // Review of PR 383: the year was decided against the browser's UTC year, while the panel's days
+  // are decided against the person's own today; the two disagreed around New Year.
+  it('decides the year against the person\'s today, not the calendar the browser is in', () => {
+    const december = { name: 'x', defaultName: { key: 'healthConnectPhone', since: '2026-12-20', tag: null } }
+    expect(sourceLabel(december, en, 'en', '2026-12-31')).toBe('Health Connect (phone), since Dec 20')
+    expect(sourceLabel(december, en, 'en', '2027-01-01')).toBe('Health Connect (phone), since Dec 20, 2026')
   })
 
   it('lets an alias win over the default', () => {
-    expect(sourceLabel(SOURCES[2]!, nl, 'nl')).toBe('Bathroom scale')
+    expect(sourceLabel(SOURCES[2]!, nl, 'nl', TODAY)).toBe('Bathroom scale')
   })
 
   it('prints the server\'s name for an unknown app, and for a key this catalogue lacks', () => {
-    expect(sourceLabel(SOURCES[3]!, nl, 'nl')).toBe('com.lyfta')
-    expect(sourceLabel({ name: 'Newer app', defaultName: { key: 'notYetKnown', since: null, tag: null } }, nl, 'nl'))
+    expect(sourceLabel(SOURCES[3]!, nl, 'nl', TODAY)).toBe('com.lyfta')
+    expect(sourceLabel({ name: 'Newer app', defaultName: { key: 'notYetKnown', since: null, tag: null } }, nl, 'nl', TODAY))
       .toBe('Newer app')
   })
 })
@@ -198,5 +209,37 @@ describe('useSourceNames().nameOf', () => {
 
   it('names each source in Dutch', () => {
     expect(render('nl')).toEqual(['Haelan (telefoon)', 'Health Connect (telefoon), sinds 4 sep', 'Bathroom scale', 'com.lyfta'])
+  })
+})
+
+// The whole path with a fixed clock: 23:30 UTC on New Year's Eve is already 1 January in the
+// person's zone, so a source first seen on 20 December is last year's and says so. The browser's
+// UTC year - what sourceLabel used to read - still said 2026 and dropped the year.
+describe('nameOf across New Year, east of UTC', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it('says the year once the person\'s own day has moved on', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.UTC(2026, 11, 31, 23, 30))
+
+    function One() {
+      const { nameOf } = useSourceNames()
+      return <span>{nameOf('hc')}</span>
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    client.setQueryData(sourceNamesKey(PERSON.personId), {
+      items: [source({
+        id: 'hc', displayName: 'com.android.healthconnect.phone.0a1b2c3d', name: 'x',
+        defaultName: { key: 'healthConnectPhone', since: '2026-12-20', tag: null },
+      })],
+    })
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en"><One /></I18nProvider>
+      </QueryClientProvider>,
+    )
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('span')?.textContent)
+      .toBe('Health Connect (phone), since Dec 20, 2026')
   })
 })
