@@ -6,6 +6,8 @@ import type { ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import { requirePersonId } from './useAnnotations.js'
+import { useTranslation } from '../i18n/index.js'
+import type { Translate } from '../format.js'
 
 // Mirrors NamedSource in packages/core/src/store/sourceAliases.ts, which the route sends whole,
 // the same choice useSyncStatus.ts makes for its own response type and for the same reason: the
@@ -16,9 +18,66 @@ export interface NamedSource {
   externalId: string
   displayName: string
   alias: string | null
+  /** The server's English name. Shown as sent unless `defaultName` lets it be said locally. */
   name: string
   kind: 'device' | 'app' | 'manual'
   createdAtMs: number
+  /**
+   * A known app's default, for sourceLabel. Optional on this side only: the demo's captured
+   * responses predate the field until they are next regenerated, and absent reads as null.
+   */
+  defaultName?: DefaultName | null
+}
+
+/**
+ * Mirrors DefaultName in packages/core/src/api/sourceNames.ts, for the reason NamedSource above is
+ * a mirror. `key` is a string here rather than the core union: a server newer than this bundle may
+ * send a key this catalogue has never heard of, and sourceLabel below falls back to the server's
+ * English `name` for exactly that case rather than printing a raw catalogue path.
+ */
+export interface DefaultName {
+  key: string
+  /** The person's local date the source was first seen; only set to tell colliding defaults apart. */
+  since: string | null
+  /** A few characters of the id, only when `since` did not tell them apart either. */
+  tag: string | null
+}
+
+/**
+ * The name to print for a source, in the reader's language.
+ *
+ * The server resolves every name once, in English (NamedSource.name), because MCP tools and exports
+ * have no reader's language to resolve into; this only re-says a known app's default in the
+ * catalogue's words. The order is the server's own: an alias always wins, then the default, then
+ * the name as sent - which for any other source already is the display name or the id. Taking
+ * `alias` as optional lets the status panel's rows use this too: the server sends those a null
+ * `defaultName` whenever an alias is set, so the alias arrives as `name` and is printed as sent.
+ *
+ * The date is short, in the reader's locale, and carries the year only when it is not this one,
+ * the same rule the status panel's day labels follow: "since 4 Sep" reads as this September, and a
+ * source first seen last December must not read as three months ahead.
+ */
+export function sourceLabel(
+  source: { name: string, alias?: string | null, defaultName?: DefaultName | null },
+  t: Translate,
+  language: string,
+): string {
+  if (source.alias !== undefined && source.alias !== null) return source.alias
+  const defaultName = source.defaultName
+  if (defaultName === undefined || defaultName === null) return source.name
+  const key = `sourceDefaults.${defaultName.key}`
+  const base = t(key)
+  // i18next hands back the key itself for a message it does not have.
+  if (base === key) return source.name
+  let label = base
+  if (defaultName.since !== null) {
+    const otherYear = defaultName.since.slice(0, 4) !== String(new Date().getUTCFullYear())
+    const date = new Date(`${defaultName.since}T00:00:00Z`).toLocaleString(language, {
+      day: 'numeric', month: 'short', timeZone: 'UTC', ...(otherYear ? { year: 'numeric' } : {}),
+    })
+    label = t('sourceDefaults.since', { name: label, date })
+  }
+  return defaultName.tag === null ? label : t('sourceDefaults.tagged', { name: label, tag: defaultName.tag })
 }
 
 /**
@@ -109,6 +168,8 @@ export function useSourceNames(): SourceNames {
   })
 
   const items = query.data?.items
+  const { t, i18n } = useTranslation()
+  const language = i18n.language
   // Memoised on the query's own data reference, not rebuilt as a fresh object literal every
   // render: `nameOf` sits in IntradayHeartRate's `build` useCallback deps, which useChart keys its
   // init/dispose effect on, so a fresh function here (even one that reads the same names) disposed
@@ -117,7 +178,10 @@ export function useSourceNames(): SourceNames {
   // didn't reach until it grew a Day tab case.
   return useMemo(() => {
     const sources = items ?? []
-    const byId = new Map(sources.map((s) => [s.id, s.name]))
+    // Localised here, once per answer and per language, so every picker, legend and heading
+    // that asks nameOf says a known app's default in the reader's words. `t` changes identity
+    // only when the language does, so the memo holds for the reason the comment above gives.
+    const byId = new Map(sources.map((s) => [s.id, sourceLabel(s, t, language)]))
     return {
       nameOf: (sourceId: string) => byId.get(sourceId) ?? sourceId,
       sources,
@@ -125,7 +189,7 @@ export function useSourceNames(): SourceNames {
       isError: query.isError,
       error: query.error,
     }
-  }, [items, query.isPending, query.isError, query.error])
+  }, [items, t, language, query.isPending, query.isError, query.error])
 }
 
 /**

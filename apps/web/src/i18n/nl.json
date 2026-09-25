@@ -128,6 +128,13 @@
     "choose": "Bronnen kiezen…",
     "empty": "Er is nog niets gekoppeld."
   },
+  "sourceDefaults": {
+    "haelanPhone": "Haelan (telefoon)",
+    "openScale": "openScale",
+    "healthConnectPhone": "Health Connect (telefoon)",
+    "since": "{{name}}, sinds {{date}}",
+    "tagged": "{{name}} ({{tag}})"
+  },
   "sidebar": {
     "sectionsLabel": "Secties",
     "openMenu": "Menu openen",

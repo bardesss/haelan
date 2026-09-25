@@ -42,14 +42,14 @@ const EMPTY: AllTime = {
 }
 
 /** The page's own query key pre-seeded: an unseeded query reaches the real network here. */
-function mountPage(all: AllTime): void {
+function mountPage(all: AllTime, lng = 'en'): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(allTimeKey(PERSON.personId), all)
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
-        <I18nProvider lng="en"><Records /></I18nProvider>
+        <I18nProvider lng={lng}><Records /></I18nProvider>
       </QueryClientProvider>,
     )
   })
@@ -188,6 +188,18 @@ describe('the all-time page', () => {
     })
     expect(text("[data-metric='steps'] .record-source")).toBe('Pixel Watch 4')
     expect(text("[data-metric='floors'] .record-source")).toBe('')
+  })
+
+  // The server names a known app in English; the key beside it lets the page say it in Dutch.
+  it('says a known app\'s default name in the reader\'s language', () => {
+    mountPage({
+      ...EMPTY,
+      records: [{
+        metric: 'steps', tier: 'merged', localDate: '2026-03-14', value: 21000, from: '2026-01-21', days: 235,
+        sourceName: 'Haelan (phone)', sourceDefaultName: { key: 'haelanPhone', since: null, tag: null },
+      }],
+    }, 'nl')
+    expect(text("[data-metric='steps'] .record-source")).toBe('Haelan (telefoon)')
   })
 
   // The cell used to be omitted outright, which is what made the rows look misaligned: in a row of

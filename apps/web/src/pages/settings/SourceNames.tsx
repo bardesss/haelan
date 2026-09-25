@@ -6,7 +6,7 @@ import { formatLocalDate } from '../../format.js'
 import { EmptyState } from '../../components/EmptyState.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
-import { sourceActivityKey, useClearSourceName, useRenameSource, useSourcesWithActivity } from '../../data/useSourceNames.js'
+import { sourceActivityKey, sourceLabel, useClearSourceName, useRenameSource, useSourcesWithActivity } from '../../data/useSourceNames.js'
 import type { NamedSourceWithActivity } from '../../data/useSourceNames.js'
 import { useSetSourcePriority, useSourcePriority } from '../../data/useSourcePriority.js'
 import { useSetPanelChoice } from '../../data/useStatusPanel.js'
@@ -32,7 +32,7 @@ const MAX_ALIAS_LENGTH = 64
  * off this screen.
  */
 export function SourceNames() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const session = useSession()
   const queryClient = useQueryClient()
   const { sources, isPending, isError, error } = useSourcesWithActivity()
@@ -132,7 +132,10 @@ export function SourceNames() {
   // since priorityFrom treats an omitted source as UNRANKED_BASE and the route would refuse a
   // write that left one out. Falling back to the id keeps a name lookup that races the sources
   // query from crashing the row rather than rendering it blank.
-  const nameFor = (sourceId: string): string => sources.find((s) => s.id === sourceId)?.name ?? sourceId
+  const nameFor = (sourceId: string): string => {
+    const source = sources.find((s) => s.id === sourceId)
+    return source === undefined ? sourceId : sourceLabel(source, t, i18n.language)
+  }
   const order = (priority.data?.order ?? []).map((entry) => entry.sourceId)
 
   // The announcement is built from `next`, the list this move is about to send, rather than
@@ -279,17 +282,23 @@ function SourceNameRow({ source, today }: { source: NamedSourceWithActivity, tod
 
   const failed = rename.isError || clear.isError || setChoice.isError
   const fallbackLabel = source.displayName === '' ? source.id : source.displayName
+  // What this row is called, and what it would be called with the field emptied. The placeholder
+  // is the second: an empty field means "no alias", and what the reader gets then is the known
+  // app's readable default when there is one ("Health Connect (phone)"), not the package name the
+  // detail line below still prints beside the id for whoever needs the raw identity.
+  const name = sourceLabel(source, t, i18n.language)
+  const unnamed = sourceLabel({ ...source, alias: null }, t, i18n.language)
 
   return (
     <li className="source-name-row">
       <label>
-        <span className="sr-only">{t('settings.sourceNames.nameLabel', { source: source.name })}</span>
+        <span className="sr-only">{t('settings.sourceNames.nameLabel', { source: name })}</span>
         <input
           type="text"
           className="input"
           value={draft}
           maxLength={MAX_ALIAS_LENGTH}
-          placeholder={fallbackLabel}
+          placeholder={unnamed}
           onChange={(e) => setDraft(e.currentTarget.value)}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
@@ -307,7 +316,7 @@ function SourceNameRow({ source, today }: { source: NamedSourceWithActivity, tod
           press cannot race the first and the switch does not flicker between the two answers. */}
       <label className="source-panel-toggle">
         <input type="checkbox" checked={shown} disabled={setChoice.isPending}
-          aria-label={t('settings.sourceNames.showInPanelLabel', { source: source.name })}
+          aria-label={t('settings.sourceNames.showInPanelLabel', { source: name })}
           onChange={(e) => setChoice.mutate({ sourceId: source.id, visible: e.currentTarget.checked })} />
         {t('settings.sourceNames.showInPanel')}
       </label>
@@ -315,7 +324,7 @@ function SourceNameRow({ source, today }: { source: NamedSourceWithActivity, tod
           nothing to go back to. */}
       {source.panelChoice !== null && (
         <button type="button" className="source-panel-default" disabled={setChoice.isPending}
-          aria-label={t('settings.sourceNames.panelDefaultLabel', { source: source.name })}
+          aria-label={t('settings.sourceNames.panelDefaultLabel', { source: name })}
           onClick={() => setChoice.mutate({ sourceId: source.id, visible: null })}>
           {t('settings.sourceNames.panelDefault')}
         </button>

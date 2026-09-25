@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
+import type { DefaultName } from './useSourceNames.js'
 
 // Mirrors AllTime in packages/core/src/query/allTime.ts, which the route sends whole - the same
 // choice useSourceNames.ts and useMaintenance.ts make, and for the same reason: apps/web imports
@@ -20,6 +21,12 @@ export interface MetricRecord {
   days: number
   /** The device behind the record day, or null when no single one can be named. */
   sourceName: string | null
+  /**
+   * Set when `sourceName` is a known app's default, for sourceLabel to say it locally. Optional
+   * because the demo's captured responses predate it until they are next regenerated, and a
+   * missing one just means the server's English `sourceName` is printed as sent.
+   */
+  sourceDefaultName?: DefaultName | null
 }
 
 export interface SessionRecord {

@@ -4,6 +4,7 @@ import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
 import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 import { useAllTime } from '../data/useAllTime.js'
+import { sourceLabel } from '../data/useSourceNames.js'
 import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/useAllTime.js'
 
 /**
@@ -149,7 +150,9 @@ function RecordRow({ record, t, language }: {
           cell reserves no width, so the window line on the two metrics with no single device used
           to slide left past every other row's. Saying nothing and occupying nothing are different
           things, and only the first one was ever intended. */}
-      <span className="record-source">{record.sourceName ?? ''}</span>
+      <span className="record-source">
+        {record.sourceName === null ? '' : sourceLabel({ name: record.sourceName, defaultName: record.sourceDefaultName }, t, language)}
+      </span>
       {/* The metric's own history, which is not the page's: floors and total_calories reach
           back further than steps do on a real archive, and a record means less without knowing
           how many days it beat. */}

@@ -2,6 +2,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
 import { formatSince } from '../format.js'
+import { sourceLabel } from '../data/useSourceNames.js'
 import { addDays } from '../controls/range.js'
 import { dataTypeForMetric } from '@haelan/core/metric-data-type'
 import { dataTypeName } from '../data/dataTypeName.js'
@@ -78,6 +79,7 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
               {connection.devices.map((device) => {
                 const label = device.lastReportedDate === null ? null : dayLabel(device.lastReportedDate, today, language)
                 const day = label === null ? t('status.delivered.never') : t('status.lastDay', { day: label })
+                const name = sourceLabel(device, t, language)
                 return (
                   <li key={device.sourceId} className="status-device" data-stale={device.stale ? 'true' : undefined}>
                     {/* One line, cut with an ellipsis, the whole name on the title. A Health Connect
@@ -87,8 +89,10 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
                         and cut the left edge off every row in it. Truncated rather than wrapped,
                         the owner's call: a line per device keeps the list scannable, and the title
                         still carries the rest to anyone who hovers. The day beside it never shrinks
-                        or wraps (app.css), so the dates stay in one column whatever the names do. */}
-                    <span className="status-device-name" title={device.name}>{device.name}</span>
+                        or wraps (app.css), so the dates stay in one column whatever the names do.
+                        Row and title both say sourceLabel's name, so a known app reads in the
+                        reader's language in either place. */}
+                    <span className="status-device-name" title={name}>{name}</span>
                     {/* A stale device says so in place of its date, and says since when in the same
                         breath: "gone quiet since 21 Aug". The date used to live only on a hover
                         title, but now that the cards no longer warn, this row is the only place a
