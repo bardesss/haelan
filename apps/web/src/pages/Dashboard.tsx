@@ -19,6 +19,7 @@ import { dashboardRows } from './dashboard/dashboardRows.js'
 import type { DashCardSlot } from './dashboard/dashboardRows.js'
 import { formatHeaderDate, formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
 import { useDashboardDay } from './dashboard/useDashboardDay.js'
+import { ApiError } from '../api/apiError.js'
 
 // The grid's class by whether its cards are the previous day's, held while the next one loads.
 const GRID_CLASS = { settled: 'dashboard-grid', stepping: 'dashboard-grid dashboard-grid-stale' } as const
@@ -84,8 +85,17 @@ export function Dashboard() {
     if (nearest !== null) setDay(nearest, { replace: true })
   }, [nearest, setDay])
 
-  // On its way to the nearest day, the gap's 404 is not an error to show.
-  if (isError && nearest === null) return <><Header timezone={timezone} day={urlDay} /><ErrorState onRetry={() => void refetch()} error={error} /></>
+  // A day the server refuses outright (a 400: before the person's first day with data, the one
+  // case useDashboardDay cannot catch from the URL alone) names no nearest day, and Retry would
+  // only ask for the same 400 again. Today is the one day that always answers, so the page falls
+  // back there, replacing the URL as the gap's redirect does.
+  const refused = urlDay !== null && isError && error instanceof ApiError && error.kind === 'config'
+  useEffect(() => {
+    if (refused) setDay(null, { replace: true })
+  }, [refused, setDay])
+
+  // On its way to the nearest day (or back to today), the refusal is not an error to show.
+  if (isError && nearest === null && !refused) return <><Header timezone={timezone} day={urlDay} /><ErrorState onRetry={() => void refetch()} error={error} /></>
   if (isPending || isError || glance === undefined) return <><Header timezone={timezone} day={urlDay} /><Loading /></>
 
   const { sleep, recovery, day } = glance

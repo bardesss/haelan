@@ -57,7 +57,7 @@ function pastGlance(nav: Glance['nav'] = { previous: '2026-09-21', next: '2026-0
   return { ...glanceBody(), today: '2026-09-22', finished: true, nav }
 }
 
-type Body = Glance | { nearest: string } | Promise<Glance>
+type Body = Glance | { nearest: string } | { refused: true } | Promise<Glance>
 
 /** Answers each /glance URL from `bodies` by its `day` (or 'today'); a body of `{ nearest }` answers 404,
  *  and a promise holds the answer until the test settles it. */
@@ -77,6 +77,7 @@ function stubFetch(bodies: Record<string, Body>, seen: string[]): () => void {
       const day = new URL(url, 'http://x').searchParams.get('day') ?? 'today'
       const body = await bodies[day]
       if (body === undefined) return json({ error: 'internal' }, 500)
+      if ('refused' in body) return json({ error: { kind: 'config', message: 'before the first day with data' } }, 400)
       return 'nearest' in body ? json(body, 404) : json(body)
     }
     if (url.includes('/sources')) return json({ items: [] })
@@ -200,6 +201,19 @@ describe('the dashboard header, a past day', () => {
       expect(window.location.search).toBe('?day=2026-09-20')
       expect(window.history.length).toBe(before)
       expect(heading()).toBe('Sunday, September 20')
+    } finally { restore() }
+  })
+
+  // The server answers a day before the person's first with a 400 and no nearest day; Retry only
+  // asked for the same 400 again, so the page was a dead end.
+  it('falls back to today, replacing the URL, when the asked-for day is refused', async () => {
+    window.history.replaceState(null, '', '/?day=2020-01-15')
+    const before = window.history.length
+    const { restore } = await mountPage({ '2020-01-15': { refused: true }, today: todayGlance() })
+    try {
+      expect(window.location.search).toBe('')
+      expect(window.history.length).toBe(before)
+      expect(container!.querySelector('.dash-date')?.textContent).toContain('Wednesday, September 23')
     } finally { restore() }
   })
 
