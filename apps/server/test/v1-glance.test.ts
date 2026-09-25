@@ -261,3 +261,123 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(body.day.steps.staleSources).toEqual([expect.objectContaining({ sourceId: 'w1', name: 'My watch' })])
   })
 })
+
+// Task 4 (M9c: day navigation): `?day=` asks for a finished day instead of today. today is
+// 2026-08-20 throughout (08:00Z is 10:00 in Europe/Amsterdam); steps is seeded every day from
+// 2026-08-01 (the first day with data) through 2026-08-19, except 2026-08-10, a deliberate gap
+// the 404 case below reads back through `nearest`.
+describe('GET /api/v1/p/:personId/glance?day=', () => {
+  const FIRST_DAY = '2026-08-01'
+  const GAP_DAY = '2026-08-10'
+
+  async function seedDays(h: Harness): Promise<void> {
+    const db = h.app.haelan.instance.db
+    for (let d = 1; d <= 19; d += 1) {
+      const localDate = `2026-08-${String(d).padStart(2, '0')}`
+      if (localDate === GAP_DAY) continue
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate, metric: 'steps', agg: 'sum', source: 'merged', value: 8000, coverage: 1, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+  }
+
+  it('answers a past day with data as a finished day, today naming that day', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const reply = await get(harness, token, '/glance?day=2026-08-18')
+    expect(reply.statusCode).toBe(200)
+    const body = reply.json()
+    expect(body.finished).toBe(true)
+    expect(body.today).toBe('2026-08-18')
+    expect(body.nav).toEqual({ previous: '2026-08-17', next: '2026-08-19' })
+  })
+
+  it('leaves today unfinished when no day is given', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const body = (await get(harness, token, '/glance')).json()
+    expect(body.finished).toBe(false)
+    expect(body.today).toBe('2026-08-20')
+  })
+
+  it('refuses a day in the future', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const reply = await get(harness, token, '/glance?day=2026-08-21')
+    expect(reply.statusCode).toBe(400)
+    expect(reply.json()).toMatchObject({ error: { kind: 'config' } })
+  })
+
+  it('refuses a day before the first day with data', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const reply = await get(harness, token, `/glance?day=2026-07-31`)
+    expect(reply.statusCode).toBe(400)
+    expect(reply.json()).toMatchObject({ error: { kind: 'config' } })
+  })
+
+  it.each(['2026-9-1', 'abc'])('refuses a malformed day %s', async (day) => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const reply = await get(harness, token, `/glance?day=${day}`)
+    expect(reply.statusCode).toBe(400)
+  })
+
+  it('answers 404 with the nearest earlier day when the requested day is a gap', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const reply = await get(harness, token, `/glance?day=${GAP_DAY}`)
+    expect(reply.statusCode).toBe(404)
+    expect(reply.json()).toEqual({ nearest: '2026-08-09' })
+  })
+
+  it('answers 304 to a repeat request for a finished day, carrying the first one\'s ETag', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const first = await get(harness, token, '/glance?day=2026-08-18')
+    expect(first.statusCode).toBe(200)
+    const again = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/glance?day=2026-08-18',
+      headers: { authorization: `Bearer ${token}`, 'if-none-match': first.headers.etag as string },
+    })
+    expect(again.statusCode).toBe(304)
+  })
+
+  it('judges a finished day\'s whole-day steps against the whole-day baseline, with no pace', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const body = (await get(harness, token, '/glance?day=2026-08-18')).json()
+    expect(body.day.stepsPace).toBeNull()
+    expect(body.day.steps.value).toBe(8000)
+    expect(body.day.steps.partial).toBe(false)
+  })
+
+  // FIRST_DAY itself always has data (it is defined as the earliest day that does), so this proves
+  // the gate compares against it rather than merely refusing everything before today.
+  it('allows the first day with data itself', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    await seedDays(harness)
+    const reply = await get(harness, token, `/glance?day=${FIRST_DAY}`)
+    expect(reply.statusCode).toBe(200)
+    expect(reply.json().finished).toBe(true)
+  })
+})
