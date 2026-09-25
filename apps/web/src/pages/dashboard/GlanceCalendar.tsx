@@ -367,15 +367,23 @@ export function GlanceCalendar({ selected, today, onPick, onClose, anchor }: {
         ))}
       </div>
       <div className="cal-legend">
+        {/* Which of a day's two dots a row describes is drawn, not written: a small pair with that
+            dot lit. Hidden from assistive tech, which hears every day's dots in words already. */}
         <p className="cal-legend-line">
+          <span className="cal-legend-pair" aria-hidden="true"><span className="cal-pair-dot is-lit" /><span className="cal-pair-dot" /></span>
           <b className="cal-legend-name">{t('glance.calendar.sleepLegend')}</b>{' '}
-          <span className="cal-key"><span className="cal-dot is-within" />{t('glance.calendar.sleepWithin')}</span>{' '}
-          <span className="cal-key"><span className="cal-dot is-outside" />{t('glance.calendar.sleepOutside')}</span>
+          <span className="cal-legend-keys">
+            <span className="cal-key"><span className="cal-dot is-within" />{t('glance.calendar.sleepWithin')}</span>{' '}
+            <span className="cal-key"><span className="cal-dot is-outside" />{t('glance.calendar.sleepOutside')}</span>
+          </span>
         </p>
         <p className="cal-legend-line">
+          <span className="cal-legend-pair" aria-hidden="true"><span className="cal-pair-dot" /><span className="cal-pair-dot is-lit" /></span>
           <b className="cal-legend-name">{t('glance.calendar.stepsLegend')}</b>{' '}
-          <span className="cal-key"><span className="cal-dot is-reached" />{t('glance.calendar.stepsReached')}</span>{' '}
-          <span className="cal-key"><span className="cal-dot is-below" />{t('glance.calendar.stepsBelow')}</span>
+          <span className="cal-legend-keys">
+            <span className="cal-key"><span className="cal-dot is-reached" />{t('glance.calendar.stepsReached')}</span>{' '}
+            <span className="cal-key"><span className="cal-dot is-below" />{t('glance.calendar.stepsBelow')}</span>
+          </span>
         </p>
       </div>
       <div className="cal-foot">

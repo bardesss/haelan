@@ -826,9 +826,15 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 .cal-day.is-selected .cal-dot { background: var(--surface-page); }
 .cal-day.is-selected .cal-dot.is-outside, .cal-day.is-selected .cal-dot.is-below { background: none; border: 1px solid var(--surface-page); }
 .cal-day.is-selected .cal-dot.is-none { background: none; border-color: color-mix(in srgb, var(--surface-page) 45%, var(--accent)); }
-.cal-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: var(--font-size-micro); color: var(--text-muted); }
-.cal-legend-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin: 0; }
+.cal-legend { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 5px 8px; margin-top: 10px; font-size: var(--font-size-micro); color: var(--text-muted); }
+/* Each row's pair, name and keys sit in the legend's own columns, so the two rows' keys line up.
+   Subgrid rather than `display: contents`, which the page grid's collapse rule would claim. */
+.cal-legend-line { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; margin: 0; }
 .cal-legend-name { color: var(--text-secondary); font-weight: var(--weight-medium); }
+.cal-legend-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.cal-legend-pair { display: inline-flex; gap: 2px; }
+.cal-pair-dot { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--text-faint); }
+.cal-pair-dot.is-lit { background: var(--text-primary); }
 .cal-key { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .cal-key .cal-dot { width: 9px; height: 9px; }
 .cal-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: 10px; font-size: var(--font-size-xs); color: var(--text-muted); }
