@@ -381,3 +381,47 @@ describe('GET /api/v1/p/:personId/glance?day=', () => {
     expect(reply.json().finished).toBe(true)
   })
 })
+
+// A strip dot opens its own day, and the route re-judges both on rounded numbers: the dot against
+// its own day's rounded band, the opened day against the same rounded band. Rounding matters here:
+// 08-14's 420.4 minutes is above an unrounded high of 420.2 (sixty days of exactly 420.2 behind
+// it), and within once both round to 420, so a dot judged on core's unrounded numbers would say
+// "outside" and open "within". 08-19's 600 widens only the shown day's own band, so 08-16's 425 is
+// outside its own usual and within the shown day's: the dot has to be judged against its own.
+describe('the night strip on the wire', () => {
+  it('agrees, day by day, with the day each dot opens and with that day\'s calendar dot', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    for (let i = 0; i < 80; i += 1) {
+      const localDate = new Date(Date.parse('2026-08-20T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate, metric: 'sleep_asleep_minutes', agg: 'sum', source: 'merged',
+        value: ({ '2026-08-14': 420.4, '2026-08-16': 425, '2026-08-19': 600 } as Record<string, number>)[localDate] ?? 420.2, coverage: null, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+      const endMs = Date.parse(`${localDate}T04:10:00Z`)
+      db.insert(schema.sessions).values({
+        id: `n-${localDate}`, personId: 'p1', sourceId: 'w1', kind: 'sleep', externalId: `n-${localDate}`,
+        startMs: endMs - 7 * 3_600_000, startOffsetMinutes: 120, endMs, endOffsetMinutes: 120,
+        localDate, attrs: JSON.stringify({}), rawPayloadId: null,
+      }).run()
+    }
+    type Band = { low: number, high: number } | null
+    type Figure = { standing: string | null, baseline: Band, strip: { localDate: string, value: number | null, band: Band, standing: string | null }[] }
+    const strip = ((await get(harness, token, '/glance')).json().sleep.asleep as Figure).strip
+    const calendar = new Map(((await get(harness, token, '/glance/calendar?month=2026-08')).json().days as { localDate: string, sleep: string | null }[])
+      .map((d) => [d.localDate, d.sleep]))
+    expect(strip.find((d) => d.localDate === '2026-08-14')).toMatchObject({ value: 420, standing: 'within' })
+    expect(strip.find((d) => d.localDate === '2026-08-16')).toMatchObject({ value: 425, standing: 'above' })
+    for (const day of strip) {
+      const path = day.localDate === '2026-08-20' ? '/glance' : `/glance?day=${day.localDate}`
+      const own = (await get(harness, token, path)).json().sleep.asleep as Figure
+      expect({ date: day.localDate, standing: day.standing, band: day.band }).toEqual({ date: day.localDate, standing: own.standing, band: own.baseline })
+      const mapped = day.standing === null ? null : day.standing === 'within' ? 'within' : 'outside'
+      expect({ date: day.localDate, calendar: mapped }).toEqual({ date: day.localDate, calendar: calendar.get(day.localDate) })
+    }
+  })
+})
