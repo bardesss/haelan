@@ -101,6 +101,18 @@
       "sync_failed": "Part of the last sync failed.",
       "phone_quiet": "The phone has not uploaded for over a day."
     },
+    "failures": {
+      "heading_one": "{{count}} data type failed in the last sync:",
+      "heading_other": "{{count}} data types failed in the last sync:",
+      "details": "Details",
+      "reason": {
+        "auth": "Google did not accept this server's access. If it keeps failing, connect again under Account.",
+        "transient": "A temporary error. The next sync tries again.",
+        "schema_drift": "Google did not accept the request, or sent an answer Haelan cannot read.",
+        "data_quality": "The data Google sent did not pass Haelan's checks.",
+        "config": "A setup problem on this server."
+      }
+    },
     "sync": {
       "run": "Sync now",
       "running": "Syncing…",

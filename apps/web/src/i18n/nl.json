@@ -101,6 +101,18 @@
       "sync_failed": "Een deel van de laatste synchronisatie is mislukt.",
       "phone_quiet": "De telefoon heeft al meer dan een dag niets geüpload."
     },
+    "failures": {
+      "heading_one": "Bij de laatste synchronisatie is {{count}} gegevenstype mislukt:",
+      "heading_other": "Bij de laatste synchronisatie zijn {{count}} gegevenstypen mislukt:",
+      "details": "Details",
+      "reason": {
+        "auth": "Google accepteert de toegang van deze server niet. Blijft het misgaan, maak dan opnieuw verbinding onder Account.",
+        "transient": "Een tijdelijke fout. De volgende synchronisatie probeert het opnieuw.",
+        "schema_drift": "Google weigerde het verzoek, of stuurde een antwoord dat Haelan niet kan lezen.",
+        "data_quality": "De gegevens van Google kwamen niet door de controles van Haelan.",
+        "config": "Een instellingsprobleem op deze server."
+      }
+    },
     "sync": {
       "run": "Nu synchroniseren",
       "running": "Bezig met synchroniseren…",

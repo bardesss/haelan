@@ -436,8 +436,15 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
    strip's right on a collapsed one - so no rule here says where it goes, only what it is. The
    width gives way on a window narrower than 20rem plus the clamp's margin either side. Card
    surface and a border, no shadow, as .rail-menu's own comment argues. */
+/* overflow-x hidden, and never auto: a row wider than the panel once gave the popover a sideways
+   scrollbar and scrolled the whole panel so every row lost its left edge (a long device name - see
+   .status-device-name). Nothing in the panel is meant to be reached by scrolling sideways, so a
+   future row that overflows is cut at the edge rather than dragging the panel with it. hidden
+   rather than clip on purpose: an element with overflow hidden still reports its content's full
+   scrollWidth, which is what layout:check's no-horizontal-overflow assertion measures, so that
+   check still sees the row that overflowed even though the reader no longer can. */
 .status-popover {
-  position: fixed; width: min(20rem, calc(100vw - 12px)); max-height: 70vh; overflow-y: auto;
+  position: fixed; width: min(20rem, calc(100vw - 12px)); max-height: 70vh; overflow-y: auto; overflow-x: hidden;
   padding: var(--space-3); background: var(--surface-card); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md); z-index: 30;
 }
@@ -447,6 +454,9 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 .status-sheet {
   margin: auto auto 0; padding: 0; border: 0; max-height: 85dvh;
   width: 100%; max-width: none;
+  /* Never scrolls sideways, for the reason .status-popover gives. A modal dialog is a scroll
+     container of the browser's own (overflow: auto in its default styles), so this is set here too. */
+  overflow-x: hidden;
   background: var(--surface-card);
   border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
@@ -470,6 +480,30 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 .status-devices { list-style: none; margin: var(--space-2) 0 0; padding: 0 0 0 var(--space-3); }
 .status-device { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); padding: 2px 0; }
 .status-device[data-stale='true'] { color: var(--negative); }
+/* A device name is cut to one line, never allowed to widen the row. A Health Connect package name
+   with its hash suffix is one unbroken word far wider than 20rem, and as a flex item's min-content
+   width it pushed the row, and the popover's scroll width with it, past the panel's edge: a
+   sideways scrollbar, and the whole panel scrolled so the left edge of every row was cut off.
+   A zero basis and min-width 0 are what let the name give way at all (a flex item will not shrink
+   below its min-content width otherwise), and with a zero basis the row's own flex-wrap never
+   drops the day onto a line of its own for a long name. The whole name is on a title
+   (StatusPanel.tsx). */
+.status-device-name { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The day never shrinks and never wraps, so "gone quiet since 21 Aug" and "yesterday" line up in
+   one column down the list however long the names beside them are. */
+.status-device-day { flex: none; white-space: nowrap; }
+/* What the last sync failed on, under the sentence that counts it: the type, a plain reason, and
+   the stored message folded away. Indented like the device list beneath, since both are the
+   connection's detail rather than its headline. */
+.status-failures { list-style: none; margin: var(--space-1) 0 0; padding: 0 0 0 var(--space-3); font-size: var(--font-size-xs); }
+.status-failure { padding: 2px 0; }
+.status-failure-name { color: var(--text-secondary); font-weight: var(--weight-medium); }
+.status-failure-reason { display: block; color: var(--text-muted); }
+.status-failure-details summary { color: var(--text-faint); cursor: pointer; font-size: var(--font-size-micro); }
+/* The raw message is an HTTP body as often as not: JSON with no spaces, as unbroken as a package
+   name. It wraps anywhere rather than truncating, because this is the one place its exact text is
+   the point, and it is already cut to 200 characters (truncateRaw). */
+.status-failure-raw { display: block; font-family: var(--font-mono); font-size: var(--font-size-micro); color: var(--text-faint); overflow-wrap: anywhere; white-space: pre-wrap; }
 /* A quiet device's metrics, on a line of their own under its name: the panel is narrow, and beside
    "gone quiet" a list of three data types would squeeze the device's name into a column. Muted
    rather than negative, because the row above already says something is wrong and this says what. */
@@ -1873,6 +1907,10 @@ button.week-bar-slot { cursor: pointer; }
      way it caught the source order buttons above: a control that opens the account page from a
      modal a finger only ever taps into deserves the same 44px it gets everywhere else. */
   .status-foot a { min-height: 44px; display: flex; align-items: center; }
+  /* The same for a failure's "Details" toggle, which is micro text too. Kept a list item rather than
+     made a flex box like the link above, because a <summary> draws its disclosure triangle only as
+     a list item; align-content centres the text in the taller block instead. */
+  .status-failure-details summary { display: list-item; min-height: 44px; align-content: center; }
 }
 
 /* The demo's own banner (apps/web/src/demo/DemoBanner.tsx), styled through classes rather than the

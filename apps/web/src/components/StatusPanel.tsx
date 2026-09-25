@@ -4,7 +4,8 @@ import { Link } from '../router.js'
 import { formatSince } from '../format.js'
 import { addDays } from '../controls/range.js'
 import { dataTypeForMetric } from '@haelan/core/metric-data-type'
-import type { StatusPanel as StatusPanelData, StatusConnection } from '../data/useStatusPanel.js'
+import { dataTypeName } from '../data/dataTypeName.js'
+import type { StatusPanel as StatusPanelData, StatusConnection, StatusFailure } from '../data/useStatusPanel.js'
 
 /**
  * What the sync button's last press, or the last run this panel watched, came to. Decided by
@@ -66,7 +67,9 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
               <SyncButton sync={status.sync} pending={syncPending} onSync={onSync} />
             )}
           </div>
-          {connection.problem !== null && <p className="status-problem">{t(`status.problem.${connection.problem}`)}</p>}
+          {connection.problem === 'sync_failed' && (connection.failures ?? []).length > 0
+            ? <SyncFailures failures={connection.failures!} />
+            : connection.problem !== null && <p className="status-problem">{t(`status.problem.${connection.problem}`)}</p>}
           {connection.kind === 'google' && outcome !== null && (
             <p className="status-result" role="status">{t(`status.sync.${outcome}`)}</p>
           )}
@@ -77,7 +80,15 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
                 const day = label === null ? t('status.delivered.never') : t('status.lastDay', { day: label })
                 return (
                   <li key={device.sourceId} className="status-device" data-stale={device.stale ? 'true' : undefined}>
-                    <span>{device.name}</span>
+                    {/* One line, cut with an ellipsis, the whole name on the title. A Health Connect
+                        package name with its hash suffix ("com.android.healthconnect.phone." and
+                        thirty hex digits) is one unbroken word far wider than the panel; left to
+                        itself it widened the row past the popover, which then scrolled sideways
+                        and cut the left edge off every row in it. Truncated rather than wrapped,
+                        the owner's call: a line per device keeps the list scannable, and the title
+                        still carries the rest to anyone who hovers. The day beside it never shrinks
+                        or wraps (app.css), so the dates stay in one column whatever the names do. */}
+                    <span className="status-device-name" title={device.name}>{device.name}</span>
                     {/* A stale device says so in place of its date, and says since when in the same
                         breath: "gone quiet since 21 Aug". The date used to live only on a hover
                         title, but now that the cards no longer warn, this row is the only place a
@@ -87,7 +98,7 @@ export function StatusPanel({ status, today, syncPending, outcome, onSync }: {
                         year only when it is not this one. The server never calls a source stale
                         without a last date, and the null arm is only there because the type
                         allows it. */}
-                    <span>{device.stale && label !== null ? t('status.stale', { day: label }) : day}</span>
+                    <span className="status-device-day">{device.stale && label !== null ? t('status.stale', { day: label }) : day}</span>
                     {/* What stopped arriving, under the row it belongs to. This is the one place a
                         quiet source is announced now - the cards' triangles and the control row's
                         "stopped in this range" line are gone - so it has to carry what those told
@@ -109,6 +120,76 @@ function QuietMetrics({ metrics }: { metrics: readonly string[] }) {
   const { t, i18n } = useTranslation()
   const text = metricNames(metrics, t, i18n.language)
   return text === null ? null : <span className="status-device-metrics">{text}</span>
+}
+
+/**
+ * What the last sync failed on: "2 data types failed in the last sync:", then each type by its
+ * readable name, a plain reason where one can be given, and the stored message under Details.
+ *
+ * Takes the place of "Part of the last sync failed." rather than sitting under it, because the
+ * count says the same thing and more; that sentence is still what a connection with an absent or
+ * empty list says (StatusPanel above), which is what a demo capture older than the field sends.
+ *
+ * Named through dataTypeName, which falls back to the raw id - the right call here, unlike
+ * metricNames below, which drops an unnamed metric: a failing type the catalogue has not named yet
+ * is still failing, and leaving it off would make the list shorter than the count above it.
+ */
+function SyncFailures({ failures }: { failures: readonly StatusFailure[] }) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <p className="status-problem">{t('status.failures.heading', { count: failures.length })}</p>
+      <ul className="status-failures">
+        {failures.map((failure) => {
+          const kind = failureKind(failure.lastError)
+          return (
+            <li key={failure.dataType} className="status-failure">
+              <span className="status-failure-name">{dataTypeName(t, failure.dataType)}</span>
+              {kind !== null && <span className="status-failure-reason">{t(`status.failures.reason.${kind}`)}</span>}
+              {failure.lastError !== null && (
+                <details className="status-failure-details">
+                  <summary>{t('status.failures.details')}</summary>
+                  <code className="status-failure-raw">{truncateRaw(failure.lastError)}</code>
+                </details>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </>
+  )
+}
+
+/**
+ * The error kinds a stored message can be read as, with a reason in the catalogues for each: every
+ * kind packages/core/src/errors.ts defines. A message carries its kind as a leading `[kind] ` tag
+ * because recordFailure stores a HaelanError's `message`, and the HaelanError constructor writes
+ * the tag there; runJob's `classify` turns anything else into a TransientError first, so nearly
+ * every failure sync_state holds is tagged. The one path that stores an untagged message is the
+ * runner's backfill catch for the unexpected, and that is exactly the case with no honest summary.
+ *
+ * The tag is the only thing read. The detail after it is free text from Google or from our own
+ * code - "token refresh failed 400: ...", an HTTP body - and matching words in it would be the
+ * message-text matching errors.ts's own header warns against: it eventually reads a schema change
+ * as a rate limit. So the reasons are said at the level the kind is certain of, and the rest stays
+ * in Details, raw.
+ */
+const FAILURE_KINDS = ['auth', 'transient', 'schema_drift', 'data_quality', 'config'] as const
+type FailureKind = typeof FAILURE_KINDS[number]
+
+export function failureKind(message: string | null): FailureKind | null {
+  const tag = message?.match(/^\[([a-z_]+)\] /)?.[1]
+  return (FAILURE_KINDS as readonly string[]).includes(tag ?? '') ? tag as FailureKind : null
+}
+
+/**
+ * The stored message, cut to a length that reads in a 20rem panel. recordFailure already keeps up
+ * to 500 characters, and most of that is an HTTP body's JSON; the first 200 hold the tag, the
+ * status and the start of the body, which is what anyone reading it to diagnose a failure needs.
+ */
+const RAW_MAX = 200
+function truncateRaw(message: string): string {
+  return message.length > RAW_MAX ? `${message.slice(0, RAW_MAX)}…` : message
 }
 
 /**
