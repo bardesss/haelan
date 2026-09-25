@@ -6,7 +6,7 @@ import { localMinutesOf, inWindow, DEFAULT_WINDOW } from '../../charts/schedule.
 import { stageOf } from '../../data/nights.js'
 import { formatClock } from '../../format.js'
 import type { GlanceSleep } from '../../data/useGlance.js'
-import { DashCard, Described, useOpensDay } from './cardShared.js'
+import { DashCard, Described, stripBands, useOpensDay } from './cardShared.js'
 import { formatFigure, usualLine } from './glanceText.js'
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
@@ -64,9 +64,9 @@ export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = 
   const language = i18n.language
   const segments = useMemo(() => hypnogramSegments(sleep), [sleep])
   const opens = useOpensDay(today, onOpenDay)
-  const { values, labels, standings } = useMemo(() => ({
+  const { values, labels, standings, bands } = useMemo(() => ({
     values: sleep.asleep.strip.map((d) => d.value), labels: sleep.asleep.strip.map((d) => d.localDate),
-    standings: sleep.asleep.strip.map((d) => d.standing),
+    standings: sleep.asleep.strip.map((d) => d.standing), bands: stripBands(sleep.asleep.strip),
   }), [sleep.asleep.strip])
   const band = sleep.asleep.baseline !== null && !sleep.asleep.baseline.thin ? sleep.asleep.baseline : undefined
   // R3: the band is shaded behind the strip AND its two edges are labelled, so a reader is never
@@ -111,7 +111,7 @@ export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = 
           <div className="dash-lead-strip">
             <Described text={usualLine(sleep.asleep, t, language) ?? t(finished ? 'glance.sleep.captionFinished' : 'glance.sleep.caption')} hidden>
               <Sparkline values={values} labels={labels} label={t(finished ? 'glance.sleep.stripFinished' : 'glance.sleep.strip')} unit={t('glance.sleep.asleep')}
-                metric={sleep.asleep.metric} baseline={band} bandLabels={bandLabels} height={64}
+                metric={sleep.asleep.metric} baseline={band} bands={bands} bandLabels={bandLabels} height={64}
                 dots pointStandings={standings} tableToggle={false} {...opens}
                 formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...sleep.asleep, value: v }, language) ?? absent)} />
             </Described>

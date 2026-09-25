@@ -204,6 +204,16 @@ describe('NightCard', () => {
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual([null, null, 'above', null, null, null, null])
   })
+
+  // Each night is judged against its own day's usual, so the strip's band steps night by night.
+  it('hands the strip each night\'s own band, the thin and missing ones as gaps', () => {
+    const base = sleepFixture()
+    const sleep = sleepFixture({
+      asleep: { strip: base.asleep.strip.map((d, i) => ({ ...d, band: i === 0 ? null : { center: 400 + i, low: 360 + i, high: 440 + i, thin: i === 1 } })) },
+    })
+    renderNight({ sleep })
+    expect(sparklineProps?.bands).toEqual([null, null, ...[2, 3, 4, 5, 6].map((i) => ({ low: 360 + i, high: 440 + i }))])
+  })
 })
 
 function recoveryFixture(over: {
@@ -419,6 +429,15 @@ describe('TodayCard', () => {
     expect(sparklineProps?.bandLabels).toEqual({ low: '8,000', high: '9,500' })
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual([null, 'below', null, null, null, null, null])
+  })
+
+  it('hands the steps strip each day\'s own band, the band its dot was judged against', () => {
+    const base = dayFixture()
+    const day = dayFixture({ steps: { strip: base.steps.strip.map((d, i) => ({ ...d, band: { center: 8000 + i, low: 7000 + i, high: 9000 + i, thin: false } })) } })
+    renderToday({ day })
+    expect(sparklineProps?.bands).toEqual([0, 1, 2, 3, 4, 5, 6].map((i) => ({ low: 7000 + i, high: 9000 + i })))
+    // The labels still name the day shown, as the card's own "usual" words do.
+    expect(sparklineProps?.baseline).toEqual(day.steps.baseline)
   })
 
   // Task 19b: with no pace verdict AND no usual line to fall back to (no baseline at all), there is

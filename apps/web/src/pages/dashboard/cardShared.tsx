@@ -4,6 +4,7 @@ import { Card } from '../../components/Card.js'
 import { BasisContext } from '../../components/basis.js'
 import { Link } from '../../router.js'
 import { useTranslation } from '../../i18n/index.js'
+import type { GlanceStripDay } from '../../data/useGlance.js'
 
 // The card's name and its muted span ("so far", "today"). No stale-source mark beside it: a quiet
 // source is announced once, in the status panel (StatusPanel.tsx), like on every other page.
@@ -53,6 +54,17 @@ export function DashCard({ span, title, subtitle, link, className, children }: {
       </div>
     </Card>
   )
+}
+
+/**
+ * A strip's per-day bands as Sparkline's `bands` draws them: each day's own usual, the one its dot
+ * is judged against, or null where that day has none or only a thin one (which judges nothing, so
+ * shading it would claim a usual the verdict does not stand on). Undefined when no day has a band
+ * at all, so a strip with nothing to shade draws no band series.
+ */
+export function stripBands(strip: readonly GlanceStripDay[]): ({ low: number, high: number } | null)[] | undefined {
+  const bands = strip.map((d) => (d.band !== null && !d.band.thin ? { low: d.band.low, high: d.band.high } : null))
+  return bands.some((b) => b !== null) ? bands : undefined
 }
 
 /**

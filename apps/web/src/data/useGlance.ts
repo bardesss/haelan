@@ -33,6 +33,8 @@ export type GlanceStanding = 'within' | 'above' | 'below'
 export interface GlanceStripDay {
   localDate: string
   value: number | null
+  /** That day's own usual, which `standing` judges it against; null where the day has none. */
+  band: GlanceBaseline | null
   standing: GlanceStanding | null
 }
 

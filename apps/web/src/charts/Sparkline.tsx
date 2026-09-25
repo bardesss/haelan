@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
-import type { ECElementEvent, EChartsOption } from 'echarts'
+import type { CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams, ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
 import { chartBase, dayMarks, dayPointDate, dayTableRows, escapeHtml, AXIS_FONT_SIZE, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { PointStanding } from './base.js'
@@ -71,6 +71,26 @@ function measureLabelWidth(text: string, fontSize: number): number {
   return ctx.measureText(text).width
 }
 
+// One day's step of the per-day band (`bands`): its whole category slot, centre +/- half a slot,
+// from its own low to its own high. Each edge is rounded to a whole pixel from the shared boundary
+// value, so two neighbouring steps meet on exactly the same pixel column: no seam of doubled
+// shading where they would overlap, and no hairline gap where they would not quite touch.
+export function bandStep(tokens: ChartTokens) {
+  return (_params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
+    const day = Number(api.value(0))
+    const [x = 0, yLow = 0] = api.coord([day, Number(api.value(1))])
+    const [, yHigh = 0] = api.coord([day, Number(api.value(2))])
+    // api.size() is typed number | number[] for other coord systems; a category/value grid always
+    // returns [x, y], x being one category's slot width (Hypnogram reads it the same way).
+    const size = api.size?.([1, 0]) ?? 0
+    const half = (Array.isArray(size) ? size[0] ?? 0 : size) / 2
+    const left = Math.round(x - half)
+    const right = Math.round(x + half)
+    return { type: 'rect' as const, shape: { x: left, y: yHigh, width: right - left, height: yLow - yHigh },
+      style: { fill: tokens.band, opacity: OPACITY.baselineBand } }
+  }
+}
+
 // Re-exported from base.ts (defined there so dayTableRows can read it too) rather than defined
 // here a second time: every existing caller imports `PointStanding` from this module.
 export type { PointStanding } from './base.js'
@@ -78,7 +98,7 @@ export type { PointStanding } from './base.js'
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
-  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, opensDay,
+  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, opensDay, bands,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
@@ -185,6 +205,15 @@ export function Sparkline({
   // (ChartFigure) for opening instead of annotating. Undefined, every other caller, leaves the
   // tooltip exactly as dayTooltip writes it and the tap control on its annotate words.
   opensDay?: { current: string, tail: string, idle: string, named: (name: string) => string }
+  // One usual per entry of `values`, each day's own (GlanceStripDay.band, never thin here), drawn
+  // in place of `baseline`'s single band as a step per day: each day's slot shaded from its own low
+  // to its own high, so the band a dot sits in is the band its colour was judged against. Steps
+  // rather than a smooth polygon through the days' edges, because a polygon blends each day's band
+  // into its neighbours' across the slot and a dot near an edge could then sit visibly inside the
+  // shading while its verdict says outside. A null entry leaves that day's slot unshaded. `baseline`
+  // is still what `bandLabels` label (the day shown, the last step), and still widens the y axis.
+  // Undefined, every caller but the dashboard's day strips, draws `baseline` exactly as before.
+  bands?: readonly ({ low: number, high: number } | null)[]
 }) {
   const { t, i18n } = useTranslation()
 
@@ -333,7 +362,7 @@ export function Sparkline({
         lineStyle: { width: STROKE.sparkline, color: tokens.series, ...(hasTrend && { opacity: 0 }) },
         // Same markArea shape HeartRateRange draws its band with: a rectangle between two y values,
         // unbounded on x, so it sits behind the line regardless of how many points there are.
-        ...(baseline && { markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
+        ...(baseline && !bands && { markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
           data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] } }),
         markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
           // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands
@@ -384,6 +413,14 @@ export function Sparkline({
           // beside it and in the panel a click on this mark reopens.
           data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
             ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
+      // The per-day band (`bands`), last in the array so every index before it is what it always
+      // was (the tooltip reads the first series' params and a click resolves the reading series'
+      // own dataIndex), and at a lower z so it is painted beneath the line and the dots. Silent:
+      // it is shading, never a point to hover or open.
+      ...(bands ? [{ type: 'custom' as const, silent: true, z: 1, tooltip: { show: false },
+        encode: { x: 0, y: [1, 2] },
+        data: bands.flatMap((band, i) => (band === null ? [] : [[i, band.low, band.high]])),
+        renderItem: bandStep(tokens) }] : []),
     ],
     // `labels` is in this list even though nothing above reads it, and it is not dead weight.
     // useChart keys its stale-tap reset on `build`'s identity, and the resolvers below (onClick,
@@ -394,7 +431,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest])
+  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest, bands])
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current
@@ -437,7 +474,7 @@ export function Sparkline({
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can
           assert the band's presence without depending on echarts' internal structure. */}
-      {baseline && <span data-baseline-band aria-hidden="true" style={{ display: 'none' }} />}
+      {(baseline || bands?.some((band) => band !== null)) && <span data-baseline-band aria-hidden="true" style={{ display: 'none' }} />}
     </>
   )
 }
