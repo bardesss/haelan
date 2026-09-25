@@ -10,6 +10,7 @@ import { recoveryIndexSeries, bandOf } from '../api/recoveryIndex.ts'
 import type { RecoveryBand } from '../api/recoveryIndex.ts'
 import { readRecoveryInput } from './recoveryInput.ts'
 import type { WorkoutSession } from './sessions.ts'
+import { ConfigError } from '../errors.ts'
 
 /**
  * The glance: last night, today's recovery and today so far, as one person bound read (M9a).
@@ -406,10 +407,16 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
   // morning before that the section would be empty although yesterday's are sitting right there.
   // Falling back one day, and only one, keeps the morning glance useful without passing off a
   // stale week as current: `asOfDate` says which day each value is.
-  const scored = scoredOn(ctx.today) ?? scoredOn(yesterday)
+  //
+  // A finished day never falls back: the fallback exists only for the running day's watch not
+  // having synced yet, which cannot be true of a day already over. Falling back on a finished day
+  // would show D-1's score and readings for D and hide D's own `missing` reasons behind a number
+  // that was never D's.
+  const scored = ctx.finished ? scoredOn(ctx.today) : (scoredOn(ctx.today) ?? scoredOn(yesterday))
 
   const figure = (metric: string) => {
     const onToday = dailyFigure(ctx, { metric, agg: 'last', on: ctx.today, partial: false, asOfMs: null })
+    if (ctx.finished) return onToday
     return onToday.value !== null ? onToday : dailyFigure(ctx, { metric, agg: 'last', on: yesterday, partial: false, asOfMs: null })
   }
   const restingHeartRate = figure('resting_heart_rate')
@@ -512,12 +519,21 @@ export function readGlance(
 ): Glance {
   const realToday = input.today
   const finished = input.day !== undefined
-  const ctx = contextFor(q, {
-    today: finished ? input.day! : input.today,
-    nowMs: finished ? input.dayEndMs! : input.nowMs,
-    nameOf: input.nameOf,
-    finished,
-  })
+  let today = input.today
+  let nowMs = input.nowMs
+  if (finished) {
+    const day = input.day
+    const dayEndMs = input.dayEndMs
+    // PersonQuery.glance already refuses a `day` without a `dayEndMs` before this is ever
+    // called; narrowed here rather than asserted so readGlance stays safe to call directly, the
+    // way the test suite does.
+    if (day === undefined || dayEndMs === undefined) {
+      throw new ConfigError('day and dayEndMs must both be given, or neither')
+    }
+    today = day
+    nowMs = dayEndMs
+  }
+  const ctx = contextFor(q, { today, nowMs, nameOf: input.nameOf, finished })
   const sleep = readLastNight(ctx)
   const day = readDay(ctx)
   // The week's asleep figure is computed from the seven nights ending on last night's own date

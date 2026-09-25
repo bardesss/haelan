@@ -91,7 +91,57 @@ describe('glance for a finished day', () => {
     const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW })
     expect(glance.finished).toBe(false)
     expect(glance.day.steps.partial).toBe(true)
-    expect(glance.week.steps!.days).toBeLessThanOrEqual(6)
+    // 70 continuous days behind TODAY, so all six finished strip days have a value.
+    expect(glance.week.steps!.days).toBe(6)
+  })
+
+  it('draws the finished day\'s own heart-rate trace, not today\'s', () => {
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: Date.parse(`${DAY}T08:00:00Z`), agg: 'mean', value: 60 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: Date.parse(`${TODAY}T08:00:00Z`), agg: 'mean', value: 90 })
+    const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: dayEndMs(DAY) })
+    expect(glance.day.heartRate.points.length).toBeGreaterThan(0)
+    expect(glance.day.heartRate.points.every((p) => p.utcMs < dayEndMs(DAY) + 1 && p.utcMs >= Date.parse(`${DAY}T00:00:00Z`))).toBe(true)
+  })
+})
+
+describe('glance recovery on a finished day', () => {
+  // The day before DAY (2026-08-14) scores, standing in for the "today" of glance.test.ts's own
+  // seedBaselines pattern; DAY itself (2026-08-15) has no reading at all.
+  const D_MINUS_1 = '2026-08-14'
+
+  beforeEach(() => {
+    for (const date of datesEnding('2026-08-13', 60)) {
+      insert({ metric: 'daily_hrv', agg: 'last', localDate: date, value: 40 + (Number(date.slice(8)) % 5) })
+      insert({ metric: 'resting_heart_rate', agg: 'last', localDate: date, value: 55 + (Number(date.slice(8)) % 3) })
+      insert({ metric: 'sleep_asleep_minutes', localDate: date, value: 420 })
+      insert({ metric: 'sleep_bedtime_minutes', agg: 'last', localDate: date, value: -30 })
+    }
+    insert({ metric: 'daily_hrv', agg: 'last', localDate: D_MINUS_1, value: 44 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: D_MINUS_1, value: 55 })
+  })
+
+  it('does not fall back to the day before when the finished day itself has no reading', () => {
+    const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: dayEndMs(DAY) })
+    expect(glance.recovery.index.value).toBeNull()
+    expect(glance.recovery.index.asOfDate).toBeNull()
+    expect(glance.recovery.restingHeartRate.value).toBeNull()
+    expect(glance.recovery.hrv.value).toBeNull()
+    expect(glance.recovery.missing).not.toBeNull()
+  })
+
+  it('scores the finished day itself when it has a reading', () => {
+    insert({ metric: 'daily_hrv', agg: 'last', localDate: DAY, value: 44 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: DAY, value: 55 })
+    const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: dayEndMs(DAY) })
+    expect(glance.recovery.index.value).not.toBeNull()
+    expect(glance.recovery.index.asOfDate).toBe(DAY)
+    expect(glance.recovery.restingHeartRate).toMatchObject({ value: 55, asOfDate: DAY })
+  })
+})
+
+describe('glance validation', () => {
+  it('refuses dayEndMs given without day', () => {
+    expect(() => new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, dayEndMs: dayEndMs(DAY) })).toThrow(/dayEndMs/)
   })
 })
 

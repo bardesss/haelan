@@ -273,6 +273,8 @@ export class PersonQuery {
         throw new ConfigError('dayEndMs is required when day is given')
       }
       requireFiniteNumber('dayEndMs', input.dayEndMs)
+    } else if (input.dayEndMs !== undefined) {
+      throw new ConfigError('dayEndMs was given without day')
     }
     return readGlance(this, {
       today: input.today,
