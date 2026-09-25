@@ -1410,6 +1410,7 @@
       "dayBefore": "the day before"
     },
     "noReading": "No reading yet",
+    "noReadingFinished": "No reading",
     "pace": {
       "ahead": "Ahead of your usual pace",
       "on": "On your usual pace",
@@ -1423,7 +1424,9 @@
       "bed": "Bed",
       "woke": "Woke",
       "strip": "Time asleep, last 7 nights",
+      "stripFinished": "Time asleep, the 7 nights to that day",
       "caption": "last 7 nights",
+      "captionFinished": "the 7 nights to that day",
       "link": "View this night",
       "efficiencyStanding": {
         "above": "higher than usual",
@@ -1446,11 +1449,14 @@
       "hrv": "HRV",
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",
+      "unscoredFinished": "Not enough readings to score.",
       "notScored": "Not scored",
       "score": "Score",
       "scoreUnscored": "Score, not scored",
       "strip": "Recovery index, last 7 days",
+      "stripFinished": "Recovery index, the 7 days to that day",
       "caption": "last 7 days",
+      "captionFinished": "the 7 days to that day",
       "link": "View recovery"
     },
     "today": {
@@ -1461,7 +1467,9 @@
       "heartRateSinceMidnight": "Heart rate · 00:00 → now",
       "heartRateChart": "Heart rate today",
       "strip": "Steps, last 7 days",
+      "stripFinished": "Steps, the 7 days to that day",
       "caption": "last 7 days",
+      "captionFinished": "the 7 days to that day",
       "link": "View activity",
       "thatDay": "That day",
       "dayStanding": {
@@ -1479,7 +1487,9 @@
     },
     "week": {
       "title": "This week",
+      "titleFinished": "That week",
       "subtitle": "last 7 days",
+      "subtitleFinished": "the 7 days to that day",
       "steps": "Steps",
       "active": "Active",
       "asleep": "Asleep",
@@ -1512,7 +1522,8 @@
       "next": "Next day",
       "today": "Today",
       "calendar": "Pick a date",
-      "pastLine": "that night, and the whole day"
+      "pastLine": "that night, and the whole day",
+      "pastLineNoNight": "no night recorded · the whole day"
     },
     "calendar": {
       "previousMonth": "Previous month",

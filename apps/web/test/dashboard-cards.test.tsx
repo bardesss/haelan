@@ -121,6 +121,15 @@ describe('NightCard', () => {
     expect(renderNight()).toMatch(/<h2 class="dash-card-title"><strong>Last night<\/strong> <span>[^<]+<\/span><\/h2>/)
   })
 
+  // A finished night has no reading still to come, and its strip ends on that night, not last night.
+  it('words a missing figure and the strip as over on a finished day', () => {
+    const html = renderNight({ finished: true, sleep: sleepFixture({ efficiency: { value: null } }) })
+    expect(html).toContain('<b class="dash-mini-value">No reading</b>')
+    expect(html).toContain('<p class="dash-caption">the 7 nights to that day</p>')
+    expect(sparklineProps?.label).toBe('Time asleep, the 7 nights to that day')
+    expect(html).not.toMatch(/last 7|No reading yet/)
+  })
+
   it('keeps the usual sentence for a screen reader on the strip', () => {
     const html = renderNight()
     expect(html).toContain('within your usual')
@@ -307,6 +316,17 @@ describe('RecoveryCard on a finished day', () => {
     expect(html).toContain('<span class="glance-asof">that day</span>')
     expect(html).toContain('<span class="glance-asof">the day before</span>')
     expect(html).not.toMatch(/>(today|yesterday)</)
+  })
+
+  it('says an unscored day and a missing gauge as over, and its strip runs to that day', () => {
+    sparklineProps = null
+    const recovery = recoveryFixture({ index: { value: null }, hrv: { value: null } })
+    const html = renderRecovery({ recovery, today: '2026-09-22', finished: true })
+    expect(html).toContain('<p class="dash-recovery-words">Not enough readings to score.</p>')
+    expect(html).toContain('<p class="glance-empty">No reading</p>')
+    expect(html).toContain('<p class="dash-caption">the 7 days to that day</p>')
+    expect(sparklineProps?.label).toBe('Recovery index, the 7 days to that day')
+    expect(html).not.toMatch(/last 7|yet/)
   })
 
   it('keeps today and yesterday on today\'s own page', () => {
@@ -506,6 +526,16 @@ describe('TodayCard on a finished day', () => {
     expect(html).toContain('<span class="label">That day&#x27;s activities</span>')
   })
 
+  it('words a missing figure and the strip as over', () => {
+    sparklineProps = null
+    const day = finishedDay()
+    const html = renderFinished({ ...day, activeMinutes: { ...day.activeMinutes, value: null } })
+    expect(html).toMatch(/<div class="dash-headline-sm">No reading <span class="glance-unit">/)
+    expect(html).toContain('<p class="dash-caption">the 7 days to that day</p>')
+    expect(sparklineProps?.label).toBe('Steps, the 7 days to that day')
+    expect(html).not.toMatch(/last 7|No reading yet/)
+  })
+
   it('says today nowhere', () => {
     // Text and accessible names only: the markup's own class names (dash-today-figures) are not words.
     expect(renderFinished().match(/(?:>[^<]*|aria-label="[^"]*)(?:[Tt]oday|so far|→ now)/g)).toBeNull()
@@ -574,6 +604,12 @@ describe('WeekCard', () => {
     const html = renderWeek({ glance: { ...glanceBody(), finished: true } })
     expect(html).toContain('aria-label="Steps, the 7 days to that day; the average counts every day shown"')
     expect(html).not.toContain('today not counted')
+  })
+
+  it('is titled That week on a finished day, the 7 days to that day', () => {
+    const html = renderWeek({ glance: { ...glanceBody(), finished: true } })
+    expect(html).toContain('<h2 class="dash-card-title"><strong>That week</strong> <span>the 7 days to that day</span></h2>')
+    expect(renderWeek()).toContain('<h2 class="dash-card-title"><strong>This week</strong> <span>last 7 days</span></h2>')
   })
 
   it("names a finished day's sleep average as including that night, not last night", () => {

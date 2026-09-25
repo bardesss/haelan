@@ -76,7 +76,8 @@ export function WeekCard({ glance, span, onOpenDay }: {
     })
   }
   return (
-    <DashCard span={span} title={t('glance.week.title')} subtitle={t('glance.week.subtitle')}>
+    <DashCard span={span} title={t(glance.finished ? 'glance.week.titleFinished' : 'glance.week.title')}
+      subtitle={t(glance.finished ? 'glance.week.subtitleFinished' : 'glance.week.subtitle')}>
       {rows.map((row) => (
         <div className="dash-week-row" key={row.key}>
           <div>

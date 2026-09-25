@@ -90,7 +90,7 @@ export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = 
       link={{ to: `/sleep/night/${sleep.localDate}`, text: t('glance.sleep.link') }}>
       <div className="dash-lead">
         <div>
-          <div className="dash-headline">{formatFigure(sleep.asleep, language) ?? t('glance.noReading')}</div>
+          <div className="dash-headline">{formatFigure(sleep.asleep, language) ?? t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</div>
           <div className="dash-minis">
             {minis.map(({ key, label, figure, unit }) => {
               const value = formatFigure(figure, language)
@@ -99,7 +99,7 @@ export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = 
                 <span key={key} className="dash-mini">
                   <span className="dash-mini-label">{label}</span>{' '}
                   <b className={out ? 'dash-mini-value is-out' : 'dash-mini-value'}>
-                    {value === null ? t('glance.noReading') : unit ? `${value} ${unit}` : value}
+                    {value === null ? t(finished ? 'glance.noReadingFinished' : 'glance.noReading') : unit ? `${value} ${unit}` : value}
                   </b>
                   {out && <span className="dash-mini-note">{' '}{t(`glance.sleep.${key}Standing.${figure.standing}`)}</span>}
                 </span>
@@ -109,13 +109,13 @@ export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = 
         </div>
         {values.filter((v) => v !== null).length > 1 && (
           <div className="dash-lead-strip">
-            <Described text={usualLine(sleep.asleep, t, language) ?? t('glance.sleep.caption')} hidden>
-              <Sparkline values={values} labels={labels} label={t('glance.sleep.strip')} unit={t('glance.sleep.asleep')}
+            <Described text={usualLine(sleep.asleep, t, language) ?? t(finished ? 'glance.sleep.captionFinished' : 'glance.sleep.caption')} hidden>
+              <Sparkline values={values} labels={labels} label={t(finished ? 'glance.sleep.stripFinished' : 'glance.sleep.strip')} unit={t('glance.sleep.asleep')}
                 metric={sleep.asleep.metric} baseline={band} bandLabels={bandLabels} height={64}
                 dots pointStandings={standings} tableToggle={false} {...opens}
                 formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...sleep.asleep, value: v }, language) ?? absent)} />
             </Described>
-            <p className="dash-caption">{t('glance.sleep.caption')}</p>
+            <p className="dash-caption">{t(finished ? 'glance.sleep.captionFinished' : 'glance.sleep.caption')}</p>
           </div>
         )}
       </div>

@@ -150,6 +150,14 @@ describe('the dashboard header, a past day', () => {
     } finally { restore() }
   })
 
+  // Today's line has its no-night form; a past day's said "that night" for a night it did not have.
+  it('says no night was recorded under the title when the day has none', async () => {
+    const { restore } = await mountPage({ '2026-09-22': { ...pastGlance(), sleep: null } })
+    try {
+      expect(subLine()).toBe('no night recorded · the whole day')
+    } finally { restore() }
+  })
+
   it('disables next exactly when there is no later day, and previous exactly when there is no earlier one', async () => {
     const { restore } = await mountPage({ '2026-09-22': pastGlance({ previous: null, next: null }) })
     try {

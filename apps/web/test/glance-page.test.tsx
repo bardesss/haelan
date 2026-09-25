@@ -481,6 +481,9 @@ describe('the glance Dashboard', () => {
       const day = cardTitled('Die dag')!
       expect(day.querySelector('.dash-card-title')?.textContent).toBe('Die dag dinsdag 22 september')
       expect(day.querySelector('.dash-pace')?.textContent).toBe('Meer dan op een gewone dag · normaal 8.000 – 9.500')
+      expect(day.querySelector('.dash-caption')?.textContent).toBe('de 7 dagen tot en met die dag')
+      expect(night.querySelector('.dash-caption')?.textContent).toBe('de 7 nachten tot en met die dag')
+      expect(cardTitled('Die week')!.querySelector('.dash-card-title')?.textContent).toBe('Die week de 7 dagen tot en met die dag')
       act(() => { container!.querySelector<HTMLButtonElement>('button[aria-haspopup]')!.click() })
       await flush(client, () => document.body.innerHTML)
       expect([...document.querySelectorAll('.cal-legend-line')].map((l) => l.textContent))

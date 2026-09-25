@@ -1410,6 +1410,7 @@
       "dayBefore": "de dag ervoor"
     },
     "noReading": "Nog geen meting",
+    "noReadingFinished": "Geen meting",
     "pace": {
       "ahead": "Vóór op je gebruikelijke tempo",
       "on": "Op je gebruikelijke tempo",
@@ -1423,7 +1424,9 @@
       "bed": "Naar bed",
       "woke": "Wakker",
       "strip": "Tijd geslapen, laatste 7 nachten",
+      "stripFinished": "Tijd geslapen, de 7 nachten tot en met die dag",
       "caption": "laatste 7 nachten",
+      "captionFinished": "de 7 nachten tot en met die dag",
       "link": "Bekijk deze nacht",
       "efficiencyStanding": {
         "above": "hoger dan gewoonlijk",
@@ -1446,11 +1449,14 @@
       "hrv": "HRV",
       "respiratory": "Ademhaling {{value}}, boven je gebruikelijke waarde",
       "unscored": "Nog niet genoeg metingen om te scoren.",
+      "unscoredFinished": "Niet genoeg metingen om te scoren.",
       "notScored": "Geen score",
       "score": "Score",
       "scoreUnscored": "Score, niet gescoord",
       "strip": "Herstelindex, laatste 7 dagen",
+      "stripFinished": "Herstelindex, de 7 dagen tot en met die dag",
       "caption": "laatste 7 dagen",
+      "captionFinished": "de 7 dagen tot en met die dag",
       "link": "Bekijk herstel"
     },
     "today": {
@@ -1461,7 +1467,9 @@
       "heartRateSinceMidnight": "Hartslag · 00:00 → nu",
       "heartRateChart": "Hartslag vandaag",
       "strip": "Stappen, laatste 7 dagen",
+      "stripFinished": "Stappen, de 7 dagen tot en met die dag",
       "caption": "laatste 7 dagen",
+      "captionFinished": "de 7 dagen tot en met die dag",
       "link": "Bekijk activiteit",
       "thatDay": "Die dag",
       "dayStanding": {
@@ -1479,7 +1487,9 @@
     },
     "week": {
       "title": "Deze week",
+      "titleFinished": "Die week",
       "subtitle": "laatste 7 dagen",
+      "subtitleFinished": "de 7 dagen tot en met die dag",
       "steps": "Stappen",
       "active": "Actief",
       "asleep": "Slaaptijd",
@@ -1512,7 +1522,8 @@
       "next": "Volgende dag",
       "today": "Vandaag",
       "calendar": "Kies een datum",
-      "pastLine": "die nacht, en de hele dag"
+      "pastLine": "die nacht, en de hele dag",
+      "pastLineNoNight": "die nacht niet gemeten · de hele dag"
     },
     "calendar": {
       "previousMonth": "Vorige maand",

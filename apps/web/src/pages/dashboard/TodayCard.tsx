@@ -72,12 +72,12 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
         <div className="dash-today-figures">
           <div>
             <span className="label">{t('glance.today.steps')}</span>
-            <div className="dash-headline-sm">{formatFigure(day.steps, language) ?? t('glance.noReading')}</div>
+            <div className="dash-headline-sm">{formatFigure(day.steps, language) ?? t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</div>
           </div>
           <div>
             <span className="label">{t('glance.today.activeMinutes')}</span>
             <div className="dash-headline-sm">
-              {formatFigure(day.activeMinutes, language) ?? t('glance.noReading')}{' '}
+              {formatFigure(day.activeMinutes, language) ?? t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}{' '}
               <span className="glance-unit">{t('activity.units.min')}</span>
             </div>
           </div>
@@ -101,13 +101,13 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
       </div>
       {values.filter((v) => v !== null).length > 1 && (
         <div>
-          <Described text={usualLine(day.steps, t, language) ?? t('glance.today.caption')} hidden>
-            <Sparkline values={values} labels={labels} label={t('glance.today.strip')} unit={t('glance.today.steps')}
+          <Described text={usualLine(day.steps, t, language) ?? t(finished ? 'glance.today.captionFinished' : 'glance.today.caption')} hidden>
+            <Sparkline values={values} labels={labels} label={t(finished ? 'glance.today.stripFinished' : 'glance.today.strip')} unit={t('glance.today.steps')}
               metric={day.steps.metric} baseline={band} bandLabels={bandLabels} height={64}
               dots pointStandings={standings} tableToggle={false} {...opens}
               formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...day.steps, value: v }, language) ?? absent)} />
           </Described>
-          <p className="dash-caption">{t('glance.today.caption')}</p>
+          <p className="dash-caption">{t(finished ? 'glance.today.captionFinished' : 'glance.today.caption')}</p>
         </div>
       )}
       {day.heartRate.points.length > 0 && (

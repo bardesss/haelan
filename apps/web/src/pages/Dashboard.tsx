@@ -136,7 +136,9 @@ export function Dashboard() {
 
   const finished = glance.finished
   // While stepping, the line under the title is the day asked for, not the held cards' span.
-  const line = shownDay !== null ? t('glance.dayNav.pastLine')
+  // A past day with no night says so, as today's span line does; while stepping, the held cards'
+  // night is not the new day's, so it waits for the day's own answer.
+  const line = shownDay !== null ? t(!stepping && sleep === null ? 'glance.dayNav.pastLineNoNight' : 'glance.dayNav.pastLine')
     : stepping ? formatLongDate(today, language) : <>{formatLongDate(glance.today, language)} · {span}</>
   // A strip's dot or a week bar opens its day, the way the calendar does.
   const card = (slot: DashCardSlot) => {
