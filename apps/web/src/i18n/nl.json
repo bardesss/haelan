@@ -1405,7 +1405,9 @@
       "time": "bijgewerkt om {{time}}",
       "today": "vandaag",
       "yesterday": "gisteren",
-      "night": "nacht van {{date}}"
+      "night": "nacht van {{date}}",
+      "thatDay": "die dag",
+      "dayBefore": "de dag ervoor"
     },
     "noReading": "Nog geen meting",
     "pace": {
@@ -1459,10 +1461,20 @@
       "heartRateChart": "Hartslag vandaag",
       "strip": "Stappen, laatste 7 dagen",
       "caption": "laatste 7 dagen",
-      "link": "Bekijk activiteit"
+      "link": "Bekijk activiteit",
+      "thatDay": "Die dag",
+      "dayStanding": {
+        "within": "Zoals op een gewone dag",
+        "above": "Meer dan op een gewone dag",
+        "below": "Minder dan op een gewone dag"
+      },
+      "usualRange": "normaal {{low}} – {{high}}",
+      "heartRateWholeDay": "Hartslag · 00:00 → 24:00",
+      "heartRateChartThatDay": "Hartslag die dag"
     },
     "workouts": {
-      "title": "Activiteiten van vandaag"
+      "title": "Activiteiten van vandaag",
+      "titleThatDay": "Activiteiten van die dag"
     },
     "week": {
       "title": "Deze week",
@@ -1474,15 +1486,55 @@
       "perNight": "per nacht",
       "totalPer": "· {{per}}",
       "barsLabel": "{{what}}, laatste 7 dagen; het gemiddelde telt alleen hele dagen mee, vandaag dus nog niet",
-      "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde"
+      "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde",
+      "barsLabelFinished": "{{what}}, de 7 dagen tot en met die dag; het gemiddelde telt elke getoonde dag mee",
+      "bar": "{{date}}: {{label}} {{value}}",
+      "openBar": "Open {{date}}: {{label}} {{value}}"
     },
+    "openDay": "Open deze dag",
+    "openDayIdle": "Tik op een dag om hem te openen",
+    "openDayNamed": "Open {{date}}",
     "subtitle": {
       "today": "vandaag",
-      "yesterday": "gisteren"
+      "yesterday": "gisteren",
+      "thatDay": "die dag",
+      "dayBefore": "de dag ervoor"
     },
     "empty": {
       "title": "Nog niets te zien",
       "detail": "Zodra een synchronisatie een nacht of een dag binnenhaalt, verschijnt die hier."
+    },
+    "dayNav": {
+      "label": "Dag",
+      "previous": "Vorige dag",
+      "next": "Volgende dag",
+      "today": "Vandaag",
+      "calendar": "Kies een datum",
+      "pastLine": "die nacht, en de hele dag"
+    },
+    "calendar": {
+      "previousMonth": "Vorige maand",
+      "nextMonth": "Volgende maand",
+      "sleepLegend": "Linker stip · slaap",
+      "sleepWithin": "binnen je gebruikelijke bereik",
+      "sleepOutside": "erbuiten",
+      "stepsLegend": "Rechter stip · stappen",
+      "stepsReached": "je gebruikelijke aantal gehaald",
+      "stepsBelow": "eronder",
+      "greyDays": "Grijze dagen hebben geen gegevens",
+      "today": "Vandaag",
+      "day": "{{date}}, {{sleep}}, {{steps}}",
+      "noData": "{{date}}, geen gegevens",
+      "spokenSleep": {
+        "within": "binnen je gebruikelijke bereik geslapen",
+        "outside": "buiten je gebruikelijke bereik geslapen",
+        "none": "slaap niet beoordeeld"
+      },
+      "spokenSteps": {
+        "reached": "je gebruikelijke aantal stappen gehaald",
+        "below": "minder stappen dan gewoonlijk",
+        "none": "stappen niet beoordeeld"
+      }
     }
   }
 }
