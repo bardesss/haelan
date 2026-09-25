@@ -10,13 +10,13 @@ export const GLANCE_TODAY = '2026-09-23'
 const DATES = ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23']
 
 function strip(values: (number | null)[]): GlanceFigure['strip'] {
-  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null }))
+  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null, standing: null }))
 }
 
 export function glanceFigure(over: Partial<GlanceFigure> & Pick<GlanceFigure, 'metric'>): GlanceFigure {
   return {
     value: null, unit: 'count', baseline: null, asOfDate: GLANCE_TODAY, asOfMs: null, partial: false,
-    staleSources: [], strip: [],
+    staleSources: [], strip: [], standing: null,
     ...over,
   }
 }
@@ -59,6 +59,7 @@ export function glanceBody(): Glance {
       missing: null,
       restingHeartRate: glanceFigure({
         metric: 'resting_heart_rate', value: 62, unit: 'bpm', baseline: { center: 56, low: 52, high: 60, thin: false },
+        standing: 'above',
       }),
       hrv: glanceFigure({ metric: 'daily_hrv', value: 51, unit: 'milliseconds', baseline: { center: 50, low: 44, high: 56, thin: false } }),
       respiratoryRate: null,
@@ -71,6 +72,7 @@ export function glanceBody(): Glance {
         asOfMs: Date.UTC(2026, 8, 23, 9, 32),
         strip: strip([8900, 7400, 10100, 8300, 9700, 8800, 4820]),
       }),
+      stepsPace: null,
       activeMinutes: glanceFigure({ metric: 'active_minutes', value: 18, unit: 'minutes', partial: true }),
       heartRate: {
         points: [
@@ -86,5 +88,7 @@ export function glanceBody(): Glance {
       // before the card existed; glance-page.test.tsx's own workout cases add one.
       workouts: [],
     },
+    // total is the whole strip's sum (8900+7400+10100+8300+9700+8800+4820), today's so-far included.
+    week: { steps: { perDay: 8000, days: 6, total: 58020 }, activeMinutes: null, asleep: null },
   }
 }

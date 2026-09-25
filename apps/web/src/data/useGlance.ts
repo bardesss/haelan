@@ -27,9 +27,12 @@ export interface GlanceBaseline {
   thin: boolean
 }
 
+export type GlanceStanding = 'within' | 'above' | 'below'
+
 export interface GlanceStripDay {
   localDate: string
   value: number | null
+  standing: GlanceStanding | null
 }
 
 export interface GlanceFigure {
@@ -42,6 +45,7 @@ export interface GlanceFigure {
   partial: boolean
   staleSources: GlanceStaleSource[]
   strip: GlanceStripDay[]
+  standing: GlanceStanding | null
 }
 
 export interface GlanceNightSegment {
@@ -75,12 +79,36 @@ export interface GlanceRecovery {
   respiratoryRate: GlanceFigure | null
 }
 
+export interface GlanceStepsPace {
+  center: number
+  low: number
+  high: number
+  thin: boolean
+  /** Today's own count, cut at the same minute as the band: what `standing` actually compares. */
+  value: number
+  atMs: number
+  standing: 'ahead' | 'on' | 'behind' | null
+}
+
 export interface GlanceDay {
   steps: GlanceFigure
+  stepsPace: GlanceStepsPace | null
   activeMinutes: GlanceFigure
   heartRate: { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
   /** Today's workouts, oldest first, merged across sources: the Activity list's own row shape. */
   workouts: WorkoutSession[]
+}
+
+export interface GlanceWeekFigure {
+  perDay: number
+  days: number
+  total: number
+}
+
+export interface GlanceWeek {
+  steps: GlanceWeekFigure | null
+  activeMinutes: GlanceWeekFigure | null
+  asleep: GlanceWeekFigure | null
 }
 
 export interface Glance {
@@ -88,6 +116,7 @@ export interface Glance {
   sleep: GlanceSleep | null
   recovery: GlanceRecovery
   day: GlanceDay
+  week: GlanceWeek
 }
 
 export function glanceKey(personId: string): readonly unknown[] {

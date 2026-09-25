@@ -188,9 +188,6 @@
       "detail": "This device did not record enough of these days to compare them. Wearing it more consistently closes this gap; waiting longer will not."
     }
   },
-  "dashboard": {
-    "title": "Dashboard"
-  },
   "recovery": {
     "title": "Recovery",
     "units": {
@@ -559,6 +556,10 @@
       "fri": "Fri",
       "sat": "Sat",
       "sun": "Sun"
+    },
+    "standing": {
+      "above": "above your usual",
+      "below": "below your usual"
     },
     "absence": {
       "notWorn": "not worn",
@@ -1384,8 +1385,15 @@
     "points": "{{points}} points"
   },
   "glance": {
-    "span": "Last night, and today until {{time}}",
-    "spanNoTime": "Last night, and today so far",
+    "span": "last night, and today until {{time}}",
+    "spanNoTime": "last night, and today so far",
+    "spanNoNight": "no night recorded · today until {{time}}",
+    "spanNoNightNoTime": "no night recorded · today so far",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
     "usual": {
       "within": "within your usual {{low}} – {{high}}",
       "above": "above your usual {{low}} – {{high}}",
@@ -1400,9 +1408,14 @@
       "night": "night of {{date}}"
     },
     "noReading": "No reading yet",
+    "pace": {
+      "ahead": "Ahead of your usual pace",
+      "on": "On your usual pace",
+      "behind": "Behind your usual pace",
+      "usualBy": "usual by {{time}} is {{value}}"
+    },
     "sleep": {
       "title": "Last night",
-      "empty": "No night recorded in the last day and a half.",
       "asleep": "Time asleep",
       "efficiency": "Efficiency",
       "bed": "Bed",
@@ -1410,7 +1423,18 @@
       "strip": "Time asleep, last 7 nights",
       "caption": "last 7 nights",
       "link": "View this night",
-      "viewSleep": "View sleep"
+      "efficiencyStanding": {
+        "above": "higher than usual",
+        "below": "lower than usual"
+      },
+      "bedStanding": {
+        "above": "later than usual",
+        "below": "earlier than usual"
+      },
+      "wokeStanding": {
+        "above": "later than usual",
+        "below": "earlier than usual"
+      }
     },
     "recovery": {
       "title": "Recovery",
@@ -1419,6 +1443,9 @@
       "hrv": "HRV",
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",
+      "notScored": "Not scored",
+      "score": "Score",
+      "scoreUnscored": "Score, not scored",
       "strip": "Recovery index, last 7 days",
       "caption": "last 7 days",
       "link": "View recovery"
@@ -1428,7 +1455,7 @@
       "subtitle": "so far",
       "steps": "Steps",
       "activeMinutes": "Active minutes",
-      "heartRate": "Heart rate",
+      "heartRateSinceMidnight": "Heart rate · 00:00 → now",
       "heartRateChart": "Heart rate today",
       "strip": "Steps, last 7 days",
       "caption": "last 7 days",
@@ -1436,6 +1463,18 @@
     },
     "workouts": {
       "title": "Today's activities"
+    },
+    "week": {
+      "title": "This week",
+      "subtitle": "last 7 days",
+      "steps": "Steps",
+      "active": "Active",
+      "asleep": "Asleep",
+      "perDay": "{{value}} a day",
+      "perNight": "a night",
+      "totalPer": "· {{per}}",
+      "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted",
+      "barsLabelNights": "{{what}}, last 7 nights; the average includes last night"
     },
     "subtitle": {
       "today": "today",

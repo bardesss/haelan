@@ -251,7 +251,9 @@ export type { DescribedPerson } from './query/personQuery.ts'
 // reachable only through PersonQuery.glance.
 export type {
   Glance, GlanceFigure, GlanceBaseline, GlanceStripDay, GlanceStaleSource, GlanceSleep, GlanceRecovery, GlanceDay, GlanceHeartRate,
+  GlanceStanding, GlanceStepsPace, GlanceWeek, GlanceWeekFigure,
 } from './query/glance.ts'
+export { standingOf } from './query/glance.ts'
 
 // M9b/status-panel task 5. The status panel's own composition: connections, their devices and a
 // per-source panel choice, from facts the server already holds. Same discipline as the readers

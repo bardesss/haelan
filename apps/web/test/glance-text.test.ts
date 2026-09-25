@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatFigure, usualLine, asOfLine } from '../src/pages/dashboard/glanceText.js'
+import { formatFigure, usualLine, asOfLine, paceKey, greetingKey } from '../src/pages/dashboard/glanceText.js'
 import { initI18n } from '../src/i18n/index.js'
 import type { GlanceFigure } from '../src/data/useGlance.js'
 import type { Translate } from '../src/format.js'
@@ -24,7 +24,7 @@ function realT(language: string): Translate {
 function figure(over: Partial<GlanceFigure> = {}): GlanceFigure {
   return {
     metric: 'steps', value: 8000, unit: 'count', baseline: null,
-    asOfDate: '2026-09-23', asOfMs: null, partial: false, staleSources: [], strip: [],
+    asOfDate: '2026-09-23', asOfMs: null, partial: false, staleSources: [], strip: [], standing: null,
     ...over,
   }
 }
@@ -65,14 +65,22 @@ describe('usualLine', () => {
 
   it('reads within, above and below the usual band', () => {
     const { t, calls } = stubT()
-    expect(usualLine(figure({ value: 8500, baseline }), t, 'en')).toBe('t(glance.usual.within)')
-    expect(usualLine(figure({ value: 9500, baseline }), t, 'en')).toBe('t(glance.usual.above)')
-    expect(usualLine(figure({ value: 7000, baseline }), t, 'en')).toBe('t(glance.usual.below)')
+    expect(usualLine(figure({ value: 8500, baseline, standing: 'within' }), t, 'en')).toBe('t(glance.usual.within)')
+    expect(usualLine(figure({ value: 9500, baseline, standing: 'above' }), t, 'en')).toBe('t(glance.usual.above)')
+    expect(usualLine(figure({ value: 7000, baseline, standing: 'below' }), t, 'en')).toBe('t(glance.usual.below)')
     expect(calls).toEqual([
       ['glance.usual.within', { low: '8,000', high: '9,000' }],
       ['glance.usual.above', { low: '8,000', high: '9,000' }],
       ['glance.usual.below', { low: '8,000', high: '9,000' }],
     ])
+  })
+
+  // The verdict is the server's, not a re-comparison here: a value inside the band still reads
+  // above when standing says so, which would never happen from core's own honest computation but
+  // proves the web trusts the field rather than recomputing it from rounded numbers.
+  it('trusts the server\'s standing even when the value itself sits inside the band', () => {
+    const { t } = stubT()
+    expect(usualLine(figure({ value: 8500, baseline, standing: 'above' }), t, 'en')).toBe('t(glance.usual.above)')
   })
 
   it('reads thin as not enough history, regardless of value', () => {
@@ -145,9 +153,9 @@ describe('glanceText with real translations', () => {
       'nog te weinig geschiedenis voor een gebruikelijke waarde', 'tot nu toe; op een gewone dag 8.700'],
   ] as const)('reads within / above / below / thin / partial in %s', (language, within, above, below, thin, partial) => {
     const t = realT(language)
-    expect(usualLine(figure({ value: 8500, baseline }), t, language)).toBe(within)
-    expect(usualLine(figure({ value: 9500, baseline }), t, language)).toBe(above)
-    expect(usualLine(figure({ value: 7000, baseline }), t, language)).toBe(below)
+    expect(usualLine(figure({ value: 8500, baseline, standing: 'within' }), t, language)).toBe(within)
+    expect(usualLine(figure({ value: 9500, baseline, standing: 'above' }), t, language)).toBe(above)
+    expect(usualLine(figure({ value: 7000, baseline, standing: 'below' }), t, language)).toBe(below)
     expect(usualLine(figure({ value: 8500, baseline: { ...baseline, thin: true } }), t, language)).toBe(thin)
     expect(usualLine(figure({ value: 3000, baseline, partial: true }), t, language)).toBe(partial)
   })
@@ -162,5 +170,24 @@ describe('glanceText with real translations', () => {
     expect(asOfLine(figure({ value: 8000, asOfDate: '2026-09-23', asOfMs: null }), opts, t, language)).toBe(today)
     expect(asOfLine(figure({ value: 8000, asOfDate: '2026-09-22', asOfMs: null }), opts, t, language)).toBe(yesterday)
     expect(asOfLine(figure({ value: 419, asOfDate: '2026-09-22', asOfMs: ms }), { ...opts, night: true }, t, language)).toBe(night)
+  })
+})
+
+describe('paceKey', () => {
+  it('words the pace from the server\'s verdict, and says nothing on a thin one', () => {
+    const pace = { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: 0, standing: 'ahead' as const }
+    expect(paceKey(pace)).toBe('glance.pace.ahead')
+    expect(paceKey({ ...pace, standing: 'behind' })).toBe('glance.pace.behind')
+    expect(paceKey({ ...pace, thin: true, standing: null })).toBeNull()
+    expect(paceKey(null)).toBeNull()
+  })
+})
+
+describe('greetingKey', () => {
+  it('greets by the hour in the person\'s own zone', () => {
+    expect(greetingKey(Date.UTC(2026, 8, 24, 4, 0), 'Europe/Amsterdam')).toBe('glance.greeting.morning') // 06:00 local
+    expect(greetingKey(Date.UTC(2026, 8, 24, 10, 0), 'Europe/Amsterdam')).toBe('glance.greeting.afternoon') // 12:00 local
+    expect(greetingKey(Date.UTC(2026, 8, 24, 16, 0), 'Europe/Amsterdam')).toBe('glance.greeting.evening') // 18:00 local
+    expect(greetingKey(Date.UTC(2026, 8, 24, 1, 0), 'Europe/Amsterdam')).toBe('glance.greeting.evening') // 03:00 local
   })
 })

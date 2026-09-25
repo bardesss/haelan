@@ -188,9 +188,6 @@
       "detail": "Dit apparaat heeft niet genoeg van deze dagen geregistreerd om ze te vergelijken. Vaker dragen dicht dit gat, langer wachten niet."
     }
   },
-  "dashboard": {
-    "title": "Dashboard"
-  },
   "recovery": {
     "title": "Herstel",
     "units": {
@@ -559,6 +556,10 @@
       "fri": "Vr",
       "sat": "Za",
       "sun": "Zo"
+    },
+    "standing": {
+      "above": "boven je gebruikelijke waarde",
+      "below": "onder je gebruikelijke waarde"
     },
     "absence": {
       "notWorn": "niet gedragen",
@@ -1384,8 +1385,15 @@
     "points": "{{points}} punten"
   },
   "glance": {
-    "span": "Afgelopen nacht, en vandaag tot {{time}}",
-    "spanNoTime": "Afgelopen nacht, en vandaag tot nu toe",
+    "span": "afgelopen nacht, en vandaag tot {{time}}",
+    "spanNoTime": "afgelopen nacht, en vandaag tot nu toe",
+    "spanNoNight": "afgelopen nacht niet gemeten · vandaag tot {{time}}",
+    "spanNoNightNoTime": "afgelopen nacht niet gemeten · vandaag tot nu toe",
+    "greeting": {
+      "morning": "Goedemorgen",
+      "afternoon": "Goedemiddag",
+      "evening": "Goedenavond"
+    },
     "usual": {
       "within": "binnen je gebruikelijke bereik {{low}} – {{high}}",
       "above": "boven je gebruikelijke bereik {{low}} – {{high}}",
@@ -1400,9 +1408,14 @@
       "night": "nacht van {{date}}"
     },
     "noReading": "Nog geen meting",
+    "pace": {
+      "ahead": "Vóór op je gebruikelijke tempo",
+      "on": "Op je gebruikelijke tempo",
+      "behind": "Achter op je gebruikelijke tempo",
+      "usualBy": "normaal zit je om {{time}} op {{value}}"
+    },
     "sleep": {
       "title": "Afgelopen nacht",
-      "empty": "Geen nacht vastgelegd in de afgelopen anderhalve dag.",
       "asleep": "Slaaptijd",
       "efficiency": "Efficiëntie",
       "bed": "Naar bed",
@@ -1410,7 +1423,18 @@
       "strip": "Tijd geslapen, laatste 7 nachten",
       "caption": "laatste 7 nachten",
       "link": "Bekijk deze nacht",
-      "viewSleep": "Bekijk slaap"
+      "efficiencyStanding": {
+        "above": "hoger dan gewoonlijk",
+        "below": "lager dan gewoonlijk"
+      },
+      "bedStanding": {
+        "above": "later dan gewoonlijk",
+        "below": "eerder dan gewoonlijk"
+      },
+      "wokeStanding": {
+        "above": "later dan gewoonlijk",
+        "below": "eerder dan gewoonlijk"
+      }
     },
     "recovery": {
       "title": "Herstel",
@@ -1419,6 +1443,9 @@
       "hrv": "HRV",
       "respiratory": "Ademhaling {{value}}, boven je gebruikelijke waarde",
       "unscored": "Nog niet genoeg metingen om te scoren.",
+      "notScored": "Geen score",
+      "score": "Score",
+      "scoreUnscored": "Score, niet gescoord",
       "strip": "Herstelindex, laatste 7 dagen",
       "caption": "laatste 7 dagen",
       "link": "Bekijk herstel"
@@ -1428,7 +1455,7 @@
       "subtitle": "tot nu toe",
       "steps": "Stappen",
       "activeMinutes": "Actieve minuten",
-      "heartRate": "Hartslag",
+      "heartRateSinceMidnight": "Hartslag · 00:00 → nu",
       "heartRateChart": "Hartslag vandaag",
       "strip": "Stappen, laatste 7 dagen",
       "caption": "laatste 7 dagen",
@@ -1436,6 +1463,18 @@
     },
     "workouts": {
       "title": "Activiteiten van vandaag"
+    },
+    "week": {
+      "title": "Deze week",
+      "subtitle": "laatste 7 dagen",
+      "steps": "Stappen",
+      "active": "Actief",
+      "asleep": "Slaaptijd",
+      "perDay": "{{value}} per dag",
+      "perNight": "per nacht",
+      "totalPer": "· {{per}}",
+      "barsLabel": "{{what}}, laatste 7 dagen; het gemiddelde telt alleen hele dagen mee, vandaag dus nog niet",
+      "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde"
     },
     "subtitle": {
       "today": "vandaag",

@@ -688,6 +688,8 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    rather than a shared class because the two components have nothing else in common to couple.
    .hypnogram-absence is the not-staged sentence alone, for a caller that turns the totals off. */
 .hypnogram-totals, .hypnogram-absence { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
+/* The dashboard's compact hypnogram: its totals as one faint line under the stage blocks. */
+.hypnogram-totals.is-compact { margin: 0; color: var(--text-faint); }
 
 /* NightStages.tsx's own nap line, beneath the hypnogram and above NightExcludedSessions' own
    .chart-note - a step up from .hypnogram-totals' caption size, since this is body text stating a
@@ -743,30 +745,82 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .card-link { display: inline-block; margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; }
 .card-link:hover { text-decoration: underline; }
 
-/* GlanceCard.tsx: one column of the glance Dashboard, one question per card. A flex column so the
-   headline, chart, secondary figures, strip and link keep one rhythm whatever a column leaves out;
-   the link opts out of the column's stretch so its hover underline stays the width of its words. */
-.glance-card { display: flex; flex-direction: column; gap: var(--space-3); }
-.glance-card > .card-link { align-self: flex-start; margin-top: 0; }
-.glance-card .basis { margin-bottom: 0; }
+/* Dashboard.tsx: the page's own measure. A home screen reads as a composition, and past 1200px the
+   lead card's hypnogram and the dials drift apart. Other pages keep .main's 1500px (spec: width). */
+.dashboard { max-width: 1200px; margin-inline: auto; }
+.dash-date { margin: 0 0 var(--space-4); font-size: var(--font-size-xs); color: var(--text-muted); }
+
 /* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
    regular weight to put the muted subtitle back to, so the heading is left at the body's weight
    and only the title is raised. */
-/* The heading and the stale-source mark on one line: the mark lives outside the h2 so its sentence
-   stays out of the heading's accessible name (GlanceTitle's comment), and this row puts it back
-   where it sat when it was inside. */
-.glance-card-head { display: flex; align-items: center; }
-.glance-card-title { margin: 0; font-size: var(--font-size-sm); }
-.glance-card-title strong { font-weight: var(--weight-semibold); }
-.glance-card-title > span { margin-left: var(--space-1); color: var(--text-muted); }
+.dash-card-title { margin: 0; font-size: var(--font-size-sm); }
+.dash-card-title strong { font-weight: var(--weight-semibold); }
+.dash-card-title > span { margin-left: var(--space-1); color: var(--text-muted); }
+
+/* cardShared.tsx: the shared head row and body wrapper every dashboard card wears. The head row
+   holds the heading and the link on one line, the link pushed to the far end. */
+.dash-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.dash-card-head { display: flex; align-items: center; gap: var(--space-2); }
+.dash-card-head > .card-link { margin: 0 0 0 auto; }
+
+/* NightCard.tsx: the lead row, headline figure and secondary strip of minutes/bed/wake pairs. */
+.dash-lead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
+.dash-lead > div:first-child { flex: 0 1 auto; }
+.dash-lead-strip { flex: 1 1 16rem; min-width: 0; }
+.dash-headline { font-size: var(--font-size-display); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -.03em; }
+.dash-minis { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin-top: var(--space-2); font-size: var(--font-size-xs); }
+.dash-mini { display: inline-flex; align-items: baseline; gap: var(--space-1); }
+.dash-mini-label { color: var(--text-faint); }
+.dash-mini-value { font-size: var(--font-size-md); font-weight: var(--weight-semibold); }
+.dash-mini-value.is-out, .dash-mini-note { color: var(--negative); }
+.dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
+
+/* TodayCard.tsx: the two headline figures side by side on one line, and the pace line under them. */
+.dash-today-figures { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-6); }
+.dash-headline-sm { font-size: var(--font-size-xl); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -.02em; }
+.dash-pace { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
+.dash-pace-word { font-weight: var(--weight-medium); }
+.dash-pace.is-ahead .dash-pace-word { color: var(--positive); }
 .glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
-.glance-mini { display: flex; flex-wrap: wrap; gap: var(--space-5); }
-.glance-mini > div { display: flex; flex-direction: column; gap: 2px; }
-.glance-mini b { font-size: var(--font-size-lg); }
-.glance-mini em { font-style: normal; font-size: var(--font-size-xs); color: var(--text-muted); }
 .glance-asof { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 .glance-note { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
 .glance-empty { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+
+/* Dashboard dials. Colours through the chart and semantic tokens only: the ring is recovery's own
+   positive colour, the gauge band is the same baseline band the charts shade, and a reading outside
+   its usual takes --negative, which is also said in words beside it so colour is never the only signal. */
+.score-ring, .usual-gauge, .week-bars { display: block; }
+.score-ring-track, .usual-gauge-track { stroke: var(--surface-inset); }
+.score-ring-fill { stroke: var(--positive); }
+.score-ring-value { fill: var(--text-primary); font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
+.score-ring-empty { fill: var(--text-muted); font-size: var(--font-size-xs); font-weight: var(--weight-medium); }
+.usual-gauge-band { stroke: var(--border-chosen); }
+.usual-gauge-marker { fill: var(--text-primary); stroke: var(--surface-card); }
+.usual-gauge-marker.is-out { fill: var(--negative); }
+.usual-gauge-value { fill: var(--text-primary); font-size: var(--font-size-md); font-weight: var(--weight-bold); }
+.usual-gauge-unit { fill: var(--text-muted); font-size: var(--font-size-micro); }
+
+.dash-dials { display: flex; justify-content: space-around; align-items: flex-end; gap: var(--space-2); }
+.dash-dial { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); min-width: 0; }
+.dash-recovery-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-7); }
+.dash-recovery-strip { display: none; flex: 1 1 16rem; min-width: 0; }
+.dash-recovery.is-wide .dash-recovery-strip { display: block; }
+.dash-recovery-row > .dash-dials { flex: 0 0 30rem; max-width: 100%; }
+.dash-recovery-words { margin: 0; text-align: center; font-size: var(--font-size-xs); color: var(--text-muted); }
+.dash-recovery.is-wide .dash-recovery-words { text-align: left; }
+@media (max-width: 620px) { .dash-dials .usual-gauge { width: 92px; height: auto; } .dash-dials .score-ring { width: 108px; height: auto; } }
+.week-bar { opacity: .55; }
+.week-bar.is-today { opacity: 1; }
+.week-bars.is-steps .week-bar { fill: var(--accent); }
+.week-bars.is-active .week-bar { fill: var(--positive); }
+/* Sleep bars use scale-4, readable on both light (deep azure) and dark (light azure) themes. */
+.week-bars.is-sleep .week-bar { fill: var(--chart-scale-4); }
+.dash-week-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
+.dash-week-figure { margin-top: var(--space-1); }
+.dash-week-value { font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
+/* The per-day average after the week's total, a sibling of the figure rather than inside it: the
+   tokens carry no regular weight to put a child of the bold figure back to. */
+.dash-week-per { font-size: var(--font-size-xs); color: var(--text-faint); }
 
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
@@ -971,6 +1025,17 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
   .grid [data-span='11'] {
     grid-column: span 12 !important;
   }
+}
+
+/* The Dashboard's own mid band: every card takes the row. Halving as above would give recovery's
+   three dials half of a ~660px column, and an 8 + 4 pair becomes 12 + 6, a row with a hole. Wide,
+   recovery has room for its seven-day strip, which RecoveryCard always renders and this shows.
+   After the app-wide block on purpose: `.dashboard-grid [data-span]` has the same specificity as
+   `.grid [data-span='4']`, so it wins by order alone (grid-collapse.test.ts asserts both). */
+@media (width > 900px) and (max-width: 1200px) {
+  .dashboard-grid [data-span] { grid-column: span 12 !important; }
+  .dashboard-grid .dash-recovery-strip { display: block; }
+  .dashboard-grid .dash-recovery-words { text-align: left; }
 }
 
 /* The sign-in screen is the one place with no rail and no wizard rail either: it is the
@@ -1688,4 +1753,76 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
      way it caught the source order buttons above: a control that opens the account page from a
      modal a finger only ever taps into deserves the same 44px it gets everywhere else. */
   .status-foot a { min-height: 44px; display: flex; align-items: center; }
+}
+
+/* The demo's own banner (apps/web/src/demo/DemoBanner.tsx), styled through classes rather than the
+   inline style object it used to carry entirely: a phone-width override needs a selector CSS can
+   beat without `!important`, which an inline style has no room to leave for. Semantic tokens only,
+   the same as everywhere else no-raw-color.test.ts reaches - this is a demo-only element, not a
+   carve-out for it. */
+.demo-banner {
+  position: relative;
+  background: var(--surface-rail);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-normal);
+  /* Room on the right for the close button, on both sides so the centred text stays centred. */
+  padding: 0.6rem 2.75rem;
+  text-align: center;
+}
+.demo-banner-lead { margin: 0; }
+/* No `<details>` here (see DemoBanner.tsx's own comment on why): `.demo-banner-rest` is a plain
+   paragraph, shown by default for the desktop reader this banner always showed its full text to,
+   and `.demo-banner-toggle` - the phone-only "More"/"Meer"/"Less"/"Minder" button - is hidden by
+   default rather than left unrendered, so its aria-expanded/aria-controls pair stays real even
+   where nothing draws the button. */
+.demo-banner-rest { display: inline; margin: 0; }
+.demo-banner-toggle {
+  display: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-top: var(--space-1);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.demo-banner-close {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  /* 44px square: the notice spans the page on a phone too, and a close target that small screen's
+     thumb can miss is a banner nobody can get rid of there. */
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+}
+
+@media (max-width: 620px) {
+  /* Left-aligned and tighter than the desktop banner's centred, wider padding: four sentences of
+     prose centred in a phone's width reads as a wall of text, which is the whole reason this task
+     exists. The dismiss button's own size and position are unchanged. */
+  .demo-banner { text-align: left; padding: var(--space-2) 2.75rem var(--space-2) var(--space-3); }
+  /* min-height and min-width together, not min-height alone: layout:check measures a control's
+     smaller dimension, and "More"/"Meer" at its own text width measured 31x20 - short on both
+     sides, the same shape .source-order-list button's own comment describes. inline-flex with both
+     axes centred is what keeps the enlarged hit area from just adding blank space to one side. */
+  .demo-banner-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; min-width: 44px;
+  }
+  /* Collapsed by default below the breakpoint: `open` starts false, so a phone reader gets the
+     lead and the toggle, and taps it to reach the rest. */
+  .demo-banner-rest.is-collapsed { display: none; }
 }

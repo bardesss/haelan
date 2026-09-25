@@ -33,6 +33,44 @@ describe('the banner', () => {
     expect(text).toMatch(/derived|cascade/i)    // the fidelity limit, said out loud
   })
 
+  // Task 18: at phone width the banner shows only its first two sentences and a disclosure for
+  // the rest, so the DOM has to carry both pieces separately rather than one paragraph. NOT a
+  // native <details>/<summary>: a closed <details> hides its own children in a way author CSS on
+  // the child cannot override (Chromium: a closed details' child fails checkVisibility() even
+  // under a rule that sets `display: inline` on it directly), which silently hid the rest of the
+  // notice from every desktop visitor once this banner first grew a disclosure - happy-dom does
+  // not model that hidden layer, which is why this file stayed green through it. The toggle is
+  // therefore a plain button with real React state behind it, and the rest a plain paragraph
+  // collapsed by a CSS class app.css only applies below the phone breakpoint.
+  it('splits into a lead and a toggled rest, with no <details> for the hidden-child trap to hide behind', () => {
+    act(() => { root?.render(<DemoBanner />) })
+    expect(container?.querySelector('details')).toBeNull()
+    const lead = container?.querySelector('.demo-banner-lead')
+    const rest = container?.querySelector('.demo-banner-rest')
+    const toggle = container?.querySelector('.demo-banner-toggle')
+    expect(lead?.textContent).toMatch(/This is a demo\..*ends on/)
+    // The fidelity-limit sentence and the reload sentence are both in the toggled rest, not the
+    // lead: a phone reader who never presses "More" still gets the two sentences the brief names.
+    expect(lead?.textContent).not.toMatch(/reload|derived/i)
+    expect(rest?.textContent).toMatch(/reload/i)
+    expect(rest?.textContent).toMatch(/derived/i)
+
+    // Closed by default, and the button's own accessible state says so - `aria-controls` points at
+    // the rest by id rather than by a container the rest happens to sit in, and both flip together
+    // on a click.
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle?.textContent).toBe('More')
+    const restId = rest?.getAttribute('id')
+    expect(restId).toBeTruthy()
+    expect(toggle?.getAttribute('aria-controls')).toBe(restId)
+    expect(rest?.className).toContain('is-collapsed')
+
+    act(() => { toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle?.textContent).toBe('Less')
+    expect(rest?.className).not.toContain('is-collapsed')
+  })
+
   it('mounts exactly one host even if the entry runs twice', () => {
     mountDemoBanner()
     mountDemoBanner()
@@ -82,7 +120,7 @@ describe('the banner', () => {
       act(() => { mountDemoBanner() })
       const host = document.querySelector('[data-demo-banner]')!
       expect(document.documentElement.style.getPropertyValue('--chrome-above')).toBe('42px')
-      const close = host.querySelector('button')!
+      const close = host.querySelector('.demo-banner-close')!
       expect(close.getAttribute('aria-label')).toBe('Dismiss the demo notice')
       act(() => { close.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
       expect(host.textContent).toBe('')
@@ -123,6 +161,7 @@ describe('the banner in the visitor\'s own language', () => {
     expect(text).toMatch(/herladen/i)      // writes live in this tab only
     expect(text).toMatch(/afgeleid/i)      // the fidelity limit, in Dutch
     expect(text).not.toMatch(/generated/i) // the English string must not also be present
+    expect(container?.querySelector('.demo-banner-toggle')?.textContent).toBe('Meer')
   })
 
   it('falls back to English for any browser language that is not Dutch', () => {

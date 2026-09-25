@@ -10,7 +10,7 @@ export type ChartTable = {
 }
 
 // Accessible chart: a name, the card's basis line as description, and the same numbers as a table.
-export function ChartFigure({ label, table, host, style, tap }: {
+export function ChartFigure({ label, table, host, style, tap, tableToggle = true }: {
   label: string
   table: ChartTable
   host: RefObject<HTMLDivElement | null>
@@ -21,6 +21,14 @@ export function ChartFigure({ label, table, host, style, tap }: {
    * on a desktop: undefined here and the row renders exactly what it rendered before this existed.
    */
   tap?: ChartTap
+  /**
+   * False drops the visible "show numbers" control, for the dashboard's compact charts, which the
+   * approved design draws with nothing under them. Only the control goes: the table below stays in
+   * the markup exactly as it is before the control is pressed (sr-only, in the accessibility tree),
+   * so a screen reader is handed the same numbers either way. True, the default, is every other
+   * chart in the app, byte for byte what this component rendered before the prop existed.
+   */
+  tableToggle?: boolean
 }) {
   const describedBy = useBasisId()
   const { t } = useTranslation()
@@ -47,7 +55,7 @@ export function ChartFigure({ label, table, host, style, tap }: {
         about the desktop. Below it the two controls sit at opposite ends and are allowed to wrap,
         because "Annotate 12 September" beside "Show numbers" is most of a 375px card.
       */}
-      <div style={tap
+      {(tableToggle || tap) && <div style={tap
         ? { display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', flexWrap: 'wrap' }
         : { display: 'flex', justifyContent: 'flex-end' }}>
         {/*
@@ -61,12 +69,14 @@ export function ChartFigure({ label, table, host, style, tap }: {
             {tap.name === null ? t('charts.annotate.idle') : t('charts.annotate.point', { point: tap.name })}
           </button>
         )}
-        <button type="button" className="chart-table-toggle" aria-expanded={shown} aria-controls={tableId}
-          aria-label={t(shown ? 'charts.tableToggle.hideFor' : 'charts.tableToggle.showFor', { label })}
-          onClick={() => setShown((current) => !current)}>
-          {t(shown ? 'charts.tableToggle.hide' : 'charts.tableToggle.show')}
-        </button>
-      </div>
+        {tableToggle && (
+          <button type="button" className="chart-table-toggle" aria-expanded={shown} aria-controls={tableId}
+            aria-label={t(shown ? 'charts.tableToggle.hideFor' : 'charts.tableToggle.showFor', { label })}
+            onClick={() => setShown((current) => !current)}>
+            {t(shown ? 'charts.tableToggle.hide' : 'charts.tableToggle.show')}
+          </button>
+        )}
+      </div>}
       {/*
         The wrapper is what keeps this table out of the page's width while it is hidden, and
         .sr-only alone cannot do it. A table's used width is floored at its min-content width, so

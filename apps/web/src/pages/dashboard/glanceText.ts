@@ -1,4 +1,4 @@
-import type { GlanceFigure } from '../../data/useGlance.js'
+import type { GlanceFigure, GlanceStepsPace } from '../../data/useGlance.js'
 import type { Translate } from '../../format.js'
 import { formatDuration, formatClock, formatMetricValue } from '../../format.js'
 
@@ -63,8 +63,10 @@ export function usualLine(figure: GlanceFigure, t: Translate, language: string):
   }
   const low = formatValue(baseline.low, figure.metric, language)
   const high = formatValue(baseline.high, figure.metric, language)
-  if (figure.value < baseline.low) return t('glance.usual.below', { low, high })
-  if (figure.value > baseline.high) return t('glance.usual.above', { low, high })
+  // The verdict is the server's (GlanceFigure.standing); this only words it. A figure the server
+  // left without one here is one it could not judge, which reads as within rather than inventing a side.
+  if (figure.standing === 'below') return t('glance.usual.below', { low, high })
+  if (figure.standing === 'above') return t('glance.usual.above', { low, high })
   return t('glance.usual.within', { low, high })
 }
 
@@ -76,6 +78,30 @@ export function yesterdayOf(today: string): string {
   const date = new Date(`${today}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() - 1)
   return date.toISOString().slice(0, 10)
+}
+
+// How far `timeZone` is ahead of UTC at the instant `utcMs`, in milliseconds: the zone's own wall
+// clock read back as if it were UTC, minus the instant itself.
+function zoneOffsetMs(utcMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(utcMs))
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)!.value)
+  const wall = Date.UTC(part('year'), part('month') - 1, part('day'), part('hour'), part('minute'), part('second'))
+  return wall - Math.floor(utcMs / 1000) * 1000
+}
+
+/**
+ * The instant local midnight opens `date` (YYYY-MM-DD) in `timeZone`, which is where the
+ * dashboard's heart rate trace starts (spec M1: its width is the day so far). The offset is read
+ * twice, the second time at the first answer, so a day whose offset changes during it (the clocks
+ * going forward or back) is answered with the offset midnight itself was in.
+ */
+export function localMidnightMs(date: string, timeZone: string): number {
+  const utcMidnight = Date.parse(`${date}T00:00:00Z`)
+  const guess = utcMidnight - zoneOffsetMs(utcMidnight, timeZone)
+  return utcMidnight - zoneOffsetMs(guess, timeZone)
 }
 
 // A moment (asOfMs) as a clock time in the person's own zone, not the browser's: two people
@@ -90,10 +116,32 @@ export function formatTimeOfDay(atMs: number, language: string, timezone: string
   return new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone }).format(new Date(atMs))
 }
 
+/**
+ * The greeting by the hour in the person's zone: morning 05-12, afternoon 12-18, evening otherwise.
+ * The zone rather than the browser's, for the reason formatTimeOfDay gives: the page's clock times
+ * are the person's, and a greeting that disagreed with the "today until 11:40" beside it would read
+ * as a second clock.
+ */
+export function greetingKey(nowMs: number, timezone: string): 'glance.greeting.morning' | 'glance.greeting.afternoon' | 'glance.greeting.evening' {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: timezone }).format(new Date(nowMs)))
+  if (hour >= 5 && hour < 12) return 'glance.greeting.morning'
+  if (hour >= 12 && hour < 18) return 'glance.greeting.afternoon'
+  return 'glance.greeting.evening'
+}
+
 // A local date as "5 Sep", the short form a "night of ..." clause reads best in - formatLocalDate's
 // own `dateStyle: 'medium'` carries the year, which a night from this week does not need to state.
 // Same UTC-midnight anchoring as formatLocalDate, for the same reason: the day printed must not
 // depend on which zone the browser sits in.
+/**
+ * The pace line's key from the server's verdict; null on a thin or absent pace, where the so-far
+ * line speaks instead.
+ */
+export function paceKey(pace: GlanceStepsPace | null): 'glance.pace.ahead' | 'glance.pace.on' | 'glance.pace.behind' | null {
+  if (pace === null || pace.standing === null) return null
+  return `glance.pace.${pace.standing}`
+}
+
 function formatShortDate(date: string, language: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleString(language, { day: 'numeric', month: 'short', timeZone: 'UTC' })
 }

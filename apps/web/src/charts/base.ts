@@ -1,6 +1,7 @@
 import type { ECElementEvent } from 'echarts'
 import type { ChartTokens } from './tokens.js'
 import type { Translate } from '../format.js'
+import type { GlanceStanding } from '../data/useGlance.js'
 
 export const STROKE = {
   sparkline: 1.6,
@@ -23,6 +24,18 @@ export const SYMBOL = {
 } as const
 
 export const AXIS_FONT_SIZE = 12
+
+/**
+ * A day's verdict against its usual, as the server sends it (`GlanceStripDay.standing`). An alias
+ * for `GlanceStanding | null` rather than a second declaration of the same union: a chart importing
+ * types from data/ is not new (IntradayHeartRate already imports IntradayPoint/IntradayResult from
+ * data/useIntraday.js), though this is the first from data/useGlance.js specifically - safe, since
+ * useGlance.ts imports nothing from charts/, so there is no circular import. Redeclaring the union
+ * here risked the two drifting apart the moment either side grew a value the other did not know
+ * about. Defined here rather than in Sparkline.tsx, the one caller that draws it as a dot, because
+ * dayTableRows below reads it too and base.ts already sits under Sparkline.tsx in the import graph.
+ */
+export type PointStanding = GlanceStanding | null
 
 /**
  * Applies the reader's motion preference to a built option object.
@@ -259,8 +272,14 @@ export function dayTableRows(input: {
   hasTrend?: boolean
   /** A column for the same days a year earlier, when the reader is comparing (Sparkline). */
   lastYear?: readonly (number | null)[]
+  // One verdict per entry of `values` (Sparkline's own dots): a day the server calls 'above' or
+  // 'below' gets that said in words in the note cell, so a day out of band reads that way to a
+  // screen reader too rather than only by the dot's colour. Undefined for every caller but
+  // Sparkline's dashboard strips - see Sparkline's own `pointStandings` doc comment for why this
+  // is never worked out here from `values` and a baseline.
+  standings?: readonly PointStanding[]
 }): (string | number)[][] {
-  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear } = input
+  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear, standings } = input
   return values
     .map((v, i) => [v, i] as const)
     // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
@@ -284,7 +303,8 @@ export function dayTableRows(input: {
       const cell = format(v, absent)
       return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
         ...(lastYear !== undefined ? [format(lastYear[i] ?? null, t('charts.absence.noReading'))] : []),
-        [isExcluded ? t('charts.absence.excluded') : '',
+        [standings?.[i] === 'above' ? t('charts.standing.above') : standings?.[i] === 'below' ? t('charts.standing.below') : '',
+          isExcluded ? t('charts.absence.excluded') : '',
           // filter, not find: several annotations can land on the same date now that day level
           // marks join the per-metric ones, and a single find() here would silently show only the
           // first and drop the rest. ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate

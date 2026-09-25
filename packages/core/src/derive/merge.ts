@@ -17,22 +17,19 @@ export interface MergeDayInput {
 }
 
 /**
- * Choosing between sources, per metric, per local hour. Master design section 9: sum within a
- * source, choose between sources, and fill a gap from a lower priority source rather than
- * averaging two devices into a number neither of them measured.
- *
- * The hour is the bucket because coverageOf already partitions the day that way, so a merged
- * row's mix and its coverage describe the same partition rather than two different ones.
- *
- * It decides only which rows survive. The arithmetic stays rollUpDay's, run over the winning
- * rows with their source rewritten, so a merged mean and a per source mean cannot come to
- * disagree about what a mean is.
+ * The hour-by-hour choice mergeDay makes, on its own: per metric, per local hour, the rows of the
+ * one source that wins by priority, re-sourced as merged, and how many hours each source won.
+ * Exported because the glance's steps pace counts a partial day and must count it exactly the way
+ * the daily total is counted (query/glance.ts, readStepsPace); two copies of this loop would be two
+ * answers to "how many steps by 14:05" that could disagree.
  */
-export function mergeDay(input: MergeDayInput): DailyRow[] {
+export function selectHourWinners(
+  rows: readonly SampleLike[], priority: Priority,
+): { winning: SampleLike[], mixes: Map<string, Map<string, number>> } {
   // metric -> local hour -> source -> rows
   const byMetric = new Map<string, Map<number, Map<string, SampleLike[]>>>()
 
-  for (const row of input.rows) {
+  for (const row of rows) {
     // A null is a reading the device did not take, so it cannot win an hour. Letting it win
     // would hand the hour to a source that observed nothing and hide the one that did.
     if (row.value === null) continue
@@ -55,7 +52,7 @@ export function mergeDay(input: MergeDayInput): DailyRow[] {
       let winner: string | null = null
       let best = Number.POSITIVE_INFINITY
       for (const source of bySource.keys()) {
-        const rank = input.priority.rank(metric, source)
+        const rank = priority.rank(metric, source)
         // The id breaks a tie, so the winner never depends on Map insertion order, which is
         // whatever order the rows happened to arrive in. rank is always finite, so the first
         // candidate always takes the left branch and the tie branch never sees a null winner.
@@ -71,6 +68,23 @@ export function mergeDay(input: MergeDayInput): DailyRow[] {
     mixes.set(metric, hoursWon)
   }
 
+  return { winning, mixes }
+}
+
+/**
+ * Choosing between sources, per metric, per local hour. Master design section 9: sum within a
+ * source, choose between sources, and fill a gap from a lower priority source rather than
+ * averaging two devices into a number neither of them measured.
+ *
+ * The hour is the bucket because coverageOf already partitions the day that way, so a merged
+ * row's mix and its coverage describe the same partition rather than two different ones.
+ *
+ * It decides only which rows survive. The arithmetic stays rollUpDay's, run over the winning
+ * rows with their source rewritten, so a merged mean and a per source mean cannot come to
+ * disagree about what a mean is.
+ */
+export function mergeDay(input: MergeDayInput): DailyRow[] {
+  const { winning, mixes } = selectHourWinners(input.rows, input.priority)
   const rows = rollUpDay({ personId: input.personId, localDate: input.localDate, rows: winning })
   return rows.map((row) => ({
     ...row,

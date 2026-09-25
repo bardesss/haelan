@@ -64,6 +64,24 @@ type Props = {
    * and review on this task found the equivalent field on eventMarks was reachable but never read.
    */
   eventMarks?: readonly { atMs: number }[]
+  /**
+   * The dashboard's form (spec amendment 2026-09-24): a slim line with no axes, gridlines or range
+   * band, and no visible "show numbers" control (the table stays for a screen reader). False, the
+   * default, is the chart every other page draws, unchanged.
+   */
+  compact?: boolean
+  /**
+   * Compact only: where the x axis starts, as an instant - the local midnight of the day drawn, in
+   * the person's zone, so the trace's whole width is the day so far (the axis ends at the last
+   * reading). Unset, the axis fits the readings themselves.
+   */
+  startMs?: number
+  /**
+   * Intervals shaded behind the trace, each a start and an end the caller has both of: today's
+   * workouts on the dashboard, whose sessions carry both ends (unlike `eventMarks` above, which has
+   * only one). Empty by default, which draws exactly what the chart drew before this existed.
+   */
+  spans?: readonly { startMs: number, endMs: number }[]
 }
 
 /**
@@ -138,9 +156,15 @@ function timeOfDay(utcMs: number, timeZone: string, language: string): string {
 // chart each time - exactly the defect chart-lifecycle.test.tsx's Day-tab case exists to catch,
 // caused here the same way useSourceNames' own nameOf memo comment describes for a different prop.
 const NO_EVENT_MARKS: readonly { atMs: number }[] = []
+// The same device for `spans`, for the same reason.
+const NO_SPANS: readonly { startMs: number, endMs: number }[] = []
+
+// The compact form's height: a slim trace under its label, the approved mockup's 80-90px.
+const COMPACT_HEIGHT = 84
 
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
+  compact = false, startMs, spans = NO_SPANS,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -196,6 +220,9 @@ export function IntradayHeartRate({
     [series],
   )
 
+  // The newest reading, where the compact axis ends: the day so far, and not a moment past it.
+  const lastMs = useMemo(() => points.reduce<number | null>((last, p) => (last === null || p.utcMs > last ? p.utcMs : last), null), [points])
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
     // series and seriesAlt first, since one or two sources is the ordinary case this chart was
@@ -203,7 +230,7 @@ export function IntradayHeartRate({
     // not a colour scheme chosen for its own sake.
     const colors = [tokens.series, tokens.seriesAlt, ...scaleStops(tokens)]
     return {
-      grid: base.grid({ top: 18 }),
+      grid: compact ? { left: 0, right: 0, top: 4, bottom: 4 } : base.grid({ top: 18 }),
       tooltip: {
         ...base.tooltip,
         trigger: 'axis' as const,
@@ -228,12 +255,17 @@ export function IntradayHeartRate({
           return lines.join('<br/><br/>')
         },
       },
-      xAxis: {
-        type: 'time' as const,
-        axisLabel: { ...base.axisLabel, formatter: (value: number) => timeOfDay(value, timezone, i18n.language) },
-        axisLine: base.labelledAxis.axisLine,
-      },
-      yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
+      xAxis: compact
+        ? { type: 'time' as const, show: false,
+            ...(startMs !== undefined && { min: startMs }), ...(lastMs !== null && { max: lastMs }) }
+        : {
+            type: 'time' as const,
+            axisLabel: { ...base.axisLabel, formatter: (value: number) => timeOfDay(value, timezone, i18n.language) },
+            axisLine: base.labelledAxis.axisLine,
+          },
+      yAxis: compact
+        ? { type: 'value' as const, scale: true, show: false }
+        : { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
       series: [...series.flatMap(({ sourceId, points: ownPoints }, index) => {
         const color = colors[index % colors.length]!
         const label = nameOf(sourceId)
@@ -247,10 +279,12 @@ export function IntradayHeartRate({
           { name: `${label} range`, type: 'line' as const,
             data: ownPoints.map((p) => [p.utcMs, p.max !== null && p.min !== null ? p.max - p.min : null]),
             showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 },
-            stack: `range-${sourceId}`, areaStyle: { color: tokens.stageLight, opacity: OPACITY.rangeBand } },
+            // Compact draws the line alone: the band stays in the series (the lookups above count
+            // three per source) but paints nothing, and its min and max stay in the table.
+            stack: `range-${sourceId}`, areaStyle: { color: tokens.stageLight, opacity: compact ? 0 : OPACITY.rangeBand } },
           { name: label, type: 'line' as const,
             data: ownPoints.map((p) => [p.utcMs, p.mean]),
-            showSymbol: false, connectNulls: false, lineStyle: { width: STROKE.series, color },
+            showSymbol: false, connectNulls: false, lineStyle: { width: compact ? STROKE.sparkline : STROKE.series, color },
             // Same marker Sparkline and HeartRateRange draw over an excluded value (SYMBOL.excluded,
             // tokens.excluded): unlike their day scoped exclusion, a sample scoped one does not
             // remove the point from readIntraday's own aggregation (readIntraday's own comment on
@@ -278,9 +312,24 @@ export function IntradayHeartRate({
             data: eventMarks.map((mark) => ({ xAxis: mark.atMs })),
           },
         }]),
+        // Last for the same reason as the events series above. A markArea per span, unbounded on
+        // y, in the baseline band's colour: the shaded interval the charts already use for "this
+        // stretch is set apart", behind the trace rather than over it.
+        ...(spans.length === 0 ? [] : [{
+          type: 'line' as const,
+          // Below the line series' default z of 2, so the shading sits behind the trace although
+          // this series is appended after it.
+          z: 1,
+          data: [],
+          markArea: {
+            silent: true,
+            itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
+            data: spans.map((span) => [{ xAxis: span.startMs }, { xAxis: span.endMs }] as [{ xAxis: number }, { xAxis: number }]),
+          },
+        }]),
       ],
     }
-  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf, eventMarks, metric, unit])
+  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, lastMs, spans])
 
   // Shared by onClick and describe below, so the annotate control acts on precisely the point a
   // click would have opened rather than on a second reading of the same event.
@@ -310,9 +359,9 @@ export function IntradayHeartRate({
   // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
   // renders an annotate control that names a point and then does nothing when pressed. See
   // useChart's ChartPointHandlers doc comment; chart-annotate-handlers.test.tsx pins it.
-  const { host, style, tap } = useChart(build, 170, onPointClick ? { onClick, describe } : undefined)
+  const { host, style, tap } = useChart(build, compact ? COMPACT_HEIGHT : 170, onPointClick ? { onClick, describe } : undefined)
   return (
-    <ChartFigure label={label} host={host} style={style} tap={tap}
+    <ChartFigure label={label} host={host} style={style} tap={tap} tableToggle={!compact}
       table={{
         columns: [
           t('charts.columns.time'), t('charts.columns.source'),

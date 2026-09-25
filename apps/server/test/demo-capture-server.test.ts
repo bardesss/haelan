@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { RawArchive, closeDatabase, openReadOnly } from '@haelan/core'
 import { startCaptureServer } from '../../../demo/capture/server.js'
+import { DEMO_CLOCK_MS, DEMO_INSTANT_MS } from '../../../apps/web/src/demo/instant.js'
 
 // Two names because they are two directories, and teardown needs the outer one. The seeder wants
 // a `data` child rather than the temp directory itself, so what mkdtempSync returns is the parent
@@ -62,5 +64,48 @@ describe('the capture server', () => {
       + '?format=csv&metric=steps&agg=sum&from=2026-09-01&to=2026-09-07'
     await expect(server.fetch(url)).rejects.toThrow()
     expect([...server.recorded.keys()].some((key) => key.includes('/export'))).toBe(false)
+  })
+
+  // scripts/seed-demo.mjs cuts its last day at the demo's clock (seedArchive's lastDayUntilMs), so
+  // the Dashboard is never captured showing data from its own future: before, the seed wrote that
+  // day whole and a midday capture said "Good afternoon" over "today until 23:00". Checked against
+  // the directory the real seeding path wrote, by each reading's end rather than its start: an
+  // hourly step interval that starts at 11:30 and ends at 12:30 is still a reading from the future.
+  it('seeded no reading on the last day that ends after the demo clock', () => {
+    const finalDayStart = DEMO_INSTANT_MS - 86_400_000
+    const db = openReadOnly(dir)
+    const ends: Array<{ dataType: string, endMs: number }> = []
+    try {
+      const archive = new RawArchive(db)
+      for (const row of archive.listFor(server.personId)) {
+        if (row.windowStartMs !== finalDayStart) continue
+        const parsed = JSON.parse(archive.getBody(server.personId, row.id)) as { dataPoints?: unknown[] }
+        for (const point of parsed.dataPoints ?? []) {
+          const instants = [...JSON.stringify(point).matchAll(/"(?:endTime|physicalTime|time)":"([^"]+)"/g)]
+            .map((m) => Date.parse(m[1]!))
+          ends.push({ dataType: row.dataType, endMs: Math.max(...instants) })
+        }
+      }
+    } finally {
+      closeDatabase(db)
+    }
+    // Not vacuous: the morning's steps and heart rate are there.
+    expect(ends.some((e) => e.dataType === 'steps')).toBe(true)
+    expect(ends.some((e) => e.dataType === 'heart-rate')).toBe(true)
+    for (const e of ends) expect(e.endMs, e.dataType).toBeLessThanOrEqual(DEMO_CLOCK_MS)
+  })
+
+  it('answers the glance as of no later than the demo clock', async () => {
+    const response = await server.fetch(`/api/v1/p/${server.personId}/glance`)
+    const glance = await response.json() as {
+      today: string
+      day: { steps: { asOfMs: number | null }, heartRate: { asOfMs: number | null }, stepsPace: { atMs: number } | null }
+    }
+    expect(glance.today).toBe('2026-09-06')
+    expect(glance.day.heartRate.asOfMs).not.toBeNull()
+    expect(glance.day.heartRate.asOfMs!).toBeLessThanOrEqual(DEMO_CLOCK_MS)
+    expect(glance.day.steps.asOfMs).not.toBeNull()
+    expect(glance.day.steps.asOfMs!).toBeLessThanOrEqual(DEMO_CLOCK_MS)
+    if (glance.day.stepsPace !== null) expect(glance.day.stepsPace.atMs).toBeLessThanOrEqual(DEMO_CLOCK_MS)
   })
 })

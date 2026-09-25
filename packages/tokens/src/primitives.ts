@@ -54,7 +54,8 @@ export const primitives = {
   radius: { sm: '3px', md: '8px', lg: '11px', xl: '14px' },
   duration: { fast: '120ms', slow: '240ms' },
   ease: { standard: 'cubic-bezier(0.2, 0, 0, 1)' },
-  text: { micro: '12px', xs: '13.5px', sm: '15.5px', md: '17px', lg: '24px', xl: '34px' },
+  text: { micro: '12px', xs: '13.5px', sm: '15.5px', md: '17px', lg: '24px', xl: '34px', display: '48px' },
+  // display is the dashboard's headline figures, the one place a single number is the page's point.
   // Three weights and three leadings, counted off both stylesheets rather than invented: app.css
   // used 600 thirteen times and 700 three times; site.css used 700, 600 and 650. The leadings were
   // 1.5, 1.6 and 1.4 in the app. No drift between the two: site.css has always set 1.6 for body

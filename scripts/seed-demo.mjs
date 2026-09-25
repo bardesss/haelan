@@ -57,6 +57,10 @@ const { runRebuild } = await import('../packages/core/src/rebuild/runRebuild.ts'
 const { PeopleStore } = await import('../packages/core/src/store/people.ts')
 const { AccountStore } = await import('../packages/core/src/store/accounts.ts')
 const { SCOPES } = await import('../packages/core/src/api/oauth.ts')
+// The instant the demo's browser, recorder and capture server are all pinned to (instant.ts says
+// why it is midday on the last seeded day). A self-contained module with no imports of its own,
+// so reaching into apps/web from here pulls in nothing else.
+const { DEMO_CLOCK_MS, DEMO_INSTANT_MS } = await import('../apps/web/src/demo/instant.ts')
 
 const PERSON_ID = 'demo'
 const USERNAME = 'demo'
@@ -82,6 +86,12 @@ const DEMO_END_DATE = '2026-09-07'
 // stranger's eye lands on first. localMidnightMs closes the span on a completed local day instead,
 // so there is nothing left on the far side of it to spill into. See its own comment in seed.ts.
 const endMs = localMidnightMs(DEMO_END_DATE)
+// Two copies of DEMO_END_DATE (instant.ts says why), so a drift between them fails here, loudly,
+// rather than cutting the wrong day at the clock below.
+if (endMs !== DEMO_INSTANT_MS) {
+  console.error(`seed-demo's end (${endMs}) and instant.ts's DEMO_INSTANT_MS (${DEMO_INSTANT_MS}) disagree`)
+  process.exit(1)
+}
 
 const instance = openHaelan(dir)
 try {
@@ -99,7 +109,12 @@ try {
   // fabricated for the purpose (seed.ts's syntheticRoute: a perfect circle over open ocean,
   // nowhere near this household), rather than shipping a capability nobody can see without
   // installing the app and going for a run.
-  const seeded = seedArchive({ archive: instance.archive, personId: PERSON_ID, days, endMs, demoRoute: true })
+  // lastDayUntilMs: the last day stops at the demo's own clock, the way a real archive's today
+  // stops at its last sync. Without it the seed wrote that day whole, and the Dashboard, captured
+  // at midday, said "Good afternoon" over "today until 23:00". See seedArchive's own comment.
+  const seeded = seedArchive({
+    archive: instance.archive, personId: PERSON_ID, days, endMs, demoRoute: true, lastDayUntilMs: DEMO_CLOCK_MS,
+  })
 
   const report = runRebuild({
     db: instance.db,

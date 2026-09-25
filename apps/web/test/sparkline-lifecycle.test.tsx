@@ -14,11 +14,16 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 const dispose = vi.fn()
+// Captured rather than left a bare vi.fn(): the bandLabels suite at the foot of this file needs to
+// read the option a render actually produced, and this is the one seam (useChart hands its built
+// option straight to the echarts instance's setOption) that lets a test see it without reaching
+// into echarts' own internals.
+let lastOption: unknown
 vi.mock('echarts/core', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
     ...actual,
-    init: () => ({ on: vi.fn(), setOption: vi.fn(), dispose, resize: vi.fn() }),
+    init: () => ({ on: vi.fn(), setOption: (option: unknown) => { lastOption = option }, dispose, resize: vi.fn() }),
   }
 })
 
@@ -27,6 +32,7 @@ let root: Root | null = null
 
 beforeEach(() => {
   dispose.mockClear()
+  lastOption = undefined
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -73,6 +79,34 @@ describe('a sparkline across a rerender', () => {
     render()
     expect(dispose).not.toHaveBeenCalled()
   })
+
+  // The opposite pin, for the value fix round 1 made: `bandLabels` is read directly inside `build`
+  // (both the grid's right margin and the markPoint data below use it), so unlike `formatValue`
+  // above it belongs in `build`'s own dependency array, not behind a ref. Leaving it out would pass
+  // every other test in this file - nothing here calls setOption twice with different bandLabels and
+  // diffs the result - while quietly serving a stale band label from before the caller's baseline
+  // (and its low/high text) changed. Asserting the option updates is the only way to catch that a
+  // rebuild happened at all, since this mock's `dispose` is the sole rebuild signal this file has.
+  it('is disposed and rebuilt when bandLabels changes, since build reads it directly', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} />
+        </I18nProvider>,
+      )
+    })
+    dispose.mockClear()
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,100', high: '9,400' }} />
+        </I18nProvider>,
+      )
+    })
+    expect(dispose).toHaveBeenCalled()
+  })
 })
 
 function renderBars() {
@@ -97,5 +131,57 @@ describe('a daily bars chart across a rerender', () => {
     dispose.mockClear()
     renderBars()
     expect(dispose).not.toHaveBeenCalled()
+  })
+})
+
+type MarkPointDatum = { name: string, xAxis: number, yAxis: number, symbolSize?: number, label?: { formatter: () => string } }
+type ReadingSeries = { markPoint?: { data: MarkPointDatum[] }, markLine?: { data: unknown[] } }
+
+function readingSeries(): ReadingSeries {
+  const series = (lastOption as { series: ReadingSeries[] }).series
+  // The reading series is always last: comparing/trend, when drawn, sit ahead of it (Sparkline.tsx's
+  // own comment on series order), and neither carries a markPoint of its own.
+  return series.at(-1)!
+}
+
+describe('a sparkline with a labelled baseline band', () => {
+  // NightCard.tsx (M9's redesign) hands the strip a shaded band with nothing beside it to say what
+  // the shading means, unlike the mini figures next to it, which always name their own numbers. This
+  // prop closes that gap: two labels anchored at the band's own low/high values, at the chart's right
+  // edge, on the same series HeartRateRange and this chart already anchor their excluded marks to.
+  it('draws the low and high text at the band edges via markPoint, never via markLine', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} />
+        </I18nProvider>,
+      )
+    })
+    const { markPoint, markLine } = readingSeries()
+    const bandPoints = (markPoint?.data ?? []).filter((d) => d.yAxis === 8000 || d.yAxis === 9500)
+    expect(bandPoints).toHaveLength(2)
+    // Anchored at the last day's index, the chart's right edge, not at a fixed pixel position: a
+    // pixel position could not follow the axis's own fitted extent, which the axis (scale: true,
+    // no min/max of its own) recomputes from the data every time the range or the reading changes.
+    expect(bandPoints.every((d) => d.xAxis === values.length - 1)).toBe(true)
+    expect(bandPoints.map((d) => d.label!.formatter()).sort()).toEqual(['8,000', '9,500'])
+    // No line drawn for these two: markLine is reserved for the dashed annotation verticals this
+    // chart already draws (day marks), and a band-edge mark that borrowed it would inherit their
+    // dashed styling and their excluded-day override.
+    expect(markLine?.data).toEqual([])
+  })
+
+  it('adds no markPoint entries for the band when bandLabels is not given', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 8000, high: 9500 }} />
+        </I18nProvider>,
+      )
+    })
+    const { markPoint } = readingSeries()
+    expect((markPoint?.data ?? []).filter((d) => d.yAxis === 8000 || d.yAxis === 9500)).toEqual([])
   })
 })

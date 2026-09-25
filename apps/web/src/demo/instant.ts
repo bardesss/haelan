@@ -66,6 +66,12 @@ export const DEMO_INSTANT_MS = localMidnightMs(DEMO_END_DATE)
  * Week views opened empty because of exactly this, on data that runRebuild had genuinely written.
  * Stepping back one millisecond crosses into the last real day without needing a second date
  * string to keep in sync with DEMO_END_DATE by hand.
+ *
+ * It is midday, not that last millisecond, for the ceiling's sake (below), and the seed stops at
+ * it: scripts/seed-demo.mjs passes this instant to seedArchive as `lastDayUntilMs`, so the last
+ * day's readings run to here and no further. Before that the seed wrote the day whole, and the
+ * Dashboard, captured at midday, said "Good afternoon" over "today until 23:00".
+ * apps/server/test/demo-capture-server.test.ts checks the seeded directory and the glance against it.
  */
 const HALF_A_DAY_MS = 12 * 60 * 60 * 1000
 

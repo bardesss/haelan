@@ -33,7 +33,7 @@ export interface GlanceStaleSource { sourceId: string, name: string, lastReporte
 /** A figure's baseline as the band a client draws: centre, and one spread either side. */
 export interface GlanceBaseline { center: number, low: number, high: number, thin: boolean }
 
-export interface GlanceStripDay { localDate: string, value: number | null }
+export interface GlanceStripDay { localDate: string, value: number | null, standing: GlanceStanding | null }
 
 export interface GlanceFigure {
   metric: string
@@ -49,6 +49,38 @@ export interface GlanceFigure {
   staleSources: GlanceStaleSource[]
   /** Seven entries, oldest first, ending on the figure's own date. */
   strip: GlanceStripDay[]
+  /** Where `value` sits against `baseline`; null when there is nothing honest to say. */
+  standing: GlanceStanding | null
+}
+
+/** Where a figure sits against its usual; the web and the phone both colour by it, so it is decided here once (M9d spec). */
+export type GlanceStanding = 'within' | 'above' | 'below'
+
+/**
+ * Null when there is nothing honest to say: no value, no band, a band too thin to stand on, or a day
+ * still running, which is never judged against a whole day's usual (a partial figure says "so far").
+ */
+export function standingOf(value: number | null, baseline: GlanceBaseline | null, partial: boolean): GlanceStanding | null {
+  if (value === null || baseline === null || baseline.thin || partial) return null
+  if (value < baseline.low) return 'below'
+  if (value > baseline.high) return 'above'
+  return 'within'
+}
+
+/**
+ * A strip of days, each carrying its own verdict against `band`: `partial` applies only to
+ * `ownDate`, the figure's own day, never to an earlier finished day in the same strip. One
+ * implementation for dailyFigure, activeMinutesFigure and the recovery index strip, so the three
+ * cannot drift onto different rules for what a strip day's standing means.
+ */
+function stripOf(
+  dates: readonly string[], valueOf: (localDate: string) => number | null,
+  band: GlanceBaseline | null, ownDate: string, partial: boolean,
+): GlanceStripDay[] {
+  return dates.map((localDate) => {
+    const value = valueOf(localDate)
+    return { localDate, value, standing: standingOf(value, band, partial && localDate === ownDate) }
+  })
 }
 
 /** What every section reads: the person's query, their today, now, and who has gone quiet. */
@@ -142,22 +174,79 @@ export function dailyFigure(
   const byDate = new Map(points.map((point) => [point.localDate, point]))
   const onDay = byDate.get(o.on)
   const baseline = ctx.q.baseline({ metric: o.metric, agg: o.agg, on: o.on })
+  const band = toGlanceBaseline(baseline)
   return {
     metric: o.metric,
     value: onDay?.value ?? null,
     unit: METRICS[o.metric]?.unit ?? '',
-    baseline: toGlanceBaseline(baseline),
+    baseline: band,
     asOfDate: onDay === undefined ? null : o.on,
     asOfMs: onDay === undefined ? null : o.asOfMs,
     partial: o.partial,
     staleSources: staleFeeding(ctx, points.flatMap(sourcesOf)),
-    strip: dates.map((localDate) => ({ localDate, value: byDate.get(localDate)?.value ?? null })),
+    strip: stripOf(dates, (localDate) => byDate.get(localDate)?.value ?? null, band, o.on, o.partial),
+    standing: standingOf(onDay?.value ?? null, band, o.partial),
   }
+}
+
+export interface GlanceStepsPace {
+  /** The usual steps by `atMs`'s local minute, as a band. */
+  center: number
+  low: number
+  high: number
+  thin: boolean
+  /** Today's own count, cut at the same minute as the band: what `standing` actually compares. */
+  value: number
+  /** Today's last step reading: the instant the comparison is made at, never now. */
+  atMs: number
+  standing: 'ahead' | 'on' | 'behind' | null
+}
+
+/**
+ * Below this share of the day's usual whole-day total, the usual-by-now count is still near zero
+ * (just after midnight), so a handful of steps would otherwise read "ahead" of it.
+ */
+export const PACE_MIN_DAY_SHARE = 0.05
+
+/**
+ * Today's steps against the person's usual count by the same minute of the day (spec: steps pace).
+ * Measured at the last reading rather than at now, because a count synced at 13:52 compared with
+ * the usual at 14:05 would call every unsynced minute a shortfall. Only baseline days that kept a
+ * daily steps row count, so an excluded or silent day is absent rather than a zero.
+ *
+ * Compared against `read.today` - the same samples, cut at the same minute, through the same
+ * selectHourWinners arithmetic as every baseline day - never against the `steps` figure's own
+ * `value`. That value is `daily.steps`, which is only as fresh as the last time the derivation
+ * queue drained; comparing a possibly-stale derived total against a band cut at the sample cutoff
+ * mixes two different instants and can call an ordinary lag "behind" the spec's "measured at the
+ * last reading" rule forbids. Pace is null only when there is no step sample today
+ * (`stepsUpToMinute` returns null) or the baseline itself is (`baselineOf` returns null) - not on
+ * whether the daily total has caught up yet.
+ *
+ * No verdict yet (`standing: null`, band still sent) while the usual-by-now count (`band.center`)
+ * sits under `PACE_MIN_DAY_SHARE` of the day's usual whole-day total: just after midnight the usual
+ * count by now is itself near zero, so even a handful of today's own steps would otherwise read
+ * "ahead".
+ */
+export function readStepsPace(ctx: GlanceContext): GlanceStepsPace | null {
+  const window = baselineWindow(ctx.today)
+  const read = ctx.q.stepsUpToMinute({ today: ctx.today, ...window })
+  if (read === null) return null
+  const withRow = new Set(ctx.q.series({ metric: 'steps', agg: 'sum', ...window }).points.map((p) => p.localDate))
+  const values = [...read.sums].filter(([date]) => withRow.has(date)).map(([, sum]) => sum)
+  const baseline = baselineOf(values)
+  if (baseline === null) return null
+  const band = toGlanceBaseline(baseline)!
+  const dayBaseline = ctx.q.baseline({ metric: 'steps', agg: 'sum', on: ctx.today })
+  const tooEarly = dayBaseline === null || dayBaseline.thin || band.center < PACE_MIN_DAY_SHARE * dayBaseline.center
+  const standing = band.thin || tooEarly ? null : read.today > band.high ? 'ahead' : read.today < band.low ? 'behind' : 'on'
+  return { ...band, value: read.today, atMs: read.atMs, standing }
 }
 
 export interface GlanceHeartRate { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
 export interface GlanceDay {
   steps: GlanceFigure
+  stepsPace: GlanceStepsPace | null
   activeMinutes: GlanceFigure
   heartRate: GlanceHeartRate
   /**
@@ -203,17 +292,19 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
   }
   const baselineValues = [...sums].filter(([date]) => date >= baselineFrom && date <= baselineTo).map(([, value]) => value)
   const baseline = baselineOf(baselineValues)
+  const band = toGlanceBaseline(baseline)
   const value = sums.get(ctx.today) ?? null
   return {
     metric: 'active_minutes',
     value,
     unit: 'minutes',
-    baseline: toGlanceBaseline(baseline),
+    baseline: band,
     asOfDate: value === null ? null : ctx.today,
     asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
     partial: true,
     staleSources: staleFeeding(ctx, feeding),
-    strip: dates.map((localDate) => ({ localDate, value: sums.get(localDate) ?? null })),
+    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, band, ctx.today, true),
+    standing: standingOf(value, band, true),
   }
 }
 
@@ -330,10 +421,11 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
       asOfMs: null,
       partial: false,
       staleSources: staleFeeding(ctx, [...restingHeartRate.staleSources, ...hrv.staleSources].map((s) => s.sourceId)),
-      strip: dates.map((localDate) => {
+      strip: stripOf(dates, (localDate) => {
         const day = series.get(localDate)
-        return { localDate, value: day !== undefined && day.enough ? day.score : null }
-      }),
+        return day !== undefined && day.enough ? day.score : null
+      }, null, ctx.today, false),
+      standing: null,
     },
     band: scored === null ? null : bandOf(scored.score),
     // Reported only when neither day scored, and then with today's reasons: yesterday's score
@@ -351,8 +443,10 @@ export function readDay(ctx: GlanceContext): GlanceDay {
   // Stale sources from heart rate's daily rows over the look-back, not from today's samples: a
   // source with a sample today is reporting by definition, so today's samples could never name one.
   const heartFeeding = lookBackPoints(ctx, 'heart_rate', 'mean', ctx.today).flatMap(sourcesOf)
+  const steps = dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) })
   return {
-    steps: dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) }),
+    steps,
+    stepsPace: readStepsPace(ctx),
     activeMinutes: activeMinutesFigure(ctx),
     heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heartFeeding) },
     // Filed under the date a workout ended on, the same key the Activity list groups by, so a run
@@ -361,19 +455,61 @@ export function readDay(ctx: GlanceContext): GlanceDay {
   }
 }
 
+export interface GlanceWeekFigure { perDay: number, days: number, total: number }
+
+/** The last seven days as averages over the finished ones; today is drawn by the client, never counted (spec: WeekCard). */
+export interface GlanceWeek { steps: GlanceWeekFigure | null, activeMinutes: GlanceWeekFigure | null, asleep: GlanceWeekFigure | null }
+
+/** The sum of every strip day with a value, the figure's own day included (for today's steps/active that is "so far"). */
+function stripTotal(strip: readonly GlanceStripDay[]): number {
+  return strip.map((d) => d.value).filter((v): v is number => v !== null).reduce((s, v) => s + v, 0)
+}
+
+/** A strip's finished days averaged. The last entry is the figure's own day and is left out: on the today figures it is still running. */
+export function weekOf(strip: readonly GlanceStripDay[]): GlanceWeekFigure | null {
+  const finished = strip.slice(0, -1).map((d) => d.value).filter((v): v is number => v !== null)
+  if (finished.length === 0) return null
+  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length, total: stripTotal(strip) }
+}
+
+/**
+ * The same average as `weekOf`, but over the whole strip: a sleep strip ends on last night, which
+ * has already finished, so there is no running day at the end to leave out.
+ */
+export function weekOfFinished(strip: readonly GlanceStripDay[]): GlanceWeekFigure | null {
+  const finished = strip.map((d) => d.value).filter((v): v is number => v !== null)
+  if (finished.length === 0) return null
+  return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length, total: stripTotal(strip) }
+}
+
 export interface Glance {
   /** The local date this was assembled for, in the person's own zone. */
   today: string
   sleep: GlanceSleep | null
   recovery: GlanceRecovery
   day: GlanceDay
+  /** The last seven days' averages, alongside `day` and `sleep` rather than replacing them. */
+  week: GlanceWeek
 }
 
 export function readGlance(
   q: PersonQuery, input: { today: string, nowMs: number, nameOf: (id: string) => string },
 ): Glance {
   const ctx = contextFor(q, input)
+  const sleep = readLastNight(ctx)
+  const day = readDay(ctx)
+  // The week's asleep figure is computed from the seven nights ending on last night's own date
+  // when there is one, or on yesterday when the watch has not synced yet: a morning before it has
+  // must not drop six already-finished nights from the week card for want of a seventh (Task 19a).
+  const asleepStrip = sleep !== null
+    ? sleep.asleep.strip
+    : dailyFigure(ctx, { metric: 'sleep_asleep_minutes', agg: 'sum', on: shiftLocalDate(ctx.today, -1), partial: false, asOfMs: null }).strip
+  const week: GlanceWeek = {
+    steps: weekOf(day.steps.strip),
+    activeMinutes: weekOf(day.activeMinutes.strip),
+    asleep: weekOfFinished(asleepStrip),
+  }
   // No generation time in the body: /glance is hashed for its ETag, and a stamp of now would make
   // every response differ, so no conditional request could ever answer 304.
-  return { today: input.today, sleep: readLastNight(ctx), recovery: readRecovery(ctx), day: readDay(ctx) }
+  return { today: input.today, sleep, recovery: readRecovery(ctx), day, week }
 }

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react'
+import { useId, useLayoutEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DEMO_CLOCK_MS } from './instant.js'
 import { detectDemoLang } from './lang.js'
@@ -13,26 +13,37 @@ const HOST_ATTR = 'data-demo-banner'
 // for why the visitor's language still has to be read: client.ts's demo refusal message now reads
 // it too, which is why the detection itself moved out to its own module rather than staying
 // private here.
-const BANNER_TEXT: Record<DemoLang, (dateLabel: string) => string> = {
+//
+// Split into a lead (the notice's first two sentences: it is a demo, and the data ends on
+// <date>) and the rest, rather than kept as one string, so a phone-width reader gets the lead and
+// a disclosure for the rest instead of four sentences of prose in a narrow column - see the
+// `<details>` this file renders below and its own CSS in app.css. The words are unchanged from
+// before this split; only where the sentence boundary falls is new.
+const BANNER_LEAD: Record<DemoLang, (dateLabel: string) => string> = {
   en: (dateLabel) => `This is a demo. The data is generated, not anyone’s real health ` +
-    `history, and it ends on ${dateLabel}. Anything you write here lives only in this browser ` +
+    `history, and it ends on ${dateLabel}.`,
+  nl: (dateLabel) => `Dit is een demo. De gegevens zijn gegenereerd, niet iemands echte ` +
+    `gezondheidsgeschiedenis, en eindigen op ${dateLabel}.`,
+}
+
+// Kept to the same claims as the English above, including the (now second) sentence's distinction
+// (an exclusion does change the page; a recompute does not follow it) - the one the review that
+// required this file called out as easy to soften in translation - and the coverage edge the
+// review that widened the sweep still requires naming: a slice was recorded, not the archive, and
+// stepping outside it is silence, not a fault. "cardiobelasting" and "afgeleid" are not
+// translator's choices made here for the first time: both already appear in nl.json
+// (settings.cardioLoadHelp, setup's timezoneWarning) for exactly these concepts, and "je"/"jouw"
+// throughout nl.json is this app's own register, not "u" - matched here rather than introducing a
+// second one.
+const BANNER_REST: Record<DemoLang, string> = {
+  en: `Anything you write here lives only in this browser ` +
     `tab; a reload resets it. Excluding a day or a session does change what you see, the ` +
     `same as a real instance; what does not follow is a recompute, so a figure derived from ` +
     `that data upstream (cardio load, a baseline, an insight) keeps the value it ` +
     `was recorded with. It also only holds a recorded slice of the archive, not the whole of ` +
     `it, so wandering past what was captured (another period back, another night) shows ` +
     `nothing rather than something broken.`,
-  // Kept to the same claims as the English above, including the third sentence's distinction (an
-  // exclusion does change the page; a recompute does not follow it) - the one the review that
-  // required this file called out as easy to soften in translation - and now the fourth, the
-  // coverage edge the review that widened the sweep still requires naming: a slice was recorded,
-  // not the archive, and stepping outside it is silence, not a fault. "cardiobelasting" and
-  // "afgeleid" are not translator's choices made here for the first time: both already appear in
-  // nl.json (settings.cardioLoadHelp, setup's timezoneWarning) for exactly these concepts, and
-  // "je"/"jouw" throughout nl.json is this app's own register, not "u" - matched here rather than
-  // introducing a second one.
-  nl: (dateLabel) => `Dit is een demo. De gegevens zijn gegenereerd, niet iemands echte ` +
-    `gezondheidsgeschiedenis, en eindigen op ${dateLabel}. Alles wat je hier schrijft, blijft ` +
+  nl: `Alles wat je hier schrijft, blijft ` +
     `alleen in dit tabblad bestaan; herladen zet het terug. Een dag of sessie uitsluiten ` +
     `verandert wél wat je ziet, net als bij een echte installatie; wat niet volgt, is een ` +
     `herberekening: een cijfer dat van die gegevens is afgeleid (cardiobelasting, een ` +
@@ -40,6 +51,12 @@ const BANNER_TEXT: Record<DemoLang, (dateLabel: string) => string> = {
     `maar een opgenomen deel van het archief, niet het geheel; verder terugbladeren dan is ` +
     `vastgelegd (nog een periode terug, nog een nacht) toont niets, geen storing.`,
 }
+
+// The phone-only disclosure's own button label, open and closed - the demo banner's per-language
+// table, same exception no-hardcoded-strings.test.ts already leaves this file (see BANNER_LEAD's
+// own comment on why nothing here routes through i18n).
+const MORE_LABEL: Record<DemoLang, string> = { en: 'More', nl: 'Meer' }
+const LESS_LABEL: Record<DemoLang, string> = { en: 'Less', nl: 'Minder' }
 
 // Intl locale to format DEMO_CLOCK_MS's date in, one per DemoLang - kept alongside BANNER_TEXT
 // rather than derived from it, so a date embedded mid-sentence never ends up in a script the rest
@@ -65,6 +82,15 @@ function rememberDismissed(): void {
 export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
   const lang = detectDemoLang()
   const [dismissed, setDismissed] = useState(readDismissed)
+  // Below the phone breakpoint only - app.css hides `.demo-banner-toggle` above it, where the rest
+  // of the notice is simply shown regardless of this flag. Real React state, not a native
+  // `<details>`: a closed `<details>` hides its own children in a way author CSS on the child
+  // cannot override (Chromium: `details.open === false` makes the child fail
+  // `checkVisibility()` even when a rule sets `display: inline` on it), which is what silently
+  // hid the rest of the notice from every desktop visitor - screen readers included - after this
+  // banner first grew a disclosure. A plain toggled element has no such hidden layer.
+  const [open, setOpen] = useState(false)
+  const restId = useId()
   const dateLabel = new Date(DEMO_CLOCK_MS).toLocaleDateString(DATE_LOCALE[lang], {
     timeZone: 'Europe/Amsterdam',
     year: 'numeric',
@@ -87,39 +113,30 @@ export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
   if (dismissed) return null
 
   return (
-    <div
-      role="note"
-      lang={lang}
-      style={{
-        position: 'relative',
-        // Semantic tokens, not literal colours: apps/web/test/no-raw-color.test.ts enforces this
-        // across apps/web/src with no carve-out for a demo-only element, and --surface-rail /
-        // --text-primary already read as "chrome, not page content" everywhere else Sidebar.tsx
-        // uses them, which is exactly what this banner is.
-        background: 'var(--surface-rail)',
-        color: 'var(--text-primary)',
-        borderBottom: '1px solid var(--border-subtle)',
-        fontSize: 'var(--font-size-xs)',
-        lineHeight: 1.5,
-        // Room on the right for the close button, on both sides so the centred text stays centred.
-        padding: '0.6rem 2.75rem',
-        textAlign: 'center',
-      }}
-    >
-      <p style={{ margin: 0 }}>{BANNER_TEXT[lang](dateLabel)}</p>
+    <div role="note" lang={lang} className="demo-banner">
+      <p className="demo-banner-lead">{BANNER_LEAD[lang](dateLabel)}</p>
+      {/* No `<details>`: a closed one hides its own children in a way author CSS on the child
+          cannot override (see the `open` state's own comment above), so the rest of the notice is
+          a plain paragraph, collapsed by CSS class rather than by a native element's hidden
+          internals. `.demo-banner-toggle` is likewise plain markup throughout, hidden above the
+          phone breakpoint by app.css rather than left unrendered, so its aria-expanded/aria-controls
+          pair is always real even on a width where nothing shows the button itself. */}
+      <p id={restId} className={open ? 'demo-banner-rest' : 'demo-banner-rest is-collapsed'}>{BANNER_REST[lang]}</p>
       <button
         type="button"
+        className="demo-banner-toggle"
+        aria-expanded={open}
+        aria-controls={restId}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {open ? LESS_LABEL[lang] : MORE_LABEL[lang]}
+      </button>
+      <button
+        type="button"
+        className="demo-banner-close"
         aria-label={DISMISS_LABEL[lang]}
         title={DISMISS_LABEL[lang]}
         onClick={() => { rememberDismissed(); setDismissed(true) }}
-        style={{
-          position: 'absolute', top: '50%', right: '0.5rem', transform: 'translateY(-50%)',
-          // 44px square: the notice spans the page on a phone too, and a close target that small
-          // screen's thumb can miss is a banner nobody can get rid of there.
-          width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          background: 'none', border: 0, borderRadius: 'var(--radius-md)', cursor: 'pointer',
-          color: 'var(--text-secondary)', padding: 0,
-        }}
       >
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none"
           stroke="currentColor" strokeWidth="2" strokeLinecap="round">

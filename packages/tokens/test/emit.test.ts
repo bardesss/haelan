@@ -43,6 +43,7 @@ describe('css emitter', () => {
     expect(css).toContain('--space-4: 16px;')
     expect(css).toContain('--font-size-xl: 34px;')
     expect(css).toContain('--font-size-micro: 12px;')
+    expect(css).toContain('--font-size-display: 48px;')
   })
 
   it('defines every theme custom property in both themes', () => {

@@ -363,6 +363,39 @@ export interface SeedArchiveInput {
    * a fabricated route belongs on purpose.
    */
   demoRoute?: boolean
+  /**
+   * Opt-in, and unset by default: every day is generated whole. When set, the final day stops
+   * here, the way a real archive's today stops at the moment it was last synced. Every reading on
+   * that day that has not finished by this instant is left out: a sample at or after it, and an
+   * interval or session ending after it. An hourly interval that straddles it is dropped rather
+   * than truncated, because nothing here models a partial hour.
+   *
+   * The exceptions are the day's whole-day totals, which the day has not reached by this instant
+   * but which dropping would take away entirely. Each is scaled by the share of the day that has
+   * passed, `Math.round(wholeDay * share)`:
+   * - active-minutes and active-zone-minutes, one interval each for the whole day, are also cut to
+   *   end here. Only their ambient minutes (LIGHT, FAT_BURN) are scaled; a workout's minutes
+   *   (MODERATE, VIGOROUS, CARDIO, PEAK) are kept whole if the workout itself finished before
+   *   this instant, and are zero if it did not.
+   * - total-calories and floors, the daily rollups. Their window stays the whole civil day, because
+   *   that is the only window dailyRollUp answers with: a real rollup fetched mid-day carries the
+   *   running total under a whole-day window. So for these two, the amount is the only thing cut.
+   *
+   * The same rule covers the day's other timed readings: weight's 07:00 sample, the night that
+   * ends that morning, a workout, the 20:00 mood. A payload whose every point was cut is still
+   * written, empty, the way a sync of an hour with nothing in it would be.
+   *
+   * Resting heart rate, HRV and respiratory rate are left as they are. Each is a once-a-day figure
+   * read off the night before, so by midday it already exists in full.
+   *
+   * Filters and scales only: every value is still drawn from the PRNG exactly as it would be
+   * without this option, so no other day in the span changes.
+   *
+   * scripts/seed-demo.mjs is the one caller, passing the demo's pinned clock (DEMO_CLOCK_MS in
+   * apps/web/src/demo/instant.ts) so the captured Dashboard never shows data from its own future.
+   * It must fall inside the final day, after that day's start and no later than `endMs`.
+   */
+  lastDayUntilMs?: number
 }
 
 export interface SeedArchiveResult { payloads: number }
@@ -387,6 +420,11 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
 
   const rand = mulberry32(input.seed ?? DEFAULT_SEED)
   let payloads = 0
+
+  const until = input.lastDayUntilMs
+  if (until !== undefined && !(until > input.endMs - DAY_MS && until <= input.endMs)) {
+    throw new Error(`lastDayUntilMs must fall inside the final day (${input.endMs - DAY_MS}, ${input.endMs}], got ${until}`)
+  }
 
   const put = (t: DataType, windowStartMs: number, windowEndMs: number, points: unknown[]): void => {
     input.archive.put({
@@ -488,6 +526,12 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const dayStart = input.endMs - (input.days - i) * DAY_MS
     const dayEnd = dayStart + DAY_MS
     const isSunday = new Date(dayStart).getUTCDay() === 0
+    // lastDayUntilMs's cut, on the final day only (see its own comment). Applied to arrays that
+    // are already built, never around a draw, so the PRNG sequence stays exactly the same.
+    const cutoff = i === input.days - 1 ? until : undefined
+    const sampleDone = (atMs: number): boolean => cutoff === undefined || atMs < cutoff
+    const intervalDone = (endMs: number): boolean => cutoff === undefined || endMs <= cutoff
+    const hourlyDone = <T>(points: T[]): T[] => points.filter((_, h) => intervalDone(dayStart + (h + 1) * HOUR_MS))
 
     // A few times a week, on a fixed schedule rather than a coin flip: the type has to show up
     // in any span this generator is asked for, not merely on average across many seeds. Decided
@@ -528,7 +572,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         utcOffset: amsterdamOffset(hourStart),
       })
     })
-    put(STEPS, dayStart, dayEnd, stepsPoints)
+    put(STEPS, dayStart, dayEnd, hourlyDone(stepsPoints))
 
     // Distance tracks the step curve - each hour's distance is that hour's own step count times a
     // jittered stride length - rather than being drawn from stepCurve a second, independent time,
@@ -543,7 +587,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         utcOffset: amsterdamOffset(hourStart),
       })
     })
-    put(DISTANCE, dayStart, dayEnd, distancePoints)
+    put(DISTANCE, dayStart, dayEnd, hourlyDone(distancePoints))
 
     // A resting floor under the same activity curve steps and distance already follow: the
     // overnight hours still report a small burn, never zero, and the workout's own hour adds a
@@ -562,7 +606,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         utcOffset: amsterdamOffset(hourStart),
       })
     })
-    put(ACTIVE_ENERGY_BURNED, dayStart, dayEnd, activeEnergyPoints)
+    put(ACTIVE_ENERGY_BURNED, dayStart, dayEnd, hourlyDone(activeEnergyPoints))
 
     const hrPoints = Array.from({ length: 24 }, (_, h) => {
       const atMs = dayStart + h * HOUR_MS
@@ -582,13 +626,14 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         physicalTime: new Date(atMs).toISOString(), utcOffset: amsterdamOffset(atMs),
       })
     })
-    put(HEART_RATE, dayStart, dayEnd, hrPoints)
+    put(HEART_RATE, dayStart, dayEnd, hrPoints.filter((_, h) => sampleDone(dayStart + h * HOUR_MS)))
 
     weightGrams += weightTrendPerDay + range(rand, -80, 80)
-    put(WEIGHT, dayStart, dayEnd, [samplePoint({
+    const weightPoints = [samplePoint({
       payloadKey: WEIGHT.payloadKey, valuePath: WEIGHT.valuePath, value: String(Math.round(weightGrams)),
       physicalTime: new Date(dayStart + 7 * HOUR_MS).toISOString(), utcOffset: amsterdamOffset(dayStart + 7 * HOUR_MS),
-    })])
+    })]
+    put(WEIGHT, dayStart, dayEnd, sampleDone(dayStart + 7 * HOUR_MS) ? weightPoints : [])
 
     const civilDate = civilDateOf(dayStart)
 
@@ -625,10 +670,22 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const lightMinutes = Math.round(range(rand, 40, 90) * (isSunday ? 0.7 : 1))
     const moderateMinutes = workout ? Math.round(workoutMinutesToday * range(rand, 0.3, 0.5)) : 0
     const vigorousMinutes = workout ? Math.round(workoutMinutesToday * range(rand, 0.3, 0.5)) : 0
+    // lastDayUntilMs's whole-day totals (see its comment): these two types are one interval for
+    // the whole day, so dropping the straddler would drop the day's figure. Cut to end at the
+    // cutoff instead, the ambient minutes scaled to the share of the day that has passed (soFar,
+    // which the two rollups further down use too), and the workout's minutes
+    // kept only if the workout itself finished before it.
+    const minutesEndMs = cutoff ?? dayEnd
+    const dayShare = (minutesEndMs - dayStart) / DAY_MS
+    const workoutKept = workout !== null && intervalDone(workout.endMs)
+    const soFar = (minutes: number): number => (cutoff === undefined ? minutes : Math.round(minutes * dayShare))
+    const ifWorkoutKept = (minutes: number): number => (workoutKept ? minutes : 0)
     put(ACTIVE_MINUTES, dayStart, dayEnd, [activeMinutesPoint({
-      startTime: new Date(dayStart).toISOString(), endTime: new Date(dayEnd).toISOString(),
+      startTime: new Date(dayStart).toISOString(), endTime: new Date(minutesEndMs).toISOString(),
       utcOffset: amsterdamOffset(dayStart),
-      minutesByLevel: { LIGHT: lightMinutes, MODERATE: moderateMinutes, VIGOROUS: vigorousMinutes },
+      minutesByLevel: {
+        LIGHT: soFar(lightMinutes), MODERATE: ifWorkoutKept(moderateMinutes), VIGOROUS: ifWorkoutKept(vigorousMinutes),
+      },
     })])
 
     const fatBurnMinutes = Math.round(range(rand, 10, 30) * (isSunday ? 0.7 : 1))
@@ -639,11 +696,11 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const peakMinutes = workout && workout.exerciseType === 'RUNNING'
       ? Math.round(workoutMinutesToday * range(rand, 0.05, 0.15)) : 0
     const minutesByZone: Readonly<Record<string, number>> = {
-      FAT_BURN: fatBurnMinutes, CARDIO: cardioMinutes, PEAK: peakMinutes,
+      FAT_BURN: soFar(fatBurnMinutes), CARDIO: ifWorkoutKept(cardioMinutes), PEAK: ifWorkoutKept(peakMinutes),
     }
     put(ACTIVE_ZONE_MINUTES, dayStart, dayEnd, Object.entries(minutesByZone).map(([zone, minutes]) => (
       activeZoneMinutesPoint({
-        startTime: new Date(dayStart).toISOString(), endTime: new Date(dayEnd).toISOString(),
+        startTime: new Date(dayStart).toISOString(), endTime: new Date(minutesEndMs).toISOString(),
         utcOffset: amsterdamOffset(dayStart), zone, minutes,
       })
     )))
@@ -656,21 +713,22 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const activeCaloriesToday = range(rand, 200, 500) * (isSunday ? 0.7 : 1)
       + (workout ? range(rand, 200, 450) : 0)
     totalCaloriesWindows.push({
-      date: civilDate, value: { kcalSum: Math.round(restingCaloriesToday + activeCaloriesToday) },
+      date: civilDate, value: { kcalSum: soFar(Math.round(restingCaloriesToday + activeCaloriesToday)) },
     })
     const floorsToday = Math.round(range(rand, 0, 6) + (rand() < 0.25 ? range(rand, 6, 16) : 0))
-    floorsWindows.push({ date: civilDate, value: { countSum: String(floorsToday) } })
+    floorsWindows.push({ date: civilDate, value: { countSum: String(soFar(floorsToday)) } })
 
     const night = nights[i]!
-    put(SLEEP, dayStart, dayEnd, [sleepPoint({
+    const sleepPoints = [sleepPoint({
       name: `users/me/dataTypes/sleep/dataPoints/seed-${i}`,
       startTime: new Date(night.startMs).toISOString(),
       endTime: new Date(night.endMs).toISOString(),
       utcOffset: amsterdamOffset(night.startMs),
       stages: stagesFor(rand, night.startMs, night.endMs, night.restless),
-    })])
+    })]
+    put(SLEEP, dayStart, dayEnd, intervalDone(night.endMs) ? sleepPoints : [])
 
-    if (workout) {
+    if (workout && workoutKept) {
       put(EXERCISE, dayStart, dayEnd, [exercisePoint({
         name: `users/me/dataTypes/exercise/dataPoints/seed-${i}`,
         startTime: new Date(workout.startMs).toISOString(),
@@ -681,9 +739,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       })])
     }
 
-    put(MOODS, dayStart, dayEnd, [moodPoint({
+    const moodPoints = [moodPoint({
       atMs: dayStart + 20 * HOUR_MS, utcOffset: amsterdamOffset(dayStart + 20 * HOUR_MS), moods: [pick(rand, MOOD_LABELS)],
-    })])
+    })]
+    put(MOODS, dayStart, dayEnd, sampleDone(dayStart + 20 * HOUR_MS) ? moodPoints : [])
   }
 
   putRollups(TOTAL_CALORIES, totalCaloriesWindows)
