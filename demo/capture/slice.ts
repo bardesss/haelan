@@ -16,7 +16,9 @@
 // The strips are the one place that is not simply the server's answer with a bound applied: a day
 // before the first day keeps its value on a real instance, and its dot would open that day. Emptied
 // here instead, so the dot is never drawn and so never offered, which is what the calendar already
-// says of those days (greyed, no data). The figures themselves (each day's own value, its band, its
+// says of those days (greyed, no data). Each emptied day's own band goes with it, so the strip's
+// per-day band shades nothing before the first day either: a usual over days the demo does not
+// have is no more its to show than their values are. The figures themselves (each day's own value, its band, its
 // verdict) are the capture's, untouched. The week card's averages are recounted over what is left,
 // with core's own weekOf rules and the server's own rounding, so a week of three bars never claims
 // seven days. The recount starts from the strip's rounded daily values where the server averaged
@@ -31,7 +33,7 @@ const CALENDAR = /^\/api\/v1\/p\/[^/]+\/glance\/calendar$/
 
 interface CalendarBody { month: string, firstDay: string | null, days: { localDate: string }[] }
 
-/** Empties every strip day before `firstDay`, anywhere in the glance. Answers whether any had a value. */
+/** Empties every strip day before `firstDay` (value, band and verdict), anywhere in the glance. Answers the strips where a day had a value. */
 function emptyStripsBefore(node: unknown, firstDay: string): Set<GlanceStripDay[]> {
   const changed = new Set<GlanceStripDay[]>()
   const walk = (value: unknown): void => {
@@ -41,7 +43,9 @@ function emptyStripsBefore(node: unknown, firstDay: string): Set<GlanceStripDay[
       if (key === 'strip' && Array.isArray(child)) {
         const strip = child as GlanceStripDay[]
         for (const day of strip) {
-          if (day.localDate >= firstDay || day.value === null) continue
+          if (day.localDate >= firstDay) continue
+          day.band = null
+          if (day.value === null) continue
           day.value = null
           day.standing = null
           changed.add(strip)

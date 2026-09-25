@@ -10,6 +10,7 @@ function strip(on: string, values: (number | null)[]) {
   return values.map((value, i) => ({
     localDate: new Date(end - (values.length - 1 - i) * 86_400_000).toISOString().slice(0, 10),
     value,
+    band: { center: 5000 + i, low: 4000 + i, high: 6000 + i, thin: false },
     standing: value === null ? null : 'within',
   }))
 }
@@ -40,6 +41,9 @@ describe('trimGlance', () => {
 
     expect(trimmed.day.steps.strip.map((d) => d.value)).toEqual([null, null, null, null, null, 6000, 7000])
     expect(trimmed.day.steps.strip.map((d) => d.standing)).toEqual([null, null, null, null, null, 'within', 'within'])
+    // Each day's own band goes with it, the silent ones' included, so no usual is shaded before the slice begins.
+    expect(trimmed.day.steps.strip.map((d) => d.band?.low ?? null)).toEqual([null, null, null, null, null, 4005, 4006])
+    expect(trimmed.day.activeMinutes.strip.map((d) => d.band?.low ?? null)).toEqual([null, null, null, null, null, 4005, 4006])
     expect(trimmed.recovery.index.strip.map((d) => d.value)).toEqual([null, null, null, null, null, 65, 66])
     expect(trimmed.sleep!.asleep.strip.map((d) => d.value)).toEqual([null, null, null, null, null, 450, 460])
     // A finished day counts its own day (weekOfFinished), as readGlance does.
