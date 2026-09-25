@@ -450,8 +450,8 @@ describe('the calendar\'s foot', () => {
   it('explains both dots and the grey days, and a Today link picks today', async () => {
     const picks = await open()
     expect([...document.querySelectorAll('.cal-legend-line')].map((l) => l.textContent))
-      .toEqual(['Left dot · sleep in your usual range outside it', 'Right dot · steps reached your usual below it'])
-    expect(document.querySelector('.cal-note')!.textContent).toBe('Grey days have no data')
+      .toEqual(['Sleep usual unusual', 'Steps reached not reached'])
+    expect(document.querySelector('.cal-note')!.textContent).toBe('Grey: no data')
     const today = document.querySelector<HTMLButtonElement>('.cal-today')!
     expect(today.textContent).toBe('Today')
     act(() => { today.click() })
