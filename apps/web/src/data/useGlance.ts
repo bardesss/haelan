@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { IntradayPoint } from './useIntraday.js'
 import type { WorkoutSession } from './useSessions.js'
-import { apiGet } from '../api/client.js'
+import { apiGet, ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 
@@ -111,26 +111,57 @@ export interface GlanceWeek {
   asleep: GlanceWeekFigure | null
 }
 
+/** The nearest days with data before and after this glance's own day, up to and including today. Mirrors GlanceNav in packages/core/src/query/glance.ts. */
+export interface GlanceNav {
+  previous: string | null
+  next: string | null
+}
+
 export interface Glance {
   today: string
   sleep: GlanceSleep | null
   recovery: GlanceRecovery
   day: GlanceDay
   week: GlanceWeek
-}
-
-export function glanceKey(personId: string): readonly unknown[] {
-  return queryKeys.resource(personId, 'glance')
+  /** True when `today` names a day already over, rather than the day still running (M9c). */
+  finished: boolean
+  /** Where the day-navigation arrows on a finished day's page go. */
+  nav: GlanceNav
 }
 
 /**
- * The glance: last night, today's recovery and today so far, as one read.
- *
- * No range argument, unlike most other reads in this app: the glance is the glance for today only,
- * and today is computed on the server in the request handler's timezone.
+ * `day` is folded into the key rather than left off it, so a day someone opened, browsed away
+ * from and came back to reads from cache instead of refetching - the same reason `useSeries` and
+ * every other ranged read here keys on its own arguments. `'today'` in place of `null` keeps the
+ * key one shape TanStack can hash consistently; `queryKeys.resource(personId, 'glance')` stays the
+ * prefix so PR 371's `invalidateResource(..., 'glance')` (useAnnotations.ts), which matches on
+ * `queryKey[2]` alone, still reaches every day's cached entry after a write.
  */
-export function useGlance(): {
+export function glanceKey(personId: string, day: string | null = null): readonly unknown[] {
+  return [...queryKeys.resource(personId, 'glance'), day ?? 'today']
+}
+
+/** The `{ nearest }` a 404 answers with, when `day` names a gap in the archive. Read off the raw
+ *  error body `apiSend` (client.ts) attaches to a thrown ApiError, since the server sends this
+ *  shape bare rather than wrapped in the usual `{ error: {...} }` envelope. */
+function nearestOf(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.status !== 404) return null
+  const body = error.body as { nearest?: string | null } | undefined
+  return typeof body?.nearest === 'string' ? body.nearest : null
+}
+
+/**
+ * The glance: last night, today's recovery and today so far, as one read - or, given `day`, that
+ * finished day's own answer instead (M9c day navigation).
+ *
+ * `day: null` means today, computed on the server in the request handler's timezone; a caller
+ * asking for a specific day gets whatever the server built for that day. A day the archive has no
+ * data for comes back as a 404 naming the `nearest` day that does, which this hook surfaces
+ * separately from `error` so a caller can redirect there without having to unpack an ApiError.
+ */
+export function useGlance(day: string | null = null): {
   glance: Glance | undefined
+  nearest: string | null
   isPending: boolean
   isError: boolean
   error: unknown
@@ -139,15 +170,18 @@ export function useGlance(): {
   const session = useSession()
   const personId = session.data?.personId
   const query = useQuery({
-    queryKey: glanceKey(personId ?? ''),
+    queryKey: glanceKey(personId ?? '', day),
     // The same race useSeries and useSourceNames guard: asking before the session resolves would
     // cache an answer under a key naming no person.
     enabled: personId !== undefined,
-    queryFn: () => apiGet<Glance>(`/api/v1/p/${personId!}/glance`),
+    queryFn: () => apiGet<Glance>(day === null
+      ? `/api/v1/p/${personId!}/glance`
+      : `/api/v1/p/${personId!}/glance?day=${encodeURIComponent(day)}`),
   })
 
   return {
     glance: query.data,
+    nearest: nearestOf(query.error),
     isPending: query.isPending,
     isError: query.isError,
     error: query.error,

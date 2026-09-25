@@ -9,14 +9,21 @@ export type ApiErrorKind =
 export class ApiError extends Error {
   readonly kind: ApiErrorKind
   readonly status: number | null
+  // The parsed response body for a request that reached the instance and came back an error,
+  // undefined for a thrown fetch or a body that would not parse. Most callers never look at this
+  // (kind and status already answer "what kind of failure"); it exists for the rare body whose
+  // *shape*, not just its envelope, the caller needs - the glance route's 404 `{ nearest }` (M9c)
+  // is the first one, since that body carries no `error` envelope for apiSend to unpack at all.
+  readonly body: unknown
 
   // Declared and assigned rather than written as constructor parameter properties: Node's type
   // stripping is strip-only and rejects parameter properties, the same reason HaelanError in
   // packages/core/src/errors.ts is written this way.
-  constructor(kind: ApiErrorKind, status: number | null, message: string) {
+  constructor(kind: ApiErrorKind, status: number | null, message: string, body?: unknown) {
     super(message)
     this.kind = kind
     this.status = status
+    this.body = body
     this.name = 'ApiError'
   }
 }

@@ -9,6 +9,7 @@ import { useGlance } from '../src/data/useGlance.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { flush } from './flush.js'
+import { glanceBody } from './glanceFixture.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -179,5 +180,71 @@ describe('useGlance', () => {
     // an undefined person, which would be a request for /api/v1/p/undefined/glance.
     const glanceRequests = fetchCalls.filter((call) => call.url.includes('/glance'))
     expect(glanceRequests).toHaveLength(0)
+  })
+
+  it('requests a specific day with ?day=, and no query at all for today', async () => {
+    const fetchCalls: string[] = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      fetchCalls.push(url.pathname + url.search)
+      return new Response(JSON.stringify(glanceBody()), { status: 200 })
+    }) as typeof fetch
+
+    function Probe({ day }: { day: string | null }) {
+      useGlance(day)
+      return null
+    }
+
+    const { client, tree } = withClient(<Probe day="2026-09-22" />, true)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    globalThis.fetch = originalFetch
+
+    expect(fetchCalls).toContain('/api/v1/p/p1/glance?day=2026-09-22')
+  })
+
+  it('requests plain /glance, no ?day=, when day is null', async () => {
+    const fetchCalls: string[] = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      fetchCalls.push(url.pathname + url.search)
+      return new Response(JSON.stringify(glanceBody()), { status: 200 })
+    }) as typeof fetch
+
+    function Probe() {
+      useGlance(null)
+      return null
+    }
+
+    const { client, tree } = withClient(<Probe />, true)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    globalThis.fetch = originalFetch
+
+    expect(fetchCalls).toContain('/api/v1/p/p1/glance')
+    expect(fetchCalls.some((url) => url.includes('day='))).toBe(false)
+  })
+
+  it('surfaces the 404 body\'s nearest day when the requested day has no data', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({ nearest: '2026-09-20' }), {
+      status: 404, headers: { 'content-type': 'application/json' },
+    })) as typeof fetch
+
+    let seen: { nearest: string | null } | null = null
+    function Probe() {
+      const { nearest } = useGlance('2026-09-21')
+      seen = { nearest }
+      return null
+    }
+
+    const { client, tree } = withClient(<Probe />, true)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    globalThis.fetch = originalFetch
+
+    expect(seen).toEqual({ nearest: '2026-09-20' })
   })
 })
