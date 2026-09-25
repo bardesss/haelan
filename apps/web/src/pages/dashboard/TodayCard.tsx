@@ -3,7 +3,7 @@ import { useTranslation } from '../../i18n/index.js'
 import { IntradayHeartRate } from '../../charts/IntradayHeartRate.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import type { GlanceDay } from '../../data/useGlance.js'
-import { DashCard, Described, useOpensDay } from './cardShared.js'
+import { DashCard, Described, stripBands, useOpensDay } from './cardShared.js'
 import { dayStanding, formatFigure, formatLongDate, formatTimeOfDay, localMidnightMs, nextDayOf, paceKey, usualLine } from './glanceText.js'
 import { TodayWorkouts } from './TodayWorkouts.js'
 
@@ -32,9 +32,9 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const { values, labels, standings } = useMemo(() => ({
+  const { values, labels, standings, bands } = useMemo(() => ({
     values: day.steps.strip.map((d) => d.value), labels: day.steps.strip.map((d) => d.localDate),
-    standings: day.steps.strip.map((d) => d.standing),
+    standings: day.steps.strip.map((d) => d.standing), bands: stripBands(day.steps.strip),
   }), [day.steps.strip])
   const band = day.steps.baseline !== null && !day.steps.baseline.thin ? day.steps.baseline : undefined
   const opens = useOpensDay(today, onOpenDay)
@@ -103,7 +103,7 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
         <div>
           <Described text={usualLine(day.steps, t, language) ?? t(finished ? 'glance.today.captionFinished' : 'glance.today.caption')} hidden>
             <Sparkline values={values} labels={labels} label={t(finished ? 'glance.today.stripFinished' : 'glance.today.strip')} unit={t('glance.today.steps')}
-              metric={day.steps.metric} baseline={band} bandLabels={bandLabels} height={64}
+              metric={day.steps.metric} baseline={band} bands={bands} bandLabels={bandLabels} height={64}
               dots pointStandings={standings} tableToggle={false} {...opens}
               formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...day.steps, value: v }, language) ?? absent)} />
           </Described>

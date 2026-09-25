@@ -125,8 +125,8 @@ describe('NightCard', () => {
   it('words a missing figure and the strip as over on a finished day', () => {
     const html = renderNight({ finished: true, sleep: sleepFixture({ efficiency: { value: null } }) })
     expect(html).toContain('<b class="dash-mini-value">No reading</b>')
-    expect(html).toContain('<p class="dash-caption">the 7 nights to that day</p>')
-    expect(sparklineProps?.label).toBe('Time asleep, the 7 nights to that day')
+    expect(html).toContain('<p class="dash-caption">the 7 nights up to that day</p>')
+    expect(sparklineProps?.label).toBe('Time asleep, the 7 nights up to that day')
     expect(html).not.toMatch(/last 7|No reading yet/)
   })
 
@@ -203,6 +203,16 @@ describe('NightCard', () => {
     renderNight({ sleep })
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual([null, null, 'above', null, null, null, null])
+  })
+
+  // Each night is judged against its own day's usual, so the strip's band steps night by night.
+  it('hands the strip each night\'s own band, the thin and missing ones as gaps', () => {
+    const base = sleepFixture()
+    const sleep = sleepFixture({
+      asleep: { strip: base.asleep.strip.map((d, i) => ({ ...d, band: i === 0 ? null : { center: 400 + i, low: 360 + i, high: 440 + i, thin: i === 1 } })) },
+    })
+    renderNight({ sleep })
+    expect(sparklineProps?.bands).toEqual([null, null, ...[2, 3, 4, 5, 6].map((i) => ({ low: 360 + i, high: 440 + i }))])
   })
 })
 
@@ -323,8 +333,8 @@ describe('RecoveryCard on a finished day', () => {
     const html = renderRecovery({ recovery, today: '2026-09-22', finished: true })
     expect(html).toContain('<p class="dash-recovery-words">Not enough readings to score.</p>')
     expect(html).toContain('<p class="glance-empty">No reading</p>')
-    expect(html).toContain('<p class="dash-caption">the 7 days to that day</p>')
-    expect(sparklineProps?.label).toBe('Recovery index, the 7 days to that day')
+    expect(html).toContain('<p class="dash-caption">the 7 days up to that day</p>')
+    expect(sparklineProps?.label).toBe('Recovery index, the 7 days up to that day')
     expect(html).not.toMatch(/last 7|yet/)
   })
 
@@ -419,6 +429,15 @@ describe('TodayCard', () => {
     expect(sparklineProps?.bandLabels).toEqual({ low: '8,000', high: '9,500' })
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual([null, 'below', null, null, null, null, null])
+  })
+
+  it('hands the steps strip each day\'s own band, the band its dot was judged against', () => {
+    const base = dayFixture()
+    const day = dayFixture({ steps: { strip: base.steps.strip.map((d, i) => ({ ...d, band: { center: 8000 + i, low: 7000 + i, high: 9000 + i, thin: false } })) } })
+    renderToday({ day })
+    expect(sparklineProps?.bands).toEqual([0, 1, 2, 3, 4, 5, 6].map((i) => ({ low: 7000 + i, high: 9000 + i })))
+    // The labels still name the day shown, as the card's own "usual" words do.
+    expect(sparklineProps?.baseline).toEqual(day.steps.baseline)
   })
 
   // Task 19b: with no pace verdict AND no usual line to fall back to (no baseline at all), there is
@@ -529,8 +548,8 @@ describe('TodayCard on a finished day', () => {
     const day = finishedDay()
     const html = renderFinished({ ...day, activeMinutes: { ...day.activeMinutes, value: null } })
     expect(html).toMatch(/<div class="dash-headline-sm">No reading <span class="glance-unit">/)
-    expect(html).toContain('<p class="dash-caption">the 7 days to that day</p>')
-    expect(sparklineProps?.label).toBe('Steps, the 7 days to that day')
+    expect(html).toContain('<p class="dash-caption">the 7 days up to that day</p>')
+    expect(sparklineProps?.label).toBe('Steps, the 7 days up to that day')
     expect(html).not.toMatch(/last 7|No reading yet/)
   })
 
@@ -600,20 +619,20 @@ describe('WeekCard', () => {
   // today-not-counted wording would be false there.
   it('names a finished day\'s average as counting every day shown', () => {
     const html = renderWeek({ glance: { ...glanceBody(), finished: true } })
-    expect(html).toContain('aria-label="Steps, the 7 days to that day; the average counts every day shown"')
+    expect(html).toContain('aria-label="Steps, the 7 days up to that day; the average counts every day shown"')
     expect(html).not.toContain('today not counted')
   })
 
-  it('is titled That week on a finished day, the 7 days to that day', () => {
+  it('is titled That week on a finished day, the 7 days up to that day', () => {
     const html = renderWeek({ glance: { ...glanceBody(), finished: true } })
-    expect(html).toContain('<h2 class="dash-card-title"><strong>That week</strong> <span>the 7 days to that day</span></h2>')
+    expect(html).toContain('<h2 class="dash-card-title"><strong>That week</strong> <span>the 7 days up to that day</span></h2>')
     expect(renderWeek()).toContain('<h2 class="dash-card-title"><strong>This week</strong> <span>last 7 days</span></h2>')
   })
 
   it("names a finished day's sleep average as including that night, not last night", () => {
     const g = { ...glanceBody(), finished: true, week: { steps: null, activeMinutes: null, asleep: { perDay: 393, days: 7, total: 2751 } } }
     const html = renderWeek({ glance: g })
-    expect(html).toContain('aria-label="Asleep, the 7 nights to that day; the average includes that night"')
+    expect(html).toContain('aria-label="Asleep, the 7 nights up to that day; the average includes that night"')
     expect(html).not.toContain('last night')
   })
 

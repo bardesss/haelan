@@ -10,7 +10,7 @@ export const GLANCE_TODAY = '2026-09-23'
 const DATES = ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23']
 
 function strip(values: (number | null)[]): GlanceFigure['strip'] {
-  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null, standing: null }))
+  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null, band: null, standing: null }))
 }
 
 export function glanceFigure(over: Partial<GlanceFigure> & Pick<GlanceFigure, 'metric'>): GlanceFigure {

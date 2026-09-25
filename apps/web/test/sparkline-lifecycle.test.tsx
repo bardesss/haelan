@@ -386,3 +386,65 @@ describe('a strip whose dots open their day', () => {
     expect(open.mock.calls).toEqual([['2026-08-10']])
   })
 })
+
+// The dashboard's strips judge every dot against its own day's usual (GlanceStripDay.band), so the
+// band behind the strip steps day by day: each day's slot shaded from its own low to its own high,
+// the band the dot's colour was judged against, rather than one band for the whole week.
+describe('a sparkline with a band per day', () => {
+  type CustomSeries = { type: string, markArea?: unknown, silent?: boolean, z?: number, data: number[][], renderItem: (p: unknown, api: unknown) => { shape: { x: number, y: number, width: number, height: number } } }
+  const series = () => (lastOption as { series: ({ type: string, markArea?: unknown } | CustomSeries)[] }).series
+
+  function renderBands(bands: ({ low: number, high: number } | null)[]) {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026" dots
+            baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} bands={bands} />
+        </I18nProvider>,
+      )
+    })
+  }
+
+  it('draws one step per day with a band, at that day\'s own low and high, and leaves a null day unshaded', () => {
+    renderBands([{ low: 7000, high: 8800 }, null, { low: 8000, high: 9500 }])
+    const steps = series().find((s) => s.type === 'custom') as CustomSeries
+    expect(steps.data).toEqual([[0, 7000, 8800], [2, 8000, 9500]])
+    // Shading, beneath the line and dots, never a point to hover or open.
+    expect(steps.silent).toBe(true)
+    expect(steps.z).toBeLessThan(2)
+    // Replaces the one band across the whole strip rather than drawing both.
+    expect(series().find((s) => s.type === 'line')!.markArea).toBeUndefined()
+    // The labels still name the day shown, the last step, as the card's own "usual" words do.
+    const line = series().find((s) => s.type === 'line') as unknown as ReadingSeries
+    expect((line.markPoint?.data ?? []).filter((d) => d.name.startsWith('band-')).map((d) => d.yAxis).sort()).toEqual([8000, 9500])
+  })
+
+  it('shades each step across its whole slot, centred on the day, meeting its neighbour on one pixel', () => {
+    renderBands([{ low: 7000, high: 8800 }, { low: 7500, high: 9000 }, { low: 8000, high: 9500 }])
+    const steps = series().find((s) => s.type === 'custom') as CustomSeries
+    // A fake 3-slot grid, 100.4px a slot: day i's centre at 50.2 + 100.4i, y = value / 10 upside down.
+    const slot = 100.4
+    const api = (datum: number[]) => ({
+      value: (d: number) => datum[d],
+      coord: ([x, y]: number[]) => [slot / 2 + x! * slot, 1000 - y! / 10],
+      size: () => [slot, 0],
+    })
+    const rects = steps.data.map((datum) => steps.renderItem({}, api(datum)).shape)
+    expect(rects[0]).toEqual({ x: 0, y: 1000 - 880, width: 100, height: 180 })
+    expect(rects.map((r) => r.x + r.width)).toEqual([100, 201, 301])
+    expect(rects.slice(1).map((r) => r.x)).toEqual([100, 201])
+  })
+
+  it('draws the single band exactly as before when no bands are given', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026" dots
+            baseline={{ low: 8000, high: 9500 }} />
+        </I18nProvider>,
+      )
+    })
+    expect(series().some((s) => s.type === 'custom')).toBe(false)
+    expect(series().find((s) => s.type === 'line')!.markArea).toBeDefined()
+  })
+})

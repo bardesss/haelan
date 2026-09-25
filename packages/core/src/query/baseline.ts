@@ -70,6 +70,32 @@ export function baselineOf(
 }
 
 /**
+ * Each of `days`' own baseline, from one set of daily values already read over all their windows.
+ *
+ * The same answer as calling `baselineOf` once per day on that day's own `baselineWindow`, which
+ * is exactly what it does, only in memory: a strip of seven days or a calendar month of thirty-one
+ * reads its rows once rather than once a day. `values` is keyed by local date and holds only the
+ * days that contribute (a caller that drops low-coverage days drops them before this), so a day
+ * with no entry is absent from the window rather than a zero, as in `baselineOf`.
+ */
+export function baselinesOver(
+  values: ReadonlyMap<string, number>,
+  days: readonly string[],
+  windowDays: number = BASELINE_WINDOW_DAYS,
+): Map<string, Baseline | null> {
+  const out = new Map<string, Baseline | null>()
+  for (const day of days) {
+    const { from, to } = baselineWindow(day, windowDays)
+    const inWindow: number[] = []
+    for (const [date, value] of values) {
+      if (date >= from && date <= to) inWindow.push(value)
+    }
+    out.set(day, baselineOf(inWindow, windowDays))
+  }
+  return out
+}
+
+/**
  * A reading as distance from the centre in units of spread, which is the sentence a baseline
  * exists to make sayable. Null where the spread is zero, because a distance measured in units
  * of nothing is not a number, and reporting it as zero or infinity would both be inventions.

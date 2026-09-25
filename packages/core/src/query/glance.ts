@@ -2,7 +2,7 @@ import { METRICS } from '../derive/metrics.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 import type { PersonQuery, DailyPoint } from './personQuery.ts'
 import type { IntradayPoint } from './intraday.ts'
-import { baselineWindow, baselineOf } from './baseline.ts'
+import { baselineWindow, baselineOf, baselinesOver } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import type { NightSegment } from './sleepNights.ts'
@@ -34,7 +34,14 @@ export interface GlanceStaleSource { sourceId: string, name: string, lastReporte
 /** A figure's baseline as the band a client draws: centre, and one spread either side. */
 export interface GlanceBaseline { center: number, low: number, high: number, thin: boolean }
 
-export interface GlanceStripDay { localDate: string, value: number | null, standing: GlanceStanding | null }
+/**
+ * One day of a figure's strip. Every strip day opens its own day, which is judged against its own
+ * 60-day usual (as the calendar judges it), so each day carries that usual as `band` and a
+ * `standing` against it rather than against the figure's own day's: a dot and the day it opens
+ * cannot disagree. `band` is null where the day has no baseline at all (and on the recovery index,
+ * which has none by design); a thin band is sent with `thin` set, and judges nothing.
+ */
+export interface GlanceStripDay { localDate: string, value: number | null, band: GlanceBaseline | null, standing: GlanceStanding | null }
 
 export interface GlanceFigure {
   metric: string
@@ -69,18 +76,24 @@ export function standingOf(value: number | null, baseline: GlanceBaseline | null
 }
 
 /**
- * A strip of days, each carrying its own verdict against `band`: `partial` applies only to
- * `ownDate`, the figure's own day, never to an earlier finished day in the same strip. One
+ * A strip of days, each carrying its own day's band and its verdict against it: `partial` applies
+ * only to `ownDate`, the figure's own day, never to an earlier finished day in the same strip. One
  * implementation for dailyFigure, activeMinutesFigure and the recovery index strip, so the three
  * cannot drift onto different rules for what a strip day's standing means.
+ *
+ * The figure's own day is the strip's last, and its band is the figure's `baseline`, so the last
+ * dot's standing is always the figure's own `standing`: on a running day that is null, the same
+ * null the calendar gives today's steps, since a day still running is never judged against a
+ * whole day's usual (the card's pace line speaks for it instead).
  */
 function stripOf(
   dates: readonly string[], valueOf: (localDate: string) => number | null,
-  band: GlanceBaseline | null, ownDate: string, partial: boolean,
+  bandOf: (localDate: string) => GlanceBaseline | null, ownDate: string, partial: boolean,
 ): GlanceStripDay[] {
   return dates.map((localDate) => {
     const value = valueOf(localDate)
-    return { localDate, value, standing: standingOf(value, band, partial && localDate === ownDate) }
+    const band = bandOf(localDate)
+    return { localDate, value, band, standing: standingOf(value, band, partial && localDate === ownDate) }
   })
 }
 
@@ -180,8 +193,11 @@ export function dailyFigure(
   const points = lookBackPoints(ctx, o.metric, o.agg, o.on)
   const byDate = new Map(points.map((point) => [point.localDate, point]))
   const onDay = byDate.get(o.on)
-  const baseline = ctx.q.baseline({ metric: o.metric, agg: o.agg, on: o.on })
-  const band = toGlanceBaseline(baseline)
+  // Every strip day's own baseline in one read (PersonQuery.baselines), the figure's own day's
+  // among them: that one is exactly what `baseline({ on })` answers, and stays the headline band.
+  const bands = new Map([...ctx.q.baselines({ metric: o.metric, agg: o.agg, from: dates[0]!, to: o.on })]
+    .map(([date, baseline]) => [date, toGlanceBaseline(baseline)]))
+  const band = bands.get(o.on) ?? null
   return {
     metric: o.metric,
     value: onDay?.value ?? null,
@@ -191,7 +207,7 @@ export function dailyFigure(
     asOfMs: onDay === undefined ? null : o.asOfMs,
     partial: o.partial,
     staleSources: staleFeeding(ctx, points.flatMap(sourcesOf)),
-    strip: stripOf(dates, (localDate) => byDate.get(localDate)?.value ?? null, band, o.on, o.partial),
+    strip: stripOf(dates, (localDate) => byDate.get(localDate)?.value ?? null, (localDate) => bands.get(localDate) ?? null, o.on, o.partial),
     standing: standingOf(onDay?.value ?? null, band, o.partial),
   }
 }
@@ -288,18 +304,21 @@ function lastSampleMs(ctx: GlanceContext, metrics: readonly string[]): number | 
  */
 function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
   const dates = stripDates(ctx.today)
-  const { from: baselineFrom, to: baselineTo } = baselineWindow(ctx.today)
+  // Read back to the strip's first day's own window, one read per level, so every strip day's own
+  // baseline comes out of memory (baselinesOver); the stale sources still come from the figure's
+  // own look-back only, as every other figure's do.
+  const readFrom = baselineWindow(dates[0]!).from
+  const lookBackFrom = lookBack(ctx.today).from
   const sums = new Map<string, number>()
   const feeding: string[] = []
   for (const metric of ACTIVE_MINUTE_METRICS) {
-    for (const point of lookBackPoints(ctx, metric, 'sum', ctx.today)) {
+    for (const point of ctx.q.series({ metric, agg: 'sum', from: readFrom, to: ctx.today }).points) {
       sums.set(point.localDate, (sums.get(point.localDate) ?? 0) + point.value)
-      feeding.push(...sourcesOf(point))
+      if (point.localDate >= lookBackFrom) feeding.push(...sourcesOf(point))
     }
   }
-  const baselineValues = [...sums].filter(([date]) => date >= baselineFrom && date <= baselineTo).map(([, value]) => value)
-  const baseline = baselineOf(baselineValues)
-  const band = toGlanceBaseline(baseline)
+  const bands = new Map([...baselinesOver(sums, dates)].map(([date, baseline]) => [date, toGlanceBaseline(baseline)]))
+  const band = bands.get(ctx.today) ?? null
   const value = sums.get(ctx.today) ?? null
   const partial = !ctx.finished
   return {
@@ -311,7 +330,7 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
     asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
     partial,
     staleSources: staleFeeding(ctx, feeding),
-    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, band, ctx.today, partial),
+    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, (localDate) => bands.get(localDate) ?? null, ctx.today, partial),
     standing: standingOf(value, band, partial),
   }
 }
@@ -438,7 +457,9 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
       strip: stripOf(dates, (localDate) => {
         const day = series.get(localDate)
         return day !== undefined && day.enough ? day.score : null
-      }, null, ctx.today, false),
+      // No band on any day: the index is already a distance from the person's own baselines (see
+      // above), so there is no usual of it to draw or judge a dot against.
+      }, () => null, ctx.today, false),
       standing: null,
     },
     band: scored === null ? null : bandOf(scored.score),

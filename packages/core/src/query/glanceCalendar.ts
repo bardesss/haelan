@@ -116,8 +116,10 @@ function toBand(baseline: Baseline | null): GlanceBaseline | null {
  * own start must not be mistaken for the start of the archive.
  *
  * Bounded reads throughout: one `daysWithData` call, one `series` call per metric over the whole
- * month, and one `baseline` call per metric per day the month actually has data for (at most
- * 31 x 2 = 62 reads of at most 60 rows each) - never a query inside a per-row loop.
+ * month, and one `baselines` call per metric covering every day's own window at once (the month
+ * plus the 60 days before it) - never a query inside a per-row loop. `baselines` is the same
+ * reader the dashboard's strips judge each of their days with, so a strip dot and the calendar's
+ * dot for the same day are judged against the same band by the same code.
  */
 export function readGlanceCalendarRaw(q: PersonQuery, input: { month: string, today: string }): GlanceCalendarRaw {
   requireDate('today', input.today)
@@ -135,12 +137,17 @@ export function readGlanceCalendarRaw(q: PersonQuery, input: { month: string, to
   const stepsByDate = new Map(q.series({ metric: 'steps', agg: 'sum', from: monthStart, to }).points.map((p) => [p.localDate, p.value]))
   const sleepByDate = new Map(q.series({ metric: 'sleep_asleep_minutes', agg: 'sum', from: monthStart, to }).points.map((p) => [p.localDate, p.value]))
 
+  const first = dates[0]!
+  const last = dates.at(-1)!
+  const sleepBands = q.baselines({ metric: 'sleep_asleep_minutes', agg: 'sum', from: first, to: last })
+  const stepsBands = q.baselines({ metric: 'steps', agg: 'sum', from: first, to: last })
+
   const days = dates.map((localDate): RawCalendarDay => ({
     localDate,
     sleepValue: sleepByDate.get(localDate) ?? null,
-    sleepBand: toBand(q.baseline({ metric: 'sleep_asleep_minutes', agg: 'sum', on: localDate })),
+    sleepBand: toBand(sleepBands.get(localDate) ?? null),
     stepsValue: stepsByDate.get(localDate) ?? null,
-    stepsBand: toBand(q.baseline({ metric: 'steps', agg: 'sum', on: localDate })),
+    stepsBand: toBand(stepsBands.get(localDate) ?? null),
     stepsPartial: localDate === input.today,
   }))
 

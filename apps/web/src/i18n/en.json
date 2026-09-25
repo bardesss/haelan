@@ -1424,9 +1424,9 @@
       "bed": "Bed",
       "woke": "Woke",
       "strip": "Time asleep, last 7 nights",
-      "stripFinished": "Time asleep, the 7 nights to that day",
+      "stripFinished": "Time asleep, the 7 nights up to that day",
       "caption": "last 7 nights",
-      "captionFinished": "the 7 nights to that day",
+      "captionFinished": "the 7 nights up to that day",
       "link": "View this night",
       "efficiencyStanding": {
         "above": "higher than usual",
@@ -1454,9 +1454,9 @@
       "score": "Score",
       "scoreUnscored": "Score, not scored",
       "strip": "Recovery index, last 7 days",
-      "stripFinished": "Recovery index, the 7 days to that day",
+      "stripFinished": "Recovery index, the 7 days up to that day",
       "caption": "last 7 days",
-      "captionFinished": "the 7 days to that day",
+      "captionFinished": "the 7 days up to that day",
       "link": "View recovery"
     },
     "today": {
@@ -1467,9 +1467,9 @@
       "heartRateSinceMidnight": "Heart rate · 00:00 → now",
       "heartRateChart": "Heart rate today",
       "strip": "Steps, last 7 days",
-      "stripFinished": "Steps, the 7 days to that day",
+      "stripFinished": "Steps, the 7 days up to that day",
       "caption": "last 7 days",
-      "captionFinished": "the 7 days to that day",
+      "captionFinished": "the 7 days up to that day",
       "link": "View activity",
       "thatDay": "That day",
       "dayStanding": {
@@ -1489,7 +1489,7 @@
       "title": "This week",
       "titleFinished": "That week",
       "subtitle": "last 7 days",
-      "subtitleFinished": "the 7 days to that day",
+      "subtitleFinished": "the 7 days up to that day",
       "steps": "Steps",
       "active": "Active",
       "asleep": "Asleep",
@@ -1498,10 +1498,10 @@
       "totalPer": "· {{per}}",
       "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted",
       "barsLabelNights": "{{what}}, last 7 nights; the average includes last night",
-      "barsLabelFinished": "{{what}}, the 7 days to that day; the average counts every day shown",
+      "barsLabelFinished": "{{what}}, the 7 days up to that day; the average counts every day shown",
       "bar": "{{date}}: {{label}} {{value}}",
       "openBar": "Open {{date}}: {{label}} {{value}}",
-      "barsLabelNightsFinished": "{{what}}, the 7 nights to that day; the average includes that night"
+      "barsLabelNightsFinished": "{{what}}, the 7 nights up to that day; the average includes that night"
     },
     "openDay": "Open this day",
     "openDayIdle": "Tap a day to open it",

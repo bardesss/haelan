@@ -19,6 +19,16 @@ interface PersonParams { personId: string }
  */
 const ROUNDED_AS: Readonly<Record<string, string>> = { active_minutes: 'active_minutes_light' }
 
+/** Rounds a band's three numbers to `metric`'s catalogue precision: a figure's own band, each strip day's, and each calendar day's alike. */
+function roundBand(metric: string, band: GlanceBaseline | null): GlanceBaseline | null {
+  return band === null ? null : {
+    ...band,
+    center: roundMetricValue(metric, band.center),
+    low: roundMetricValue(metric, band.low),
+    high: roundMetricValue(metric, band.high),
+  }
+}
+
 /**
  * A figure's value, band and strip, each to its metric's catalogue precision, with every verdict
  * recomputed from those same rounded numbers (Task 19a): `standingOf` runs on unrounded values in
@@ -29,13 +39,7 @@ const ROUNDED_AS: Readonly<Record<string, string>> = { active_minutes: 'active_m
  */
 function roundFigure(figure: GlanceFigure): GlanceFigure {
   const metric = ROUNDED_AS[figure.metric] ?? figure.metric
-  const { baseline } = figure
-  const band = baseline === null ? null : {
-    ...baseline,
-    center: roundMetricValue(metric, baseline.center),
-    low: roundMetricValue(metric, baseline.low),
-    high: roundMetricValue(metric, baseline.high),
-  }
+  const band = roundBand(metric, figure.baseline)
   const value = roundMetricValueOrNull(metric, figure.value)
   // The figure's own day is always the strip's last entry (stripDates ends on `on`); `partial`
   // never applies to an earlier, already-finished day in the same strip (glance.ts's stripOf).
@@ -44,9 +48,14 @@ function roundFigure(figure: GlanceFigure): GlanceFigure {
     ...figure,
     value,
     baseline: band,
+    // Each strip day against its own day's band (glance.ts's stripOf), rounded by the same rule as
+    // the figure's: the last day's band is the figure's own, so its dot and the headline agree, and
+    // every earlier dot agrees with the day it opens and with that day's calendar dot, which
+    // /glance/calendar re-judges from its own rounded numbers the same way.
     strip: figure.strip.map((day) => {
       const dayValue = roundMetricValueOrNull(metric, day.value)
-      return { ...day, value: dayValue, standing: standingOf(dayValue, band, figure.partial && day.localDate === ownDate) }
+      const dayBand = roundBand(metric, day.band)
+      return { ...day, value: dayValue, band: dayBand, standing: standingOf(dayValue, dayBand, figure.partial && day.localDate === ownDate) }
     }),
     standing: standingOf(value, band, figure.partial),
   }
@@ -126,16 +135,6 @@ function roundGlance(glance: Glance): Glance {
       activeMinutes: roundWeekFigure(ROUNDED_AS.active_minutes!, week.activeMinutes),
       asleep: roundWeekFigure('sleep_asleep_minutes', week.asleep),
     },
-  }
-}
-
-/** Rounds a calendar band's three numbers to `metric`'s catalogue precision, the same rule roundFigure applies to a glance figure's own band. */
-function roundBand(metric: string, band: GlanceBaseline | null): GlanceBaseline | null {
-  return band === null ? null : {
-    ...band,
-    center: roundMetricValue(metric, band.center),
-    low: roundMetricValue(metric, band.low),
-    high: roundMetricValue(metric, band.high),
   }
 }
 
