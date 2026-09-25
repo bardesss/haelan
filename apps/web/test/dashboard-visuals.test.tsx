@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import type { ComponentProps } from 'react'
+import { I18nProvider } from '../src/i18n/index.js'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { ScoreRing } from '../src/pages/dashboard/ScoreRing.js'
 import { UsualGauge, gaugeScale, gaugeFraction } from '../src/pages/dashboard/UsualGauge.js'
@@ -41,24 +43,37 @@ describe('UsualGauge', () => {
 
 const WEEK_DATES = ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23']
 
+function weekBars(props: Partial<ComponentProps<typeof WeekBars>> = {}): string {
+  return renderToStaticMarkup(
+    <I18nProvider lng="en">
+      <WeekBars values={[8900, 2, null, 4, 5, 9840, 4820]} dates={WEEK_DATES} tone="steps" label="Steps, last 7 days"
+        line="Steps" language="en" format={(v) => v.toLocaleString('en')} current="2026-09-23" {...props} />
+    </I18nProvider>,
+  )
+}
+
 describe('WeekBars', () => {
-  it('draws seven bars, today last and highlighted, a silent day as no bar', () => {
-    const html = renderToStaticMarkup(
-      <WeekBars values={[1, 2, null, 4, 5, 6, 3]} dates={WEEK_DATES} tone="steps" label="Steps, last 7 days"
-        language="en" format={(v) => String(v)} />,
-    )
-    expect(html.match(/<rect/g)!.length).toBe(6)
+  it('draws seven slots, today last and highlighted, a silent day as no bar', () => {
+    const html = weekBars()
+    expect(html.match(/class="week-bar(?: is-today)?"/g)!.length).toBe(6)
+    expect(html.match(/class="week-bar-gap"/g)!.length).toBe(1)
     expect(html).toContain('week-bar is-today')
   })
 
-  // Task 19b: each bar carries its own day and value in words for a screen reader, formatted the
-  // same way the row beside it prints its figure - not just the one label on the svg as a whole.
-  it('gives each bar its day and value in words, formatted the same way the row prints', () => {
-    const html = renderToStaticMarkup(
-      <WeekBars values={[8900, null, null, null, null, null, 4820]} dates={WEEK_DATES} tone="steps"
-        label="Steps, last 7 days" language="en" format={(v) => `${v} steps`} />,
-    )
-    expect(html).toContain('<title>Thu 8900 steps</title>')
-    expect(html).toContain('<title>Wed 4820 steps</title>')
+  // Task 19b, then M9c: each bar carries its own day and value in words for a screen reader,
+  // formatted the same way the row beside it prints its figure. No native <title> tooltip: the
+  // styled one below is the only hover, and the name lives on the bar itself.
+  it('names each bar with its day and value in words, and has no native tooltip', () => {
+    const html = weekBars()
+    expect(html).toContain('aria-label="Thursday, September 17: Steps 8,900"')
+    expect(html).toContain('aria-label="Wednesday, September 23: Steps 4,820"')
+    expect(html).not.toContain('<title')
+  })
+
+  it('makes every bar but the day shown a button named for opening its day', () => {
+    const html = weekBars({ onPick: () => {} })
+    expect(html).toContain('<button type="button" class="week-bar-slot" aria-label="Open Tuesday, September 22: Steps 9,840"')
+    expect(html.match(/<button/g)!.length).toBe(5)
+    expect(html).toContain('<span class="week-bar-slot" role="img" aria-label="Wednesday, September 23: Steps 4,820"')
   })
 })

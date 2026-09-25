@@ -128,12 +128,13 @@ export function Dashboard() {
   // While stepping, the line under the title is the day asked for, not the held cards' span.
   const line = shownDay !== null ? t('glance.dayNav.pastLine')
     : stepping ? formatLongDate(today, language) : <>{formatLongDate(glance.today, language)} · {span}</>
+  // A strip's dot or a week bar opens its day, the way the calendar does.
   const card = (slot: DashCardSlot) => {
     switch (slot.kind) {
-      case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} timezone={timezone} />
-      case 'recovery': return <RecoveryCard key="recovery" recovery={recovery} span={slot.span} wide={slot.wide} today={glance.today} timezone={timezone} finished={finished} />
-      case 'today': return <TodayCard key="today" day={day} span={slot.span} today={glance.today} timezone={timezone} finished={finished} />
-      case 'week': return <WeekCard key="week" glance={glance} span={slot.span} />
+      case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} timezone={timezone} onOpenDay={setDay} />
+      case 'recovery': return <RecoveryCard key="recovery" recovery={recovery} span={slot.span} wide={slot.wide} today={glance.today} timezone={timezone} finished={finished} onOpenDay={setDay} />
+      case 'today': return <TodayCard key="today" day={day} span={slot.span} today={glance.today} timezone={timezone} finished={finished} onOpenDay={setDay} />
+      case 'week': return <WeekCard key="week" glance={glance} span={slot.span} onOpenDay={setDay} />
     }
   }
 

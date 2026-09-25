@@ -3,7 +3,7 @@ import { useTranslation } from '../../i18n/index.js'
 import { IntradayHeartRate } from '../../charts/IntradayHeartRate.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import type { GlanceDay } from '../../data/useGlance.js'
-import { DashCard, Described } from './cardShared.js'
+import { DashCard, Described, useOpensDay } from './cardShared.js'
 import { dayStanding, formatFigure, formatLongDate, formatTimeOfDay, localMidnightMs, nextDayOf, paceKey, usualLine } from './glanceText.js'
 import { TodayWorkouts } from './TodayWorkouts.js'
 
@@ -25,8 +25,10 @@ import { TodayWorkouts } from './TodayWorkouts.js'
  * your usual day · usual 6,800 – 10,400"), and the heart rate trace across the whole day, 00:00 to
  * the next midnight, rather than to its last reading.
  */
-export function TodayCard({ day, span, today, timezone, finished = false }: {
+export function TodayCard({ day, span, today, timezone, finished = false, onOpenDay }: {
   day: GlanceDay, span: 8 | 12, today: string, timezone: string, finished?: boolean
+  /** Opens a strip dot's day (M9c). */
+  onOpenDay?: (day: string) => void
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -35,6 +37,7 @@ export function TodayCard({ day, span, today, timezone, finished = false }: {
     standings: day.steps.strip.map((d) => d.standing),
   }), [day.steps.strip])
   const band = day.steps.baseline !== null && !day.steps.baseline.thin ? day.steps.baseline : undefined
+  const opens = useOpensDay(today, onOpenDay)
   // Same device as NightCard's own bandLabels: memoised on band/language so a fresh object identity
   // every render does not fold into Sparkline's `build` dependency array and rebuild the chart for
   // no reason that has anything to do with what it draws.
@@ -101,7 +104,7 @@ export function TodayCard({ day, span, today, timezone, finished = false }: {
           <Described text={usualLine(day.steps, t, language) ?? t('glance.today.caption')} hidden>
             <Sparkline values={values} labels={labels} label={t('glance.today.strip')} unit={t('glance.today.steps')}
               metric={day.steps.metric} baseline={band} bandLabels={bandLabels} height={64}
-              dots pointStandings={standings} tableToggle={false}
+              dots pointStandings={standings} tableToggle={false} {...opens}
               formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...day.steps, value: v }, language) ?? absent)} />
           </Described>
           <p className="dash-caption">{t('glance.today.caption')}</p>

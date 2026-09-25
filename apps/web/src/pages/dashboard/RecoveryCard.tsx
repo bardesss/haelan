@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import type { GlanceFigure, GlanceRecovery } from '../../data/useGlance.js'
-import { DashCard, Described } from './cardShared.js'
+import { DashCard, Described, useOpensDay } from './cardShared.js'
 import { ScoreRing } from './ScoreRing.js'
 import { UsualGauge } from './UsualGauge.js'
 import { formatFigure, usualLine, asOfLine, yesterdayOf } from './glanceText.js'
@@ -14,14 +14,17 @@ import { formatFigure, usualLine, asOfLine, yesterdayOf } from './glanceText.js'
  * An unscored day draws an empty ring and says why once; the gauges still draw what they have, each
  * naming its day when it is not the card's.
  */
-export function RecoveryCard({ recovery, span, wide, today, timezone, finished = false }: {
+export function RecoveryCard({ recovery, span, wide, today, timezone, finished = false, onOpenDay }: {
   recovery: GlanceRecovery, span: 4 | 12, wide: boolean, today: string, timezone: string
   /** A past day's page (M9c): `today` is that day, so its words are "that day" and "the day before". */
   finished?: boolean
+  /** Opens a strip dot's day (M9c). */
+  onOpenDay?: (day: string) => void
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const small = !wide
+  const opens = useOpensDay(today, onOpenDay)
   const gaugeSize = small ? 100 : 120
   const ringSize = small ? 124 : 150
   const subtitle = recovery.index.asOfDate === today ? t(finished ? 'glance.subtitle.thatDay' : 'glance.subtitle.today')
@@ -65,7 +68,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
     <div className="dash-recovery-strip">
       <Described text={t('glance.recovery.caption')} hidden>
         <Sparkline values={values} labels={labels} label={t('glance.recovery.strip')} unit={t('glance.recovery.index')}
-          metric={index.metric} height={64} dots pointStandings={standings} tableToggle={false}
+          metric={index.metric} height={64} dots pointStandings={standings} tableToggle={false} {...opens}
           formatValue={(v, absent) => (v === null ? absent : String(Math.round(v)))} />
       </Described>
       <p className="dash-caption">{t('glance.recovery.caption')}</p>

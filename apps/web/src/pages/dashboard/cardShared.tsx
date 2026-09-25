@@ -1,8 +1,9 @@
-import { useId } from 'react'
+import { useId, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { Card } from '../../components/Card.js'
 import { BasisContext } from '../../components/basis.js'
 import { Link } from '../../router.js'
+import { useTranslation } from '../../i18n/index.js'
 
 // The card's name and its muted span ("so far", "today"). No stale-source mark beside it: a quiet
 // source is announced once, in the status panel (StatusPanel.tsx), like on every other page.
@@ -52,4 +53,21 @@ export function DashCard({ span, title, subtitle, link, className, children }: {
       </div>
     </Card>
   )
+}
+
+/**
+ * What a strip hands Sparkline so its dots open their day (M9c): the click, and the words for it.
+ * `current` is the day the page shows, which is never an opener - it is already open. Nothing at
+ * all without `onOpenDay`, so a card mounted without somewhere to go keeps a plain strip.
+ * Memoised, since `onPointClick` reaches Sparkline's click resolver's dependencies.
+ */
+export function useOpensDay(current: string, onOpenDay: ((day: string) => void) | undefined) {
+  const { t } = useTranslation()
+  return useMemo(() => onOpenDay === undefined ? {} : {
+    onPointClick: onOpenDay,
+    opensDay: {
+      current, tail: t('glance.openDay'), idle: t('glance.openDayIdle'),
+      named: (name: string) => t('glance.openDayNamed', { date: name }),
+    },
+  }, [current, onOpenDay, t])
 }

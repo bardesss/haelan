@@ -1487,8 +1487,13 @@
       "totalPer": "· {{per}}",
       "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted",
       "barsLabelNights": "{{what}}, last 7 nights; the average includes last night",
-      "barsLabelFinished": "{{what}}, the 7 days to that day; the average counts every day shown"
+      "barsLabelFinished": "{{what}}, the 7 days to that day; the average counts every day shown",
+      "bar": "{{date}}: {{label}} {{value}}",
+      "openBar": "Open {{date}}: {{label}} {{value}}"
     },
+    "openDay": "Open this day",
+    "openDayIdle": "Tap a day to open it",
+    "openDayNamed": "Open {{date}}",
     "subtitle": {
       "today": "today",
       "yesterday": "yesterday",

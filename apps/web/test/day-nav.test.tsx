@@ -202,6 +202,15 @@ describe('the dashboard header, a past day', () => {
       expect(heading()).toBe('Sunday, September 20')
     } finally { restore() }
   })
+
+  // M9c: the page hands its cards the same setDay the arrows use, so a week bar opens its day.
+  it('opens the day of a week bar', async () => {
+    const { restore } = await mountPage({ '2026-09-22': pastGlance(), '2026-09-20': { ...pastGlance(), today: '2026-09-20' } })
+    try {
+      act(() => { container!.querySelector<HTMLButtonElement>('button[aria-label="Open Sunday, September 20: Steps 8,300"]')!.click() })
+      expect(window.location.search).toBe('?day=2026-09-20')
+    } finally { restore() }
+  })
 })
 
 describe('stepping to a day not yet loaded', () => {

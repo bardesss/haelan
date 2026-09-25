@@ -549,8 +549,8 @@ describe('WeekCard', () => {
   // the same way the row's own figures print (a plain count, no unit).
   it('gives the steps strip\'s bars their day and value in words', () => {
     const html = renderWeek()
-    expect(html).toContain('<title>Thu 8,900</title>')
-    expect(html).toContain('<title>Wed 4,820</title>')
+    expect(html).toContain('aria-label="Thursday, September 17: Steps 8,900"')
+    expect(html).toContain('aria-label="Wednesday, September 23: Steps 4,820"')
   })
 
   // The active minutes row formats each bar's value the way its own per-day figure prints
@@ -559,7 +559,7 @@ describe('WeekCard', () => {
     const g = { ...glanceBody(), week: { steps: null, activeMinutes: { perDay: 30, days: 6, total: 180 }, asleep: null },
       day: { ...glanceBody().day, activeMinutes: { ...glanceBody().day.activeMinutes, strip: glanceBody().day.steps.strip.map((d) => ({ ...d, value: d.value === null ? null : 30 })) } } }
     const html = renderWeek({ glance: g })
-    expect(html).toContain('<title>Thu 30 min</title>')
+    expect(html).toContain('aria-label="Thursday, September 17: Active 30 min"')
   })
 
   // A finished day's week counts that day too (the server's weekOfFinished for every row), so the
@@ -578,5 +578,51 @@ describe('WeekCard', () => {
       <I18nextProvider i18n={i18n}><WeekCard glance={g} span={4} /></I18nextProvider>,
     )
     expect(html).toContain('<span class="dash-week-per">~ 8,205 a day</span>')
+  })
+})
+
+// M9c: a dot on any of the three strips opens the day it stands for. The card owns which day that
+// is not (the day already shown) and the words; Sparkline's own suite pins what it does with them.
+describe('the strips open their days', () => {
+  beforeEach(() => { sparklineProps = null })
+
+  const cards = [
+    ['NightCard', (onOpenDay?: (day: string) => void) => renderNight({ onOpenDay })],
+    ['RecoveryCard', (onOpenDay?: (day: string) => void) => renderRecovery({ onOpenDay })],
+    ['TodayCard', (onOpenDay?: (day: string) => void) => renderToday({ onOpenDay })],
+  ] as const
+
+  for (const [name, renderCard] of cards) {
+    it(`${name}: a clicked dot opens its day, and says so in the tooltip, but not on the day shown`, () => {
+      const open = vi.fn()
+      renderCard(open)
+      sparklineProps!.onPointClick!('2026-09-20')
+      expect(open.mock.calls).toEqual([['2026-09-20']])
+      expect(sparklineProps!.opensDay?.current).toBe(TODAY)
+      expect(sparklineProps!.opensDay?.tail).toBe('Open this day')
+      expect(sparklineProps!.opensDay?.idle).toBe('Tap a day to open it')
+      expect(sparklineProps!.opensDay?.named('Sunday, September 20')).toBe('Open Sunday, September 20')
+    })
+
+    it(`${name}: without somewhere to open a day, the strip is not an opener`, () => {
+      renderCard(undefined)
+      expect(sparklineProps!.onPointClick).toBeUndefined()
+      expect(sparklineProps!.opensDay).toBeUndefined()
+    })
+  }
+})
+
+describe('WeekCard opens a bar\'s day', () => {
+  it('names each bar in words and opens it, except the day shown', () => {
+    const html = renderWeek({ onOpenDay: vi.fn() })
+    expect(html).toContain('aria-label="Open Thursday, September 17: Steps 8,900"')
+    // The last bar is the day shown: named, but not a button.
+    expect(html).toContain('<span class="week-bar-slot" role="img" aria-label="Wednesday, September 23: Steps 4,820"')
+    expect(html).not.toContain('aria-label="Open Wednesday, September 23')
+    expect(html).not.toContain('<title>')
+  })
+
+  it('draws no buttons without somewhere to open a day', () => {
+    expect(renderWeek()).not.toContain('<button')
   })
 })

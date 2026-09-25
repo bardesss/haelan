@@ -19,11 +19,15 @@ const dispose = vi.fn()
 // option straight to the echarts instance's setOption) that lets a test see it without reaching
 // into echarts' own internals.
 let lastOption: unknown
+// The click listener useChart binds, kept so the day-opening suite below can click a point the way
+// echarts would hand the event over.
+let clickHandler: ((event: unknown) => void) | undefined
 vi.mock('echarts/core', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
     ...actual,
-    init: () => ({ on: vi.fn(), setOption: (option: unknown) => { lastOption = option }, dispose, resize: vi.fn() }),
+    init: () => ({ on: (name: string, fn: (event: unknown) => void) => { if (name === 'click') clickHandler = fn },
+      setOption: (option: unknown) => { lastOption = option }, dispose, resize: vi.fn() }),
   }
 })
 
@@ -33,6 +37,7 @@ let root: Root | null = null
 beforeEach(() => {
   dispose.mockClear()
   lastOption = undefined
+  clickHandler = undefined
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -337,5 +342,47 @@ describe('a sparkline with a labelled baseline band', () => {
     const { yAxis } = chartOption()
     expect(yAxis.min).toBeUndefined()
     expect(yAxis.max).toBeUndefined()
+  })
+})
+
+// M9c: the dashboard's strips open the day a dot stands for. The tooltip ends with the words for
+// that ("Open this day") only when a click would do it, which is never on the day already shown.
+describe('a strip whose dots open their day', () => {
+  const OPENS = { current: '2026-08-12', tail: 'Open this day', idle: 'Tap a day to open it', named: (name: string) => `Open ${name}` }
+
+  function renderStrip(props: { onPointClick?: (date: string) => void, opensDay?: typeof OPENS }) {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026" dots
+            formatValue={(v, absent) => (v === null ? absent : String(v))} {...props} />
+        </I18nProvider>,
+      )
+    })
+  }
+  function tooltip(dataIndex: number): string {
+    const formatter = (lastOption as { tooltip: { formatter: (p: unknown) => string } }).tooltip.formatter
+    return formatter([{ componentType: 'series', dataIndex }])
+  }
+
+  it('ends the tooltip with the open line on every day but the one shown', () => {
+    renderStrip({ onPointClick: vi.fn(), opensDay: OPENS })
+    expect(tooltip(0)).toBe('2026-08-10<br/>Steps: 9000<br/>Open this day')
+    expect(tooltip(1)).toBe('2026-08-11<br/>Steps: 8600<br/>Open this day')
+    expect(tooltip(2)).toBe('2026-08-12<br/>Steps: 9400')
+  })
+
+  it('leaves the tooltip exactly as dayTooltip writes it without the prop', () => {
+    renderStrip({ onPointClick: vi.fn() })
+    expect(tooltip(0)).toBe('2026-08-10<br/>Steps: 9000')
+  })
+
+  it('opens a clicked day, and not the day already shown', () => {
+    const open = vi.fn()
+    renderStrip({ onPointClick: open, opensDay: OPENS })
+    act(() => { clickHandler!({ componentType: 'series', dataIndex: 0 }) })
+    expect(open.mock.calls).toEqual([['2026-08-10']])
+    act(() => { clickHandler!({ componentType: 'series', dataIndex: 2 }) })
+    expect(open.mock.calls).toEqual([['2026-08-10']])
   })
 })

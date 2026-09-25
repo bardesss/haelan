@@ -879,7 +879,7 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 /* Dashboard dials. Colours through the chart and semantic tokens only: the ring is recovery's own
    positive colour, the gauge band is the same baseline band the charts shade, and a reading outside
    its usual takes --negative, which is also said in words beside it so colour is never the only signal. */
-.score-ring, .usual-gauge, .week-bars { display: block; }
+.score-ring, .usual-gauge { display: block; }
 .score-ring-track, .usual-gauge-track { stroke: var(--surface-inset); }
 .score-ring-fill { stroke: var(--positive); }
 .score-ring-value { fill: var(--text-primary); font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
@@ -899,12 +899,29 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 .dash-recovery-words { margin: 0; text-align: center; font-size: var(--font-size-xs); color: var(--text-muted); }
 .dash-recovery.is-wide .dash-recovery-words { text-align: left; }
 @media (max-width: 620px) { .dash-dials .usual-gauge { width: 92px; height: auto; } .dash-dials .score-ring { width: 108px; height: auto; } }
-.week-bar { opacity: .55; }
-.week-bar.is-today { opacity: 1; }
-.week-bars.is-steps .week-bar { fill: var(--accent); }
-.week-bars.is-active .week-bar { fill: var(--positive); }
+/* The week's bars: seven slots, each the full height, the bar itself a block at the foot of its slot
+   (WeekBars.tsx). A slot that opens its day is a button, reset here to nothing but its bar. */
+.week-bars { position: relative; display: flex; align-items: flex-end; width: 112px; height: 40px; }
+.week-bar-slot { display: flex; align-items: flex-end; flex: 1 1 0; min-width: 0; height: 100%; margin: 0; padding: 0 var(--space-1) 0 0; border: 0; background: none; color: inherit; font: inherit; }
+button.week-bar-slot { cursor: pointer; }
+.week-bar-gap { flex: 1 1 0; }
+.week-bar { display: block; width: 100%; border-radius: var(--radius-sm); opacity: .55; }
+.week-bar.is-today, button.week-bar-slot:hover .week-bar, button.week-bar-slot:focus-visible .week-bar { opacity: 1; }
+.week-bars.is-steps .week-bar { background: var(--accent); }
+.week-bars.is-active .week-bar { background: var(--positive); }
 /* Sleep bars use scale-4, readable on both light (deep azure) and dark (light azure) themes. */
-.week-bars.is-sleep .week-bar { fill: var(--chart-scale-4); }
+.week-bars.is-sleep .week-bar { background: var(--chart-scale-4); }
+/* The charts' own tooltip, rebuilt for bars that are not a chart: chartBase(tokens).tooltip's
+   background, border and text tokens (week-bars.test.tsx reads them off chartBase), and echarts'
+   own 1px border, small radius, nowrap lines. No shadow: echarts draws its shadow from a constant
+   in its own defaults, not from a token, so there is no token for this to take one from. */
+.week-bar-tip {
+  position: absolute; bottom: calc(100% + var(--space-2)); z-index: 5; pointer-events: none;
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); white-space: nowrap;
+  font-size: var(--font-size-xs); line-height: var(--leading-normal); text-align: left;
+  background: var(--chart-tooltip-bg); border: 1px solid var(--chart-grid); color: var(--text-muted);
+}
+.week-bar-tip.is-below { top: calc(100% + var(--space-2)); bottom: auto; }
 .dash-week-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
 .dash-week-figure { margin-top: var(--space-1); }
 .dash-week-value { font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
@@ -1077,7 +1094,13 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
    the subset that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
    the wrappers out of this stylesheet and fails if one of them is missing from the list below,
    including the fourth nobody has written yet. */
-@media (max-width: 900px) { .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; } }
+@media (max-width: 900px) {
+  .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; }
+  /* Where every card spans the row, a week bar is a finger's target: the bars take the row's full
+     width under the figure, seven 44px slots at the narrowest phone. */
+  .dash-week-row { grid-template-columns: minmax(0, 1fr); }
+  .week-bars { width: 100%; height: 44px; }
+}
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean
    anything. Measured on the demo before this rule existed: at a 901px window the Dashboard's

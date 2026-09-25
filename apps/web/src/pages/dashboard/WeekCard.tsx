@@ -20,7 +20,11 @@ import { hasWeek } from './dashboardRows.js'
  * No link: unlike Today, Recovery and Night, the week has no page of its own for this card to point
  * to, so `DashCard`'s optional `link` is left out.
  */
-export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 }) {
+export function WeekCard({ glance, span, onOpenDay }: {
+  glance: Glance, span: 4 | 8 | 12,
+  /** Opens a bar's day (M9c); the last bar is the day shown, which opens nothing. */
+  onOpenDay?: (day: string) => void
+}) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   if (!hasWeek(glance)) return null
@@ -81,6 +85,7 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
             </div>
           </div>
           <WeekBars values={row.values} dates={row.dates} tone={row.tone} language={language} format={row.format}
+            line={t(`glance.week.${row.key}`)} current={glance.today} onPick={onOpenDay}
             label={t(row.labelKey, { what: t(`glance.week.${row.key}`) })} />
         </div>
       ))}

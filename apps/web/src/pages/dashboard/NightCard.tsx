@@ -6,7 +6,7 @@ import { localMinutesOf, inWindow, DEFAULT_WINDOW } from '../../charts/schedule.
 import { stageOf } from '../../data/nights.js'
 import { formatClock } from '../../format.js'
 import type { GlanceSleep } from '../../data/useGlance.js'
-import { DashCard, Described } from './cardShared.js'
+import { DashCard, Described, useOpensDay } from './cardShared.js'
 import { formatFigure, usualLine } from './glanceText.js'
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
@@ -50,16 +50,18 @@ function nightSpan(sleep: GlanceSleep, language: string, timeZone: string): stri
  * A secondary figure outside its usual takes the warning colour and says which way in words, so the
  * colour is never the only signal.
  */
-// `today` is part of every dashboard card's shared shape (the other redesigned cards read it to
-// decide "today" vs "yesterday" wording) but this card has none of that: a night is always named
-// by the date it ended on and the strip's usual line never mentions the calendar day it was read.
-// Kept in the signature anyway so every card in the row takes the same props.
-export function NightCard({ sleep, span, timezone }: {
+// `today` is not used for wording here, as the other redesigned cards use it ("today" vs
+// "yesterday"): a night is always named by the date it ended on. It is read for one thing only,
+// the strip's day already shown (the night that ended on it), which a click does not open.
+export function NightCard({ sleep, span, today, timezone, onOpenDay }: {
   sleep: GlanceSleep, span: 8 | 12, today: string, timezone: string,
+  /** Opens a strip dot's day (M9c); the night strip's days are named by the date each night ended. */
+  onOpenDay?: (day: string) => void
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const segments = useMemo(() => hypnogramSegments(sleep), [sleep])
+  const opens = useOpensDay(today, onOpenDay)
   const { values, labels, standings } = useMemo(() => ({
     values: sleep.asleep.strip.map((d) => d.value), labels: sleep.asleep.strip.map((d) => d.localDate),
     standings: sleep.asleep.strip.map((d) => d.standing),
@@ -108,7 +110,7 @@ export function NightCard({ sleep, span, timezone }: {
             <Described text={usualLine(sleep.asleep, t, language) ?? t('glance.sleep.caption')} hidden>
               <Sparkline values={values} labels={labels} label={t('glance.sleep.strip')} unit={t('glance.sleep.asleep')}
                 metric={sleep.asleep.metric} baseline={band} bandLabels={bandLabels} height={64}
-                dots pointStandings={standings} tableToggle={false}
+                dots pointStandings={standings} tableToggle={false} {...opens}
                 formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...sleep.asleep, value: v }, language) ?? absent)} />
             </Described>
             <p className="dash-caption">{t('glance.sleep.caption')}</p>
