@@ -365,7 +365,7 @@ a.segment { text-decoration: none; display: inline-block; }
    element's own open state rather than a class, so a sheet closed by Escape - which never tells
    React anything - unlocks the page by the same declaration that locked it. The rail drawer takes
    this exact measure for the same reason. */
-html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overflow: hidden; }
+html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:has(dialog.cal-sheet[open]) { overflow: hidden; }
 
 .button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
 .button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
@@ -758,6 +758,81 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .day-nav { display: flex; flex-shrink: 0; gap: var(--space-1); }
 .day-nav-btn { min-width: 36px; justify-content: center; }
 .day-nav-today { justify-content: center; }
+
+/* GlanceCalendar.tsx, the day navigator's calendar (spec M9c, "The calendar (C2)"). The popover is
+   fixed and portalled like .status-popover, placed under the button by placementFor through inline
+   left and bottom; card surface and a border, no shadow. */
+.cal-popover {
+  position: fixed; width: min(300px, calc(100vw - 12px)); box-sizing: border-box; padding: 14px;
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl); color: var(--text-primary); z-index: 30;
+}
+/* The phone's bottom sheet, .status-sheet's rules repeated for the reason that rule gives. */
+.cal-sheet {
+  margin: auto auto 0; padding: 0; border: 0; max-height: 85dvh;
+  width: 100%; max-width: none;
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-primary);
+}
+.cal-sheet::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
+.cal-sheet-body { padding: var(--space-3); }
+.cal-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.cal-sheet-title { font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-title { font-size: var(--font-size-sm); font-weight: var(--weight-semibold); }
+.cal-nav {
+  appearance: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  background: none; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  color: var(--text-secondary); cursor: pointer;
+}
+.cal-nav:hover:not(:disabled) { color: var(--text-primary); }
+.cal-nav:disabled { color: var(--text-disabled); cursor: default; }
+.cal-grid { display: flex; flex-direction: column; gap: 4px; }
+.cal-weekdays, .cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-weekday { font-size: var(--font-size-micro); color: var(--text-faint); text-align: center; letter-spacing: .04em; padding-bottom: 4px; }
+.cal-cell { min-width: 0; }
+/* A border on every day, transparent until it is today's, so today's outline costs no layout. */
+.cal-day {
+  appearance: none; font: inherit; width: 100%; height: 36px; padding: 0; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; color: var(--text-primary);
+  background: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer;
+}
+.cal-day:hover { background: var(--surface-hover); }
+.cal-day:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.cal-day.is-off { color: var(--text-disabled); cursor: default; }
+.cal-day.is-off:hover { background: none; }
+.cal-day.is-today { border-color: var(--border-chosen); }
+.cal-day.is-selected { background: var(--accent); color: var(--surface-page); font-weight: var(--weight-bold); }
+.cal-num { display: block; }
+.cal-dots { display: flex; gap: 2px; }
+.cal-dot { display: block; width: 5px; height: 5px; box-sizing: border-box; border-radius: 50%; }
+.cal-dot.is-within { background: var(--chart-scale-4); }
+.cal-dot.is-outside { background: var(--negative); }
+.cal-dot.is-reached { background: var(--accent); }
+.cal-dot.is-below { background: color-mix(in srgb, var(--accent) 35%, var(--surface-card)); }
+/* No verdict (a thin baseline, or today's steps still counting): a ring, present but unjudged. */
+.cal-dot.is-none { border: 1px solid var(--text-faint); }
+/* On the accent fill the dots take the page colour, or the verdict colours would vanish into it
+   (the steps dot is the accent itself). The unfavourable verdict is the page colour thinned. */
+.cal-day.is-selected .cal-dot { background: var(--surface-page); }
+.cal-day.is-selected .cal-dot.is-outside, .cal-day.is-selected .cal-dot.is-below { background: color-mix(in srgb, var(--surface-page) 45%, var(--accent)); }
+.cal-day.is-selected .cal-dot.is-none { background: none; border-color: var(--surface-page); }
+.cal-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: var(--font-size-micro); color: var(--text-muted); }
+.cal-legend-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin: 0; }
+.cal-legend-name { color: var(--text-secondary); font-weight: var(--weight-medium); }
+.cal-key { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cal-key .cal-dot { width: 9px; height: 9px; }
+.cal-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: 10px; font-size: var(--font-size-xs); color: var(--text-muted); }
+.cal-note { min-width: 0; }
+.cal-today { appearance: none; font: inherit; padding: 0; background: none; border: 0; color: var(--accent-soft); cursor: pointer; }
+.cal-today:hover { text-decoration: underline; }
+/* A finger's targets in the phone sheet: 44px days, arrows and Today. */
+.cal-sheet .cal-day { height: 44px; }
+.cal-sheet .cal-nav { width: 44px; height: 44px; }
+.cal-sheet .cal-today { min-height: 44px; padding: 0 var(--space-2); }
 
 /* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
    regular weight to put the muted subtitle back to, so the heading is left at the body's weight

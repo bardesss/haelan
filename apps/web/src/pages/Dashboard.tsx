@@ -12,6 +12,8 @@ import { RecoveryCard } from './dashboard/RecoveryCard.js'
 import { TodayCard } from './dashboard/TodayCard.js'
 import { WeekCard } from './dashboard/WeekCard.js'
 import { DayNav } from './dashboard/DayNav.js'
+import { CalendarButton } from './dashboard/GlanceCalendar.js'
+import { localToday } from '../controls/range.js'
 import { dashboardRows } from './dashboard/dashboardRows.js'
 import type { DashCardSlot } from './dashboard/dashboardRows.js'
 import { formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
@@ -84,7 +86,10 @@ export function Dashboard() {
   const { sleep, recovery, day } = glance
   // The day the payload was built for, not the URL's: the title names the day every card shows.
   const shownDay = glance.finished ? glance.today : null
-  const nav = <DayNav glance={glance} onPick={(picked) => setDay(picked)} />
+  // The person's own today, for the calendar's last pickable day and its Today link (setDay turns
+  // today into no `?day=` at all, as the header's Today button has it).
+  const calendarButton = <CalendarButton selected={glance.today} today={localToday(timezone)} onPick={(picked) => setDay(picked)} />
+  const nav = <DayNav glance={glance} onPick={(picked) => setDay(picked)} calendarButton={calendarButton} />
 
   // First run, or an archive with nothing in the last day and a half: four cards each saying it
   // has no reading would be the page repeating one fact four times, so it says it once.

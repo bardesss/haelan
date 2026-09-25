@@ -64,6 +64,11 @@ function stubFetch(bodies: Record<string, Glance | { nearest: string }>, seen: s
     seen.push(url)
     const json = (value: unknown, code = 200) =>
       new Response(JSON.stringify(value), { status: code, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/glance/calendar')) {
+      // Every day of September to today has data; enough for the page tests to open the calendar.
+      const days = Array.from({ length: 23 }, (_, i) => ({ localDate: `2026-09-${String(i + 1).padStart(2, '0')}`, sleep: 'within', steps: 'reached' }))
+      return json({ month: '2026-09', firstDay: '2026-09-01', days })
+    }
     if (url.includes('/glance')) {
       const day = new URL(url, 'http://x').searchParams.get('day') ?? 'today'
       const body = bodies[day]
@@ -161,6 +166,25 @@ describe('the dashboard header, a past day', () => {
       expect(window.location.search).toBe('')
       await flush(client, () => container!.innerHTML)
       expect(heading()).toBe('Good morning')
+    } finally { restore() }
+  })
+
+  it('opens the calendar on the shown day, and a day picked there goes into the URL, today as none', async () => {
+    const { client, seen, restore } = await mountPage({ '2026-09-22': pastGlance(), '2026-09-21': { ...pastGlance(), today: '2026-09-21' }, today: todayGlance() })
+    try {
+      const calendar = () => document.querySelector('[data-calendar]')
+      act(() => { button('Pick a date')!.click() })
+      await flush(client, () => document.body.innerHTML)
+      expect(seen.filter((u) => u.includes('/glance/calendar'))).toEqual(['/api/v1/p/p1/glance/calendar?month=2026-09'])
+      expect(document.querySelector('[data-day="2026-09-22"]')!.className).toBe('cal-day is-selected')
+      act(() => { document.querySelector<HTMLButtonElement>('[data-day="2026-09-21"]')!.click() })
+      expect(calendar()).toBeNull()
+      expect(window.location.search).toBe('?day=2026-09-21')
+      await flush(client, () => container!.innerHTML)
+      act(() => { button('Pick a date')!.click() })
+      await flush(client, () => document.body.innerHTML)
+      act(() => { document.querySelector<HTMLButtonElement>('.cal-today')!.click() })
+      expect(window.location.search).toBe('')
     } finally { restore() }
   })
 

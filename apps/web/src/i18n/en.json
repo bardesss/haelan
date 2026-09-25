@@ -1506,6 +1506,30 @@
       "today": "Today",
       "calendar": "Pick a date",
       "pastLine": "that night, and the whole day"
+    },
+    "calendar": {
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "sleepLegend": "Left dot · sleep",
+      "sleepWithin": "in your usual range",
+      "sleepOutside": "outside it",
+      "stepsLegend": "Right dot · steps",
+      "stepsReached": "reached your usual",
+      "stepsBelow": "below it",
+      "greyDays": "Grey days have no data",
+      "today": "Today",
+      "day": "{{date}}, {{sleep}}, {{steps}}",
+      "noData": "{{date}}, no data",
+      "spokenSleep": {
+        "within": "slept in your usual range",
+        "outside": "slept outside your usual range",
+        "none": "sleep not judged"
+      },
+      "spokenSteps": {
+        "reached": "steps reached your usual",
+        "below": "steps below your usual",
+        "none": "steps not judged"
+      }
     }
   }
 }

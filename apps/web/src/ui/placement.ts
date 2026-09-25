@@ -29,18 +29,26 @@ export interface Placement { left: number, bottom: number }
  * (the popover's max-height: 70vh caps it, but a short window can still make 70vh more than there
  * is).
  */
-export function placementFor({ trigger, anchorLeft, stripRight, collapsed, size, viewport }: {
+export function placementFor({ trigger, anchorLeft, stripRight, collapsed, below = false, size, viewport }: {
   trigger: { left: number, top: number, right: number, bottom: number }
   /** Where an expanded rail's layer starts: the rail foot's left edge, or the wrapper's. */
   anchorLeft: number
   /** Where a collapsed rail's strip ends: the rail's right edge. */
   stripRight: number
   collapsed: boolean
+  /**
+   * Opens downward from the trigger instead, its top GAP_PX under the trigger's bottom: for a
+   * trigger at the top of the page (the dashboard header's calendar, GlanceCalendar.tsx), where
+   * there is no room above. `collapsed` and `stripRight` do not apply; the caller passes the left
+   * edge it wants as `anchorLeft`.
+   */
+  below?: boolean
   size: { width: number, height: number }
   viewport: { width: number, height: number }
 }): Placement {
-  const left = collapsed ? stripRight + GAP_PX : anchorLeft
-  const bottom = collapsed ? viewport.height - trigger.bottom : viewport.height - trigger.top + GAP_PX
+  const left = collapsed && !below ? stripRight + GAP_PX : anchorLeft
+  const bottom = below ? viewport.height - trigger.bottom - GAP_PX - size.height
+    : collapsed ? viewport.height - trigger.bottom : viewport.height - trigger.top + GAP_PX
   return {
     // Near edge first, then the far one, so when both cannot hold the far one wins: the right
     // edge over the left, the top over the bottom. A layer cut at the top loses its first line,
