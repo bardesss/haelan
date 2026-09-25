@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.10.1](https://github.com/bardesss/haelan/compare/v2.10.0...v2.10.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **web:** the usual band's labels sit at the strip's start, and the band always fits ([#375](https://github.com/bardesss/haelan/issues/375)) ([aae3255](https://github.com/bardesss/haelan/commit/aae32555c55c5c3bfaf2a73c1436fb1e85483e9f))
+
 ## [2.10.0](https://github.com/bardesss/haelan/compare/v2.9.0...v2.10.0) (2026-09-25)
 
 
