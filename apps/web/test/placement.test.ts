@@ -32,6 +32,17 @@ describe('placementFor', () => {
       .toBe(800 - 790 - 6)
   })
 
+  it('opens downward under a trigger at the top of the page, below: true', () => {
+    // The dashboard's calendar button sits in the header, with no room above it: the layer's top
+    // goes GAP_PX under the trigger, expressed as a bottom through the layer's own height.
+    const header = { left: 900, top: 20, right: 944, bottom: 56 }
+    expect(placementFor({ trigger: header, anchorLeft: 944 - 300, stripRight: 944, collapsed: false, below: true, size: { width: 300, height: 420 }, viewport }))
+      .toEqual({ left: 644, bottom: 800 - 56 - 6 - 420 })
+    // Too tall for the room under it: its bottom is held GAP_PX off the viewport's.
+    expect(placementFor({ trigger: header, anchorLeft: 644, stripRight: 944, collapsed: false, below: true, size: { width: 300, height: 760 }, viewport }).bottom)
+      .toBe(6)
+  })
+
   it('keeps a collapsed-rail layer from running off the top', () => {
     const high = { left: 15, top: 40, right: 45, bottom: 70 }
     expect(placementFor({ trigger: high, anchorLeft: 8, stripRight: 60, collapsed: true, size: { width: 320, height: 400 }, viewport }))

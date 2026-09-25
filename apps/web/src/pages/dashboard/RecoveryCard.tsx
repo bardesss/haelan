@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import type { GlanceFigure, GlanceRecovery } from '../../data/useGlance.js'
-import { DashCard, Described } from './cardShared.js'
+import { DashCard, Described, useOpensDay } from './cardShared.js'
 import { ScoreRing } from './ScoreRing.js'
 import { UsualGauge } from './UsualGauge.js'
 import { formatFigure, usualLine, asOfLine, yesterdayOf } from './glanceText.js'
@@ -14,20 +14,26 @@ import { formatFigure, usualLine, asOfLine, yesterdayOf } from './glanceText.js'
  * An unscored day draws an empty ring and says why once; the gauges still draw what they have, each
  * naming its day when it is not the card's.
  */
-export function RecoveryCard({ recovery, span, wide, today, timezone }: {
+export function RecoveryCard({ recovery, span, wide, today, timezone, finished = false, onOpenDay }: {
   recovery: GlanceRecovery, span: 4 | 12, wide: boolean, today: string, timezone: string
+  /** A past day's page (M9c): `today` is that day, so its words are "that day" and "the day before". */
+  finished?: boolean
+  /** Opens a strip dot's day (M9c). */
+  onOpenDay?: (day: string) => void
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const small = !wide
+  const opens = useOpensDay(today, onOpenDay)
   const gaugeSize = small ? 100 : 120
   const ringSize = small ? 124 : 150
-  const subtitle = recovery.index.asOfDate === today ? t('glance.subtitle.today')
-    : recovery.index.asOfDate !== null && recovery.index.asOfDate === yesterdayOf(today) ? t('glance.subtitle.yesterday') : null
+  const subtitle = recovery.index.asOfDate === today ? t(finished ? 'glance.subtitle.thatDay' : 'glance.subtitle.today')
+    : recovery.index.asOfDate !== null && recovery.index.asOfDate === yesterdayOf(today)
+      ? t(finished ? 'glance.subtitle.dayBefore' : 'glance.subtitle.yesterday') : null
   const gauge = (key: 'rhr' | 'hrv', figure: GlanceFigure, unit: string) => {
-    if (figure.value === null) return <div className="dash-dial"><p className="glance-empty">{t('glance.noReading')}</p><span className="label">{t(`glance.recovery.${key}`)}</span></div>
+    if (figure.value === null) return <div className="dash-dial"><p className="glance-empty">{t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</p><span className="label">{t(`glance.recovery.${key}`)}</span></div>
     const usual = usualLine(figure, t, language)
-    const day = figure.asOfDate !== recovery.index.asOfDate ? asOfLine(figure, { today, timezone }, t, language) : null
+    const day = figure.asOfDate !== recovery.index.asOfDate ? asOfLine(figure, { today, timezone, finished }, t, language) : null
     const band = figure.baseline !== null && !figure.baseline.thin ? figure.baseline : null
     return (
       <div className="dash-dial">
@@ -60,19 +66,19 @@ export function RecoveryCard({ recovery, span, wide, today, timezone }: {
   }), [index.strip])
   const strip = values.filter((v) => v !== null).length > 1 ? (
     <div className="dash-recovery-strip">
-      <Described text={t('glance.recovery.caption')} hidden>
-        <Sparkline values={values} labels={labels} label={t('glance.recovery.strip')} unit={t('glance.recovery.index')}
-          metric={index.metric} height={64} dots pointStandings={standings} tableToggle={false}
+      <Described text={t(finished ? 'glance.recovery.captionFinished' : 'glance.recovery.caption')} hidden>
+        <Sparkline values={values} labels={labels} label={t(finished ? 'glance.recovery.stripFinished' : 'glance.recovery.strip')} unit={t('glance.recovery.index')}
+          metric={index.metric} height={64} dots pointStandings={standings} tableToggle={false} {...opens}
           formatValue={(v, absent) => (v === null ? absent : String(Math.round(v)))} />
       </Described>
-      <p className="dash-caption">{t('glance.recovery.caption')}</p>
+      <p className="dash-caption">{t(finished ? 'glance.recovery.captionFinished' : 'glance.recovery.caption')}</p>
     </div>
   ) : null
   return (
     <DashCard span={span} title={t('glance.recovery.title')} subtitle={subtitle} className={wide ? 'dash-recovery is-wide' : 'dash-recovery'}
       link={{ to: '/recovery', text: t('glance.recovery.link') }}>
       <div className="dash-recovery-row">{dials}{strip}</div>
-      <p className="dash-recovery-words">{score === null ? t('glance.recovery.unscored') : bandWords}</p>
+      <p className="dash-recovery-words">{score === null ? t(finished ? 'glance.recovery.unscoredFinished' : 'glance.recovery.unscored') : bandWords}</p>
       {recovery.respiratoryRate !== null && (
         <p className="glance-note">{t('glance.recovery.respiratory', { value: `${formatFigure(recovery.respiratoryRate, language)} ${t('recovery.units.breathsPerMinuteShort')}` })}</p>
       )}

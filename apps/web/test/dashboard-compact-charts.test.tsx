@@ -219,6 +219,14 @@ describe('IntradayHeartRate, compact', () => {
     expect(option.yAxis).toEqual({ type: 'value', scale: true, show: false })
   })
 
+  // A finished day: the axis ends at the next local midnight, whenever the last reading was.
+  it('runs to endMs when given one, past the last reading', () => {
+    const END = localMidnightMs('2026-09-24', 'Europe/Amsterdam')
+    mount(<IntradayHeartRate points={POINTS} reduction={null} label="Heart rate that day" compact startMs={MIDNIGHT} endMs={END} />)
+    const option = lastOption as { xAxis: { min?: number, max?: number } }
+    expect(option.xAxis).toEqual({ type: 'time', show: false, min: MIDNIGHT, max: Date.UTC(2026, 8, 23, 22, 0) })
+  })
+
   it('shades the workout span behind the trace', () => {
     compact()
     const shaded = seriesOf(lastOption).filter((s) => s.markArea !== undefined)

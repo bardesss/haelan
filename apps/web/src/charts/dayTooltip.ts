@@ -82,7 +82,7 @@ export function dayTooltip(
   // "excluded", not "no reading", for a day the reader threw out: there was a reading, and the day
   // is blank because of something they did rather than because the device never reported.
   const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-  const lines = [t('charts.tooltip.line', { label: unit, value: format(value, absent) })]
+  const lines = dayTooltipLines(date, unit, format(value, absent), t)
   if (hasTrend) {
     // The same column name the table gives the trend, so the two channels cannot drift apart on
     // wording, and the same formatter, since a trend is a smoothed reading in the identical unit.
@@ -104,5 +104,15 @@ export function dayTooltip(
   //
   // `format` is the caller's own formatter here, so a metric whose display unit is produced
   // outside this file still arrives as text rather than as markup.
-  return [date, ...lines].map(escapeHtml).join('<br/>')
+  return lines.map(escapeHtml).join('<br/>')
+}
+
+/**
+ * The two lines every day's tooltip opens with, as plain text: the day, then "Label: value".
+ * dayTooltip escapes and joins them for echarts; the dashboard's week bars (WeekBars.tsx), which
+ * are not an echarts chart, render the same lines through React, so a bar and a strip dot for the
+ * same day say the same thing in the same order.
+ */
+export function dayTooltipLines(date: string, label: string, value: string, t: Translate): string[] {
+  return [date, t('charts.tooltip.line', { label, value })]
 }

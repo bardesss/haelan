@@ -1405,9 +1405,12 @@
       "time": "bijgewerkt om {{time}}",
       "today": "vandaag",
       "yesterday": "gisteren",
-      "night": "nacht van {{date}}"
+      "night": "nacht van {{date}}",
+      "thatDay": "die dag",
+      "dayBefore": "de dag ervoor"
     },
     "noReading": "Nog geen meting",
+    "noReadingFinished": "Geen meting",
     "pace": {
       "ahead": "Vóór op je gebruikelijke tempo",
       "on": "Op je gebruikelijke tempo",
@@ -1421,7 +1424,9 @@
       "bed": "Naar bed",
       "woke": "Wakker",
       "strip": "Tijd geslapen, laatste 7 nachten",
+      "stripFinished": "Tijd geslapen, de 7 nachten tot en met die dag",
       "caption": "laatste 7 nachten",
+      "captionFinished": "de 7 nachten tot en met die dag",
       "link": "Bekijk deze nacht",
       "efficiencyStanding": {
         "above": "hoger dan gewoonlijk",
@@ -1434,7 +1439,8 @@
       "wokeStanding": {
         "above": "later dan gewoonlijk",
         "below": "eerder dan gewoonlijk"
-      }
+      },
+      "titleFinished": "Die nacht"
     },
     "recovery": {
       "title": "Herstel",
@@ -1443,11 +1449,14 @@
       "hrv": "HRV",
       "respiratory": "Ademhaling {{value}}, boven je gebruikelijke waarde",
       "unscored": "Nog niet genoeg metingen om te scoren.",
+      "unscoredFinished": "Niet genoeg metingen om te scoren.",
       "notScored": "Geen score",
       "score": "Score",
       "scoreUnscored": "Score, niet gescoord",
       "strip": "Herstelindex, laatste 7 dagen",
+      "stripFinished": "Herstelindex, de 7 dagen tot en met die dag",
       "caption": "laatste 7 dagen",
+      "captionFinished": "de 7 dagen tot en met die dag",
       "link": "Bekijk herstel"
     },
     "today": {
@@ -1458,15 +1467,29 @@
       "heartRateSinceMidnight": "Hartslag · 00:00 → nu",
       "heartRateChart": "Hartslag vandaag",
       "strip": "Stappen, laatste 7 dagen",
+      "stripFinished": "Stappen, de 7 dagen tot en met die dag",
       "caption": "laatste 7 dagen",
-      "link": "Bekijk activiteit"
+      "captionFinished": "de 7 dagen tot en met die dag",
+      "link": "Bekijk activiteit",
+      "thatDay": "Die dag",
+      "dayStanding": {
+        "within": "Zoals op een gewone dag",
+        "above": "Meer dan op een gewone dag",
+        "below": "Minder dan op een gewone dag"
+      },
+      "usualRange": "normaal {{low}} – {{high}}",
+      "heartRateWholeDay": "Hartslag · 00:00 → 24:00",
+      "heartRateChartThatDay": "Hartslag die dag"
     },
     "workouts": {
-      "title": "Activiteiten van vandaag"
+      "title": "Activiteiten van vandaag",
+      "titleThatDay": "Activiteiten van die dag"
     },
     "week": {
       "title": "Deze week",
+      "titleFinished": "Die week",
       "subtitle": "laatste 7 dagen",
+      "subtitleFinished": "de 7 dagen tot en met die dag",
       "steps": "Stappen",
       "active": "Actief",
       "asleep": "Slaaptijd",
@@ -1474,15 +1497,57 @@
       "perNight": "per nacht",
       "totalPer": "· {{per}}",
       "barsLabel": "{{what}}, laatste 7 dagen; het gemiddelde telt alleen hele dagen mee, vandaag dus nog niet",
-      "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde"
+      "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde",
+      "barsLabelFinished": "{{what}}, de 7 dagen tot en met die dag; het gemiddelde telt elke getoonde dag mee",
+      "bar": "{{date}}: {{label}} {{value}}",
+      "openBar": "Open {{date}}: {{label}} {{value}}",
+      "barsLabelNightsFinished": "{{what}}, de 7 nachten tot en met die dag; die nacht telt mee in het gemiddelde"
     },
+    "openDay": "Open deze dag",
+    "openDayIdle": "Tik op een dag om hem te openen",
+    "openDayNamed": "Open {{date}}",
     "subtitle": {
       "today": "vandaag",
-      "yesterday": "gisteren"
+      "yesterday": "gisteren",
+      "thatDay": "die dag",
+      "dayBefore": "de dag ervoor"
     },
     "empty": {
       "title": "Nog niets te zien",
       "detail": "Zodra een synchronisatie een nacht of een dag binnenhaalt, verschijnt die hier."
+    },
+    "dayNav": {
+      "label": "Dag",
+      "previous": "Vorige dag",
+      "next": "Volgende dag",
+      "today": "Vandaag",
+      "calendar": "Kies een datum",
+      "pastLine": "die nacht, en de hele dag",
+      "pastLineNoNight": "die nacht niet gemeten · de hele dag"
+    },
+    "calendar": {
+      "previousMonth": "Vorige maand",
+      "nextMonth": "Volgende maand",
+      "sleepLegend": "Linkerstip · slaap",
+      "sleepWithin": "binnen je gebruikelijke bereik",
+      "sleepOutside": "erbuiten",
+      "stepsLegend": "Rechterstip · stappen",
+      "stepsReached": "je gebruikelijke aantal gehaald",
+      "stepsBelow": "eronder",
+      "greyDays": "Grijze dagen hebben geen gegevens",
+      "today": "Vandaag",
+      "day": "{{date}}, {{sleep}}, {{steps}}",
+      "noData": "{{date}}, geen gegevens",
+      "spokenSleep": {
+        "within": "binnen je gebruikelijke bereik geslapen",
+        "outside": "buiten je gebruikelijke bereik geslapen",
+        "none": "slaap niet beoordeeld"
+      },
+      "spokenSteps": {
+        "reached": "je gebruikelijke aantal stappen gehaald",
+        "below": "minder stappen dan gewoonlijk",
+        "none": "stappen niet beoordeeld"
+      }
     }
   }
 }

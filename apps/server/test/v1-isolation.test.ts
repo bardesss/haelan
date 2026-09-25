@@ -239,6 +239,25 @@ const ROUTES: readonly RouteCase[] = [
     otherNeedle: 'leaked-source-999999',
   },
   {
+    name: 'glance/calendar',
+    template: '/api/v1/p/:personId/glance/calendar',
+    // The harness's default clock (1_770_000_000_000 ms) reads as 2026-02-02 in Europe/Amsterdam,
+    // so 2026-02 is always a reachable, non-future month regardless of what any other case in this
+    // table moves the clock to (this table shares no clock across cases). The two dates are the
+    // owner's and the leak target's own days, each within that month and at or before "today", so
+    // a leak shows up as an extra localDate entry rather than overwriting the owner's.
+    path: (p) => `/api/v1/p/${p}/glance/calendar?month=2026-02`,
+    seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-02-01', value: 8000 }),
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-02-02', value: 999_999 }),
+    ownNeedle: '2026-02-01',
+    otherNeedle: '2026-02-02',
+    extraOwnAssertions: (body) => {
+      const dates = (body as { days: { localDate: string }[] }).days.map((d) => d.localDate)
+      expect(dates).toContain('2026-02-01')
+      expect(dates).not.toContain('2026-02-02')
+    },
+  },
+  {
     name: 'sessions',
     template: '/api/v1/p/:personId/sessions',
     path: (p) => `/api/v1/p/${p}/sessions?kind=exercise&from=2026-08-01&to=2026-08-01`,

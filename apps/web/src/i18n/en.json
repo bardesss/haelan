@@ -1405,9 +1405,12 @@
       "time": "as of {{time}}",
       "today": "today",
       "yesterday": "yesterday",
-      "night": "night of {{date}}"
+      "night": "night of {{date}}",
+      "thatDay": "that day",
+      "dayBefore": "the day before"
     },
     "noReading": "No reading yet",
+    "noReadingFinished": "No reading",
     "pace": {
       "ahead": "Ahead of your usual pace",
       "on": "On your usual pace",
@@ -1421,7 +1424,9 @@
       "bed": "Bed",
       "woke": "Woke",
       "strip": "Time asleep, last 7 nights",
+      "stripFinished": "Time asleep, the 7 nights to that day",
       "caption": "last 7 nights",
+      "captionFinished": "the 7 nights to that day",
       "link": "View this night",
       "efficiencyStanding": {
         "above": "higher than usual",
@@ -1434,7 +1439,8 @@
       "wokeStanding": {
         "above": "later than usual",
         "below": "earlier than usual"
-      }
+      },
+      "titleFinished": "That night"
     },
     "recovery": {
       "title": "Recovery",
@@ -1443,11 +1449,14 @@
       "hrv": "HRV",
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",
+      "unscoredFinished": "Not enough readings to score.",
       "notScored": "Not scored",
       "score": "Score",
       "scoreUnscored": "Score, not scored",
       "strip": "Recovery index, last 7 days",
+      "stripFinished": "Recovery index, the 7 days to that day",
       "caption": "last 7 days",
+      "captionFinished": "the 7 days to that day",
       "link": "View recovery"
     },
     "today": {
@@ -1458,15 +1467,29 @@
       "heartRateSinceMidnight": "Heart rate · 00:00 → now",
       "heartRateChart": "Heart rate today",
       "strip": "Steps, last 7 days",
+      "stripFinished": "Steps, the 7 days to that day",
       "caption": "last 7 days",
-      "link": "View activity"
+      "captionFinished": "the 7 days to that day",
+      "link": "View activity",
+      "thatDay": "That day",
+      "dayStanding": {
+        "within": "Within your usual day",
+        "above": "Above your usual day",
+        "below": "Below your usual day"
+      },
+      "usualRange": "usual {{low}} – {{high}}",
+      "heartRateWholeDay": "Heart rate · 00:00 → 24:00",
+      "heartRateChartThatDay": "Heart rate that day"
     },
     "workouts": {
-      "title": "Today's activities"
+      "title": "Today's activities",
+      "titleThatDay": "That day's activities"
     },
     "week": {
       "title": "This week",
+      "titleFinished": "That week",
       "subtitle": "last 7 days",
+      "subtitleFinished": "the 7 days to that day",
       "steps": "Steps",
       "active": "Active",
       "asleep": "Asleep",
@@ -1474,15 +1497,57 @@
       "perNight": "a night",
       "totalPer": "· {{per}}",
       "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted",
-      "barsLabelNights": "{{what}}, last 7 nights; the average includes last night"
+      "barsLabelNights": "{{what}}, last 7 nights; the average includes last night",
+      "barsLabelFinished": "{{what}}, the 7 days to that day; the average counts every day shown",
+      "bar": "{{date}}: {{label}} {{value}}",
+      "openBar": "Open {{date}}: {{label}} {{value}}",
+      "barsLabelNightsFinished": "{{what}}, the 7 nights to that day; the average includes that night"
     },
+    "openDay": "Open this day",
+    "openDayIdle": "Tap a day to open it",
+    "openDayNamed": "Open {{date}}",
     "subtitle": {
       "today": "today",
-      "yesterday": "yesterday"
+      "yesterday": "yesterday",
+      "thatDay": "that day",
+      "dayBefore": "the day before"
     },
     "empty": {
       "title": "Nothing here yet",
       "detail": "Once a sync brings in a night or a day, it shows up here."
+    },
+    "dayNav": {
+      "label": "Day",
+      "previous": "Previous day",
+      "next": "Next day",
+      "today": "Today",
+      "calendar": "Pick a date",
+      "pastLine": "that night, and the whole day",
+      "pastLineNoNight": "no night recorded · the whole day"
+    },
+    "calendar": {
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "sleepLegend": "Left dot · sleep",
+      "sleepWithin": "in your usual range",
+      "sleepOutside": "outside it",
+      "stepsLegend": "Right dot · steps",
+      "stepsReached": "reached your usual",
+      "stepsBelow": "below it",
+      "greyDays": "Grey days have no data",
+      "today": "Today",
+      "day": "{{date}}, {{sleep}}, {{steps}}",
+      "noData": "{{date}}, no data",
+      "spokenSleep": {
+        "within": "slept in your usual range",
+        "outside": "slept outside your usual range",
+        "none": "sleep not judged"
+      },
+      "spokenSteps": {
+        "reached": "steps reached your usual",
+        "below": "steps below your usual",
+        "none": "steps not judged"
+      }
     }
   }
 }

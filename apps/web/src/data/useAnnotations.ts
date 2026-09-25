@@ -254,6 +254,12 @@ function invalidateAffected(queryClient: QueryClient, personId: string, result: 
   void queryClient.invalidateQueries({
     predicate: (query) => overlapsAffected(query.queryKey, personId, affected),
   })
+  // The dashboard's two day-keyed reads carry no from/to for overlapsAffected to find: the glance
+  // is keyed by its day, the calendar by its `month`. A finished month is cached forever
+  // (useGlanceCalendar.ts), so without these two an excluded day's dot kept its old verdict until
+  // a reload, and a past day's cards kept the old figure until the glance aged out.
+  invalidateResource(queryClient, personId, 'glance')
+  invalidateResource(queryClient, personId, 'glance-calendar')
 }
 
 /** notes and events carry no drain and no applied field: a write to either takes effect the

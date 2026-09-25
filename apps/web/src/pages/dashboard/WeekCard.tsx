@@ -20,7 +20,11 @@ import { hasWeek } from './dashboardRows.js'
  * No link: unlike Today, Recovery and Night, the week has no page of its own for this card to point
  * to, so `DashCard`'s optional `link` is left out.
  */
-export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 }) {
+export function WeekCard({ glance, span, onOpenDay }: {
+  glance: Glance, span: 4 | 8 | 12,
+  /** Opens a bar's day (M9c); the last bar is the day shown, which opens nothing. */
+  onOpenDay?: (day: string) => void
+}) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   if (!hasWeek(glance)) return null
@@ -28,8 +32,11 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
     key: 'steps' | 'active' | 'asleep', tone: 'steps' | 'active' | 'sleep',
     values: (number | null)[], dates: string[], format: (value: number) => string,
     value: string, per: string, withTotal: boolean,
-    labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelNights',
+    labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelFinished' | 'glance.week.barsLabelNights' | 'glance.week.barsLabelNightsFinished',
   }[] = []
+  // A finished day's week counts that day too (the server's weekOfFinished for every row), so
+  // "today not counted" would be false there.
+  const daysLabel = glance.finished ? 'glance.week.barsLabelFinished' as const : 'glance.week.barsLabel' as const
   const count = (value: number) => formatNumber(Math.round(value), 0, language, '')
   if (glance.week.steps !== null) {
     rows.push({
@@ -39,7 +46,7 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       format: (value: number) => count(value),
       value: count(glance.week.steps.total),
       per: t('glance.week.perDay', { value: count(glance.week.steps.perDay) }),
-      labelKey: 'glance.week.barsLabel',
+      labelKey: daysLabel,
     })
   }
   if (glance.week.activeMinutes !== null) {
@@ -50,7 +57,7 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       format: (value: number) => `${Math.round(value)} ${t('activity.units.min')}`,
       value: formatDuration(glance.week.activeMinutes.total),
       per: t('glance.week.perDay', { value: `${Math.round(glance.week.activeMinutes.perDay)} ${t('activity.units.min')}` }),
-      labelKey: 'glance.week.barsLabel',
+      labelKey: daysLabel,
     })
   }
   if (glance.week.asleep !== null && glance.sleep !== null) {
@@ -63,11 +70,14 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       // Unlike steps and active minutes (the server's weekOf drops today, which WeekBars still
       // highlights as the strip's last bar), the sleep strip ends on last night and weekOfFinished
       // already counts it - so this row's aria-label says the opposite of the other two rows'.
-      per: t('glance.week.perNight'), labelKey: 'glance.week.barsLabelNights',
+      per: t('glance.week.perNight'),
+      // On a finished day the strip ends on that day's night, not last night.
+      labelKey: glance.finished ? 'glance.week.barsLabelNightsFinished' : 'glance.week.barsLabelNights',
     })
   }
   return (
-    <DashCard span={span} title={t('glance.week.title')} subtitle={t('glance.week.subtitle')}>
+    <DashCard span={span} title={t(glance.finished ? 'glance.week.titleFinished' : 'glance.week.title')}
+      subtitle={t(glance.finished ? 'glance.week.subtitleFinished' : 'glance.week.subtitle')}>
       {rows.map((row) => (
         <div className="dash-week-row" key={row.key}>
           <div>
@@ -78,6 +88,7 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
             </div>
           </div>
           <WeekBars values={row.values} dates={row.dates} tone={row.tone} language={language} format={row.format}
+            line={t(`glance.week.${row.key}`)} current={glance.today} onPick={onOpenDay}
             label={t(row.labelKey, { what: t(`glance.week.${row.key}`) })} />
         </div>
       ))}

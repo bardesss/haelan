@@ -103,6 +103,8 @@ async function paintableAt(page, selector, box) {
 let statusPanelsOpened = 0
 // The person menu's own count, at module scope for the same reason: the summary line reads it.
 let personMenusOpened = 0
+// The day navigation's calendar, opened once as the phone sheet and once as the popover above it.
+let calendarsOpened = 0
 
 // Every control `isExemptInlineLink` excused from the 44px rule across this whole run, with the
 // sweep that found it. An exemption that nothing counts is an exemption that can widen in
@@ -172,14 +174,24 @@ const NIGHT_DATE = manifestUrls
   .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/sleep\/nights\?from=([^&]+)&to=([^&]+)$/))
   .find((match) => match !== null && match[1] === match[2])?.[1] ?? null
 
-if (SESSION_ID === null || NIGHT_DATE === null) {
+// A past day the dashboard can open (M9c), read off a captured `/glance?day=` the same way: the
+// latest one, the day before the demo day, so its calendar month is the demo's own and carries
+// days to pick, the selected day, today and grey days after it.
+const PAST_DAY = manifestUrls
+  .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/glance\?day=(\d{4}-\d{2}-\d{2})$/)?.[1] ?? null)
+  .filter((day) => day !== null)
+  .sort()
+  .at(-1) ?? null
+
+if (SESSION_ID === null || NIGHT_DATE === null || PAST_DAY === null) {
   console.error(
-    'layout:check could not find both a workout session and a night in the capture manifest '
-    + `(session: ${SESSION_ID}, night: ${NIGHT_DATE}) - the seed this capture ran against produced `
-    + 'no exercise session or no night in the window record.tsx sweeps.',
+    'layout:check could not find a workout session, a night and a past day in the capture manifest '
+    + `(session: ${SESSION_ID}, night: ${NIGHT_DATE}, past day: ${PAST_DAY}) - the seed this capture `
+    + 'ran against produced none in the window record.tsx sweeps.',
   )
   process.exit(1)
 }
+const DAY_ROUTE = `/?day=${PAST_DAY}`
 
 const ROUTE_PARAMS = { sessionId: SESSION_ID, localDate: NIGHT_DATE }
 
@@ -587,6 +599,89 @@ try {
     }
   }
 
+  // The dashboard on a past day, and its calendar open (M9c). The ROUTES sweeps above only ever
+  // load today's dashboard, whose next arrow is disabled and whose card titles are today's; a past
+  // day is a different header and different cards. The calendar is a layer like the status panel:
+  // a <dialog> sheet at phone width and a portalled popover above it (GlanceCalendar.tsx), shut
+  // until its button is pressed, so every control in it has a zero rect until then.
+  //
+  // The 44px rule is measured at 375px only. It is a phone rule (app.css sets the minimums inside
+  // its phone media query, and the calendar's desktop cells and month arrows are 36px and 30px by
+  // design), which is why every other hit-area sweep in this file runs at PHONE alone. At 621px
+  // the checks are the ones that hold at any width: no overflow, and a popover that is on screen
+  // and actually painted.
+  //
+  // Grey days count as hit areas. They are aria-disabled buttons, not removed ones: they sit in
+  // the same grid as the days that can be picked, take focus through the arrow keys, and a finger
+  // aimed at a picked day's neighbour lands on one. So they are measured with everything else,
+  // and the sweep pins that it saw both kinds, or a month with no grey day (or none to pick) would
+  // pass without having measured what this is about.
+  for (const viewport of [PHONE, BAND]) {
+    const phone = viewport === PHONE
+    const where = `${DAY_ROUTE} at ${viewport.width}px`
+    await page.setViewportSize(viewport)
+    await open(DAY_ROUTE)
+    const shut = await measure()
+    check(shut.scrollWidth <= shut.clientWidth, `${where} is ${shut.scrollWidth}px wide in a ${shut.clientWidth}px viewport`)
+    if (phone) {
+      const onPage = await smallTargets(page, null)
+      check(onPage.small.length === 0, `${where}: ${onPage.small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(onPage.small)}`)
+      for (const target of onPage.exempt) exempted.push({ where, target })
+    }
+
+    const calendarButton = page.locator('.day-nav-btn[aria-haspopup]')
+    const buttonShown = await calendarButton.isVisible().catch(() => false)
+    check(buttonShown, `${where}: no calendar button (.day-nav-btn[aria-haspopup])`)
+    if (!buttonShown) continue
+    await calendarButton.click()
+    const layerSelector = phone ? 'dialog.cal-sheet' : '.cal-popover'
+    const kind = phone ? 'sheet' : 'popover'
+    const layer = page.locator(phone ? 'dialog.cal-sheet[open]' : '.cal-popover')
+    const layerShown = await layer.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(layerShown, `${where}: the calendar ${kind} did not open`)
+    if (!layerShown) continue
+    // The month's days arrive on their own read after the layer opens (aria-busy until then).
+    const daysShown = await page.locator(`${layerSelector} .cal-grid[aria-busy="false"] .cal-day`).first()
+      .waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(daysShown, `${where}: the calendar opened with no days in it`)
+    calendarsOpened += 1
+    await page.waitForTimeout(SETTLE_MS)
+    const label = `${where} (calendar ${kind})`
+
+    const withLayer = await measure()
+    check(withLayer.scrollWidth <= withLayer.clientWidth, `${label}: the page is ${withLayer.scrollWidth}px wide in a ${withLayer.clientWidth}px viewport`)
+    const box = await layer.boundingBox()
+    const size = page.viewportSize()
+    check(
+      box !== null && size !== null && box.x >= -1 && box.y >= -1
+        && box.x + box.width <= size.width + 1 && box.y + box.height <= size.height + 1,
+      `${label} is outside the viewport: ${box === null ? 'unmeasurable'
+        : `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}`}`,
+    )
+    // The layer's own width against its content's, which the page's scrollWidth cannot see: the
+    // sheet and the popover both clip, so a grid wider than them never widens the document.
+    const inner = await page.locator(layerSelector).evaluate((node) => ({ scrollWidth: node.scrollWidth, clientWidth: node.clientWidth }))
+    check(inner.scrollWidth <= inner.clientWidth + 1, `${label}: its content is ${inner.scrollWidth}px wide in ${inner.clientWidth}px`)
+    if (!phone) check(box !== null && await paintableAt(page, '.cal-popover', box), `${label} is clipped or covered`)
+
+    const days = await page.locator(`${layerSelector} .cal-day`).evaluateAll((nodes) => ({
+      grey: nodes.filter((node) => node.getAttribute('aria-disabled') === 'true').length,
+      open: nodes.filter((node) => node.getAttribute('aria-disabled') !== 'true').length,
+    }))
+    check(days.grey > 0 && days.open > 0, `${label}: the month shown has ${days.open} day(s) to pick and ${days.grey} grey, and needs both`)
+    if (phone) {
+      const inLayer = await smallTargets(page, layerSelector)
+      check(inLayer.small.length === 0, `${label}: ${inLayer.small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(inLayer.small)}`)
+      for (const target of inLayer.exempt) exempted.push({ where: label, target })
+    }
+
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(SETTLE_MS)
+    check(!(await layer.isVisible().catch(() => false)), `${label}: Escape did not close it`)
+  }
+  // Pinned, as the status panel's count is: a renamed trigger would otherwise skip all of the above.
+  check(calendarsOpened === 2, `the day calendar was opened ${calendarsOpened} of 2 times (phone sheet, popover)`)
+
   // The rail foot, at the size that reproduced the defect. Above the breakpoint, so this is the
   // rail rather than the drawer.
   await page.setViewportSize(SHORT)
@@ -780,5 +875,7 @@ console.log(
     + `${BAND_ROUTE} across the rest of the band, the same routes rotated across the breakpoint, `
     + 'the drawer and its three ways out, the rail foot, the status panel opened '
     + `${statusPanelsOpened} times (phone sheet, desktop popover, collapsed-rail popover), `
-    + `and the person menu opened ${personMenusOpened} times (collapsed and expanded rail).`,
+    + `the person menu opened ${personMenusOpened} times (collapsed and expanded rail), `
+    + `and the dashboard on a past day (${DAY_ROUTE}) at both widths with its calendar opened `
+    + `${calendarsOpened} times (phone sheet with hit areas, grey days included; popover).`,
 )

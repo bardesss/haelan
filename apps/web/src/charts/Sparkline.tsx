@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { chartBase, dayMarks, dayPointDate, dayTableRows, AXIS_FONT_SIZE, STROKE, OPACITY, SYMBOL } from './base.js'
+import { chartBase, dayMarks, dayPointDate, dayTableRows, escapeHtml, AXIS_FONT_SIZE, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { PointStanding } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -78,7 +78,7 @@ export type { PointStanding } from './base.js'
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
-  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY,
+  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, opensDay,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
@@ -178,6 +178,13 @@ export function Sparkline({
   // own already knows what the client cannot (a thin band, a day still running). Ignored without
   // `dots`; a missing entry is no verdict.
   pointStandings?: readonly PointStanding[]
+  // The dashboard's strips (M9c), where a click on a dot opens that day rather than annotating it.
+  // `current` is the day already on screen: it opens nothing, so a click on it does nothing, a tap
+  // on a phone does not select it, and its tooltip does not offer it. Every other day with a value
+  // ends its tooltip with `tail` ("Open this day"); `idle` and `named` word the phone's tap control
+  // (ChartFigure) for opening instead of annotating. Undefined, every other caller, leaves the
+  // tooltip exactly as dayTooltip writes it and the tap control on its annotate words.
+  opensDay?: { current: string, tail: string, idle: string, named: (name: string) => string }
 }) {
   const { t, i18n } = useTranslation()
 
@@ -217,10 +224,12 @@ export function Sparkline({
   // exact defect chart-lifecycle.test.tsx guards. The formatter runs on hover, long after the
   // option was set, so reading the ref at that moment hands it the current values anyway.
   const tooltipRef = useRef<DayTooltipInput | null>(null)
+  const opensRef = useRef(opensDay)
   useLayoutEffect(() => {
     tooltipRef.current = {
       values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t, lastYear: comparing ? lastYear : undefined,
     }
+    opensRef.current = opensDay
   })
 
   // The last day with a value, which is the dot drawn large: "latest" is the newest reading on the
@@ -268,7 +277,16 @@ export function Sparkline({
         const p = Array.isArray(params) ? params[0] : params
         const current = tooltipRef.current
         if (!p || !current) return ''
-        return dayTooltip(current, p as Parameters<typeof dayTooltip>[1])
+        const event = p as Parameters<typeof dayTooltip>[1]
+        const html = dayTooltip(current, event)
+        // A day's own readout only, never a mark's (whose dataIndex counts into the marks), and
+        // only a day with a value: the day is what a click on this point would open.
+        const opens = opensRef.current
+        const date = event.componentType === 'series' && event.dataIndex !== undefined ? current.labels[event.dataIndex] : undefined
+        const openable = opens !== undefined && html !== '' && date !== undefined && date !== opens.current
+          && current.values[event.dataIndex!] != null
+        // Joined, not templated: `html` is already escaped markup, which `tip` would escape again.
+        return openable ? [html, escapeHtml(opens.tail)].join('<br/>') : html
       },
     },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
@@ -378,18 +396,20 @@ export function Sparkline({
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
   }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest])
 
+  // The day already shown is not a point to act on when this strip opens days (`opensDay`).
+  const current = opensDay?.current
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
-    if (date !== undefined) onPointClick?.(date)
-  }, [labels, marks, onPointClick])
+    if (date !== undefined && date !== current) onPointClick?.(date)
+  }, [labels, marks, onPointClick, current])
 
   // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
   // point a click would have opened. This chart draws no axis labels at all, so the formatted date
   // is the only place the tapped day is ever written down outside the tooltip.
   const describe = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
-    return date === undefined ? undefined : formatLocalDate(date, i18n.language)
-  }, [labels, marks, i18n.language])
+    return date === undefined || date === current ? undefined : formatLocalDate(date, i18n.language)
+  }, [labels, marks, i18n.language, current])
 
   // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
   // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
@@ -399,6 +419,7 @@ export function Sparkline({
   return (
     <>
       <ChartFigure label={label} host={host} style={style} tap={tap} tableToggle={tableToggle}
+        tapWords={opensDay && { idle: opensDay.idle, named: opensDay.named }}
         table={{
           // The trend gets a column of its own whenever it is drawn, between the reading and the
           // note. Without one, the smooth line existed only on the canvas: a table-only reader was

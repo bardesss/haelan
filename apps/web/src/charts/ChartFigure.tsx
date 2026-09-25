@@ -10,7 +10,7 @@ export type ChartTable = {
 }
 
 // Accessible chart: a name, the card's basis line as description, and the same numbers as a table.
-export function ChartFigure({ label, table, host, style, tap, tableToggle = true }: {
+export function ChartFigure({ label, table, host, style, tap, tableToggle = true, tapWords }: {
   label: string
   table: ChartTable
   host: RefObject<HTMLDivElement | null>
@@ -29,6 +29,11 @@ export function ChartFigure({ label, table, host, style, tap, tableToggle = true
    * chart in the app, byte for byte what this component rendered before the prop existed.
    */
   tableToggle?: boolean
+  /**
+   * The tap control's words when a tapped point opens something other than the annotate panel:
+   * the dashboard's strips open the day (Sparkline's `opensDay`). Undefined is the annotate words.
+   */
+  tapWords?: { idle: string, named: (name: string) => string }
 }) {
   const describedBy = useBasisId()
   const { t } = useTranslation()
@@ -66,7 +71,8 @@ export function ChartFigure({ label, table, host, style, tap, tableToggle = true
         */}
         {tap && (
           <button type="button" className="chart-annotate" disabled={tap.name === null} onClick={tap.annotate}>
-            {tap.name === null ? t('charts.annotate.idle') : t('charts.annotate.point', { point: tap.name })}
+            {tap.name === null ? tapWords?.idle ?? t('charts.annotate.idle')
+              : tapWords?.named(tap.name) ?? t('charts.annotate.point', { point: tap.name })}
           </button>
         )}
         {tableToggle && (

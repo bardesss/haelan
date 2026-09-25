@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
+import { and, asc, eq, gt, gte, inArray, isNotNull, lt, lte, max, min } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { readSourceActivity } from './sourceActivity.ts'
 import { readAllTime } from './allTime.ts'
@@ -49,6 +49,8 @@ import type { StoredEvent } from '../store/events.ts'
 import { writeProjection } from './projection.ts'
 import { readGlance } from './glance.ts'
 import type { Glance } from './glance.ts'
+import { readGlanceCalendar } from './glanceCalendar.ts'
+import type { GlanceCalendar } from './glanceCalendar.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -122,6 +124,19 @@ const DEVICE_ROLLED_EQUIVALENT: Readonly<Record<string, { metric: string, agg: s
 const MAX_WINDOW_HOURS = 48
 
 const MAX_WINDOW_MS = MAX_WINDOW_HOURS * 3_600_000
+
+/**
+ * The metrics that count as "this day has something to show" for the dashboard's day navigation
+ * (`daysWithData`, `nearestDayWithData`): the glance's own day figures, plus the intraday heart
+ * rate trace. A night counts through its derived `sleep_asleep_minutes` row, already in this
+ * list, rather than through the raw sleep session: derivation has already dropped a session an
+ * override excluded and a nap-only night `assembleNights` turned into no night at all, so the
+ * daily row is the only place those two are already accounted for.
+ */
+export const GLANCE_DAY_METRICS: readonly string[] = [
+  'steps', 'sleep_asleep_minutes', 'resting_heart_rate', 'daily_hrv',
+  'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous', 'heart_rate',
+]
 
 /**
  * Everything a surface asks of the store, bound to one person at construction.
@@ -236,11 +251,50 @@ export class PersonQuery {
    * dashboard and the native app alike. `today` and `nowMs` are the caller's, because the person's
    * zone and the clock live above this layer; `nameOf` resolves a source id to the name the person
    * gave it, defaulting to the id.
+   *
+   * `day` (M9c: day navigation) asks for a finished day instead of today: it must be strictly
+   * before `today`, and `dayEndMs` - the last millisecond of that local day, which the caller
+   * computes with `localMidnightMs` since core has no timezone of its own - is then required, and
+   * the whole glance is built as if `nowMs` were `dayEndMs`.
    */
-  glance(input: { today: string, nowMs: number, nameOf?: (sourceId: string) => string }): Glance {
+  glance(input: {
+    today: string
+    nowMs: number
+    nameOf?: (sourceId: string) => string
+    day?: string
+    dayEndMs?: number
+  }): Glance {
     requireDate('today', input.today)
     requireFiniteNumber('nowMs', input.nowMs)
-    return readGlance(this, { today: input.today, nowMs: input.nowMs, nameOf: input.nameOf ?? ((id) => id) })
+    if (input.day !== undefined) {
+      requireDate('day', input.day)
+      if (input.day >= input.today) {
+        throw new ConfigError(`day '${input.day}' must be before today '${input.today}'`)
+      }
+      if (input.dayEndMs === undefined) {
+        throw new ConfigError('dayEndMs is required when day is given')
+      }
+      requireFiniteNumber('dayEndMs', input.dayEndMs)
+    } else if (input.dayEndMs !== undefined) {
+      throw new ConfigError('dayEndMs was given without day')
+    }
+    return readGlance(this, {
+      today: input.today,
+      nowMs: input.nowMs,
+      nameOf: input.nameOf ?? ((id) => id),
+      day: input.day,
+      dayEndMs: input.dayEndMs,
+    })
+  }
+
+  /**
+   * The calendar (M9c): a month of days with data, each with its sleep and steps verdicts, for
+   * the dashboard's calendar picker. `today` decides both which days of the current month are
+   * shown (never a future one) and whether the month's own last day counts as partial for steps;
+   * see `readGlanceCalendarRaw` for the reads and `judgeCalendarDay` for the verdicts.
+   */
+  glanceCalendar(input: { month: string, today: string }): GlanceCalendar {
+    return readGlanceCalendar(this, input)
   }
 
   /**
@@ -462,6 +516,54 @@ export class PersonQuery {
       sums.set(date, sumAt(dayRows))
     }
     return { atMs: last.utcMs, minuteOfDay, today: sumAt(byDate.get(input.today)!), sums }
+  }
+
+  /**
+   * The local dates in `[from, to]` that have anything for the dashboard to show: a `daily` row
+   * for one of `GLANCE_DAY_METRICS`. Sorted.
+   *
+   * One query, never a per-day loop: drizzle prepares a statement per `.run()`, and a loop over
+   * the days in a range was the rebuild's own OOM before it was hoisted out (see
+   * `drizzle-prepares-per-run`). Sessions are deliberately not consulted here: a raw sleep session
+   * can be excluded by a session-scope override, or be a nap-only night `assembleNights` turns
+   * into no night at all, and either way derivation has already resolved that into whether
+   * `sleep_asleep_minutes` (in `GLANCE_DAY_METRICS`) got written - reading the session directly
+   * would land navigation on a day the dashboard shows nothing for.
+   */
+  daysWithData(input: { from: string, to: string }): string[] {
+    requireRange(input.from, input.to)
+    const dailyDates = this.#db.selectDistinct({ localDate: daily.localDate }).from(daily).where(and(
+      eq(daily.personId, this.#personId),
+      gte(daily.localDate, input.from),
+      lte(daily.localDate, input.to),
+      inArray(daily.metric, GLANCE_DAY_METRICS as readonly string[]),
+    )).all().map((row) => row.localDate)
+    return [...new Set(dailyDates)].sort()
+  }
+
+  /**
+   * The nearest local date with data (same definition as `daysWithData`) strictly before or after
+   * `on`, or null when there is none. `until`, when given, is the far edge of the search: a day
+   * beyond it does not count as found, which is what lets a caller page day by day without ever
+   * landing past a range it was told to stay inside.
+   *
+   * One query, like `daysWithData` and for the same reason sessions are absent from it, bounded by
+   * `on` and `until` in the WHERE clause rather than filtered afterwards, so a day beyond `until`
+   * is never fetched only to be discarded.
+   */
+  nearestDayWithData(input: { on: string, direction: 'before' | 'after', until?: string }): string | null {
+    requireDate('on', input.on)
+    if (input.until !== undefined) requireDate('until', input.until)
+
+    const isBefore = input.direction === 'before'
+    const bound = this.#db.select({ bound: isBefore ? max(daily.localDate) : min(daily.localDate) })
+      .from(daily).where(and(
+        eq(daily.personId, this.#personId),
+        inArray(daily.metric, GLANCE_DAY_METRICS as readonly string[]),
+        isBefore ? lt(daily.localDate, input.on) : gt(daily.localDate, input.on),
+        input.until === undefined ? undefined : (isBefore ? gte(daily.localDate, input.until) : lte(daily.localDate, input.until)),
+      )).get()?.bound ?? null
+    return bound
   }
 
   /** The person's sleep nights in a local date range. See `readSleepNights` for the grouping. */

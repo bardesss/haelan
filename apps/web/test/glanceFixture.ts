@@ -90,5 +90,9 @@ export function glanceBody(): Glance {
     },
     // total is the whole strip's sum (8900+7400+10100+8300+9700+8800+4820), today's so-far included.
     week: { steps: { perDay: 8000, days: 6, total: 58020 }, activeMinutes: null, asleep: null },
+    // The M9c fields (day navigation): every existing test here is a today glance, so false and no
+    // neighbours is the honest default; a finished-day test overrides both.
+    finished: false,
+    nav: { previous: null, next: null },
   }
 }

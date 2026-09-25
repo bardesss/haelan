@@ -65,6 +65,11 @@ function stubFetch(body: Glance, seen: string[], status = 200): () => void {
     seen.push(url)
     const json = (value: unknown, code = 200) =>
       new Response(JSON.stringify(value), { status: code, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/glance/calendar')) {
+      // Every day of September to the 23rd has data, so the Dutch past-day case can open the calendar.
+      const days = Array.from({ length: 23 }, (_, i) => ({ localDate: `2026-09-${String(i + 1).padStart(2, '0')}`, sleep: 'within', steps: 'below' }))
+      return json({ month: '2026-09', firstDay: '2026-09-01', days })
+    }
     if (url.includes('/glance')) return status === 200 ? json(body) : json({ error: 'internal' }, status)
     if (url.includes('/sources')) return json({ items: [] })
     return json({})
@@ -107,9 +112,12 @@ describe('the glance Dashboard', () => {
     try {
       const page = container!.firstElementChild!
       expect(page.className).toBe('dashboard')
-      // The greeting, then the date and span line, then the grid, in that order.
+      // The header (the greeting over the date and span line, the day navigator beside them), then
+      // the grid, in that order.
       expect([...page.children].map((el) => [el.tagName.toLowerCase(), el.className]))
-        .toEqual([['h1', ''], ['p', 'dash-date'], ['div', 'grid dashboard-grid']])
+        .toEqual([['div', 'dash-header'], ['div', 'grid dashboard-grid']])
+      expect([...page.querySelector('.dash-heading')!.children].map((el) => [el.tagName.toLowerCase(), el.className]))
+        .toEqual([['h1', 'dash-title'], ['p', 'dash-date']])
       expect(page.querySelector('h1')?.textContent).toBe('Good morning')
       expect(titles()).toEqual(['Last night', 'Recovery', 'Today', 'This week'])
       expect(cards().map((card) => card.getAttribute('data-span'))).toEqual(['8', '4', '8', '4'])
@@ -451,6 +459,37 @@ describe('the glance Dashboard', () => {
       const described = container!.querySelector(`[id="${trace?.getAttribute('aria-describedby')}"]`)
       expect(described?.textContent).toBe('bijgewerkt om 11:38')
       expect(described?.className).toBe('sr-only')
+    } finally { restore() }
+  })
+
+  // The same reason, for a past day: its header, the day's verdict and the calendar's legend, read whole.
+  it('renders a past day and its calendar in Dutch', async () => {
+    window.history.replaceState(null, '', '/?day=2026-09-22')
+    const body = glanceBody()
+    // A finished day's steps as the server sends them: whole, and judged against the usual day.
+    const steps = { ...body.day.steps, value: 10200, partial: false, standing: 'above' as const }
+    const past: Glance = {
+      ...body, today: '2026-09-22', finished: true, nav: { previous: '2026-09-21', next: '2026-09-23' },
+      day: { ...body.day, steps },
+    }
+    const { client, restore } = await mountPage(past, { lng: 'nl' })
+    try {
+      expect(container!.querySelector('h1')?.textContent).toBe('dinsdag 22 september')
+      expect(dateLine()).toBe('die nacht, en de hele dag')
+      const night = cardTitled('Die nacht')!
+      expect(night.querySelector('.dash-card-title')?.textContent).toBe('Die nacht di 22 – wo 23 sep')
+      const day = cardTitled('Die dag')!
+      expect(day.querySelector('.dash-card-title')?.textContent).toBe('Die dag dinsdag 22 september')
+      expect(day.querySelector('.dash-pace')?.textContent).toBe('Meer dan op een gewone dag · normaal 8.000 – 9.500')
+      expect(day.querySelector('.dash-caption')?.textContent).toBe('de 7 dagen tot en met die dag')
+      expect(night.querySelector('.dash-caption')?.textContent).toBe('de 7 nachten tot en met die dag')
+      expect(cardTitled('Die week')!.querySelector('.dash-card-title')?.textContent).toBe('Die week de 7 dagen tot en met die dag')
+      act(() => { container!.querySelector<HTMLButtonElement>('button[aria-haspopup]')!.click() })
+      await flush(client, () => document.body.innerHTML)
+      expect([...document.querySelectorAll('.cal-legend-line')].map((l) => l.textContent))
+        .toEqual(['Linkerstip · slaap binnen je gebruikelijke bereik erbuiten', 'Rechterstip · stappen je gebruikelijke aantal gehaald eronder'])
+      expect(document.querySelector('.cal-note')?.textContent).toBe('Grijze dagen hebben geen gegevens')
+      expect(document.querySelector('.cal-today')?.textContent).toBe('Vandaag')
     } finally { restore() }
   })
 

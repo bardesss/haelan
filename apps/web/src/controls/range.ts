@@ -31,7 +31,8 @@ function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
 
-function isRealDate(date: string): boolean {
+/** A real calendar date: the pattern alone would accept '2026-02-30'. Exported for the dashboard's `?day=` (useDashboardDay.ts). */
+export function isRealDate(date: string): boolean {
   if (!DATE_PATTERN.test(date)) return false
   const { year, month, day } = partsOf(date)
   if (month < 1 || month > 12) return false

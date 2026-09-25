@@ -14,6 +14,8 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 import { useBaseline } from '../src/data/useBaseline.js'
+import { glanceKey } from '../src/data/useGlance.js'
+import { glanceCalendarKey } from '../src/data/useGlanceCalendar.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -260,6 +262,33 @@ describe('useWriteOverride, applied true', () => {
     expect(disjointCalls()).toBe(1)
   })
 
+  // The dashboard's day and its calendar month carry no from/to, so overlapsAffected never
+  // matched them, and a finished month is cached with staleTime Infinity: an excluded day's dot
+  // kept its old verdict until a reload.
+  it("invalidates the dashboard's glance and calendar month, which carry no range to overlap", async () => {
+    const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
+    const day = glanceKey('p1', '2026-08-15')
+    const month = glanceCalendarKey('p1', '2026-08')
+    const otherPerson = glanceCalendarKey('p2', '2026-08')
+    client.setQueryData(day, {})
+    client.setQueryData(month, { month: '2026-08', firstDay: null, days: [] })
+    client.setQueryData(otherPerson, { month: '2026-08', firstDay: null, days: [] })
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: true,
+    })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(client.getQueryState(day)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(month)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(otherPerson)?.isInvalidated).toBe(false)
+  })
+
   // affected: null means the target names a sample or a session no backfill has reached, so the
   // store marked no local day dirty at all: there is nothing derived that could be stale, even for
   // a cached range that happens to cover the day a reader would guess the override targets.
@@ -304,6 +333,24 @@ describe('useWriteOverride, applied false', () => {
     globalThis.fetch = original
 
     expect(client.getQueryState(overlapping)?.isInvalidated).toBe(false)
+  })
+
+  it('leaves the calendar month alone too, since its dots have not changed yet', async () => {
+    const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
+    const month = glanceCalendarKey('p1', '2026-08')
+    client.setQueryData(month, { month: '2026-08', firstDay: null, days: [] })
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: false,
+    })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(client.getQueryState(month)?.isInvalidated).toBe(false)
   })
 
   // The case the coordinator's original brief would have left broken: the row is written to the

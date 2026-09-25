@@ -365,7 +365,7 @@ a.segment { text-decoration: none; display: inline-block; }
    element's own open state rather than a class, so a sheet closed by Escape - which never tells
    React anything - unlocks the page by the same declaration that locked it. The rail drawer takes
    this exact measure for the same reason. */
-html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overflow: hidden; }
+html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:has(dialog.cal-sheet[open]) { overflow: hidden; }
 
 .button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
 .button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
@@ -749,6 +749,96 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    lead card's hypnogram and the dials drift apart. Other pages keep .main's 1500px (spec: width). */
 .dashboard { max-width: 1200px; margin-inline: auto; }
 .dash-date { margin: 0 0 var(--space-4); font-size: var(--font-size-xs); color: var(--text-muted); }
+/* Dashboard.tsx's header: the title and its line on the left, DayNav.tsx's buttons on the right, one
+   row at every width. On a phone the title wraps inside its own column rather than pushing the
+   buttons onto a second line (spec M9c, "Phone"). */
+.dash-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.dash-heading { flex: 1 1 auto; min-width: 0; }
+.dash-title { font-size: var(--font-size-lg); margin: 0 0 var(--space-1); }
+.day-nav { display: flex; flex-wrap: nowrap; flex-shrink: 0; gap: var(--space-1); }
+/* The previous day's cards, held on screen while the day stepped to loads (useGlance's placeholder). */
+.dashboard-grid-stale { opacity: .6; transition: opacity .15s; }
+.day-nav-btn { min-width: 36px; justify-content: center; }
+.day-nav-today { justify-content: center; }
+
+/* GlanceCalendar.tsx, the day navigator's calendar (spec M9c, "The calendar (C2)"). The popover is
+   fixed and portalled like .status-popover, placed under the button by placementFor through inline
+   left and bottom; card surface and a border, no shadow. */
+.cal-popover {
+  position: fixed; width: min(300px, calc(100vw - 12px)); box-sizing: border-box; padding: 14px;
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl); color: var(--text-primary); z-index: 30;
+}
+/* The phone's bottom sheet, .status-sheet's rules repeated for the reason that rule gives. */
+.cal-sheet {
+  margin: auto auto 0; padding: 0; border: 0; max-height: 85dvh;
+  width: 100%; max-width: none;
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-primary);
+}
+.cal-sheet::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
+.cal-sheet-body { padding: var(--space-3); }
+.cal-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.cal-sheet-title { font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-title { font-size: var(--font-size-sm); font-weight: var(--weight-semibold); }
+.cal-nav {
+  appearance: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  background: none; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  color: var(--text-secondary); cursor: pointer;
+}
+.cal-nav:hover:not(:disabled) { color: var(--text-primary); }
+.cal-nav:disabled { color: var(--text-disabled); cursor: default; }
+.cal-grid { display: flex; flex-direction: column; gap: 4px; border-radius: var(--radius-md); }
+/* The grid takes focus itself only in a month with no day to pick (GlanceCalendar.tsx). */
+.cal-grid:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cal-weekdays, .cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-weekday { font-size: var(--font-size-micro); color: var(--text-faint); text-align: center; letter-spacing: .04em; padding-bottom: 4px; }
+.cal-cell { min-width: 0; }
+/* A border on every day, transparent until it is today's, so today's outline costs no layout. */
+.cal-day {
+  appearance: none; font: inherit; width: 100%; height: 36px; padding: 0; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; color: var(--text-primary);
+  background: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer;
+}
+.cal-day:hover { background: var(--surface-hover); }
+.cal-day:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.cal-day.is-off { color: var(--text-disabled); cursor: default; }
+.cal-day.is-off:hover { background: none; }
+.cal-day.is-today { border-color: var(--border-chosen); }
+.cal-day.is-selected { background: var(--accent); color: var(--surface-page); font-weight: var(--weight-bold); }
+.cal-num { display: block; }
+.cal-dots { display: flex; gap: 2px; }
+.cal-dot { display: block; width: 5px; height: 5px; box-sizing: border-box; border-radius: 50%; }
+.cal-dot.is-within { background: var(--chart-scale-4); }
+.cal-dot.is-outside { background: var(--negative); }
+.cal-dot.is-reached { background: var(--accent); }
+.cal-dot.is-below { background: color-mix(in srgb, var(--accent) 35%, var(--surface-card)); }
+/* No verdict (a thin baseline, or today's steps still counting): a ring, present but unjudged. */
+.cal-dot.is-none { border: 1px solid var(--text-faint); }
+/* On the accent fill the dots take the page colour, or the verdict colours would vanish into it
+   (the steps dot is the accent itself). A favourable verdict is a filled dot, an unfavourable one a
+   ring: a thinned fill was too close to the full one in dark to tell apart. No verdict is a
+   fainter ring. */
+.cal-day.is-selected .cal-dot { background: var(--surface-page); }
+.cal-day.is-selected .cal-dot.is-outside, .cal-day.is-selected .cal-dot.is-below { background: none; border: 1px solid var(--surface-page); }
+.cal-day.is-selected .cal-dot.is-none { background: none; border-color: color-mix(in srgb, var(--surface-page) 45%, var(--accent)); }
+.cal-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: var(--font-size-micro); color: var(--text-muted); }
+.cal-legend-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin: 0; }
+.cal-legend-name { color: var(--text-secondary); font-weight: var(--weight-medium); }
+.cal-key { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cal-key .cal-dot { width: 9px; height: 9px; }
+.cal-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: 10px; font-size: var(--font-size-xs); color: var(--text-muted); }
+.cal-note { min-width: 0; }
+.cal-today { appearance: none; font: inherit; padding: 0; background: none; border: 0; color: var(--accent-soft); cursor: pointer; }
+.cal-today:hover { text-decoration: underline; }
+/* A finger's targets in the phone sheet: 44px days, arrows and Today. */
+.cal-sheet .cal-day { height: 44px; }
+.cal-sheet .cal-nav { width: 44px; height: 44px; }
+.cal-sheet .cal-today { min-height: 44px; padding: 0 var(--space-2); }
 
 /* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
    regular weight to put the muted subtitle back to, so the heading is left at the body's weight
@@ -789,7 +879,7 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 /* Dashboard dials. Colours through the chart and semantic tokens only: the ring is recovery's own
    positive colour, the gauge band is the same baseline band the charts shade, and a reading outside
    its usual takes --negative, which is also said in words beside it so colour is never the only signal. */
-.score-ring, .usual-gauge, .week-bars { display: block; }
+.score-ring, .usual-gauge { display: block; }
 .score-ring-track, .usual-gauge-track { stroke: var(--surface-inset); }
 .score-ring-fill { stroke: var(--positive); }
 .score-ring-value { fill: var(--text-primary); font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
@@ -809,12 +899,29 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
 .dash-recovery-words { margin: 0; text-align: center; font-size: var(--font-size-xs); color: var(--text-muted); }
 .dash-recovery.is-wide .dash-recovery-words { text-align: left; }
 @media (max-width: 620px) { .dash-dials .usual-gauge { width: 92px; height: auto; } .dash-dials .score-ring { width: 108px; height: auto; } }
-.week-bar { opacity: .55; }
-.week-bar.is-today { opacity: 1; }
-.week-bars.is-steps .week-bar { fill: var(--accent); }
-.week-bars.is-active .week-bar { fill: var(--positive); }
+/* The week's bars: seven slots, each the full height, the bar itself a block at the foot of its slot
+   (WeekBars.tsx). A slot that opens its day is a button, reset here to nothing but its bar. */
+.week-bars { position: relative; display: flex; align-items: flex-end; width: 112px; height: 40px; }
+.week-bar-slot { display: flex; align-items: flex-end; flex: 1 1 0; min-width: 0; height: 100%; margin: 0; padding: 0 var(--space-1) 0 0; border: 0; background: none; color: inherit; font: inherit; }
+button.week-bar-slot { cursor: pointer; }
+.week-bar-gap { flex: 1 1 0; }
+.week-bar { display: block; width: 100%; border-radius: var(--radius-sm); opacity: .55; }
+.week-bar.is-today, button.week-bar-slot:hover .week-bar, button.week-bar-slot:focus-visible .week-bar { opacity: 1; }
+.week-bars.is-steps .week-bar { background: var(--accent); }
+.week-bars.is-active .week-bar { background: var(--positive); }
 /* Sleep bars use scale-4, readable on both light (deep azure) and dark (light azure) themes. */
-.week-bars.is-sleep .week-bar { fill: var(--chart-scale-4); }
+.week-bars.is-sleep .week-bar { background: var(--chart-scale-4); }
+/* The charts' own tooltip, rebuilt for bars that are not a chart: chartBase(tokens).tooltip's
+   background, border and text tokens (week-bars.test.tsx reads them off chartBase), and echarts'
+   own 1px border, small radius, nowrap lines. No shadow: echarts draws its shadow from a constant
+   in its own defaults, not from a token, so there is no token for this to take one from. */
+.week-bar-tip {
+  position: absolute; bottom: calc(100% + var(--space-2)); z-index: 5; pointer-events: none;
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); white-space: nowrap;
+  font-size: var(--font-size-xs); line-height: var(--leading-normal); text-align: left;
+  background: var(--chart-tooltip-bg); border: 1px solid var(--chart-grid); color: var(--text-muted);
+}
+.week-bar-tip.is-below { top: calc(100% + var(--space-2)); bottom: auto; }
 .dash-week-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
 .dash-week-figure { margin-top: var(--space-1); }
 .dash-week-value { font-size: var(--font-size-lg); font-weight: var(--weight-bold); }
@@ -987,7 +1094,13 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    the subset that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
    the wrappers out of this stylesheet and fails if one of them is missing from the list below,
    including the fourth nobody has written yet. */
-@media (max-width: 900px) { .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; } }
+@media (max-width: 900px) {
+  .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; }
+  /* Where every card spans the row, a week bar is a finger's target: the bars take the row's full
+     width under the figure, seven 44px slots at the narrowest phone. */
+  .dash-week-row { grid-template-columns: minmax(0, 1fr); }
+  .week-bars { width: 100%; height: 44px; }
+}
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean
    anything. Measured on the demo before this rule existed: at a 901px window the Dashboard's
@@ -1721,6 +1834,13 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
     min-height: 44px;
   }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
+  /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
+     header draws them) but hold only an icon, so they need .icon-button's square minimum too. */
+  .day-nav-btn { min-width: 44px; }
+  /* One line on a phone: the title takes what the buttons leave and ends in an ellipsis rather than
+     wrapping beside them (Dashboard.tsx already prints the short date here). */
+  .dash-header { gap: var(--space-2); }
+  .dash-title { font-size: var(--font-size-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The ranking list's two movers are bare buttons carrying a word rather than .button or
      .icon-button, so they inherited none of this and measured 33x21 and 50x21. Both dimensions are
      under the rule, not just the height, which is why they need the min-width .icon-button gets as

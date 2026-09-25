@@ -36,7 +36,12 @@ import { fileURLToPath } from 'node:url'
  * the year before, so September, the default Month view, compares against real days. Still well
  * inside the spec's under-40 MB bracket.
  *
- * MAX_CAPTURE_BYTES is roughly 1.5x that measurement (10 446 037 * 1.5 = 15 669 055.5, rounded
+ * Re-measured 2026-09-25 with the dashboard's days (M9c): 1018 files, 9 921 491 bytes (9.5 MB),
+ * 178.0s, with five weeks of past glances, their calendar months and every workout those glances
+ * link to. The ceiling below was set from the 2026-09-23 figure and is left there: this run sits
+ * at 63% of it.
+ *
+ * MAX_CAPTURE_BYTES is roughly 1.5x the 2026-09-23 measurement (10 446 037 * 1.5 = 15 669 055.5, rounded
  * up): a ceiling that catches a runaway (a route that starts recording every source separately,
  * say, or a metric catalogue that grows sharply), not one that trips on the ordinary growth a new
  * card or a new day of seeded data adds.

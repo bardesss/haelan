@@ -27,5 +27,5 @@
   // vite-env.d.ts is the ambient declaration import.meta.env's own type comes from (router.tsx
   // reads BASE_URL off it); apps/web/tsconfig.json gets it for free from its own "src" include,
   // but this project's include lists exact files, so it has to be named the same way.
-  "include": ["record.tsx", "server.ts", "../../apps/web/src/vite-env.d.ts"]
+  "include": ["record.tsx", "server.ts", "slice.ts", "../../apps/web/src/vite-env.d.ts"]
 }

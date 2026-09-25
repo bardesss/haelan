@@ -66,7 +66,7 @@ export async function apiSend<T>(method: string, path: string, body?: unknown): 
     ? named.kind as ApiErrorKind
     : null
   const kind = declared ?? KIND_BY_STATUS[response.status] ?? (response.status >= 500 ? 'transient' : 'config')
-  throw new ApiError(kind, response.status, named?.message ?? named?.code ?? `request failed with ${response.status}`)
+  throw new ApiError(kind, response.status, named?.message ?? named?.code ?? `request failed with ${response.status}`, parsed)
 }
 
 export function apiGet<T>(path: string): Promise<T> {

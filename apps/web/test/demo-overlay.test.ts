@@ -407,6 +407,35 @@ describe('a session-scope exclusion', () => {
     expect(applyOverlay(glanceUrl, captured, overlay)).toBe(captured)
   })
 
+  // Since M9c the demo also replays a past day's glance (`/glance?day=`), whose "That day's
+  // activities" list reads the same day.workouts rows. The url the transport hands applyOverlay is
+  // the one the page asked for, query string and all, so the marking has to survive the query.
+  it("marks the workout in a past day's glance too", () => {
+    const overlay = createOverlay()
+    const captured = {
+      sleep: null, recovery: { score: 71 }, finished: true,
+      day: { steps: { value: 8123 }, workouts: [REAL_SESSION_ROW] },
+    }
+    writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {
+      scope: 'session', targetKey: sessionTarget(SESSION_ID), action: 'exclude', reason: 'GPS lost signal',
+    }, overlay)
+
+    const glance = applyOverlay(`/api/v1/p/${PERSON}/glance?day=2026-09-06`, captured, overlay) as typeof captured
+    expect(glance.day.workouts[0]).toEqual({ ...REAL_SESSION_ROW, excluded: true, excludeReason: 'GPS lost signal' })
+    expect(captured.day.workouts[0]!.excluded).toBe(false)
+  })
+
+  // The calendar's verdicts are sleep and steps against their bands, neither of which a session
+  // exclusion touches, so its captured body is answered as it is even with an exclusion written.
+  it('leaves the glance calendar as captured', () => {
+    const overlay = createOverlay()
+    writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {
+      scope: 'session', targetKey: sessionTarget(SESSION_ID), action: 'exclude', reason: 'GPS lost signal',
+    }, overlay)
+    const calendar = { month: '2026-09', firstDay: '2026-08-03', days: [{ localDate: '2026-09-06', sleep: 'within', steps: 'above' }] }
+    expect(applyOverlay(`/api/v1/p/${PERSON}/glance/calendar?month=2026-09`, calendar, overlay)).toBe(calendar)
+  })
+
   it('leaves an unrelated session out of the exclusion', () => {
     const overlay = createOverlay()
     writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {

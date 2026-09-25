@@ -117,7 +117,7 @@ export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './de
 // The same question as localDateOf above, asked with an IANA zone rather than a fixed offset.
 // Aliased because the two cannot share a name and a caller holding a person's `timezone` string
 // needs this one: an offset is a fact about an instant, a zone is a fact about a person.
-export { localDateOf as localDateInZone } from './sync/localDate.ts'
+export { localDateOf as localDateInZone, localMidnightMs } from './sync/localDate.ts'
 export { coverageOf } from './derive/coverage.ts'
 export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
 export type { DailyRow, SampleLike } from './derive/rollup.ts'
@@ -181,7 +181,7 @@ export { mergeSleepDay } from './derive/sleepMerge.ts'
 export { SLEEP_METRICS } from './derive/metrics.ts'
 
 // M2d. The query layer M3 and M4 both sit on, and the statistics behind it.
-export { PersonQuery, requireDate } from './query/personQuery.ts'
+export { PersonQuery, requireDate, GLANCE_DAY_METRICS } from './query/personQuery.ts'
 export type { DailyPoint, SeriesResult } from './query/personQuery.ts'
 export { readRecoveryInput } from './query/recoveryInput.ts'
 export type { FilledCount } from './query/recoveryInput.ts'
@@ -254,6 +254,14 @@ export type {
   GlanceStanding, GlanceStepsPace, GlanceWeek, GlanceWeekFigure,
 } from './query/glance.ts'
 export { standingOf } from './query/glance.ts'
+
+// M9c: day navigation. The calendar's verdicts, reachable through PersonQuery.glanceCalendar for
+// full precision; `readGlanceCalendarRaw` and `judgeCalendarDay` are exported too, unlike
+// readGlance above, because the HTTP route rounds the raw values to catalogue precision and
+// re-judges from those rounded numbers rather than from what PersonQuery.glanceCalendar returns
+// (the same split /glance keeps between its own figures and roundGlance).
+export type { CalendarSleep, CalendarSteps, GlanceCalendarDay, GlanceCalendar, RawCalendarDay, GlanceCalendarRaw } from './query/glanceCalendar.ts'
+export { readGlanceCalendarRaw, judgeCalendarDay } from './query/glanceCalendar.ts'
 
 // M9b/status-panel task 5. The status panel's own composition: connections, their devices and a
 // per-source panel choice, from facts the server already holds. Same discipline as the readers
