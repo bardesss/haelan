@@ -73,10 +73,12 @@ export function Sparkline({
   // from thirty real days, not less, so the caller (Recovery.tsx) only ever hands this over once
   // its own baseline query has cleared the thin check.
   baseline?: { low: number, high: number }
-  // Text for the band's own low and high, anchored at the band's edges on the chart's right side.
-  // Undefined (the default, every caller before NightCard) draws the band exactly as it always
-  // has: shaded, and unlabelled everywhere but the accessible table, which already prints the
-  // baseline in words through usualLine. Ignored with no `baseline` to anchor against.
+  // Text for the band's own low and high, anchored at the band's edges on the chart's left side
+  // (day zero), away from the latest dot at the right end so the low label is never misread as
+  // today's own value. Undefined (the default, every caller before NightCard) draws the band
+  // exactly as it always has: shaded, and unlabelled everywhere but the accessible table, which
+  // already prints the baseline in words through usualLine. Ignored with no `baseline` to anchor
+  // against.
   bandLabels?: { low: string, high: string }
   height?: number
   // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart type
@@ -176,13 +178,13 @@ export function Sparkline({
   const latest = values.reduce<number>((found, v, i) => (v === null ? found : i), -1)
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
-    // Room on the right for the band's own edge labels, drawn past the last day's point: with no
-    // right margin (every other caller) that text would sit flush against, or past, the container.
-    // With dots, a margin of half the latest dot on every side, so a day at the strip's edge or
-    // its extreme is drawn whole rather than clipped by the grid.
+    // Room on the left for the band's own edge labels, anchored at the first day so the low label
+    // never sits beside today's (latest) dot at the right end, where a reader would misread it as
+    // today's own value. With dots, a margin of half the latest dot on every other side, so a day
+    // at the strip's edge or its extreme is drawn whole rather than clipped by the grid.
     grid: dots
-      ? { left: DOT.latest / 2, right: bandLabels ? 40 : DOT.latest / 2, top: DOT.latest / 2, bottom: DOT.latest / 2 }
-      : { left: 0, right: bandLabels ? 40 : 0, top: 4, bottom: 4 },
+      ? { left: bandLabels ? 40 : DOT.latest / 2, right: DOT.latest / 2, top: DOT.latest / 2, bottom: DOT.latest / 2 }
+      : { left: bandLabels ? 40 : 0, right: 0, top: 4, bottom: 4 },
     tooltip: {
       ...chartBase(tokens).tooltip,
       trigger: 'axis' as const,
@@ -196,7 +198,16 @@ export function Sparkline({
       },
     },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
-    yAxis: { type: 'value' as const, show: false, scale: true },
+    // scale: true fits the axis to the series values alone; a markArea/markPoint never widens that
+    // extent, so a band whose edge sits outside every day's own value (steps strip: every day below
+    // the band's top) got silently clipped along with its edge label. With a baseline to draw,
+    // widen the fitted extent to include both band edges (echarts calls min/max with the extent it
+    // would otherwise have picked); with no baseline, `scale: true` alone behaves exactly as before.
+    yAxis: { type: 'value' as const, show: false, scale: true,
+      ...(baseline && {
+        min: (extent: { min: number }) => Math.min(extent.min, baseline.low),
+        max: (extent: { max: number }) => Math.max(extent.max, baseline.high),
+      }) },
     series: [
       ...(comparing ? [{ type: 'line' as const, data: lastYear, showSymbol: false, connectNulls: episodic, silent: true,
         lineStyle: { width: STROKE.sparkline, color: tokens.muted, type: 'dashed' as const } }] : []),
@@ -245,16 +256,20 @@ export function Sparkline({
           // value of 9,500 maps to" short of reading the chart instance back out after it renders,
           // where markPoint's xAxis/yAxis pair is a data coordinate echarts resolves against
           // whatever extent the axis actually fits, the same as every excluded mark below it. Each
-          // is invisible (symbolSize 0) and anchored at the last day's index, the chart's right
-          // edge, with its own text as a label rather than a symbol.
+          // is invisible (symbolSize 0) and anchored at day zero, the chart's LEFT edge, with its
+          // own text as a label rather than a symbol, right-aligned back toward the band so it
+          // reads next to the shading rather than off the strip's edge. Anchored at the first day
+          // rather than the last: the right edge sits beside the latest dot (`dots`'s large, primary-
+          // coloured point for today), where the low label in particular used to read as if it were
+          // today's own value instead of the band's.
           data: [
             ...marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })),
             ...(bandLabels && baseline ? [
-              { name: 'band-high', xAxis: values.length - 1, yAxis: baseline.high, symbolSize: 0,
-                label: { show: true, position: 'right' as const, color: tokens.muted,
+              { name: 'band-high', xAxis: 0, yAxis: baseline.high, symbolSize: 0,
+                label: { show: true, position: 'left' as const, color: tokens.muted,
                   fontSize: chartBase(tokens).axisLabel.fontSize, formatter: () => bandLabels.high } },
-              { name: 'band-low', xAxis: values.length - 1, yAxis: baseline.low, symbolSize: 0,
-                label: { show: true, position: 'right' as const, color: tokens.muted,
+              { name: 'band-low', xAxis: 0, yAxis: baseline.low, symbolSize: 0,
+                label: { show: true, position: 'left' as const, color: tokens.muted,
                   fontSize: chartBase(tokens).axisLabel.fontSize, formatter: () => bandLabels.low } },
             ] : []),
           ] },

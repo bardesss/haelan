@@ -134,8 +134,17 @@ describe('a daily bars chart across a rerender', () => {
   })
 })
 
-type MarkPointDatum = { name: string, xAxis: number, yAxis: number, symbolSize?: number, label?: { formatter: () => string } }
-type ReadingSeries = { markPoint?: { data: MarkPointDatum[] }, markLine?: { data: unknown[] } }
+type MarkPointDatum = { name: string, xAxis: number, yAxis: number, symbolSize?: number, label?: { formatter: () => string, position?: string } }
+type ReadingSeries = {
+  markPoint?: { data: MarkPointDatum[] }
+  markLine?: { data: unknown[] }
+}
+type Grid = { left?: number, right?: number }
+type YAxis = { min?: (extent: { min: number, max: number }) => number, max?: (extent: { min: number, max: number }) => number }
+
+function chartOption(): { grid: Grid, yAxis: YAxis } {
+  return lastOption as { grid: Grid, yAxis: YAxis }
+}
 
 function readingSeries(): ReadingSeries {
   const series = (lastOption as { series: ReadingSeries[] }).series
@@ -161,10 +170,13 @@ describe('a sparkline with a labelled baseline band', () => {
     const { markPoint, markLine } = readingSeries()
     const bandPoints = (markPoint?.data ?? []).filter((d) => d.yAxis === 8000 || d.yAxis === 9500)
     expect(bandPoints).toHaveLength(2)
-    // Anchored at the last day's index, the chart's right edge, not at a fixed pixel position: a
-    // pixel position could not follow the axis's own fitted extent, which the axis (scale: true,
-    // no min/max of its own) recomputes from the data every time the range or the reading changes.
-    expect(bandPoints.every((d) => d.xAxis === values.length - 1)).toBe(true)
+    // Anchored at day zero, the chart's left edge, not at a fixed pixel position: a pixel position
+    // could not follow the axis's own fitted extent, which the axis (scale: true, no min/max of its
+    // own beyond the band-widening below) recomputes from the data every time the range or the
+    // reading changes. Anchored at the first day rather than the last so the low label never sits
+    // beside the latest (today's) dot, where it used to read as today's own value.
+    expect(bandPoints.every((d) => d.xAxis === 0)).toBe(true)
+    expect(bandPoints.every((d) => d.label!.position === 'left')).toBe(true)
     expect(bandPoints.map((d) => d.label!.formatter()).sort()).toEqual(['8,000', '9,500'])
     // No line drawn for these two: markLine is reserved for the dashed annotation verticals this
     // chart already draws (day marks), and a band-edge mark that borrowed it would inherit their
@@ -183,5 +195,88 @@ describe('a sparkline with a labelled baseline band', () => {
     })
     const { markPoint } = readingSeries()
     expect((markPoint?.data ?? []).filter((d) => d.yAxis === 8000 || d.yAxis === 9500)).toEqual([])
+  })
+
+  // The 40px margin for the edge labels moves to the left, beside day zero, and never sits on the
+  // right, beside the latest dot: a right margin left over from before this fix would still leave
+  // room for text nothing draws there any more, and (worse) leave none on the left for the text
+  // that now does.
+  it('puts the 40px label margin on the grid\'s left, not its right, when bandLabels is set', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} />
+        </I18nProvider>,
+      )
+    })
+    const { grid } = chartOption()
+    expect(grid.left).toBe(40)
+    expect(grid.right).not.toBe(40)
+  })
+
+  // scale: true alone fits the y axis to the series values, and a markArea/markPoint never widens
+  // that extent - so a band whose edge sits outside every day's own reading (every day below the
+  // band's top, or above its bottom) got clipped along with its edge label. With a baseline, the
+  // axis's min/max become functions that widen whatever extent echarts would otherwise have picked
+  // to also cover both band edges.
+  describe('the y axis widens to fit the band', () => {
+    it('extends past the fitted extent on both sides when every value already sits inside the band', () => {
+      act(() => {
+        root!.render(
+          <I18nProvider lng="en">
+            <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+              baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} />
+          </I18nProvider>,
+        )
+      })
+      const { yAxis } = chartOption()
+      expect(yAxis.min!({ min: 8600, max: 9400 })).toBe(8000)
+      expect(yAxis.max!({ min: 8600, max: 9400 })).toBe(9500)
+    })
+
+    it('keeps the fitted extent\'s own edge when every value sits below the band', () => {
+      act(() => {
+        root!.render(
+          <I18nProvider lng="en">
+            <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+              baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} />
+          </I18nProvider>,
+        )
+      })
+      const { yAxis } = chartOption()
+      // Every reading below the band (the steps strip's own reported defect): the fitted min is
+      // already below the band's low, so the band's own low must not pull it back up, and the
+      // fitted max sits below the band's high, so the max function must reach up to the band's top.
+      expect(yAxis.min!({ min: 5000, max: 7000 })).toBe(5000)
+      expect(yAxis.max!({ min: 5000, max: 7000 })).toBe(9500)
+    })
+
+    it('keeps the fitted extent\'s own edge when every value sits above the band', () => {
+      act(() => {
+        root!.render(
+          <I18nProvider lng="en">
+            <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+              baseline={{ low: 8000, high: 9500 }} bandLabels={{ low: '8,000', high: '9,500' }} />
+          </I18nProvider>,
+        )
+      })
+      const { yAxis } = chartOption()
+      expect(yAxis.min!({ min: 10000, max: 12000 })).toBe(8000)
+      expect(yAxis.max!({ min: 10000, max: 12000 })).toBe(12000)
+    })
+  })
+
+  it('leaves the y axis with no min/max override when there is no baseline to widen for', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026" />
+        </I18nProvider>,
+      )
+    })
+    const { yAxis } = chartOption()
+    expect(yAxis.min).toBeUndefined()
+    expect(yAxis.max).toBeUndefined()
   })
 })
