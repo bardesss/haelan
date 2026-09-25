@@ -393,6 +393,9 @@ export function Sparkline({
             // same reason: zrender paints a label with no fontFamily of its own in a generic
             // 'sans-serif', not the app's --font-sans, so the two would silently measure and paint
             // in different typefaces without this.
+            // Anchored at the first slot, but the shown day's usual (the card's "usual X - Y"),
+            // not the first day's own step beside it: at the last slot they would sit on the
+            // shown day's dot again, the collision #375 moved them away from.
             ...(bandLabels && baseline ? [
               { name: 'band-high', xAxis: 0, yAxis: baseline.high, symbolSize: 0,
                 label: { show: true, position: 'left' as const, distance: BAND_LABEL_GAP, color: tokens.muted,

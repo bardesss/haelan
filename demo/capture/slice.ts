@@ -17,8 +17,9 @@
 // before the first day keeps its value on a real instance, and its dot would open that day. Emptied
 // here instead, so the dot is never drawn and so never offered, which is what the calendar already
 // says of those days (greyed, no data). Each emptied day's own band goes with it, so the strip's
-// per-day band shades nothing before the first day either: a usual over days the demo does not
-// have is no more its to show than their values are. The figures themselves (each day's own value, its band, its
+// per-day band shades nothing before the first day either. The days from the first day on keep
+// their bands as captured, windows that still reach back over earlier synthetic days, as the
+// figures' own bands always have. The figures themselves (each day's own value, its band, its
 // verdict) are the capture's, untouched. The week card's averages are recounted over what is left,
 // with core's own weekOf rules and the server's own rounding, so a week of three bars never claims
 // seven days. The recount starts from the strip's rounded daily values where the server averaged
