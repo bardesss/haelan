@@ -319,7 +319,6 @@ describe('RecoveryCard on a finished day', () => {
   })
 
   it('says an unscored day and a missing gauge as over, and its strip runs to that day', () => {
-    sparklineProps = null
     const recovery = recoveryFixture({ index: { value: null }, hrv: { value: null } })
     const html = renderRecovery({ recovery, today: '2026-09-22', finished: true })
     expect(html).toContain('<p class="dash-recovery-words">Not enough readings to score.</p>')
@@ -527,7 +526,6 @@ describe('TodayCard on a finished day', () => {
   })
 
   it('words a missing figure and the strip as over', () => {
-    sparklineProps = null
     const day = finishedDay()
     const html = renderFinished({ ...day, activeMinutes: { ...day.activeMinutes, value: null } })
     expect(html).toMatch(/<div class="dash-headline-sm">No reading <span class="glance-unit">/)
