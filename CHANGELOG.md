@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.11.1](https://github.com/bardesss/haelan/compare/v2.11.0...v2.11.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* strip dots judged against their own day, and the day navigation's loose ends ([#379](https://github.com/bardesss/haelan/issues/379)) ([14b5175](https://github.com/bardesss/haelan/commit/14b5175939ab4f54165350b217790be16b1bd471))
+
 ## [2.11.0](https://github.com/bardesss/haelan/compare/v2.10.1...v2.11.0) (2026-09-25)
 
 
