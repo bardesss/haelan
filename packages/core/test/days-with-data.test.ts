@@ -20,8 +20,11 @@ function insertDaily(o: { metric: string, agg?: string, localDate: string, value
   }).run()
 }
 
+// A raw sleep session, with no derived daily row alongside it - the shape a session-scope
+// override excludes, or a nap-only night `assembleNights` turns into no night at all. Neither
+// reader is meant to consult this table at all; see the fix-round-1 comment on daysWithData.
 let sleepSeq = 0
-function insertSleepNight(localDate: string) {
+function insertSleepSession(localDate: string) {
   sleepSeq += 1
   const id = `sleep-${sleepSeq}`
   test.db.insert(sessions).values({
@@ -36,12 +39,13 @@ function seedFixture() {
   insertDaily({ metric: 'steps', localDate: '2026-09-01', value: 1000 })
   insertDaily({ metric: 'steps', localDate: '2026-09-03', value: 2000 })
   insertDaily({ metric: 'resting_heart_rate', agg: 'last', localDate: '2026-09-05', value: 55 })
-  insertSleepNight('2026-09-07')
+  // The night of 2026-09-07, standing for a real derived night: a daily row, not a raw session.
+  insertDaily({ metric: 'sleep_asleep_minutes', localDate: '2026-09-07', value: 430 })
   insertDaily({ metric: 'weight', localDate: '2026-09-09', value: 80 })
 }
 
 describe('daysWithData', () => {
-  it('lists the sorted local dates in range that have a glance metric row or a sleep night', () => {
+  it('lists the sorted local dates in range that have a glance metric row', () => {
     seedFixture()
     const query = new PersonQuery(test.db, 'p1')
     expect(query.daysWithData({ from: '2026-09-01', to: '2026-09-10' }))
@@ -54,8 +58,17 @@ describe('daysWithData', () => {
     expect(query.daysWithData({ from: '2026-09-01', to: '2026-09-10' })).toEqual([])
   })
 
-  it('finds a sleep night even with no daily rows on that date', () => {
-    insertSleepNight('2026-09-07')
+  // A raw sleep session with no derived daily row must not count: it is exactly the shape a
+  // session-scope override excludes, or a nap-only night that assembleNights turned into no
+  // night, and reading the session directly would land navigation on an empty day.
+  it('does not count a sleep session that has no derived daily row', () => {
+    insertSleepSession('2026-09-07')
+    const query = new PersonQuery(test.db, 'p1')
+    expect(query.daysWithData({ from: '2026-09-01', to: '2026-09-10' })).toEqual([])
+  })
+
+  it('counts a day whose only daily row is sleep_asleep_minutes', () => {
+    insertDaily({ metric: 'sleep_asleep_minutes', localDate: '2026-09-07', value: 430 })
     const query = new PersonQuery(test.db, 'p1')
     expect(query.daysWithData({ from: '2026-09-01', to: '2026-09-10' })).toEqual(['2026-09-07'])
   })

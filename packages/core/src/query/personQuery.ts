@@ -4,7 +4,7 @@ import { readSourceActivity } from './sourceActivity.ts'
 import { readAllTime } from './allTime.ts'
 import type { AllTime } from './allTime.ts'
 import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
-import { daily, people, samples, overrides as overridesTable, SESSION_KINDS, sessions as sessionsTable, sourceAliases, sources } from '../db/schema/index.ts'
+import { daily, people, samples, overrides as overridesTable, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { SampleLike } from '../derive/rollup.ts'
@@ -126,8 +126,10 @@ const MAX_WINDOW_MS = MAX_WINDOW_HOURS * 3_600_000
 /**
  * The metrics that count as "this day has something to show" for the dashboard's day navigation
  * (`daysWithData`, `nearestDayWithData`): the glance's own day figures, plus the intraday heart
- * rate trace. A sleep night counts too, but through `sessions` rather than this list, since a
- * night with no daily rows at all is still a day worth landing on.
+ * rate trace. A night counts through its derived `sleep_asleep_minutes` row, already in this
+ * list, rather than through the raw sleep session: derivation has already dropped a session an
+ * override excluded and a nap-only night `assembleNights` turned into no night at all, so the
+ * daily row is the only place those two are already accounted for.
  */
 export const GLANCE_DAY_METRICS: readonly string[] = [
   'steps', 'sleep_asleep_minutes', 'resting_heart_rate', 'daily_hrv',
@@ -504,12 +506,15 @@ export class PersonQuery {
 
   /**
    * The local dates in `[from, to]` that have anything for the dashboard to show: a `daily` row
-   * for one of `GLANCE_DAY_METRICS`, or a sleep night filed under that date. Sorted, deduplicated
-   * across the two sources.
+   * for one of `GLANCE_DAY_METRICS`. Sorted.
    *
-   * One query per source, unioned in JS, never a per-day loop: drizzle prepares a statement per
-   * `.run()`, and a loop over the days in a range was the rebuild's own OOM before it was hoisted
-   * out (see `drizzle-prepares-per-run`).
+   * One query, never a per-day loop: drizzle prepares a statement per `.run()`, and a loop over
+   * the days in a range was the rebuild's own OOM before it was hoisted out (see
+   * `drizzle-prepares-per-run`). Sessions are deliberately not consulted here: a raw sleep session
+   * can be excluded by a session-scope override, or be a nap-only night `assembleNights` turns
+   * into no night at all, and either way derivation has already resolved that into whether
+   * `sleep_asleep_minutes` (in `GLANCE_DAY_METRICS`) got written - reading the session directly
+   * would land navigation on a day the dashboard shows nothing for.
    */
   daysWithData(input: { from: string, to: string }): string[] {
     requireRange(input.from, input.to)
@@ -519,13 +524,7 @@ export class PersonQuery {
       lte(daily.localDate, input.to),
       inArray(daily.metric, GLANCE_DAY_METRICS as readonly string[]),
     )).all().map((row) => row.localDate)
-    const sleepDates = this.#db.selectDistinct({ localDate: sessionsTable.localDate }).from(sessionsTable).where(and(
-      eq(sessionsTable.personId, this.#personId),
-      eq(sessionsTable.kind, 'sleep'),
-      gte(sessionsTable.localDate, input.from),
-      lte(sessionsTable.localDate, input.to),
-    )).all().map((row) => row.localDate)
-    return [...new Set([...dailyDates, ...sleepDates])].sort()
+    return [...new Set(dailyDates)].sort()
   }
 
   /**
@@ -534,35 +533,23 @@ export class PersonQuery {
    * beyond it does not count as found, which is what lets a caller page day by day without ever
    * landing past a range it was told to stay inside.
    *
-   * One query per source per call, like `daysWithData`, each bounded by `on` and `until` in the
-   * WHERE clause rather than filtered afterwards, so a day beyond `until` is never fetched only to
-   * be discarded.
+   * One query, like `daysWithData` and for the same reason sessions are absent from it, bounded by
+   * `on` and `until` in the WHERE clause rather than filtered afterwards, so a day beyond `until`
+   * is never fetched only to be discarded.
    */
   nearestDayWithData(input: { on: string, direction: 'before' | 'after', until?: string }): string | null {
     requireDate('on', input.on)
     if (input.until !== undefined) requireDate('until', input.until)
 
     const isBefore = input.direction === 'before'
-    const dailyBound = this.#db.select({ bound: isBefore ? max(daily.localDate) : min(daily.localDate) })
+    const bound = this.#db.select({ bound: isBefore ? max(daily.localDate) : min(daily.localDate) })
       .from(daily).where(and(
         eq(daily.personId, this.#personId),
         inArray(daily.metric, GLANCE_DAY_METRICS as readonly string[]),
         isBefore ? lt(daily.localDate, input.on) : gt(daily.localDate, input.on),
         input.until === undefined ? undefined : (isBefore ? gte(daily.localDate, input.until) : lte(daily.localDate, input.until)),
       )).get()?.bound ?? null
-    const sleepBound = this.#db.select({ bound: isBefore ? max(sessionsTable.localDate) : min(sessionsTable.localDate) })
-      .from(sessionsTable).where(and(
-        eq(sessionsTable.personId, this.#personId),
-        eq(sessionsTable.kind, 'sleep'),
-        isBefore ? lt(sessionsTable.localDate, input.on) : gt(sessionsTable.localDate, input.on),
-        input.until === undefined ? undefined : (isBefore ? gte(sessionsTable.localDate, input.until) : lte(sessionsTable.localDate, input.until)),
-      )).get()?.bound ?? null
-
-    const candidates = [dailyBound, sleepBound].filter((d): d is string => d !== null)
-    if (candidates.length === 0) return null
-    return isBefore
-      ? candidates.reduce((a, b) => (a > b ? a : b))
-      : candidates.reduce((a, b) => (a < b ? a : b))
+    return bound
   }
 
   /** The person's sleep nights in a local date range. See `readSleepNights` for the grouping. */
