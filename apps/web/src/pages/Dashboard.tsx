@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useIsPhone } from '../ui/breakpoint.js'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
@@ -16,15 +17,21 @@ import { CalendarButton } from './dashboard/GlanceCalendar.js'
 import { localToday } from '../controls/range.js'
 import { dashboardRows } from './dashboard/dashboardRows.js'
 import type { DashCardSlot } from './dashboard/dashboardRows.js'
-import { formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
+import { formatHeaderDate, formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
 import { useDashboardDay } from './dashboard/useDashboardDay.js'
+
+// The grid's class by whether its cards are the previous day's, held while the next one loads.
+const GRID_CLASS = { settled: 'dashboard-grid', stepping: 'dashboard-grid dashboard-grid-stale' } as const
 
 // The page's heading, in every branch: today greets, a past day is titled with its date. Both are
 // known before the glance arrives (the clock and the person's zone, or the day in the URL), so
 // loading and error carry the same title rather than flashing a second one.
+// On a phone a past day's title is the short date ("Tue, Sep 22"): the long one wrapped to three
+// lines beside the four buttons, and the header is one line there (spec M9c, "Phone").
 function Title({ timezone, day }: { timezone: string, day: string | null }) {
   const { t, i18n } = useTranslation()
-  return <h1 className="dash-title">{day === null ? t(greetingKey(Date.now(), timezone)) : formatLongDate(day, i18n.language)}</h1>
+  const isPhone = useIsPhone()
+  return <h1 className="dash-title">{day === null ? t(greetingKey(Date.now(), timezone)) : formatHeaderDate(day, i18n.language, isPhone)}</h1>
 }
 
 // The heading block on the left, the day navigator (when there is a glance to navigate from) on the
@@ -69,27 +76,31 @@ export function Dashboard() {
   const session = useSession()
   const timezone = session.data?.timezone ?? 'UTC'
   const { day: urlDay, setDay } = useDashboardDay()
-  const { glance, nearest, isPending, isError, error, refetch } = useGlance(urlDay)
+  const { glance, nearest, isPending, isPlaceholderData, isError, error, refetch } = useGlance(urlDay)
 
   // A day in range with no data: the server names the nearest day that has some, and the page
   // opens that day in place of this one - replacing the URL, so Back does not return to the gap.
   useEffect(() => {
     if (nearest !== null) setDay(nearest, { replace: true })
-    // setDay is a fresh closure every render and deliberately not a dependency: the redirect is
-    // owed once per `nearest`, not once per render.
-  }, [nearest])
+  }, [nearest, setDay])
 
   // On its way to the nearest day, the gap's 404 is not an error to show.
   if (isError && nearest === null) return <><Header timezone={timezone} day={urlDay} /><ErrorState onRetry={() => void refetch()} error={error} /></>
   if (isPending || isError || glance === undefined) return <><Header timezone={timezone} day={urlDay} /><Loading /></>
 
   const { sleep, recovery, day } = glance
-  // The day the payload was built for, not the URL's: the title names the day every card shows.
-  const shownDay = glance.finished ? glance.today : null
+  // Stepping to a day not in the cache: `glance` is still the previous day's answer (useGlance's
+  // placeholder), so the cards stay put, dimmed, while the header already names the day asked for
+  // and the arrows wait for that day's own `nav`. Settled, the header names the day the payload
+  // was built for, which is the day every card shows.
+  const stepping = isPlaceholderData
+  const today = localToday(timezone)
+  const shownDay = stepping ? urlDay : glance.finished ? glance.today : null
   // The person's own today, for the calendar's last pickable day and its Today link (setDay turns
   // today into no `?day=` at all, as the header's Today button has it).
-  const calendarButton = <CalendarButton selected={glance.today} today={localToday(timezone)} onPick={(picked) => setDay(picked)} />
-  const nav = <DayNav glance={glance} onPick={(picked) => setDay(picked)} calendarButton={calendarButton} />
+  const calendarButton = <CalendarButton selected={shownDay ?? today} today={today} onPick={(picked) => setDay(picked)} />
+  const nav = <DayNav glance={glance} onPick={(picked) => setDay(picked)} calendarButton={calendarButton}
+    pending={stepping} finished={shownDay !== null} />
 
   // First run, or an archive with nothing in the last day and a half: four cards each saying it
   // has no reading would be the page repeating one fact four times, so it says it once.
@@ -114,6 +125,9 @@ export function Dashboard() {
     : (time === null ? t('glance.spanNoTime') : t('glance.span', { time }))
 
   const finished = glance.finished
+  // While stepping, the line under the title is the day asked for, not the held cards' span.
+  const line = shownDay !== null ? t('glance.dayNav.pastLine')
+    : stepping ? formatLongDate(today, language) : <>{formatLongDate(glance.today, language)} · {span}</>
   const card = (slot: DashCardSlot) => {
     switch (slot.kind) {
       case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} timezone={timezone} />
@@ -125,9 +139,8 @@ export function Dashboard() {
 
   return (
     <div className="dashboard">
-      <Header timezone={timezone} day={shownDay} nav={nav}
-        line={finished ? t('glance.dayNav.pastLine') : <>{formatLongDate(glance.today, language)} · {span}</>} />
-      <CardGrid className="dashboard-grid">{dashboardRows(glance).flat().map(card)}</CardGrid>
+      <Header timezone={timezone} day={shownDay} nav={nav} line={line} />
+      <CardGrid className={stepping ? GRID_CLASS.stepping : GRID_CLASS.settled}>{dashboardRows(glance).flat().map(card)}</CardGrid>
     </div>
   )
 }

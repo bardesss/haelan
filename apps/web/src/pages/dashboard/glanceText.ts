@@ -117,6 +117,16 @@ export function formatLongDate(localDate: string, language: string): string {
     .format(new Date(`${localDate}T00:00:00Z`))
 }
 
+/**
+ * The dashboard's title for a past day: the long date, or on a phone the short one ("Tue, Sep 22"),
+ * both through Intl in the page language and anchored the way formatLongDate is.
+ */
+export function formatHeaderDate(localDate: string, language: string, short: boolean): string {
+  if (!short) return formatLongDate(localDate, language)
+  return new Intl.DateTimeFormat(language, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+    .format(new Date(`${localDate}T00:00:00Z`))
+}
+
 // How far `timeZone` is ahead of UTC at the instant `utcMs`, in milliseconds: the zone's own wall
 // clock read back as if it were UTC, minus the instant itself.
 function zoneOffsetMs(utcMs: number, timeZone: string): number {

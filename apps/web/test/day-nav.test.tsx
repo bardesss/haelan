@@ -16,6 +16,7 @@ import type { Session } from '../src/auth/session.js'
 import type { Glance } from '../src/data/useGlance.js'
 import { glanceBody } from './glanceFixture.js'
 import { flush } from './flush.js'
+import { PHONE_MEDIA_QUERY } from '../src/ui/breakpoint.js'
 
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
@@ -56,8 +57,11 @@ function pastGlance(nav: Glance['nav'] = { previous: '2026-09-21', next: '2026-0
   return { ...glanceBody(), today: '2026-09-22', finished: true, nav }
 }
 
-/** Answers each /glance URL from `bodies` by its `day` (or 'today'); a body of `{ nearest }` answers 404. */
-function stubFetch(bodies: Record<string, Glance | { nearest: string }>, seen: string[]): () => void {
+type Body = Glance | { nearest: string } | Promise<Glance>
+
+/** Answers each /glance URL from `bodies` by its `day` (or 'today'); a body of `{ nearest }` answers 404,
+ *  and a promise holds the answer until the test settles it. */
+function stubFetch(bodies: Record<string, Body>, seen: string[]): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -71,7 +75,7 @@ function stubFetch(bodies: Record<string, Glance | { nearest: string }>, seen: s
     }
     if (url.includes('/glance')) {
       const day = new URL(url, 'http://x').searchParams.get('day') ?? 'today'
-      const body = bodies[day]
+      const body = await bodies[day]
       if (body === undefined) return json({ error: 'internal' }, 500)
       return 'nearest' in body ? json(body, 404) : json(body)
     }
@@ -81,7 +85,7 @@ function stubFetch(bodies: Record<string, Glance | { nearest: string }>, seen: s
   return () => { globalThis.fetch = original }
 }
 
-async function mountPage(bodies: Record<string, Glance | { nearest: string }>): Promise<{ seen: string[], client: QueryClient, restore: () => void }> {
+async function mountPage(bodies: Record<string, Body>): Promise<{ seen: string[], client: QueryClient, restore: () => void }> {
   const seen: string[] = []
   const restore = stubFetch(bodies, seen)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
@@ -196,6 +200,80 @@ describe('the dashboard header, a past day', () => {
       expect(window.location.search).toBe('?day=2026-09-20')
       expect(window.history.length).toBe(before)
       expect(heading()).toBe('Sunday, September 20')
+    } finally { restore() }
+  })
+})
+
+describe('stepping to a day not yet loaded', () => {
+  beforeEach(() => { window.history.replaceState(null, '', '/?day=2026-09-22') })
+
+  /** Lets the page render what it has without waiting for the held fetch. */
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 5; i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+  }
+
+  it('keeps the header and the previous cards, names the new day, and holds the arrows until it arrives', async () => {
+    let release: (body: Glance) => void = () => {}
+    const held = new Promise<Glance>((resolve) => { release = resolve })
+    const { client, restore } = await mountPage({ '2026-09-22': pastGlance(), '2026-09-21': held })
+    try {
+      press('ArrowLeft')
+      expect(window.location.search).toBe('?day=2026-09-21')
+      await settle()
+      // Still the page, not the loading state: the row did not vanish under the pointer.
+      expect(container!.querySelector('.empty')).toBeNull()
+      expect(container!.querySelectorAll('.dashboard-grid > section.card').length).toBeGreaterThan(0)
+      expect(container!.querySelector('.dashboard-grid')!.className).toBe('grid dashboard-grid dashboard-grid-stale')
+      expect(heading()).toBe('Monday, September 21')
+      expect(subLine()).toBe('that night, and the whole day')
+      expect(button('Previous day')!.disabled).toBe(true)
+      expect(button('Next day')!.disabled).toBe(true)
+      expect(button('Today')!.disabled).toBe(false)
+      // A second ← while the day loads would step from the 22nd's stale nav: it does nothing.
+      press('ArrowLeft')
+      expect(window.location.search).toBe('?day=2026-09-21')
+
+      release({ ...pastGlance({ previous: '2026-09-20', next: '2026-09-22' }), today: '2026-09-21' })
+      await flush(client, () => container!.innerHTML)
+      expect(container!.querySelector('.dashboard-grid')!.className).toBe('grid dashboard-grid')
+      expect(heading()).toBe('Monday, September 21')
+      expect(button('Previous day')!.disabled).toBe(false)
+      expect(button('Next day')!.disabled).toBe(false)
+    } finally { restore() }
+  })
+
+  it("never holds another person's day on screen", async () => {
+    const { client, restore } = await mountPage({ '2026-09-22': pastGlance() })
+    try {
+      // The placeholder is the previous answer only when that answer was the same person's.
+      const options = client.getQueryCache().findAll({ queryKey: ['person', 'p1', 'glance'] })[0]!.options as {
+        placeholderData?: (previous: unknown, previousQuery?: { queryKey: readonly unknown[] }) => unknown
+      }
+      const glance = pastGlance()
+      expect(options.placeholderData!(glance, { queryKey: ['person', 'p1', 'glance', '2026-09-21'] })).toBe(glance)
+      expect(options.placeholderData!(glance, { queryKey: ['person', 'p2', 'glance', '2026-09-21'] })).toBeUndefined()
+    } finally { restore() }
+  })
+})
+
+describe('the dashboard header on a phone', () => {
+  const realMatchMedia = window.matchMedia.bind(window)
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/?day=2026-09-22')
+    window.matchMedia = ((query: string) => {
+      if (query !== PHONE_MEDIA_QUERY) return realMatchMedia(query)
+      return {
+        matches: true, media: query, onchange: null,
+        addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+      } as unknown as MediaQueryList
+    }) as typeof window.matchMedia
+  })
+  afterEach(() => { window.matchMedia = realMatchMedia as typeof window.matchMedia })
+
+  it('titles a past day with the short date, so the header stays one line', async () => {
+    const { restore } = await mountPage({ '2026-09-22': pastGlance() })
+    try {
+      expect(heading()).toBe('Tue, Sep 22')
     } finally { restore() }
   })
 })

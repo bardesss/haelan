@@ -753,9 +753,11 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
    row at every width. On a phone the title wraps inside its own column rather than pushing the
    buttons onto a second line (spec M9c, "Phone"). */
 .dash-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
-.dash-heading { min-width: 0; }
+.dash-heading { flex: 1 1 auto; min-width: 0; }
 .dash-title { font-size: var(--font-size-lg); margin: 0 0 var(--space-1); }
-.day-nav { display: flex; flex-shrink: 0; gap: var(--space-1); }
+.day-nav { display: flex; flex-wrap: nowrap; flex-shrink: 0; gap: var(--space-1); }
+/* The previous day's cards, held on screen while the day stepped to loads (useGlance's placeholder). */
+.dashboard-grid-stale { opacity: .6; transition: opacity .15s; }
 .day-nav-btn { min-width: 36px; justify-content: center; }
 .day-nav-today { justify-content: center; }
 
@@ -1808,6 +1810,10 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
   /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
      header draws them) but hold only an icon, so they need .icon-button's square minimum too. */
   .day-nav-btn { min-width: 44px; }
+  /* One line on a phone: the title takes what the buttons leave and ends in an ellipsis rather than
+     wrapping beside them (Dashboard.tsx already prints the short date here). */
+  .dash-header { gap: var(--space-2); }
+  .dash-title { font-size: var(--font-size-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The ranking list's two movers are bare buttons carrying a word rather than .button or
      .icon-button, so they inherited none of this and measured 33x21 and 50x21. Both dimensions are
      under the rule, not just the height, which is why they need the min-width .icon-button gets as

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useRoute, navigate, withQuery, readQuery } from '../../router.js'
 import { useSession } from '../../auth/session.js'
 import { localToday } from '../../controls/range.js'
@@ -52,10 +52,10 @@ export function useDashboardDay(): {
     if (invalid) navigate(withQuery(route, { day: null }), { replace: true })
   }, [invalid, route])
 
-  return {
-    day: valid && raw !== today ? raw : null,
-    setDay: (day, opts) => {
-      navigate(withQuery(route, { day: day === null || day === today ? null : day }), { replace: opts?.replace ?? false })
-    },
-  }
+  // Stable for as long as the route and today are, so a caller's effect can list it as a dependency.
+  const setDay = useCallback((day: string | null, opts?: { replace?: boolean }) => {
+    navigate(withQuery(route, { day: day === null || day === today ? null : day }), { replace: opts?.replace ?? false })
+  }, [route, today])
+
+  return { day: valid && raw !== today ? raw : null, setDay }
 }

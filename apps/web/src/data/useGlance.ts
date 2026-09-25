@@ -163,6 +163,8 @@ export function useGlance(day: string | null = null): {
   glance: Glance | undefined
   nearest: string | null
   isPending: boolean
+  /** True while `glance` is still the previous day's answer, held on screen as this day loads. */
+  isPlaceholderData: boolean
   isError: boolean
   error: unknown
   refetch: () => unknown
@@ -177,12 +179,19 @@ export function useGlance(day: string | null = null): {
     queryFn: () => apiGet<Glance>(day === null
       ? `/api/v1/p/${personId!}/glance`
       : `/api/v1/p/${personId!}/glance?day=${encodeURIComponent(day)}`),
+    // Stepping to a day not yet in the cache changes the key, which would drop the page back to
+    // its loading state and unmount the arrows under the pointer. The previous day's answer stays
+    // on screen instead, flagged by isPlaceholderData so the page can say it is on its way - but
+    // only the same person's: glanceKey is ['person', personId, 'glance', day], and a household
+    // member switch must never show one person's day under another's name.
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === personId ? previous : undefined,
   })
 
   return {
     glance: query.data,
     nearest: nearestOf(query.error),
     isPending: query.isPending,
+    isPlaceholderData: query.isPlaceholderData,
     isError: query.isError,
     error: query.error,
     refetch: () => { void query.refetch() },

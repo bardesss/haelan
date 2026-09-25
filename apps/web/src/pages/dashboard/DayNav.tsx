@@ -21,14 +21,22 @@ import type { Glance } from '../../data/useGlance.js'
  *
  * `calendarButton` is the calendar's own trigger; until one is handed in, a disabled button holds
  * its place so the row does not change shape when it arrives.
+ *
+ * `pending`: the day asked for is still loading and `glance` is the previous day's answer, held on
+ * screen so the row does not vanish under the pointer. Its `nav` names the neighbours of the wrong
+ * day, so both arrows (and their keys) are disabled until the new answer arrives; `finished` then
+ * says whether the day being loaded is a past one, which decides the Today button.
  */
-export function DayNav({ glance, onPick, calendarButton }: {
+export function DayNav({ glance, onPick, calendarButton, pending = false, finished = glance.finished }: {
   glance: Glance
   onPick: (day: string | null) => void
   calendarButton?: ReactNode
+  pending?: boolean
+  finished?: boolean
 }) {
   const { t } = useTranslation()
-  const { previous, next } = glance.nav
+  const previous = pending ? null : glance.nav.previous
+  const next = pending ? null : glance.nav.next
 
   useShortcutKeys((event) => {
     if (event.shiftKey) return
@@ -41,7 +49,7 @@ export function DayNav({ glance, onPick, calendarButton }: {
       if (next === null) return
       event.preventDefault(); onPick(next); return
     }
-    if ((event.key === 't' || event.key === 'T') && glance.finished) onPick(null)
+    if ((event.key === 't' || event.key === 'T') && finished) onPick(null)
   })
 
   return (
@@ -59,7 +67,7 @@ export function DayNav({ glance, onPick, calendarButton }: {
           <Icon name="calendar" />
         </button>
       )}
-      {glance.finished && (
+      {finished && (
         <button type="button" className="button day-nav-today"
           title={t('shortcuts.withKey', { label: t('glance.dayNav.today'), key: 'T' })}
           aria-keyshortcuts="T" onClick={() => onPick(null)}>{t('glance.dayNav.today')}</button>
