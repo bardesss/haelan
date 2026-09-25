@@ -130,8 +130,12 @@ export function GlanceCalendar({ selected, today, onPick, onClose, anchor }: {
   // click on a month arrow leaves focus on the arrow rather than pulling it into the grid.
   const wantFocus = useRef(true)
 
+  // Where a key moves from: the focused day, or in a month with no day to focus, the day the cursor
+  // was headed for, so the keys still page on past an empty month rather than stranding focus.
+  const moveFrom = focusDay ?? (loaded === undefined ? null : cursor.day)
+
   function move(target: string, dir: 1 | -1) {
-    if (focusDay === null) return
+    if (moveFrom === null) return
     const targetMonth = target.slice(0, 7)
     if (targetMonth !== month) {
       if (!reachable(targetMonth)) return
@@ -164,21 +168,21 @@ export function GlanceCalendar({ selected, today, onPick, onClose, anchor }: {
   }
 
   function onGridKeyDown(event: React.KeyboardEvent) {
-    if (focusDay === null) return
-    const dayOfMonth = Number(focusDay.slice(8))
-    const weekday = weekdayIndex(focusDay)
+    if (moveFrom === null) return
+    const dayOfMonth = Number(moveFrom.slice(8))
+    const weekday = weekdayIndex(moveFrom)
     switch (event.key) {
-      case 'ArrowLeft': move(addDays(focusDay, -1), -1); break
-      case 'ArrowRight': move(addDays(focusDay, 1), 1); break
-      case 'ArrowUp': move(addDays(focusDay, -7), -1); break
-      case 'ArrowDown': move(addDays(focusDay, 7), 1); break
+      case 'ArrowLeft': move(addDays(moveFrom, -1), -1); break
+      case 'ArrowRight': move(addDays(moveFrom, 1), 1); break
+      case 'ArrowUp': move(addDays(moveFrom, -7), -1); break
+      case 'ArrowDown': move(addDays(moveFrom, 7), 1); break
       case 'PageUp': move(clampDay(shiftMonth(month, -1), dayOfMonth), -1); break
       case 'PageDown': move(clampDay(shiftMonth(month, 1), dayOfMonth), 1); break
       // The week's ends, held inside the month, carrying on back toward the day focus came from
-      // when the end itself is grey.
-      case 'Home': move(`${month}-${pad(Math.max(1, dayOfMonth - weekday))}`, 1); break
-      case 'End': move(`${month}-${pad(Math.min(daysIn(month), dayOfMonth + 6 - weekday))}`, -1); break
-      case 'Enter': case ' ': pick(focusDay); break
+      // when the end itself is grey. Nothing to do in a month with no day to land on.
+      case 'Home': if (focusDay !== null) move(`${month}-${pad(Math.max(1, dayOfMonth - weekday))}`, 1); break
+      case 'End': if (focusDay !== null) move(`${month}-${pad(Math.min(daysIn(month), dayOfMonth + 6 - weekday))}`, -1); break
+      case 'Enter': case ' ': if (focusDay !== null) pick(focusDay); break
       default: return
     }
     event.preventDefault()
@@ -256,8 +260,12 @@ export function GlanceCalendar({ selected, today, onPick, onClose, anchor }: {
   // Focus to the day it is headed for, once there is somewhere to put it: the month has arrived,
   // and on a desktop the popover has been placed (a hidden box cannot take focus).
   useEffect(() => {
-    if (!wantFocus.current || focusDay === null || (!isPhone && placement === null)) return
-    const target = layer.current?.querySelector<HTMLElement>(`[data-day="${focusDay}"]`)
+    if (!wantFocus.current || loaded === undefined || (!isPhone && placement === null)) return
+    // A month with no pickable day focuses the grid itself, the one tab stop it then has, so focus
+    // is never left on the button (on open) or dropped to the body (after a key into the month).
+    const target = focusDay === null
+      ? layer.current?.querySelector<HTMLElement>('.cal-grid')
+      : layer.current?.querySelector<HTMLElement>(`[data-day="${focusDay}"]`)
     if (!target) return
     target.focus({ preventScroll: true })
     wantFocus.current = false
@@ -323,7 +331,8 @@ export function GlanceCalendar({ selected, today, onPick, onClose, anchor }: {
           <Icon name="chevronRight" />
         </button>
       </div>
-      <div className="cal-grid" role="grid" aria-labelledby={titleId} aria-busy={loaded === undefined} onKeyDown={onGridKeyDown}>
+      <div className="cal-grid" role="grid" aria-labelledby={titleId} aria-busy={loaded === undefined}
+        tabIndex={loaded !== undefined && focusDay === null ? 0 : undefined} onKeyDown={onGridKeyDown}>
         <div className="cal-weekdays" role="row">
           {weekdays.map((w) => (
             <span key={w.name} className="cal-weekday" role="columnheader" aria-label={w.name}>{w.initials}</span>

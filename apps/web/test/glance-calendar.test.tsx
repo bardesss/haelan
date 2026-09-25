@@ -58,6 +58,8 @@ let container: HTMLDivElement | null = null
 let root: Root | null = null
 let client: QueryClient | null = null
 let seen: string[] = []
+/** What the stubbed calendar route answers per month; a test may replace one. */
+let months: Record<string, GlanceCalendar> = {}
 let restoreFetch: (() => void) | null = null
 const realShowModal = HTMLDialogElement.prototype.showModal
 const realClose = HTMLDialogElement.prototype.close
@@ -81,12 +83,13 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(Date.UTC(2026, 8, 23, 9, 40))
   seen = []
+  months = { '2026-09': SEPTEMBER, '2026-08': AUGUST }
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
     seen.push(url)
     const month = new URL(url, 'http://x').searchParams.get('month')
-    const body = month === '2026-09' ? SEPTEMBER : month === '2026-08' ? AUGUST : null
+    const body = month !== null && month in months ? months[month]! : null
     return new Response(JSON.stringify(body ?? { error: 'bad_request' }), { status: body === null ? 400 : 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   restoreFetch = () => { globalThis.fetch = original }
@@ -221,6 +224,12 @@ describe('the calendar stylesheet', () => {
   it('draws the selected day\'s dots in the page colour, so both stay visible on the accent fill', () => {
     expect(rule('.cal-day.is-selected')).toContain('background: var(--accent)')
     expect(rule('.cal-day.is-selected .cal-dot')).toContain('background: var(--surface-page)')
+    // Favourable filled, unfavourable a ring: a thinned fill could not be told from a full one.
+    for (const verdict of ['.cal-dot.is-outside', '.cal-dot.is-below']) {
+      const body = rule(`.cal-day.is-selected ${verdict}`)
+      expect(body).toContain('background: none')
+      expect(body).toContain('border: 1px solid var(--surface-page)')
+    }
   })
 
   it('outlines today with a border and draws no shadow anywhere in the calendar', () => {
@@ -288,6 +297,34 @@ describe('the calendar keyboard', () => {
     // Down a week from the 6th is the 13th, grey; the next enabled day going forward is the 14th.
     press('ArrowUp'); press('ArrowRight'); expect(focused()).toBe('2026-09-05')
     press('ArrowRight'); press('ArrowDown'); expect(focused()).toBe('2026-09-14')
+  })
+
+  it('focuses the grid in a month with no day to pick, and pages on from it', async () => {
+    months['2026-09'] = { ...SEPTEMBER, days: [] }
+    await open('2026-09-22')
+    const grid = document.querySelector<HTMLElement>('.cal-grid')!
+    expect(document.activeElement).toBe(grid)
+    expect(panel()!.contains(grid)).toBe(true)
+    expect(grid.tabIndex).toBe(0)
+    expect(tabStops()).toEqual([])
+    press('PageUp')
+    await settle()
+    expect(calendarUrls()).toEqual(['/api/v1/p/p1/glance/calendar?month=2026-09', '/api/v1/p/p1/glance/calendar?month=2026-08'])
+    expect(focused()).toBe('2026-08-22')
+  })
+
+  it('keeps focus in the calendar when a key crosses into an empty month', async () => {
+    const JULY: GlanceCalendar = { month: '2026-07', firstDay: '2026-07-01', days: [day('2026-07-20')] }
+    months = { '2026-09': { ...SEPTEMBER, firstDay: '2026-07-01' }, '2026-08': { month: '2026-08', firstDay: '2026-07-01', days: [] }, '2026-07': JULY }
+    await openOn('2026-09-01')
+    press('ArrowLeft')
+    await settle()
+    expect(title()).toBe('August 2026')
+    expect(document.activeElement).toBe(document.querySelector('.cal-grid'))
+    press('ArrowLeft')
+    await settle()
+    expect(title()).toBe('July 2026')
+    expect(focused()).toBe('2026-07-20')
   })
 
   it('stays put when nothing enabled lies that way', async () => {

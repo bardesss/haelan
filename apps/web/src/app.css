@@ -791,7 +791,9 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 }
 .cal-nav:hover:not(:disabled) { color: var(--text-primary); }
 .cal-nav:disabled { color: var(--text-disabled); cursor: default; }
-.cal-grid { display: flex; flex-direction: column; gap: 4px; }
+.cal-grid { display: flex; flex-direction: column; gap: 4px; border-radius: var(--radius-md); }
+/* The grid takes focus itself only in a month with no day to pick (GlanceCalendar.tsx). */
+.cal-grid:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .cal-weekdays, .cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-weekday { font-size: var(--font-size-micro); color: var(--text-faint); text-align: center; letter-spacing: .04em; padding-bottom: 4px; }
 .cal-cell { min-width: 0; }
@@ -818,10 +820,12 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 /* No verdict (a thin baseline, or today's steps still counting): a ring, present but unjudged. */
 .cal-dot.is-none { border: 1px solid var(--text-faint); }
 /* On the accent fill the dots take the page colour, or the verdict colours would vanish into it
-   (the steps dot is the accent itself). The unfavourable verdict is the page colour thinned. */
+   (the steps dot is the accent itself). A favourable verdict is a filled dot, an unfavourable one a
+   ring: a thinned fill was too close to the full one in dark to tell apart. No verdict is a
+   fainter ring. */
 .cal-day.is-selected .cal-dot { background: var(--surface-page); }
-.cal-day.is-selected .cal-dot.is-outside, .cal-day.is-selected .cal-dot.is-below { background: color-mix(in srgb, var(--surface-page) 45%, var(--accent)); }
-.cal-day.is-selected .cal-dot.is-none { background: none; border-color: var(--surface-page); }
+.cal-day.is-selected .cal-dot.is-outside, .cal-day.is-selected .cal-dot.is-below { background: none; border: 1px solid var(--surface-page); }
+.cal-day.is-selected .cal-dot.is-none { background: none; border-color: color-mix(in srgb, var(--surface-page) 45%, var(--accent)); }
 .cal-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: var(--font-size-micro); color: var(--text-muted); }
 .cal-legend-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin: 0; }
 .cal-legend-name { color: var(--text-secondary); font-weight: var(--weight-medium); }
