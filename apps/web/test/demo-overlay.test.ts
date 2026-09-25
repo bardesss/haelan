@@ -180,6 +180,25 @@ describe('the status panel', () => {
     expect(devices.map((d) => d.metrics)).toEqual([[], ['heart_rate', 'steps']])
   })
 
+  // The Google connection's failing data types (StatusConnection.failures) are the capture's to
+  // carry, not the overlay's to rewrite: a recomposed read keeps them as captured, and a capture
+  // older than the field (CAPTURED_STATUS above has none) recomposes without inventing one.
+  it('carries a captured failures list through a recomposed read, and adds none where there was none', () => {
+    const failures = [{ dataType: 'steps', lastError: '[transient] 503 listing steps', lastErrorAtMs: 1 }]
+    const captured = {
+      ...CAPTURED_STATUS,
+      connections: [{ ...CAPTURED_STATUS.connections[0]!, problem: 'sync_failed', failures }],
+    }
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/sources/watch-2/panel`, { visible: false }, overlay)
+
+    const composed = applyOverlay('/api/status', captured, overlay) as typeof captured
+    expect(composed.connections[0]?.failures).toEqual(failures)
+    expect(composed.problems).toBe(1)
+    const old = applyOverlay('/api/status', CAPTURED_STATUS, overlay) as { connections: Record<string, unknown>[] }
+    expect('failures' in old.connections[0]!).toBe(false)
+  })
+
   it('clearing a choice back to the default answers the captured row again', () => {
     const overlay = createOverlay()
     writeThrough('PUT', `/api/v1/p/${PERSON}/sources/watch-2/panel`, { visible: false }, overlay)

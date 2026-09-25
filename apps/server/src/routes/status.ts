@@ -54,7 +54,13 @@ export function registerStatus(app: FastifyInstance): void {
     // run.lastFailed is instance-wide - the last run's failure count across everyone it synced -
     // so passing it straight through would mark this person's row 'sync_failed' because a
     // housemate's sync failed, not their own. freshnessFor's own failing count is per person.
-    const failing = stores.syncState.freshnessFor([personId]).get(personId)?.failing ?? 0
+    //
+    // The list is what "Part of the last sync failed" was missing: which types, and why. It is
+    // the same set that count is taken over (failuresFor is built on the same dueJobs rule and the
+    // same consecutiveFailures test, and its store test pins the two to agree), so its length is
+    // the count and a second query would only be a chance for them to disagree.
+    const syncFailures = stores.syncState.failuresFor(personId)
+    const failing = syncFailures.length
     return composeStatus({
       today,
       nowMs,
@@ -70,6 +76,7 @@ export function registerStatus(app: FastifyInstance): void {
       activity: readSourceActivity(instance.db, personId, { today }),
       names: new Map(instance.sourceAliases.listNamed(personId).map((s) => [s.id, s.name])),
       choices: instance.sourceVisibility.list(personId),
+      syncFailures,
     })
   })
 }

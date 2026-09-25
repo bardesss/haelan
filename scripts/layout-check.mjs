@@ -157,7 +157,8 @@ if (!existsSync(manifestPath)) {
   console.error(`No capture manifest found at ${manifestPath}. Run: pnpm demo:capture && pnpm demo:build`)
   process.exit(1)
 }
-const manifestUrls = Object.keys(JSON.parse(await readFile(manifestPath, 'utf8')))
+const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+const manifestUrls = Object.keys(manifest)
 
 // A real session id, read off a captured `/sessions/:id` detail read (sessionPath in
 // useWorkoutSession.ts) rather than off the `/sessions` list, which never appears in the manifest
@@ -192,6 +193,96 @@ if (SESSION_ID === null || NIGHT_DATE === null || PAST_DAY === null) {
   process.exit(1)
 }
 const DAY_ROUTE = `/?day=${PAST_DAY}`
+
+// The status panel as a real instance can answer it and the demo's own capture never does: a device
+// named by a Health Connect package with its hash suffix, and a sync failure whose stored message is
+// an HTTP body. Both are single unbroken words far wider than the 20rem panel. The owner's panel
+// showed a sideways scrollbar and every row cut at its left edge because of the first; the second
+// is the same shape arriving by way of the failures list this check would otherwise never see.
+//
+// Injected here, into the captured /api/status the built demo fetches, rather than seeded by
+// scripts/seed-demo.mjs, for three reasons. The published demo stays as it is - a stranger's first
+// look at the status panel is not a failed sync and a package name. The check stops depending on
+// a recapture: demo/capture/out is rebuilt only when CI sees demo files change, and a seed change
+// would leave every older capture unable to fail this check. And it stops depending on how sources
+// are named: a package this long could one day resolve to a friendly default name, which would
+// quietly turn a seeded long name into a short one and this assertion into a check of nothing.
+//
+// Synthetic, both of them: an invented hash, and a failure nobody's sync produced.
+const LONG_SOURCE_NAME = 'com.android.healthconnect.phone.0a1b2c3d4e5f60718293a4b5c6d7e8f9'
+const LONG_FAILURE = '[schema_drift] 400 listing steps: {"error":{"code":400,"message":"Invalid'
+  + '_filter_expression_near_token_0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6","status":"INVALID_ARGUMENT"}}'
+const STATUS_FILE = manifest['/api/status'] ?? null
+if (STATUS_FILE === null) {
+  console.error('layout:check found no /api/status in the capture manifest; the status panel checks need one')
+  process.exit(1)
+}
+const capturedStatus = JSON.parse(await readFile(join(DIST, 'demo-api', STATUS_FILE), 'utf8'))
+const googleConnection = capturedStatus.connections.find((c) => c.kind === 'google')
+if (googleConnection === undefined) {
+  console.error('layout:check found no Google connection in the captured /api/status to add a long name to')
+  process.exit(1)
+}
+googleConnection.devices.unshift({
+  sourceId: 'layout-check-long-name', name: LONG_SOURCE_NAME,
+  lastReportedDate: googleConnection.devices[0]?.lastReportedDate ?? null, stale: false, choice: null, metrics: [],
+})
+if (googleConnection.problem === null) capturedStatus.problems += 1
+googleConnection.problem = 'sync_failed'
+googleConnection.failures = [{ dataType: 'steps', lastError: LONG_FAILURE, lastErrorAtMs: googleConnection.lastDeliveryAtMs }]
+const INJECTED_STATUS = JSON.stringify(capturedStatus)
+
+/**
+ * Whether an open status panel scrolls sideways, and whether the long name above is really in it.
+ * scrollWidth over clientWidth on the panel's own scroll container, the popover or the dialog: the
+ * page-wide measure the route sweep uses cannot see this, because both are fixed or top-layer
+ * boxes whose overflow never reaches the document. `overflow-x: hidden` on them (app.css) hides a
+ * scrollbar but not the measurement - a hidden-overflow element still reports its content's full
+ * scrollWidth - so a row that overflows still fails here even though the reader can no longer
+ * scroll to it.
+ *
+ * The other two checks keep the first honest. A panel that never rendered the long name would pass
+ * the overflow test trivially, so the name has to be there and actually truncated (wider than its
+ * box). And the day beside it has to stay on the name's line, which is what "the day column never
+ * wraps" means to a reader: a long name must not push its date down into a second row.
+ */
+async function statusPanelFits(page, selector, where) {
+  const fit = await page.evaluate(({ selector, name }) => {
+    const panel = document.querySelector(selector)
+    const nameEl = [...(panel?.querySelectorAll('.status-device-name') ?? [])].find((el) => el.textContent === name) ?? null
+    const day = nameEl?.parentElement?.querySelector('.status-device-day') ?? null
+    return panel === null ? null : {
+      scrollWidth: panel.scrollWidth, clientWidth: panel.clientWidth,
+      named: nameEl !== null, truncated: nameEl !== null && nameEl.scrollWidth > nameEl.clientWidth,
+      sameLine: nameEl !== null && day !== null
+        && Math.abs(nameEl.getBoundingClientRect().top - day.getBoundingClientRect().top) < 2,
+      failure: panel.querySelector('.status-failure details .status-failure-raw') !== null,
+    }
+  }, { selector, name: LONG_SOURCE_NAME })
+  check(fit !== null, `${where}: not found to measure`)
+  if (fit === null) return
+  check(fit.scrollWidth <= fit.clientWidth,
+    `${where} overflows sideways: ${fit.scrollWidth}px of content in a ${fit.clientWidth}px panel`)
+  check(fit.named, `${where} did not render the injected long device name`)
+  check(fit.truncated, `${where}: the long device name is not truncated inside its own box`)
+  check(fit.sameLine, `${where}: the long device name pushed its day onto another line`)
+  check(fit.failure, `${where} did not render the injected sync failure`)
+
+  // Then again with every Details open: a closed <details> lays out nothing of its content, so the
+  // raw HTTP body only reaches the panel's width once a reader asks for it. Closed again after, so
+  // the rest of the sweep meets the panel as it opened.
+  const opened = await page.evaluate((selector) => {
+    const panel = document.querySelector(selector)
+    const details = [...(panel?.querySelectorAll('details') ?? [])]
+    for (const d of details) d.open = true
+    const answer = { count: details.length, scrollWidth: panel?.scrollWidth ?? 0, clientWidth: panel?.clientWidth ?? 0 }
+    for (const d of details) d.open = false
+    return answer
+  }, selector)
+  check(opened.count > 0 && opened.scrollWidth <= opened.clientWidth,
+    `${where} overflows sideways with its failure details open: ${opened.scrollWidth}px in ${opened.clientWidth}px `
+      + `(${opened.count} details)`)
+}
 
 const ROUTE_PARAMS = { sessionId: SESSION_ID, localDate: NIGHT_DATE }
 
@@ -235,6 +326,11 @@ function routeUrl(route) {
 let crashError = null
 try {
   const page = await browser.newPage({ viewport: PHONE })
+  // Every read of the captured status answers the one with the long name and the failure in it
+  // (INJECTED_STATUS, above), for the whole sweep: the route pages' own widths are measured with it
+  // too, which is what a real instance's shell carries.
+  await page.route(`**${DEMO_PREFIX}/demo-api/${STATUS_FILE}`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: INJECTED_STATUS }))
 
   const measure = () => page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
@@ -559,6 +655,7 @@ try {
         `the status sheet: ${inSheet.small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(inSheet.small)}`,
       )
       for (const target of inSheet.exempt) exempted.push({ where: 'the status sheet', target })
+      await statusPanelFits(page, 'dialog.status-sheet[open]', 'the status sheet')
 
       const sheetBox = await sheet.boundingBox()
       const phoneViewport = page.viewportSize()
@@ -729,6 +826,7 @@ try {
         box !== null && await paintableAt(page, '.status-popover', box),
         'the status popover is clipped or covered at 900x380 expanded',
       )
+      await statusPanelFits(page, '.status-popover', 'the status popover at 900x380')
       await page.keyboard.press('Escape')
       await page.waitForTimeout(SETTLE_MS)
       check(!(await popover.isVisible().catch(() => false)), 'Escape did not close the status popover at 900x380')
@@ -766,6 +864,7 @@ try {
             collapsedBox !== null && await paintableAt(page, '.status-popover', collapsedBox),
             'the status popover is clipped or covered at 900x380 collapsed',
           )
+          await statusPanelFits(page, '.status-popover', 'the collapsed status popover at 900x380')
         }
       }
     }
@@ -874,7 +973,8 @@ console.log(
     + `the annotate panel opened and swept on ${PANEL_OPENERS.length} routes, `
     + `${BAND_ROUTE} across the rest of the band, the same routes rotated across the breakpoint, `
     + 'the drawer and its three ways out, the rail foot, the status panel opened '
-    + `${statusPanelsOpened} times (phone sheet, desktop popover, collapsed-rail popover), `
+    + `${statusPanelsOpened} times (phone sheet, desktop popover, collapsed-rail popover) with a long `
+    + 'device name and a failed sync injected and no sideways overflow in any of them, '
     + `the person menu opened ${personMenusOpened} times (collapsed and expanded rail), `
     + `and the dashboard on a past day (${DAY_ROUTE}) at both widths with its calendar opened `
     + `${calendarsOpened} times (phone sheet with hit areas, grey days included; popover).`,

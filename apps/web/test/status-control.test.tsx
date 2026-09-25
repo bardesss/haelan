@@ -11,7 +11,8 @@ import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { StatusControl } from '../src/components/StatusControl.js'
-import { dayLabel } from '../src/components/StatusPanel.js'
+import { dayLabel, failureKind } from '../src/components/StatusPanel.js'
+import { AuthError, ConfigError, DataQualityError, SchemaDriftError, TransientError } from '@haelan/core'
 import { navigate } from '../src/router.js'
 import { statusKey } from '../src/data/useStatusPanel.js'
 import type { StatusPanel, StatusConnection } from '../src/data/useStatusPanel.js'
@@ -539,6 +540,141 @@ describe('the panel content', () => {
     mount(panel({ connections: [], sync: null }))
     press(icon())
     expect(popover()!.textContent).toContain('Nothing is connected yet.')
+  })
+
+  // A Health Connect package name with its hash suffix is one unbroken word far wider than the
+  // panel. The name truncates on one line (app.css's .status-device-name) and keeps the whole name
+  // on a title, so a hover still reads it; layout:check is what proves the panel no longer scrolls
+  // sideways, since happy-dom does no layout.
+  it('keeps a device\'s full name on a title, on the element that truncates it', () => {
+    const long = 'com.example.healthconnect.phone.a1b2c3d4e5f60718293a4b5c6d7e8f90'
+    mount(panel({ connections: [google({ devices: [{ sourceId: 'hc', name: long, lastReportedDate: '2026-09-24', stale: false, choice: null, metrics: [] }] })] }))
+    press(icon())
+    const name = popover()!.querySelector('.status-device')!.children[0]!
+    expect(name.className).toBe('status-device-name')
+    expect(name.getAttribute('title')).toBe(long)
+    expect(name.textContent).toBe(long)
+  })
+})
+
+/**
+ * "Part of the last sync failed." said something went wrong and nothing about what. The server now
+ * sends the failing data types (StatusConnection.failures, newest error first), and the panel names
+ * them, with a plain reason where the stored message's `[kind]` tag makes one reliable and the raw
+ * message folded away under Details either way.
+ */
+describe('what failed in the last sync', () => {
+  const FAILURES = [
+    { dataType: 'steps', lastError: '[transient] 503 listing steps: {"error":{"code":503}}', lastErrorAtMs: NOW - 60_000 },
+    { dataType: 'weight', lastError: '[schema_drift] 400 listing weight: bad filter', lastErrorAtMs: NOW - 120_000 },
+  ]
+  const failing = (failures: StatusConnection['failures']): StatusPanel =>
+    panel({ connections: [google({ problem: 'sync_failed', failures })], problems: 1 }, { lastFailed: failures?.length ?? 1 })
+  const items = (): HTMLElement[] => [...popover()!.querySelectorAll<HTMLElement>('.status-failure')]
+
+  it('says how many types failed, and names each in the order the server sent', () => {
+    mount(failing(FAILURES))
+    press(icon())
+    expect(popover()!.querySelector('.status-problem')!.textContent).toBe('2 data types failed in the last sync:')
+    expect(items().map((li) => li.querySelector('.status-failure-name')!.textContent)).toEqual(['Steps', 'Weight'])
+  })
+
+  it('says one data type in the singular', () => {
+    mount(failing([FAILURES[0]!]))
+    press(icon())
+    expect(popover()!.querySelector('.status-problem')!.textContent).toBe('1 data type failed in the last sync:')
+  })
+
+  it('gives each a plain reason from its error kind, with the raw message collapsed under Details', () => {
+    mount(failing(FAILURES))
+    press(icon())
+    const [steps, weight] = items()
+    expect(steps!.querySelector('.status-failure-reason')!.textContent).toBe('A temporary error. The next sync tries again.')
+    expect(weight!.querySelector('.status-failure-reason')!.textContent).toBe('Google did not accept the request, or sent an answer Haelan cannot read.')
+    const details = steps!.querySelector('details')!
+    // Collapsed by the attribute: happy-dom does not hide a closed <details>'s content, so its
+    // visibility would say nothing. See the happy-dom note in the project memory.
+    expect(details.hasAttribute('open')).toBe(false)
+    expect(details.querySelector('summary')!.textContent).toBe('Details')
+    expect(details.querySelector('.status-failure-raw')!.textContent).toBe(FAILURES[0]!.lastError)
+  })
+
+  // Keyed on the classes that produce the messages rather than on hand-written tags, so a kind
+  // errors.ts gains without a reason here (or a tag format that changes) goes red in this file
+  // instead of quietly dropping every failure of that kind to "Details" only.
+  it('has a reason for every error kind core records', () => {
+    const errors = [new AuthError('a'), new TransientError('b'), new SchemaDriftError('c'), new DataQualityError('d'), new ConfigError('e')]
+    expect(errors.map((error) => failureKind(error.message))).toEqual(errors.map((error) => error.kind))
+    mount(failing(errors.map((error, i) => ({ dataType: `type-${i}`, lastError: error.message, lastErrorAtMs: NOW }))))
+    press(icon())
+    const reasons = items().map((li) => li.querySelector('.status-failure-reason')?.textContent ?? null)
+    expect(reasons.every((reason) => reason !== null && !reason.startsWith('status.'))).toBe(true)
+  })
+
+  it('shows only the raw message for an error it cannot classify, and nothing for none at all', () => {
+    mount(failing([
+      { dataType: 'steps', lastError: 'token refresh failed 400: {"error":"weird"}', lastErrorAtMs: NOW },
+      { dataType: 'weight', lastError: null, lastErrorAtMs: null },
+    ]))
+    press(icon())
+    const [steps, weight] = items()
+    expect(steps!.querySelector('.status-failure-reason')).toBeNull()
+    expect(steps!.querySelector('details .status-failure-raw')!.textContent).toBe('token refresh failed 400: {"error":"weird"}')
+    expect(weight!.querySelector('.status-failure-reason')).toBeNull()
+    expect(weight!.querySelector('details')).toBeNull()
+    expect(weight!.querySelector('.status-failure-name')!.textContent).toBe('Weight')
+  })
+
+  it('cuts a long raw message short', () => {
+    const body = 'x'.repeat(600)
+    mount(failing([{ dataType: 'steps', lastError: `[transient] ${body}`, lastErrorAtMs: NOW }]))
+    press(icon())
+    const raw = items()[0]!.querySelector('.status-failure-raw')!.textContent!
+    expect(raw).toBe(`[transient] ${body}`.slice(0, 200) + '…')
+  })
+
+  it('names a data type the catalogue has no label for by its id rather than dropping it', () => {
+    mount(failing([{ dataType: 'not-a-type', lastError: '[config] nope', lastErrorAtMs: NOW }]))
+    press(icon())
+    expect(items()[0]!.querySelector('.status-failure-name')!.textContent).toBe('not-a-type')
+    expect(items()[0]!.querySelector('.status-failure-reason')!.textContent).toBe('A setup problem on this server.')
+  })
+
+  // A demo capture recorded before the field existed has no `failures` at all, and a server that
+  // flagged a failure with nothing in sync_state (a race between the run and this read) sends an
+  // empty list: both still say the old sentence rather than "0 data types failed".
+  it('keeps the old sentence when the list is absent or empty', () => {
+    mount(failing(undefined))
+    press(icon())
+    expect(popover()!.querySelector('.status-problem')!.textContent).toBe('Part of the last sync failed.')
+    expect(popover()!.querySelector('.status-failures')).toBeNull()
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    mount(failing([]))
+    press(icon())
+    expect(popover()!.querySelector('.status-problem')!.textContent).toBe('Part of the last sync failed.')
+    expect(popover()!.querySelector('.status-failures')).toBeNull()
+  })
+
+  it('lists nothing for a connection whose problem is not a failed sync', () => {
+    mount(panel({ connections: [google({ problem: 'revoked', failures: FAILURES })], sync: null, problems: 1 }))
+    press(icon())
+    expect(popover()!.querySelector('.status-failures')).toBeNull()
+  })
+
+  it('reads naturally in Dutch', () => {
+    mount(failing(FAILURES), 'nl')
+    press(icon())
+    expect(popover()!.querySelector('.status-problem')!.textContent).toBe('Bij de laatste synchronisatie zijn 2 gegevenstypen mislukt:')
+    const [steps] = items()
+    expect(steps!.querySelector('.status-failure-name')!.textContent).toBe('Stappen')
+    expect(steps!.querySelector('.status-failure-reason')!.textContent).toBe('Een tijdelijke fout. De volgende synchronisatie probeert het opnieuw.')
+    expect(steps!.querySelector('summary')!.textContent).toBe('Details')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    mount(failing([FAILURES[0]!]), 'nl')
+    press(icon())
+    expect(popover()!.querySelector('.status-problem')!.textContent).toBe('Bij de laatste synchronisatie is 1 gegevenstype mislukt:')
   })
 })
 

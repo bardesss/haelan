@@ -24,11 +24,38 @@ export interface StatusDevice {
   metrics: string[]
 }
 
+/**
+ * One data type whose sync is failing for this person, as sync_state records it: the same set
+ * SyncStateStore.freshnessFor counts as `failing` (a type this person syncs whose
+ * consecutiveFailures is above zero). `lastError` is stored raw - usually a HaelanError's message,
+ * `[kind] detail`, cut at 500 characters by recordFailure - and is left raw here: turning it into
+ * something a reader can follow is a question about the reader's language, so the web does it.
+ */
+export interface StatusFailure {
+  dataType: string
+  lastError: string | null
+  lastErrorAtMs: number | null
+}
+
 export interface StatusConnection {
   kind: ConnectionKind
   lastDeliveryAtMs: number | null
   problem: ConnectionProblem | null
   devices: StatusDevice[]          // visible devices only, most recent first
+  /**
+   * The Google connection's failing data types, newest error first; an empty array when none
+   * fail. Absent on the phone, whose uploads are not synced per data type and so have nothing in
+   * sync_state to report.
+   *
+   * Optional in the type rather than required because the demo answers /api/status from a
+   * capture, and a capture recorded before this field existed carries none: the panel must read an
+   * absent list as "nothing to name", not fall over on it.
+   *
+   * Here because "Part of the last sync failed" on its own told the reader something went wrong
+   * and nothing about what: the per-type failures were on disk all along, counted by freshnessFor
+   * for the members list and never shown to the person they belong to.
+   */
+  failures?: StatusFailure[]
 }
 
 export interface StatusSync {
@@ -60,6 +87,8 @@ export interface StatusInput {
   }>
   names: ReadonlyMap<string, string>
   choices: ReadonlyMap<string, boolean>
+  /** This person's failing data types (SyncStateStore.failuresFor), in any order. */
+  syncFailures: ReadonlyArray<StatusFailure>
 }
 
 /**
@@ -125,7 +154,14 @@ export function composeStatus(input: StatusInput): StatusPanel {
     const problem: ConnectionProblem | null = input.google.state === 'revoked' ? 'revoked'
       : input.google.state === 'credentials_unreadable' ? 'credentials_unreadable'
         : (input.run.lastFailed ?? 0) > 0 ? 'sync_failed' : null
-    connections.push({ kind: 'google', lastDeliveryAtMs: input.run.lastFinishedAtMs, problem, devices: google })
+    // Newest error first, because the one that failed last is the likeliest to still be failing
+    // on the next run and the likeliest to be what the reader just saw go wrong. A failure with
+    // no timestamp sorts last - "newest" cannot be claimed for it - and ties fall to the id so the
+    // list does not shuffle between polls. Copied before sorting: the input is the caller's.
+    const failures = input.syncFailures.map((f) => ({ ...f })).sort((a, b) =>
+      (b.lastErrorAtMs ?? Number.NEGATIVE_INFINITY) - (a.lastErrorAtMs ?? Number.NEGATIVE_INFINITY)
+      || a.dataType.localeCompare(b.dataType))
+    connections.push({ kind: 'google', lastDeliveryAtMs: input.run.lastFinishedAtMs, problem, devices: google, failures })
   }
   if (input.phone.lastUploadAtMs !== null) {
     const quiet = input.nowMs - input.phone.lastUploadAtMs > PHONE_QUIET_MS

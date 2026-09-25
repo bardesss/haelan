@@ -15,7 +15,7 @@ import { sourceNamesKey } from './useSourceNames.js'
 // StatusPanel lives in an import-free core module that composeStatus builds the answer from, so a
 // copy here would be a second opinion about a shape that already has a single owner - and the
 // panel reads every field of it, so "name only what is read" would name all of them anyway.
-export type { StatusPanel, StatusConnection, StatusDevice, StatusSync, ConnectionKind, ConnectionProblem } from '@haelan/core/status-panel'
+export type { StatusPanel, StatusConnection, StatusDevice, StatusSync, StatusFailure, ConnectionKind, ConnectionProblem } from '@haelan/core/status-panel'
 
 /**
  * One key for the status panel's query, its own invalidation after a click, and the whole-person

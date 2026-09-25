@@ -176,6 +176,34 @@ describe('GET /api/status', () => {
     expect(googleB?.problem).toBeNull()
   })
 
+  // "Part of the last sync failed" named nothing. The per-type failures were in sync_state all
+  // along; this is the route handing them to the panel, per person like the count above, so a
+  // housemate's failing types never appear in this person's list.
+  it("lists the caller's own failing data types on the Google connection, newest first", async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const tokenA = await harness.signIn()
+    await harness.addPerson({ id: 'p2', displayName: 'Other', username: 'other' })
+    harness.app.haelan.instance.credentials.putRefreshToken({
+      personId: 'p2', refreshToken: 'stub-refresh-token-2', scopes: [], nowMs: harness.clock.nowMs,
+    })
+    const tokenB = await harness.signIn('other', 'a good long password')
+    const syncState = harness.app.haelan.stores.syncState
+    const now = harness.clock.nowMs
+    syncState.recordFailure({ personId: 'p1', dataType: 'steps', error: new TransientError('503 listing steps'), nowMs: now - 2000 })
+    syncState.recordFailure({ personId: 'p1', dataType: 'weight', error: new TransientError('503 listing weight'), nowMs: now - 1000 })
+    syncState.recordFailure({ personId: 'p2', dataType: 'sleep', error: new TransientError('not yours'), nowMs: now })
+
+    type Body = { connections: { kind: string, failures?: { dataType: string, lastError: string | null, lastErrorAtMs: number | null }[] }[] }
+    const bodyA = (await status(harness, tokenA)).json() as Body
+    expect(bodyA.connections.find((c) => c.kind === 'google')?.failures).toEqual([
+      { dataType: 'weight', lastError: '[transient] 503 listing weight', lastErrorAtMs: now - 1000 },
+      { dataType: 'steps', lastError: '[transient] 503 listing steps', lastErrorAtMs: now - 2000 },
+    ])
+    const bodyB = (await status(harness, tokenB)).json() as Body
+    expect(bodyB.connections.find((c) => c.kind === 'google')?.failures?.map((f) => f.dataType)).toEqual(['sleep'])
+  })
+
   it("never shows another person's sources", async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()

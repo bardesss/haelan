@@ -16,6 +16,13 @@ export interface SyncStateRow {
   consecutiveFailures: number
 }
 
+/** One data type failing for a person right now - statusPanel.ts's StatusFailure, structurally. */
+export interface SyncFailure {
+  dataType: string
+  lastError: string | null
+  lastErrorAtMs: number | null
+}
+
 /** What the members list says about one person's sync, and the only aggregate over sync_state
  *  anything outside this store asks for. */
 export interface SyncFreshness {
@@ -206,6 +213,29 @@ export class SyncStateStore {
       })
     }
     return result
+  }
+
+  /**
+   * The data types failing for one person right now, each with the last error sync_state kept for
+   * it, for the status panel's "what failed" list. In no particular order: composeStatus orders it.
+   *
+   * Exactly the set freshnessFor counts as `failing` - a type this person syncs (dueJobs, so an
+   * excluded type is not theirs to be failing on) whose consecutiveFailures is above zero - and
+   * built the same way on purpose. The panel prints a count beside the list, and the members page
+   * prints freshnessFor's count for the same person; the two drifting apart would put two answers
+   * to one question on two screens. `lastError` alone is not the test: a type that failed and then
+   * recovered keeps its old message, and consecutiveFailures is what records that it recovered.
+   */
+  failuresFor(personId: string): SyncFailure[] {
+    const due = new Set(this.dueJobs([personId], 0).map((job) => job.dataType))
+    return this.#db.select({
+      dataType: syncState.dataType,
+      lastError: syncState.lastError,
+      lastErrorAtMs: syncState.lastErrorAtMs,
+      consecutiveFailures: syncState.consecutiveFailures,
+    }).from(syncState).where(eq(syncState.personId, personId)).all()
+      .filter((row) => row.consecutiveFailures > 0 && due.has(row.dataType))
+      .map((row) => ({ dataType: row.dataType, lastError: row.lastError ?? null, lastErrorAtMs: row.lastErrorAtMs ?? null }))
   }
 
   private upsert(personId: string, dataType: string, set: Partial<typeof syncState.$inferInsert>): void {
