@@ -96,7 +96,9 @@ export function Dashboard() {
 
   // On its way to the nearest day (or back to today), the refusal is not an error to show.
   if (isError && nearest === null && !refused) return <><Header timezone={timezone} day={urlDay} /><ErrorState onRetry={() => void refetch()} error={error} /></>
-  if (isPending || isError || glance === undefined) return <><Header timezone={timezone} day={urlDay} /><Loading /></>
+  // A gap day's 404 carries the glance already on screen, if there was one (useGlance), so the
+  // redirect to its nearest day holds the page rather than flashing this.
+  if (glance === undefined || (isError && nearest === null)) return <><Header timezone={timezone} day={urlDay} /><Loading /></>
 
   const { sleep, recovery, day } = glance
   // Stepping to a day not in the cache: `glance` is still the previous day's answer (useGlance's

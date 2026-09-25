@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { IntradayPoint } from './useIntraday.js'
 import type { WorkoutSession } from './useSessions.js'
@@ -163,7 +164,8 @@ export function useGlance(day: string | null = null): {
   glance: Glance | undefined
   nearest: string | null
   isPending: boolean
-  /** True while `glance` is still the previous day's answer, held on screen as this day loads. */
+  /** True while `glance` is still the previous day's answer, held on screen as this day loads, or
+   *  as the page redirects from a day with no data to its `nearest`. */
   isPlaceholderData: boolean
   isError: boolean
   error: unknown
@@ -187,11 +189,26 @@ export function useGlance(day: string | null = null): {
     placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === personId ? previous : undefined,
   })
 
+  // The glance last on screen, and whose it was. placeholderData covers a day still loading, but
+  // TanStack drops it the moment that day's query errors, and a gap day's 404 is an error: without
+  // this the page fell to its loading state for the render between the 404 and the redirect to
+  // `nearest`. Once the redirect lands, the nearest day's own placeholder is this same glance again
+  // (TanStack hands placeholderData the last query that had data, which the gap never did), so
+  // holding it here for the 404 alone is what closes the gap. On a cold load there is nothing to
+  // hold and the page shows its loading state, as it does for today.
+  const shown = useRef<{ personId: string, glance: Glance } | null>(null)
+  if (query.data !== undefined && personId !== undefined) shown.current = { personId, glance: query.data }
+  const nearest = nearestOf(query.error)
+  const last = shown.current
+  const held = nearest !== null && query.data === undefined && last !== null && last.personId === personId
+    ? last.glance
+    : undefined
+
   return {
-    glance: query.data,
-    nearest: nearestOf(query.error),
+    glance: query.data ?? held,
+    nearest,
     isPending: query.isPending,
-    isPlaceholderData: query.isPlaceholderData,
+    isPlaceholderData: query.isPlaceholderData || held !== undefined,
     isError: query.isError,
     error: query.error,
     refetch: () => { void query.refetch() },

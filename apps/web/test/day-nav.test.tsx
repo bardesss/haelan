@@ -109,6 +109,29 @@ const button = (name: string): HTMLButtonElement | undefined =>
 const heading = (): string | null | undefined => container!.querySelector('h1')?.textContent
 const subLine = (): string | null | undefined => container!.querySelector('.dash-date')?.textContent
 
+/**
+ * Every state the page ever committed to the DOM, from now on: 'loading' for Loading's <p class="empty">,
+ * 'error' for ErrorState's <div class="empty">. A flash lives for one commit before an effect moves
+ * the page on, so reading the tree after the fact never sees it; a MutationObserver sees every commit.
+ */
+function watchStates(): () => string[] {
+  const seen: string[] = []
+  const note = (records: MutationRecord[]) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof Element)) continue
+        for (const el of [node, ...node.querySelectorAll('.empty')]) {
+          if (!el.matches('.empty')) continue
+          seen.push(el.tagName === 'P' ? 'loading' : 'error')
+        }
+      }
+    }
+  }
+  const observer = new MutationObserver(note)
+  observer.observe(container!, { childList: true, subtree: true })
+  return () => { note(observer.takeRecords()); observer.disconnect(); return seen }
+}
+
 function press(key: string, target: EventTarget = document.body, init: KeyboardEventInit = {}): void {
   act(() => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })) })
 }
@@ -212,6 +235,18 @@ describe('the dashboard header, a past day', () => {
     } finally { restore() }
   })
 
+  // Opened cold on a gap day there is no glance to hold: the page says Loading, as it does for
+  // today, and never the error state its 404 would otherwise be.
+  it('opens a gap day cold on the loading state, never the error state, and lands on the nearest day', async () => {
+    window.history.replaceState(null, '', '/?day=2026-09-21')
+    const states = watchStates()
+    const { restore } = await mountPage({ '2026-09-21': { nearest: '2026-09-20' }, '2026-09-20': { ...pastGlance(), today: '2026-09-20' } })
+    try {
+      expect(heading()).toBe('Sunday, September 20')
+      expect(states()).toEqual(['loading'])
+    } finally { restore() }
+  })
+
   // The server answers a day before the person's first with a 400 and no nearest day; Retry only
   // asked for the same 400 again, so the page was a dead end.
   it('falls back to today, replacing the URL, when the asked-for day is refused', async () => {
@@ -270,6 +305,28 @@ describe('stepping to a day not yet loaded', () => {
       expect(heading()).toBe('Monday, September 21')
       expect(button('Previous day')!.disabled).toBe(false)
       expect(button('Next day')!.disabled).toBe(false)
+    } finally { restore() }
+  })
+
+  // A step onto a gap day answers 404 { nearest }, and TanStack drops the placeholder the moment
+  // the query errors: the page fell to Loading for the commit before the redirect, the cards
+  // vanishing under the pointer. It holds the day on screen until the nearest one arrives.
+  it('holds the previous cards through the redirect from a gap day to its nearest day', async () => {
+    let release: (body: Glance) => void = () => {}
+    const held = new Promise<Glance>((resolve) => { release = resolve })
+    const { client, restore } = await mountPage({ '2026-09-22': pastGlance(), '2026-09-21': { nearest: '2026-09-20' }, '2026-09-20': held })
+    try {
+      const states = watchStates()
+      press('ArrowLeft')
+      await settle()
+      expect(window.location.search).toBe('?day=2026-09-20')
+      expect(container!.querySelector('.dashboard-grid')!.className).toBe('grid dashboard-grid dashboard-grid-stale')
+      expect(heading()).toBe('Sunday, September 20')
+
+      release({ ...pastGlance({ previous: '2026-09-19', next: '2026-09-22' }), today: '2026-09-20' })
+      await flush(client, () => container!.innerHTML)
+      expect(container!.querySelector('.dashboard-grid')!.className).toBe('grid dashboard-grid')
+      expect(states()).toEqual([])
     } finally { restore() }
   })
 
