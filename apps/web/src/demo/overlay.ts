@@ -102,6 +102,12 @@ const SERIES = /^\/api\/v1\/p\/[^/]+\/series$/
 const INTRADAY = /^\/api\/v1\/p\/[^/]+\/intraday(?:\/window)?$/
 const SESSIONS_LIST = /^\/api\/v1\/p\/[^/]+\/sessions$/
 const SESSION_ITEM = /^\/api\/v1\/p\/[^/]+\/sessions\/([^/]+)$/
+// Matched against the path alone (applyOverlay splits the query off first), so a past day's
+// `/glance?day=` (M9c) is marked exactly as today's `/glance` is. `/glance/calendar` does not match
+// and needs no overlay of its own: its verdicts are sleep and steps against their bands, and the
+// one session exclusion a demo visitor can write (a workout, from its own page) changes neither. A
+// day-metric exclusion is left out of both on purpose, as composeGlance leaves it out of the
+// glance's figures, so the calendar's dots and the day they open still agree.
 const GLANCE = /^\/api\/v1\/p\/[^/]+\/glance$/
 
 function splitUrl(url: string): { path: string, params: URLSearchParams } {

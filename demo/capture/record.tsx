@@ -31,6 +31,7 @@ import { CHART_VARS } from '../../apps/web/src/charts/tokens.js'
 import { DEMO_CLOCK_MS } from '../../apps/web/src/demo/instant.js'
 import { flush } from '../../apps/web/test/flush.js'
 import { startCaptureServer } from './server.js'
+import { sliceToFirstDay, unreachableDays } from './slice.js'
 import type { CaptureServer } from './server.js'
 import { writeCapture } from '../../scripts/capture-demo.mjs'
 import type { WorkoutSession } from '../../apps/web/src/data/useSessions.js'
@@ -72,6 +73,21 @@ const DEMO_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam
 // ControlRow at all - routes.tsx's own table names every unparameterised path, and this is that
 // table minus those four. The Dashboard is not here either since M9b: it is the glance now, which
 // has no source picker, so sweeping it by source would only remount one page for nothing.
+/** How many days the dashboard steps back through in the demo, the demo day included (M9c: five weeks). */
+const DAY_WINDOW = 35
+
+/** Every 'YYYY-MM' from `from`'s month through `to`'s, in order. */
+function monthsBetween(from: string, to: string): string[] {
+  const months: string[] = []
+  let [year, month] = from.slice(0, 7).split('-').map(Number) as [number, number]
+  for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = `${year}-${String(month).padStart(2, '0')}`) {
+    months.push(m)
+    month += 1
+    if (month > 12) { month = 1; year += 1 }
+  }
+  return months
+}
+
 const SOURCE_ROUTES = new Set(['/activity', '/sleep', '/recovery', '/health', '/weight'])
 
 /** Whether `path` reads range/anchor from the url at all. Settings, Account and Nutrition are
@@ -319,6 +335,56 @@ describe('the capture sweep', () => {
     ).values()]
     expect(nights.length, 'the seed produced no nights in the default week/month views').toBeGreaterThan(0)
     for (const night of nights) await mount(NIGHT_ROUTE.replace(':localDate', night.localDate))
+
+    // The dashboard's days (M9c): a past day's glance for every day with data in the five weeks
+    // ending on the demo day, and the calendar months they fall in. Which days have data is the
+    // calendar's own answer (it lists exactly the days daysWithData does), so the arrows, the
+    // calendar and this list cannot disagree. Fetched directly, as the wide heart rate series above
+    // is: a mount per day would cost a page render each for the same one read. The demo day itself
+    // is the plain /glance the sweep already recorded (useDashboardDay drops a `?day=` naming today).
+    const windowStart = addDays(DEMO_DATE, -(DAY_WINDOW - 1))
+    const glanceDays: string[] = []
+    for (const month of monthsBetween(windowStart, DEMO_DATE)) {
+      const reply = await server.fetch(`/api/v1/p/${server.personId}/glance/calendar?month=${month}`)
+      const { days } = await reply.json() as { days: { localDate: string }[] }
+      for (const { localDate } of days) if (localDate >= windowStart && localDate < DEMO_DATE) glanceDays.push(localDate)
+    }
+    glanceDays.sort()
+    expect(glanceDays.length, 'the seed has no day with data in the five weeks before the demo day').toBeGreaterThan(0)
+    const firstDay = glanceDays[0]!
+    const pastNights = new Set<string>()
+    for (const day of glanceDays) {
+      const reply = await server.fetch(`/api/v1/p/${server.personId}/glance?day=${day}`)
+      const { sleep } = await reply.json() as { sleep: { localDate: string } | null }
+      if (sleep !== null) pastNights.add(sleep.localDate)
+    }
+
+    // One past day through the real page, to prove the glance is the whole of what it reads: had
+    // it asked for anything else, that url would be recorded for this one day only.
+    const beforeDay = new Set(server.recorded.keys())
+    await mount(`/?day=${firstDay}`)
+    expect([...server.recorded.keys()].filter((url) => !beforeDay.has(url)), 'a past day read more than its glance')
+      .toEqual([])
+
+    // Each past day's night card links to that night's own page.
+    const mountedNights = new Set(nights.map((night) => night.localDate))
+    for (const night of [...pastNights].sort()) {
+      if (!mountedNights.has(night)) await mount(NIGHT_ROUTE.replace(':localDate', night))
+    }
+
+    // The demo's archive begins on its first captured day (slice.ts's own comment says why the
+    // captured JSON is trimmed rather than the server bounded).
+    sliceToFirstDay(server.recorded, firstDay)
+    const glanceOf = (day: string) => server.recorded.get(`/api/v1/p/${server.personId}/glance?day=${day}`) as
+      { nav: { previous: string | null } } | undefined
+    expect(glanceOf(firstDay)?.nav.previous, 'the first captured day still steps back').toBeNull()
+    for (const [url, body] of server.recorded) {
+      if (!url.includes('/glance/calendar?')) continue
+      const calendar = body as { firstDay: string | null, days: { localDate: string }[] }
+      expect(calendar.firstDay, url).toBe(firstDay)
+      expect(calendar.days.every((day) => day.localDate >= firstDay), url).toBe(true)
+    }
+    expect(unreachableDays(server.recorded, DEMO_DATE), 'days the dashboard opens that the demo cannot answer').toEqual([])
 
     // The manifest itself still has to be non-empty (writeCapture's own refusal), which is a
     // stricter, whole-sweep fact that every per-mount landing check above cannot by itself
