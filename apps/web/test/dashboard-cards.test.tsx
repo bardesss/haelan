@@ -13,6 +13,7 @@ import { I18nProvider, initI18n } from '../src/i18n/index.js'
 import type { GlanceFigure, GlanceSleep, GlanceRecovery, GlanceDay } from '../src/data/useGlance.js'
 import { glanceBody, GLANCE_TODAY } from './glanceFixture.js'
 import type { Sparkline } from '../src/charts/Sparkline.js'
+import type { IntradayHeartRate } from '../src/charts/IntradayHeartRate.js'
 
 // Sparkline itself never renders to static markup (its chart lives behind a useEffect, which
 // renderToStaticMarkup never runs) - the echarts option a card hands it, band labels included, is
@@ -27,6 +28,21 @@ vi.mock('../src/charts/Sparkline.js', () => ({
     return null
   },
 }))
+
+// The heart rate trace's props, read the way sparklineProps are for the strips: its x axis bounds live
+// in the echarts option, which static markup never builds. A pass-through rather than a stub, so the
+// chart's own markup (its host and table) still reaches every case that counts them.
+let heartRateProps: ComponentProps<typeof IntradayHeartRate> | null = null
+vi.mock('../src/charts/IntradayHeartRate.js', async (importOriginal) => {
+  const actual = (await importOriginal()) as { IntradayHeartRate: typeof IntradayHeartRate }
+  return {
+    ...actual,
+    IntradayHeartRate: (props: ComponentProps<typeof IntradayHeartRate>) => {
+      heartRateProps = props
+      return actual.IntradayHeartRate(props)
+    },
+  }
+})
 
 // The markup's chart hosts and their accessible tables, counted the way pages.test.tsx's chart
 // rule counts them: one sr-only table per role="img" host.
@@ -261,6 +277,39 @@ describe('RecoveryCard', () => {
   })
 })
 
+describe('RecoveryCard on a finished day', () => {
+  // The shown day is not today, so "today" and "yesterday" would name the wrong days: the subtitle
+  // says the index is that day's, or the day before's.
+  it('names the index\'s day as that day, never as today', () => {
+    const recovery = recoveryFixture({ index: { asOfDate: '2026-09-22' } })
+    const html = renderRecovery({ recovery, today: '2026-09-22', finished: true })
+    expect(html).toContain('<h2 class="dash-card-title"><strong>Recovery</strong> <span>that day</span></h2>')
+  })
+
+  it('names an index from the day before as the day before, never as yesterday', () => {
+    const recovery = recoveryFixture({
+      index: { asOfDate: '2026-09-21' }, restingHeartRate: { asOfDate: '2026-09-20' }, hrv: { asOfDate: '2026-09-21' },
+    })
+    const html = renderRecovery({ recovery, today: '2026-09-22', finished: true })
+    expect(html).toContain('<h2 class="dash-card-title"><strong>Recovery</strong> <span>the day before</span></h2>')
+    expect(html).not.toContain('yesterday')
+  })
+
+  it('names a gauge\'s own day in the finished forms too', () => {
+    const recovery = recoveryFixture({ index: { value: null, asOfDate: null }, restingHeartRate: { asOfDate: '2026-09-22' }, hrv: { asOfDate: '2026-09-21' } })
+    const html = renderRecovery({ recovery, today: '2026-09-22', finished: true })
+    expect(html).toContain('<span class="glance-asof">that day</span>')
+    expect(html).toContain('<span class="glance-asof">the day before</span>')
+    expect(html).not.toMatch(/>(today|yesterday)</)
+  })
+
+  it('keeps today and yesterday on today\'s own page', () => {
+    const recovery = recoveryFixture({ index: { asOfDate: '2026-09-22' } })
+    expect(renderRecovery({ recovery })).toContain('<span>yesterday</span>')
+    expect(renderRecovery()).toContain('<span>today</span>')
+  })
+})
+
 function dayFixture(over: { steps?: Partial<GlanceFigure>, stepsPace?: GlanceDay['stepsPace'] } = {}): GlanceDay {
   const day = glanceBody().day
   return {
@@ -380,6 +429,83 @@ function renderWeek(props: Partial<Parameters<typeof WeekCard>[0]> = {}): string
   )
 }
 
+describe('TodayCard on a finished day', () => {
+  // Tuesday the 22nd, over: 9,840 steps against a whole usual day of 6,800 - 10,400.
+  function finishedDay(over: { steps?: Partial<GlanceFigure> } = {}): GlanceDay {
+    return dayFixture({
+      steps: { value: 9840, partial: false, standing: 'above', baseline: { center: 8600, low: 6800, high: 10400, thin: false }, ...over.steps },
+      stepsPace: null,
+    })
+  }
+  const renderFinished = (day: GlanceDay = finishedDay()) =>
+    renderToday({ day, today: '2026-09-22', timezone: 'Europe/Amsterdam', finished: true })
+
+  beforeEach(() => { heartRateProps = null })
+
+  it('is titled That day, with the date beside it', () => {
+    expect(renderFinished()).toContain('<h2 class="dash-card-title"><strong>That day</strong> <span>Tuesday, September 22</span></h2>')
+  })
+
+  it('gives the whole day\'s verdict with the usual range, and no pace', () => {
+    const html = renderFinished()
+    expect(html).toContain('<p class="dash-pace is-ahead"><span class="dash-pace-word">Above your usual day</span> · usual 6,800 – 10,400</p>')
+    expect(html.match(/<p class="dash-pace/g)).toHaveLength(1)
+    expect(html).not.toContain('usual by')
+    expect(html).not.toContain('so far')
+  })
+
+  it('words a below and a within verdict too, in plain text', () => {
+    const below = renderFinished(finishedDay({ steps: { value: 5000, standing: 'below' } }))
+    expect(below).toContain('<p class="dash-pace"><span class="dash-pace-word">Below your usual day</span> · usual 6,800 – 10,400</p>')
+    const within = renderFinished(finishedDay({ steps: { value: 8000, standing: 'within' } }))
+    expect(within).toContain('<p class="dash-pace"><span class="dash-pace-word">Within your usual day</span> · usual 6,800 – 10,400</p>')
+  })
+
+  it('says a thin baseline is not a usual yet, rather than a verdict', () => {
+    const html = renderFinished(finishedDay({ steps: { standing: null, baseline: { center: 8600, low: 6800, high: 10400, thin: true } } }))
+    expect(html).toContain('<p class="dash-pace">not enough history for a usual yet</p>')
+  })
+
+  it('never words a pace on a finished day, even handed one', () => {
+    const day = { ...finishedDay(), stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: 0, standing: 'ahead' as const } }
+    const html = renderFinished(day)
+    expect(html).not.toContain('Ahead of your usual pace')
+    expect(html).toContain('Above your usual day')
+    // With no verdict to lead with (a thin baseline), the pace must still not speak.
+    const thin = { ...finishedDay({ steps: { standing: null, baseline: { center: 8600, low: 6800, high: 10400, thin: true } } }), stepsPace: day.stepsPace }
+    const thinHtml = renderFinished(thin)
+    expect(thinHtml).not.toContain('Ahead of your usual pace')
+    expect(thinHtml).toContain('<p class="dash-pace">not enough history for a usual yet</p>')
+  })
+
+  it('labels the heart rate trace 00:00 to 24:00 and runs it from midnight to the next midnight', () => {
+    const html = renderFinished()
+    expect(html).toContain('<span class="label">Heart rate · 00:00 → 24:00</span>')
+    expect(html).toMatch(/<div role="img" aria-label="Heart rate that day"/)
+    // Amsterdam is UTC+2 on both midnights.
+    expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 8, 21, 22, 0))
+    expect(heartRateProps?.endMs).toBe(Date.UTC(2026, 8, 22, 22, 0))
+  })
+
+  it('leaves the trace\'s end to its last reading on today\'s own card', () => {
+    renderToday({ timezone: 'Europe/Amsterdam' })
+    expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 8, 22, 22, 0))
+    expect(heartRateProps?.endMs).toBeUndefined()
+  })
+
+  it('names the workouts list as that day\'s', () => {
+    const run = { id: 'r', sourceId: 'watch', startMs: 0, endMs: 1, startOffsetMinutes: 0, endOffsetMinutes: 0, localDate: '2026-09-22',
+      attrs: { exerciseType: 'RUNNING' }, excluded: false, excludeReason: null, sources: ['watch'], alternateIds: [] }
+    const html = renderFinished({ ...finishedDay(), workouts: [run] })
+    expect(html).toContain('<span class="label">That day&#x27;s activities</span>')
+  })
+
+  it('says today nowhere', () => {
+    // Text and accessible names only: the markup's own class names (dash-today-figures) are not words.
+    expect(renderFinished().match(/(?:>[^<]*|aria-label="[^"]*)(?:[Tt]oday|so far|→ now)/g)).toBeNull()
+  })
+})
+
 describe('WeekCard', () => {
   it('shows each row\'s per-day average with its bars, and leaves out a row with no data', () => {
     const g = { ...glanceBody(), week: { steps: { perDay: 8205.4, days: 6, total: 49232 }, activeMinutes: { perDay: 36, days: 6, total: 216 }, asleep: null } }
@@ -434,6 +560,14 @@ describe('WeekCard', () => {
       day: { ...glanceBody().day, activeMinutes: { ...glanceBody().day.activeMinutes, strip: glanceBody().day.steps.strip.map((d) => ({ ...d, value: d.value === null ? null : 30 })) } } }
     const html = renderWeek({ glance: g })
     expect(html).toContain('<title>Thu 30 min</title>')
+  })
+
+  // A finished day's week counts that day too (the server's weekOfFinished for every row), so the
+  // today-not-counted wording would be false there.
+  it('names a finished day\'s average as counting every day shown', () => {
+    const html = renderWeek({ glance: { ...glanceBody(), finished: true } })
+    expect(html).toContain('aria-label="Steps, the 7 days to that day; the average counts every day shown"')
+    expect(html).not.toContain('today not counted')
   })
 
   it('reads the total/per-day separator from the translation, not a literal', () => {

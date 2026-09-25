@@ -1,4 +1,4 @@
-import type { GlanceFigure, GlanceStepsPace } from '../../data/useGlance.js'
+import type { GlanceFigure, GlanceStanding, GlanceStepsPace } from '../../data/useGlance.js'
 import type { Translate } from '../../format.js'
 import { formatDuration, formatClock, formatMetricValue } from '../../format.js'
 
@@ -70,6 +70,25 @@ export function usualLine(figure: GlanceFigure, t: Translate, language: string):
   return t('glance.usual.within', { low, high })
 }
 
+/**
+ * A finished day's steps against the whole usual day, as the card prints it: the verdict in words
+ * ("Above your usual day") and the range it was judged against ("usual 6,800 – 10,400"). Null when
+ * there is no verdict to word - no value, no baseline, a thin one, or the server left `standing`
+ * null - and the caller falls back to usualLine, which says the thin case in its own words.
+ */
+export function dayStanding(figure: GlanceFigure, t: Translate, language: string): { standing: GlanceStanding, word: string, range: string } | null {
+  if (figure.value === null || figure.baseline === null || figure.baseline.thin || figure.standing === null) return null
+  const standing = figure.standing
+  return {
+    standing,
+    word: t(`glance.today.dayStanding.${standing}`),
+    range: t('glance.today.usualRange', {
+      low: formatValue(figure.baseline.low, figure.metric, language),
+      high: formatValue(figure.baseline.high, figure.metric, language),
+    }),
+  }
+}
+
 // The day before `today` (a YYYY-MM-DD local date), computed by stepping the UTC calendar date
 // rather than subtracting 86_400_000 ms: the local dates this app hands around name a day, not an
 // instant, and formatLocalDate's own convention (anchor at UTC midnight, read back in UTC) is the
@@ -78,6 +97,24 @@ export function yesterdayOf(today: string): string {
   const date = new Date(`${today}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() - 1)
   return date.toISOString().slice(0, 10)
+}
+
+// The day after `date`, stepped the same way yesterdayOf steps back: a finished day's heart rate
+// trace ends at this day's local midnight.
+export function nextDayOf(date: string): string {
+  const next = new Date(`${date}T00:00:00Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.toISOString().slice(0, 10)
+}
+
+/**
+ * A local date as a long date ("Wednesday, September 23"). Anchored at UTC midnight and read back in
+ * UTC, the convention formatLocalDate uses, so no zone can move it onto a neighbouring day. The
+ * page's date line and a finished day's title both read it, so the two cannot name a day differently.
+ */
+export function formatLongDate(localDate: string, language: string): string {
+  return new Intl.DateTimeFormat(language, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
+    .format(new Date(`${localDate}T00:00:00Z`))
 }
 
 // How far `timeZone` is ahead of UTC at the instant `utcMs`, in milliseconds: the zone's own wall
@@ -151,11 +188,12 @@ function formatShortDate(date: string, language: string): string {
  * known and lands on today, a day read as today/yesterday from `asOfDate` otherwise, or - for a
  * sleep figure, whose `asOfDate` names the night rather than the moment it was read - "night of 5
  * Sep" regardless of any instant carried alongside it. Null when there is no value to be current
- * to.
+ * to. `finished` (a past day's page) words the day as "that day" / "the day before" and drops the
+ * clock time: a reading taken during a day already over is simply that day's.
  */
 export function asOfLine(
   figure: GlanceFigure,
-  o: { today: string, timezone: string, night?: boolean },
+  o: { today: string, timezone: string, night?: boolean, finished?: boolean },
   t: Translate,
   language: string,
 ): string | null {
@@ -164,10 +202,12 @@ export function asOfLine(
     if (figure.asOfDate === null) return null
     return t('glance.asOf.night', { date: formatShortDate(figure.asOfDate, language) })
   }
-  if (figure.asOfMs !== null && figure.asOfDate === o.today) {
+  if (figure.asOfMs !== null && figure.asOfDate === o.today && o.finished !== true) {
     return t('glance.asOf.time', { time: formatTimeOfDay(figure.asOfMs, language, o.timezone) })
   }
-  if (figure.asOfDate === o.today) return t('glance.asOf.today')
-  if (figure.asOfDate === yesterdayOf(o.today)) return t('glance.asOf.yesterday')
+  // A finished day's page is about that day, not about the reader's today: the same two facts in
+  // words that do not say "today" of a day already over.
+  if (figure.asOfDate === o.today) return t(o.finished === true ? 'glance.asOf.thatDay' : 'glance.asOf.today')
+  if (figure.asOfDate === yesterdayOf(o.today)) return t(o.finished === true ? 'glance.asOf.dayBefore' : 'glance.asOf.yesterday')
   return null
 }

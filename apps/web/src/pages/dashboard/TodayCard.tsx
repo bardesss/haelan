@@ -4,7 +4,7 @@ import { IntradayHeartRate } from '../../charts/IntradayHeartRate.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import type { GlanceDay } from '../../data/useGlance.js'
 import { DashCard, Described } from './cardShared.js'
-import { formatFigure, formatTimeOfDay, localMidnightMs, paceKey, usualLine } from './glanceText.js'
+import { dayStanding, formatFigure, formatLongDate, formatTimeOfDay, localMidnightMs, nextDayOf, paceKey, usualLine } from './glanceText.js'
 import { TodayWorkouts } from './TodayWorkouts.js'
 
 /**
@@ -19,8 +19,15 @@ import { TodayWorkouts } from './TodayWorkouts.js'
  * themselves whether "5,900 so far" is good or bad partway through the day. Without a verdict
  * (`stepsPace` null, or thin) the so-far line speaks instead, the same wording every other partial
  * figure in the redesign uses.
+ *
+ * A finished day (M9c, `finished`) is the same card for a day already over: titled "That day" with
+ * its date beside it, the whole day's verdict against the usual whole day in place of a pace ("Above
+ * your usual day · usual 6,800 – 10,400"), and the heart rate trace across the whole day, 00:00 to
+ * the next midnight, rather than to its last reading.
  */
-export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span: 8 | 12, today: string, timezone: string }) {
+export function TodayCard({ day, span, today, timezone, finished = false }: {
+  day: GlanceDay, span: 8 | 12, today: string, timezone: string, finished?: boolean
+}) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const { values, labels, standings } = useMemo(() => ({
@@ -37,9 +44,16 @@ export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span
   }, [band, language])
   // Memoised for the same reason: both reach IntradayHeartRate's own `build` dependencies.
   const midnight = useMemo(() => localMidnightMs(today, timezone), [today, timezone])
+  const endMs = useMemo(() => finished ? localMidnightMs(nextDayOf(today), timezone) : undefined, [finished, today, timezone])
   const workoutSpans = useMemo(() => day.workouts.map((w) => ({ startMs: w.startMs, endMs: w.endMs })), [day.workouts])
-  const pace = day.stepsPace
+  // Never a pace on a finished day, whatever the payload carries: a day that is over has no "so
+  // far" to be ahead or behind in.
+  const pace = finished ? null : day.stepsPace
   const key = paceKey(pace)
+  const verdict = finished ? dayStanding(day.steps, t, language) : null
+  // Above the usual day reads in the pace line's own ahead colour; below stays plain text, as
+  // behind does.
+  const isAbove = verdict?.standing === 'above'
   const isAhead = pace?.standing === 'ahead'
   // Task 19a's own note: `standing` can be null while the band is present (no verdict before 5% of
   // the usual day), so `key === null` is not "no pace object" - it is "no verdict to word". Either
@@ -48,7 +62,8 @@ export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span
   // for a screen reader than no paragraph at all.
   const usual = usualLine(day.steps, t, language)
   return (
-    <DashCard span={span} title={t('glance.today.title')} subtitle={t('glance.today.subtitle')}
+    <DashCard span={span} title={t(finished ? 'glance.today.thatDay' : 'glance.today.title')}
+      subtitle={finished ? formatLongDate(today, language) : t('glance.today.subtitle')}
       link={{ to: '/activity', text: t('glance.today.link') }}>
       <div>
         <div className="dash-today-figures">
@@ -64,7 +79,12 @@ export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span
             </div>
           </div>
         </div>
-        {key !== null && pace !== null ? (
+        {verdict !== null ? (
+          <p className={isAbove ? 'dash-pace is-ahead' : 'dash-pace'}>
+            <span className="dash-pace-word">{verdict.word}</span>{' '}
+            · {verdict.range}
+          </p>
+        ) : key !== null && pace !== null ? (
           <p className={isAhead ? 'dash-pace is-ahead' : 'dash-pace'}>
             <span className="dash-pace-word">{t(key)}</span>{' '}
             · {t('glance.pace.usualBy', {
@@ -89,16 +109,18 @@ export function TodayCard({ day, span, today, timezone }: { day: GlanceDay, span
       )}
       {day.heartRate.points.length > 0 && (
         <div>
-          <span className="label">{t('glance.today.heartRateSinceMidnight')}</span>
-          <Described hidden text={day.heartRate.asOfMs !== null
-            ? t('glance.asOf.time', { time: formatTimeOfDay(day.heartRate.asOfMs, language, timezone) })
-            : t('glance.asOf.today')}>
-            <IntradayHeartRate points={day.heartRate.points} reduction={null} label={t('glance.today.heartRateChart')}
-              compact startMs={midnight} spans={workoutSpans} />
+          <span className="label">{t(finished ? 'glance.today.heartRateWholeDay' : 'glance.today.heartRateSinceMidnight')}</span>
+          <Described hidden text={finished ? t('glance.asOf.thatDay')
+            : day.heartRate.asOfMs !== null
+              ? t('glance.asOf.time', { time: formatTimeOfDay(day.heartRate.asOfMs, language, timezone) })
+              : t('glance.asOf.today')}>
+            <IntradayHeartRate points={day.heartRate.points} reduction={null}
+              label={t(finished ? 'glance.today.heartRateChartThatDay' : 'glance.today.heartRateChart')}
+              compact startMs={midnight} endMs={endMs} spans={workoutSpans} />
           </Described>
         </div>
       )}
-      <TodayWorkouts workouts={day.workouts} />
+      <TodayWorkouts workouts={day.workouts} finished={finished} />
     </DashCard>
   )
 }

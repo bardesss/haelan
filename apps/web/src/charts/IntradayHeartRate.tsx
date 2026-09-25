@@ -77,6 +77,12 @@ type Props = {
    */
   startMs?: number
   /**
+   * Compact only: where the x axis ends, as an instant - the next local midnight on a finished day,
+   * so the trace's width is the whole day (00:00 to 24:00) whenever its last reading came. Unset,
+   * the axis ends at the last reading: the day so far.
+   */
+  endMs?: number
+  /**
    * Intervals shaded behind the trace, each a start and an end the caller has both of: today's
    * workouts on the dashboard, whose sessions carry both ends (unlike `eventMarks` above, which has
    * only one). Empty by default, which draws exactly what the chart drew before this existed.
@@ -164,7 +170,7 @@ const COMPACT_HEIGHT = 84
 
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
-  compact = false, startMs, spans = NO_SPANS,
+  compact = false, startMs, endMs, spans = NO_SPANS,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -220,8 +226,10 @@ export function IntradayHeartRate({
     [series],
   )
 
-  // The newest reading, where the compact axis ends: the day so far, and not a moment past it.
-  const lastMs = useMemo(() => points.reduce<number | null>((last, p) => (last === null || p.utcMs > last ? p.utcMs : last), null), [points])
+  // The newest reading, where the compact axis ends unless the caller names an end (a finished
+  // day's next midnight): the day so far, and not a moment past it.
+  const lastReadingMs = useMemo(() => points.reduce<number | null>((last, p) => (last === null || p.utcMs > last ? p.utcMs : last), null), [points])
+  const lastMs = endMs ?? lastReadingMs
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)

@@ -28,8 +28,11 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
     key: 'steps' | 'active' | 'asleep', tone: 'steps' | 'active' | 'sleep',
     values: (number | null)[], dates: string[], format: (value: number) => string,
     value: string, per: string, withTotal: boolean,
-    labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelNights',
+    labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelFinished' | 'glance.week.barsLabelNights',
   }[] = []
+  // A finished day's week counts that day too (the server's weekOfFinished for every row), so
+  // "today not counted" would be false there.
+  const daysLabel = glance.finished ? 'glance.week.barsLabelFinished' as const : 'glance.week.barsLabel' as const
   const count = (value: number) => formatNumber(Math.round(value), 0, language, '')
   if (glance.week.steps !== null) {
     rows.push({
@@ -39,7 +42,7 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       format: (value: number) => count(value),
       value: count(glance.week.steps.total),
       per: t('glance.week.perDay', { value: count(glance.week.steps.perDay) }),
-      labelKey: 'glance.week.barsLabel',
+      labelKey: daysLabel,
     })
   }
   if (glance.week.activeMinutes !== null) {
@@ -50,7 +53,7 @@ export function WeekCard({ glance, span }: { glance: Glance, span: 4 | 8 | 12 })
       format: (value: number) => `${Math.round(value)} ${t('activity.units.min')}`,
       value: formatDuration(glance.week.activeMinutes.total),
       per: t('glance.week.perDay', { value: `${Math.round(glance.week.activeMinutes.perDay)} ${t('activity.units.min')}` }),
-      labelKey: 'glance.week.barsLabel',
+      labelKey: daysLabel,
     })
   }
   if (glance.week.asleep !== null && glance.sleep !== null) {

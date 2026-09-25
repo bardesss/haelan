@@ -107,9 +107,12 @@ describe('the glance Dashboard', () => {
     try {
       const page = container!.firstElementChild!
       expect(page.className).toBe('dashboard')
-      // The greeting, then the date and span line, then the grid, in that order.
+      // The header (the greeting over the date and span line, the day navigator beside them), then
+      // the grid, in that order.
       expect([...page.children].map((el) => [el.tagName.toLowerCase(), el.className]))
-        .toEqual([['h1', ''], ['p', 'dash-date'], ['div', 'grid dashboard-grid']])
+        .toEqual([['div', 'dash-header'], ['div', 'grid dashboard-grid']])
+      expect([...page.querySelector('.dash-heading')!.children].map((el) => [el.tagName.toLowerCase(), el.className]))
+        .toEqual([['h1', 'dash-title'], ['p', 'dash-date']])
       expect(page.querySelector('h1')?.textContent).toBe('Good morning')
       expect(titles()).toEqual(['Last night', 'Recovery', 'Today', 'This week'])
       expect(cards().map((card) => card.getAttribute('data-span'))).toEqual(['8', '4', '8', '4'])

@@ -749,6 +749,15 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
    lead card's hypnogram and the dials drift apart. Other pages keep .main's 1500px (spec: width). */
 .dashboard { max-width: 1200px; margin-inline: auto; }
 .dash-date { margin: 0 0 var(--space-4); font-size: var(--font-size-xs); color: var(--text-muted); }
+/* Dashboard.tsx's header: the title and its line on the left, DayNav.tsx's buttons on the right, one
+   row at every width. On a phone the title wraps inside its own column rather than pushing the
+   buttons onto a second line (spec M9c, "Phone"). */
+.dash-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.dash-heading { min-width: 0; }
+.dash-title { font-size: var(--font-size-lg); margin: 0 0 var(--space-1); }
+.day-nav { display: flex; flex-shrink: 0; gap: var(--space-1); }
+.day-nav-btn { min-width: 36px; justify-content: center; }
+.day-nav-today { justify-content: center; }
 
 /* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
    regular weight to put the muted subtitle back to, so the heading is left at the body's weight
@@ -1721,6 +1730,9 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]) { overf
     min-height: 44px;
   }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
+  /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
+     header draws them) but hold only an icon, so they need .icon-button's square minimum too. */
+  .day-nav-btn { min-width: 44px; }
   /* The ranking list's two movers are bare buttons carrying a word rather than .button or
      .icon-button, so they inherited none of this and measured 33x21 and 50x21. Both dimensions are
      under the rule, not just the height, which is why they need the min-width .icon-button gets as

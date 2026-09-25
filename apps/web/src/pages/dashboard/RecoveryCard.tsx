@@ -14,20 +14,23 @@ import { formatFigure, usualLine, asOfLine, yesterdayOf } from './glanceText.js'
  * An unscored day draws an empty ring and says why once; the gauges still draw what they have, each
  * naming its day when it is not the card's.
  */
-export function RecoveryCard({ recovery, span, wide, today, timezone }: {
+export function RecoveryCard({ recovery, span, wide, today, timezone, finished = false }: {
   recovery: GlanceRecovery, span: 4 | 12, wide: boolean, today: string, timezone: string
+  /** A past day's page (M9c): `today` is that day, so its words are "that day" and "the day before". */
+  finished?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const small = !wide
   const gaugeSize = small ? 100 : 120
   const ringSize = small ? 124 : 150
-  const subtitle = recovery.index.asOfDate === today ? t('glance.subtitle.today')
-    : recovery.index.asOfDate !== null && recovery.index.asOfDate === yesterdayOf(today) ? t('glance.subtitle.yesterday') : null
+  const subtitle = recovery.index.asOfDate === today ? t(finished ? 'glance.subtitle.thatDay' : 'glance.subtitle.today')
+    : recovery.index.asOfDate !== null && recovery.index.asOfDate === yesterdayOf(today)
+      ? t(finished ? 'glance.subtitle.dayBefore' : 'glance.subtitle.yesterday') : null
   const gauge = (key: 'rhr' | 'hrv', figure: GlanceFigure, unit: string) => {
     if (figure.value === null) return <div className="dash-dial"><p className="glance-empty">{t('glance.noReading')}</p><span className="label">{t(`glance.recovery.${key}`)}</span></div>
     const usual = usualLine(figure, t, language)
-    const day = figure.asOfDate !== recovery.index.asOfDate ? asOfLine(figure, { today, timezone }, t, language) : null
+    const day = figure.asOfDate !== recovery.index.asOfDate ? asOfLine(figure, { today, timezone, finished }, t, language) : null
     const band = figure.baseline !== null && !figure.baseline.thin ? figure.baseline : null
     return (
       <div className="dash-dial">

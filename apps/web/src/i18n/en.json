@@ -1405,7 +1405,9 @@
       "time": "as of {{time}}",
       "today": "today",
       "yesterday": "yesterday",
-      "night": "night of {{date}}"
+      "night": "night of {{date}}",
+      "thatDay": "that day",
+      "dayBefore": "the day before"
     },
     "noReading": "No reading yet",
     "pace": {
@@ -1459,10 +1461,20 @@
       "heartRateChart": "Heart rate today",
       "strip": "Steps, last 7 days",
       "caption": "last 7 days",
-      "link": "View activity"
+      "link": "View activity",
+      "thatDay": "That day",
+      "dayStanding": {
+        "within": "Within your usual day",
+        "above": "Above your usual day",
+        "below": "Below your usual day"
+      },
+      "usualRange": "usual {{low}} – {{high}}",
+      "heartRateWholeDay": "Heart rate · 00:00 → 24:00",
+      "heartRateChartThatDay": "Heart rate that day"
     },
     "workouts": {
-      "title": "Today's activities"
+      "title": "Today's activities",
+      "titleThatDay": "That day's activities"
     },
     "week": {
       "title": "This week",
@@ -1474,15 +1486,26 @@
       "perNight": "a night",
       "totalPer": "· {{per}}",
       "barsLabel": "{{what}}, last 7 days; the average counts finished days only, today not counted",
-      "barsLabelNights": "{{what}}, last 7 nights; the average includes last night"
+      "barsLabelNights": "{{what}}, last 7 nights; the average includes last night",
+      "barsLabelFinished": "{{what}}, the 7 days to that day; the average counts every day shown"
     },
     "subtitle": {
       "today": "today",
-      "yesterday": "yesterday"
+      "yesterday": "yesterday",
+      "thatDay": "that day",
+      "dayBefore": "the day before"
     },
     "empty": {
       "title": "Nothing here yet",
       "detail": "Once a sync brings in a night or a day, it shows up here."
+    },
+    "dayNav": {
+      "label": "Day",
+      "previous": "Previous day",
+      "next": "Next day",
+      "today": "Today",
+      "calendar": "Pick a date",
+      "pastLine": "that night, and the whole day"
     }
   }
 }
