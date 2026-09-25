@@ -9,6 +9,21 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.10.0](https://github.com/bardesss/haelan/compare/v2.9.0...v2.10.0) (2026-09-25)
+
+
+### Features
+
+* a status panel beside your name, replacing the rail's sync line ([#368](https://github.com/bardesss/haelan/issues/368)) ([42d6b73](https://github.com/bardesss/haelan/commit/42d6b732ee3d9b1e2e9c10874f9daf5a0bc23b38))
+* warnings about a quiet source live in the status panel alone ([#373](https://github.com/bardesss/haelan/issues/373)) ([8dc8c85](https://github.com/bardesss/haelan/commit/8dc8c85fb9c8010e4e2c44589e042641c2f48922))
+* **web:** the dashboard as a home screen ([#374](https://github.com/bardesss/haelan/issues/374)) ([54b183e](https://github.com/bardesss/haelan/commit/54b183e19bec65448ae7da261a88de6b2d70a032))
+
+
+### Bug Fixes
+
+* four suspected bugs, all real, plus a stale dashboard glance ([#371](https://github.com/bardesss/haelan/issues/371)) ([611ab15](https://github.com/bardesss/haelan/commit/611ab1506158a4aeca1a93c513a181e766a9342c))
+* the status panel's leftover minor issues ([#370](https://github.com/bardesss/haelan/issues/370)) ([3ac9662](https://github.com/bardesss/haelan/commit/3ac9662e1cb790567263b793cae4d3d708859ce3))
+
 ## [2.9.0](https://github.com/bardesss/haelan/compare/v2.8.2...v2.9.0) (2026-09-24)
 
 
