@@ -11,7 +11,7 @@ import type { SampleLike } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { nameFor } from '../store/sourceAliases.ts'
 import { ConfigError } from '../errors.ts'
-import { baselineOf, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
+import { baselinesOver, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
 import { coverageIsMeaningful } from './coverageSignal.ts'
 // Aliased: the class has a method of the same name, and an unqualified call inside it
@@ -313,24 +313,48 @@ export class PersonQuery {
   }): Baseline | null {
     requireMetricAndAgg(input.metric, input.agg)
     requireDate('on', input.on)
+    return this.baselines({ ...input, from: input.on, to: input.on }).get(input.on) ?? null
+  }
+
+  /**
+   * Every day's own baseline from `from` through `to`, each exactly what `baseline({ on })` answers
+   * for that day, from one read of the rows under all their windows rather than one read a day.
+   * `baseline` itself is this over a single day, so the two cannot come to disagree about a window,
+   * the coverage rule or the arithmetic. The dashboard's strips (a week, each dot judged against its
+   * own day's usual) and the calendar (a month) are why it exists.
+   */
+  baselines(input: {
+    metric: string
+    agg: string
+    from: string
+    to: string
+    windowDays?: number
+    source?: string
+  }): Map<string, Baseline | null> {
+    requireMetricAndAgg(input.metric, input.agg)
+    requireRange(input.from, input.to)
     requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
     requirePositiveInteger('windowDays', windowDays)
-    const { from, to } = baselineWindow(input.on, windowDays)
     const { points } = this.series({
-      metric: input.metric, agg: input.agg, from, to, source: input.source,
+      metric: input.metric, agg: input.agg,
+      from: baselineWindow(input.from, windowDays).from, to: baselineWindow(input.to, windowDays).to, source: input.source,
     })
 
     // A barely observed day is a systematic undercount, not a low reading, and sixty of them
     // build a centre a properly worn day then scores a large z against. The insight gate refuses
     // such a period outright; a baseline can do better and drop the days rather than the answer.
+    // Oldest first, as series returns them, so each window sums in the same order a read of that
+    // window alone would.
     const judgeCoverage = coverageIsMeaningful(input.metric)
-    const values = points
+    const values = new Map(points
       .filter((point) => !(judgeCoverage && point.coverage !== null && point.coverage < INSIGHT_MIN_COVERAGE))
-      .map((point) => point.value)
+      .map((point) => [point.localDate, point.value]))
 
-    return baselineOf(values, windowDays)
+    const days: string[] = []
+    for (let day = input.from; day <= input.to; day = shiftLocalDate(day, 1)) days.push(day)
+    return baselinesOver(values, days, windowDays)
   }
 
   /**

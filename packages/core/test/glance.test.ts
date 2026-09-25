@@ -291,7 +291,7 @@ describe('readRecovery', () => {
     expect(recovery.band).not.toBeNull()
     expect(recovery.missing).toBeNull()
     // The strip is the index's week, still ending on today, where today is a gap.
-    expect(recovery.index.strip.at(-1)).toEqual({ localDate: TODAY, value: null, standing: null })
+    expect(recovery.index.strip.at(-1)).toEqual({ localDate: TODAY, value: null, band: null, standing: null })
     expect(recovery.index.strip.at(-2)!.value).toBe(recovery.index.value)
   })
 
@@ -421,7 +421,7 @@ describe('readGlance', () => {
 })
 
 describe('weekOf', () => {
-  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, standing: null }))
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, band: null, standing: null }))
   it('averages the six finished days and never today', () => {
     expect(weekOf(strip([1, 2, 3, 4, 5, 6, 1000]))).toEqual({ perDay: 3.5, days: 6, total: 1021 })
   })
@@ -437,7 +437,7 @@ describe('weekOf', () => {
 })
 
 describe('weekOfFinished', () => {
-  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, standing: null }))
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, band: null, standing: null }))
   it('averages all seven days, the last included, because a night strip ends on a finished night', () => {
     expect(weekOfFinished(strip([1, 2, 3, 4, 5, 6, 7]))).toEqual({ perDay: 4, days: 7, total: 28 })
   })
