@@ -48,6 +48,14 @@ afterEach(() => {
 const values = [9000, 8600, 9400]
 const labels = ['2026-08-10', '2026-08-11', '2026-08-12']
 
+// Sparkline.tsx's own fallback family string, duplicated here rather than imported: it is not
+// exported, and this file's job is to pin the observable behaviour (what the band labels are
+// actually painted in), not to reach into the module's internals to read the constant back out.
+// This environment (happy-dom, and CHART_VARS above sets no --font-sans) always resolves to this
+// fallback, never to a real --font-sans value, so the two staying in sync is a fact this suite can
+// only assert by keeping the literal identical to Sparkline.tsx's own.
+const FONT_FAMILY_FALLBACK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+
 // A fresh arrow every call, which is exactly what Activity.tsx:303 (its Sparkline call site) and
 // Weight.tsx:250 hand this component: `sparkFormat` is a parameter of a card() helper invoked
 // inline during render, so its identity changes on every render even though its behaviour never
@@ -134,7 +142,7 @@ describe('a daily bars chart across a rerender', () => {
   })
 })
 
-type MarkPointDatum = { name: string, xAxis: number, yAxis: number, symbolSize?: number, label?: { formatter: () => string, position?: string } }
+type MarkPointDatum = { name: string, xAxis: number, yAxis: number, symbolSize?: number, label?: { formatter: () => string, position?: string, fontFamily?: string } }
 type ReadingSeries = {
   markPoint?: { data: MarkPointDatum[] }
   markLine?: { data: unknown[] }
@@ -178,6 +186,12 @@ describe('a sparkline with a labelled baseline band', () => {
     expect(bandPoints.every((d) => d.xAxis === 0)).toBe(true)
     expect(bandPoints.every((d) => d.label!.position === 'left')).toBe(true)
     expect(bandPoints.map((d) => d.label!.formatter()).sort()).toEqual(['8,000', '9,500'])
+    // Both labels painted in the exact same family the margin was measured against (fix round 3):
+    // zrender paints a label with no fontFamily of its own in a generic 'sans-serif', not the app's
+    // own --font-sans, so a label missing this would size grid.left for a font nothing on screen is
+    // actually set in. This environment (happy-dom, no CHART_VARS entry for --font-sans) resolves
+    // the same fallback family measureLabelWidth's own canvas-less path measures characters against.
+    expect(bandPoints.every((d) => d.label!.fontFamily === FONT_FAMILY_FALLBACK)).toBe(true)
     // No line drawn for these two: markLine is reserved for the dashed annotation verticals this
     // chart already draws (day marks), and a band-edge mark that borrowed it would inherit their
     // dashed styling and their excluded-day override.
@@ -240,6 +254,24 @@ describe('a sparkline with a labelled baseline band', () => {
     })
     const { grid } = chartOption()
     expect(grid.left).toBe(expectedMargin('5.593', '11.590'))
+  })
+
+  // bandLabels alone, with no baseline to anchor the labels against: the markPoint data above only
+  // ever draws the two edge labels under `bandLabels && baseline`, so a margin computed for
+  // `bandLabels` alone would widen the grid for text this render never draws (NightCard's own
+  // thin-baseline case: bandLabels stays undefined too here, but a caller could in principle hand
+  // one without the other, and the margin has to agree with what markPoint actually draws either way).
+  it('keeps the plain (non-label) grid margin when bandLabels is given but baseline is not', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            bandLabels={{ low: '5.593', high: '11.590' }} />
+        </I18nProvider>,
+      )
+    })
+    const { grid } = chartOption()
+    expect(grid.left).toBe(0)
   })
 
   // scale: true alone fits the y axis to the series values, and a markArea/markPoint never widens
