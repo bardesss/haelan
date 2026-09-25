@@ -169,3 +169,26 @@ describe('PersonQuery.glanceCalendar', () => {
     empty.cleanup()
   })
 })
+
+// monthEndOf is the month's last date by integer arithmetic, not Date; read through the public
+// reader, a month that ended a day early would drop its last day and one that ran long would pull
+// in the next month's first.
+describe('PersonQuery.glanceCalendar at a month end', () => {
+  const lastListed = (month: string, today: string) =>
+    new PersonQuery(test.db, 'p1').glanceCalendar({ month, today }).days.map((d) => d.localDate).at(-1)
+
+  it('runs a leap February to the 29th', () => {
+    for (const localDate of ['2028-02-28', '2028-02-29', '2028-03-01']) putDaily({ metric: 'steps', localDate, value: 8_000 })
+    expect(lastListed('2028-02', '2028-03-10')).toBe('2028-02-29')
+  })
+
+  it('ends an ordinary February on the 28th', () => {
+    for (const localDate of ['2027-02-27', '2027-02-28', '2027-03-01']) putDaily({ metric: 'steps', localDate, value: 8_000 })
+    expect(lastListed('2027-02', '2027-03-10')).toBe('2027-02-28')
+  })
+
+  it('runs December to the 31st, without the new year', () => {
+    for (const localDate of ['2027-12-30', '2027-12-31', '2028-01-01']) putDaily({ metric: 'steps', localDate, value: 8_000 })
+    expect(lastListed('2027-12', '2028-01-10')).toBe('2027-12-31')
+  })
+})

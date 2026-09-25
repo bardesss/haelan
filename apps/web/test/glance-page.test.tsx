@@ -487,7 +487,7 @@ describe('the glance Dashboard', () => {
       act(() => { container!.querySelector<HTMLButtonElement>('button[aria-haspopup]')!.click() })
       await flush(client, () => document.body.innerHTML)
       expect([...document.querySelectorAll('.cal-legend-line')].map((l) => l.textContent))
-        .toEqual(['Linker stip · slaap binnen je gebruikelijke bereik erbuiten', 'Rechter stip · stappen je gebruikelijke aantal gehaald eronder'])
+        .toEqual(['Linkerstip · slaap binnen je gebruikelijke bereik erbuiten', 'Rechterstip · stappen je gebruikelijke aantal gehaald eronder'])
       expect(document.querySelector('.cal-note')?.textContent).toBe('Grijze dagen hebben geen gegevens')
       expect(document.querySelector('.cal-today')?.textContent).toBe('Vandaag')
     } finally { restore() }

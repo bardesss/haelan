@@ -1528,10 +1528,10 @@
     "calendar": {
       "previousMonth": "Vorige maand",
       "nextMonth": "Volgende maand",
-      "sleepLegend": "Linker stip · slaap",
+      "sleepLegend": "Linkerstip · slaap",
       "sleepWithin": "binnen je gebruikelijke bereik",
       "sleepOutside": "erbuiten",
-      "stepsLegend": "Rechter stip · stappen",
+      "stepsLegend": "Rechterstip · stappen",
       "stepsReached": "je gebruikelijke aantal gehaald",
       "stepsBelow": "eronder",
       "greyDays": "Grijze dagen hebben geen gegevens",

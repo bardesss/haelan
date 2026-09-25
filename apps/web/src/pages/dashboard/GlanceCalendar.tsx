@@ -179,7 +179,9 @@ export function GlanceCalendar({ selected, today, onPick, onClose, anchor }: {
       case 'PageUp': move(clampDay(shiftMonth(month, -1), dayOfMonth), -1); break
       case 'PageDown': move(clampDay(shiftMonth(month, 1), dayOfMonth), 1); break
       // The week's ends, held inside the month, carrying on back toward the day focus came from
-      // when the end itself is grey. Nothing to do in a month with no day to land on.
+      // when the end itself is grey. That day is in this week row and has data, so the scan stops
+      // on it at the latest and never crosses into the next or previous week (hence the direction:
+      // Home scans forward, End back). Nothing to do in a month with no day to land on.
       case 'Home': if (focusDay !== null) move(`${month}-${pad(Math.max(1, dayOfMonth - weekday))}`, 1); break
       case 'End': if (focusDay !== null) move(`${month}-${pad(Math.min(daysIn(month), dayOfMonth + 6 - weekday))}`, -1); break
       case 'Enter': case ' ': if (focusDay !== null) pick(focusDay); break
@@ -429,11 +431,19 @@ export function CalendarButton({ selected, today, onPick }: {
     trigger.current?.focus({ preventScroll: true })
   }
 
+  // Tab either way off the button leaves the calendar behind, so the popover closes rather than
+  // staying open over the page with focus somewhere else. The key is not claimed: the browser steps
+  // on from the button as it would with the calendar shut. The phone's sheet is modal, so the button
+  // cannot take focus while it is open.
+  function onTriggerKeyDown(event: React.KeyboardEvent) {
+    if (event.key === 'Tab' && open && !isPhone) setOpen(false)
+  }
+
   return (
     <>
       <button ref={trigger} type="button" className="button day-nav-btn" aria-label={t('glance.dayNav.calendar')}
         aria-haspopup={isPhone ? 'dialog' : 'true'} aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}>
+        onClick={() => setOpen((current) => !current)} onKeyDown={onTriggerKeyDown}>
         <Icon name="calendar" />
       </button>
       {open && <GlanceCalendar selected={selected} today={today} onPick={onPick} onClose={close} anchor={trigger.current} />}

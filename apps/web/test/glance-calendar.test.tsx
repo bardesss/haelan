@@ -342,6 +342,20 @@ describe('the calendar keyboard', () => {
     press('End'); expect(focused()).toBe('2026-09-11')
   })
 
+  // Home and End stay in the focused day's week row: a grey week start carries on forward, toward
+  // the day focus came from, never back into the week before.
+  it('keeps Home inside the week when the week starts grey', async () => {
+    months['2026-09'] = { ...SEPTEMBER, days: SEPTEMBER.days.filter((d) => d.localDate !== '2026-09-14') }
+    await openOn('2026-09-17')
+    press('Home'); expect(focused()).toBe('2026-09-15')
+  })
+
+  it('keeps End inside the week when the week ends grey', async () => {
+    await openOn('2026-09-09')
+    // Saturday the 12th and Sunday the 13th are grey: End stops on Friday the 11th, never the 14th.
+    press('End'); expect(focused()).toBe('2026-09-11')
+  })
+
   it('moves a month with PageUp and PageDown, and across a month edge with the arrows', async () => {
     await openOn('2026-09-22')
     press('PageUp')
@@ -370,6 +384,28 @@ describe('the calendar keyboard', () => {
     await settle()
     press(' ')
     expect(picks).toEqual(['2026-09-21', '2026-09-22'])
+  })
+
+  it('closes when Tab leaves the calendar button, either way', async () => {
+    await openOn('2026-09-22')
+    act(() => { trigger().focus() })
+    press('Tab')
+    expect(panel()).toBeNull()
+    expect(trigger().getAttribute('aria-expanded')).toBe('false')
+    act(() => { trigger().click() })
+    await settle()
+    act(() => { trigger().focus() })
+    act(() => { trigger().dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true })) })
+    expect(panel()).toBeNull()
+  })
+
+  it('closes when Tab leaves the popover past its last control', async () => {
+    await openOn('2026-09-22')
+    const last = document.querySelector<HTMLButtonElement>('.cal-today')!
+    act(() => { last.focus() })
+    press('Tab')
+    expect(panel()).toBeNull()
+    expect(document.activeElement).toBe(trigger())
   })
 
   it('closes on Escape and gives focus back to the calendar button', async () => {

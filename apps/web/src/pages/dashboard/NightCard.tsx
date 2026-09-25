@@ -55,9 +55,9 @@ function nightSpan(sleep: GlanceSleep, language: string, timeZone: string): stri
 // the strip's day already shown (the night that ended on it), which a click does not open.
 export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = false }: {
   sleep: GlanceSleep, span: 8 | 12, today: string, timezone: string,
-  /** A past day's page (M9c): its night is "that night", the one that ended that morning. */
+  /** A past day's page (day navigation): its night is "that night", the one that ended that morning. */
   finished?: boolean
-  /** Opens a strip dot's day (M9c); the night strip's days are named by the date each night ended. */
+  /** Opens a strip dot's day (day navigation); the night strip's days are named by the date each night ended. */
   onOpenDay?: (day: string) => void
 }) {
   const { t, i18n } = useTranslation()
