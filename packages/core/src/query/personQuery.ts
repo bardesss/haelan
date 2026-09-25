@@ -247,11 +247,38 @@ export class PersonQuery {
    * dashboard and the native app alike. `today` and `nowMs` are the caller's, because the person's
    * zone and the clock live above this layer; `nameOf` resolves a source id to the name the person
    * gave it, defaulting to the id.
+   *
+   * `day` (M9c: day navigation) asks for a finished day instead of today: it must be strictly
+   * before `today`, and `dayEndMs` - the last millisecond of that local day, which the caller
+   * computes with `localMidnightMs` since core has no timezone of its own - is then required, and
+   * the whole glance is built as if `nowMs` were `dayEndMs`.
    */
-  glance(input: { today: string, nowMs: number, nameOf?: (sourceId: string) => string }): Glance {
+  glance(input: {
+    today: string
+    nowMs: number
+    nameOf?: (sourceId: string) => string
+    day?: string
+    dayEndMs?: number
+  }): Glance {
     requireDate('today', input.today)
     requireFiniteNumber('nowMs', input.nowMs)
-    return readGlance(this, { today: input.today, nowMs: input.nowMs, nameOf: input.nameOf ?? ((id) => id) })
+    if (input.day !== undefined) {
+      requireDate('day', input.day)
+      if (input.day >= input.today) {
+        throw new ConfigError(`day '${input.day}' must be before today '${input.today}'`)
+      }
+      if (input.dayEndMs === undefined) {
+        throw new ConfigError('dayEndMs is required when day is given')
+      }
+      requireFiniteNumber('dayEndMs', input.dayEndMs)
+    }
+    return readGlance(this, {
+      today: input.today,
+      nowMs: input.nowMs,
+      nameOf: input.nameOf ?? ((id) => id),
+      day: input.day,
+      dayEndMs: input.dayEndMs,
+    })
   }
 
   /**

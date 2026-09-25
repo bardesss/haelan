@@ -91,12 +91,18 @@ export interface GlanceContext {
   /** Stale sources by id, from sourceActivity, judged against `today`. */
   stale: ReadonlyMap<string, { lastReportedDate: string, medianGapDays: number | null }>
   nameOf: (sourceId: string) => string
+  /**
+   * True when `today` names a day already over, built as if `nowMs` were its last millisecond
+   * (M9c: day navigation). Every "today so far" figure reads this rather than comparing `today`
+   * to a real clock, which core has no access to.
+   */
+  finished: boolean
 }
 
 const STRIP_DAYS = 7
 
 export function contextFor(
-  q: PersonQuery, input: { today: string, nowMs: number, nameOf: (id: string) => string },
+  q: PersonQuery, input: { today: string, nowMs: number, nameOf: (id: string) => string, finished?: boolean },
 ): GlanceContext {
   const stale = new Map<string, { lastReportedDate: string, medianGapDays: number | null }>()
   for (const activity of q.sourceActivity({ today: input.today })) {
@@ -106,7 +112,7 @@ export function contextFor(
     if (activity.continuedElsewhere) continue
     stale.set(activity.sourceId, { lastReportedDate: activity.lastReportedDate, medianGapDays: activity.medianGapDays })
   }
-  return { q, today: input.today, nowMs: input.nowMs, stale, nameOf: input.nameOf }
+  return { q, today: input.today, nowMs: input.nowMs, stale, nameOf: input.nameOf, finished: input.finished ?? false }
 }
 
 /** The sources a merged row names in its mix, or the row's own source when it is a device row. */
@@ -294,6 +300,7 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
   const baseline = baselineOf(baselineValues)
   const band = toGlanceBaseline(baseline)
   const value = sums.get(ctx.today) ?? null
+  const partial = !ctx.finished
   return {
     metric: 'active_minutes',
     value,
@@ -301,10 +308,10 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
     baseline: band,
     asOfDate: value === null ? null : ctx.today,
     asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
-    partial: true,
+    partial,
     staleSources: staleFeeding(ctx, feeding),
-    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, band, ctx.today, true),
-    standing: standingOf(value, band, true),
+    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, band, ctx.today, partial),
+    standing: standingOf(value, band, partial),
   }
 }
 
@@ -443,10 +450,10 @@ export function readDay(ctx: GlanceContext): GlanceDay {
   // Stale sources from heart rate's daily rows over the look-back, not from today's samples: a
   // source with a sample today is reporting by definition, so today's samples could never name one.
   const heartFeeding = lookBackPoints(ctx, 'heart_rate', 'mean', ctx.today).flatMap(sourcesOf)
-  const steps = dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) })
+  const steps = dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: !ctx.finished, asOfMs: lastSampleMs(ctx, ['steps']) })
   return {
     steps,
-    stepsPace: readStepsPace(ctx),
+    stepsPace: ctx.finished ? null : readStepsPace(ctx),
     activeMinutes: activeMinutesFigure(ctx),
     heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heartFeeding) },
     // Filed under the date a workout ended on, the same key the Activity list groups by, so a run
@@ -482,6 +489,9 @@ export function weekOfFinished(strip: readonly GlanceStripDay[]): GlanceWeekFigu
   return { perDay: finished.reduce((s, v) => s + v, 0) / finished.length, days: finished.length, total: stripTotal(strip) }
 }
 
+/** The nearest days with data before and after this glance's own day, up to and including today. */
+export interface GlanceNav { previous: string | null, next: string | null }
+
 export interface Glance {
   /** The local date this was assembled for, in the person's own zone. */
   today: string
@@ -490,12 +500,24 @@ export interface Glance {
   day: GlanceDay
   /** The last seven days' averages, alongside `day` and `sleep` rather than replacing them. */
   week: GlanceWeek
+  /** True when `today` names a day already over, rather than the day still running (M9c). */
+  finished: boolean
+  /** Where the day-navigation arrows on a finished day's page go. */
+  nav: GlanceNav
 }
 
 export function readGlance(
-  q: PersonQuery, input: { today: string, nowMs: number, nameOf: (id: string) => string },
+  q: PersonQuery,
+  input: { today: string, nowMs: number, nameOf: (id: string) => string, day?: string, dayEndMs?: number },
 ): Glance {
-  const ctx = contextFor(q, input)
+  const realToday = input.today
+  const finished = input.day !== undefined
+  const ctx = contextFor(q, {
+    today: finished ? input.day! : input.today,
+    nowMs: finished ? input.dayEndMs! : input.nowMs,
+    nameOf: input.nameOf,
+    finished,
+  })
   const sleep = readLastNight(ctx)
   const day = readDay(ctx)
   // The week's asleep figure is computed from the seven nights ending on last night's own date
@@ -504,12 +526,18 @@ export function readGlance(
   const asleepStrip = sleep !== null
     ? sleep.asleep.strip
     : dailyFigure(ctx, { metric: 'sleep_asleep_minutes', agg: 'sum', on: shiftLocalDate(ctx.today, -1), partial: false, asOfMs: null }).strip
+  // A finished day's own strip day is a whole day like every other in it, so its week average
+  // includes it (weekOfFinished) rather than treating it as still running (weekOf).
   const week: GlanceWeek = {
-    steps: weekOf(day.steps.strip),
-    activeMinutes: weekOf(day.activeMinutes.strip),
+    steps: finished ? weekOfFinished(day.steps.strip) : weekOf(day.steps.strip),
+    activeMinutes: finished ? weekOfFinished(day.activeMinutes.strip) : weekOf(day.activeMinutes.strip),
     asleep: weekOfFinished(asleepStrip),
+  }
+  const nav: GlanceNav = {
+    previous: q.nearestDayWithData({ on: ctx.today, direction: 'before' }),
+    next: q.nearestDayWithData({ on: ctx.today, direction: 'after', until: realToday }),
   }
   // No generation time in the body: /glance is hashed for its ETag, and a stamp of now would make
   // every response differ, so no conditional request could ever answer 304.
-  return { today: input.today, sleep, recovery: readRecovery(ctx), day, week }
+  return { today: ctx.today, sleep, recovery: readRecovery(ctx), day, week, finished, nav }
 }
