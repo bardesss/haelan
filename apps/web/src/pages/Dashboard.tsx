@@ -131,7 +131,7 @@ export function Dashboard() {
   // A strip's dot or a week bar opens its day, the way the calendar does.
   const card = (slot: DashCardSlot) => {
     switch (slot.kind) {
-      case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} timezone={timezone} onOpenDay={setDay} />
+      case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} timezone={timezone} onOpenDay={setDay} finished={finished} />
       case 'recovery': return <RecoveryCard key="recovery" recovery={recovery} span={slot.span} wide={slot.wide} today={glance.today} timezone={timezone} finished={finished} onOpenDay={setDay} />
       case 'today': return <TodayCard key="today" day={day} span={slot.span} today={glance.today} timezone={timezone} finished={finished} onOpenDay={setDay} />
       case 'week': return <WeekCard key="week" glance={glance} span={slot.span} onOpenDay={setDay} />

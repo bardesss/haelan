@@ -1436,7 +1436,8 @@
       "wokeStanding": {
         "above": "later than usual",
         "below": "earlier than usual"
-      }
+      },
+      "titleFinished": "That night"
     },
     "recovery": {
       "title": "Recovery",
@@ -1489,7 +1490,8 @@
       "barsLabelNights": "{{what}}, last 7 nights; the average includes last night",
       "barsLabelFinished": "{{what}}, the 7 days to that day; the average counts every day shown",
       "bar": "{{date}}: {{label}} {{value}}",
-      "openBar": "Open {{date}}: {{label}} {{value}}"
+      "openBar": "Open {{date}}: {{label}} {{value}}",
+      "barsLabelNightsFinished": "{{what}}, the 7 nights to that day; the average includes that night"
     },
     "openDay": "Open this day",
     "openDayIdle": "Tap a day to open it",

@@ -1436,7 +1436,8 @@
       "wokeStanding": {
         "above": "later dan gewoonlijk",
         "below": "eerder dan gewoonlijk"
-      }
+      },
+      "titleFinished": "Die nacht"
     },
     "recovery": {
       "title": "Herstel",
@@ -1489,7 +1490,8 @@
       "barsLabelNights": "{{what}}, laatste 7 nachten; afgelopen nacht telt mee in het gemiddelde",
       "barsLabelFinished": "{{what}}, de 7 dagen tot en met die dag; het gemiddelde telt elke getoonde dag mee",
       "bar": "{{date}}: {{label}} {{value}}",
-      "openBar": "Open {{date}}: {{label}} {{value}}"
+      "openBar": "Open {{date}}: {{label}} {{value}}",
+      "barsLabelNightsFinished": "{{what}}, de 7 nachten tot en met die dag; die nacht telt mee in het gemiddelde"
     },
     "openDay": "Open deze dag",
     "openDayIdle": "Tik op een dag om hem te openen",

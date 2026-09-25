@@ -476,6 +476,8 @@ describe('the glance Dashboard', () => {
     try {
       expect(container!.querySelector('h1')?.textContent).toBe('dinsdag 22 september')
       expect(dateLine()).toBe('die nacht, en de hele dag')
+      const night = cardTitled('Die nacht')!
+      expect(night.querySelector('.dash-card-title')?.textContent).toBe('Die nacht di 22 – wo 23 sep')
       const day = cardTitled('Die dag')!
       expect(day.querySelector('.dash-card-title')?.textContent).toBe('Die dag dinsdag 22 september')
       expect(day.querySelector('.dash-pace')?.textContent).toBe('Meer dan op een gewone dag · normaal 8.000 – 9.500')

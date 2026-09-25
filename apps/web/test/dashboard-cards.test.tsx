@@ -115,6 +115,12 @@ describe('NightCard', () => {
     expect(html).toContain('later than usual')
   })
 
+  // A past day's page is "that night, and the whole day": its night is that night, not last night.
+  it('is titled That night on a finished day, and Last night on today', () => {
+    expect(renderNight({ finished: true })).toMatch(/<h2 class="dash-card-title"><strong>That night<\/strong> <span>[^<]+<\/span><\/h2>/)
+    expect(renderNight()).toMatch(/<h2 class="dash-card-title"><strong>Last night<\/strong> <span>[^<]+<\/span><\/h2>/)
+  })
+
   it('keeps the usual sentence for a screen reader on the strip', () => {
     const html = renderNight()
     expect(html).toContain('within your usual')
@@ -568,6 +574,13 @@ describe('WeekCard', () => {
     const html = renderWeek({ glance: { ...glanceBody(), finished: true } })
     expect(html).toContain('aria-label="Steps, the 7 days to that day; the average counts every day shown"')
     expect(html).not.toContain('today not counted')
+  })
+
+  it("names a finished day's sleep average as including that night, not last night", () => {
+    const g = { ...glanceBody(), finished: true, week: { steps: null, activeMinutes: null, asleep: { perDay: 393, days: 7, total: 2751 } } }
+    const html = renderWeek({ glance: g })
+    expect(html).toContain('aria-label="Asleep, the 7 nights to that day; the average includes that night"')
+    expect(html).not.toContain('last night')
   })
 
   it('reads the total/per-day separator from the translation, not a literal', () => {

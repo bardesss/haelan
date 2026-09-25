@@ -53,8 +53,10 @@ function nightSpan(sleep: GlanceSleep, language: string, timeZone: string): stri
 // `today` is not used for wording here, as the other redesigned cards use it ("today" vs
 // "yesterday"): a night is always named by the date it ended on. It is read for one thing only,
 // the strip's day already shown (the night that ended on it), which a click does not open.
-export function NightCard({ sleep, span, today, timezone, onOpenDay }: {
+export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = false }: {
   sleep: GlanceSleep, span: 8 | 12, today: string, timezone: string,
+  /** A past day's page (M9c): its night is "that night", the one that ended that morning. */
+  finished?: boolean
   /** Opens a strip dot's day (M9c); the night strip's days are named by the date each night ended. */
   onOpenDay?: (day: string) => void
 }) {
@@ -84,7 +86,7 @@ export function NightCard({ sleep, span, today, timezone, onOpenDay }: {
     { key: 'woke', label: t('glance.sleep.woke'), figure: sleep.waketime },
   ]
   return (
-    <DashCard span={span} title={t('glance.sleep.title')} subtitle={nightSpan(sleep, language, timezone)}
+    <DashCard span={span} title={t(finished ? 'glance.sleep.titleFinished' : 'glance.sleep.title')} subtitle={nightSpan(sleep, language, timezone)}
       link={{ to: `/sleep/night/${sleep.localDate}`, text: t('glance.sleep.link') }}>
       <div className="dash-lead">
         <div>

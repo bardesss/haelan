@@ -32,7 +32,7 @@ export function WeekCard({ glance, span, onOpenDay }: {
     key: 'steps' | 'active' | 'asleep', tone: 'steps' | 'active' | 'sleep',
     values: (number | null)[], dates: string[], format: (value: number) => string,
     value: string, per: string, withTotal: boolean,
-    labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelFinished' | 'glance.week.barsLabelNights',
+    labelKey: 'glance.week.barsLabel' | 'glance.week.barsLabelFinished' | 'glance.week.barsLabelNights' | 'glance.week.barsLabelNightsFinished',
   }[] = []
   // A finished day's week counts that day too (the server's weekOfFinished for every row), so
   // "today not counted" would be false there.
@@ -70,7 +70,9 @@ export function WeekCard({ glance, span, onOpenDay }: {
       // Unlike steps and active minutes (the server's weekOf drops today, which WeekBars still
       // highlights as the strip's last bar), the sleep strip ends on last night and weekOfFinished
       // already counts it - so this row's aria-label says the opposite of the other two rows'.
-      per: t('glance.week.perNight'), labelKey: 'glance.week.barsLabelNights',
+      per: t('glance.week.perNight'),
+      // On a finished day the strip ends on that day's night, not last night.
+      labelKey: glance.finished ? 'glance.week.barsLabelNightsFinished' : 'glance.week.barsLabelNights',
     })
   }
   return (
