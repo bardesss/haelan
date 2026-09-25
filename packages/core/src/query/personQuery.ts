@@ -4,12 +4,12 @@ import { readSourceActivity } from './sourceActivity.ts'
 import { readAllTime } from './allTime.ts'
 import type { AllTime } from './allTime.ts'
 import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
-import { daily, people, samples, overrides as overridesTable, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
+import { daily, people, samples, overrides as overridesTable, SESSION_KINDS, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { SampleLike } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
-import { nameFor } from '../store/sourceAliases.ts'
+import { namedSourcesOf } from '../store/sourceAliases.ts'
 import { ConfigError } from '../errors.ts'
 import { baselinesOver, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
@@ -813,8 +813,9 @@ export class PersonQuery {
    * once, and a session that outlives the account it was issued for is a bug elsewhere, not a
    * question this method can answer by degrading to nulls.
    *
-   * `sources[].name` runs the same alias-then-display-name-then-id choice `nameFor` makes for
-   * every other surface, rather than a second copy of it living here.
+   * `sources[].name` is namedSourcesOf's, the alias-then-default-then-display-name-then-id choice
+   * every other surface makes, rather than a second copy of it living here. English, since an
+   * agent has no reader's language to localise a known app's default into.
    */
   describe(input: { today?: string } = {}): DescribedPerson {
     const person = this.#db.select({
@@ -822,19 +823,9 @@ export class PersonQuery {
     }).from(people).where(eq(people.id, this.#personId)).get()
     if (person === undefined) throw new ConfigError(`no person named '${this.#personId}'`)
 
-    const rows = this.#db.select({
-      id: sources.id,
-      displayName: sources.displayName,
-      kind: sources.kind,
-      alias: sourceAliases.alias,
-    }).from(sources)
-      .leftJoin(sourceAliases, and(
-        eq(sourceAliases.personId, sources.personId),
-        eq(sourceAliases.sourceId, sources.id),
-      ))
-      .where(eq(sources.personId, this.#personId))
-      .orderBy(asc(sources.createdAtMs), asc(sources.id))
-      .all()
+    // The shared read rather than a join of its own, because a known app's default name depends
+    // on the person's other sources and a second copy of that rule here would drift from it.
+    const rows = namedSourcesOf(this.#db, this.#personId)
 
     // Only when asked. The staleness read scans this person's daily rows, and describe() is the
     // cheap "who am I bound to" call every agent session opens with.
@@ -849,7 +840,7 @@ export class PersonQuery {
       timezone: person.timezone,
       sources: rows.map((row) => ({
         id: row.id,
-        name: nameFor({ id: row.id, displayName: row.displayName, alias: row.alias }),
+        name: row.name,
         kind: row.kind,
         // null for a source with no daily rows as well as for a call that asked for none: an
         // agent is told "not known" rather than handed a guess either way.

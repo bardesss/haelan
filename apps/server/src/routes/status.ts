@@ -61,6 +61,9 @@ export function registerStatus(app: FastifyInstance): void {
     // the count and a second query would only be a chance for them to disagree.
     const syncFailures = stores.syncState.failuresFor(personId)
     const failing = syncFailures.length
+    // Read once for both maps: the default names depend on the whole list (two Health Connect
+    // rows are told apart by date), so the two maps must come from the same read.
+    const named = instance.sourceAliases.listNamed(personId)
     return composeStatus({
       today,
       nowMs,
@@ -74,7 +77,10 @@ export function registerStatus(app: FastifyInstance): void {
       },
       phone: { lastUploadAtMs, sourceIds: phoneSources },
       activity: readSourceActivity(instance.db, personId, { today }),
-      names: new Map(instance.sourceAliases.listNamed(personId).map((s) => [s.id, s.name])),
+      names: new Map(named.map((s) => [s.id, s.name])),
+      // Null beside an alias: a panel row carries no alias to check first, so it must not be
+      // handed a default that would outrank the name the person chose.
+      defaultNames: new Map(named.map((s) => [s.id, s.alias === null ? s.defaultName : null])),
       choices: instance.sourceVisibility.list(personId),
       syncFailures,
     })

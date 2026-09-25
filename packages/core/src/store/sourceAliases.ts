@@ -1,7 +1,10 @@
 import { and, asc, eq, ne } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { sourceAliases, sources } from '../db/schema/index.ts'
+import { people, sourceAliases, sources } from '../db/schema/index.ts'
 import { ConfigError } from '../errors.ts'
+import { localDateOf } from '../sync/localDate.ts'
+import { defaultNamesOf, englishDefaultName } from '../api/sourceNames.ts'
+import type { DefaultName } from '../api/sourceNames.ts'
 import { getSource } from './sources.ts'
 
 /**
@@ -16,14 +19,25 @@ export interface NamedSource {
   displayName: string
   /** What this person called it, or null if they never did. */
   alias: string | null
-  /** What every surface shows. Resolved here so no client reimplements the chain. */
+  /**
+   * What every surface shows. Resolved here so no client reimplements the chain. For a known app
+   * with no alias this is the English default (sourceNames.ts), which is what an MCP tool, an
+   * export and any client without a reader's language print.
+   */
   name: string
   kind: 'device' | 'app' | 'manual'
   createdAtMs: number
+  /**
+   * The known app's default this source has, so the web can say it in the reader's language. Null
+   * for a source that is not a known app, where `name` is the whole answer. Still set beside an
+   * alias, for Settings' placeholder (see DefaultName); every reader checks `alias` first, the order
+   * nameFor itself follows.
+   */
+  defaultName: DefaultName | null
 }
 
 /**
- * Alias, then the provider's own name, then the id.
+ * Alias, then a known app's readable default, then the provider's own name, then the id.
  *
  * The last step is not dead code: `display_name` is not null, but nothing stops a provider from
  * sending an empty one, and an option rendering as blank is worse than one rendering as a hex id.
@@ -31,9 +45,66 @@ export interface NamedSource {
  * and M4's CLI would otherwise each carry their own copy and drift apart on what a source is
  * called.
  */
-export function nameFor(input: { id: string, displayName: string, alias: string | null }): string {
+export function nameFor(input: {
+  id: string, displayName: string, alias: string | null, defaultName?: DefaultName | null,
+}): string {
   if (input.alias !== null) return input.alias
+  if (input.defaultName) return englishDefaultName(input.defaultName)
   return input.displayName === '' ? input.id : input.displayName
+}
+
+/**
+ * Every source one person has, named, oldest first. The one read behind every surface that names a
+ * source - listNamed, PersonQuery.describe (and through it the MCP tools), the all-time records -
+ * because a default name depends on the person's other sources (two Health Connect rows are told
+ * apart by date, one is not) and so cannot be resolved one row at a time without each caller
+ * re-reading the list and, sooner or later, disagreeing about it.
+ *
+ * The first-seen date is read in the person's own zone, the same way every other local date in
+ * this codebase is: "since 4 Sep" means the day the person would have called it.
+ */
+export function namedSourcesOf(db: DbOrTx, personId: string): NamedSource[] {
+  const rows = db.select({
+    id: sources.id,
+    externalId: sources.externalId,
+    displayName: sources.displayName,
+    kind: sources.kind,
+    createdAtMs: sources.createdAtMs,
+    alias: sourceAliases.alias,
+  }).from(sources)
+    .leftJoin(sourceAliases, and(
+      eq(sourceAliases.personId, sources.personId),
+      eq(sourceAliases.sourceId, sources.id),
+    ))
+    .where(eq(sources.personId, personId))
+    // Stable and meaningful: oldest source first, and the id breaks a tie so two sources first
+    // seen in the same payload do not swap places between two reads of the same list.
+    .orderBy(asc(sources.createdAtMs), asc(sources.id))
+    .all()
+  if (rows.length === 0) return []
+
+  // UTC for a person row that is somehow missing: the sources exist, so their names must still
+  // resolve, and a date one day off in the rare disambiguation suffix is the whole cost.
+  const timezone = db.select({ timezone: people.timezone }).from(people)
+    .where(eq(people.id, personId)).get()?.timezone ?? 'UTC'
+  const defaults = defaultNamesOf(rows.map((row) => ({
+    id: row.id, displayName: row.displayName, kind: row.kind, alias: row.alias,
+    firstSeenDate: localDateOf(row.createdAtMs, timezone),
+  })))
+
+  return rows.map((row) => {
+    const defaultName = defaults.get(row.id) ?? null
+    return {
+      id: row.id,
+      externalId: row.externalId,
+      displayName: row.displayName,
+      alias: row.alias,
+      name: nameFor({ id: row.id, displayName: row.displayName, alias: row.alias, defaultName }),
+      kind: row.kind,
+      createdAtMs: row.createdAtMs,
+      defaultName,
+    }
+  })
 }
 
 /**
@@ -49,33 +120,7 @@ export class SourceAliasStore {
 
   /** Every source this person has, each with the name to show for it. Creation order. */
   listNamed(personId: string): NamedSource[] {
-    const rows = this.#db.select({
-      id: sources.id,
-      externalId: sources.externalId,
-      displayName: sources.displayName,
-      kind: sources.kind,
-      createdAtMs: sources.createdAtMs,
-      alias: sourceAliases.alias,
-    }).from(sources)
-      .leftJoin(sourceAliases, and(
-        eq(sourceAliases.personId, sources.personId),
-        eq(sourceAliases.sourceId, sources.id),
-      ))
-      .where(eq(sources.personId, personId))
-      // Stable and meaningful: oldest source first, and the id breaks a tie so two sources first
-      // seen in the same payload do not swap places between two reads of the same list.
-      .orderBy(asc(sources.createdAtMs), asc(sources.id))
-      .all()
-
-    return rows.map((row) => ({
-      id: row.id,
-      externalId: row.externalId,
-      displayName: row.displayName,
-      alias: row.alias,
-      name: nameFor({ id: row.id, displayName: row.displayName, alias: row.alias }),
-      kind: row.kind,
-      createdAtMs: row.createdAtMs,
-    }))
+    return namedSourcesOf(this.#db, personId)
   }
 
   put(input: { personId: string, sourceId: string, alias: string, nowMs: number }): void {

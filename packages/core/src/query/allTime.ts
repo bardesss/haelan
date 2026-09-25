@@ -4,7 +4,9 @@ import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
 import { sessionRecordsOf } from '../api/sessionRecords.ts'
 import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
-import { nameFor } from '../store/sourceAliases.ts'
+import { namedSourcesOf } from '../store/sourceAliases.ts'
+import type { NamedSource } from '../store/sourceAliases.ts'
+import type { DefaultName } from '../api/sourceNames.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
 import type { DbOrTx } from '../db/open.ts'
 
@@ -101,6 +103,12 @@ export interface MetricRecord {
    * and a merged day assembled from several devices is not one device's record.
    */
   sourceName: string | null
+  /**
+   * The known-app default `sourceName` was built from, for the web to say in the reader's
+   * language, or null - always null beside a null `sourceName`, and null when the person renamed
+   * the source or it is not a known app. See NamedSource.defaultName.
+   */
+  sourceDefaultName: DefaultName | null
   /** This metric's own first day, which is not the page's - see `eddington` for why that matters. */
   from: string
   days: number
@@ -154,6 +162,11 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
 
   const records: MetricRecord[] = []
   let stepDays: DayRow[] = []
+  // Read once, and only when a record day turns out to have one source: most do not, and the
+  // list is the same for every metric.
+  let named: Map<string, NamedSource> | undefined
+  const namedById = (): Map<string, NamedSource> =>
+    (named ??= new Map(namedSourcesOf(db, personId).map((source) => [source.id, source])))
 
   for (const metric of RECORD_METRICS) {
     // Whichever tier actually has rows, asked rather than assumed, so a household whose device
@@ -180,10 +193,14 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
 
     const best = recordOf(rows)
     if (best !== null) {
+      const sole = soleSourceOn(db, personId, metric, best.localDate, namedById)
       records.push({
         metric, tier, localDate: best.localDate, value: best.value,
         from: rows[0]!.localDate, days: rows.length,
-        sourceName: soleSourceOn(db, personId, metric, best.localDate),
+        sourceName: sole?.name ?? null,
+        // Null beside an alias, for the reason the status route gives: a record carries no alias
+        // for the web to check first.
+        sourceDefaultName: sole !== null && sole.alias === null ? sole.defaultName : null,
       })
     }
   }
@@ -216,12 +233,14 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
  *
  * Null rather than a guess in three real cases: a provider row carries no mix at all, a merged
  * day assembled from two devices belongs to neither, and a source may have no row in `sources`.
- * The alias chain is `nameFor`, the same one every other surface resolves a source name through,
- * so a household that renamed its watch sees that name here too.
+ * The name is namedSourcesOf's, the same one every other surface resolves a source name through,
+ * so a household that renamed its watch sees that name here too, and a known app reads the same
+ * default here as it does in the status panel.
  */
 function soleSourceOn(
   db: DbOrTx, personId: string, metric: string, localDate: string,
-): string | null {
+  namedById: () => ReadonlyMap<string, NamedSource>,
+): NamedSource | null {
   const row = db.all<{ sourceMix: string | null }>(sql`
     SELECT source_mix AS sourceMix FROM daily
      WHERE person_id = ${personId} AND metric = ${metric} AND local_date = ${localDate}
@@ -235,13 +254,7 @@ function soleSourceOn(
   const sourceId = (mix[0] as { source?: unknown }).source
   if (typeof sourceId !== 'string') return null
 
-  const source = db.all<{ displayName: string, alias: string | null }>(sql`
-    SELECT s.display_name AS displayName, a.alias AS alias FROM sources s
-      LEFT JOIN source_aliases a ON a.person_id = s.person_id AND a.source_id = s.id
-     WHERE s.person_id = ${personId} AND s.id = ${sourceId}`)[0]
-  if (!source) return null
-
-  return nameFor({ id: sourceId, displayName: source.displayName, alias: source.alias })
+  return namedById().get(sourceId) ?? null
 }
 
 /**

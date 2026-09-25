@@ -43,9 +43,9 @@ describe('listNamed', () => {
   it('names every source the person has, in creation order', () => {
     store.put({ personId: 'p1', sourceId: 'app', alias: 'Food diary', nowMs: 100 })
     expect(store.listNamed('p1')).toEqual([
-      { id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4', alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 10 },
-      { id: 'app', externalId: 'HEALTH_CONNECT:com.lyfta', displayName: 'com.lyfta', alias: 'Food diary', name: 'Food diary', kind: 'app', createdAtMs: 20 },
-      { id: 'nameless', externalId: 'HEALTH_CONNECT:', displayName: '', alias: null, name: 'nameless', kind: 'app', createdAtMs: 30 },
+      { id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4', alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 10, defaultName: null },
+      { id: 'app', externalId: 'HEALTH_CONNECT:com.lyfta', displayName: 'com.lyfta', alias: 'Food diary', name: 'Food diary', kind: 'app', createdAtMs: 20, defaultName: null },
+      { id: 'nameless', externalId: 'HEALTH_CONNECT:', displayName: '', alias: null, name: 'nameless', kind: 'app', createdAtMs: 30, defaultName: null },
     ])
   })
 

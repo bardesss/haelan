@@ -31,7 +31,7 @@ describe('GET /p/:personId/all-time', () => {
     expect(body.span).toMatchObject({ from: '2026-01-01', to: '2026-01-02', days: 2 })
     expect(body.records).toEqual([{
       metric: 'steps', tier: 'merged', localDate: '2026-01-02', value: 21000,
-      from: '2026-01-01', days: 2, sourceName: null,
+      from: '2026-01-01', days: 2, sourceName: null, sourceDefaultName: null,
     }])
     expect(body.eddington).toMatchObject({ from: '2026-01-01', days: 2 })
   })
@@ -46,7 +46,7 @@ describe('GET /p/:personId/all-time', () => {
     })
     expect(response.json().records).toEqual([{
       metric: 'floors', tier: 'provider', localDate: '2026-01-01', value: 12,
-      from: '2026-01-01', days: 1, sourceName: null,
+      from: '2026-01-01', days: 1, sourceName: null, sourceDefaultName: null,
     }])
   })
 
