@@ -49,6 +49,8 @@ import type { StoredEvent } from '../store/events.ts'
 import { writeProjection } from './projection.ts'
 import { readGlance } from './glance.ts'
 import type { Glance } from './glance.ts'
+import { readGlanceCalendar } from './glanceCalendar.ts'
+import type { GlanceCalendar } from './glanceCalendar.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -283,6 +285,16 @@ export class PersonQuery {
       day: input.day,
       dayEndMs: input.dayEndMs,
     })
+  }
+
+  /**
+   * The calendar (M9c): a month of days with data, each with its sleep and steps verdicts, for
+   * the dashboard's calendar picker. `today` decides both which days of the current month are
+   * shown (never a future one) and whether the month's own last day counts as partial for steps;
+   * see `readGlanceCalendarRaw` for the reads and `judgeCalendarDay` for the verdicts.
+   */
+  glanceCalendar(input: { month: string, today: string }): GlanceCalendar {
+    return readGlanceCalendar(this, input)
   }
 
   /**

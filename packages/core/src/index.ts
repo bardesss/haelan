@@ -255,6 +255,14 @@ export type {
 } from './query/glance.ts'
 export { standingOf } from './query/glance.ts'
 
+// M9c: day navigation. The calendar's verdicts, reachable through PersonQuery.glanceCalendar for
+// full precision; `readGlanceCalendarRaw` and `judgeCalendarDay` are exported too, unlike
+// readGlance above, because the HTTP route rounds the raw values to catalogue precision and
+// re-judges from those rounded numbers rather than from what PersonQuery.glanceCalendar returns
+// (the same split /glance keeps between its own figures and roundGlance).
+export type { CalendarSleep, CalendarSteps, GlanceCalendarDay, GlanceCalendar, RawCalendarDay, GlanceCalendarRaw } from './query/glanceCalendar.ts'
+export { readGlanceCalendarRaw, judgeCalendarDay } from './query/glanceCalendar.ts'
+
 // M9b/status-panel task 5. The status panel's own composition: connections, their devices and a
 // per-source panel choice, from facts the server already holds. Same discipline as the readers
 // above - only the pure composer and its shapes are exported, the server's own route assembles
