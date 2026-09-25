@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { localDateOf } from '../src/sync/localDate.ts'
+import { localDateOf, localMidnightMs } from '../src/sync/localDate.ts'
 import { dayWindows } from '../src/sync/windows.ts'
 
 const AMS = 'Europe/Amsterdam'
@@ -98,5 +98,26 @@ describe('localDateOf', () => {
     })
     expect(windows.length).toBeGreaterThan(28)
     expect(built()).toBe(1)
+  })
+})
+
+describe('localMidnightMs', () => {
+  it('finds the instant local midnight opens a date in a zone ahead of UTC', () => {
+    expect(localMidnightMs('2026-09-22', AMS)).toBe(Date.parse('2026-09-21T22:00:00Z'))
+  })
+
+  // 2026-10-25 is still summer time (CEST, UTC+2); the clocks go back on 2026-10-25 03:00 CEST,
+  // so 2026-10-26 opens under winter time (CET, UTC+1). Reading the offset twice, the second time
+  // at the first answer, is what makes the day the change itself falls on come out right.
+  it('answers the day the clocks go back with the offset that day started under', () => {
+    expect(localMidnightMs('2026-10-25', AMS)).toBe(Date.parse('2026-10-24T22:00:00Z'))
+  })
+
+  it('answers the day after the clocks go back with the new offset', () => {
+    expect(localMidnightMs('2026-10-26', AMS)).toBe(Date.parse('2026-10-25T23:00:00Z'))
+  })
+
+  it('is the plain UTC midnight in UTC itself', () => {
+    expect(localMidnightMs('2026-09-22', 'UTC')).toBe(Date.parse('2026-09-22T00:00:00Z'))
   })
 })

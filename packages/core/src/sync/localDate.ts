@@ -39,3 +39,31 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
 export function localDateOf(ms: number, timeZone: string): string {
   return formatterFor(timeZone).format(new Date(ms))
 }
+
+// How far `timeZone` is ahead of UTC at the instant `utcMs`, in milliseconds: the zone's own wall
+// clock read back as if it were UTC, minus the instant itself.
+function zoneOffsetMs(utcMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(utcMs))
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)!.value)
+  const wall = Date.UTC(part('year'), part('month') - 1, part('day'), part('hour'), part('minute'), part('second'))
+  return wall - Math.floor(utcMs / 1000) * 1000
+}
+
+/**
+ * The instant local midnight opens `date` (YYYY-MM-DD) in `timeZone`. The offset is read twice,
+ * the second time at the first answer, so a day whose offset changes during it (the clocks going
+ * forward or back) is answered with the offset midnight itself was in.
+ *
+ * Same algorithm as `apps/web/src/pages/dashboard/glanceText.ts`'s own `localMidnightMs`, which
+ * this mirrors rather than imports from: the web app's copy exists for a browser reading its own
+ * timezone, and this one for core's server-side readers, which have no reason to depend on
+ * `apps/web`.
+ */
+export function localMidnightMs(date: string, timeZone: string): number {
+  const utcMidnight = Date.parse(`${date}T00:00:00Z`)
+  const guess = utcMidnight - zoneOffsetMs(utcMidnight, timeZone)
+  return utcMidnight - zoneOffsetMs(guess, timeZone)
+}
