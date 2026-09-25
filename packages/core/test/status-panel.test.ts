@@ -8,7 +8,7 @@ function input(over: Partial<StatusInput> = {}): StatusInput {
     today: '2026-09-24', nowMs: 10_000_000,
     google: { state: 'connected' }, run: RUN,
     phone: { lastUploadAtMs: null, sourceIds: new Set() },
-    activity: [], names: new Map(), choices: new Map(),
+    activity: [], names: new Map(), choices: new Map(), syncFailures: [],
     ...over,
   }
 }
@@ -122,5 +122,39 @@ describe('composeStatus', () => {
     expect(panel.connections[0]!.devices.map((d) => [d.sourceId, d.metrics])).toEqual([
       ['fine', []], ['dead', ['heart_rate', 'steps']], ['renamed', []],
     ])
+  })
+
+  it('lists the failing data types on the Google connection, newest error first', () => {
+    const panel = composeStatus(input({
+      run: { ...RUN, lastFailed: 3 },
+      // Neither in time order nor in the reverse of it, and the answer is not alphabetical either,
+      // so no accidental order - input, reversed or by id - can pass for newest first.
+      syncFailures: [
+        { dataType: 'steps', lastError: '[transient] 503 listing steps', lastErrorAtMs: 1_000 },
+        // Never timestamped: a row that somehow counts failures with no error time sorts last
+        // rather than first, since "newest" cannot be claimed for it.
+        { dataType: 'sleep', lastError: null, lastErrorAtMs: null },
+        { dataType: 'weight', lastError: '[schema_drift] 400 listing weight', lastErrorAtMs: 3_000 },
+      ],
+    }))
+    expect(panel.connections[0]!.failures).toEqual([
+      { dataType: 'weight', lastError: '[schema_drift] 400 listing weight', lastErrorAtMs: 3_000 },
+      { dataType: 'steps', lastError: '[transient] 503 listing steps', lastErrorAtMs: 1_000 },
+      { dataType: 'sleep', lastError: null, lastErrorAtMs: null },
+    ])
+  })
+
+  it('carries an empty failures list on Google when nothing fails, and none on the phone', () => {
+    const panel = composeStatus(input({ phone: { lastUploadAtMs: 9_000_000, sourceIds: new Set() } }))
+    expect(panel.connections.map((c) => [c.kind, c.failures])).toEqual([['google', []], ['phone', undefined]])
+  })
+
+  it('does not reorder the caller\'s own failures array', () => {
+    const failures = [
+      { dataType: 'steps', lastError: 'a', lastErrorAtMs: 1 },
+      { dataType: 'sleep', lastError: 'b', lastErrorAtMs: 2 },
+    ]
+    composeStatus(input({ syncFailures: failures }))
+    expect(failures.map((f) => f.dataType)).toEqual(['steps', 'sleep'])
   })
 })

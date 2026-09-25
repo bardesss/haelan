@@ -269,5 +269,5 @@ export { readGlanceCalendarRaw, judgeCalendarDay } from './query/glanceCalendar.
 // StatusInput from stores this package does not reach.
 export { composeStatus, shownByDefault, PANEL_DEFAULT_WINDOW_DAYS, PHONE_QUIET_MS } from './api/statusPanel.ts'
 export type {
-  StatusPanel, StatusInput, StatusConnection, StatusDevice, StatusSync, ConnectionKind, ConnectionProblem,
+  StatusPanel, StatusInput, StatusConnection, StatusDevice, StatusSync, StatusFailure, ConnectionKind, ConnectionProblem,
 } from './api/statusPanel.ts'

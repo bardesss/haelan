@@ -165,6 +165,43 @@ describe('SyncStateStore', () => {
     })
   })
 
+  /**
+   * The status panel's list of what failed, which has to be exactly the set freshnessFor counts
+   * as `failing` - the panel's sentence says how many, and a list that disagreed with the count
+   * beside it on the members page would be two answers to one question.
+   */
+  describe('failuresFor', () => {
+    it('lists the types failing right now with their last error, and none that recovered', () => {
+      store.recordFailure({ personId: 'p1', dataType: 'steps', error: new TransientError('503 listing steps'), nowMs: 2000 })
+      store.recordFailure({ personId: 'p1', dataType: 'weight', error: new SchemaDriftError('400 listing weight'), nowMs: 3000 })
+      // Failed, then recovered: consecutiveFailures is back to zero, so it is not failing any more
+      // even though lastError still holds the old message.
+      store.recordFailure({ personId: 'p1', dataType: 'sleep', error: new TransientError('old'), nowMs: 1000 })
+      store.recordSuccess({ personId: 'p1', dataType: 'sleep', highWaterMs: 1, nowMs: 1500 })
+
+      const failures = store.failuresFor('p1')
+      expect([...failures].sort((a, b) => a.dataType.localeCompare(b.dataType))).toEqual([
+        { dataType: 'steps', lastError: '[transient] 503 listing steps', lastErrorAtMs: 2000 },
+        { dataType: 'weight', lastError: '[schema_drift] 400 listing weight', lastErrorAtMs: 3000 },
+      ])
+      expect(failures.length).toBe(store.freshnessFor(['p1']).get('p1')!.failing)
+    })
+
+    it('leaves out a failing type the person has since turned off, as freshnessFor does', () => {
+      store.recordFailure({ personId: 'p1', dataType: 'steps', error: new TransientError('x'), nowMs: 2000 })
+      store.recordFailure({ personId: 'p1', dataType: 'weight', error: new TransientError('x'), nowMs: 2000 })
+      new ExcludedDataTypeStore(ctx.db).setFor({ personId: 'p1', dataTypeIds: ['weight'], nowMs: 3000 })
+      expect(store.failuresFor('p1').map((f) => f.dataType)).toEqual(['steps'])
+      expect(store.freshnessFor(['p1']).get('p1')!.failing).toBe(1)
+    })
+
+    it("does not answer with another person's failures", () => {
+      seedPerson(ctx.db, 'p3')
+      store.recordFailure({ personId: 'p3', dataType: 'steps', error: new TransientError('x'), nowMs: 2000 })
+      expect(store.failuresFor('p1')).toEqual([])
+    })
+  })
+
   describe('dueJobs and exclusions', () => {
     let excluded: ExcludedDataTypeStore
 
