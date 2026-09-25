@@ -25,26 +25,28 @@
  * what every surface without a reader's language gets - MCP tools, exports, the API's `name` field.
  */
 
-/** The catalogue key the web app localises under `sourceNames.default.<key>`. */
+/** The catalogue key the web app localises under `sourceDefaults.<key>`. */
 export type KnownAppKey = 'haelanPhone' | 'openScale' | 'healthConnectPhone'
 
 /**
  * What a surface needs to say a default name in the reader's language. Null for a source that is
- * not a known app. Beside an alias it is still set (without disambiguation), because Settings shows
- * it as the rename field's placeholder - what the source goes back to being called - but the alias
- * wins everywhere a name is printed; a surface that carries no alias (the status panel's rows, a
- * record's source) is sent null instead, so it cannot get the order wrong.
+ * not a known app. Beside an alias it is still set, as the name the source would have with the alias
+ * cleared (see defaultNamesOf), because Settings shows it as the rename field's placeholder - but the
+ * alias wins everywhere a name is printed; a surface that carries no alias (the status panel's rows,
+ * a record's source) is sent null instead, so it cannot get the order wrong.
  */
 export interface DefaultName {
   key: KnownAppKey
   /**
    * The person's local date (YYYY-MM-DD) the source was first seen, set only when two or more of
-   * this person's un-renamed sources would otherwise print the same default name. Null otherwise,
-   * because a date beside a name nothing else shares is noise.
+   * this person's un-renamed sources would otherwise print the same default name (for a renamed
+   * source: would, once its alias were cleared). Null otherwise, because a date beside a name
+   * nothing else shares is noise.
    */
   since: string | null
   /**
-   * The first characters of the source id, set only when `since` did not separate them either:
+   * The first characters of the source id - as many as keep it unique among the sources sharing its
+   * date - set only when `since` did not separate them either:
    * sources first created by the same upload, or re-keyed by the same rebuild, share a first-seen
    * date, and two identical labels merge into one legend entry and one picker option nobody can
    * tell apart. Ugly on purpose - it is the last resort, and renaming the source removes it.
@@ -112,8 +114,12 @@ export function englishDefaultName(defaultName: DefaultName): string {
   return defaultName.tag === null ? dated : `${dated} (${defaultName.tag})`
 }
 
-/** How many leading characters of the id `tag` carries. Enough for a household's handful. */
-const TAG_LENGTH = 4
+/**
+ * The fewest leading characters of the id `tag` carries. Four tell a household's handful apart
+ * almost always, but a hex id's first four characters are not unique by construction, so a tag
+ * grows past this until it is (see tagsFor).
+ */
+const MIN_TAG_LENGTH = 4
 
 export interface NameableSource {
   id: string
@@ -125,41 +131,70 @@ export interface NameableSource {
 }
 
 /**
+ * The shortest id prefix, at least MIN_TAG_LENGTH long, that no two of `ids` share. Ids are unique,
+ * so the full id always ends the search; in practice it stops at four.
+ */
+function tagsFor(ids: readonly string[]): Map<string, string> {
+  const longest = Math.max(...ids.map((id) => id.length))
+  let length = MIN_TAG_LENGTH
+  while (length < longest && new Set(ids.map((id) => id.slice(0, length))).size < ids.length) length += 1
+  return new Map(ids.map((id) => [id, id.slice(0, length)]))
+}
+
+/**
+ * The default names one collision group earns: undated when it has one member, dated when it has
+ * more, and tagged where the dates collide too, the tags unique within that date.
+ */
+function disambiguate(key: KnownAppKey, group: readonly NameableSource[]): Map<string, DefaultName> {
+  const out = new Map<string, DefaultName>()
+  if (group.length === 1) {
+    out.set(group[0]!.id, { key, since: null, tag: null })
+    return out
+  }
+  const perDate = new Map<string, string[]>()
+  for (const row of group) perDate.set(row.firstSeenDate, [...(perDate.get(row.firstSeenDate) ?? []), row.id])
+  for (const row of group) {
+    const sameDay = perDate.get(row.firstSeenDate)!
+    const tag = sameDay.length > 1 ? tagsFor(sameDay).get(row.id)! : null
+    out.set(row.id, { key, since: row.firstSeenDate, tag })
+  }
+  return out
+}
+
+/**
  * Every default name for one person's sources, disambiguated against each other.
  *
  * Takes the whole list rather than one source, because whether a default needs its date depends
  * on the others: one Health Connect row is "Health Connect (phone)", two are each told apart by
- * when they appeared. Only un-renamed sources count toward a collision - once the person has named
- * one of two, the other is alone under the default again and loses its date.
+ * when they appeared. Only un-renamed sources count toward the names printed - once the person has
+ * named one of two, the other is alone under the default again and loses its date.
+ *
+ * A renamed known app is in the map too, for Settings' rename placeholder, and its entry is what it
+ * would be called with its alias cleared: it rejoins the un-renamed sources of its own default for
+ * its own name only, so with two Health Connect rows already dated a third renamed one reads dated
+ * as well - the name clearing the field really produces (the review of PR 383 found the placeholder
+ * promising an undated name here). The un-renamed sources' own names never change because of a
+ * renamed sibling, since nobody sees the renamed one under its default while the alias stands.
  *
  * Returns a map holding only the sources that are known apps; everything absent resolves through
- * the plain alias-then-display-name-then-id chain. A renamed known app is in it with no date or tag:
- * it collides with nothing while its alias stands, and the placeholder that reads it is a hint.
+ * the plain alias-then-display-name-then-id chain.
  */
 export function defaultNamesOf(rows: readonly NameableSource[]): Map<string, DefaultName> {
-  const byKey = new Map<KnownAppKey, NameableSource[]>()
-  const out = new Map<string, DefaultName>()
+  const unrenamed = new Map<KnownAppKey, NameableSource[]>()
+  const renamed: { key: KnownAppKey, row: NameableSource }[] = []
   for (const row of rows) {
     const app = knownAppOf(row)
     if (app === null) continue
-    if (row.alias !== null) {
-      out.set(row.id, { key: app.key, since: null, tag: null })
-      continue
-    }
-    byKey.set(app.key, [...(byKey.get(app.key) ?? []), row])
+    if (row.alias !== null) renamed.push({ key: app.key, row })
+    else unrenamed.set(app.key, [...(unrenamed.get(app.key) ?? []), row])
   }
 
-  for (const [key, group] of byKey) {
-    if (group.length === 1) {
-      out.set(group[0]!.id, { key, since: null, tag: null })
-      continue
-    }
-    const perDate = new Map<string, number>()
-    for (const row of group) perDate.set(row.firstSeenDate, (perDate.get(row.firstSeenDate) ?? 0) + 1)
-    for (const row of group) {
-      const tag = (perDate.get(row.firstSeenDate) ?? 0) > 1 ? row.id.slice(0, TAG_LENGTH) : null
-      out.set(row.id, { key, since: row.firstSeenDate, tag })
-    }
+  const out = new Map<string, DefaultName>()
+  for (const [key, group] of unrenamed) {
+    for (const [id, name] of disambiguate(key, group)) out.set(id, name)
+  }
+  for (const { key, row } of renamed) {
+    out.set(row.id, disambiguate(key, [...(unrenamed.get(key) ?? []), row]).get(row.id)!)
   }
   return out
 }

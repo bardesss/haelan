@@ -825,7 +825,7 @@ export class PersonQuery {
 
     // The shared read rather than a join of its own, because a known app's default name depends
     // on the person's other sources and a second copy of that rule here would drift from it.
-    const rows = namedSourcesOf(this.#db, this.#personId)
+    const rows = namedSourcesOf(this.#db, this.#personId, person.timezone)
 
     // Only when asked. The staleness read scans this person's daily rows, and describe() is the
     // cheap "who am I bound to" call every agent session opens with.

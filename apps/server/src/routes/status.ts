@@ -63,7 +63,7 @@ export function registerStatus(app: FastifyInstance): void {
     const failing = syncFailures.length
     // Read once for both maps: the default names depend on the whole list (two Health Connect
     // rows are told apart by date), so the two maps must come from the same read.
-    const named = instance.sourceAliases.listNamed(personId)
+    const named = instance.sourceAliases.listNamed(personId, person?.timezone)
     return composeStatus({
       today,
       nowMs,

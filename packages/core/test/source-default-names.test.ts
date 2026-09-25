@@ -1,4 +1,5 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources } from '../src/db/schema/index.ts'
@@ -66,8 +67,50 @@ describe('defaultNamesOf', () => {
       row({ id: 'b', displayName: HC_B, firstSeenDate: '2026-09-12', alias: 'Old phone' }),
     ])
     expect(names.get('a')).toEqual({ key: 'healthConnectPhone', since: null, tag: null })
-    // Still present, for the rename field's placeholder, but undated: it collides with nothing.
-    expect(names.get('b')).toEqual({ key: 'healthConnectPhone', since: null, tag: null })
+    // Still present, for the rename field's placeholder: what it would be called with its alias
+    // cleared, which is the moment it collides with `a` again and so carries its date.
+    expect(names.get('b')).toEqual({ key: 'healthConnectPhone', since: '2026-09-12', tag: null })
+  })
+
+  // Review of PR 383: the placeholder promised "Health Connect (phone)" for a renamed source while
+  // two others already collided, so clearing the alias produced a third, dated name instead.
+  it('dates a renamed source as it would be named with its alias cleared, without touching the others', () => {
+    const names = defaultNamesOf([
+      row({ id: 'a', displayName: HC_A, firstSeenDate: '2026-09-04' }),
+      row({ id: 'b', displayName: HC_B, firstSeenDate: '2026-09-12' }),
+      row({ id: 'c', displayName: 'com.android.healthconnect.phone.55555555', firstSeenDate: '2026-09-20', alias: 'Old phone' }),
+    ])
+    expect(names.get('c')).toEqual({ key: 'healthConnectPhone', since: '2026-09-20', tag: null })
+    expect(names.get('a')).toEqual({ key: 'healthConnectPhone', since: '2026-09-04', tag: null })
+    expect(names.get('b')).toEqual({ key: 'healthConnectPhone', since: '2026-09-12', tag: null })
+  })
+
+  it('never lets a renamed sibling date or tag an unrenamed source', () => {
+    const names = defaultNamesOf([
+      row({ id: 'aaaa1111', displayName: HC_A, firstSeenDate: '2026-09-04' }),
+      row({ id: 'aaaa2222', displayName: HC_B, firstSeenDate: '2026-09-04', alias: 'Old phone' }),
+    ])
+    expect(names.get('aaaa1111')).toEqual({ key: 'healthConnectPhone', since: null, tag: null })
+    // Its own placeholder sees the collision it would rejoin, down to the tag.
+    expect(names.get('aaaa2222')).toEqual({ key: 'healthConnectPhone', since: '2026-09-04', tag: 'aaaa2' })
+  })
+
+  // Review of PR 383: four characters of a hex id are not unique by construction.
+  it('lengthens the id tag until it is unique within the collision', () => {
+    const names = defaultNamesOf([
+      row({ id: 'abcdef11', displayName: HC_A, firstSeenDate: '2026-09-04' }),
+      row({ id: 'abcdef22', displayName: HC_B, firstSeenDate: '2026-09-04' }),
+      row({ id: 'abcxyz33', displayName: 'com.android.healthconnect.phone', firstSeenDate: '2026-09-04' }),
+    ])
+    expect([...names.values()].map((n) => n.tag)).toEqual(['abcdef1', 'abcdef2', 'abcxyz3'])
+  })
+
+  it('keeps the tag at four characters when four already tell them apart', () => {
+    const names = defaultNamesOf([
+      row({ id: 'abcd1111', displayName: HC_A, firstSeenDate: '2026-09-04' }),
+      row({ id: 'abce2222', displayName: HC_B, firstSeenDate: '2026-09-04' }),
+    ])
+    expect([...names.values()].map((n) => n.tag)).toEqual(['abcd', 'abce'])
   })
 
   // Sources first created by one upload or one rebuild share a date, and a date that does not
@@ -149,6 +192,25 @@ describe('namedSourcesOf', () => {
     const hcA = namedSourcesOf(test.db, 'p1').find((s) => s.id === 'hcA')!
     expect(hcA.defaultName).toEqual({ key: 'healthConnectPhone', since: '2026-09-04', tag: null })
     expect(namedSourcesOf(test.db, 'p1').find((s) => s.id === 'lyfta')!.defaultName).toBeNull()
+  })
+
+  // Review of PR 383: this read is behind every page's source picker, so it must not pay for a
+  // people lookup that no name needs.
+  it('reads no timezone when no source is a known app', () => {
+    const selects = vi.spyOn(test.db, 'select')
+    for (const id of ['haelan', 'scale', 'hcA', 'hcB']) test.db.delete(sources).where(eq(sources.id, id)).run()
+    selects.mockClear()
+    namedSourcesOf(test.db, 'p1')
+    expect(selects).toHaveBeenCalledTimes(1)
+    selects.mockRestore()
+  })
+
+  it('takes the timezone from the caller and names exactly as if it had read it', () => {
+    const read = namedSourcesOf(test.db, 'p1')
+    const selects = vi.spyOn(test.db, 'select')
+    expect(namedSourcesOf(test.db, 'p1', 'Europe/Amsterdam')).toEqual(read)
+    expect(selects).toHaveBeenCalledTimes(1)
+    selects.mockRestore()
   })
 
   it('is what listNamed answers, so no surface resolves a second way', () => {

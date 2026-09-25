@@ -3,7 +3,7 @@ import type { DbOrTx } from '../db/open.ts'
 import { people, sourceAliases, sources } from '../db/schema/index.ts'
 import { ConfigError } from '../errors.ts'
 import { localDateOf } from '../sync/localDate.ts'
-import { defaultNamesOf, englishDefaultName } from '../api/sourceNames.ts'
+import { defaultNamesOf, englishDefaultName, knownAppOf } from '../api/sourceNames.ts'
 import type { DefaultName } from '../api/sourceNames.ts'
 import { getSource } from './sources.ts'
 
@@ -62,8 +62,13 @@ export function nameFor(input: {
  *
  * The first-seen date is read in the person's own zone, the same way every other local date in
  * this codebase is: "since 4 Sep" means the day the person would have called it.
+ *
+ * `timezone` is for a caller that has already read the person (describe, the routes that compute
+ * the person's today): this read sits behind every page's source picker, so it should not repeat a
+ * lookup its caller just made. Without it, the zone is read here - and only when some source is a
+ * known app, since nothing else needs a date at all.
  */
-export function namedSourcesOf(db: DbOrTx, personId: string): NamedSource[] {
+export function namedSourcesOf(db: DbOrTx, personId: string, timezone?: string): NamedSource[] {
   const rows = db.select({
     id: sources.id,
     externalId: sources.externalId,
@@ -83,14 +88,20 @@ export function namedSourcesOf(db: DbOrTx, personId: string): NamedSource[] {
     .all()
   if (rows.length === 0) return []
 
-  // UTC for a person row that is somehow missing: the sources exist, so their names must still
-  // resolve, and a date one day off in the rare disambiguation suffix is the whole cost.
-  const timezone = db.select({ timezone: people.timezone }).from(people)
-    .where(eq(people.id, personId)).get()?.timezone ?? 'UTC'
-  const defaults = defaultNamesOf(rows.map((row) => ({
-    id: row.id, displayName: row.displayName, kind: row.kind, alias: row.alias,
-    firstSeenDate: localDateOf(row.createdAtMs, timezone),
-  })))
+  // Only known apps can earn a default, so only they need a first-seen date, and a person with
+  // none of them costs no people read and no date formatting.
+  const candidates = rows.filter((row) => knownAppOf(row) !== null)
+  let defaults = new Map<string, DefaultName>()
+  if (candidates.length > 0) {
+    // UTC for a person row that is somehow missing: the sources exist, so their names must still
+    // resolve, and a date one day off in the rare disambiguation suffix is the whole cost.
+    const zone = timezone ?? db.select({ timezone: people.timezone }).from(people)
+      .where(eq(people.id, personId)).get()?.timezone ?? 'UTC'
+    defaults = defaultNamesOf(candidates.map((row) => ({
+      id: row.id, displayName: row.displayName, kind: row.kind, alias: row.alias,
+      firstSeenDate: localDateOf(row.createdAtMs, zone),
+    })))
+  }
 
   return rows.map((row) => {
     const defaultName = defaults.get(row.id) ?? null
@@ -118,9 +129,12 @@ export class SourceAliasStore {
 
   constructor(db: DbOrTx) { this.#db = db }
 
-  /** Every source this person has, each with the name to show for it. Creation order. */
-  listNamed(personId: string): NamedSource[] {
-    return namedSourcesOf(this.#db, personId)
+  /**
+   * Every source this person has, each with the name to show for it. Creation order. `timezone`
+   * saves the people read for a caller that already has the person (see namedSourcesOf).
+   */
+  listNamed(personId: string, timezone?: string): NamedSource[] {
+    return namedSourcesOf(this.#db, personId, timezone)
   }
 
   put(input: { personId: string, sourceId: string, alias: string, nowMs: number }): void {
