@@ -4,9 +4,24 @@ export const PHONE_QUIET_MS = 24 * 3_600_000
 export type ConnectionKind = 'google' | 'phone'
 export type ConnectionProblem = 'revoked' | 'credentials_unreadable' | 'sync_failed' | 'phone_quiet'
 
+/**
+ * A known app's default name, as `name` was built from it. Structurally the DefaultName in
+ * sourceNames.ts, restated rather than imported because this module is import-free (see
+ * status-panel-subpath.test.ts); `key` is widened to string for the same reason, and the web reads
+ * it through the `sourceNames.default.<key>` catalogue entries either way.
+ */
+export interface StatusDefaultName { key: string, since: string | null, tag: string | null }
+
 export interface StatusDevice {
   sourceId: string
+  /** The English name every non-web reader gets: alias, known-app default, display name, id. */
   name: string
+  /**
+   * Set when `name` is a known app's default, so the panel can say it in the reader's language.
+   * composeStatus always sets it; optional because the web reads this type too, and the demo's
+   * captured /api/status predates the field until it is next regenerated - absent reads as null.
+   */
+  defaultName?: StatusDefaultName | null
   lastReportedDate: string | null
   stale: boolean
   /** Whether the person chose it (true/false) or it follows the default (null). */
@@ -86,6 +101,8 @@ export interface StatusInput {
     continuedElsewhere: boolean, routineMetrics: readonly string[],
   }>
   names: ReadonlyMap<string, string>
+  /** Known-app defaults by source id, from NamedSource.defaultName. Absent means none. */
+  defaultNames?: ReadonlyMap<string, StatusDefaultName | null>
   choices: ReadonlyMap<string, boolean>
   /** This person's failing data types (SyncStateStore.failuresFor), in any order. */
   syncFailures: ReadonlyArray<StatusFailure>
@@ -133,6 +150,7 @@ export function composeStatus(input: StatusInput): StatusPanel {
     const device: StatusDevice = {
       sourceId: seen.sourceId,
       name: input.names.get(seen.sourceId) ?? seen.sourceId,
+      defaultName: input.defaultNames?.get(seen.sourceId) ?? null,
       lastReportedDate: seen.lastReportedDate,
       stale,
       choice,

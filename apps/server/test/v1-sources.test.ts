@@ -119,8 +119,8 @@ describe('GET /sources', () => {
     const response = await list()
     expect(response.statusCode).toBe(200)
     expect(response.json().items).toEqual([
-      { id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4', alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 10 },
-      { id: 'app', externalId: 'HEALTH_CONNECT:com.lyfta', displayName: 'com.lyfta', alias: null, name: 'com.lyfta', kind: 'app', createdAtMs: 20 },
+      { id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4', alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 10, defaultName: null },
+      { id: 'app', externalId: 'HEALTH_CONNECT:com.lyfta', displayName: 'com.lyfta', alias: null, name: 'com.lyfta', kind: 'app', createdAtMs: 20, defaultName: null },
     ])
   })
 

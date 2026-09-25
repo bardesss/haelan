@@ -42,7 +42,7 @@ export function registerSourceRoutes(app: FastifyInstance): void {
     // folded into this same listing so the settings card can show the panel's current state
     // without a second round trip.
     const choices = app.haelan.instance.sourceVisibility.list(personId)
-    const items = aliases().listNamed(personId).map((source) => {
+    const items = aliases().listNamed(personId, person?.timezone).map((source) => {
       // A source with no daily row at all is not left out and not crashed on: it is reported as
       // having never reported, which is a real state - the archive measured had a source row
       // with no rows behind it.

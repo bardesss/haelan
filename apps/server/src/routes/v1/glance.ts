@@ -177,7 +177,7 @@ export function registerGlanceRoutes(app: FastifyInstance): void {
     const person = app.haelan.stores.people.get(personId)
     const tz = person?.timezone ?? 'UTC'
     const today = localDateInZone(nowMs, tz)
-    const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId).map((s) => [s.id, s.name]))
+    const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId, tz).map((s) => [s.id, s.name]))
     const nameOf = (id: string) => names.get(id) ?? id
     const q = personQueryOf(request)
 

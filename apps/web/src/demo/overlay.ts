@@ -557,7 +557,10 @@ function composeGlance(body: unknown, overlay: Overlay): unknown {
  * Mirrors `nameFor` in packages/core/src/store/sourceAliases.ts, which has no browser safe
  * subpath (it lives in a module that imports drizzle-orm and the schema): alias, then the
  * provider's own name, then the id, so a demo composed source resolves its name the same way a
- * real one does.
+ * real one does. The known-app default step nameFor now takes between the alias and the display
+ * name is not repeated here: the captured row keeps its `defaultName`, and sourceLabel in
+ * useSourceNames.ts reads that ahead of `name` whenever the alias is cleared, so the page still
+ * says the readable default.
  */
 function nameFor(id: string, displayName: string, alias: string | null): string {
   if (alias !== null) return alias
