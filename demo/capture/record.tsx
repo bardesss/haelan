@@ -387,7 +387,8 @@ describe('the capture sweep', () => {
     const glanceOf = (day: string) => server.recorded.get(`/api/v1/p/${server.personId}/glance?day=${day}`) as
       { nav: { previous: string | null } } | undefined
     expect(glanceOf(firstDay)?.nav.previous, 'the first captured day still steps back').toBeNull()
-    // Every month the window reaches has its calendar, or the loop below would pass over nothing.
+    // The enumeration above fetched every month the window reaches; this pins that the slice kept
+    // them all (it drops months before the first day), or the loop below would pass over nothing.
     for (const month of monthsBetween(windowStart, DEMO_DATE)) {
       expect(server.recorded.has(`/api/v1/p/${server.personId}/glance/calendar?month=${month}`), `no calendar for ${month}`)
         .toBe(true)
