@@ -9,6 +9,19 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.12.0](https://github.com/bardesss/haelan/compare/v2.11.1...v2.12.0) (2026-09-25)
+
+
+### Features
+
+* readable default names for known app sources ([#383](https://github.com/bardesss/haelan/issues/383)) ([feaa4d0](https://github.com/bardesss/haelan/commit/feaa4d09d6792440b7bda699abf6a64292354a27))
+
+
+### Bug Fixes
+
+* **web:** a calendar legend of two short lines, the dot it means drawn rather than named ([#381](https://github.com/bardesss/haelan/issues/381)) ([ff0dd63](https://github.com/bardesss/haelan/commit/ff0dd6355505f7efebaf9bd120b9c73c55af3c71))
+* **web:** keep long device names inside the status panel, and say what the sync failed on ([#384](https://github.com/bardesss/haelan/issues/384)) ([9b040a9](https://github.com/bardesss/haelan/commit/9b040a9c7f342dca266d29dbd7618cfb993d360d))
+
 ## [2.11.1](https://github.com/bardesss/haelan/compare/v2.11.0...v2.11.1) (2026-09-25)
 
 
