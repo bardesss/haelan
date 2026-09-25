@@ -31,7 +31,7 @@ import { CHART_VARS } from '../../apps/web/src/charts/tokens.js'
 import { DEMO_CLOCK_MS } from '../../apps/web/src/demo/instant.js'
 import { flush } from '../../apps/web/test/flush.js'
 import { startCaptureServer } from './server.js'
-import { sliceToFirstDay, unreachableDays } from './slice.js'
+import { sliceToFirstDay, unreachableDays, unreachableWorkouts } from './slice.js'
 import type { CaptureServer } from './server.js'
 import { writeCapture } from '../../scripts/capture-demo.mjs'
 import type { WorkoutSession } from '../../apps/web/src/data/useSessions.js'
@@ -353,10 +353,13 @@ describe('the capture sweep', () => {
     expect(glanceDays.length, 'the seed has no day with data in the five weeks before the demo day').toBeGreaterThan(0)
     const firstDay = glanceDays[0]!
     const pastNights = new Set<string>()
+    const pastWorkouts = new Set<string>()
     for (const day of glanceDays) {
       const reply = await server.fetch(`/api/v1/p/${server.personId}/glance?day=${day}`)
-      const { sleep } = await reply.json() as { sleep: { localDate: string } | null }
+      const { sleep, day: { workouts } } = await reply.json() as
+        { sleep: { localDate: string } | null, day: { workouts: { id: string }[] } }
       if (sleep !== null) pastNights.add(sleep.localDate)
+      for (const { id } of workouts) pastWorkouts.add(id)
     }
 
     // One past day through the real page, to prove the glance is the whole of what it reads: had
@@ -371,6 +374,12 @@ describe('the capture sweep', () => {
     for (const night of [...pastNights].sort()) {
       if (!mountedNights.has(night)) await mount(NIGHT_ROUTE.replace(':localDate', night))
     }
+    // And each past day's workouts link to their own pages, most of them before the default
+    // Week and Month views the detail sweep above covers.
+    const mountedSessions = new Set(sessions.map((session) => session.id))
+    for (const id of [...pastWorkouts].sort()) {
+      if (!mountedSessions.has(id)) await mount(WORKOUT_ROUTE.replace(':sessionId', id))
+    }
 
     // The demo's archive begins on its first captured day (slice.ts's own comment says why the
     // captured JSON is trimmed rather than the server bounded).
@@ -378,6 +387,11 @@ describe('the capture sweep', () => {
     const glanceOf = (day: string) => server.recorded.get(`/api/v1/p/${server.personId}/glance?day=${day}`) as
       { nav: { previous: string | null } } | undefined
     expect(glanceOf(firstDay)?.nav.previous, 'the first captured day still steps back').toBeNull()
+    // Every month the window reaches has its calendar, or the loop below would pass over nothing.
+    for (const month of monthsBetween(windowStart, DEMO_DATE)) {
+      expect(server.recorded.has(`/api/v1/p/${server.personId}/glance/calendar?month=${month}`), `no calendar for ${month}`)
+        .toBe(true)
+    }
     for (const [url, body] of server.recorded) {
       if (!url.includes('/glance/calendar?')) continue
       const calendar = body as { firstDay: string | null, days: { localDate: string }[] }
@@ -385,6 +399,7 @@ describe('the capture sweep', () => {
       expect(calendar.days.every((day) => day.localDate >= firstDay), url).toBe(true)
     }
     expect(unreachableDays(server.recorded, DEMO_DATE), 'days the dashboard opens that the demo cannot answer').toEqual([])
+    expect(unreachableWorkouts(server.recorded), 'workouts a glance lists that the demo cannot open').toEqual([])
 
     // The manifest itself still has to be non-empty (writeCapture's own refusal), which is a
     // stricter, whole-sweep fact that every per-mount landing check above cannot by itself

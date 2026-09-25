@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Glance } from '../../packages/core/src/query/glance.ts'
-import { sliceToFirstDay, trimGlance, unreachableDays } from '../../demo/capture/slice.ts'
+import { sliceToFirstDay, trimGlance, unreachableDays, unreachableWorkouts } from '../../demo/capture/slice.ts'
 
 const P = '/api/v1/p/demo'
 
@@ -120,5 +120,31 @@ describe('unreachableDays', () => {
     const days = unreachableDays(recorded, '2026-08-22').map((line) => line.slice(0, 10))
     // The strips' six earlier days, the back arrow's day and the calendar's day; never the day shown.
     expect(days).toEqual(['2026-08-02', '2026-08-12', '2026-08-15', '2026-08-16', '2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20'])
+  })
+})
+
+describe('unreachableWorkouts', () => {
+  function withWorkouts(on: string, ids: string[]): Glance {
+    const g = glance(on)
+    ;(g.day as { workouts: { id: string }[] }).workouts = ids.map((id) => ({ id }))
+    return g
+  }
+
+  it('names a workout a glance lists with no recorded session page', () => {
+    const recorded = new Map<string, unknown>([
+      [`${P}/glance?day=2026-08-05`, withWorkouts('2026-08-05', ['aaa', 'bbb'])],
+      [`${P}/sessions/aaa`, { id: 'aaa' }],
+    ])
+    expect(unreachableWorkouts(recorded)).toEqual([`bbb (from ${P}/glance?day=2026-08-05)`])
+  })
+
+  it("is empty when every listed workout has its page, today's glance included", () => {
+    const recorded = new Map<string, unknown>([
+      [`${P}/glance`, withWorkouts('2026-08-22', ['ccc'])],
+      [`${P}/glance?day=2026-08-05`, withWorkouts('2026-08-05', ['aaa'])],
+      [`${P}/sessions/aaa`, { id: 'aaa' }],
+      [`${P}/sessions/ccc`, { id: 'ccc' }],
+    ])
+    expect(unreachableWorkouts(recorded)).toEqual([])
   })
 })

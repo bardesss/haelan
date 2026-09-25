@@ -19,7 +19,9 @@
 // says of those days (greyed, no data). The figures themselves (each day's own value, its band, its
 // verdict) are the capture's, untouched. The week card's averages are recounted over what is left,
 // with core's own weekOf rules and the server's own rounding, so a week of three bars never claims
-// seven days.
+// seven days. The recount starts from the strip's rounded daily values where the server averaged
+// the raw ones, so on the window's first six days (the only ones whose strips reach before it) the
+// asleep average can differ from what a real instance would show by up to a minute.
 import { weekOf, weekOfFinished } from '../../packages/core/src/query/glance.ts'
 import type { Glance, GlanceStripDay, GlanceWeekFigure } from '../../packages/core/src/query/glance.ts'
 import { roundMetricValue } from '../../apps/server/src/routes/v1/shared.ts'
@@ -106,6 +108,11 @@ export function sliceToFirstDay(recorded: Map<string, unknown>, firstDay: string
  * the arrows (`nav`), a strip's dots and a week bar (every strip day with a value, bar the day
  * shown), and the calendar's days. `today` opens the plain `/glance` (useDashboardDay drops a
  * `?day=` naming today). Empty when the demo can answer every one.
+ *
+ * The strip walk mirrors the app's openers rather than calling them: `useOpensDay` (a strip's
+ * dots) and `WeekBars.opens` (a week bar) both read a card's `strip` array and open any day on it
+ * with a value other than the one shown. Should either start opening from something else, this has
+ * to follow, or it will pass while the demo misses.
  */
 export function unreachableDays(recorded: ReadonlyMap<string, unknown>, today: string): string[] {
   const glanceDays = new Set<string>()
@@ -136,4 +143,22 @@ export function unreachableDays(recorded: ReadonlyMap<string, unknown>, today: s
     }
   }
   return [...opened].filter(([day]) => !glanceDays.has(day)).map(([day, from]) => `${day} (from ${from})`).sort()
+}
+
+/**
+ * Every workout a captured glance lists (`day.workouts`, each row a link to its own page) whose
+ * page the demo cannot open: no recorded `/sessions/:id`, the one read WorkoutDetail makes for it
+ * (useWorkoutSession's sessionPath, the same encoding). Empty when every row has its page.
+ */
+export function unreachableWorkouts(recorded: ReadonlyMap<string, unknown>): string[] {
+  const missing = new Set<string>()
+  for (const [url, body] of recorded) {
+    const [path = ''] = url.split('?')
+    if (!GLANCE.test(path)) continue
+    const base = path.slice(0, -'/glance'.length)
+    for (const { id } of (body as Glance).day.workouts) {
+      if (!recorded.has(`${base}/sessions/${encodeURIComponent(id)}`)) missing.add(`${id} (from ${url})`)
+    }
+  }
+  return [...missing].sort()
 }
