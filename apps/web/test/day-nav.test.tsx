@@ -260,6 +260,18 @@ describe('the dashboard header, a past day', () => {
     } finally { restore() }
   })
 
+  // Between the 400 and the fallback to today there is one commit with isError set; the error
+  // state with its Retry must not be what that commit shows.
+  it('never shows the error state on its way from a refused day to today', async () => {
+    window.history.replaceState(null, '', '/?day=2020-01-15')
+    const states = watchStates()
+    const { restore } = await mountPage({ '2020-01-15': { refused: true }, today: todayGlance() })
+    try {
+      expect(heading()).toBe('Good morning')
+      expect(states()).not.toContain('error')
+    } finally { restore() }
+  })
+
   // M9c: the page hands its cards the same setDay the arrows use, so a week bar opens its day.
   it('opens the day of a week bar', async () => {
     const { restore } = await mountPage({ '2026-09-22': pastGlance(), '2026-09-20': { ...pastGlance(), today: '2026-09-20' } })
@@ -327,6 +339,25 @@ describe('stepping to a day not yet loaded', () => {
       await flush(client, () => container!.innerHTML)
       expect(container!.querySelector('.dashboard-grid')!.className).toBe('grid dashboard-grid')
       expect(states()).toEqual([])
+    } finally { restore() }
+  })
+
+  // The held cards are the old day's, and so is their night: the line under the title must not say
+  // "no night recorded" off the day being left when the day asked for may well have one.
+  it("does not word the line off the held day's missing night while stepping", async () => {
+    let release: (body: Glance) => void = () => {}
+    const held = new Promise<Glance>((resolve) => { release = resolve })
+    const { client, restore } = await mountPage({ '2026-09-22': { ...pastGlance(), sleep: null }, '2026-09-21': held })
+    try {
+      expect(subLine()).toBe('no night recorded · the whole day')
+      press('ArrowLeft')
+      await settle()
+      expect(heading()).toBe('Monday, September 21')
+      expect(subLine()).toBe('that night, and the whole day')
+
+      release({ ...pastGlance({ previous: '2026-09-20', next: '2026-09-22' }), today: '2026-09-21' })
+      await flush(client, () => container!.innerHTML)
+      expect(subLine()).toBe('that night, and the whole day')
     } finally { restore() }
   })
 
