@@ -197,11 +197,21 @@ describe('a sparkline with a labelled baseline band', () => {
     expect((markPoint?.data ?? []).filter((d) => d.yAxis === 8000 || d.yAxis === 9500)).toEqual([])
   })
 
-  // The 40px margin for the edge labels moves to the left, beside day zero, and never sits on the
-  // right, beside the latest dot: a right margin left over from before this fix would still leave
-  // room for text nothing draws there any more, and (worse) leave none on the left for the text
-  // that now does.
-  it('puts the 40px label margin on the grid\'s left, not its right, when bandLabels is set', () => {
+  // Fix round 1 anchored the labels at the grid's left with a flat 40px margin; fix round 2 found
+  // that flat number too narrow for a label like "11.590" or "7h 48m", which ran the text straight
+  // into the first day's own dot and line. happy-dom (this file's environment) has no canvas 2D
+  // context, so measureLabelWidth falls back to FALLBACK_CHAR_WIDTH (7.5px) per character - this is
+  // the fallback path's own pin, not a canvas measurement.
+  const FALLBACK_CHAR_WIDTH = 7.5
+  const BAND_LABEL_GAP = 8
+  function expectedMargin(low: string, high: string): number {
+    return Math.ceil(Math.max(low.length, high.length) * FALLBACK_CHAR_WIDTH) + BAND_LABEL_GAP
+  }
+
+  // The margin sits on the grid's left, beside day zero, and never on the right, beside the latest
+  // dot: a right margin left over from before this fix would still leave room for text nothing
+  // draws there any more, and (worse) leave none on the left for the text that now does.
+  it('sizes the grid\'s left margin to the label text, not the right, when bandLabels is set', () => {
     act(() => {
       root!.render(
         <I18nProvider lng="en">
@@ -211,8 +221,25 @@ describe('a sparkline with a labelled baseline band', () => {
       )
     })
     const { grid } = chartOption()
-    expect(grid.left).toBe(40)
-    expect(grid.right).not.toBe(40)
+    expect(grid.left).toBe(expectedMargin('8,000', '9,500'))
+    expect(grid.right).not.toBe(grid.left)
+  })
+
+  // The defect fix round 1 shipped and fix round 2 caught in a screenshot: a flat margin fits some
+  // labels and overruns others. "11.590" (6 characters) needs more room than "8,000" (5) did, and a
+  // margin that stayed flat regardless of the text would touch or overlap the first dot for exactly
+  // the labels this pins.
+  it('grows the grid\'s left margin for a longer label', () => {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026"
+            baseline={{ low: 5593, high: 11590 }} bandLabels={{ low: '5.593', high: '11.590' }} />
+        </I18nProvider>,
+      )
+    })
+    const { grid } = chartOption()
+    expect(grid.left).toBe(expectedMargin('5.593', '11.590'))
   })
 
   // scale: true alone fits the y axis to the series values, and a markArea/markPoint never widens

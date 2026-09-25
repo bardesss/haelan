@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { chartBase, dayMarks, dayPointDate, dayTableRows, STROKE, OPACITY, SYMBOL } from './base.js'
+import { chartBase, dayMarks, dayPointDate, dayTableRows, AXIS_FONT_SIZE, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { PointStanding } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -20,6 +20,41 @@ const EMPTY = Object.freeze([]) as never[]
 // pixels as echarts takes them, and the latest dot's rim in the card's own colour so it reads as
 // lifted off the line rather than sitting on it.
 const DOT = { day: 6, latest: 11, rim: 2 } as const
+
+// The gap, in pixels, between the band label's own right edge and the plot area it sits left of
+// (`grid.left` below is set to the label's own width plus this): with none, a label right at the
+// axis label font size would still touch the first day's dot or line the moment its own width was
+// measured exactly, since "just fits" and "touches" are the same pixel.
+const BAND_LABEL_GAP = 8
+// Same font stack packages/tokens/src/primitives.ts's `font.sans` emits as `--font-sans`, read
+// straight off the document when one exists (measureLabelWidth below) rather than imported from
+// tokens: a chart has no CSS import of its own, and hardcoding the one property this needs is
+// cheaper than adding a dependency on the whole tokens package for a single string.
+const FONT_FAMILY_FALLBACK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+// Used only when no canvas 2D context is available to measure with (happy-dom in tests, and any
+// other environment without a real canvas): an average character width at the axis label's own
+// font size, wide enough that a fallback estimate never comes in narrower than the real text would
+// measure, which would be the one way this margin could still clip.
+const FALLBACK_CHAR_WIDTH = 7.5
+
+// The band label's own pixel width at `fontSize`, so `grid.left` below can fit it exactly instead
+// of guessing a fixed margin: bandLabels carries whatever formatMetricValue or a caller's own
+// formatter produced ("11.590", "7h 48m"), and those differ in width by more than a fixed 40px
+// margin could cover for every metric and every locale. A real canvas 2D context measures the
+// actual glyphs in the app's own font; without one (happy-dom in tests, or any environment with no
+// canvas support) the fallback above stands in, wide enough that a test asserting against it can
+// still pin "grows with a longer label" without touching a canvas at all.
+function measureLabelWidth(text: string, fontSize: number): number {
+  if (typeof document === 'undefined') return text.length * FALLBACK_CHAR_WIDTH
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return text.length * FALLBACK_CHAR_WIDTH
+  const family = typeof getComputedStyle === 'function'
+    ? getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim()
+    : ''
+  ctx.font = `${fontSize}px ${family || FONT_FAMILY_FALLBACK}`
+  return ctx.measureText(text).width
+}
 
 // Re-exported from base.ts (defined there so dayTableRows can read it too) rather than defined
 // here a second time: every existing caller imports `PointStanding` from this module.
@@ -177,14 +212,31 @@ export function Sparkline({
   // strip, so a strip whose final day has nothing yet still highlights the day that does.
   const latest = values.reduce<number>((found, v, i) => (v === null ? found : i), -1)
 
+  // Memoised on the label strings themselves, not recomputed every time `build` is (build also
+  // rebuilds for reasons that have nothing to do with the band, e.g. a new `values` array): the
+  // wider of the two, since one grid margin has to fit both. Round 1 of this fix used a flat 40px
+  // margin, which a label like "11.590" or "7h 48m" (past 40px at the axis label font size) simply
+  // overran, running the text straight into the first day's own dot and line - measuring the real
+  // text is the only way this stays correct across every metric's own formatting and every locale.
+  const bandLabelMargin = useMemo(() => {
+    if (!bandLabels) return 0
+    const width = Math.max(
+      measureLabelWidth(bandLabels.low, AXIS_FONT_SIZE),
+      measureLabelWidth(bandLabels.high, AXIS_FONT_SIZE),
+    )
+    return Math.ceil(width) + BAND_LABEL_GAP
+  }, [bandLabels])
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     // Room on the left for the band's own edge labels, anchored at the first day so the low label
     // never sits beside today's (latest) dot at the right end, where a reader would misread it as
-    // today's own value. With dots, a margin of half the latest dot on every other side, so a day
-    // at the strip's edge or its extreme is drawn whole rather than clipped by the grid.
+    // today's own value. Sized to the label text itself (bandLabelMargin above) rather than a flat
+    // number, so the gap is always exactly wide enough and never wider than it needs to be. With
+    // dots, a margin of half the latest dot on every other side, so a day at the strip's edge or its
+    // extreme is drawn whole rather than clipped by the grid.
     grid: dots
-      ? { left: bandLabels ? 40 : DOT.latest / 2, right: DOT.latest / 2, top: DOT.latest / 2, bottom: DOT.latest / 2 }
-      : { left: bandLabels ? 40 : 0, right: 0, top: 4, bottom: 4 },
+      ? { left: bandLabels ? bandLabelMargin : DOT.latest / 2, right: DOT.latest / 2, top: DOT.latest / 2, bottom: DOT.latest / 2 }
+      : { left: bandLabels ? bandLabelMargin : 0, right: 0, top: 4, bottom: 4 },
     tooltip: {
       ...chartBase(tokens).tooltip,
       trigger: 'axis' as const,
@@ -264,12 +316,16 @@ export function Sparkline({
           // today's own value instead of the band's.
           data: [
             ...marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })),
+            // `distance` set explicitly to BAND_LABEL_GAP rather than left at echarts' own default
+            // (5px): bandLabelMargin above reserves exactly textWidth + BAND_LABEL_GAP for this
+            // label, so the label's own offset from its anchor has to agree with that reservation
+            // or the two numbers drift apart the moment either one changes.
             ...(bandLabels && baseline ? [
               { name: 'band-high', xAxis: 0, yAxis: baseline.high, symbolSize: 0,
-                label: { show: true, position: 'left' as const, color: tokens.muted,
+                label: { show: true, position: 'left' as const, distance: BAND_LABEL_GAP, color: tokens.muted,
                   fontSize: chartBase(tokens).axisLabel.fontSize, formatter: () => bandLabels.high } },
               { name: 'band-low', xAxis: 0, yAxis: baseline.low, symbolSize: 0,
-                label: { show: true, position: 'left' as const, color: tokens.muted,
+                label: { show: true, position: 'left' as const, distance: BAND_LABEL_GAP, color: tokens.muted,
                   fontSize: chartBase(tokens).axisLabel.fontSize, formatter: () => bandLabels.low } },
             ] : []),
           ] },
@@ -292,7 +348,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest])
+  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
