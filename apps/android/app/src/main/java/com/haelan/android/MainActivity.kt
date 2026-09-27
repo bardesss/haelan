@@ -630,7 +630,9 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
                 // throwing it, and the session cookie is dropped either way below. An instance
                 // that is unreachable must not be able to keep somebody signed in.
                 InstanceClient.post(server, "/api/auth/logout", "{}", cookie) { }
-                // The last glance is health data on the device; it leaves with the session.
+                // The last glance is health data on the device; it leaves with the session. The
+                // glance screen's repository has to be closed before this runs (GlanceRepository's
+                // KDoc), or a read it still has in flight can write the glance back.
                 GlanceStore.encrypted(this@MainActivity).delete()
             }
             SessionStore.clearSession(SessionStore.prefs(this@MainActivity))

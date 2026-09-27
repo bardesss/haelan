@@ -12,7 +12,6 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -332,9 +331,96 @@ class GlanceRepositoryTest {
         reads.answerDay("2026-08-18", GlanceRead.Fresh(pastJson, null))
         reads.answerDay("2026-08-18", GlanceRead.Fresh(pastJson, null))
         repository.showDay("2026-08-18")
+        now = 900L
         repository.refresh()
         assertEquals(listOf("2026-08-18", "2026-08-18"), reads.daysAsked)
         assertEquals(emptyList<String?>(), reads.etagsSent)
+        assertEquals("2026-08-18", state.shownDay)
+        assertEquals(GlanceParser.parse(pastJson), state.glance)
+        assertEquals(900L, state.fetchedAtMs)
+        assertTrue(state.reachable)
+        assertFalse(state.loading)
+    }
+
+    @Test
+    fun `a 304 clears a problem an earlier answer named`() {
+        storedEarlier()
+        reads.todayAnswers += GlanceRead.TooOld
+        repository.open()
+        assertEquals(Problem.TooOld, state.problem)
+
+        // empty.json is stored, so the glance's own problem is the first run, not nothing.
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.refresh()
+        assertEquals(Problem.FirstRun, state.problem)
+
+        reads.todayAnswers += GlanceRead.Refused("person not found")
+        repository.refresh()
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.refresh()
+        assertEquals(Problem.FirstRun, state.problem)
+    }
+
+    @Test
+    fun `a 304 on a full glance leaves no problem`() {
+        store.save(server, "p1", "\"v1\"", 100L, todayJson)
+        reads.todayAnswers += GlanceRead.TooOld
+        repository.open()
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.refresh()
+        assertNull(state.problem)
+    }
+
+    @Test
+    fun `a today read that answers after close is never written, so sign-out stays signed out`() {
+        val queue = QueueDispatcher()
+        repository.close()
+        repository = repository(queue)
+        reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v2\"")
+
+        // Sign-out while the read is blocked in the client: close the repository, then delete the
+        // store. Closing before the task runs would prove nothing, since a cancelled coroutine never
+        // starts; this is the read that is already past the point cancellation can stop.
+        reads.onToday = {
+            repository.close()
+            store.delete()
+        }
+        repository.refresh()
+        queue.runFirst()
+
+        assertNull(storage.bytes)
+    }
+
+    @Test
+    fun `an overtaken today answer does not replace the newer one, in memory or on disk`() {
+        val queue = QueueDispatcher()
+        repository.close()
+        repository = repository(queue)
+        // Answers are handed out in the order the instance is reached: v3 first, then v2.
+        reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v3\"")
+        reads.todayAnswers += GlanceRead.Fresh(emptyJson, "\"v2\"")
+        repository.refresh()
+        repository.refresh()
+        val earlier = queue.tasks.removeFirst()
+        val later = queue.tasks.removeFirst()
+
+        // The earlier read starts first, and while it waits on the instance the later read starts,
+        // is answered (v3) and finishes; then the earlier read's own answer (v2) arrives.
+        reads.onToday = {
+            reads.onToday = {}
+            later.run()
+        }
+        earlier.run()
+
+        val kept = checkNotNull(store.load(server, "p1"))
+        assertEquals("\"v3\"", kept.etag)
+        assertEquals(GlanceParser.parse(todayJson), kept.glance)
+
+        // In memory too: the next read revalidates v3, not v2.
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.refresh()
+        queue.runFirst()
+        assertEquals("\"v3\"", reads.etagsSent.last())
     }
 
     @Test
@@ -428,7 +514,6 @@ class GlanceRepositoryTest {
     @Test
     fun `nothing is read before open`() {
         assertEquals(GlanceUiState(null, null, null, reachable = true, loading = false, problem = null), state)
-        assertNotNull(repository.state)
         assertTrue(reads.etagsSent.isEmpty())
     }
 }

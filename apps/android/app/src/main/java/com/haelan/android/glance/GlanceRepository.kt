@@ -63,7 +63,19 @@ internal fun holdsNoValue(glance: Glance): Boolean {
  * The reads block (they are [com.haelan.android.InstanceClient] calls), so [dispatcher] is IO in the
  * app. Each call starts a new read and numbers it; an answer that arrives after a later call is not
  * drawn, so a slow day the person already stepped away from cannot replace the one they are on.
- * Today's answer is still stored when it lands, since it is the truth about today whoever asked.
+ * Today's answer is still stored when it lands, since it is the truth about today whoever asked,
+ * unless a today read started after it has already been kept: only the newest answer is kept, and
+ * memory and disk are written together under one lock, so the file never holds an older glance than
+ * the one in memory.
+ *
+ * The public methods are called from the main thread; [refresh] reads the state outside the lock,
+ * which is only safe because nothing else calls them concurrently.
+ *
+ * **Sign-out closes the repository before deleting the store.** A blocking read cannot be
+ * interrupted, so a today read in flight at sign-out can still answer 200 afterwards; [close] makes
+ * sure that answer is never written, and deleting after it makes sure nothing written before stays.
+ * Only the explicit sign-out deletes: a 401 leaves the record, which is keyed by server and person,
+ * so the same person signing back in gets their glance back and anyone else never sees it.
  *
  * Nothing here computes a date: every day it asks for came from a payload, through the caller.
  */
@@ -102,6 +114,13 @@ class GlanceRepository(
     /** Today's glance as last stored, so going back to today draws it without the disk; guarded by [lock]. */
     private var today: GlanceStore.Kept? = null
 
+    /** The number of the latest today read started, and of the newest one kept; guarded by [lock]. */
+    private var todayStarted = 0
+    private var todayKept = 0
+
+    /** Set by [close]: nothing is kept after it, in memory or on disk; guarded by [lock]. */
+    private var closed = false
+
     /** Draws the stored glance, then asks the instance whether it is still current. */
     fun open() = start({ it.copy(loading = true) }) { gen ->
         val stored = store.load(server, personId)
@@ -126,8 +145,14 @@ class GlanceRepository(
     /** Back to today: the kept glance at once, then revalidated. */
     fun showToday() = start({ it.copy(shownDay = null, loading = true) }) { gen -> backToToday(gen) }
 
-    /** Stops every read in flight; the screen is gone. */
-    fun close() = scope.cancel()
+    /**
+     * Stops every read in flight; the screen is gone, or the person is signing out. A read already
+     * blocked in the client still returns, but its answer is no longer kept.
+     */
+    fun close() {
+        synchronized(lock) { closed = true }
+        scope.cancel()
+    }
 
     /** Numbers a call, marks it pending on screen at once, and runs [block] on the dispatcher. */
     private fun start(pending: (GlanceUiState) -> GlanceUiState, block: (Int) -> Unit) {
@@ -168,12 +193,12 @@ class GlanceRepository(
     }
 
     private fun readToday(gen: Int) {
-        val etag = synchronized(lock) { today?.etag }
+        val (etag, seq) = synchronized(lock) { today?.etag to ++todayStarted }
         when (val read = reads.today(etag)) {
             is GlanceRead.Fresh -> {
                 val glance = parseOrNull(read.json, "today") ?: return unreachable(gen)
                 val kept = GlanceStore.Kept(glance, read.json, read.etag, clock())
-                keep(kept)
+                keep(kept, seq)
                 emit(gen) {
                     GlanceUiState(
                         shownDay = null, glance = glance, fetchedAtMs = kept.fetchedAtMs,
@@ -186,8 +211,15 @@ class GlanceRepository(
                 // Only sent with an ETag, so there is a kept glance; the store learns the new instant
                 // too, so "Shown from" after a reopen is the last time the instance was reached.
                 val kept = synchronized(lock) { today }?.copy(fetchedAtMs = now)
-                if (kept != null) keep(kept)
-                emit(gen) { it.copy(fetchedAtMs = kept?.fetchedAtMs ?: it.fetchedAtMs, reachable = true, loading = false) }
+                if (kept != null) keep(kept, seq)
+                // The glance is confirmed current, so whatever an earlier answer said about the
+                // instance (too old, refused) no longer holds: the problem is the glance's own again.
+                emit(gen) {
+                    it.copy(
+                        fetchedAtMs = kept?.fetchedAtMs ?: it.fetchedAtMs, reachable = true, loading = false,
+                        problem = problemOf(kept?.glance ?: it.glance),
+                    )
+                }
             }
             GlanceRead.Unauthorised -> signOut(gen)
             GlanceRead.TooOld -> emit(gen) { it.copy(reachable = true, loading = false, problem = Problem.TooOld) }
@@ -246,11 +278,20 @@ class GlanceRepository(
         }
     }
 
-    /** Today's glance, in memory and on disk. A store that refuses costs only the instant open. */
-    private fun keep(kept: GlanceStore.Kept) {
-        synchronized(lock) { today = kept }
-        if (!store.save(server, personId, kept.etag, kept.fetchedAtMs, kept.json)) {
-            log("today's glance could not be kept on the device")
+    /**
+     * Today's glance, in memory and on disk, from today read number [seq]. Nothing after [close], and
+     * nothing older than an answer already kept. The disk write is inside the lock so the file's
+     * order is memory's order; it is one small file, and it is what makes close-then-delete final.
+     * A store that refuses costs only the instant open.
+     */
+    private fun keep(kept: GlanceStore.Kept, seq: Int) {
+        synchronized(lock) {
+            if (closed || seq < todayKept) return
+            todayKept = seq
+            today = kept
+            if (!store.save(server, personId, kept.etag, kept.fetchedAtMs, kept.json)) {
+                log("today's glance could not be kept on the device")
+            }
         }
     }
 
