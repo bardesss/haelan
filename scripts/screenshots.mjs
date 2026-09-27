@@ -27,9 +27,16 @@ export const SCREENSHOTS = [
   {
     file: 'dashboard.png',
     title: 'Dashboard',
-    alt: 'The Hælan dashboard: last night\'s time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today\'s steps with their pace against your usual, active minutes, heart rate and workouts, beside the week\'s totals and averages.',
+    alt: 'The Hælan dashboard, a Log button beside the day arrows in its header: last night\'s time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today\'s steps with their pace against your usual, active minutes, heart rate and workouts, beside the week\'s totals and averages.',
     role: 'hero',
     readme: 'inline',
+  },
+  {
+    file: 'log-panel.png',
+    title: 'Quick logging',
+    alt: 'The log panel open over the dashboard, for today: five faces for how the day felt with Good marked, a chip for each kind of event with Caffeine counted twice and an undo line beneath, and a box for the day\'s note.',
+    role: 'gallery',
+    readme: 'link',
   },
   {
     file: 'activity.png',
