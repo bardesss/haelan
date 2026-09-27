@@ -940,6 +940,35 @@
       }
     }
   },
+  "logPanel": {
+    "titleToday": "Loggen voor vandaag",
+    "titleYesterday": "Loggen voor gisteren",
+    "titleDay": "Loggen voor {{day}}",
+    "previousDay": "Vorige dag",
+    "nextDay": "Volgende dag",
+    "mood": {
+      "label": "Hoe voel je je?",
+      "1": "Slecht",
+      "2": "Matig",
+      "3": "Gaat wel",
+      "4": "Goed",
+      "5": "Top"
+    },
+    "chips": {
+      "label": "Wat speelde er?",
+      "countToday": "{{kind}}, {{count}} vandaag",
+      "countDay": "{{kind}}, {{count}} die dag"
+    },
+    "undo": {
+      "today": "{{kind}} gelogd",
+      "day": "{{kind}} gelogd voor {{day}}",
+      "action": "Ongedaan maken"
+    },
+    "note": {
+      "label": "Notitie",
+      "placeholder": "Iets om te onthouden over deze dag…"
+    }
+  },
   "nutrition": {
     "title": "Voeding",
     "empty": {

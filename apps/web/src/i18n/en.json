@@ -940,6 +940,35 @@
       }
     }
   },
+  "logPanel": {
+    "titleToday": "Log for today",
+    "titleYesterday": "Log for yesterday",
+    "titleDay": "Log for {{day}}",
+    "previousDay": "Previous day",
+    "nextDay": "Next day",
+    "mood": {
+      "label": "How do you feel?",
+      "1": "Bad",
+      "2": "Poor",
+      "3": "Okay",
+      "4": "Good",
+      "5": "Great"
+    },
+    "chips": {
+      "label": "What happened?",
+      "countToday": "{{kind}}, {{count}} today",
+      "countDay": "{{kind}}, {{count}} that day"
+    },
+    "undo": {
+      "today": "{{kind}} logged",
+      "day": "{{kind}} logged for {{day}}",
+      "action": "Undo"
+    },
+    "note": {
+      "label": "Note",
+      "placeholder": "Something to remember about this day…"
+    }
+  },
   "nutrition": {
     "title": "Nutrition",
     "empty": {
