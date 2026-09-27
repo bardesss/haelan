@@ -1058,6 +1058,8 @@
       "sleepTargetUnreadable": "Vul een heel aantal minuten in.",
       "sleepUseBaseline": "Volg mijn baseline",
       "sleepUseBaselineHint": "Wanneer ingeschakeld, wordt elke nacht afgezet tegen je gemiddelde slaap over de afgelopen zestig dagen. Totdat je genoeg geschiedenis hebt voor een gemiddelde, wordt het doel hierboven gebruikt. Wanneer uitgeschakeld, wordt altijd het doel hierboven gebruikt.",
+      "quickLog": "Snel loggen",
+      "quickLogHint": "Een knop Loggen op het dashboard, voor hoe de dag voelde en wat er speelde.",
       "save": "Opslaan",
       "saving": "Opslaan…",
       "saved": "Opgeslagen.",

@@ -72,6 +72,7 @@ export function Profile() {
     sex: session.data.sex,
     sleepTargetMinutes: session.data.sleepTargetMinutes,
     sleepUseBaseline: session.data.sleepUseBaseline,
+    quickLogEnabled: session.data.quickLogEnabled,
   }
   const value = draft ?? current
   const edit = (patch: Partial<ProfileEdit>): void => setDraft({ ...value, ...patch })
@@ -92,6 +93,7 @@ export function Profile() {
     || value.sex !== current.sex
     || (value.sleepTargetMinutes !== undefined && value.sleepTargetMinutes !== current.sleepTargetMinutes)
     || value.sleepUseBaseline !== current.sleepUseBaseline
+    || value.quickLogEnabled !== current.quickLogEnabled
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
@@ -215,6 +217,17 @@ export function Profile() {
             <span className="label">{t('settings.profile.sleepUseBaseline')}</span>
           </span>
           <span className="field-hint">{t('settings.profile.sleepUseBaselineHint')}</span>
+        </label>
+
+        {/* Off by default (Session.quickLogEnabled's own comment says why), and the switch that
+            decides whether the dashboard offers a Log button at all (M9c). */}
+        <label className="field">
+          <span className="check-row">
+            <input type="checkbox" checked={value.quickLogEnabled}
+              onChange={(e) => edit({ quickLogEnabled: e.currentTarget.checked })} />
+            <span className="label">{t('settings.profile.quickLog')}</span>
+          </span>
+          <span className="field-hint">{t('settings.profile.quickLogHint')}</span>
         </label>
 
         <div className="form-actions">

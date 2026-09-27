@@ -1058,6 +1058,8 @@
       "sleepTargetUnreadable": "Enter a whole number of minutes.",
       "sleepUseBaseline": "Follow my baseline",
       "sleepUseBaselineHint": "When enabled, each night is measured against your average sleep over the previous sixty days. Until you have enough history for an average, the target above is used. When disabled, the target above is always used.",
+      "quickLog": "Quick logging",
+      "quickLogHint": "A Log button on the dashboard for how the day felt and what happened.",
       "save": "Save",
       "saving": "Saving…",
       "saved": "Saved.",

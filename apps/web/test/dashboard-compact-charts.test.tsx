@@ -62,6 +62,7 @@ afterEach(() => {
 const SESSION: Session = {
   personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
   sleepTargetMinutes: 480, sleepUseBaseline: true,
+ quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 

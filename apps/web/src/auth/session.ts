@@ -22,6 +22,9 @@ export interface Session {
   // seven or eight hour line on purpose. Never null, for the same reason the target is not:
   // following the baseline is the behaviour for somebody who has never opened Settings.
   sleepUseBaseline: boolean
+  // Whether the dashboard offers a Log button for this person (M9c). Off by default
+  // (PeopleStore.create seeds it false), matching auth.ts's own ?? false for a pre-migration row.
+  quickLogEnabled: boolean
   // Whether this person has a usable Google connection right now - a non-revoked refresh token,
   // not merely a credentials row. A revoked person and a never-connected person both need the
   // same connect control to get moving again, so this one boolean is correct for both.

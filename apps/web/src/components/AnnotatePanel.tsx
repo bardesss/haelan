@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { dayMetricTarget, sampleTarget, sessionTarget } from '@haelan/core/target-key'
 import { useTranslation } from '../i18n/index.js'
 import { useWriteEvent, useWriteNote, useWriteOverride } from '../data/useAnnotations.js'
+import { usePresets } from '../data/useQuickLog.js'
 import { SEED_KINDS } from '../data/eventKinds.js'
 
 /**
@@ -90,6 +91,10 @@ export function AnnotatePanel({ target, onClose }: {
   const writeOverride = useWriteOverride()
   const writeNote = useWriteNote()
   const writeEvent = useWriteEvent()
+  // The person's own chips (M9c), offered as suggestions ahead of the seed set once they have
+  // loaded; SEED_KINDS covers the field while the request is pending or has failed, the same
+  // fallback the panel gave every reader before presets existed at all.
+  const presets = usePresets()
 
   // Built here, from exactly the fields the click (or, for a workout, the page) carried, and
   // nowhere else in this component. No reason for a target key to appear as a field a reader could
@@ -249,8 +254,9 @@ export function AnnotatePanel({ target, onClose }: {
                 <input className="input" value={kind} list={`${titleId}-kinds`}
                   onChange={(event) => setKind(event.target.value)} />
                 <datalist id={`${titleId}-kinds`}>
-                  {SEED_KINDS.map((seed) => (
-                    <option key={seed} value={seed} label={t(`annotate.event.kinds.${seed}`)} />
+                  {(presets.data?.kinds ?? SEED_KINDS).map((preset) => (
+                    <option key={preset} value={preset}
+                      label={SEED_KINDS.includes(preset) ? t(`annotate.event.kinds.${preset}`) : preset} />
                   ))}
                 </datalist>
               </label>

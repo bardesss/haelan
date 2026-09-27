@@ -19,6 +19,7 @@ import { flush } from './flush.js'
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
   sleepTargetMinutes: 480, sleepUseBaseline: true,
+ quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
