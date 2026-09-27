@@ -405,6 +405,29 @@ describe('the sheet, on a phone', () => {
     expect(document.activeElement).toBe(trigger())
   })
 
+  // A modal dialog makes everything outside it inert, so in a real browser the trigger cannot take
+  // focus until the dialog is closed; happy-dom has no inertness, so the order itself is asserted.
+  it('closes the dialog before handing focus back, on ✕ and on a backdrop click', () => {
+    phone = true
+    mount()
+    const openAtFocus: boolean[] = []
+    const realFocus = HTMLElement.prototype.focus
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
+      if (this === trigger()) openAtFocus.push(sheet()?.open === true)
+      realFocus.call(this, options)
+    }
+    try {
+      open()
+      act(() => { byLabel('Close').click() })
+      expect(sheet()).toBeNull()
+      open()
+      act(() => { sheet()!.click() })
+      expect(sheet()).toBeNull()
+      expect(openAtFocus.length).toBeGreaterThan(0)
+      expect(openAtFocus.every((wasOpen) => !wasOpen)).toBe(true)
+    } finally { HTMLElement.prototype.focus = realFocus }
+  })
+
   it('a click inside the sheet is not a backdrop click', () => {
     phone = true
     mount()

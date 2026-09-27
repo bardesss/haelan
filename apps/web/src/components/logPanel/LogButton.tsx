@@ -153,9 +153,17 @@ function LogLayer({ shownDay, today, log, anchor, onClose }: {
     if (controls.length === 0 ? active === element : active === controls.at(-1)) onClose()
   }
 
+  // The sheet is closed before the button hears of it: while a modal dialog is open everything
+  // outside it is inert, so the trigger could not take focus back until the dialog had gone.
+  // (Escape and the back gesture close it themselves, before its close event calls onClose.)
+  function dismiss() {
+    if (sheet.current?.open === true) sheet.current.close()
+    onClose()
+  }
+
   const panel = (
     <LogPanel day={day} today={today} {...(day === shownDay && log !== undefined ? { initial: log } : {})}
-      onStep={setDay} onClose={onClose} titleId={titleId} />
+      onStep={setDay} onClose={dismiss} titleId={titleId} />
   )
 
   // Both containers are portalled to the body, so neither sits inside the day navigator's
@@ -163,7 +171,7 @@ function LogLayer({ shownDay, today, log, anchor, onClose }: {
   if (isPhone) {
     return createPortal(
       <dialog ref={sheet} className="log-sheet" data-log-panel="" aria-labelledby={titleId}
-        onClick={(event) => { if (event.target === sheet.current) onClose() }}
+        onClick={(event) => { if (event.target === sheet.current) dismiss() }}
         onKeyDown={(event) => { if (event.key === 'Escape') escapeClaimed.current = false }}>
         <div ref={layer} className="log-sheet-body">
           <span className="log-grab" aria-hidden="true" />
