@@ -13,7 +13,7 @@ import { glanceKey } from '../src/data/useGlance.js'
 import type { GlanceLog } from '../src/data/useGlance.js'
 import { useGlance } from '../src/data/useGlance.js'
 import {
-  useDayLog, useQuickLogTap, useSetMood, useSaveNote, useSavePresets,
+  dayLogKey, useDayLog, useQuickLogTap, useSetMood, useSaveNote, useSavePresets,
 } from '../src/data/useQuickLog.js'
 import { glanceBody, glanceLog } from './glanceFixture.js'
 import { flush } from './flush.js'
@@ -224,6 +224,18 @@ describe('useSaveNote', () => {
 
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ method: 'PUT', url: '/api/v1/p/p1/notes/2026-09-23', body: { body: 'x' } })
+  })
+
+  it('puts the old note back in the cached day log when the server refuses the save', async () => {
+    const { restore } = stubFetch(() => json({ error: { code: 'config', message: 'no' } }, 400))
+    const client = newClient()
+    client.setQueryData(dayLogKey('p1', '2026-09-23'), glanceLog({ note: 'before' }))
+    mount(client, <Probe />)
+    click(container!.querySelectorAll('button')[1]!)
+    await flush(client, () => container!.innerHTML)
+    restore()
+
+    expect(client.getQueryData<GlanceLog>(dayLogKey('p1', '2026-09-23'))!.note).toBe('before')
   })
 })
 

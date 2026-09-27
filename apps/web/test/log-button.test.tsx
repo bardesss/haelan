@@ -372,6 +372,28 @@ describe('a half-typed note', () => {
     await settle()
     expect(noteWrites()).toEqual([])
   })
+
+  // The panel reads its note once, as it opens, from the cached day log; a save only marks that
+  // cache stale, and nothing observes it while the panel is closed. Reopened before the refetch
+  // lands, the panel would show the old note, and an edit to it would save over the new one.
+  it('is what a panel reopened at once shows, before any refetch has landed', async () => {
+    mount()
+    open()
+    // Every day-log read from here on is held open, so the reopen cannot be rescued by a refetch.
+    const base = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/quick-log/day/')) {
+        seen.push(String(input))
+        return new Promise<Response>(() => {})
+      }
+      return base(input, init)
+    }) as typeof fetch
+    type(note(), 'Late dinner')
+    key(note(), 'Escape')
+    await act(async () => { await Promise.resolve() })
+    open()
+    expect(note().value).toBe('Late dinner')
+  })
 })
 
 describe('the sheet, on a phone', () => {
