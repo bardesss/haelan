@@ -1926,6 +1926,10 @@ button.week-bar-slot { cursor: pointer; }
   .source-order-list button, .log-face, .log-chip {
     min-height: 44px;
   }
+  /* The log panel's Undo is a bare word in its row, so it takes the height the row would otherwise
+     pad on, the .cal-sheet .cal-today way; the row's own vertical padding goes to keep it compact. */
+  .log-undo { padding-top: 0; padding-bottom: 0; }
+  .log-undo .log-link { min-height: 44px; padding: 0 var(--space-2); }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
   /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
      header draws them) but hold only an icon, so they need .icon-button's square minimum too. */

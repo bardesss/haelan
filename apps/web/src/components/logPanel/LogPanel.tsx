@@ -136,17 +136,31 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
     undoTimer.current = null
     setUndoable(null)
   }
-  useEffect(() => () => { if (undoTimer.current !== null) clearTimeout(undoTimer.current) }, [])
+  // Whether this day's body is still on screen: a tap can settle after the reader has stepped to
+  // another day or closed the panel, and must not arm a timer for a line nobody will see.
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      if (undoTimer.current !== null) clearTimeout(undoTimer.current)
+    }
+  }, [])
+  // Which tap is the latest. Taps do not wait on one another, so they can settle out of order, and
+  // only the latest one's line may show: an earlier tap settling late must not replace it.
+  const tapSeq = useRef(0)
 
   function onTap(kind: string) {
-    // Only the latest tap is undoable, so the previous one's line goes the moment another starts.
+    const seq = ++tapSeq.current
+    // Only the latest tap is undoable, so the previous one's line (and its timer) goes the moment
+    // another starts.
     clearUndo()
     setChipsError(null)
     shift(kind, 1)
     tap.mutateAsync({ kind, day }).then(
       (event) => {
         void refreshed().finally(() => shift(kind, -1))
-        clearUndo()
+        if (!mounted.current || seq !== tapSeq.current) return
         setUndoable({ kind, eventId: event.id })
         undoTimer.current = setTimeout(() => { undoTimer.current = null; setUndoable(null) }, UNDO_MS)
       },

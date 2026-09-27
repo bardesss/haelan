@@ -292,6 +292,46 @@ describe('LogPanel undo', () => {
     expect(live().textContent).toBe('')
   })
 
+  it('keeps the latest tap undoable when an earlier one settles after it', async () => {
+    // The server files both taps as they arrive (e1, then e2), but the first answer is held back
+    // until the second has already settled.
+    let releaseFirst: () => void = () => {}
+    handler = (req) => {
+      if (req.method !== 'POST' || (req.body as { kind: string }).kind !== 'alcohol') return fakeServer(req)
+      const answer = fakeServer(req)
+      return new Promise<Response>((resolve) => { releaseFirst = () => resolve(answer) })
+    }
+    render()
+    click(chip('Alcohol'))
+    await pumpUntil(() => writes().length === 1, 'the first tap')
+    click(chip('Caffeine'))
+    await pumpUntil(() => live().textContent !== '', 'the second tap line')
+    expect(live().textContent).toBe('Caffeine loggedUndo')
+    releaseFirst()
+    await settle()
+    expect(live().textContent).toBe('Caffeine loggedUndo')
+    click([...live().querySelectorAll('button')].find((b) => b.textContent === 'Undo')!)
+    await settle()
+    expect(writes().at(-1)).toEqual({ method: 'DELETE', url: '/api/v1/p/p1/events/e2', body: null })
+  })
+
+  it('gives a new tap its own ten seconds, clearing the old line\'s timer', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    render()
+    click(chip('Caffeine'))
+    await pumpUntilLine()
+    expect(live().textContent).toBe('Caffeine loggedUndo')
+    act(() => { vi.advanceTimersByTime(6_000) })
+    click(chip('Alcohol'))
+    await pumpUntilLine()
+    expect(live().textContent).toBe('Alcohol loggedUndo')
+    // 12 s after the first tap, 6 s after the second: the first line's timer would have fired at 10.
+    act(() => { vi.advanceTimersByTime(6_000) })
+    expect(live().textContent).toBe('Alcohol loggedUndo')
+    act(() => { vi.advanceTimersByTime(4_000) })
+    expect(live().textContent).toBe('')
+  })
+
   it('names the day on a past day', async () => {
     render({ day: OLDER })
     click(chip('Caffeine'))
