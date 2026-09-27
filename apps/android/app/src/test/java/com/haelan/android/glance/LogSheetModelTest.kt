@@ -154,6 +154,71 @@ class LogSheetModelTest {
     }
 
     @Test
+    fun `stepping back to the screen's day after a glance caught up draws that glance, not the one it opened with`() {
+        model.open(today, glanceLog)
+        model.typeNote("Birthday")
+        model.step("2026-09-26")
+        // The refresh after the save arrives while the sheet is on the day before.
+        model.glanceArrived(today, glanceLog.copy(note = "Birthday"))
+        model.step(today)
+        assertEquals("Birthday", sheet?.noteText)
+        assertEquals("Birthday", sheet?.log?.note)
+    }
+
+    @Test
+    fun `a stepped day's read waits for a tap still out on that day`() {
+        val queue = QueueDispatcher()
+        val held = model(queue)
+        held.open(today, glanceLog)
+        held.step("2026-09-26")
+        queue.runFirst()
+        held.tap("travel")
+        held.step(today)
+        held.step("2026-09-26")
+        // The read runs first, and waits: the tap goes out before it asks.
+        queue.runLast()
+        assertEquals(listOf("day 2026-09-26"), calls.sent)
+        while (queue.tasks.isNotEmpty()) queue.runFirst()
+        assertEquals(listOf("day 2026-09-26", "tap travel 2026-09-26", "day 2026-09-26"), calls.sent)
+        assertEquals(1, held.state.value?.count("travel"))
+    }
+
+    @Test
+    fun `a read answered while a write started is asked again once the write is answered`() {
+        val queue = QueueDispatcher()
+        val held = model(queue)
+        held.open(today, glanceLog)
+        held.step("2026-09-26")
+        var tapped = false
+        calls.onDay = { if (!tapped) { tapped = true; held.tap("travel") } }
+        while (queue.tasks.isNotEmpty()) queue.runFirst()
+        assertEquals(listOf("day 2026-09-26", "tap travel 2026-09-26", "day 2026-09-26"), calls.sent)
+        assertEquals(1, held.state.value?.count("travel"))
+        assertEquals(emptyMap<String, Int>(), held.state.value?.deltas)
+    }
+
+    @Test
+    fun `chips saved on one day are every kept day's chips`() {
+        model.open(today, glanceLog)
+        model.step("2026-09-26")
+        model.startEdit()
+        model.addSuggestion("caffeine")
+        model.saveEdit()
+        model.step(today)
+        assertEquals(listOf("travel", "caffeine"), sheet?.log?.presets)
+    }
+
+    @Test
+    fun `Done with the chips unchanged sends nothing and refreshes nothing`() {
+        model.open(today, glanceLog)
+        model.startEdit()
+        model.saveEdit()
+        assertEquals(emptyList<String>(), calls.sent)
+        assertEquals(0, refreshed)
+        assertNull(sheet?.edit)
+    }
+
+    @Test
     fun `undo deletes the latest tap's event`() {
         model.open(today, glanceLog)
         calls.nextEventId = "e9"
@@ -193,7 +258,13 @@ class LogSheetModelTest {
         var moodAnswer: Answer<Unit> = Answer.Ok(Unit)
         var noteAnswer: Answer<Unit> = Answer.Ok(Unit)
 
-        override fun dayLog(localDate: String): Answer<DayLog> = dayAnswer.also { sent += "day $localDate" }
+        var onDay: () -> Unit = {}
+
+        override fun dayLog(localDate: String): Answer<DayLog> {
+            sent += "day $localDate"
+            onDay()
+            return dayAnswer
+        }
         override fun tap(kind: String, day: String): Answer<LoggedEvent> {
             sent += "tap $kind $day"
             return tapAnswer ?: Answer.Ok(LoggedEvent(nextEventId, kind, day))

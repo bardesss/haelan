@@ -418,8 +418,8 @@ internal val DUTCH_TEXT: Map<String, String> = mapOf(
     "annotate_event_kinds_caffeine" to "Cafeïne",
     "control_row_close" to "Sluiten",
     // The phone's own: the web reorders chips by dragging, so it has no words for these buttons.
-    "log_panel_edit_move_earlier" to "{{kind}} naar voren",
-    "log_panel_edit_move_later" to "{{kind}} naar achteren",
+    "log_panel_edit_move_earlier" to "{{kind}} naar voren verplaatsen",
+    "log_panel_edit_move_later" to "{{kind}} naar achteren verplaatsen",
 )
 
 /** Strings over one of the maps above, failing loudly on a key the map does not have. */

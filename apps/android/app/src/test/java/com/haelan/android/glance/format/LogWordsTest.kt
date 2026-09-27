@@ -79,6 +79,6 @@ class LogWordsTest {
         assertEquals("Remove Caffeine", english.remove("caffeine"))
         assertEquals("Cafeïne verplaatst naar plek 2", dutch.moved("caffeine", 2))
         assertEquals("Move Sauna earlier", english.moveEarlier("Sauna"))
-        assertEquals("Sauna naar achteren", dutch.moveLater("Sauna"))
+        assertEquals("Sauna naar achteren verplaatsen", dutch.moveLater("Sauna"))
     }
 }

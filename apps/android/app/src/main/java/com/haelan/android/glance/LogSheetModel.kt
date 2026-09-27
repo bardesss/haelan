@@ -3,8 +3,10 @@ package com.haelan.android.glance
 import com.haelan.android.glance.QuickLogClient.Answer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,8 +45,12 @@ interface LogSheetActions {
  *
  * The screen's own day opens from the glance's `log`, or from its kept state until a glance has
  * caught up with it ([LogSheetState.caughtUpWith]); any other day opens from what is kept and reads
- * `GET /quick-log/day/{date}` behind it, once that day's note saves are answered, so the read
- * cannot overtake a save sent before it.
+ * `GET /quick-log/day/{date}` behind it. The read waits for every write for that day still out, and
+ * is asked again if another starts while it is out, so its answer never lands between a write and
+ * that write's own answer: a tap it already counts would otherwise be counted a second time when
+ * the tap's answer folds its one in (the web's LogPanel waits the same way, in `refreshed`).
+ *
+ * The chips are the person's, not the day's, so a saved list goes to every kept day.
  *
  * After every write that lands, [onWrote] refreshes the screen's glance; a 401 calls [onSignedOut].
  * The public methods are called on the main thread.
@@ -72,8 +78,11 @@ class LogSheetModel(
     private var screenDay: String? = null
     private var screenLog: DayLog? = null
 
-    /** The latest note save per day, which a read of that day waits for; guarded by [lock]. */
-    private val noteSaves = mutableMapOf<String, Job>()
+    /** The writes still out per day, which a read of that day waits for; guarded by [lock]. */
+    private val pending = mutableMapOf<String, MutableSet<Job>>()
+
+    /** How many writes have started per day, so a read can tell one started while it was out; guarded by [lock]. */
+    private val started = mutableMapOf<String, Int>()
 
     @Volatile
     private var closed = false
@@ -98,6 +107,9 @@ class LogSheetModel(
      */
     fun glanceArrived(day: String, log: DayLog) {
         synchronized(lock) {
+            // The newer log is what the screen's day opens from next, whether or not the sheet
+            // is on it now: stepping back to it must not rebuild it from the log it opened with.
+            if (day == screenDay) screenLog = log
             if (day == shown) return
             if (days[day]?.caughtUpWith(log) == true) days.remove(day)
         }
@@ -133,13 +145,26 @@ class LogSheetModel(
         if (day != screenDay) read(day)
     }
 
-    /** Guarded by [lock]: reads [day]'s log once its note saves are answered. */
+    /**
+     * Reads [day]'s log once no write for it is out. An answer is kept only if no write started
+     * while it was being asked for; otherwise it may or may not count that write, and the read
+     * goes round again once the write has been answered.
+     */
     private fun read(day: String) {
-        val before = noteSaves[day]
         scope.launch {
-            before?.join()
-            settle(day, calls().dayLog(day)) { state, log, problem ->
-                if (log != null) state.loaded(log) else state.loadFailed(problem!!)
+            while (true) {
+                val (writes, mark) = synchronized(lock) { pending[day].orEmpty().toList() to started[day] }
+                writes.joinAll()
+                if (synchronized(lock) { started[day] != mark }) continue
+                val answer = calls().dayLog(day)
+                val kept = synchronized(lock) {
+                    if (started[day] != mark) return@synchronized false
+                    settle(day, answer) { state, log, problem ->
+                        if (log != null) state.loaded(log) else state.loadFailed(problem!!)
+                    }
+                    true
+                }
+                if (kept) break
             }
         }
     }
@@ -155,21 +180,23 @@ class LogSheetModel(
     override fun tap(kind: String) {
         val next = change { it.tapped(kind) } ?: return
         val seq = next.tapSeq
+        val since = next.generation
         write(next.day, { calls().tap(kind, next.day) }) { state, event, problem ->
-            if (event != null) state.tapLogged(seq, kind, event.id) else state.tapFailed(kind, problem!!)
+            if (event != null) state.tapLogged(seq, kind, event.id, since) else state.tapFailed(kind, problem!!)
         }
     }
 
     override fun undo() {
-        val (day, slot) = synchronized(lock) {
+        val (state, slot) = synchronized(lock) {
             val state = shown?.let { days[it] } ?: return
             val slot = state.undo ?: return
             days[state.day] = state.undoing() ?: return
             publish()
-            state.day to slot
+            state to slot
         }
-        write(day, { calls().undo(slot.eventId) }) { state, done, problem ->
-            if (done != null) state.undone(slot.kind) else state.undoFailed(slot.kind, problem!!)
+        val since = state.generation
+        write(state.day, { calls().undo(slot.eventId) }) { day, done, problem ->
+            if (done != null) day.undone(slot.kind, since) else day.undoFailed(slot.kind, problem!!)
         }
     }
 
@@ -191,7 +218,7 @@ class LogSheetModel(
         if (save == null) return
         days[state.day] = next
         publish()
-        noteSaves[save.day] = write(save.day, { calls().saveNote(save.day, save.body) }) { day, done, problem ->
+        write(save.day, { calls().saveNote(save.day, save.body) }) { day, done, problem ->
             if (done != null) day.noteSettled() else day.noteFailed(save, problem!!)
         }
     }
@@ -230,10 +257,15 @@ class LogSheetModel(
             val (next, kinds) = state.editSaving() ?: return
             days[state.day] = next
             publish()
-            state.day to kinds
+            // An unchanged list has already left edit mode, and sends nothing.
+            state.day to (kinds ?: return)
         }
         write(day, { calls().savePresets(kinds) }) { state, saved, problem ->
-            if (saved != null) state.editSaved(saved) else state.editFailed(problem!!)
+            if (saved == null) return@write state.editFailed(problem!!)
+            // Inside settle, so under [lock]: the list is the person's, and every kept day takes it.
+            for (other in days.keys.toList()) if (other != day) days[other] = days.getValue(other).presetsSaved(saved)
+            screenLog = screenLog?.copy(presets = saved)
+            state.editSaved(saved)
         }
     }
 
@@ -259,10 +291,23 @@ class LogSheetModel(
         day: String,
         send: () -> Answer<T>,
         fold: (LogSheetState, T?, SheetProblem?) -> LogSheetState,
-    ): Job = scope.launch {
-        val answer = send()
-        settle(day, answer, fold)
-        if (answer is Answer.Ok && !closed) onWrote()
+    ): Job {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val answer = send()
+                settle(day, answer, fold)
+                if (answer is Answer.Ok && !closed) onWrote()
+            } finally {
+                synchronized(lock) { pending[day]?.remove(coroutineContext[Job]) }
+            }
+        }
+        // Counted before it can run, so a read deciding whether to wait always sees it.
+        synchronized(lock) {
+            pending.getOrPut(day) { mutableSetOf() } += job
+            started[day] = (started[day] ?: 0) + 1
+        }
+        job.start()
+        return job
     }
 
     /** Folds [answer] into [day]'s state, whichever day is on screen now. */

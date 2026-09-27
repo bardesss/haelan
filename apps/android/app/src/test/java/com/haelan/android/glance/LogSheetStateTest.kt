@@ -171,6 +171,30 @@ class LogSheetStateTest {
         assertEquals(emptyMap<String, Int>(), undone.log?.counts)
     }
 
+    @Test
+    fun `a read landing between a tap and its answer counts the tap once`() {
+        val tapped = sheet.tapped("caffeine")
+        val since = tapped.generation
+        // The read already counts the tap: the instance had filed it when it answered.
+        val read = tapped.loaded(log.copy(counts = mapOf("caffeine" to 2)))
+        assertEquals(3, read.count("caffeine"))
+        val landed = read.tapLogged(tapped.tapSeq, "caffeine", "e1", since)
+        assertEquals(2, landed.count("caffeine"))
+        assertEquals(emptyMap<String, Int>(), landed.deltas)
+        assertEquals(UndoSlot("caffeine", "e1", 1), landed.undo)
+    }
+
+    @Test
+    fun `a read landing between an undo and its answer takes the tap off once`() {
+        val logged = sheet.tapped("caffeine").tapLogged(1, "caffeine", "e1")
+        val undoing = logged.undoing()!!
+        val since = undoing.generation
+        val read = undoing.loaded(log.copy(counts = mapOf("caffeine" to 1)))
+        val undone = read.undone("caffeine", since)
+        assertEquals(1, undone.count("caffeine"))
+        assertEquals(emptyMap<String, Int>(), undone.deltas)
+    }
+
     // Mood.
 
     @Test
@@ -354,10 +378,23 @@ class LogSheetStateTest {
 
     @Test
     fun `a refused save stays in edit mode with the instance's sentence`() {
-        val (saving, _) = editing.editSaving()!!
+        val (saving, _) = editing.kindRemoved("illness").editSaving()!!
         val failed = saving.editFailed(problem("kinds[2] is empty"))
         assertEquals(EditProblem.Failed(problem("kinds[2] is empty")), failed.edit?.problem)
         assertFalse(failed.edit!!.saving)
+    }
+
+    @Test
+    fun `Done with the list as it was leaves edit mode and sends nothing`() {
+        val (left, kinds) = editing.kindMoved("caffeine", 1).kindMoved("caffeine", -1).editSaving()!!
+        assertNull(kinds)
+        assertNull(left.edit)
+        assertEquals(0, left.inFlight)
+    }
+
+    @Test
+    fun `chips saved from another day's sheet replace this day's`() {
+        assertEquals(listOf("travel"), sheet.presetsSaved(listOf("travel")).log?.presets)
     }
 
     @Test

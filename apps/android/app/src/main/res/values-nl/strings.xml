@@ -310,6 +310,6 @@
     <string name="annotate_event_kinds_injury">Blessure</string>
     <string name="annotate_event_kinds_caffeine">Cafeïne</string>
     <string name="control_row_close">Sluiten</string>
-    <string name="log_panel_edit_move_earlier">{{kind}} naar voren</string>
-    <string name="log_panel_edit_move_later">{{kind}} naar achteren</string>
+    <string name="log_panel_edit_move_earlier">{{kind}} naar voren verplaatsen</string>
+    <string name="log_panel_edit_move_later">{{kind}} naar achteren verplaatsen</string>
 </resources>

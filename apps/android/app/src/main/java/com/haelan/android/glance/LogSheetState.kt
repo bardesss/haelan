@@ -66,6 +66,11 @@ data class NoteSave(val day: String, val body: String, val previous: String)
  *
  * [inFlight] counts the calls not yet answered, which is how [caughtUpWith] knows the log here may
  * still be ahead of any glance the screen reads.
+ *
+ * [generation] moves with every read that replaces the log. A tap or an undo answered after a read
+ * that landed while it was out does not fold its one into the log: the read is the newer account,
+ * and folding again would count the tap twice. [LogSheetModel] holds its reads back until no write
+ * is out, so this is the second line, not the first.
  */
 data class LogSheetState(
     val day: String,
@@ -88,6 +93,7 @@ data class LogSheetState(
     val noteProblem: SheetProblem? = null,
     val edit: PresetEdit? = null,
     val inFlight: Int = 0,
+    val generation: Int = 0,
 ) {
     companion object {
         /** The server's limits (packages/core/src/api/eventKinds.ts), checked here as the web does. */
@@ -154,7 +160,7 @@ data class LogSheetState(
         val note = fresh.note ?: ""
         // Text typed while a read was out (a sheet opened from a kept log) is the reader's; keep it.
         val text = if (unchanged(noteText, noteSaved)) note else noteText
-        return copy(today = fresh.today, log = fresh, loadProblem = null, noteText = text, noteSaved = note)
+        return copy(today = fresh.today, log = fresh, loadProblem = null, noteText = text, noteSaved = note, generation = generation + 1)
     }
 
     /** A failed read shows only where there is nothing to show instead. */
@@ -194,9 +200,10 @@ data class LogSheetState(
     fun tapped(kind: String): LogSheetState =
         copy(deltas = shift(kind, 1), tapSeq = tapSeq + 1, undo = null, chipsProblem = null, inFlight = inFlight + 1)
 
-    fun tapLogged(seq: Int, kind: String, eventId: String): LogSheetState = copy(
+    /** Tap [seq] landed; [since] is the [generation] it was made in (see the class KDoc). */
+    fun tapLogged(seq: Int, kind: String, eventId: String, since: Int = generation): LogSheetState = copy(
         deltas = shift(kind, -1),
-        log = counted(kind, 1),
+        log = if (since == generation) counted(kind, 1) else log,
         undo = if (seq == tapSeq) UndoSlot(kind, eventId, seq) else undo,
         inFlight = inFlight - 1,
     )
@@ -210,7 +217,8 @@ data class LogSheetState(
         return copy(deltas = shift(slot.kind, -1), undo = null, chipsProblem = null, inFlight = inFlight + 1)
     }
 
-    fun undone(kind: String): LogSheetState = copy(deltas = shift(kind, 1), log = counted(kind, -1), inFlight = inFlight - 1)
+    fun undone(kind: String, since: Int = generation): LogSheetState =
+        copy(deltas = shift(kind, 1), log = if (since == generation) counted(kind, -1) else log, inFlight = inFlight - 1)
 
     fun undoFailed(kind: String, problem: SheetProblem): LogSheetState =
         copy(deltas = shift(kind, 1), chipsProblem = problem, inFlight = inFlight - 1)
@@ -297,15 +305,22 @@ data class LogSheetState(
         return copy(edit = open.copy(kinds = kinds, moved = kind))
     }
 
-    /** Done: the list to send, and the state saving it; null while a save is already out. */
-    fun editSaving(): Pair<LogSheetState, List<String>>? {
+    /**
+     * Done: the list to send and the state saving it, or, for a list left as it was, the state out
+     * of edit mode and nothing to send. Null while a save is already out.
+     */
+    fun editSaving(): Pair<LogSheetState, List<String>?>? {
         val open = edit ?: return null
         if (open.saving) return null
+        if (open.kinds == log?.presets) return copy(edit = null) to null
         return copy(edit = open.copy(saving = true, problem = null), inFlight = inFlight + 1) to open.kinds
     }
 
     /** Saved: the chips come back in the list the instance answered with, and edit mode ends. */
     fun editSaved(kinds: List<String>): LogSheetState = copy(log = log?.copy(presets = kinds), edit = null, inFlight = inFlight - 1)
+
+    /** Another day's sheet saved the chips: they are the person's, so this day's log takes them too. */
+    fun presetsSaved(kinds: List<String>): LogSheetState = copy(log = log?.copy(presets = kinds))
 
     fun editFailed(problem: SheetProblem): LogSheetState =
         copy(edit = edit?.copy(saving = false, problem = EditProblem.Failed(problem)), inFlight = inFlight - 1)

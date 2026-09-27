@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -68,7 +69,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.haelan.android.R
@@ -110,7 +113,10 @@ fun LogSheet(state: LogSheetState, text: CardText, actions: LogSheetActions) {
     DisposableEffect(Unit) { onDispose { latest.commitNote() } }
     ModalBottomSheet(onDismissRequest = actions::dismiss, sheetState = sheetState) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            // imePadding so the keyboard lifts the note and the add field into view; insets the
+            // sheet has already consumed are not counted twice.
+            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TitleRow(state, words, actions) {
@@ -340,14 +346,27 @@ private fun UndoLine(state: LogSheetState, words: LogWords, actions: LogSheetAct
 /**
  * The day's note. Saved when it loses focus and on the keyboard's done key (which also lets focus
  * go, so the keyboard closes); emptied, it deletes the note.
+ *
+ * The field edits a value of its own, with its cursor and the IME's composing span, and pushes the
+ * text to the model as it changes: a round trip through the StateFlow for every key can drop a
+ * character or move the cursor under an IME. The model's text still decides what is saved. The
+ * field starts over from it only when the model changes it on its own, which is a step to another
+ * day or a read landing ([LogSheetState.generation]); comparing the two texts instead would reset
+ * the field to a StateFlow value a keystroke behind it.
  */
 @Composable
 private fun NoteField(state: LogSheetState, actions: LogSheetActions) {
     val focus = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
+    var field by remember(state.day, state.generation) {
+        mutableStateOf(TextFieldValue(state.noteText, TextRange(state.noteText.length)))
+    }
     OutlinedTextField(
-        value = state.noteText,
-        onValueChange = actions::typeNote,
+        value = field,
+        onValueChange = {
+            field = it
+            actions.typeNote(it.text)
+        },
         placeholder = { Text(stringResource(R.string.log_panel_note_placeholder)) },
         minLines = 2,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -375,10 +394,10 @@ private fun PresetEditor(edit: PresetEdit, suggestions: List<String>, words: Log
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(words.kind(kind), modifier = Modifier.weight(1f).padding(start = 4.dp))
                 IconButton(onClick = { actions.moveKind(kind, -1) }, enabled = index > 0) {
-                    Icon(painterResource(R.drawable.ic_chevron_left), words.moveEarlier(kind))
+                    Icon(painterResource(R.drawable.ic_arrow_up), words.moveEarlier(kind))
                 }
                 IconButton(onClick = { actions.moveKind(kind, 1) }, enabled = index < edit.kinds.lastIndex) {
-                    Icon(painterResource(R.drawable.ic_chevron_right), words.moveLater(kind))
+                    Icon(painterResource(R.drawable.ic_arrow_down), words.moveLater(kind))
                 }
                 IconButton(onClick = { actions.removeKind(kind) }) {
                     Icon(painterResource(R.drawable.ic_close), words.remove(kind))
