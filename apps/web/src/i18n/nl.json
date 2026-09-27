@@ -966,7 +966,8 @@
       "moved": "{{kind}} verplaatst naar plek {{position}}",
       "done": "Klaar",
       "cancel": "Annuleren",
-      "full": "Hoogstens 16 knoppen"
+      "full": "Hoogstens 16 knoppen",
+      "duplicate": "{{kind}} is al een knop"
     },
     "undo": {
       "today": "{{kind}} gelogd",

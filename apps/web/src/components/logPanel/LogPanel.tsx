@@ -23,7 +23,7 @@ const CHIP_CLASS = { on: 'log-chip is-on', off: 'log-chip' } as const
 
 /** The failure line under the section whose write failed: the server's own message, which for
  *  these routes is the one sentence that says what was wrong with the request. */
-function failureText(error: unknown): string {
+export function failureText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 

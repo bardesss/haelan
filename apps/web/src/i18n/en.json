@@ -966,7 +966,8 @@
       "moved": "{{kind}} moved to position {{position}}",
       "done": "Done",
       "cancel": "Cancel",
-      "full": "At most 16 chips"
+      "full": "At most 16 chips",
+      "duplicate": "{{kind}} is already a chip"
     },
     "undo": {
       "today": "{{kind}} logged",

@@ -933,7 +933,9 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 .log-note { min-height: 64px; resize: vertical; }
 .log-error { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
 /* PresetEditor.tsx: the chips in edit mode, each still chip-shaped so the list reads as the row it
-   replaces, with its remove button inside the pill. grab says it can be dragged. */
+   replaces, with its remove button inside the pill. grab says it can be dragged; touch-action: none
+   hands a finger's moves to the drag rather than to scrolling the sheet, and user-select: none keeps
+   a mouse drag from selecting the names it passes. */
 .log-editor { display: flex; flex-direction: column; gap: var(--space-2); }
 .log-editor:focus { outline: none; }
 .log-edit-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -941,6 +943,7 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
   display: inline-flex; align-items: center; gap: var(--space-1); min-height: 40px; padding: 0 var(--space-1) 0 14px;
   border-radius: 999px; background: var(--surface-inset); border: 1px solid var(--border-subtle);
   color: var(--text-secondary); font-size: var(--font-size-sm); cursor: grab; max-width: 100%;
+  touch-action: none; user-select: none;
 }
 /* A kind runs to 40 characters, wider than a phone's sheet: it ends in an ellipsis so the remove
    button stays inside the pill. */

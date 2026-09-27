@@ -125,10 +125,16 @@ function type(el: HTMLInputElement, value: string): void {
     el.dispatchEvent(new Event('input', { bubbles: true }))
   })
 }
-/** One act() per drag event, as a real pointer delivers them one at a time. */
-function drag(el: Element, type: string): void {
-  act(() => { el.dispatchEvent(new Event(type, { bubbles: true, cancelable: true })) })
+/** One act() per pointer event, as a real pointer delivers them one at a time. happy-dom lays
+ *  nothing out, so what lies under the pointer is whatever `under` names at the time. */
+let under: Element | null = null
+function pointer(el: Element, type: string, init: PointerEventInit = {}): void {
+  act(() => { el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, ...init })) })
 }
+beforeEach(() => {
+  under = null
+  document.elementFromPoint = () => under
+})
 
 describe('PresetEditor', () => {
   it('removes a kind with its remove button', () => {
@@ -150,13 +156,33 @@ describe('PresetEditor', () => {
     expect(errors()).toEqual([])
   })
 
-  it('refuses a duplicate with the validation message and keeps what was typed', () => {
+  it("refuses a duplicate in the reader's language and keeps what was typed", () => {
     renderEditor(['caffeine', 'alcohol'])
-    type(field(), 'Alcohol')
+    type(field(), ' ALCOHOL')
     key(field(), 'Enter')
     expect(names()).toEqual(['Caffeine', 'Alcohol'])
-    expect(errors()).toEqual(['kind 3 repeats "alcohol"'])
-    expect(field().value).toBe('Alcohol')
+    expect(errors()).toEqual(['Alcohol is already a chip'])
+    expect(field().value).toBe(' ALCOHOL')
+  })
+
+  it('clears the error when a kind is removed', () => {
+    renderEditor(['caffeine', 'alcohol'])
+    type(field(), 'alcohol')
+    key(field(), 'Enter')
+    expect(errors()).toEqual(['Alcohol is already a chip'])
+    click(byLabel('Remove Caffeine'))
+    expect(errors()).toEqual([])
+  })
+
+  it('caps what can be typed at the longest kind the server keeps', () => {
+    renderEditor([])
+    expect(field().maxLength).toBe(40)
+  })
+
+  it('leaves out a suggestion that differs from a listed kind only by case', () => {
+    renderEditor(['sauna'], ['Sauna', 'travel'])
+    const options = [...container!.querySelectorAll('datalist option')].map((o) => o.getAttribute('value'))
+    expect(options).toEqual(['travel'])
   })
 
   it('offers the suggestions not already in the list', () => {
@@ -179,18 +205,42 @@ describe('PresetEditor', () => {
     expect(announced()).toBe('Caffeine moved to position 1')
   })
 
-  it('reorders by dragging one kind onto another', () => {
+  it('leaves focus where the reader takes it after an arrow press at the end of the list', () => {
+    renderEditor(['caffeine', 'sauna'])
+    act(() => { item('Caffeine').focus() })
+    const left = key(item('Caffeine'), 'ArrowLeft')
+    expect(left.defaultPrevented).toBe(true)
+    expect(names()).toEqual(['Caffeine', 'sauna'])
+    act(() => { field().focus() })
+    type(field(), 'x')
+    expect(document.activeElement).toBe(field())
+  })
+
+  it('reorders live as a pointer drags one kind over the others, and announces where it landed', () => {
     renderEditor(['caffeine', 'sauna', 'alcohol'])
-    expect(item('Alcohol').getAttribute('draggable')).toBe('true')
-    drag(item('Alcohol'), 'dragstart')
-    const over = new Event('dragover', { bubbles: true, cancelable: true })
-    act(() => { item('Caffeine').dispatchEvent(over) })
-    // A drop target has to cancel dragover, or the browser never delivers the drop.
-    expect(over.defaultPrevented).toBe(true)
-    drag(item('Caffeine'), 'drop')
-    drag(item('Alcohol'), 'dragend')
+    const alcohol = item('Alcohol')
+    pointer(alcohol, 'pointerdown')
+    under = item('sauna')
+    pointer(alcohol, 'pointermove')
+    expect(names()).toEqual(['Caffeine', 'Alcohol', 'sauna'])
+    under = item('Caffeine')
+    pointer(alcohol, 'pointermove')
     expect(names()).toEqual(['Alcohol', 'Caffeine', 'sauna'])
+    expect(announced()).toBe('')
+    pointer(alcohol, 'pointerup')
     expect(announced()).toBe('Alcohol moved to position 1')
+    // Once the pointer is up, passing over another kind moves nothing.
+    under = item('sauna')
+    pointer(alcohol, 'pointermove')
+    expect(names()).toEqual(['Alcohol', 'Caffeine', 'sauna'])
+  })
+
+  it('starts no drag from a remove button', () => {
+    renderEditor(['caffeine', 'sauna'])
+    pointer(byLabel('Remove Caffeine'), 'pointerdown')
+    under = item('sauna')
+    pointer(item('Caffeine'), 'pointermove')
+    expect(names()).toEqual(['Caffeine', 'sauna'])
   })
 
   it('saves the new order on Done and then calls onDone', async () => {
@@ -201,6 +251,22 @@ describe('PresetEditor', () => {
     await settle()
     expect(writes()).toEqual([{ method: 'PUT', url: '/api/v1/p/p1/quick-log/presets', body: { kinds: ['caffeine', 'alcohol'] } }])
     expect(calls).toEqual({ done: 1, cancel: 0 })
+  })
+
+  it('disables Done while the save is in flight', async () => {
+    let release: () => void = () => {}
+    handler = (req) => req.method === 'PUT'
+      ? new Promise<Response>((resolve) => { release = () => resolve(fakeServer(req)) })
+      : fakeServer(req)
+    const calls = renderEditor(['caffeine'])
+    click(button('Done'))
+    await pumpUntil(() => writes().length === 1, 'the save')
+    expect(button('Done').disabled).toBe(true)
+    click(button('Done'))
+    release()
+    await settle()
+    expect(writes()).toHaveLength(1)
+    expect(calls.done).toBe(1)
   })
 
   it('keeps the editor open with the server message when Done fails', async () => {
@@ -230,6 +296,25 @@ describe('PresetEditor', () => {
     }
   })
 
+  it("clears a draft on Escape in the add field, and only an empty field's Escape discards", () => {
+    const seen: string[] = []
+    const spy = (event: KeyboardEvent) => { seen.push(event.key) }
+    document.addEventListener('keydown', spy)
+    try {
+      const calls = renderEditor(['caffeine'])
+      type(field(), 'sau')
+      key(field(), 'Escape')
+      expect(field().value).toBe('')
+      expect(calls).toEqual({ done: 0, cancel: 0 })
+      expect(seen).toEqual([])
+      key(field(), 'Escape')
+      expect(calls).toEqual({ done: 0, cancel: 1 })
+      expect(seen).toEqual([])
+    } finally {
+      document.removeEventListener('keydown', spy)
+    }
+  })
+
   it('discards on Cancel', () => {
     const calls = renderEditor(['caffeine'])
     click(button('Cancel'))
@@ -242,6 +327,11 @@ describe('PresetEditor', () => {
     renderEditor(sixteen)
     expect(field().disabled).toBe(true)
     expect(container!.textContent).toContain('At most 16 chips')
+    // Disabled is the browser's guard; a key that reaches the field regardless is refused in words.
+    type(field(), 'sauna')
+    key(field(), 'Enter')
+    expect(names()).toHaveLength(16)
+    expect(errors()).toEqual(['At most 16 chips'])
     click(byLabel('Remove kind16'))
     expect(field().disabled).toBe(false)
     expect(container!.textContent).not.toContain('At most 16 chips')
