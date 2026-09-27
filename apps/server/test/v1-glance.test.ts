@@ -402,7 +402,7 @@ describe('log on the glance', () => {
     const first = await get(harness, token, '/glance')
     const firstBody = first.json()
     expect(firstBody.log).toMatchObject({
-      presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'], mood: null,
+      presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'], mood: null, today: '2026-08-20',
     })
 
     const written = await harness.app.inject({
@@ -444,6 +444,10 @@ describe('log on the glance', () => {
 
     const body = (await get(harness, token, '/glance?day=2026-08-18')).json()
     expect(body.log.mood).toBe(5)
+    // The glance's own `today` names the day shown; only the log still carries the real today,
+    // which is what the Log button needs to know where its › stops and which day a tap may go to.
+    expect(body.today).toBe('2026-08-18')
+    expect(body.log.today).toBe('2026-08-20')
   })
 })
 

@@ -83,7 +83,7 @@ export function registerQuickLogRoutes(app: FastifyInstance): void {
   app.get<{ Params: DayParams }>('/p/:personId/quick-log/day/:localDate', async (request, reply) => {
     const { person, today } = personAndToday(personIdOf(request))
     notAfterToday('localDate', request.params.localDate, today)
-    return sendHashed(reply, request, readDayLog(app.haelan.instance, person, request.params.localDate))
+    return sendHashed(reply, request, readDayLog(app.haelan.instance, person, request.params.localDate, today))
   })
 
   app.get<{ Params: PersonParams, Querystring: DateRangeQuery }>('/p/:personId/moods', async (request, reply) => {

@@ -114,9 +114,12 @@ export function Dashboard() {
   const calendarButton = <CalendarButton selected={shownDay ?? today} today={today} onPick={(picked) => setDay(picked)} />
   // The Log button shows while the glance carries a log, which it does only with quick logging on.
   // Stepping, that log is the held day's rather than the day the header names, so the panel is
-  // left to load the named day itself.
+  // left to load the named day itself. Its today is the server's, off the log, not the browser's
+  // clock: a clock ahead of the server just after midnight would open the panel on a day the
+  // server calls tomorrow, and every tap would be refused. On today's own glance the log's today is
+  // the glance's day; stepping back to today, it is the held glance's word for today.
   const logButton = glance.log !== undefined
-    ? <LogButton shownDay={shownDay ?? today} today={today} log={stepping ? undefined : glance.log} />
+    ? <LogButton shownDay={shownDay ?? glance.log.today} today={glance.log.today} log={stepping ? undefined : glance.log} />
     : undefined
   const nav = <DayNav glance={glance} onPick={(picked) => setDay(picked)} logButton={logButton} calendarButton={calendarButton}
     pending={stepping} finished={shownDay !== null} />

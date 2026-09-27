@@ -146,6 +146,7 @@ describe('POST /quick-log', () => {
     expect(badDay.json().error.message).toContain('day')
     expect(badDay.json().error.message).not.toContain('localDate')
   })
+
 })
 
 describe('moods', () => {
@@ -211,8 +212,10 @@ describe('GET /quick-log/day/:localDate', () => {
 
     const body = (await get(harness, token, '/quick-log/day/2026-09-26')).json()
     expect(body).toEqual({
-      presets: SEED_KINDS, mood: 4, counts: { caffeine: 1 }, note: 'late dinner',
+      presets: SEED_KINDS, mood: 4, counts: { caffeine: 1 }, note: 'late dinner', today: '2026-09-26',
     })
+    // A past day's log still names the person's real today, not the day it is for.
+    expect((await get(harness, token, '/quick-log/day/2026-09-20')).json().today).toBe('2026-09-26')
 
     const future = await get(harness, token, '/quick-log/day/2026-09-27')
     expect(future.statusCode).toBe(400)

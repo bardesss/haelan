@@ -510,7 +510,7 @@ describe('quick logging', () => {
   const TODAY = '2026-09-06'
   const YESTERDAY = '2026-09-05'
   const log = (counts: Record<string, number> = {}) => ({
-    presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'], mood: null, counts, note: null,
+    presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'], mood: null, counts, note: null, today: TODAY,
   })
   const glance = (today: string) => ({ today, finished: false, log: log({ caffeine: 1 }) })
   const glanceUrl = `/api/v1/p/${PERSON}/glance`
@@ -542,6 +542,8 @@ describe('quick logging', () => {
     expect(event.localDate).toBe(YESTERDAY)
     const pastGlance = applyOverlay(`${glanceUrl}?day=${YESTERDAY}`, glance(YESTERDAY), overlay) as { log: { counts: Record<string, number> } }
     expect(pastGlance.log.counts).toEqual({ caffeine: 1, alcohol: 1 })
+    // A composed past day's log keeps the capture's real today, which the Log button reads.
+    expect((pastGlance.log as unknown as { today: string }).today).toBe(TODAY)
     expect((applyOverlay(dayUrl(YESTERDAY), log(), overlay) as { counts: Record<string, number> }).counts).toEqual({ alcohol: 1 })
     // Not on today's.
     expect(applyOverlay(dayUrl(TODAY), log(), overlay)).toEqual(log())

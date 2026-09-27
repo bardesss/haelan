@@ -586,6 +586,8 @@ interface DayLog {
   mood: number | null
   counts: Record<string, number>
   note: string | null
+  /** The demo person's today, whichever day the log is for: the capture's, which is DEMO_DATE. */
+  today: string
 }
 
 /** The demo person's local date at `ms`: the seed's zone, Europe/Amsterdam, as instant.ts has it. */
@@ -655,6 +657,7 @@ function composeDayLog(day: string, log: DayLog, overlay: Overlay): DayLog {
   for (const event of written) counts[event.kind] = (counts[event.kind] ?? 0) + 1
   const note = overlay.notes.get(day)?.body ?? (overlay.deletedNoteDates.has(day) ? null : log.note)
   return {
+    ...log,
     presets: overlay.presets ?? log.presets,
     mood: overlay.moods.has(day) ? overlay.moods.get(day)! : log.mood,
     counts,

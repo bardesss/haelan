@@ -210,9 +210,10 @@ export function registerGlanceRoutes(app: FastifyInstance): void {
 
     // The day's log rides on the glance only for a person who turned quick logging on (M9c), so
     // one request still draws the page and a client needs no second read to know whether to show
-    // the button. Absent, not null, when off.
+    // the button. Absent, not null, when off. The log carries the real today even on a past day's
+    // glance, whose own `today` names the day shown.
     const body = person?.quickLogEnabled === true
-      ? { ...roundGlance(result), log: readDayLog(app.haelan.instance, person, effectiveDay) }
+      ? { ...roundGlance(result), log: readDayLog(app.haelan.instance, person, effectiveDay, today) }
       : roundGlance(result)
     return sendHashed(reply, request, body)
   })

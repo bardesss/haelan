@@ -131,6 +131,8 @@ export interface GlanceLog {
   mood: number | null
   counts: Record<string, number>
   note: string | null
+  /** The person's today as the server computes it, whichever day the log is for (core's DayLog). */
+  today: string
 }
 
 export interface Glance {

@@ -22,6 +22,7 @@ export function glanceLog(overrides?: Partial<GlanceLog>): GlanceLog {
     mood: null,
     counts: {},
     note: null,
+    today: GLANCE_TODAY,
     ...overrides,
   }
 }

@@ -140,6 +140,38 @@ describe('the glance Dashboard', () => {
     } finally { restore() }
   })
 
+  // The browser's clock can run ahead of the server's just after midnight. The panel's today is the
+  // server's (the log's), so it opens on the glance's day and a tap goes there, not to a day the
+  // server would refuse as after today.
+  it('opens the Log panel on the server\'s today and taps for it when the browser\'s clock is a day ahead', async () => {
+    // 00:20 on the 24th in Amsterdam, while the server's glance still says the 23rd.
+    vi.setSystemTime(Date.UTC(2026, 8, 23, 22, 20))
+    const { seen, client, restore } = await mountPage({ ...glanceBody(), log: glanceLog({ today: TODAY }) })
+    const stubbed = globalThis.fetch
+    const posted: unknown[] = []
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') posted.push(JSON.parse(String(init.body)))
+      // The refetch after a tap reads the day log itself.
+      if (String(input).includes('/quick-log/day/')) {
+        seen.push(String(input))
+        return new Response(JSON.stringify(glanceLog({ today: TODAY })), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      return stubbed(input, init)
+    }) as typeof fetch
+    try {
+      act(() => { container!.querySelector<HTMLButtonElement>('.log-btn')!.click() })
+      const panel = document.querySelector('[data-log-panel]')!
+      expect(panel.querySelector('h2')?.textContent).toBe('Log for today')
+      expect(panel.querySelector('button[aria-label="Next day"]')?.getAttribute('aria-disabled')).toBe('true')
+      const caffeine = [...panel.querySelectorAll<HTMLButtonElement>('.log-chip')].find((chip) => chip.textContent === 'Caffeine')!
+      act(() => { caffeine.click() })
+      await flush(client, () => document.body.innerHTML)
+      expect(posted).toEqual([{ kind: 'caffeine', day: TODAY }])
+      // Drawn from the glance's own log, with nothing asked for the browser's tomorrow.
+      expect(seen.filter((url) => url.includes('/quick-log/day/2026-09-24'))).toEqual([])
+    } finally { globalThis.fetch = stubbed; restore() }
+  })
+
   it('greets by the person\'s clock, not the machine\'s', async () => {
     // 16:30 UTC is 18:30 in Amsterdam: evening there, whatever zone the test runner sits in.
     vi.setSystemTime(Date.UTC(2026, 8, 23, 16, 30))

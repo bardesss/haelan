@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { StrictMode, act } from 'react'
@@ -48,11 +48,9 @@ function todayOf(nowMs: number): string {
 }
 
 async function mountApp(harness: Harness, enabled: boolean): Promise<QueryClient> {
-  // The page's own today comes from the browser's clock (Dashboard.tsx's localToday) and the
-  // server's from the harness's pinned one; left apart, a tap on "today" is a day the server calls
-  // the future. Only Date is faked, the way the demo build freezes it (frozenClock.ts), so every
-  // timer the render and its refetches wait on still runs.
-  vi.useFakeTimers({ toFake: ['Date'], now: harness.clock.nowMs })
+  // No Date pin: the browser's clock is the real one, months from the harness's pinned server
+  // clock, and the Log button still opens on the server's today, which it reads off the glance's
+  // log rather than the browser's clock.
   await harness.completeSetup()
   harness.app.haelan.stores.people.setQuickLogEnabled('p1', enabled)
   const cookie = await harness.signIn()
@@ -127,7 +125,6 @@ describe('quick logging, through a real server and a real render', () => {
       expect(notes.items.map(({ localDate, body }) => ({ localDate, body })))
         .toEqual([{ localDate: today, body: 'Late dinner with friends.' }])
     } finally {
-      vi.useRealTimers()
       globalThis.fetch = originalFetch
       await harness.cleanup()
     }
@@ -142,7 +139,6 @@ describe('quick logging, through a real server and a real render', () => {
       expect(container!.querySelector('.day-nav')).not.toBeNull()
       expect(logButton()).toBeNull()
     } finally {
-      vi.useRealTimers()
       globalThis.fetch = originalFetch
       await harness.cleanup()
     }

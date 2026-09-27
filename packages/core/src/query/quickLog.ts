@@ -51,17 +51,25 @@ export interface DayLog {
   /** The day's events per kind, by local start date. Kinds that are not presets count too. */
   counts: Record<string, number>
   note: string | null
+  /**
+   * The person's today as the server computes it, whichever day this log is for. The browser's
+   * clock can disagree with it near midnight, and a glance for a past day names only that day, so
+   * this is the one place the web app can learn which day a tap may still go to.
+   */
+  today: string
 }
 
+/** `today` comes from the route, which knows the person's zone and the clock; core knows neither. */
 export function readDayLog(
   stores: { notes: NoteStore, events: EventStore, moods: MoodStore },
   person: Pick<PersonRow, 'id' | 'quickLogPresets'>,
   localDate: string,
+  today: string,
 ): DayLog {
   const counts: Record<string, number> = {}
   for (const event of stores.events.listFor(person.id, localDate, localDate)) {
     counts[event.kind] = (counts[event.kind] ?? 0) + 1
   }
   const note = stores.notes.listFor(person.id, localDate, localDate)[0]?.body ?? null
-  return { presets: quickLogPresetsOf(person), mood: stores.moods.get(person.id, localDate), counts, note }
+  return { presets: quickLogPresetsOf(person), mood: stores.moods.get(person.id, localDate), counts, note, today }
 }
