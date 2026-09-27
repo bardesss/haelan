@@ -28,6 +28,7 @@ let container: HTMLDivElement | null = null
 let root: Root | null = null
 let client: QueryClient | null = null
 let seen: string[] = []
+let writes: { method: string, url: string, body: unknown }[] = []
 let restoreFetch: (() => void) | null = null
 const realShowModal = HTMLDialogElement.prototype.showModal
 const realClose = HTMLDialogElement.prototype.close
@@ -49,10 +50,13 @@ beforeEach(() => {
   })) as unknown as typeof window.matchMedia
   window.history.replaceState(null, '', '/?day=2026-09-20')
   seen = []
+  writes = []
   const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     seen.push(url)
+    const method = init?.method ?? 'GET'
+    if (method !== 'GET') writes.push({ method, url, body: init?.body === undefined ? null : JSON.parse(String(init.body)) })
     return new Response(JSON.stringify(url.includes('/quick-log/day/') ? glanceLog() : {}),
       { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -103,6 +107,15 @@ function key(target: EventTarget, name: string, init: KeyboardEventInit = {}): K
   return event
 }
 function open(): void { act(() => { trigger().click() }) }
+const note = () => document.querySelector<HTMLTextAreaElement>('[data-log-panel] textarea')!
+function type(el: HTMLTextAreaElement, value: string): void {
+  // Through the prototype's setter, so React reads the input event as a change (log-panel.test.tsx).
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, value)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+const noteWrites = () => writes.filter((write) => write.url.includes('/notes/'))
 
 describe('the Log button', () => {
   it('is a labelled button that says it opens a popover', () => {
@@ -272,6 +285,71 @@ describe('the popover, on a desktop', () => {
     open()
     key(trigger(), 'Tab')
     expect(popover()).toBeNull()
+  })
+})
+
+// Escape, a press outside and ‹ › take the panel away without the textarea ever blurring, so the
+// half-typed note is saved as the panel's body unmounts, to the day it was typed on, and once.
+describe('a half-typed note', () => {
+  it('is saved when Escape closes the popover', async () => {
+    mount()
+    open()
+    type(note(), 'Late dinner')
+    key(note(), 'Escape')
+    expect(popover()).toBeNull()
+    await settle()
+    expect(noteWrites()).toEqual([{ method: 'PUT', url: `/api/v1/p/p1/notes/${TODAY}`, body: { body: 'Late dinner' } }])
+  })
+
+  it('is saved when a press outside closes the popover', async () => {
+    mount()
+    open()
+    type(note(), 'Late dinner')
+    act(() => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })) })
+    expect(popover()).toBeNull()
+    await settle()
+    expect(noteWrites()).toEqual([{ method: 'PUT', url: `/api/v1/p/p1/notes/${TODAY}`, body: { body: 'Late dinner' } }])
+  })
+
+  it('is saved to the day it was typed on when ‹ steps to the day before', async () => {
+    mount()
+    open()
+    type(note(), 'Late dinner')
+    act(() => { byLabel('Previous day').click() })
+    await settle()
+    expect(title()).toBe('Log for yesterday')
+    expect(noteWrites()).toEqual([{ method: 'PUT', url: `/api/v1/p/p1/notes/${TODAY}`, body: { body: 'Late dinner' } }])
+  })
+
+  it('is saved once when a blur already saved it and the popover then closes', async () => {
+    mount()
+    open()
+    type(note(), 'Late dinner')
+    act(() => { note().dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    key(document.body, 'Escape')
+    await settle()
+    expect(noteWrites()).toEqual([{ method: 'PUT', url: `/api/v1/p/p1/notes/${TODAY}`, body: { body: 'Late dinner' } }])
+  })
+
+  it('is saved when Escape closes the phone sheet', async () => {
+    phone = true
+    mount()
+    open()
+    type(note(), 'Late dinner')
+    // The browser's own Escape: an unclaimed keydown, then the dialog closing itself.
+    key(note(), 'Escape')
+    act(() => { sheet()!.close() })
+    expect(sheet()).toBeNull()
+    await settle()
+    expect(noteWrites()).toEqual([{ method: 'PUT', url: `/api/v1/p/p1/notes/${TODAY}`, body: { body: 'Late dinner' } }])
+  })
+
+  it('sends nothing when nothing was typed', async () => {
+    mount()
+    open()
+    key(document.body, 'Escape')
+    await settle()
+    expect(noteWrites()).toEqual([])
   })
 })
 

@@ -21,6 +21,11 @@ const UNDO_MS = 10_000
 // Looked up rather than assembled, so css-classes.test.ts reads both names as written.
 const CHIP_CLASS = { on: 'log-chip is-on', off: 'log-chip' } as const
 
+/** Whether a note needs no save: the text the server holds, or blank where it holds nothing. */
+function unchanged(body: string, held: string): boolean {
+  return body === held || (body.trim() === '' && held.trim() === '')
+}
+
 /** The failure line under the section whose write failed: the server's own message, which for
  *  these routes is the one sentence that says what was wrong with the request. */
 export function failureText(error: unknown): string {
@@ -210,16 +215,34 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
   const [text, setText] = useState(log.note ?? '')
   const [saved, setSaved] = useState(log.note ?? '')
   const [noteError, setNoteError] = useState<string | null>(null)
+  // The same two, readable from the unmount below. `savedRef` moves the moment a save starts, so a
+  // blur that already saved and then a close send one PUT, not two.
+  const textRef = useRef(text)
+  textRef.current = text
+  const savedRef = useRef(saved)
 
   function commitNote() {
-    if (text === saved || (text.trim() === '' && saved.trim() === '')) return
+    if (unchanged(text, saved)) return
     const previous = saved
+    savedRef.current = text
     setSaved(text)
     setNoteError(null)
     saveNote.mutateAsync({ day, body: text }).catch(
-      (error: unknown) => { setSaved(previous); setNoteError(failureText(error)) },
+      (error: unknown) => { savedRef.current = previous; setSaved(previous); setNoteError(failureText(error)) },
     )
   }
+
+  // Closing by Escape, by a press outside the popover or by the phone's back gesture unmounts the
+  // panel without a blur, and so does ‹ › re-keying this body onto another day; a half-typed note
+  // is saved here instead, to the day it was typed on. `mutate` rather than mutateAsync: nothing
+  // is left on screen to show a failure in.
+  const saveNoteRef = useRef(saveNote.mutate)
+  saveNoteRef.current = saveNote.mutate
+  useEffect(() => () => {
+    if (unchanged(textRef.current, savedRef.current)) return
+    savedRef.current = textRef.current
+    saveNoteRef.current({ day, body: textRef.current })
+  }, [day])
 
   function onNoteKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
