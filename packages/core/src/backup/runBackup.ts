@@ -60,9 +60,9 @@ export function listBackups(dir: string): BackupFile[] {
 // only check. daily and sessions are named by the spec and were missing: a copy that lost every
 // derived day is a copy that opens to an empty dashboard, and it used to verify clean. people
 // and sources are ours rather than the spec's, and stay - they are the rows every other table
-// hangs off.
+// hangs off. moods (M9c) is typed in by hand like notes and events, so no rebuild brings it back.
 const COUNTED = [
-  'people', 'sources', 'raw_payloads', 'overrides', 'notes', 'events', 'samples', 'daily', 'sessions',
+  'people', 'sources', 'raw_payloads', 'overrides', 'notes', 'events', 'moods', 'samples', 'daily', 'sessions',
 ]
 
 /**
