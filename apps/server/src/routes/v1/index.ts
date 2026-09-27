@@ -6,6 +6,7 @@ import { registerTier2Routes } from './tier2.ts'
 import { registerChangesRoutes } from './changes.ts'
 import { registerExportRoutes } from './export.ts'
 import { registerAnnotationRoutes } from './annotations.ts'
+import { registerQuickLogRoutes } from './quickLog.ts'
 import { registerIngestRoutes } from './ingest.ts'
 import { registerSourceRoutes } from './sources.ts'
 import { registerAllTimeRoutes } from './allTime.ts'
@@ -49,6 +50,7 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
   registerChangesRoutes(app)
   registerExportRoutes(app)
   registerAnnotationRoutes(app)
+  registerQuickLogRoutes(app)
   registerIngestRoutes(app)
   registerSourceRoutes(app)
   registerAllTimeRoutes(app)

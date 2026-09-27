@@ -305,6 +305,25 @@ describe('PUT /api/profile baseline switch', () => {
   })
 })
 
+describe('PUT /api/profile quick-log switch (M9c)', () => {
+  it('answers off for a person who has never touched it', async () => {
+    expect((await me(adminToken)).json().quickLogEnabled).toBe(false)
+  })
+
+  it('saves it and carries it on the session', async () => {
+    const response = await saveProfile(adminToken, { quickLogEnabled: true })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().quickLogEnabled).toBe(true)
+    expect((await me(adminToken)).json().quickLogEnabled).toBe(true)
+  })
+
+  it('refuses a switch that is not a boolean', async () => {
+    const response = await saveProfile(adminToken, { quickLogEnabled: 'yes' })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toContain('quickLogEnabled must be a boolean')
+  })
+})
+
 describe('PUT /api/profile/password', () => {
   const NEW_PASSWORD = 'an even better password'
 

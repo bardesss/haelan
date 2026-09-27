@@ -1,11 +1,13 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import {
   ConfigError, peopleNeedingRebuild, requireDate, runDerive,
 } from '@haelan/core'
 import type { OverrideScope, StoredOverride } from '@haelan/core'
 import { parseSampleTarget } from '@haelan/core/target-key'
 import { errorBody, statusFor } from '../../api/envelope.ts'
-import { requireString, roundMetricValue, sendHashed } from './shared.ts'
+import {
+  personIdOf, requireDateRange, roundMetricValue, sendHashed, textField,
+} from './shared.ts'
 
 interface PersonParams { personId: string }
 interface OverrideParams extends PersonParams { overrideId: string }
@@ -277,30 +279,6 @@ function roundCorrectedValue(item: StoredOverride): StoredOverride {
 }
 
 /**
- * `from` and `to` both present, both real calendar dates, and not reversed. Shared by /notes and
- * /events, the two reads a caller ranges by local date, so the refusal a caller sees for a
- * malformed or backwards range cannot drift between the two the way three independent copies of
- * this check could.
- */
-function requireDateRange(query: DateRangeQuery): { from: string, to: string } {
-  const from = requireString(query.from, 'from')
-  const to = requireString(query.to, 'to')
-  requireDate('from', from)
-  requireDate('to', to)
-  if (from > to) throw new ConfigError(`from '${from}' is after to '${to}'`)
-  return { from, to }
-}
-
-/**
- * registerV1's plugin wide guard has already refused this request unless :personId is the signed
- * in account's own person, so the path segment is the caller's person by the time a handler runs.
- * Read here rather than off personQuery, which keeps its person id private.
- */
-function personIdOf(request: FastifyRequest<{ Params: PersonParams }>): string {
-  return request.params.personId
-}
-
-/**
  * Derives the writer's own dirty days and answers whether the day just written came out of the
  * queue.
  *
@@ -402,16 +380,6 @@ function stillQueued(app: FastifyInstance, personId: string, localDate: string):
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-/**
- * A JSON body carries types a query string cannot, so a field can arrive as a number or an
- * object where a string was meant. Narrowed here and then handed to shared.ts's requireString, so
- * a missing field and an empty one refuse in the same words as everywhere else on this surface.
- */
-function textField(value: unknown, name: string): string {
-  if (value !== undefined && typeof value !== 'string') throw new ConfigError(`${name} must be a string`)
-  return requireString(value, name)
 }
 
 function enumField<T extends string>(value: unknown, allowed: readonly T[], name: string): T {
