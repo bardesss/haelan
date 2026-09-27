@@ -2,6 +2,7 @@
 // happy-dom: the panel is tapped, typed into and driven by keys for real, and its writes settle
 // through a stubbed fetch the way use-quick-log.test.tsx lets its mutations settle.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -163,6 +164,16 @@ describe('LogPanel title', () => {
     render({}, steps)
     click(byLabel('Next day')!)
     expect(steps).toEqual([])
+  })
+
+  // happy-dom applies no stylesheet, so the rule itself is read: P2 fades the whole › on today,
+  // border included, to .35, rather than greying only its icon inside a full-strength border.
+  it('fades the whole disabled arrow, not only its icon, with a plain cursor', () => {
+    const css = readFileSync('apps/web/src/app.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ')
+    const rule = /\.log-top \.icon-button\[aria-disabled='true'\] \{([^}]*)\}/.exec(css)?.[1] ?? ''
+    expect(rule).toMatch(/opacity: \.35;/)
+    expect(rule).toMatch(/cursor: default;/)
+    expect(rule).not.toMatch(/(^|[^-])color:/)
   })
 
   it('steps back with the previous arrow, then reads "Log for yesterday" with next enabled', () => {

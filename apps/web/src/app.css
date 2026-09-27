@@ -892,7 +892,10 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
   width: 34px; height: 34px; justify-content: center; align-items: center;
   border: 1px solid var(--border-subtle); color: var(--text-secondary);
 }
-.log-top .icon-button[aria-disabled='true'] { color: var(--text-disabled); cursor: not-allowed; }
+/* › on today: the whole button fades, border and all, as P2 draws it, and the cursor stays plain
+   (there is simply no tomorrow yet, nothing refused). aria-disabled rather than disabled, so it
+   keeps its place in the tab order (LogPanel's own comment). */
+.log-top .icon-button[aria-disabled='true'] { opacity: .35; cursor: default; }
 .log-title { flex: 1; min-width: 0; text-align: center; }
 .log-title h2 { margin: 0; font-size: var(--font-size-md); font-weight: var(--weight-semibold); color: var(--text-primary); line-height: var(--leading-tight); }
 .log-title small { display: block; margin-top: 2px; font-size: var(--font-size-xs); color: var(--text-muted); }

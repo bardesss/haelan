@@ -29,7 +29,7 @@ export interface Placement { left: number, bottom: number }
  * (the popover's max-height: 70vh caps it, but a short window can still make 70vh more than there
  * is).
  */
-export function placementFor({ trigger, anchorLeft, stripRight, collapsed, below = false, size, viewport }: {
+export function placementFor({ trigger, anchorLeft, stripRight, collapsed, below = false, rightEdge, size, viewport }: {
   trigger: { left: number, top: number, right: number, bottom: number }
   /** Where an expanded rail's layer starts: the rail foot's left edge, or the wrapper's. */
   anchorLeft: number
@@ -43,17 +43,24 @@ export function placementFor({ trigger, anchorLeft, stripRight, collapsed, below
    * edge it wants as `anchorLeft`.
    */
   below?: boolean
+  /**
+   * The furthest right the layer's right edge may reach, when that is short of the viewport's: the
+   * log panel keeps to the page's own right gutter (LogButton.tsx) rather than running into it.
+   * Never past the viewport's edge less GAP_PX.
+   */
+  rightEdge?: number
   size: { width: number, height: number }
   viewport: { width: number, height: number }
 }): Placement {
   const left = collapsed && !below ? stripRight + GAP_PX : anchorLeft
+  const right = Math.min(rightEdge ?? Infinity, viewport.width - GAP_PX)
   const bottom = below ? viewport.height - trigger.bottom - GAP_PX - size.height
     : collapsed ? viewport.height - trigger.bottom : viewport.height - trigger.top + GAP_PX
   return {
     // Near edge first, then the far one, so when both cannot hold the far one wins: the right
     // edge over the left, the top over the bottom. A layer cut at the top loses its first line,
     // the one a reader opened it to see.
-    left: Math.min(Math.max(GAP_PX, left), viewport.width - size.width - GAP_PX),
+    left: Math.min(Math.max(GAP_PX, left), right - size.width),
     bottom: Math.min(Math.max(GAP_PX, bottom), viewport.height - size.height - GAP_PX),
   }
 }

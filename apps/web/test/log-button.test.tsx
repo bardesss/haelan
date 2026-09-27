@@ -164,6 +164,26 @@ describe('the popover, on a desktop', () => {
     } finally { HTMLElement.prototype.getBoundingClientRect = real }
   })
 
+  it('stops its right edge at the page\'s right gutter, not at the window\'s edge', () => {
+    // The button inside .main, whose padding is the page's gutter; the window is wider than the
+    // content, so the viewport clamp alone would let the panel run into the gutter.
+    container!.className = 'main'
+    container!.style.paddingRight = '20px'
+    const real = HTMLElement.prototype.getBoundingClientRect
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      const box = this.classList.contains('log-btn') ? { left: 800, right: 860, top: 20, bottom: 56 }
+        : this.classList.contains('log-popover') ? { left: 0, right: 380, top: 0, bottom: 400 }
+          : this.classList.contains('main') ? { left: 0, right: 1000, top: 0, bottom: 800 }
+            : { left: 0, right: 0, top: 0, bottom: 0 }
+      return { ...box, x: box.left, y: box.top, width: box.right - box.left, height: box.bottom - box.top, toJSON: () => box } as DOMRect
+    }
+    try {
+      mount()
+      open()
+      expect(popover()!.style.left).toBe(`${1000 - 20 - 380}px`)
+    } finally { HTMLElement.prototype.getBoundingClientRect = real }
+  })
+
   it('closes on Escape, putting focus back on the button', () => {
     mount()
     open()

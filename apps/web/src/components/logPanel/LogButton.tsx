@@ -39,16 +39,21 @@ function LogLayer({ shownDay, today, log, anchor, onClose }: {
 
   // Under the button, its left edge on the button's (the calendar anchors its right edge; the Log
   // button leads the row, so its panel opens rightward over the page), kept in the viewport by
-  // placementFor. Measured again on resize and whenever the panel's height changes: a stepped day
-  // loads, and the chip editor is taller than the chips.
+  // placementFor, and pulled in no further right than the content's own right edge: the page's
+  // gutter, read off .main's padding, rather than placementFor's 6px from the window. Measured
+  // again on resize and whenever the panel's height changes: a stepped day loads, and the chip
+  // editor is taller than the chips.
   useLayoutEffect(() => {
     if (isPhone) { setPlacement(null); return }
     const place = () => {
       if (anchor === null) return
       const rect = anchor.getBoundingClientRect()
       const box = layer.current?.getBoundingClientRect()
+      const main = anchor.closest<HTMLElement>('.main')
+      const gutter = main === null ? NaN : parseFloat(getComputedStyle(main).paddingRight)
       const next = placementFor({
         trigger: rect, anchorLeft: rect.left, stripRight: rect.right, collapsed: false, below: true,
+        ...(main !== null && Number.isFinite(gutter) ? { rightEdge: main.getBoundingClientRect().right - gutter } : {}),
         size: { width: box?.width ?? 0, height: box?.height ?? 0 },
         viewport: { width: window.innerWidth, height: window.innerHeight },
       })
