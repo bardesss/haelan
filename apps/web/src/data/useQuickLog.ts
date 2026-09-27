@@ -135,17 +135,35 @@ export function useSetMood(): UseMutationResult<void, ApiError, SetMoodInput> {
 
 /** Saves the day's note: PUT with a body, or DELETE when the reader clears it to nothing (the
  *  same `body.trim() === ''` convention AnnotatePanel's own note action does not need, since that
- *  one always requires a non-empty body to submit at all). */
-export function useSaveNote(): UseMutationResult<void, ApiError, SaveNoteInput> {
+ *  one always requires a non-empty body to submit at all).
+ *
+ *  The day's cached log takes the new note as the save starts, not when the refetch lands: the
+ *  panel reads its note once, as it opens, and a save made while it closes (LogPanel's unmount
+ *  save) leaves that cache stale with nothing observing it. Reopened before the refetch, the
+ *  panel would show the old note, and an edit to it would save over the new one. A failed save
+ *  puts the old note back, so the cache never claims what the server refused. */
+export function useSaveNote(): UseMutationResult<void, ApiError, SaveNoteInput, { previous: string | null } | undefined> {
   const session = useSession()
   const personId = session.data?.personId
   const queryClient = useQueryClient()
+  const setNote = (day: string, note: string | null) => {
+    queryClient.setQueryData<GlanceLog>(dayLogKey(personId ?? '', day), (old) => old && { ...old, note })
+  }
   return useMutation({
     mutationFn: (input: SaveNoteInput) => {
       const id = requirePersonId(personId)
       return input.body.trim() === ''
         ? apiSend<void>('DELETE', `/api/v1/p/${id}/notes/${input.day}`)
         : apiSend<void>('PUT', `/api/v1/p/${id}/notes/${input.day}`, { body: input.body })
+    },
+    onMutate: (input: SaveNoteInput) => {
+      const cached = queryClient.getQueryData<GlanceLog>(dayLogKey(personId ?? '', input.day))
+      if (cached === undefined) return undefined
+      setNote(input.day, input.body.trim() === '' ? null : input.body)
+      return { previous: cached.note }
+    },
+    onError: (_error, input, context) => {
+      if (context !== undefined) setNote(input.day, context.previous)
     },
     onSuccess: () => {
       if (personId !== undefined) invalidateLog(queryClient, personId)
