@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -167,8 +169,8 @@ fun rememberCardText(zone: ZoneId): CardText {
  * date from the payload) and [onOpenPage] for a card's link or a workout row (the web path it would
  * open).
  *
- * The top bar carries the day controls ([DayNavState]): ‹ and ›, the calendar, and Today on a past
- * day. Pulling the page down asks again ([onRefresh]), as Try again does on the unreachable page;
+ * A row under the top bar carries the day controls ([DayNavState]): ‹ and ›, the calendar, and
+ * Today on a past day. Pulling the page down asks again ([onRefresh]), as Try again does on the unreachable page;
  * the pull's spinner shows only for a pull, since the page also revalidates on its own (on resume,
  * after a sync) and the web does not announce those either.
  *
@@ -199,7 +201,6 @@ fun GlanceScreen(
             TopAppBar(
                 title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
-                    DayActions(nav, onOpenDay, onToday, onOpenCalendar)
                     IconButton(onClick = onOpenSync) {
                         Icon(
                             painter = painterResource(R.drawable.ic_sync),
@@ -215,22 +216,27 @@ fun GlanceScreen(
         var pulled by remember { mutableStateOf(false) }
         val loading = state?.loading == true
         LaunchedEffect(loading) { if (!loading) pulled = false }
-        PullToRefreshBox(
-            isRefreshing = pulled && loading,
-            onRefresh = {
-                pulled = true
-                onRefresh()
-            },
-            modifier = Modifier.fillMaxSize().padding(padding),
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                noticeOf(state)?.let { Notice(it, text) }
-                Box(Modifier.fillMaxWidth().weight(1f)) {
-                    when (val body = bodyOf(state)) {
-                        GlanceBody.Waiting -> Centred { if (loading) CircularProgressIndicator() }
-                        GlanceBody.Empty -> Centred { EmptyGlance() }
-                        GlanceBody.Unreachable -> Centred { UnreachableGlance(onRefresh) }
-                        is GlanceBody.Cards -> Cards(body, shownDay, nav.stepping, text, onOpenDay, onOpenPage)
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            // Outside the scroll and the stepping dim, on every body: always reachable, always at
+            // full strength, and the page keeps its shape whether or not there is a day to step to.
+            DayRow(nav, onOpenDay, onToday, onOpenCalendar)
+            PullToRefreshBox(
+                isRefreshing = pulled && loading,
+                onRefresh = {
+                    pulled = true
+                    onRefresh()
+                },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    noticeOf(state)?.let { Notice(it, text) }
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                        when (val body = bodyOf(state)) {
+                            GlanceBody.Waiting -> Centred { if (loading) CircularProgressIndicator() }
+                            GlanceBody.Empty -> Centred { EmptyGlance() }
+                            GlanceBody.Unreachable -> Centred { UnreachableGlance(onRefresh) }
+                            is GlanceBody.Cards -> Cards(body, shownDay, nav.stepping, text, onOpenDay, onOpenPage)
+                        }
                     }
                 }
             }
@@ -249,15 +255,36 @@ fun GlanceScreen(
 }
 
 /**
- * ‹, ›, the calendar and, on a past day, Today: the web's DayNav in the top bar. Disabled rather
- * than hidden where there is nowhere to go, so the bar keeps its shape; Today alone comes and goes,
- * as on the web. Touch only: the web's arrow keys and T are a keyboard's, and a phone has none.
+ * ‹, ›, the calendar and, on a past day, Today: the web's DayNav, on its own row under the top bar
+ * as the web header has it, since a 360dp bar holding them beside the title and sync left the title
+ * a few letters. Disabled rather than hidden where there is nowhere to go, so the row keeps its
+ * shape; Today alone comes and goes, at the far end, as on the web. Touch only: the web's arrow keys
+ * and T are a keyboard's, and a phone has none.
  */
 @Composable
-private fun DayActions(
+private fun DayRow(
     nav: DayNavState,
     onOpenDay: (String) -> Unit,
     onToday: () -> Unit,
+    onOpenCalendar: (selected: String, today: String) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DayButtons(nav, onOpenDay, onOpenCalendar)
+        Spacer(Modifier.weight(1f))
+        if (nav.showToday) {
+            TextButton(onClick = onToday) { Text(stringResource(R.string.glance_day_nav_today)) }
+        }
+    }
+}
+
+/** The row's three icon buttons: ‹, › and the calendar. */
+@Composable
+private fun DayButtons(
+    nav: DayNavState,
+    onOpenDay: (String) -> Unit,
     onOpenCalendar: (selected: String, today: String) -> Unit,
 ) {
     IconButton(onClick = { nav.previous?.let(onOpenDay) }, enabled = nav.previous != null) {
@@ -271,9 +298,6 @@ private fun DayActions(
         enabled = nav.calendarEnabled,
     ) {
         Icon(painterResource(R.drawable.ic_calendar), stringResource(R.string.glance_day_nav_calendar))
-    }
-    if (nav.showToday) {
-        TextButton(onClick = onToday) { Text(stringResource(R.string.glance_day_nav_today)) }
     }
 }
 

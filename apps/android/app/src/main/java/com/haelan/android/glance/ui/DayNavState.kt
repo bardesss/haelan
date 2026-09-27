@@ -3,7 +3,7 @@ package com.haelan.android.glance.ui
 import com.haelan.android.glance.GlanceUiState
 
 /**
- * The top bar's day controls for one screen state, the web's DayNav read for the phone: ‹ and › to
+ * The day row's controls for one screen state, the web's DayNav read for the phone: ‹ and › to
  * the nearest days with data either side, the calendar, and on a past day a Today action.
  *
  * Where the arrows go is the payload's own `nav`, never a date computed here: the server knows which

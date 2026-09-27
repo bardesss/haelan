@@ -3,6 +3,7 @@ package com.haelan.android.glance
 import android.util.Log
 import com.haelan.android.glance.GlanceClient.GlanceRead
 import com.haelan.android.glance.GlanceUiState.Problem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -156,7 +157,12 @@ class GlanceRepository(
      * blocked in the client still returns, but its answer is no longer kept.
      */
     override fun close() {
-        synchronized(lock) { closed = true }
+        synchronized(lock) {
+            closed = true
+            // A cancelled read never answers, so nothing else would end its loading: the pull's
+            // spinner, which waits for loading to end, must not spin on over a closed glance.
+            mutableState.value = mutableState.value.copy(loading = false)
+        }
         scope.cancel()
     }
 
@@ -166,7 +172,19 @@ class GlanceRepository(
             mutableState.value = withToday(pending(mutableState.value))
             ++generation
         }
-        scope.launch { block(gen) }
+        scope.launch {
+            try {
+                block(gen)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {
+                // Every read settles, whatever went wrong: a failure nobody planned for (a store that
+                // throws, a client bug) is an unreachable read, logged, rather than a loading state
+                // left on for good and an uncaught exception on the IO thread.
+                log("a glance read failed: $e")
+                unreachable(gen)
+            }
+        }
     }
 
     /** Applies [change] only while [gen] is still the latest call. */

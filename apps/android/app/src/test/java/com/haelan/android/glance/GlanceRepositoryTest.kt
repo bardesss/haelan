@@ -543,4 +543,30 @@ class GlanceRepositoryTest {
         assertEquals("2026-08-20", checkNotNull(onScreenWhenAsked).today)
         assertEquals("2026-08-20", state.today)
     }
+
+    @Test
+    fun `closing ends the loading a cancelled read would never end`() {
+        val queue = QueueDispatcher()
+        repository.close()
+        repository = repository(queue)
+        repository.refresh()
+        assertTrue(state.loading)
+
+        repository.close()
+        assertFalse("a closed glance still reads as loading", state.loading)
+    }
+
+    @Test
+    fun `a read that fails in a way nobody planned for still settles, as unreachable`() {
+        reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v2\"")
+        repository.open()
+        reads.onToday = { throw IllegalStateException("a client bug") }
+
+        repository.refresh()
+
+        assertFalse(state.loading)
+        assertFalse(state.reachable)
+        assertEquals(GlanceParser.parse(todayJson), state.glance)
+        assertTrue(logged.any { "a client bug" in it })
+    }
 }

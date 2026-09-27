@@ -122,7 +122,7 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
     // A field: SharedPreferences holds its listeners weakly (SyncSignal's KDoc).
     private val syncSignal = SyncSignal(prefs) { viewModelScope.launch { syncFinished() } }
 
-    private var resumedBefore = false
+    private val resumeRule = ResumeRule()
 
     init {
         repository.open()
@@ -130,35 +130,26 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
         syncSignal.start()
     }
 
-    /**
-     * Opens [localDate], as a payload named it (an arrow's `nav`, a strip dot, a week bar, the
-     * calendar). The person's today goes through [showToday], so it is drawn from the kept glance and
-     * revalidated with its ETag rather than read as a past day; the day already asked for is not
-     * asked again, as the web's setDay has it.
-     */
-    fun open(localDate: String) {
-        val now = state.value
-        when (localDate) {
-            now.today -> if (now.shownDay != null) repository.showToday()
-            now.shownDay -> Unit
-            else -> repository.showDay(localDate)
-        }
-    }
+    /** Opens [localDate], as a payload named it; [DayRequest.of] decides which read that is. */
+    fun open(localDate: String) = request(DayRequest.of(state.value, localDate))
 
     /** Back to today, from the Today action or the calendar's Today. */
-    fun showToday() {
-        if (state.value.shownDay != null) repository.showToday()
+    fun showToday() = request(DayRequest.today(state.value))
+
+    private fun request(request: DayRequest) {
+        when (request) {
+            DayRequest.Today -> repository.showToday()
+            is DayRequest.Day -> repository.showDay(request.localDate)
+            DayRequest.None -> Unit
+        }
     }
 
     /** Pull to refresh and Try again: ask again for what is on screen. */
     fun refresh() = repository.refresh()
 
-    /**
-     * The screen came back to the foreground. The first resume after the screen was built is the
-     * one [init] already read for, so only the ones after it ask again.
-     */
+    /** The screen came back to the foreground; [ResumeRule] says whether that asks again. */
     fun resumed() {
-        if (resumedBefore) repository.refresh() else resumedBefore = true
+        if (resumeRule.onResume()) repository.refresh()
     }
 
     /**
@@ -196,15 +187,12 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
         GlanceRegistry.app.close(repository)
     }
 
-    /**
-     * A type finished syncing. Today is what a sync changes, so only today is asked again; a past
-     * day on screen is left alone, and the person gets today's news when they go back to it.
-     */
+    /** A type finished syncing: once the run settles, [shouldRefreshOnSync] says whether to ask again. */
     private fun syncFinished() {
         syncRefresh?.cancel()
         syncRefresh = viewModelScope.launch {
             delay(SYNC_SETTLE_MS)
-            if (state.value.shownDay == null) repository.refresh()
+            if (shouldRefreshOnSync(state.value)) repository.refresh()
         }
     }
 

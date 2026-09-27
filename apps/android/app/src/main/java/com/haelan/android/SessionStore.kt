@@ -2,6 +2,7 @@ package com.haelan.android
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -33,8 +34,19 @@ object SessionStore {
     var insecureFallback = false
         private set
 
+    /**
+     * The one preferences instance for the process. Built once under a lock: two threads asking
+     * first at the same moment (the glance screen opening while the background worker starts) must
+     * not get two instances, because EncryptedSharedPreferences tells only the listeners registered
+     * on the instance that wrote, and the glance hears a finished sync through exactly that
+     * (glance/SyncSignal.kt).
+     */
     fun prefs(context: Context): SharedPreferences {
         cached?.let { return it }
+        return synchronized(this) { cached ?: build(context).also { cached = it } }
+    }
+
+    private fun build(context: Context): SharedPreferences {
         val appCtx = context.applicationContext
         val secure = try {
             val masterKey = MasterKey.Builder(appCtx)
@@ -58,7 +70,6 @@ object SessionStore {
             insecureFallback = true
             appCtx.getSharedPreferences(FILE_PLAIN, Context.MODE_PRIVATE)
         }
-        cached = resolved
         return resolved
     }
 
@@ -110,10 +121,10 @@ object SessionStore {
      * not have their times read in the previous person's zone.
      */
     fun saveTimezone(prefs: SharedPreferences, server: String, personId: String, zone: String) {
-        prefs.edit()
-            .putString(KEY_TIMEZONE, zone)
-            .putString(KEY_TIMEZONE_FOR, timezoneOwner(server, personId))
-            .apply()
+        prefs.edit {
+            putString(KEY_TIMEZONE, zone)
+            putString(KEY_TIMEZONE_FOR, timezoneOwner(server, personId))
+        }
     }
 
     /** The zone [saveTimezone] kept for this person on this server, or null for anyone else or none. */
