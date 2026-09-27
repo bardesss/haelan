@@ -48,7 +48,12 @@ export function quickLogInstant(input: {
 export interface DayLog {
   presets: string[]
   mood: number | null
-  /** The day's events per kind, by local start date. Kinds that are not presets count too. */
+  /**
+   * The day's events per kind, by local start date. Kinds that are not presets count too. An
+   * event counts under the preset whose name matches it ignoring case, the way preset names are
+   * kept unique, so a "sauna" event lights a "Sauna" chip; with no such preset it keeps its own
+   * spelling.
+   */
   counts: Record<string, number>
   note: string | null
   /**
@@ -66,10 +71,13 @@ export function readDayLog(
   localDate: string,
   today: string,
 ): DayLog {
+  const presets = quickLogPresetsOf(person)
+  const presetByKey = new Map(presets.map((preset) => [preset.toLowerCase(), preset]))
   const counts: Record<string, number> = {}
   for (const event of stores.events.listFor(person.id, localDate, localDate)) {
-    counts[event.kind] = (counts[event.kind] ?? 0) + 1
+    const kind = presetByKey.get(event.kind.toLowerCase()) ?? event.kind
+    counts[kind] = (counts[kind] ?? 0) + 1
   }
   const note = stores.notes.listFor(person.id, localDate, localDate)[0]?.body ?? null
-  return { presets: quickLogPresetsOf(person), mood: stores.moods.get(person.id, localDate), counts, note, today }
+  return { presets, mood: stores.moods.get(person.id, localDate), counts, note, today }
 }

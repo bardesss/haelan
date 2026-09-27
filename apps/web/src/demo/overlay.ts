@@ -603,7 +603,9 @@ function demoLocalDate(ms: number): string {
  * time, and the log panel shows counts, not times, so nothing on screen can tell the two apart.
  */
 function quickLog(payload: unknown, overlay: Overlay): OverlayEvent {
-  const { kind, day } = payload as { kind: string, day: string }
+  const { day } = payload as { kind: string, day: string }
+  // Trimmed as the route trims it, so a padded kind still counts under its chip.
+  const kind = (payload as { kind: string }).kind.trim()
   const today = demoLocalDate(DEMO_CLOCK_MS)
   if (day > today) throw new ApiError('config', 400, `${day} is after today`)
   let startedAtMs = DEMO_CLOCK_MS
@@ -653,12 +655,18 @@ function composeDayLog(day: string, log: DayLog, overlay: Overlay): DayLog {
   const touched = overlay.presets !== null || overlay.moods.has(day) || written.length > 0
     || overlay.notes.has(day) || overlay.deletedNoteDates.has(day)
   if (!touched) return log
+  const presets = overlay.presets ?? log.presets
+  // Under the preset whose name matches ignoring case, as core's readDayLog counts.
+  const presetByKey = new Map(presets.map((preset) => [preset.toLowerCase(), preset]))
   const counts = { ...log.counts }
-  for (const event of written) counts[event.kind] = (counts[event.kind] ?? 0) + 1
+  for (const event of written) {
+    const kind = presetByKey.get(event.kind.toLowerCase()) ?? event.kind
+    counts[kind] = (counts[kind] ?? 0) + 1
+  }
   const note = overlay.notes.get(day)?.body ?? (overlay.deletedNoteDates.has(day) ? null : log.note)
   return {
     ...log,
-    presets: overlay.presets ?? log.presets,
+    presets,
     mood: overlay.moods.has(day) ? overlay.moods.get(day)! : log.mood,
     counts,
     note,

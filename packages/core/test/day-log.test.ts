@@ -31,4 +31,12 @@ describe('readDayLog', () => {
     expect(readDayLog(stores, { id: 'p1', quickLogPresets: ['caffeine'] }, '2026-09-20', '2026-09-20'))
       .toEqual({ presets: ['caffeine'], mood: 4, counts: { caffeine: 2, sauna: 1 }, note: 'late dinner', today: '2026-09-20' })
   })
+  it('counts an event under the preset whose name matches it ignoring case, and keeps its own spelling otherwise', () => {
+    stores.events.add({ personId: 'p1', kind: 'sauna', startedAtMs: noon('2026-09-20'), startedAtOffsetMinutes: 120 })
+    stores.events.add({ personId: 'p1', kind: 'SAUNA', startedAtMs: noon('2026-09-20'), startedAtOffsetMinutes: 120 })
+    stores.events.add({ personId: 'p1', kind: 'Sauna', startedAtMs: noon('2026-09-20'), startedAtOffsetMinutes: 120 })
+    stores.events.add({ personId: 'p1', kind: 'Cold plunge', startedAtMs: noon('2026-09-20'), startedAtOffsetMinutes: 120 })
+    expect(readDayLog(stores, { id: 'p1', quickLogPresets: ['Sauna', 'caffeine'] }, '2026-09-20', '2026-09-20').counts)
+      .toEqual({ Sauna: 3, 'Cold plunge': 1 })
+  })
 })

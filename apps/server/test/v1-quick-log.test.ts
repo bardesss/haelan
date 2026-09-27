@@ -147,6 +147,24 @@ describe('POST /quick-log', () => {
     expect(badDay.json().error.message).not.toContain('localDate')
   })
 
+  it('trims the kind, and refuses one that is only spaces or longer than a preset may be', async () => {
+    harness = await withServer(); harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    const padded = await req(harness, token, 'POST', '/quick-log', { kind: '  sauna ', day: '2026-09-26' })
+    expect(padded.statusCode).toBe(200)
+    expect(padded.json().kind).toBe('sauna')
+    expect((await get(harness, token, '/quick-log/day/2026-09-26')).json().counts).toEqual({ sauna: 1 })
+
+    const blank = await req(harness, token, 'POST', '/quick-log', { kind: '   ', day: '2026-09-26' })
+    expect(blank.statusCode).toBe(400)
+    expect(blank.json().error.message).toBe('kind is empty')
+
+    const fortyOne = await req(harness, token, 'POST', '/quick-log', { kind: 'x'.repeat(41), day: '2026-09-26' })
+    expect(fortyOne.statusCode).toBe(400)
+    expect(fortyOne.json().error.message).toBe('kind is longer than 40 characters')
+    const forty = await req(harness, token, 'POST', '/quick-log', { kind: ` ${'x'.repeat(40)} `, day: '2026-09-26' })
+    expect(forty.statusCode).toBe(200)
+  })
 })
 
 describe('moods', () => {

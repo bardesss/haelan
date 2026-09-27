@@ -5,6 +5,7 @@ import {
 } from '@haelan/core'
 import type { PersonRow } from '@haelan/core'
 import { oneNightPerDate } from '@haelan/core/nights'
+import { MAX_PRESET_LENGTH } from '@haelan/core/event-kinds'
 import {
   personIdOf, personQueryOf, requireDateRange, sendHashed, textField,
 } from './shared.ts'
@@ -55,7 +56,11 @@ export function registerQuickLogRoutes(app: FastifyInstance): void {
   app.post<{ Params: PersonParams, Body: QuickLogBody }>('/p/:personId/quick-log', async (request, reply) => {
     const personId = personIdOf(request)
     const body = request.body ?? {}
-    const kind = textField(body.kind, 'kind')
+    // Trimmed and bounded like a preset (validatePresets' rules), since a tap files the chip's
+    // name as the event's kind: a padded or overlong kind would count under no chip.
+    const kind = textField(body.kind, 'kind').trim()
+    if (kind === '') throw new ConfigError('kind is empty')
+    if (kind.length > MAX_PRESET_LENGTH) throw new ConfigError(`kind is longer than ${MAX_PRESET_LENGTH} characters`)
     const day = textField(body.day, 'day')
     const { person, nowMs, today } = personAndToday(personId)
     notAfterToday('day', day, today)

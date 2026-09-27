@@ -549,6 +549,16 @@ describe('quick logging', () => {
     expect(applyOverlay(dayUrl(TODAY), log(), overlay)).toEqual(log())
   })
 
+  it('trims a tapped kind and counts it under the chip whose name matches ignoring case, as core does', () => {
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/quick-log/presets`, { kinds: ['Sauna'] }, overlay)
+    const event = writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: ' sauna ', day: TODAY }, overlay) as { kind: string }
+    expect(event.kind).toBe('sauna')
+    writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: 'Cold plunge', day: TODAY }, overlay)
+    expect((applyOverlay(dayUrl(TODAY), log(), overlay) as { counts: Record<string, number> }).counts)
+      .toEqual({ Sauna: 1, 'Cold plunge': 1 })
+  })
+
   it('refuses a day after today, as the route does', () => {
     expect(() => writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: 'caffeine', day: '2026-09-07' }, createOverlay()))
       .toThrow('2026-09-07 is after today')
