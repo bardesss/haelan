@@ -16,7 +16,7 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 import type { Session } from '../src/auth/session.js'
 import type { Glance, GlanceFigure } from '../src/data/useGlance.js'
 import type { WorkoutSession } from '../src/data/useSessions.js'
-import { glanceBody, glanceFigure } from './glanceFixture.js'
+import { glanceBody, glanceFigure, glanceLog } from './glanceFixture.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
@@ -122,6 +122,21 @@ describe('the glance Dashboard', () => {
       expect(page.querySelector('h1')?.textContent).toBe('Good morning')
       expect(titles()).toEqual(['Last night', 'Recovery', 'Today', 'This week'])
       expect(cards().map((card) => card.getAttribute('data-span'))).toEqual(['8', '4', '8', '4'])
+    } finally { restore() }
+  })
+
+  it('puts no Log button in the header while the glance carries no log', async () => {
+    const { restore } = await mountPage()
+    try {
+      expect(container!.querySelector('.day-nav .log-btn')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('leads the day navigator with the Log button when the glance carries a log', async () => {
+    const { restore } = await mountPage({ ...glanceBody(), log: glanceLog() })
+    try {
+      const first = container!.querySelector('.day-nav')!.firstElementChild!
+      expect([first.tagName.toLowerCase(), first.className, first.textContent]).toEqual(['button', 'button log-btn', 'Log'])
     } finally { restore() }
   })
 

@@ -14,8 +14,8 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { Session } from '../src/auth/session.js'
 import type { Glance } from '../src/data/useGlance.js'
-import { glanceBody } from './glanceFixture.js'
-import { flush } from './flush.js'
+import { glanceBody, glanceLog } from './glanceFixture.js'
+import { flush, pumpUntil } from './flush.js'
 import { PHONE_MEDIA_QUERY } from '../src/ui/breakpoint.js'
 
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
@@ -81,6 +81,7 @@ function stubFetch(bodies: Record<string, Body>, seen: string[]): () => void {
       if ('refused' in body) return json({ error: { kind: 'config', message: 'before the first day with data' } }, 400)
       return 'nearest' in body ? json(body, 404) : json(body)
     }
+    if (url.includes('/quick-log/day/')) return json(glanceLog())
     if (url.includes('/sources')) return json({ items: [] })
     return json({})
   }) as typeof fetch
@@ -203,6 +204,23 @@ describe('the dashboard header, a past day', () => {
       expect(window.location.search).toBe('')
       await flush(client, () => container!.innerHTML)
       expect(heading()).toBe('Good morning')
+    } finally { restore() }
+  })
+
+  // While a day loads, the glance on screen is the previous day's, and so is its log: seeding the
+  // panel with it would file one day's answer under another in the cache.
+  it('opens the Log panel on the day being loaded without seeding it from the held glance', async () => {
+    let release: (glance: Glance) => void = () => {}
+    const held = new Promise<Glance>((resolve) => { release = resolve })
+    const { client, seen, restore } = await mountPage({ '2026-09-22': { ...pastGlance(), log: glanceLog() }, '2026-09-21': held })
+    try {
+      act(() => { button('Previous day')!.click() })
+      await pumpUntil(() => seen.some((u) => u.includes('day=2026-09-21')), 'the request for the day stepped to')
+      act(() => { container!.querySelector<HTMLButtonElement>('.log-btn')!.click() })
+      await pumpUntil(() => seen.some((u) => u.includes('/quick-log/day/')), 'the log panel\'s request')
+      expect(seen.filter((u) => u.includes('/quick-log/day/'))).toEqual(['/api/v1/p/p1/quick-log/day/2026-09-21'])
+      release({ ...pastGlance(), today: '2026-09-21', log: glanceLog() })
+      await flush(client, () => document.body.innerHTML)
     } finally { restore() }
   })
 
@@ -446,6 +464,28 @@ describe('DayNav', () => {
     expect(onPick).not.toHaveBeenCalled()
     press('ArrowLeft')
     expect(onPick.mock.calls).toEqual([['2026-09-22']])
+  })
+
+  it('leads with the Log button when one is handed in', () => {
+    act(() => {
+      root!.render(<I18nProvider lng="en"><DayNav glance={pastGlance()} onPick={() => {}} logButton={<button type="button">Log</button>} /></I18nProvider>)
+    })
+    const names = [...container!.querySelectorAll('.day-nav button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
+    expect(names).toEqual(['Log', 'Previous day', 'Next day', 'Pick a date', 'Today'])
+  })
+
+  // The log panel's chips and its day arrows are buttons, and ← on one must not step the page's day
+  // behind the panel.
+  it('ignores keys pressed inside the log panel', () => {
+    const onPick = vi.fn()
+    mountNav(pastGlance(), onPick, (
+      <div data-log-panel=""><button type="button" data-testid="chip">Caffeine</button></div>
+    ))
+    const chip = container!.querySelector('[data-testid="chip"]')!
+    press('ArrowLeft', chip)
+    press('ArrowRight', chip)
+    press('t', chip)
+    expect(onPick).not.toHaveBeenCalled()
   })
 
   it('ignores keys typed in a field, a select, with a modifier, or inside the calendar', () => {

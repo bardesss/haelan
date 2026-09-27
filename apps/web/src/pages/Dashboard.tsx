@@ -14,6 +14,7 @@ import { TodayCard } from './dashboard/TodayCard.js'
 import { WeekCard } from './dashboard/WeekCard.js'
 import { DayNav } from './dashboard/DayNav.js'
 import { CalendarButton } from './dashboard/GlanceCalendar.js'
+import { LogButton } from '../components/logPanel/LogButton.js'
 import { localToday } from '../controls/range.js'
 import { dashboardRows } from './dashboard/dashboardRows.js'
 import type { DashCardSlot } from './dashboard/dashboardRows.js'
@@ -111,7 +112,13 @@ export function Dashboard() {
   // The person's own today, for the calendar's last pickable day and its Today link (setDay turns
   // today into no `?day=` at all, as the header's Today button has it).
   const calendarButton = <CalendarButton selected={shownDay ?? today} today={today} onPick={(picked) => setDay(picked)} />
-  const nav = <DayNav glance={glance} onPick={(picked) => setDay(picked)} calendarButton={calendarButton}
+  // The Log button shows while the glance carries a log, which it does only with quick logging on.
+  // Stepping, that log is the held day's rather than the day the header names, so the panel is
+  // left to load the named day itself.
+  const logButton = glance.log !== undefined
+    ? <LogButton shownDay={shownDay ?? today} today={today} log={stepping ? undefined : glance.log} />
+    : undefined
+  const nav = <DayNav glance={glance} onPick={(picked) => setDay(picked)} logButton={logButton} calendarButton={calendarButton}
     pending={stepping} finished={shownDay !== null} />
 
   // First run, or an archive with nothing in the last day and a half: four cards each saying it

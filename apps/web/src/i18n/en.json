@@ -941,6 +941,7 @@
     }
   },
   "logPanel": {
+    "open": "Log",
     "titleToday": "Log for today",
     "titleYesterday": "Log for yesterday",
     "titleDay": "Log for {{day}}",

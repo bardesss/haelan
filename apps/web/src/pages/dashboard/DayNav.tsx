@@ -19,6 +19,11 @@ import type { Glance } from '../../data/useGlance.js'
  * (useShortcutKeys' own rule) or inside the calendar, which has arrow keys of its own for its
  * grid, are left alone.
  *
+ * `logButton` is quick logging's Log button (LogButton.tsx), leading the row when the person has the
+ * switch on; without it the row is exactly the four controls it always was. Keys pressed inside
+ * the log panel are left alone like the calendar's: its chips and day arrows are buttons, and ← on
+ * one must not step the page's day behind it.
+ *
  * `calendarButton` is the calendar's own trigger; until one is handed in, a disabled button holds
  * its place so the row does not change shape when it arrives.
  *
@@ -27,9 +32,10 @@ import type { Glance } from '../../data/useGlance.js'
  * day, so both arrows (and their keys) are disabled until the new answer arrives; `finished` then
  * says whether the day being loaded is a past one, which decides the Today button.
  */
-export function DayNav({ glance, onPick, calendarButton, pending = false, finished = glance.finished }: {
+export function DayNav({ glance, onPick, logButton, calendarButton, pending = false, finished = glance.finished }: {
   glance: Glance
   onPick: (day: string | null) => void
+  logButton?: ReactNode
   calendarButton?: ReactNode
   pending?: boolean
   finished?: boolean
@@ -40,7 +46,7 @@ export function DayNav({ glance, onPick, calendarButton, pending = false, finish
 
   useShortcutKeys((event) => {
     if (event.shiftKey) return
-    if (event.target instanceof Element && event.target.closest('[data-calendar]') !== null) return
+    if (event.target instanceof Element && event.target.closest('[data-calendar], [data-log-panel]') !== null) return
     if (event.key === 'ArrowLeft') {
       if (previous === null) return
       event.preventDefault(); onPick(previous); return
@@ -54,6 +60,7 @@ export function DayNav({ glance, onPick, calendarButton, pending = false, finish
 
   return (
     <div className="day-nav" role="group" aria-label={t('glance.dayNav.label')}>
+      {logButton}
       <button type="button" className="button day-nav-btn" aria-label={t('glance.dayNav.previous')}
         title={t('shortcuts.withKey', { label: t('glance.dayNav.previous'), key: '←' })}
         aria-keyshortcuts="ArrowLeft" disabled={previous === null}

@@ -941,6 +941,7 @@
     }
   },
   "logPanel": {
+    "open": "Loggen",
     "titleToday": "Loggen voor vandaag",
     "titleYesterday": "Loggen voor gisteren",
     "titleDay": "Loggen voor {{day}}",
