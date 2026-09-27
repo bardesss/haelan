@@ -57,6 +57,11 @@ const { runRebuild } = await import('../packages/core/src/rebuild/runRebuild.ts'
 const { PeopleStore } = await import('../packages/core/src/store/people.ts')
 const { AccountStore } = await import('../packages/core/src/store/accounts.ts')
 const { SCOPES } = await import('../packages/core/src/api/oauth.ts')
+const { quickLogInstant } = await import('../packages/core/src/query/quickLog.ts')
+const { PersonQuery } = await import('../packages/core/src/query/personQuery.ts')
+const { oneNightPerDate } = await import('../packages/core/src/api/nights.ts')
+const { shiftLocalDate } = await import('../packages/core/src/derive/localDay.ts')
+const { zoneOffsetMinutes } = await import('../packages/core/src/sync/localDate.ts')
 // The instant the demo's browser, recorder and capture server are all pinned to (instant.ts says
 // why it is midday on the last seeded day). A self-contained module with no imports of its own,
 // so reaching into apps/web from here pulls in nothing else.
@@ -131,6 +136,11 @@ try {
     process.exit(1)
   }
 
+  // Quick logging (M9c), on for the demo person, and five weeks of what its panel would have
+  // written, so the capture sees the chips, moods, events and note a real instance would.
+  // Through the stores and quickLogInstant, after the rebuild so the nights it reads exist.
+  seedQuickLog()
+
   const built = report.people[0]
   console.log(`wrote ${seeded.payloads} payloads, ${days} days, person '${PERSON_ID}', into ${dir}`)
   if (built) {
@@ -181,4 +191,70 @@ try {
     + 'for any other.')
 } finally {
   instance.close()
+}
+
+/**
+ * The five weeks the demo's dashboard steps back through (DAY_WINDOW in demo/capture/record.tsx),
+ * ending on the demo day. A fixed pattern, not a draw, so the capture and its screenshots repeat:
+ *
+ * - a mood on every day but Saturdays (the day nobody opened the app): 4 most days, 2 on the
+ *   Sundays after a Saturday's alcohol, 3 on the two days of an illness;
+ * - caffeine at 08:10 every day and again at 14:30 on weekdays, tapped as it was drunk;
+ * - alcohol on three Saturdays, tapped the morning after, so it lands where the production rule
+ *   puts a past day's tap (an hour before that night's bedtime, or 21:00 with no night);
+ * - illness on two consecutive weekdays, tapped each morning;
+ * - one note, on the Saturday of the late dinner.
+ *
+ * The demo day's own taps stop before the demo clock (midday), as a real day's stop at now.
+ */
+function seedQuickLog() {
+  new PeopleStore(instance.db).setQuickLogEnabled(PERSON_ID, true)
+  const timeZone = 'Europe/Amsterdam'
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone }).format(DEMO_CLOCK_MS)
+  const firstDay = shiftLocalDate(today, -34)
+  const alcoholDays = new Set([shiftLocalDate(firstDay, 5), shiftLocalDate(firstDay, 19), shiftLocalDate(firstDay, 26)])
+  const illnessDays = new Set([shiftLocalDate(firstDay, 9), shiftLocalDate(firstDay, 10)])
+  const noteDay = shiftLocalDate(firstDay, 19)
+  const nights = new PersonQuery(instance.db, PERSON_ID)
+
+  // A tap made live at `hhmm` on `day`: quickLogInstant's today branch, with that moment as now.
+  const liveAt = (day, hhmm) => {
+    const [h, m] = hhmm.split(':').map(Number)
+    const naive = Date.parse(`${day}T00:00:00Z`) + (h * 60 + m) * 60_000
+    // The offset read twice, as core's wallClockMs does, so a clock change day still reads the wall.
+    const nowMs = naive - zoneOffsetMinutes(naive - zoneOffsetMinutes(naive, timeZone) * 60_000, timeZone) * 60_000
+    return quickLogInstant({ day, today: day, nowMs, timeZone, nightStartMs: null })
+  }
+  // A tap made the morning after, for `day`: the route's own lookup of the night that followed it.
+  const dayAfterFor = (day) => {
+    const following = shiftLocalDate(day, 1)
+    const night = oneNightPerDate(nights.sleepNights({ from: following, to: following }))[0] ?? null
+    return quickLogInstant({ day, today: following, nowMs: DEMO_CLOCK_MS, timeZone, nightStartMs: night?.startMs ?? null })
+  }
+  const tap = (kind, at) => instance.events.add({ personId: PERSON_ID, kind, ...at })
+
+  let events = 0
+  let moods = 0
+  for (let i = 0; i < 35; i += 1) {
+    const day = shiftLocalDate(firstDay, i)
+    const weekday = new Date(`${day}T12:00:00Z`).getUTCDay()
+    const saturday = weekday === 6
+    const afterAlcohol = alcoholDays.has(shiftLocalDate(day, -1))
+    if (!saturday) {
+      const score = illnessDays.has(day) ? 3 : afterAlcohol ? 2 : 4
+      instance.moods.put({ personId: PERSON_ID, localDate: day, score, nowMs: DEMO_CLOCK_MS })
+      moods += 1
+    }
+    const times = weekday === 0 || saturday ? ['08:10'] : ['08:10', '14:30']
+    for (const hhmm of times) {
+      const at = liveAt(day, hhmm)
+      if (at.startedAtMs >= DEMO_CLOCK_MS) continue
+      tap('caffeine', at)
+      events += 1
+    }
+    if (illnessDays.has(day)) { tap('illness', liveAt(day, '09:00')); events += 1 }
+    if (alcoholDays.has(day)) { tap('alcohol', dayAfterFor(day)); events += 1 }
+  }
+  instance.notes.put({ personId: PERSON_ID, localDate: noteDay, body: 'Late dinner with friends.', nowMs: DEMO_CLOCK_MS })
+  console.log(`quick logging on: ${moods} moods, ${events} events and 1 note from ${firstDay} to ${today}`)
 }
