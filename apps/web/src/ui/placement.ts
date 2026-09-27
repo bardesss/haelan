@@ -45,8 +45,8 @@ export function placementFor({ trigger, anchorLeft, stripRight, collapsed, below
   below?: boolean
   /**
    * The furthest right the layer's right edge may reach, when that is short of the viewport's: the
-   * log panel keeps to the page's own right gutter (LogButton.tsx) rather than running into it.
-   * Never past the viewport's edge less GAP_PX.
+   * log panel keeps to the right edge of the page's content (LogButton.tsx) rather than running
+   * into its gutter. Never past the viewport's edge less GAP_PX.
    */
   rightEdge?: number
   size: { width: number, height: number }

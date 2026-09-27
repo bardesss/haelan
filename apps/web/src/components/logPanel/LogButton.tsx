@@ -39,21 +39,25 @@ function LogLayer({ shownDay, today, log, anchor, onClose }: {
 
   // Under the button, its left edge on the button's (the calendar anchors its right edge; the Log
   // button leads the row, so its panel opens rightward over the page), kept in the viewport by
-  // placementFor, and pulled in no further right than the content's own right edge: the page's
-  // gutter, read off .main's padding, rather than placementFor's 6px from the window. Measured
-  // again on resize and whenever the panel's height changes: a stepped day loads, and the chip
-  // editor is taller than the chips.
+  // placementFor, and pulled in no further right than the right edge of the row the button leads
+  // (DayNav's .day-nav), which is where the page's content ends: the header and the cards stop
+  // there, short of the window by the page's gutter (more on a window wider than the dashboard),
+  // where placementFor alone would let the panel run to 6px from the window's edge. Measured again
+  // on resize and whenever the panel's height changes: a stepped day loads, and the chip editor is
+  // taller than the chips.
   useLayoutEffect(() => {
     if (isPhone) { setPlacement(null); return }
     const place = () => {
       if (anchor === null) return
       const rect = anchor.getBoundingClientRect()
       const box = layer.current?.getBoundingClientRect()
-      const main = anchor.closest<HTMLElement>('.main')
-      const gutter = main === null ? NaN : parseFloat(getComputedStyle(main).paddingRight)
+      // Only a laid-out button inside a row that reaches past it is a measurement to trust (a tree
+      // not laid out reads every box as zero); otherwise the viewport clamp alone applies.
+      const rowRight = anchor.parentElement?.getBoundingClientRect().right ?? 0
+      const measured = rect.right > rect.left && rowRight >= rect.right
       const next = placementFor({
         trigger: rect, anchorLeft: rect.left, stripRight: rect.right, collapsed: false, below: true,
-        ...(main !== null && Number.isFinite(gutter) ? { rightEdge: main.getBoundingClientRect().right - gutter } : {}),
+        ...(measured ? { rightEdge: rowRight } : {}),
         size: { width: box?.width ?? 0, height: box?.height ?? 0 },
         viewport: { width: window.innerWidth, height: window.innerHeight },
       })
