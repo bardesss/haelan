@@ -1,7 +1,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import { ConfigError, metricSpec, PersonQuery } from '@haelan/core'
+import { ConfigError, metricSpec, PersonQuery, requireDate } from '@haelan/core'
 import type { SeriesResult } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
+
+interface PersonParams { personId: string }
+interface DateRangeQuery { from?: string, to?: string }
 
 /**
  * request.personQuery is decorated null and set by registerV1's preHandler hook, which every
@@ -158,4 +161,40 @@ export function roundSeriesResult(metric: string, result: SeriesResult): SeriesR
     ...result,
     points: result.points.map((point) => ({ ...point, value: roundMetricValue(metric, point.value) })),
   }
+}
+
+/**
+ * registerV1's plugin wide guard has already refused this request unless :personId is the signed
+ * in account's own person, so the path segment is the caller's person by the time a handler runs.
+ * Read here rather than off personQuery, which keeps its person id private. Moved here from
+ * annotations.ts (Task 3, M9c) so quickLog.ts can share it rather than carrying a second copy.
+ */
+export function personIdOf(request: FastifyRequest<{ Params: PersonParams }>): string {
+  return request.params.personId
+}
+
+/**
+ * A JSON body carries types a query string cannot, so a field can arrive as a number or an
+ * object where a string was meant. Narrowed here and then handed to requireString, so a missing
+ * field and an empty one refuse in the same words as everywhere else on this surface. Moved here
+ * from annotations.ts (Task 3, M9c) so quickLog.ts can share it rather than carrying a second copy.
+ */
+export function textField(value: unknown, name: string): string {
+  if (value !== undefined && typeof value !== 'string') throw new ConfigError(`${name} must be a string`)
+  return requireString(value, name)
+}
+
+/**
+ * `from` and `to` both present, both real calendar dates, and not reversed. Shared by /notes,
+ * /events and quickLog.ts's /moods, the reads a caller ranges by local date, so the refusal a
+ * caller sees for a malformed or backwards range cannot drift between them. Moved here from
+ * annotations.ts (Task 3, M9c) for the same reason personIdOf and textField were.
+ */
+export function requireDateRange(query: DateRangeQuery): { from: string, to: string } {
+  const from = requireString(query.from, 'from')
+  const to = requireString(query.to, 'to')
+  requireDate('from', from)
+  requireDate('to', to)
+  if (from > to) throw new ConfigError(`from '${from}' is after to '${to}'`)
+  return { from, to }
 }

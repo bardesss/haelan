@@ -1,6 +1,6 @@
 import { parseDayMetricTarget, parseSampleTarget, parseSessionTarget } from '@haelan/core/target-key'
 import { ApiError } from '../api/apiError.js'
-import { DEMO_CLOCK_MS } from './instant.js'
+import { DEMO_CLOCK_MS, amsterdamOffsetSeconds } from './instant.js'
 
 // Mirrors OverrideAction in apps/web/src/data/useAnnotations.ts, mirrored there by value for the
 // same reason this is: the enum has no browser safe subpath of its own.
@@ -69,6 +69,11 @@ export interface Overlay {
   // see affectedRangeFor's own comment for why a session-scope write needs this and has nowhere
   // else to get it from.
   sessionLocalDates: Map<string, string>
+  // localDate -> the mood this session set, or null once cleared: the same explicit-null reason as
+  // `aliases`, since a captured day can already carry a mood this session then clears.
+  moods: Map<string, number | null>
+  // The chips as this session saved them, or null while it never has (the capture's list stands).
+  presets: string[] | null
 }
 
 export function createOverlay(): Overlay {
@@ -82,6 +87,8 @@ export function createOverlay(): Overlay {
     aliases: new Map(),
     panelChoices: new Map(),
     sessionLocalDates: new Map(),
+    moods: new Map(),
+    presets: null,
   }
 }
 
@@ -109,6 +116,10 @@ const SESSION_ITEM = /^\/api\/v1\/p\/[^/]+\/sessions\/([^/]+)$/
 // day-metric exclusion is left out of both on purpose, as composeGlance leaves it out of the
 // glance's figures, so the calendar's dots and the day they open still agree.
 const GLANCE = /^\/api\/v1\/p\/[^/]+\/glance$/
+const QUICK_LOG = /^\/api\/v1\/p\/[^/]+\/quick-log$/
+const QUICK_LOG_PRESETS = /^\/api\/v1\/p\/[^/]+\/quick-log\/presets$/
+const QUICK_LOG_DAY = /^\/api\/v1\/p\/[^/]+\/quick-log\/day\/([^/]+)$/
+const MOOD_ITEM = /^\/api\/v1\/p\/[^/]+\/moods\/([^/]+)$/
 
 function splitUrl(url: string): { path: string, params: URLSearchParams } {
   const [path = '', search = ''] = url.split('?')
@@ -134,7 +145,10 @@ export function applyOverlay(url: string, body: unknown, overlay: Overlay): unkn
   if (SESSIONS_LIST.test(path)) return composeSessionsList(body, overlay)
   const sessionItem = path.match(SESSION_ITEM)
   if (sessionItem) return composeSessionDetail(sessionItem[1]!, body, overlay)
-  if (GLANCE.test(path)) return composeGlance(body, overlay)
+  if (GLANCE.test(path)) return composeGlance(params, body, overlay)
+  const quickLogDay = path.match(QUICK_LOG_DAY)
+  if (quickLogDay) return composeDayLog(quickLogDay[1]!, body as DayLog, overlay)
+  if (QUICK_LOG_PRESETS.test(path)) return overlay.presets === null ? body : { kinds: overlay.presets }
   return body
 }
 
@@ -157,6 +171,10 @@ export function writeThrough(method: string, url: string, payload: unknown, over
   if (method === 'DELETE' && (match = path.match(SOURCE_ALIAS))) return clearSourceAlias(match[1]!, overlay)
   if (method === 'PUT' && (match = path.match(SOURCE_PANEL))) return setPanelChoice(match[1]!, payload, overlay)
   if (method === 'DELETE' && (match = path.match(SOURCE_PANEL))) return clearPanelChoice(match[1]!, overlay)
+  if (method === 'POST' && QUICK_LOG.test(path)) return quickLog(payload, overlay)
+  if (method === 'PUT' && QUICK_LOG_PRESETS.test(path)) return savePresets(payload, overlay)
+  if (method === 'PUT' && (match = path.match(MOOD_ITEM))) return setMood(match[1]!, payload, overlay)
+  if (method === 'DELETE' && (match = path.match(MOOD_ITEM))) return clearMood(match[1]!, overlay)
 
   // The recorder only ever captured GETs, and every write this build knows how to answer is
   // matched above - reaching here means either a route the app has grown since this file was
@@ -541,14 +559,118 @@ function composeSessionsList(body: unknown, overlay: Overlay): unknown {
  * sessionOverrideFor gives: the rest of the glance (today's steps, active minutes, heart rate, last
  * night, recovery) is captured as a real instance derived it, and none of it is recomputed here.
  * Copied along the path it changes and nowhere else, since the manifest's object is shared by every
- * read of this URL; untouched, and the same object back, when there is no session override at all.
+ * read of this URL; untouched, and the same object back, when there is no session override and
+ * nothing written over its log.
  */
-function composeGlance(body: unknown, overlay: Overlay): unknown {
-  if (!hasSessionOverride(overlay)) return body
-  const typed = body as { day?: { workouts?: Record<string, unknown>[] } }
-  const workouts = typed.day?.workouts
-  if (!Array.isArray(workouts)) return body
-  return { ...typed, day: { ...typed.day, workouts: markSessionRows(workouts, overlay) } }
+function composeGlance(params: URLSearchParams, body: unknown, overlay: Overlay): unknown {
+  let result = body as { today?: string, day?: { workouts?: Record<string, unknown>[] }, log?: DayLog }
+  const workouts = result.day?.workouts
+  if (hasSessionOverride(overlay) && Array.isArray(workouts)) {
+    result = { ...result, day: { ...result.day, workouts: markSessionRows(workouts, overlay) } }
+  }
+  // The day's log (M9c), present only when the capture's person has quick logging on. The day it
+  // is for is the one asked for, or, on today's glance, the day the payload was built for.
+  const day = params.get('day') ?? result.today
+  if (result.log !== undefined && day !== undefined) {
+    const log = composeDayLog(day, result.log, overlay)
+    if (log !== result.log) result = { ...result, log }
+  }
+  return result
+}
+
+// ---- quick logging ------------------------------------------------------------------------------
+
+// Mirrors packages/core/src/query/quickLog.ts's DayLog, which has no browser safe subpath.
+interface DayLog {
+  presets: string[]
+  mood: number | null
+  counts: Record<string, number>
+  note: string | null
+  /** The demo person's today, whichever day the log is for: the capture's, which is DEMO_DATE. */
+  today: string
+}
+
+/** The demo person's local date at `ms`: the seed's zone, Europe/Amsterdam, as instant.ts has it. */
+function demoLocalDate(ms: number): string {
+  return localDateOf(ms, amsterdamOffsetSeconds(ms) / 60)
+}
+
+/**
+ * A chip tap, answered as the real route answers it. The time rule is the production one only for
+ * today (the demo clock, as writeNote stamps a note); a past day goes at 21:00 local, which is the
+ * real rule's answer for a day with no night after it. The real rule places it an hour before the
+ * following night's bedtime when there is one, but the static demo has no night to look up at write
+ * time, and the log panel shows counts, not times, so nothing on screen can tell the two apart.
+ */
+function quickLog(payload: unknown, overlay: Overlay): OverlayEvent {
+  const { day } = payload as { kind: string, day: string }
+  // Trimmed as the route trims it, so a padded kind still counts under its chip.
+  const kind = (payload as { kind: string }).kind.trim()
+  const today = demoLocalDate(DEMO_CLOCK_MS)
+  if (day > today) throw new ApiError('config', 400, `${day} is after today`)
+  let startedAtMs = DEMO_CLOCK_MS
+  if (day !== today) {
+    // The same two-step read as core's wallClockMs, so a day the clocks change on still reads 21:00.
+    const naive = Date.parse(`${day}T21:00:00Z`)
+    startedAtMs = naive - amsterdamOffsetSeconds(naive - amsterdamOffsetSeconds(naive) * 1000) * 1000
+  }
+  const startedAtOffsetMinutes = amsterdamOffsetSeconds(startedAtMs) / 60
+  const event: OverlayEvent = {
+    id: crypto.randomUUID(), kind, startedAtMs, startedAtOffsetMinutes,
+    endedAtMs: null, endedAtOffsetMinutes: null, value: null, note: null,
+    localDate: localDateOf(startedAtMs, startedAtOffsetMinutes),
+  }
+  // Into the same map POST /events writes, so the Notes page lists it and Undo's DELETE removes it.
+  overlay.events.set(event.id, event)
+  return event
+}
+
+function savePresets(payload: unknown, overlay: Overlay): { kinds: string[] } {
+  // Trimmed as the store trims; the editor has already refused duplicates, lengths and counts in
+  // the reader's own language before a Done can send them (PresetEditor.tsx).
+  overlay.presets = (payload as { kinds: string[] }).kinds.map((kind) => kind.trim())
+  return { kinds: overlay.presets }
+}
+
+function setMood(localDate: string, payload: unknown, overlay: Overlay): { localDate: string, score: number } {
+  const { score } = payload as { score: number }
+  overlay.moods.set(localDate, score)
+  return { localDate, score }
+}
+
+function clearMood(localDate: string, overlay: Overlay): { localDate: string } {
+  overlay.moods.set(localDate, null)
+  return { localDate }
+}
+
+/**
+ * A captured day log with this session's writes over it: the saved chips, the mood, the note, and
+ * one more count per event written on that day (a tap, or an event from the chart panel, which the
+ * real count includes too). A captured event deleted on the Notes page does not lower its count:
+ * the captured log holds only numbers, with no ids to match the deletion against. Returns `log`
+ * itself when nothing here touches it.
+ */
+function composeDayLog(day: string, log: DayLog, overlay: Overlay): DayLog {
+  const written = [...overlay.events.values()].filter((event) => event.localDate === day)
+  const touched = overlay.presets !== null || overlay.moods.has(day) || written.length > 0
+    || overlay.notes.has(day) || overlay.deletedNoteDates.has(day)
+  if (!touched) return log
+  const presets = overlay.presets ?? log.presets
+  // Under the preset whose name matches ignoring case, as core's readDayLog counts.
+  const presetByKey = new Map(presets.map((preset) => [preset.toLowerCase(), preset]))
+  const counts = { ...log.counts }
+  for (const event of written) {
+    const kind = presetByKey.get(event.kind.toLowerCase()) ?? event.kind
+    counts[kind] = (counts[kind] ?? 0) + 1
+  }
+  const note = overlay.notes.get(day)?.body ?? (overlay.deletedNoteDates.has(day) ? null : log.note)
+  return {
+    ...log,
+    presets,
+    mood: overlay.moods.has(day) ? overlay.moods.get(day)! : log.mood,
+    counts,
+    note,
+  }
 }
 
 // ---- source aliases -----------------------------------------------------------------------------

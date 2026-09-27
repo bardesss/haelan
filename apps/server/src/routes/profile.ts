@@ -11,6 +11,7 @@ interface ProfileBody {
   sex?: unknown
   sleepTargetMinutes?: unknown
   sleepUseBaseline?: unknown
+  quickLogEnabled?: unknown
 }
 interface PasswordBody { currentPassword?: unknown, newPassword?: unknown }
 
@@ -45,7 +46,9 @@ export function registerProfile(app: FastifyInstance): void {
         return reply.code(statusFor('not_found')).send(errorBody('not_found', 'no_such_person', 'this account has no person row'))
       }
 
-      const { displayName, username, timezone, birthDate, sex, sleepTargetMinutes, sleepUseBaseline } = request.body ?? {}
+      const {
+        displayName, username, timezone, birthDate, sex, sleepTargetMinutes, sleepUseBaseline, quickLogEnabled,
+      } = request.body ?? {}
       // Each field is optional and absent means untouched, so a client can save one control
       // without restating the other two. A present field must still be a string: `undefined` and
       // `null` are different answers here, and treating the second as "leave it" would let a
@@ -96,7 +99,16 @@ export function registerProfile(app: FastifyInstance): void {
         return reply.code(statusFor('config'))
           .send(errorBody('config', 'config', 'sleepUseBaseline must be a boolean'))
       }
-
+      // Its own branch, the same shape as sleepUseBaseline just above: the quick-log switch (M9c)
+      // is neither text nor clearable either. Unlike sleepUseBaseline this is not merely a nicer
+      // message than the store's own - the write below is itself gated on `typeof quickLogEnabled
+      // === 'boolean'`, so with no pre-check a non-boolean value never reaches
+      // PeopleStore.setQuickLogEnabled at all: it is silently ignored and the request answers 200
+      // as if nothing were wrong, and any field written earlier (displayName, above) stays saved.
+      // The pre-check is what turns that into a 400 before anything is written.
+      if (quickLogEnabled !== undefined && typeof quickLogEnabled !== 'boolean') {
+        return reply.code(statusFor('config')).send(errorBody('config', 'config', 'quickLogEnabled must be a boolean'))
+      }
       // The zone comparison is against what is stored, not against whether the field was sent.
       // Saving the form unchanged sends all three every time, and a timezone write costs this
       // person every derived row they have until a rebuild replays them (PeopleStore.setTimezone),
@@ -115,6 +127,7 @@ export function registerProfile(app: FastifyInstance): void {
       // that restated it would be the second place a future change had to reach.
       if (typeof sleepTargetMinutes === 'number') stores().people.setSleepTargetMinutes(person.id, sleepTargetMinutes)
       if (typeof sleepUseBaseline === 'boolean') stores().people.setSleepUseBaseline(person.id, sleepUseBaseline)
+      if (typeof quickLogEnabled === 'boolean') stores().people.setQuickLogEnabled(person.id, quickLogEnabled)
       if (zoneMoved) stores().people.setTimezone(person.id, timezone)
 
       const saved = stores().people.get(person.id)!
@@ -127,6 +140,7 @@ export function registerProfile(app: FastifyInstance): void {
         sex: saved.sex,
         sleepTargetMinutes: saved.sleepTargetMinutes,
         sleepUseBaseline: saved.sleepUseBaseline,
+        quickLogEnabled: saved.quickLogEnabled,
         // What the caller is owed rather than what happened: nothing rebuilds on this request. The
         // derivation stamp is cleared, which is what the boot rebuild reads, so this says "your
         // history is being re-derived from the archive the next time this instance starts" and the

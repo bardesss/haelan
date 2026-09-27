@@ -95,6 +95,7 @@ describe('auth', () => {
       // which is what keeps every reader of this field from supplying its own fallback.
       sleepTargetMinutes: 480,
       sleepUseBaseline: true,
+      quickLogEnabled: false,
       connected: true, credentialsUnreadable: false,
       baseUrl: 'http://localhost:4235',
     })

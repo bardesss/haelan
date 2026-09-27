@@ -117,6 +117,11 @@ export function registerAuth(app: FastifyInstance): void {
       // column the same way 480 is the target for rows predating its own, so a database that
       // has not run the migration yet still answers one preference rather than none.
       sleepUseBaseline: person?.sleepUseBaseline ?? true,
+      // Whether this person sees the quick-log button (M9c), beside the two preferences above for
+      // the same reason: Settings writes it and the Shell reads it before the panel can render.
+      // Not nullable on the row (PeopleStore.create seeds it false), but the same ?? false a
+      // pre-migration row would need is kept here anyway, matching sleepUseBaseline's own ?? true.
+      quickLogEnabled: person?.quickLogEnabled ?? false,
       // Whether this person has a *usable* Google connection - a credentials row whose token was
       // never revoked, matching listConnectedPeople's own predicate. A revoked row is not a
       // connection in any sense the UI cares about: it cannot sync, so it must show the same

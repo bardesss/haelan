@@ -940,6 +940,46 @@
       }
     }
   },
+  "logPanel": {
+    "open": "Log",
+    "titleToday": "Log for today",
+    "titleYesterday": "Log for yesterday",
+    "titleDay": "Log for {{day}}",
+    "previousDay": "Previous day",
+    "nextDay": "Next day",
+    "mood": {
+      "label": "How do you feel?",
+      "1": "Bad",
+      "2": "Poor",
+      "3": "Okay",
+      "4": "Good",
+      "5": "Great"
+    },
+    "chips": {
+      "label": "What happened?",
+      "countToday": "{{kind}}, {{count}} today",
+      "countDay": "{{kind}}, {{count}} that day",
+      "edit": "Edit"
+    },
+    "edit": {
+      "remove": "Remove {{kind}}",
+      "add": "Add a kind",
+      "moved": "{{kind}} moved to position {{position}}",
+      "done": "Done",
+      "cancel": "Cancel",
+      "full": "At most 16 chips",
+      "duplicate": "{{kind}} is already a chip"
+    },
+    "undo": {
+      "today": "{{kind}} logged",
+      "day": "{{kind}} logged for {{day}}",
+      "action": "Undo"
+    },
+    "note": {
+      "label": "Note",
+      "placeholder": "Something to remember about this day…"
+    }
+  },
   "nutrition": {
     "title": "Nutrition",
     "empty": {
@@ -1058,6 +1098,8 @@
       "sleepTargetUnreadable": "Enter a whole number of minutes.",
       "sleepUseBaseline": "Follow my baseline",
       "sleepUseBaselineHint": "When enabled, each night is measured against your average sleep over the previous sixty days. Until you have enough history for an average, the target above is used. When disabled, the target above is always used.",
+      "quickLog": "Quick logging",
+      "quickLogHint": "A Log button on the dashboard for how the day felt and what happened.",
       "save": "Save",
       "saving": "Saving…",
       "saved": "Saved.",

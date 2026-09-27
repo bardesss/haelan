@@ -46,13 +46,13 @@ catching them is a standing part of how the project is built rather than a past 
      page is built from. Do not edit between the markers by hand: a test regenerates this and fails
      when it disagrees. -->
 <!-- screenshots:start -->
-![The Hælan dashboard: last night's time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today's steps with their pace against your usual, active minutes, heart rate and workouts, beside the week's totals and averages.](assets/screenshots/dashboard.png)
+![The Hælan dashboard, a Log button beside the day arrows in its header: last night's time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today's steps with their pace against your usual, active minutes, heart rate and workouts, beside the week's totals and averages.](assets/screenshots/dashboard.png)
 
 ![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
-<sub>Dashboard and Activity above; [Sleep](assets/screenshots/sleep.png) and
-[Recovery](assets/screenshots/recovery.png) as well. All four are the demo data
-`scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
+<sub>Dashboard and Activity above; [Quick logging](assets/screenshots/log-panel.png),
+[Sleep](assets/screenshots/sleep.png) and [Recovery](assets/screenshots/recovery.png) as well. All
+five are the demo data `scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
 <!-- screenshots:end -->
 
 ## What it does
@@ -309,7 +309,8 @@ Sign in as `demo` with the password `demodemo`. That password is printed by the 
 written down here on purpose: it is correct for a throwaway directory and wrong for anything else,
 and the script refuses to run against a directory that already holds a database. The data comes
 from a fixed seed, so the data behind the screenshots above regenerates identically. Dashboard,
-Sleep and Recovery were taken on the week ending 2026-09-06, which is where the demo's data ends;
+the log panel, Sleep and Recovery were taken on the week ending 2026-09-06, which is where the
+demo's data ends (the log panel after one tap on Caffeine);
 Activity was taken on August 2026, because a month is where its bar charts thin their date labels
 and a week is not. A fresh boot opens on the current month instead, so you would have to walk back
 to frame the same pictures. The range and the day both live in the URL, which is the quickest way
@@ -535,12 +536,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 1142 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 1172 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 1142 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 1172 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

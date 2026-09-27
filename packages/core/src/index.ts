@@ -63,7 +63,7 @@ export type { QueueEntry } from './store/deriveQueue.ts'
 // from an empty volume to a syncing household, and nothing it does not. `apps/server` reaches
 // core only through this file, which is why the store classes are here rather than deep
 // imported: `exports` in package.json publishes this module and no other.
-export { PeopleStore } from './store/people.ts'
+export { PeopleStore, quickLogPresetsOf } from './store/people.ts'
 export { DEFAULT_SLEEP_TARGET_MINUTES, SLEEP_TARGET_MINUTES_RANGE } from './derive/metrics.ts'
 export { declaredColumnDefaults } from './db/schema/index.ts'
 export type { PersonRow } from './store/people.ts'
@@ -117,7 +117,7 @@ export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './de
 // The same question as localDateOf above, asked with an IANA zone rather than a fixed offset.
 // Aliased because the two cannot share a name and a caller holding a person's `timezone` string
 // needs this one: an offset is a fact about an instant, a zone is a fact about a person.
-export { localDateOf as localDateInZone, localMidnightMs } from './sync/localDate.ts'
+export { localDateOf as localDateInZone, localMidnightMs, zoneOffsetMinutes } from './sync/localDate.ts'
 export { coverageOf } from './derive/coverage.ts'
 export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
 export type { DailyRow, SampleLike } from './derive/rollup.ts'
@@ -161,6 +161,8 @@ export { NoteStore } from './store/notes.ts'
 export type { PutNoteInput, StoredNote } from './store/notes.ts'
 export { EventStore } from './store/events.ts'
 export type { AddEventInput, StoredEvent } from './store/events.ts'
+export { MoodStore } from './store/moods.ts'
+export type { StoredMood } from './store/moods.ts'
 export { ObservationStore } from './store/observations.ts'
 export type { ObservationRow } from './store/observations.ts'
 export { InviteStore, INVITE_TTL_MS } from './store/invites.ts'
@@ -207,6 +209,11 @@ export type { SourceCadence, SourceStatus, SourceReport } from './api/sourceCade
 export { comparePeriods, INSIGHT_MIN_DAY_FRACTION, INSIGHT_MIN_COVERAGE } from './query/insights.ts'
 export type { Insight, PeriodPoint, SuppressionReason, DateRange } from './query/insights.ts'
 export { coverageIsMeaningful } from './query/coverageSignal.ts'
+
+// M9c task 2. The time rule for when a quick-logged event starts, and one day's log: the presets,
+// mood, per-kind counts and note a panel needs to render it.
+export { quickLogInstant, readDayLog } from './query/quickLog.ts'
+export type { DayLog } from './query/quickLog.ts'
 
 // M3b1. The rest of PersonQuery's readers: intraday samples, sleep nights, workout sessions and
 // the computed trend. Only the shapes they hand back are exported here, never the module level

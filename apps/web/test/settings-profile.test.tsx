@@ -12,6 +12,8 @@ import { Profile } from '../src/pages/settings/Profile.js'
 import { instanceUrlKey } from '../src/data/useInstanceUrl.js'
 import { membersKey } from '../src/data/useMembers.js'
 import { sourceNamesKey } from '../src/data/useSourceNames.js'
+import { glanceKey } from '../src/data/useGlance.js'
+import { glanceBody } from './glanceFixture.js'
 import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
@@ -35,6 +37,7 @@ const SESSION: Session = {
   timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
+  quickLogEnabled: true,
   connected: true, credentialsUnreadable: false,
   baseUrl: 'http://localhost:4235',
 }
@@ -96,7 +99,7 @@ function click(el: Element): void {
  * changed meaning when it landed.
  */
 const FIELDS = {
-  displayName: 0, username: 1, timezone: 2, birthDate: 3, sleepTarget: 4, sleepUseBaseline: 5,
+  displayName: 0, username: 1, timezone: 2, birthDate: 3, sleepTarget: 4, sleepUseBaseline: 5, quickLogEnabled: 6,
 } as const
 
 const fields = (): HTMLInputElement[] => [...container!.querySelectorAll('input')] as HTMLInputElement[]
@@ -135,7 +138,7 @@ describe('the profile section', () => {
     // The switch is a checkbox, so its "value" is the constant 'on' rather than anything the
     // session holds; the stored position is asserted on `checked` in the switch's own cases
     // below, not here.
-    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', '480', 'on', '', ''])
+    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', '480', 'on', 'on', '', ''])
     expect(sexSelect().value).toBe('')
   })
 
@@ -146,7 +149,7 @@ describe('the profile section', () => {
     mountSection()
     expect(container!.innerHTML).not.toMatch(/\bsettings\.[a-zA-Z][a-zA-Z.]*\b/)
     expect([...container!.querySelectorAll('.field .label')].map((n) => n.textContent))
-      .toEqual(['Name', 'Username', 'Time zone', 'Birthday', 'Sex', 'Sleep target', 'Follow my baseline', 'Current password', 'New password'])
+      .toEqual(['Name', 'Username', 'Time zone', 'Birthday', 'Sex', 'Sleep target', 'Follow my baseline', 'Quick logging', 'Current password', 'New password'])
   })
 
   // The sentence that justifies asking for either field in the first place - not decoration, the
@@ -530,6 +533,59 @@ describe('the baseline switch', () => {
     expect(saveButton().disabled).toBe(false)
     click(fields()[FIELDS.sleepUseBaseline]!)
     expect(saveButton().disabled).toBe(true)
+  })
+})
+
+/**
+ * The switch that decides whether the dashboard offers a Log button at all (M9c). Off by default,
+ * the same convention the baseline switch above documents its own tests against; saving it
+ * invalidates the glance, since that is where the Log button itself is read from
+ * (useSaveProfile's own comment on why).
+ */
+describe('the quick logging switch', () => {
+  it('shows an opted-out switch as off', () => {
+    mountSection({ quickLogEnabled: false })
+    expect(fields()[FIELDS.quickLogEnabled]!.checked).toBe(false)
+  })
+
+  it('saves a checked switch with the rest of the profile', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: true,
+      quickLogEnabled: true, rebuildPending: false,
+    }))
+    const client = mountSection({ quickLogEnabled: false })
+
+    click(fields()[FIELDS.quickLogEnabled]!)
+    expect(saveButton().disabled).toBe(false)
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests[0]).toMatchObject({
+      method: 'PUT',
+      url: '/api/profile',
+      body: { quickLogEnabled: true },
+    })
+  })
+
+  it('invalidates the glance once saved, so the Log button appears without a reload', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: true,
+      quickLogEnabled: true, rebuildPending: false,
+    }))
+    const client = mountSection({ quickLogEnabled: false })
+    client.setQueryData(glanceKey('p1'), glanceBody())
+    const query = client.getQueryCache().find({ queryKey: glanceKey('p1') })!
+    expect(query.state.isInvalidated).toBe(false)
+
+    click(fields()[FIELDS.quickLogEnabled]!)
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(query.state.isInvalidated).toBe(true)
   })
 })
 

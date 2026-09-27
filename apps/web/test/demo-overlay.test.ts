@@ -504,3 +504,98 @@ describe('notes upsert semantics', () => {
     expect(composed.items[0]).toMatchObject({ localDate: '2026-09-02', body: 'edited' })
   })
 })
+
+describe('quick logging', () => {
+  // The demo clock's own day (DEMO_CLOCK_MS, midday on 2026-09-06 in Amsterdam) and the day before.
+  const TODAY = '2026-09-06'
+  const YESTERDAY = '2026-09-05'
+  const log = (counts: Record<string, number> = {}) => ({
+    presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'], mood: null, counts, note: null, today: TODAY,
+  })
+  const glance = (today: string) => ({ today, finished: false, log: log({ caffeine: 1 }) })
+  const glanceUrl = `/api/v1/p/${PERSON}/glance`
+  const dayUrl = (day: string) => `/api/v1/p/${PERSON}/quick-log/day/${day}`
+
+  it("counts a tap on today's captured glance, over what the capture already counted", () => {
+    const overlay = createOverlay()
+    const event = writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: 'caffeine', day: TODAY }, overlay) as {
+      id: string, localDate: string, startedAtMs: number, endedAtMs: null,
+    }
+    expect(event).toMatchObject({ localDate: TODAY, endedAtMs: null })
+    const composed = applyOverlay(glanceUrl, glance(TODAY), overlay) as { log: { counts: Record<string, number> } }
+    expect(composed.log.counts).toEqual({ caffeine: 2 })
+
+    // Undo deletes it through the events route, and the count falls back.
+    writeThrough('DELETE', `/api/v1/p/${PERSON}/events/${event.id}`, undefined, overlay)
+    expect((applyOverlay(glanceUrl, glance(TODAY), overlay) as { log: { counts: Record<string, number> } }).log.counts)
+      .toEqual({ caffeine: 1 })
+  })
+
+  it("files a past day's tap at 21:00 local on that day, and counts it on that day's glance and day log", () => {
+    const overlay = createOverlay()
+    const event = writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: 'alcohol', day: YESTERDAY }, overlay) as {
+      startedAtMs: number, startedAtOffsetMinutes: number, localDate: string,
+    }
+    // 21:00 CEST is 19:00 UTC.
+    expect(new Date(event.startedAtMs).toISOString()).toBe('2026-09-05T19:00:00.000Z')
+    expect(event.startedAtOffsetMinutes).toBe(120)
+    expect(event.localDate).toBe(YESTERDAY)
+    const pastGlance = applyOverlay(`${glanceUrl}?day=${YESTERDAY}`, glance(YESTERDAY), overlay) as { log: { counts: Record<string, number> } }
+    expect(pastGlance.log.counts).toEqual({ caffeine: 1, alcohol: 1 })
+    // A composed past day's log keeps the capture's real today, which the Log button reads.
+    expect((pastGlance.log as unknown as { today: string }).today).toBe(TODAY)
+    expect((applyOverlay(dayUrl(YESTERDAY), log(), overlay) as { counts: Record<string, number> }).counts).toEqual({ alcohol: 1 })
+    // Not on today's.
+    expect(applyOverlay(dayUrl(TODAY), log(), overlay)).toEqual(log())
+  })
+
+  it('trims a tapped kind and counts it under the chip whose name matches ignoring case, as core does', () => {
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/quick-log/presets`, { kinds: ['Sauna'] }, overlay)
+    const event = writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: ' sauna ', day: TODAY }, overlay) as { kind: string }
+    expect(event.kind).toBe('sauna')
+    writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: 'Cold plunge', day: TODAY }, overlay)
+    expect((applyOverlay(dayUrl(TODAY), log(), overlay) as { counts: Record<string, number> }).counts)
+      .toEqual({ Sauna: 1, 'Cold plunge': 1 })
+  })
+
+  it('refuses a day after today, as the route does', () => {
+    expect(() => writeThrough('POST', `/api/v1/p/${PERSON}/quick-log`, { kind: 'caffeine', day: '2026-09-07' }, createOverlay()))
+      .toThrow('2026-09-07 is after today')
+  })
+
+  it('sets a mood on the day it names, and clearing it answers null over a captured one', () => {
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/moods/${TODAY}`, { score: 4 }, overlay)
+    expect((applyOverlay(glanceUrl, glance(TODAY), overlay) as { log: { mood: number | null } }).log.mood).toBe(4)
+    expect((applyOverlay(dayUrl(YESTERDAY), { ...log(), mood: 2 }, overlay) as { mood: number | null }).mood).toBe(2)
+    writeThrough('DELETE', `/api/v1/p/${PERSON}/moods/${YESTERDAY}`, undefined, overlay)
+    expect((applyOverlay(dayUrl(YESTERDAY), { ...log(), mood: 2 }, overlay) as { mood: number | null }).mood).toBeNull()
+  })
+
+  it('carries the saved chips into every day log, the glance and the presets read', () => {
+    const overlay = createOverlay()
+    const saved = writeThrough('PUT', `/api/v1/p/${PERSON}/quick-log/presets`, { kinds: ['caffeine', ' sauna '] }, overlay)
+    expect(saved).toEqual({ kinds: ['caffeine', 'sauna'] })
+    expect(applyOverlay(`/api/v1/p/${PERSON}/quick-log/presets`, { kinds: ['illness'] }, overlay)).toEqual({ kinds: ['caffeine', 'sauna'] })
+    expect((applyOverlay(dayUrl(YESTERDAY), log(), overlay) as { presets: string[] }).presets).toEqual(['caffeine', 'sauna'])
+    expect((applyOverlay(glanceUrl, glance(TODAY), overlay) as { log: { presets: string[] } }).log.presets).toEqual(['caffeine', 'sauna'])
+  })
+
+  it("puts the day's note written through the notes route into its log", () => {
+    const overlay = createOverlay()
+    writeThrough('PUT', `/api/v1/p/${PERSON}/notes/${TODAY}`, { body: 'Late dinner.' }, overlay)
+    expect((applyOverlay(glanceUrl, glance(TODAY), overlay) as { log: { note: string | null } }).log.note).toBe('Late dinner.')
+    writeThrough('DELETE', `/api/v1/p/${PERSON}/notes/${YESTERDAY}`, undefined, overlay)
+    expect((applyOverlay(dayUrl(YESTERDAY), { ...log(), note: 'captured' }, overlay) as { note: string | null }).note).toBeNull()
+  })
+
+  it('answers the captured body itself while nothing is written, and leaves a glance with no log alone', () => {
+    const overlay = createOverlay()
+    const body = glance(TODAY)
+    expect(applyOverlay(glanceUrl, body, overlay)).toBe(body)
+    writeThrough('PUT', `/api/v1/p/${PERSON}/moods/${TODAY}`, { score: 4 }, overlay)
+    const off = { today: TODAY, finished: false }
+    expect(applyOverlay(glanceUrl, off, overlay)).toBe(off)
+  })
+})

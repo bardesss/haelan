@@ -43,6 +43,20 @@ describe('placementFor', () => {
       .toBe(6)
   })
 
+  it('keeps its right edge at rightEdge when one is given, and never past the viewport\'s', () => {
+    const header = { left: 900, top: 20, right: 944, bottom: 56 }
+    const size = { width: 300, height: 400 }
+    // The page's content ends 20px short of the window: the layer stops there, not at 6px.
+    expect(placementFor({ trigger: header, anchorLeft: 900, stripRight: 944, collapsed: false, below: true, rightEdge: 980, size, viewport }).left)
+      .toBe(980 - 300)
+    // A rightEdge past the viewport's own is held to the viewport less the gap.
+    expect(placementFor({ trigger: header, anchorLeft: 900, stripRight: 944, collapsed: false, below: true, rightEdge: 2000, size, viewport }).left)
+      .toBe(1000 - 300 - 6)
+    // Where it fits already, rightEdge changes nothing.
+    expect(placementFor({ trigger: header, anchorLeft: 500, stripRight: 944, collapsed: false, below: true, rightEdge: 980, size, viewport }).left)
+      .toBe(500)
+  })
+
   it('keeps a collapsed-rail layer from running off the top', () => {
     const high = { left: 15, top: 40, right: 45, bottom: 70 }
     expect(placementFor({ trigger: high, anchorLeft: 8, stripRight: 60, collapsed: true, size: { width: 320, height: 400 }, viewport }))

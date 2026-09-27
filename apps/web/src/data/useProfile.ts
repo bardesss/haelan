@@ -21,6 +21,7 @@ export interface SavedProfile {
   sex: 'male' | 'female' | null
   sleepTargetMinutes: number
   sleepUseBaseline: boolean
+  quickLogEnabled: boolean
   rebuildPending: boolean
 }
 
@@ -41,6 +42,8 @@ export interface ProfileEdit {
   // Required, unlike the target above: a checkbox always holds a boolean, never the empty
   // string a cleared number input holds, so there is no mid-edit state to omit.
   sleepUseBaseline: boolean
+  // Same shape as sleepUseBaseline, and for the same reason: a checkbox, never mid-edit.
+  quickLogEnabled: boolean
 }
 
 /**
@@ -56,6 +59,14 @@ export function useSaveProfile(): UseMutationResult<SavedProfile, ApiError, Prof
     mutationFn: (input) => apiSend<SavedProfile>('PUT', '/api/profile', input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.session() })
+      // The quickLogEnabled switch (M9c) rides on the glance's own `log` field
+      // (routes/v1/glance.ts), which the dashboard has already cached under the old answer. Without
+      // this a reader who just flipped the switch would need a reload before the Log button (or
+      // its absence) caught up, the same gap invalidateAffected's own comment on the glance
+      // describes for an override write.
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === 'person' && query.queryKey[2] === 'glance',
+      })
     },
   })
 }

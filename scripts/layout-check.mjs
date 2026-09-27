@@ -105,6 +105,8 @@ let statusPanelsOpened = 0
 let personMenusOpened = 0
 // The day navigation's calendar, opened once as the phone sheet and once as the popover above it.
 let calendarsOpened = 0
+// The quick-log panel (M9c), opened once as the phone sheet and once as the popover above it.
+let logPanelsOpened = 0
 
 // Every control `isExemptInlineLink` excused from the 44px rule across this whole run, with the
 // sweep that found it. An exemption that nothing counts is an exemption that can widen in
@@ -779,6 +781,61 @@ try {
   // Pinned, as the status panel's count is: a renamed trigger would otherwise skip all of the above.
   check(calendarsOpened === 2, `the day calendar was opened ${calendarsOpened} of 2 times (phone sheet, popover)`)
 
+  // The log panel on today's dashboard (M9c), the demo person having quick logging on: the Log
+  // button leads the day navigator, a round + at phone width, and opens a <dialog> sheet there and
+  // a portalled popover above it (LogButton.tsx), shut until pressed, as the calendar is. The same
+  // checks as the calendar's, the 44px rule at 375px only for the same reason. The panel opens
+  // drawn, from the glance's own log, so there is nothing to wait for once the layer shows.
+  for (const viewport of [PHONE, BAND]) {
+    const phone = viewport === PHONE
+    const where = `/ at ${viewport.width}px`
+    await page.setViewportSize(viewport)
+    await open('/')
+    const logButton = page.locator('.day-nav .log-btn')
+    const buttonShown = await logButton.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(buttonShown, `${where}: no Log button (.day-nav .log-btn) - is quick logging still on in the demo seed?`)
+    if (!buttonShown) continue
+    await logButton.click()
+    const layerSelector = phone ? 'dialog.log-sheet' : '.log-popover'
+    const kind = phone ? 'sheet' : 'popover'
+    const layer = page.locator(phone ? 'dialog.log-sheet[open]' : '.log-popover')
+    const layerShown = await layer.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(layerShown, `${where}: the log ${kind} did not open`)
+    if (!layerShown) continue
+    const chipsShown = await page.locator(`${layerSelector} .log-chip`).first()
+      .waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(chipsShown, `${where}: the log ${kind} opened with no chips in it`)
+    logPanelsOpened += 1
+    await page.waitForTimeout(SETTLE_MS)
+    const label = `${where} (log ${kind})`
+
+    const withLayer = await measure()
+    check(withLayer.scrollWidth <= withLayer.clientWidth, `${label}: the page is ${withLayer.scrollWidth}px wide in a ${withLayer.clientWidth}px viewport`)
+    const box = await layer.boundingBox()
+    const size = page.viewportSize()
+    check(
+      box !== null && size !== null && box.x >= -1 && box.y >= -1
+        && box.x + box.width <= size.width + 1 && box.y + box.height <= size.height + 1,
+      `${label} is outside the viewport: ${box === null ? 'unmeasurable'
+        : `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}`}`,
+    )
+    const inner = await page.locator(layerSelector).evaluate((node) => ({ scrollWidth: node.scrollWidth, clientWidth: node.clientWidth }))
+    check(inner.scrollWidth <= inner.clientWidth + 1, `${label}: its content is ${inner.scrollWidth}px wide in ${inner.clientWidth}px`)
+    if (!phone) check(box !== null && await paintableAt(page, '.log-popover', box), `${label} is clipped or covered`)
+    if (phone) {
+      const inLayer = await smallTargets(page, layerSelector)
+      check(inLayer.small.length === 0, `${label}: ${inLayer.small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(inLayer.small)}`)
+      for (const target of inLayer.exempt) exempted.push({ where: label, target })
+    }
+
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(SETTLE_MS)
+    check(!(await layer.isVisible().catch(() => false)), `${label}: Escape did not close it`)
+  }
+  // Pinned, as the calendar's count is: a renamed trigger or a seed without the switch would
+  // otherwise skip all of the above.
+  check(logPanelsOpened === 2, `the log panel was opened ${logPanelsOpened} of 2 times (phone sheet, popover)`)
+
   // The rail foot, at the size that reproduced the defect. Above the breakpoint, so this is the
   // rail rather than the drawer.
   await page.setViewportSize(SHORT)
@@ -977,5 +1034,6 @@ console.log(
     + 'device name and a failed sync injected and no sideways overflow in any of them, '
     + `the person menu opened ${personMenusOpened} times (collapsed and expanded rail), `
     + `and the dashboard on a past day (${DAY_ROUTE}) at both widths with its calendar opened `
-    + `${calendarsOpened} times (phone sheet with hit areas, grey days included; popover).`,
+    + `${calendarsOpened} times (phone sheet with hit areas, grey days included; popover), `
+    + `and the log panel on today opened ${logPanelsOpened} times (phone sheet with hit areas; popover).`,
 )

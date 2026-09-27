@@ -20,6 +20,7 @@
     "./recovery-index": "./src/api/recoveryIndex.ts",
     "./source-cadence": "./src/api/sourceCadence.ts",
     "./nights": "./src/api/nights.ts",
+    "./event-kinds": "./src/api/eventKinds.ts",
     "./status-panel": "./src/api/statusPanel.ts"
   },
   "scripts": {

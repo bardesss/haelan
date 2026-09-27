@@ -1,4 +1,4 @@
-import type { Glance, GlanceFigure } from '../src/data/useGlance.js'
+import type { Glance, GlanceFigure, GlanceLog } from '../src/data/useGlance.js'
 
 // One whole glance payload, shared by every test that mounts the glance Dashboard (glance-page,
 // pages, chart-lifecycle), so the three agree on what a full answer looks like and a change to the
@@ -11,6 +11,20 @@ const DATES = ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-
 
 function strip(values: (number | null)[]): GlanceFigure['strip'] {
   return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null, band: null, standing: null }))
+}
+
+/** The day's own quick log (M9c), off the switch by default so no existing glanceBody() caller
+ *  starts carrying one. A test for the switch being on builds its own with `glanceLog()` and sets
+ *  it on the body's `log` field by hand. */
+export function glanceLog(overrides?: Partial<GlanceLog>): GlanceLog {
+  return {
+    presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'],
+    mood: null,
+    counts: {},
+    note: null,
+    today: GLANCE_TODAY,
+    ...overrides,
+  }
 }
 
 export function glanceFigure(over: Partial<GlanceFigure> & Pick<GlanceFigure, 'metric'>): GlanceFigure {
