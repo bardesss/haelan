@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.13.0](https://github.com/bardesss/haelan/compare/v2.12.0...v2.13.0) (2026-09-27)
+
+
+### Features
+
+* quick logging - how the day felt, what happened, and its note (M9c) ([#386](https://github.com/bardesss/haelan/issues/386)) ([5c3a9d1](https://github.com/bardesss/haelan/commit/5c3a9d1c1a085c30b7cef0f4412fea8efc7a3c55))
+
+
+### Bug Fixes
+
+* **web:** a reopened log panel shows the note just saved ([#388](https://github.com/bardesss/haelan/issues/388)) ([3878950](https://github.com/bardesss/haelan/commit/38789506da237090d5f0f1502e802c048892ca4a))
+
 ## [2.12.0](https://github.com/bardesss/haelan/compare/v2.11.1...v2.12.0) (2026-09-25)
 
 
