@@ -48,6 +48,11 @@
             </intent-filter>
         </activity>
 
+        <!-- The screen after sign-in. The sync screen below is reached from its top bar. -->
+        <activity
+            android:name=".GlanceActivity"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="false" />

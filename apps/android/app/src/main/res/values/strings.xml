@@ -118,4 +118,7 @@
 
     <string name="rationale_text">Hælan reads activity, body measures and heart data from Health Connect to show them on your own Hælan dashboard. Nothing leaves your home network.</string>
     <string name="rationale_continue">Continue</string>
+
+    <!-- The glance: the screen after sign-in, a copy of the web dashboard. -->
+    <string name="glance_sync_open">Sync</string>
 </resources>

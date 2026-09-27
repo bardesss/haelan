@@ -102,4 +102,6 @@
 
     <string name="rationale_text">Hælan leest activiteit, lichaamsmaten en hartgegevens uit Health Connect om ze op je eigen Hælan-dashboard te tonen. Niets verlaat je thuisnetwerk.</string>
     <string name="rationale_continue">Doorgaan</string>
+
+    <string name="glance_sync_open">Synchroniseren</string>
 </resources>

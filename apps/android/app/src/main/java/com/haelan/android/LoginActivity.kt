@@ -32,8 +32,9 @@ class LoginActivity : ComponentActivity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** Signed in, by hand or from the saved session: the glance, with the sync screen behind it. */
     private fun startMain(session: SessionStore.Session) {
-        startActivity(Intent(this, MainActivity::class.java).apply {
+        startActivity(Intent(this, GlanceActivity::class.java).apply {
             putExtra(EXTRA_SERVER, session.server)
             putExtra(EXTRA_PERSON_ID, session.personId)
             putExtra(EXTRA_COOKIE, session.cookie)

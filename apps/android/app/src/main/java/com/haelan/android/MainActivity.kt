@@ -614,6 +614,10 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     private fun goLogin(expired: Boolean) {
         startActivity(Intent(this, LoginActivity::class.java).apply {
             putExtra(LoginActivity.EXTRA_EXPIRED, expired)
+            // This screen is opened from the glance, which stays underneath it. Signing out or
+            // losing the session has to take the glance with it: otherwise back from sign-in
+            // lands on a glance for a session that is gone.
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         })
         finish()
     }
