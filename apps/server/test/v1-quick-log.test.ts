@@ -141,11 +141,15 @@ describe('POST /quick-log', () => {
     expect(emptyKind.statusCode).toBe(400)
     const badDay = await req(harness, token, 'POST', '/quick-log', { kind: 'caffeine', day: 'nope' })
     expect(badDay.statusCode).toBe(400)
+    // Names `day`, the body field the caller actually sent, not `localDate` - a name that appears
+    // nowhere in this request and would send a reader looking at the wrong field.
+    expect(badDay.json().error.message).toContain('day')
+    expect(badDay.json().error.message).not.toContain('localDate')
   })
 })
 
 describe('moods', () => {
-  it('saves a score, lists it in range, refuses an out-of-range score and a future date, and deletes it', async () => {
+  it('saves a score, lists it in range, refuses a future date, and deletes it', async () => {
     harness = await withServer(); harness.clock.nowMs = NOW_MS
     const token = await harness.signIn()
 
@@ -155,9 +159,6 @@ describe('moods', () => {
 
     const list = await get(harness, token, '/moods?from=2026-09-01&to=2026-09-30')
     expect(list.json().items).toMatchObject([{ localDate: '2026-09-26', score: 4 }])
-
-    const badScore = await req(harness, token, 'PUT', '/moods/2026-09-26', { score: 6 })
-    expect(badScore.statusCode).toBe(400)
 
     const future = await req(harness, token, 'PUT', '/moods/2026-09-27', { score: 3 })
     expect(future.statusCode).toBe(400)
@@ -169,12 +170,34 @@ describe('moods', () => {
     expect(after.json().items).toEqual([])
   })
 
-  it('answers 400 for a score that is not a number', async () => {
+  // The route's own pre-check, not the store's: this exact message is what the route's own
+  // `typeof body.score !== 'number'` branch throws, before the value ever reaches MoodStore.put.
+  // Deleting that branch and falling through to the store leaves this test red (the store passes
+  // a non-number straight to Number.isInteger and throws the same wording as the case below).
+  it('answers 400 with the exact "score must be a number" message for a non-number score', async () => {
     harness = await withServer(); harness.clock.nowMs = NOW_MS
     const token = await harness.signIn()
     const written = await req(harness, token, 'PUT', '/moods/2026-09-26', { score: '4' })
     expect(written.statusCode).toBe(400)
-    expect(written.json().error.message).toContain('score')
+    expect(written.json().error.message).toBe('score must be a number')
+  })
+
+  // MoodStore.put's own message, for an in-range-type value the route's own pre-check lets
+  // through: a real number that is merely out of range or non-integer is the store's problem to
+  // name, not the route's.
+  it('answers 400 with the store\'s own message for a score out of range', async () => {
+    harness = await withServer(); harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    const written = await req(harness, token, 'PUT', '/moods/2026-09-26', { score: 6 })
+    expect(written.statusCode).toBe(400)
+    expect(written.json().error.message).toBe('score must be an integer from 1 to 5')
+  })
+
+  it('answers 400 for a malformed date on DELETE', async () => {
+    harness = await withServer(); harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    const removed = await req(harness, token, 'DELETE', '/moods/not-a-date')
+    expect(removed.statusCode).toBe(400)
   })
 })
 

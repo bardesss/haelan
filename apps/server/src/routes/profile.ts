@@ -100,12 +100,15 @@ export function registerProfile(app: FastifyInstance): void {
           .send(errorBody('config', 'config', 'sleepUseBaseline must be a boolean'))
       }
       // Its own branch, the same shape as sleepUseBaseline just above: the quick-log switch (M9c)
-      // is neither text nor clearable either, and its own setter throws the same ConfigError this
-      // pre-check exists to give a name to before anything else has been written.
+      // is neither text nor clearable either. Unlike sleepUseBaseline this is not merely a nicer
+      // message than the store's own - the write below is itself gated on `typeof quickLogEnabled
+      // === 'boolean'`, so with no pre-check a non-boolean value never reaches
+      // PeopleStore.setQuickLogEnabled at all: it is silently ignored and the request answers 200
+      // as if nothing were wrong, and any field written earlier (displayName, above) stays saved.
+      // The pre-check is what turns that into a 400 before anything is written.
       if (quickLogEnabled !== undefined && typeof quickLogEnabled !== 'boolean') {
         return reply.code(statusFor('config')).send(errorBody('config', 'config', 'quickLogEnabled must be a boolean'))
       }
-
       // The zone comparison is against what is stored, not against whether the field was sent.
       // Saving the form unchanged sends all three every time, and a timezone write costs this
       // person every derived row they have until a rebuild replays them (PeopleStore.setTimezone),
