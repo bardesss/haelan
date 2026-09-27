@@ -4,6 +4,15 @@ import com.haelan.android.InstanceClient
 import org.json.JSONObject
 
 /**
+ * The two glance reads, as [GlanceRepository] needs them: the client in the app, a hand-written
+ * fake in a test, so the state machine is tested without a server underneath it.
+ */
+interface GlanceReads {
+    fun today(etag: String?): GlanceClient.GlanceRead
+    fun day(localDate: String): GlanceClient.GlanceRead
+}
+
+/**
  * The three reads the glance makes: today, a finished day, and a month of the calendar.
  *
  * Each answer comes back as a case the screen can draw, not as a status code: 401 is "sign in
@@ -23,7 +32,7 @@ class GlanceClient(
     private val transport: Transport = Transport { server, path, cookie, headers ->
         InstanceClient.get(server, path, cookie, headers) { it }
     },
-) {
+) : GlanceReads {
 
     /** One GET, answering the whole [InstanceClient.Reply] so each read can decide for itself. */
     fun interface Transport {
@@ -74,7 +83,7 @@ class GlanceClient(
      * Today's glance. With [etag], the instance answers 304 when nothing changed, which is what
      * lets the screen ask again often without moving the whole body every time.
      */
-    fun today(etag: String?): GlanceRead {
+    override fun today(etag: String?): GlanceRead {
         val headers = if (etag != null) mapOf("If-None-Match" to etag) else emptyMap()
         return glance(base, headers, dayRoute = false)
     }
@@ -83,7 +92,7 @@ class GlanceClient(
      * A finished day's glance, for [localDate] exactly as a payload named it. No ETag: a past day
      * is read when the person asks for it, and there is no copy on screen to compare against.
      */
-    fun day(localDate: String): GlanceRead = glance("$base?day=$localDate", emptyMap(), dayRoute = true)
+    override fun day(localDate: String): GlanceRead = glance("$base?day=$localDate", emptyMap(), dayRoute = true)
 
     /** One month of the calendar, [month] as `YYYY-MM` from the payload. */
     fun calendar(month: String): CalendarRead =

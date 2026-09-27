@@ -25,6 +25,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.haelan.android.glance.GlanceStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -629,6 +630,8 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
                 // throwing it, and the session cookie is dropped either way below. An instance
                 // that is unreachable must not be able to keep somebody signed in.
                 InstanceClient.post(server, "/api/auth/logout", "{}", cookie) { }
+                // The last glance is health data on the device; it leaves with the session.
+                GlanceStore.encrypted(this@MainActivity).delete()
             }
             SessionStore.clearSession(SessionStore.prefs(this@MainActivity))
             goLogin(expired = false)
