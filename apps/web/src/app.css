@@ -1990,11 +1990,12 @@ button.week-bar-slot { cursor: pointer; }
   /* The log panel's Undo is a bare word in its row, so it takes the height the row would otherwise
      pad on, the .cal-sheet .cal-today way; the row's own vertical padding goes to keep it compact. */
   .log-undo { padding-top: 0; padding-bottom: 0; }
-  .log-undo .log-link { min-height: 44px; padding: 0 var(--space-2); }
+  /* min-width too: a short word ("Undo", "Edit") in CI's fonts measured 43px wide. */
+  .log-undo .log-link { min-height: 44px; min-width: 44px; padding: 0 var(--space-2); }
   /* The editor's remove button is square inside its pill, so it takes both sides, as .icon-button
      does; the pill's own 44px leaves it room. Edit is a bare word beside the section's label. */
   .log-edit-remove { width: 44px; height: 44px; }
-  .log-sec-head .log-link { min-height: 44px; padding: 0 var(--space-2); }
+  .log-sec-head .log-link { min-height: 44px; min-width: 44px; padding: 0 var(--space-2); }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
   /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
      header draws them) but hold only an icon, so they need .icon-button's square minimum too. */
