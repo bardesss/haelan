@@ -254,12 +254,58 @@ class GlanceParserTest {
         assertTrue(failure.message, failure.message!!.contains("finished"))
     }
 
-    /** A verdict the app has no word for is not guessed at: the payload is refused, as a missing one is. */
+    /**
+     * A verdict word a newer server adds is not guessed at, and does not freeze the app on a stale
+     * glance either: it reads as not judged, and the rest of the payload lands.
+     */
     @Test
-    fun `a standing the app does not know fails the parse, naming it`() {
-        val json = edited("today.json") { it.getJSONObject("sleep").getJSONObject("asleep").put("standing", "sideways") }
-        val failure = assertThrows(GlanceParseException::class.java) { GlanceParser.parse(json) }
-        assertTrue(failure.message, failure.message!!.contains("sleep.asleep.standing"))
+    fun `a verdict word the app does not know reads as not judged`() {
+        val json = edited("today.json") {
+            it.getJSONObject("sleep").getJSONObject("asleep").put("standing", "sideways")
+            it.getJSONObject("recovery").put("band", "stellar")
+            it.getJSONObject("day").getJSONObject("stepsPace").put("standing", "sprinting")
+        }
+        val glance = GlanceParser.parse(json)
+        assertNull(checkNotNull(glance.sleep).asleep.standing)
+        assertNull(glance.recovery.band)
+        assertNull(checkNotNull(glance.day.stepsPace).standing)
+        assertEquals(420.0, checkNotNull(glance.sleep).asleep.value)
+
+        val calendar = edited("calendar.json") {
+            it.getJSONArray("days").getJSONObject(18).put("sleep", "dreamy").put("steps", "soaring")
+        }
+        assertEquals(CalendarDay("2026-08-19", null, null), GlanceParser.parseCalendar(calendar).days[18])
+    }
+
+    /** The fixtures carry each of these at one value only, so each read is proven at the other. */
+    @Test
+    fun `flags and offsets the fixtures hold at one value land at the other`() {
+        val json = edited("today.json") {
+            val sleep = it.getJSONObject("sleep")
+            sleep.put("endOffsetMinutes", 60)
+            sleep.getJSONObject("asleep").getJSONObject("baseline").put("thin", true)
+            val day = it.getJSONObject("day")
+            day.getJSONObject("stepsPace").put("thin", true)
+            day.getJSONObject("heartRate").getJSONArray("points").getJSONObject(0).put("excluded", true)
+            day.getJSONArray("workouts").getJSONObject(0)
+                .put("excluded", true)
+                .put("excludeReason", "Wore it on the bike")
+                .put("alternateIds", JSONArray().put("phone-run"))
+                .put("endOffsetMinutes", 60)
+        }
+        val glance = GlanceParser.parse(json)
+        val sleep = checkNotNull(glance.sleep)
+        assertEquals(60, sleep.endOffsetMinutes)
+        assertEquals(120, sleep.startOffsetMinutes)
+        assertTrue(checkNotNull(sleep.asleep.baseline).thin)
+        assertTrue(checkNotNull(glance.day.stepsPace).thin)
+        assertTrue(glance.day.heartRate.points[0].excluded)
+        val run = glance.day.workouts.single()
+        assertTrue(run.excluded)
+        assertEquals("Wore it on the bike", run.excludeReason)
+        assertEquals(listOf("phone-run"), run.alternateIds)
+        assertEquals(60, run.endOffsetMinutes)
+        assertEquals(120, run.startOffsetMinutes)
     }
 
     @Test
@@ -309,12 +355,16 @@ class GlanceParserTest {
         assertEquals(emptyList<String>(), run.alternateIds)
     }
 
-    /** workoutSummary.ts's rules: absent or blank is null, a recorded zero is zero, and attrs that are not an object are no fields at all. */
+    /**
+     * workoutSummary.ts's rules: absent or blank is null, a recorded zero is zero, and attrs that
+     * are not an object are no fields at all.
+     */
     @Test
     fun `a workout's attrs read absent as null and zero as zero`() {
         val json = edited("today.json") {
             val run = it.getJSONObject("day").getJSONArray("workouts").getJSONObject(0)
-            run.put("attrs", JSONObject().put("metricsSummary", JSONObject().put("caloriesKcal", 0).put("averageHeartRateBeatsPerMinute", " ")))
+            val metrics = JSONObject().put("caloriesKcal", 0).put("averageHeartRateBeatsPerMinute", " ")
+            run.put("attrs", JSONObject().put("metricsSummary", metrics))
         }
         assertEquals(
             WorkoutSummary(null, caloriesKcal = 0.0, averageHeartRateBpm = null, null, null, null),

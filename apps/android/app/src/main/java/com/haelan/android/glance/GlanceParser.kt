@@ -14,7 +14,8 @@ class GlanceParseException(message: String, cause: Throwable? = null) : Exceptio
  * ignored, so a newer server can add to the payload freely, while a field it needs being absent,
  * or of the wrong type, fails the whole parse with that field's path. The screen then treats the
  * answer as unreachable and keeps the last good glance, rather than drawing half a payload. A
- * verdict word the app has no meaning for fails the same way: the app never guesses at a verdict.
+ * verdict word the app has no meaning for is the one exception: it reads as not judged (null), so
+ * the app never guesses at a verdict and a newer server never freezes it.
  *
  * Reads through `has`, `isNull` and `get` alone, never the `opt*` family: those differ between
  * the platform's org.json and the library the unit tests run on (the platform's `optString` answers
@@ -33,7 +34,9 @@ object GlanceParser {
             week = week(root.obj("week")),
             finished = root.boolean("finished"),
             nav = root.obj("nav").let { GlanceNav(it.nullableString("previous"), it.nullableString("next")) },
-            // Absent, not null, while the person has quick logging off.
+            // Absent, not null, while the person has quick logging off: the route omits the key
+            // then (routes/v1/glance.ts), so a `log` present as null is a shape it never sends,
+            // and obj() fails the parse on it.
             log = if (root.has("log")) dayLog(root.obj("log")) else null,
         )
     }
@@ -257,7 +260,10 @@ object GlanceParser {
 
         fun keys(): List<String> = json.keys().asSequence().toList()
 
-        /** The value under [key], JSON null as null; absent is a failure, since every field read this way is one the payload always sends. */
+        /**
+         * The value under [key], JSON null as null; absent is a failure, since every field read
+         * this way is one the payload always sends.
+         */
         fun raw(key: String): Any? {
             if (!json.has(key)) throw GlanceParseException("${at(key)} is missing")
             return if (json.isNull(key)) null else json.get(key)
@@ -333,9 +339,15 @@ object GlanceParser {
 
         fun strings(key: String): List<String> = required(key, nullableStrings(key))
 
+        /**
+         * A verdict word, or null when the server gave none - or gave one this app has no meaning
+         * for. The app ships apart from the server, so a word a newer server adds reads as "not
+         * judged" rather than freezing an older app on a stale glance. The field itself must
+         * still be there: absent, or not a string, fails as any other field does.
+         */
         fun <E> nullableEnum(key: String, words: Map<String, E>): E? {
             val word = nullableString(key) ?: return null
-            return words[word] ?: throw GlanceParseException("${at(key)} is '$word', which the app does not know")
+            return words[word]
         }
     }
 }

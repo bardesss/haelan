@@ -65,7 +65,11 @@ data class GlanceFigure(
     val standing: GlanceStanding?,
 )
 
-/** A stretch of one sleep stage. [stage] stays the server's upper-case word (DEEP, LIGHT, REM, AWAKE, and others a device may report), not an enum, so a stage the app has no row for is not a parse failure. */
+/**
+ * A stretch of one sleep stage. [stage] stays the server's upper-case word (DEEP, LIGHT, REM,
+ * AWAKE, and others a device may report), not an enum, so a stage the app has no row for is not a
+ * parse failure.
+ */
 data class GlanceNightSegment(
     val stage: String,
     val startMs: Long,
