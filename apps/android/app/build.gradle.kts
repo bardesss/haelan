@@ -170,8 +170,9 @@ dependencies {
     // Compose, for the glance. The BOM pins every Compose artifact to one release, which is why
     // the lines under it carry no version. activity-compose matches activity above, and the
     // lifecycle artifact is not in the BOM, so it names the lifecycle release Compose resolves to.
-    // 2026.03.01 is the last BOM whose Compose is built on a Kotlin 2.0 standard library; from
-    // 2026.06 it needs 2.1, ahead of the Kotlin this module compiles with. Bump both together.
+    // 2026.03.01 is chosen as the newest BOM whose Compose asks for a Kotlin 2.0 standard library,
+    // matching the Kotlin this module compiles with; later BOMs ask for 2.1, and moving to them is
+    // a Kotlin bump taken on purpose rather than a side effect of this one.
     implementation(platform("androidx.compose:compose-bom:2026.03.01"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")

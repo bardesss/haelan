@@ -74,18 +74,19 @@ val LocalGlanceColors = staticCompositionLocalOf<GlanceColors> {
 /**
  * The chrome follows the phone: Material You's wallpaper colours from Android 12, where the phone
  * has them. Before that, the same token mapping `values/themes.xml` gives the view screens, so the
- * glance and the sync screen one tap away look like one app. The data colours are the tokens
- * either way, through [LocalGlanceColors].
+ * glance and the sync screen one tap away look like one app. The page itself and the data colours
+ * are the tokens either way, through [withTokenPage] and [LocalGlanceColors].
  */
 @Composable
 fun GlanceTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
-    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val context = LocalContext.current
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
         tokenColorScheme(dark)
     }
+    val scheme = withTokenPage(base) { colorResource(it) }
     val colors = glanceColorsFrom { colorResource(it) }
     CompositionLocalProvider(LocalGlanceColors provides colors) {
         MaterialTheme(colorScheme = scheme, content = content)
@@ -93,7 +94,20 @@ fun GlanceTheme(content: @Composable () -> Unit) {
 }
 
 /**
- * `values/themes.xml` role for role. The light and dark builders differ only in the defaults for
+ * The page under the cards is not chrome: a dynamic scheme replaces `background` with a wallpaper
+ * tint, the Scaffold paints its whole container with it, and the glance would then sit on a
+ * different page from the sync screen next door, which stays on `surface_page`. Everything else in
+ * [base] is kept, the top bar and the buttons included. Inline for the same reason as
+ * [glanceColorsFrom]: the lookup in the app is `colorResource`.
+ */
+inline fun withTokenPage(base: ColorScheme, color: (Int) -> Color): ColorScheme = base.copy(
+    background = color(R.color.surface_page),
+    onBackground = color(R.color.text_primary),
+)
+
+/**
+ * `values/themes.xml` role for role, less the page, which [withTokenPage] sets on every branch
+ * (the XML's `windowBackground`). The light and dark builders differ only in the defaults for
  * the roles the XML theme leaves alone; the token colours themselves already switch with the night
  * qualifier.
  */
@@ -104,7 +118,6 @@ private fun tokenColorScheme(dark: Boolean): ColorScheme {
     val primaryContainer = colorResource(R.color.surface_selected)
     val onPrimaryContainer = colorResource(R.color.accent_soft)
     val secondary = colorResource(R.color.accent_soft)
-    val background = colorResource(R.color.surface_page)
     val surface = colorResource(R.color.surface_card)
     val onSurface = colorResource(R.color.text_primary)
     val surfaceVariant = colorResource(R.color.surface_inset)
@@ -117,8 +130,6 @@ private fun tokenColorScheme(dark: Boolean): ColorScheme {
             primaryContainer = primaryContainer,
             onPrimaryContainer = onPrimaryContainer,
             secondary = secondary,
-            background = background,
-            onBackground = onSurface,
             surface = surface,
             onSurface = onSurface,
             surfaceVariant = surfaceVariant,
@@ -132,8 +143,6 @@ private fun tokenColorScheme(dark: Boolean): ColorScheme {
             primaryContainer = primaryContainer,
             onPrimaryContainer = onPrimaryContainer,
             secondary = secondary,
-            background = background,
-            onBackground = onSurface,
             surface = surface,
             onSurface = onSurface,
             surfaceVariant = surfaceVariant,

@@ -26,6 +26,7 @@ import com.haelan.android.glance.ui.GlanceTheme
  */
 class GlanceActivity : ComponentActivity() {
 
+    /** Who the glance is for; refreshed from the store whenever the app acts on it. */
     private lateinit var session: SessionStore.Session
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,13 +58,30 @@ class GlanceActivity : ComponentActivity() {
         }
     }
 
-    /** Started on top rather than instead: back from the sync screen returns to the glance. */
+    /**
+     * Started on top rather than instead: back from the sync screen returns to the glance.
+     *
+     * The session is read again here rather than taken from the launch: a sync that met a 401
+     * while the glance was up has already forgotten the cookie, and handing the old one to the
+     * sync screen would only have it meet the same 401. An empty store means exactly that, since
+     * sign-in saves the session before the glance ever starts, so it is the expired notice.
+     */
     private fun openSync() {
+        val current = SessionStore.loadSession(SessionStore.prefs(this))
+        if (current == null) {
+            startActivity(Intent(this, LoginActivity::class.java).apply {
+                putExtra(LoginActivity.EXTRA_EXPIRED, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
+            finish()
+            return
+        }
+        session = current
         startActivity(Intent(this, MainActivity::class.java).apply {
-            putExtra(LoginActivity.EXTRA_SERVER, session.server)
-            putExtra(LoginActivity.EXTRA_PERSON_ID, session.personId)
-            putExtra(LoginActivity.EXTRA_COOKIE, session.cookie)
-            putExtra(LoginActivity.EXTRA_USERNAME, session.username)
+            putExtra(LoginActivity.EXTRA_SERVER, current.server)
+            putExtra(LoginActivity.EXTRA_PERSON_ID, current.personId)
+            putExtra(LoginActivity.EXTRA_COOKIE, current.cookie)
+            putExtra(LoginActivity.EXTRA_USERNAME, current.username)
         })
     }
 }
