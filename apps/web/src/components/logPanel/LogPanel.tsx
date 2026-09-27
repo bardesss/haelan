@@ -6,6 +6,7 @@ import { Icon } from '../icons.js'
 import { Loading } from '../Loading.js'
 import { ErrorState } from '../ErrorState.js'
 import { MoodFaces } from './MoodFaces.js'
+import { PresetEditor } from './PresetEditor.js'
 import { useSession } from '../../auth/session.js'
 import type { GlanceLog } from '../../data/useGlance.js'
 import { SEED_KINDS } from '../../data/eventKinds.js'
@@ -93,6 +94,24 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
   const saveNote = useSaveNote()
   const moodLabelId = useId()
   const noteId = useId()
+  // Edit mode swaps the chips row for the editor and nothing else: the mood, the undo line and the
+  // note stay where they are and keep working.
+  const [editing, setEditing] = useState(false)
+  const editButton = useRef<HTMLButtonElement>(null)
+  // Whether focus goes back to Edit on the next render: only on leaving edit mode, never on mount.
+  const returnFocus = useRef(false)
+  useEffect(() => {
+    if (editing || !returnFocus.current) return
+    returnFocus.current = false
+    editButton.current?.focus()
+  }, [editing])
+  function leaveEditing() {
+    returnFocus.current = true
+    setEditing(false)
+  }
+  // What the add field offers: the kinds this day already has events under (a kind typed into the
+  // chart panel, say), then the seed set. The editor drops the ones already on the list.
+  const suggestions = [...new Set([...Object.keys(log.counts), ...SEED_KINDS])]
 
   /** Resolves once the day log holds the server's answer again: the refetch the hook's own
    *  invalidation already started, joined rather than repeated (cancelRefetch: false). An optimistic
@@ -218,19 +237,29 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
       <section className="log-sec">
         <div className="log-sec-head">
           <span className="label">{t('logPanel.chips.label')}</span>
+          {!editing && (
+            <button type="button" ref={editButton} className="log-link" onClick={() => setEditing(true)}>
+              {t('logPanel.chips.edit')}
+            </button>
+          )}
         </div>
-        <div className="log-chips">
-          {log.presets.map((kind) => {
-            const count = countOf(kind)
-            return (
-              <button key={kind} type="button" className={count > 0 ? CHIP_CLASS.on : CHIP_CLASS.off}
-                aria-label={chipName(kind, count)} onClick={() => onTap(kind)}>
-                {kindLabel(kind)}
-                {count > 0 && <span className="log-count" aria-hidden="true">{count}</span>}
-              </button>
-            )
-          })}
-        </div>
+        {editing
+          // Done closes only once the day log holds the saved list, so the chips come back in their
+          // new order rather than showing the old one for the length of a refetch.
+          ? <PresetEditor kinds={log.presets} suggestions={suggestions}
+              onDone={() => { void refreshed().finally(leaveEditing) }} onCancel={leaveEditing} />
+          : <div className="log-chips">
+            {log.presets.map((kind) => {
+              const count = countOf(kind)
+              return (
+                <button key={kind} type="button" className={count > 0 ? CHIP_CLASS.on : CHIP_CLASS.off}
+                  aria-label={chipName(kind, count)} onClick={() => onTap(kind)}>
+                  {kindLabel(kind)}
+                  {count > 0 && <span className="log-count" aria-hidden="true">{count}</span>}
+                </button>
+              )
+            })}
+          </div>}
         <div className="log-undo-slot" aria-live="polite">
           {undoable !== null && (
             <div className="log-undo">

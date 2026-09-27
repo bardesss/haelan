@@ -957,7 +957,16 @@
     "chips": {
       "label": "Wat speelde er?",
       "countToday": "{{kind}}, {{count}} vandaag",
-      "countDay": "{{kind}}, {{count}} die dag"
+      "countDay": "{{kind}}, {{count}} die dag",
+      "edit": "Bewerken"
+    },
+    "edit": {
+      "remove": "{{kind}} verwijderen",
+      "add": "Soort toevoegen",
+      "moved": "{{kind}} verplaatst naar plek {{position}}",
+      "done": "Klaar",
+      "cancel": "Annuleren",
+      "full": "Hoogstens 16 knoppen"
     },
     "undo": {
       "today": "{{kind}} gelogd",

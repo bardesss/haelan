@@ -932,6 +932,27 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 .log-link:hover { text-decoration: underline; }
 .log-note { min-height: 64px; resize: vertical; }
 .log-error { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
+/* PresetEditor.tsx: the chips in edit mode, each still chip-shaped so the list reads as the row it
+   replaces, with its remove button inside the pill. grab says it can be dragged. */
+.log-editor { display: flex; flex-direction: column; gap: var(--space-2); }
+.log-editor:focus { outline: none; }
+.log-edit-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.log-edit-item {
+  display: inline-flex; align-items: center; gap: var(--space-1); min-height: 40px; padding: 0 var(--space-1) 0 14px;
+  border-radius: 999px; background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  color: var(--text-secondary); font-size: var(--font-size-sm); cursor: grab; max-width: 100%;
+}
+/* A kind runs to 40 characters, wider than a phone's sheet: it ends in an ellipsis so the remove
+   button stays inside the pill. */
+.log-edit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-edit-item:focus-visible { border-color: var(--border-accent); color: var(--text-primary); }
+.log-edit-remove {
+  appearance: none; font: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--text-muted);
+}
+.log-edit-remove:hover { color: var(--text-primary); background: var(--surface-card); }
+.log-edit-remove svg { width: 13px; height: 13px; }
+.log-edit-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
 /* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
    regular weight to put the muted subtitle back to, so the heading is left at the body's weight
@@ -1923,13 +1944,17 @@ button.week-bar-slot { cursor: pointer; }
      drawer open as well as closed, which is what turned this from an argument into a failure. */
   .button, .icon-button, .chart-table-toggle, .chart-annotate, .card-link,
   .session-row-link, .night-row-link, .date-picker, .input, .rail-item, .rail-person,
-  .source-order-list button, .log-face, .log-chip {
+  .source-order-list button, .log-face, .log-chip, .log-edit-item {
     min-height: 44px;
   }
   /* The log panel's Undo is a bare word in its row, so it takes the height the row would otherwise
      pad on, the .cal-sheet .cal-today way; the row's own vertical padding goes to keep it compact. */
   .log-undo { padding-top: 0; padding-bottom: 0; }
   .log-undo .log-link { min-height: 44px; padding: 0 var(--space-2); }
+  /* The editor's remove button is square inside its pill, so it takes both sides, as .icon-button
+     does; the pill's own 44px leaves it room. Edit is a bare word beside the section's label. */
+  .log-edit-remove { width: 44px; height: 44px; }
+  .log-sec-head .log-link { min-height: 44px; padding: 0 var(--space-2); }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
   /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
      header draws them) but hold only an icon, so they need .icon-button's square minimum too. */

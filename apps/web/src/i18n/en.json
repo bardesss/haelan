@@ -957,7 +957,16 @@
     "chips": {
       "label": "What happened?",
       "countToday": "{{kind}}, {{count}} today",
-      "countDay": "{{kind}}, {{count}} that day"
+      "countDay": "{{kind}}, {{count}} that day",
+      "edit": "Edit"
+    },
+    "edit": {
+      "remove": "Remove {{kind}}",
+      "add": "Add a kind",
+      "moved": "{{kind}} moved to position {{position}}",
+      "done": "Done",
+      "cancel": "Cancel",
+      "full": "At most 16 chips"
     },
     "undo": {
       "today": "{{kind}} logged",
