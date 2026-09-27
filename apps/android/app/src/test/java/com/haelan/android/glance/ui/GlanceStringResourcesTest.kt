@@ -22,11 +22,39 @@ class GlanceStringResourcesTest {
         .firstOrNull { it.isDirectory }
         ?: error("src/main/res was not found above ${File("").absolutePath}")
 
-    /** Every `<string>` in [file], its text as `getString` returns it. */
-    private fun strings(file: File): Map<String, String> {
+    /** Every `<string>` in [file], as written between its tags. */
+    private fun raw(file: File): Map<String, String> {
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
         val nodes = document.getElementsByTagName("string")
-        return (0 until nodes.length).map { nodes.item(it) as Element }.associate { it.getAttribute("name") to unescape(it.textContent) }
+        return (0 until nodes.length).map { nodes.item(it) as Element }.associate { it.getAttribute("name") to it.textContent }
+    }
+
+    /** Every `<string>` in [file], its text as `getString` returns it (given [plainly] holds for it). */
+    private fun strings(file: File): Map<String, String> = raw(file).mapValues { unescape(it.value) }
+
+    /**
+     * [unescape] reads only backslash escapes. Android also drops an unescaped double quote (it
+     * marks a quoted run) and collapses runs of whitespace outside one, so a resource holding either
+     * would read differently on a phone than here; none of the glance's may.
+     */
+    @Test
+    fun `no glance resource leans on quoting or whitespace the comparison cannot read`() {
+        val offenders = listOf("values", "values-nl").flatMap { dir ->
+            raw(File(res, "$dir/strings.xml")).filterKeys { it in ENGLISH_TEXT }.filterValues { !plainly(it) }.keys.map { "$dir/$it" }
+        }
+        assertEquals(emptyList<String>(), offenders)
+    }
+
+    @Test
+    fun `the plainness check catches what it claims to`() {
+        assertEquals(false, plainly("say \"hi\" \"there"))
+        assertEquals(false, plainly("\"quoted\""))
+        assertEquals(false, plainly("two  spaces"))
+        assertEquals(false, plainly(" leading"))
+        assertEquals(false, plainly("a\nb"))
+        assertEquals(false, plainly("a\tb"))
+        // As written in the XML: an escaped apostrophe and escaped quotes are read as themselves.
+        assertEquals(true, plainly("""Today\'s \"best\" run"""))
     }
 
     @Test
@@ -61,6 +89,16 @@ class GlanceStringResourcesTest {
     }
 
     private companion object {
+        /**
+         * Whether Android reads [raw] exactly as [unescape] does: no double quote without its
+         * backslash, no leading or trailing whitespace, no run of two, no line break or tab.
+         */
+        fun plainly(raw: String): Boolean {
+            // A quote after an even number of backslashes (none included) is not escaped.
+            val unescapedQuote = Regex("(^|[^\\\\])(\\\\\\\\)*\"").containsMatchIn(raw)
+            return !unescapedQuote && raw == raw.trim() && !raw.contains(Regex("\\s{2}")) && !raw.contains('\n') && !raw.contains('\t')
+        }
+
         /** Android's string-resource escapes: a backslash before a quote, a backslash, an at or a question mark. */
         fun unescape(raw: String): String {
             val out = StringBuilder()

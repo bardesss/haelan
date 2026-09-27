@@ -27,9 +27,11 @@ import com.haelan.android.glance.GlanceStanding
 import com.haelan.android.glance.PaceStanding
 import com.haelan.android.glance.WorkoutSession
 import com.haelan.android.glance.format.GlanceFormat
+import com.haelan.android.glance.format.StripKind
 import com.haelan.android.glance.format.Strings
 import com.haelan.android.glance.format.TodayLine
-import java.time.LocalDate
+import com.haelan.android.glance.geometry.showsStrip
+import com.haelan.android.glance.geometry.traceWindow
 
 /**
  * Today, the web's TodayCard: steps and active minutes side by side, the line under them (a
@@ -50,7 +52,6 @@ internal fun TodayCard(
     val words = text.words
     val colors = LocalGlanceColors.current
     val noReading = stringResource(if (finished) R.string.glance_no_reading_finished else R.string.glance_no_reading)
-    val caption = stringResource(if (finished) R.string.glance_today_caption_finished else R.string.glance_today_caption)
     DashCard(
         title = stringResource(if (finished) R.string.glance_today_that_day else R.string.glance_today_title),
         subtitle = if (finished) GlanceFormat.longDate(today, text.locale) else stringResource(R.string.glance_today_subtitle),
@@ -80,7 +81,8 @@ internal fun TodayCard(
             }
             words.todayLine(day, finished)?.let { line -> TodayLineText(line) }
         }
-        if (day.steps.strip.count { it.value != null } > 1) {
+        if (showsStrip(day.steps.strip)) {
+            val strip = words.stripText(StripKind.STEPS, day.steps, finished)
             val openNamed = stringResource(R.string.glance_open_day_named)
             Column {
                 Strip(
@@ -88,31 +90,19 @@ internal fun TodayCard(
                     baseline = day.steps.baseline,
                     current = today,
                     formatValue = { words.value(it, day.steps.metric) },
-                    label = stringResource(if (finished) R.string.glance_today_strip_finished else R.string.glance_today_strip),
-                    description = words.usualLine(day.steps) ?: caption,
+                    label = strip.label,
+                    description = strip.description,
                     openLabel = { Strings.fill(openNamed, mapOf("date" to GlanceFormat.longDate(it, text.locale))) },
                     onOpenDay = onOpenDay,
                 )
-                Caption(caption)
+                Caption(strip.caption)
             }
         }
         if (day.heartRate.points.isNotEmpty()) {
-            val asOf = when {
-                finished -> stringResource(R.string.glance_as_of_that_day)
-                day.heartRate.asOfMs != null -> Strings.fill(
-                    stringResource(R.string.glance_as_of_time),
-                    mapOf("time" to GlanceFormat.clock(day.heartRate.asOfMs, text.zone)),
-                )
-                else -> stringResource(R.string.glance_as_of_today)
-            }
-            val chart = stringResource(if (finished) R.string.glance_today_heart_rate_chart_that_day else R.string.glance_today_heart_rate_chart)
-            // Midnight of the payload's day in the person's zone: where the trace starts, never a day to ask for.
-            val date = LocalDate.parse(today)
-            val midnight = date.atStartOfDay(text.zone).toInstant().toEpochMilli()
-            val end = if (finished) date.plusDays(1).atStartOfDay(text.zone).toInstant().toEpochMilli() else null
+            val window = traceWindow(today, finished, text.zone)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 CardLabel(stringResource(if (finished) R.string.glance_today_heart_rate_whole_day else R.string.glance_today_heart_rate_since_midnight))
-                HeartRateTrace(day.heartRate.points, midnight, end, day.workouts, "$chart, $asOf")
+                HeartRateTrace(day.heartRate.points, window.startMs, window.endMs, day.workouts, words.traceDescription(day.heartRate, finished))
             }
         }
         if (day.workouts.isNotEmpty()) {

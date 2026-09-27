@@ -25,7 +25,9 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.haelan.android.glance.GlanceRegistry
 import com.haelan.android.glance.GlanceStore
+import com.haelan.android.glance.forgetGlances
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -624,19 +626,16 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     }
 
     private fun signOut() {
-        // First, and here on the main thread: the glance underneath this screen stops keeping
-        // anything before the delete below can run (GlanceActivity.closeForSignOut says why).
-        GlanceActivity.closeForSignOut()
         scope.launch {
             withContext(Dispatchers.IO) {
                 // Best effort by construction: the client returns the failure rather than
                 // throwing it, and the session cookie is dropped either way below. An instance
                 // that is unreachable must not be able to keep somebody signed in.
                 InstanceClient.post(server, "/api/auth/logout", "{}", cookie) { }
-                // The last glance is health data on the device; it leaves with the session. The
-                // glance screen's repository was closed before this coroutine started, so a read
-                // it still has in flight cannot write the glance back after it.
-                GlanceStore.encrypted(this@MainActivity).delete()
+                // The last glance is health data on the device; it leaves with the session. Every
+                // open glance is closed first (forgetGlances), so a read still in flight on the
+                // glance screen underneath cannot write the glance back after the delete.
+                forgetGlances(GlanceRegistry.app) { GlanceStore.encrypted(this@MainActivity).delete() }
             }
             SessionStore.clearSession(SessionStore.prefs(this@MainActivity))
             goLogin(expired = false)

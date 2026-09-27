@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -31,6 +32,7 @@ import com.haelan.android.glance.GlanceBaseline
 import com.haelan.android.glance.GlanceStripDay
 import com.haelan.android.glance.geometry.DotRole
 import com.haelan.android.glance.geometry.stripLayout
+import com.haelan.android.glance.geometry.stripUsual
 import kotlin.math.abs
 
 // The web draws the band at half strength over the card (charts/base.ts, OPACITY.baselineBand).
@@ -65,7 +67,7 @@ internal fun Strip(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.textMuted)
-    val usual = baseline?.takeUnless { it.thin }
+    val usual = stripUsual(baseline)
     val lowText = usual?.let { measurer.measure(formatValue(it.low), labelStyle) }
     val highText = usual?.let { measurer.measure(formatValue(it.high), labelStyle) }
     val gap = with(density) { 6.dp.toPx() }
@@ -73,6 +75,9 @@ internal fun Strip(
     // Room above and below the plot for the largest dot, so a day at either edge is not cut in half.
     val inset = with(density) { 6.dp.toPx() }
 
+    // The gesture block below restarts only when the layout or the shown day changes, so it reads
+    // the newest callback through this rather than keeping the one it started with.
+    val openDay by rememberUpdatedState(onOpenDay)
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val layout = remember(days, baseline, canvasSize, gutter) {
         if (canvasSize == IntSize.Zero) null
@@ -87,7 +92,7 @@ internal fun Strip(
             .onSizeChanged { canvasSize = it }
             .semantics {
                 contentDescription = "$label, $description"
-                customActions = openable.map { day -> CustomAccessibilityAction(openLabel(day)) { onOpenDay(day); true } }
+                customActions = openable.map { day -> CustomAccessibilityAction(openLabel(day)) { openDay(day); true } }
             }
             .pointerInput(layout, current) {
                 val dots = layout?.dots ?: return@pointerInput
@@ -95,7 +100,7 @@ internal fun Strip(
                 detectTapGestures { tap ->
                     val hit = dots.minByOrNull { abs(it.x + gutter - tap.x) } ?: return@detectTapGestures
                     val day = days[hit.index].localDate
-                    if (abs(hit.x + gutter - tap.x) <= slot / 2 && day != current) onOpenDay(day)
+                    if (abs(hit.x + gutter - tap.x) <= slot / 2 && day != current) openDay(day)
                 }
             },
     ) {

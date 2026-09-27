@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,12 +72,13 @@ internal fun DashCard(
 
 /** A small upper-case label over a figure or a chart ("STEPS"), as the web's `.label`. */
 @Composable
-internal fun CardLabel(text: String, modifier: Modifier = Modifier) {
+internal fun CardLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign? = null) {
     Text(
         text.uppercase(),
         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
         color = LocalGlanceColors.current.textMuted,
         modifier = modifier,
+        textAlign = textAlign,
     )
 }
 

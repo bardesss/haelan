@@ -11,6 +11,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.haelan.android.glance.GlanceClient
+import com.haelan.android.glance.GlanceRegistry
 import com.haelan.android.glance.GlanceRepository
 import com.haelan.android.glance.GlanceStore
 import com.haelan.android.glance.ui.GlanceScreen
@@ -32,29 +33,6 @@ class GlanceActivity : ComponentActivity() {
     /** The glance's state machine, for as long as this screen exists; null before a session is known. */
     private var repository: GlanceRepository? = null
 
-    companion object {
-        /**
-         * The repository of the glance screen that is up, if one is; main thread only. Held so
-         * that [closeForSignOut] can reach it from the sync screen, which sits on top of it.
-         * A repository holds no Context (the store keeps the application's), so this leaks nothing.
-         */
-        private var open: GlanceRepository? = null
-
-        /**
-         * **Sign-out closes the glance before the store is deleted.** Called by the sync screen's
-         * sign-out on the main thread, before it deletes the stored glance off the main thread: a
-         * today read still blocked in the client can answer 200 after the delete, and only a closed
-         * repository is sure not to write that answer back (GlanceRepository's KDoc). The glance
-         * screen is underneath the sync screen and is not destroyed until the sign-out clears the
-         * task, which is after the delete has been started, so its own onDestroy is too late to be
-         * the guarantee. Closing twice is harmless: onDestroy closes again.
-         */
-        fun closeForSignOut() {
-            open?.close()
-            open = null
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -74,16 +52,16 @@ class GlanceActivity : ComponentActivity() {
             return
         }
 
-        val repo = GlanceRepository(
+        // Registered so the sign-out can close it before it deletes the stored glance.
+        val repo = GlanceRegistry.app.register(GlanceRepository(
             reads = GlanceClient(session.server, session.personId, session.cookie),
             store = GlanceStore.encrypted(this),
             server = session.server,
             personId = session.personId,
             clock = System::currentTimeMillis,
             dispatcher = Dispatchers.IO,
-        )
+        ))
         repository = repo
-        open = repo
         // The 401 waits in the repository's channel until the screen is started, so an expiry met
         // while the sync screen is on top is acted on when the glance comes back, not from behind.
         lifecycleScope.launch {
@@ -113,11 +91,22 @@ class GlanceActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        repository?.let { repo ->
-            repo.close()
-            if (open === repo) open = null
-        }
+        repository?.let { GlanceRegistry.app.close(it) }
         super.onDestroy()
+    }
+
+    /**
+     * Sign-in reuses the glance already in the task (FLAG_ACTIVITY_CLEAR_TOP with SINGLE_TOP) rather
+     * than stacking a second. Every path that changes who is signed in clears the task first, so
+     * the session here is normally the one already shown; a different one starts the screen afresh
+     * rather than drawing one person's glance under another's session.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val incoming = intent.getStringExtra(LoginActivity.EXTRA_PERSON_ID)
+        val server = intent.getStringExtra(LoginActivity.EXTRA_SERVER)
+        if ((incoming != null && incoming != session.personId) || (server != null && server != session.server)) recreate()
     }
 
     /**

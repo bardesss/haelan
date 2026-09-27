@@ -19,6 +19,8 @@ import com.haelan.android.glance.GlanceStanding
 import com.haelan.android.glance.format.GlanceFormat
 import com.haelan.android.glance.format.Strings
 import com.haelan.android.glance.format.SleepMini
+import com.haelan.android.glance.format.StripKind
+import com.haelan.android.glance.geometry.showsStrip
 
 /**
  * Last night, the web's NightCard: the time asleep in display type, efficiency, bed and wake in one
@@ -41,7 +43,6 @@ internal fun NightCard(
 ) {
     val words = text.words
     val noReading = stringResource(if (finished) R.string.glance_no_reading_finished else R.string.glance_no_reading)
-    val caption = stringResource(if (finished) R.string.glance_sleep_caption_finished else R.string.glance_sleep_caption)
     val openNamed = stringResource(R.string.glance_open_day_named)
     DashCard(
         title = stringResource(if (finished) R.string.glance_sleep_title_finished else R.string.glance_sleep_title),
@@ -62,19 +63,20 @@ internal fun NightCard(
                 Mini(stringResource(R.string.glance_sleep_woke), sleep.waketime, SleepMini.WOKE, noReading, text) { it }
             }
         }
-        if (sleep.asleep.strip.count { it.value != null } > 1) {
+        if (showsStrip(sleep.asleep.strip)) {
+            val strip = words.stripText(StripKind.NIGHT, sleep.asleep, finished)
             Column {
                 Strip(
                     days = sleep.asleep.strip,
                     baseline = sleep.asleep.baseline,
                     current = today,
                     formatValue = { words.value(it, sleep.asleep.metric) },
-                    label = stringResource(if (finished) R.string.glance_sleep_strip_finished else R.string.glance_sleep_strip),
-                    description = words.usualLine(sleep.asleep) ?: caption,
+                    label = strip.label,
+                    description = strip.description,
                     openLabel = { Strings.fill(openNamed, mapOf("date" to GlanceFormat.longDate(it, text.locale))) },
                     onOpenDay = onOpenDay,
                 )
-                Caption(caption)
+                Caption(strip.caption)
             }
         }
         Hypnogram(sleep.segments, sleep.startMs, text)

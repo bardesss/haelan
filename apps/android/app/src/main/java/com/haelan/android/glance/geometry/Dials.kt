@@ -63,3 +63,24 @@ data class RingSweep(val startDegrees: Float, val sweepDegrees: Float)
 
 /** The index ring's fill, or null on an unscored day, which draws the empty track and says why. */
 fun ringSweep(index: Double?): RingSweep? = index?.let { RingSweep(-90f, (it / 100 * 360).toFloat()) }
+
+/**
+ * The recovery row's sizes, in dp, for [width] dp of card: the two gauges each in 30% of the row
+ * and the ring in the middle 40%, each dial [DIAL_GAP] narrower than its share so neighbours never
+ * touch, and none larger than the web's phone sizes (a 96 gauge, a 112 ring). On a 360dp phone the
+ * card leaves about 296dp, where the web's fixed sizes need 304; the shares always sum to the row.
+ */
+data class DialSizes(val gauge: Float, val ring: Float, val gaugeShare: Float, val ringShare: Float)
+
+const val DIAL_GAP = 4f
+
+fun dialSizes(width: Float): DialSizes {
+    val gaugeShare = 0.3f
+    val ringShare = 1f - 2 * gaugeShare
+    return DialSizes(
+        gauge = minOf(96f, width * gaugeShare - DIAL_GAP),
+        ring = minOf(112f, width * ringShare - DIAL_GAP),
+        gaugeShare = gaugeShare,
+        ringShare = ringShare,
+    )
+}

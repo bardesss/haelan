@@ -87,7 +87,7 @@ class GlanceRepository(
     private val clock: () -> Long,
     dispatcher: CoroutineDispatcher,
     private val log: (String) -> Unit = { Log.w(TAG, it) },
-) {
+) : AutoCloseable {
 
     private companion object {
         const val TAG = "haelan-glance"
@@ -149,7 +149,7 @@ class GlanceRepository(
      * Stops every read in flight; the screen is gone, or the person is signing out. A read already
      * blocked in the client still returns, but its answer is no longer kept.
      */
-    fun close() {
+    override fun close() {
         synchronized(lock) { closed = true }
         scope.cancel()
     }

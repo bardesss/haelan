@@ -52,8 +52,8 @@ data class StripLayout(
  * past its grid, which a Canvas would clip.
  */
 fun stripLayout(days: List<GlanceStripDay>, baseline: GlanceBaseline?, width: Float, height: Float): StripLayout? {
-    if (days.count { it.value != null } < 2) return null
-    val usual = baseline?.takeUnless { it.thin }
+    if (!showsStrip(days)) return null
+    val usual = stripUsual(baseline)
     val dayBands = days.map { day -> day.band?.takeUnless { it.thin } }
 
     val extent = buildList {
@@ -102,3 +102,12 @@ fun stripLayout(days: List<GlanceStripDay>, baseline: GlanceBaseline?, width: Fl
     val labels = usual?.let { StripBandLabels(it.low, it.high, y(it.low), y(it.high), x(0)) }
     return StripLayout(dots, lines, bands, labels)
 }
+
+/** Whether a strip is drawn at all: two days with a value make a shape, one dot does not. The cards leave it out otherwise, caption and all. */
+fun showsStrip(days: List<GlanceStripDay>): Boolean = days.count { it.value != null } >= 2
+
+/**
+ * The usual a strip labels, or null: none, or a thin one, which judges nothing and so is neither
+ * shaded nor labelled. The one rule both the layout and the card's label gutter read.
+ */
+fun stripUsual(baseline: GlanceBaseline?): GlanceBaseline? = baseline?.takeUnless { it.thin }

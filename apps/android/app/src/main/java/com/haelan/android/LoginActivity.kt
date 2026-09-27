@@ -32,9 +32,16 @@ class LoginActivity : ComponentActivity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    /** Signed in, by hand or from the saved session: the glance, with the sync screen behind it. */
+    /**
+     * Signed in, by hand or from the saved session: the glance, with the sync screen behind it.
+     * CLEAR_TOP with SINGLE_TOP keeps one glance per task: a glance already in it is brought back
+     * (and anything above it closed) instead of a second one stacking up with its own repository.
+     * A flag at the one place that starts it, rather than launchMode singleTask, which would also
+     * move the glance by task affinity and apply to every future caller without being visible here.
+     */
     private fun startMain(session: SessionStore.Session) {
         startActivity(Intent(this, GlanceActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(EXTRA_SERVER, session.server)
             putExtra(EXTRA_PERSON_ID, session.personId)
             putExtra(EXTRA_COOKIE, session.cookie)

@@ -2,6 +2,8 @@ package com.haelan.android.glance.geometry
 
 import com.haelan.android.glance.IntradayPoint
 import com.haelan.android.glance.WorkoutSession
+import java.time.LocalDate
+import java.time.ZoneId
 
 // The Today card's slim heart rate trace, as the web's IntradayHeartRate draws it with `compact`
 // (apps/web/src/charts/IntradayHeartRate.tsx): each source's mean as a line from local midnight to
@@ -81,4 +83,20 @@ fun traceLayout(
         if (right > left) TraceSpan(left, right) else null
     }
     return TraceLayout(lines, spans, excluded)
+}
+
+/** The stretch of time the trace spans: from [startMs], to [endMs] or, when null, to the newest reading. */
+data class TraceWindow(val startMs: Long, val endMs: Long?)
+
+/**
+ * The trace's window for the payload's day [today] in the person's [zone]: from its local midnight,
+ * and on a finished day to the next local midnight, so the whole day is drawn; today it ends at the
+ * last reading (null), never at a moment not yet reached. Midnight is the zone's, so a day that
+ * loses or gains an hour to daylight saving is 23 or 25 hours wide, as the web's localMidnightMs
+ * makes it. An instant to draw from, never a day to ask for.
+ */
+fun traceWindow(today: String, finished: Boolean, zone: ZoneId): TraceWindow {
+    val day = LocalDate.parse(today)
+    fun midnight(date: LocalDate) = date.atStartOfDay(zone).toInstant().toEpochMilli()
+    return TraceWindow(midnight(day), if (finished) midnight(day.plusDays(1)) else null)
 }

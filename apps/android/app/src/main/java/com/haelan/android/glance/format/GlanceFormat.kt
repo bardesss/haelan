@@ -1,8 +1,10 @@
 package com.haelan.android.glance.format
 
 import com.haelan.android.glance.Glance
+import com.haelan.android.glance.GlanceBaseline
 import com.haelan.android.glance.GlanceDay
 import com.haelan.android.glance.GlanceFigure
+import com.haelan.android.glance.GlanceHeartRate
 import com.haelan.android.glance.GlanceRecovery
 import com.haelan.android.glance.GlanceSleep
 import com.haelan.android.glance.GlanceStanding
@@ -198,6 +200,31 @@ data class WeekLine(
     val values: List<Double?>,
     val dates: List<String>,
 )
+
+/** The Recovery card's two gauges. */
+enum class GaugeKind { RESTING_HEART_RATE, HRV }
+
+/**
+ * One gauge dial, everything the card places: the reading and the usual it is drawn against (null
+ * when there is none or it is thin, which the web hands its gauge as no baseline, so the arc
+ * centres on the value), the server's verdict for the marker, the dial's name and unit, the as-of
+ * line when its day is not the index's, and the gauge's accessible description.
+ */
+data class GaugeDial(
+    val value: Double,
+    val baseline: GlanceBaseline?,
+    val standing: GlanceStanding?,
+    val name: String,
+    val unit: String,
+    val asOf: String?,
+    val description: String,
+)
+
+/** Which seven-day strip. */
+enum class StripKind { NIGHT, RECOVERY, STEPS }
+
+/** A strip's chart name, the caption under it, and the sentence its description reads. */
+data class StripText(val label: String, val caption: String, val description: String)
 
 /**
  * Every sentence the glance prints, in one language and one zone. A phone builds one from its
@@ -439,6 +466,70 @@ class GlanceWords(
         WeekRowKind.STEPS -> GlanceFormat.number(value, locale)
         WeekRowKind.ACTIVE -> "${value.roundToLong()} ${t("activity_units_min")}"
         WeekRowKind.ASLEEP -> GlanceFormat.duration(value)
+    }
+
+    /**
+     * A recovery gauge, or null with no reading, where the card says "No reading yet" in its place.
+     * Its description is the web's: name, value and unit, then the usual line.
+     */
+    fun gaugeDial(kind: GaugeKind, recovery: GlanceRecovery, today: String, finished: Boolean): GaugeDial? {
+        val (figure, nameKey, unitKey) = when (kind) {
+            GaugeKind.RESTING_HEART_RATE -> Triple(recovery.restingHeartRate, "glance_recovery_rhr", "charts_units_bpm")
+            GaugeKind.HRV -> Triple(recovery.hrv, "glance_recovery_hrv", "charts_units_milliseconds")
+        }
+        val value = figure.value ?: return null
+        val name = t(nameKey)
+        val unit = t(unitKey)
+        return GaugeDial(
+            value = value,
+            baseline = figure.baseline?.takeUnless { it.thin },
+            standing = figure.standing,
+            name = name,
+            unit = unit,
+            asOf = if (figure.asOfDate != recovery.index.asOfDate) asOfLine(figure, today, finished = finished) else null,
+            description = listOfNotNull("$name ${figure(figure)} $unit", usualLine(figure)).joinToString(", "),
+        )
+    }
+
+    /** The index ring's description: "Recovery index 64, Around your usual", or that it went unscored. */
+    fun ringDescription(recovery: GlanceRecovery): String {
+        val score = recovery.index.value ?: return t("glance_recovery_score_unscored")
+        return listOfNotNull("${t("glance_recovery_index")} ${score.roundToLong()}", bandWords(recovery.band)).joinToString(", ")
+    }
+
+    /** The line under the dials: the band in words, or why the day went unscored; null for a scored day with no band. */
+    fun recoveryLine(recovery: GlanceRecovery, finished: Boolean): String? =
+        if (recovery.index.value == null) t(if (finished) "glance_recovery_unscored_finished" else "glance_recovery_unscored")
+        else bandWords(recovery.band)
+
+    /**
+     * A strip's words. Its description is the figure's usual line, or the caption when there is none
+     * to say; the recovery strip draws no usual and is described by its caption alone, as on the web.
+     */
+    fun stripText(kind: StripKind, figure: GlanceFigure, finished: Boolean): StripText {
+        val base = when (kind) {
+            StripKind.NIGHT -> "glance_sleep"
+            StripKind.RECOVERY -> "glance_recovery"
+            StripKind.STEPS -> "glance_today"
+        }
+        val suffix = if (finished) "_finished" else ""
+        val caption = t("${base}_caption$suffix")
+        val usual = if (kind == StripKind.RECOVERY) null else usualLine(figure)
+        return StripText(label = t("${base}_strip$suffix"), caption = caption, description = usual ?: caption)
+    }
+
+    /**
+     * The heart rate trace's description: its name and what it is current to, "that day" on a
+     * finished day, else the time of the last reading, else "today".
+     */
+    fun traceDescription(heartRate: GlanceHeartRate, finished: Boolean): String {
+        val asOfMs = heartRate.asOfMs
+        val asOf = when {
+            finished -> t("glance_as_of_that_day")
+            asOfMs != null -> t("glance_as_of_time", "time" to GlanceFormat.clock(asOfMs, zone))
+            else -> t("glance_as_of_today")
+        }
+        return "${t(if (finished) "glance_today_heart_rate_chart_that_day" else "glance_today_heart_rate_chart")}, $asOf"
     }
 
     private companion object {

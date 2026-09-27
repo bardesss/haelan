@@ -1,6 +1,7 @@
 package com.haelan.android.glance.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,10 +14,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.haelan.android.R
-import com.haelan.android.glance.GlanceFigure
 import com.haelan.android.glance.GlanceRecovery
+import com.haelan.android.glance.format.GaugeKind
 import com.haelan.android.glance.format.GlanceFormat
+import com.haelan.android.glance.format.StripKind
 import com.haelan.android.glance.format.Strings
+import com.haelan.android.glance.geometry.dialSizes
+import com.haelan.android.glance.geometry.showsStrip
 import kotlin.math.roundToLong
 
 /**
@@ -24,7 +28,8 @@ import kotlin.math.roundToLong
  * against their usual either side of the index's ring, the band's words under them (or why the day
  * went unscored), and the breathing-rate note on a day it rose. A gauge whose reading is for a
  * different day from the index says which. [wide] (no night card above) adds the index's seven-day
- * strip under the dials, where the web puts it beside them.
+ * strip under the dials, where the web puts it beside them. The dials are sized from the row's
+ * width ([dialSizes]), so all three fit a 360dp phone.
  */
 @Composable
 internal fun RecoveryCard(
@@ -39,29 +44,24 @@ internal fun RecoveryCard(
     val words = text.words
     val colors = LocalGlanceColors.current
     val index = recovery.index
-    val score = index.value
-    val bandWords = words.bandWords(recovery.band)
-    val indexName = stringResource(R.string.glance_recovery_index)
-    val ringDescription = if (score == null) {
-        stringResource(R.string.glance_recovery_score_unscored)
-    } else {
-        listOfNotNull("$indexName ${score.roundToLong()}", bandWords).joinToString(", ")
-    }
     DashCard(
         title = stringResource(R.string.glance_recovery_title),
         subtitle = words.recoverySubtitle(recovery, today, finished),
         link = CardLink(stringResource(R.string.glance_recovery_link), "/recovery"),
         onOpenPage = onOpenPage,
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.Bottom) {
-            GaugeDial(stringResource(R.string.glance_recovery_rhr), recovery.restingHeartRate, stringResource(R.string.charts_units_bpm), recovery, today, finished, text)
-            Dial(stringResource(R.string.glance_recovery_score)) {
-                ScoreRing(score, stringResource(R.string.glance_recovery_not_scored), ringDescription)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val sizes = dialSizes(maxWidth.value)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                GaugeDial(GaugeKind.RESTING_HEART_RATE, recovery, today, finished, text, sizes.gauge, Modifier.weight(sizes.gaugeShare))
+                Dial(stringResource(R.string.glance_recovery_score), null, Modifier.weight(sizes.ringShare)) {
+                    ScoreRing(index.value, stringResource(R.string.glance_recovery_not_scored), words.ringDescription(recovery), size = sizes.ring.dp)
+                }
+                GaugeDial(GaugeKind.HRV, recovery, today, finished, text, sizes.gauge, Modifier.weight(sizes.gaugeShare))
             }
-            GaugeDial(stringResource(R.string.glance_recovery_hrv), recovery.hrv, stringResource(R.string.charts_units_milliseconds), recovery, today, finished, text)
         }
-        val caption = stringResource(if (finished) R.string.glance_recovery_caption_finished else R.string.glance_recovery_caption)
-        if (wide && index.strip.count { it.value != null } > 1) {
+        if (wide && showsStrip(index.strip)) {
+            val strip = words.stripText(StripKind.RECOVERY, index, finished)
             val openNamed = stringResource(R.string.glance_open_day_named)
             Column {
                 // The web's index strip draws no band: it hands Sparkline no baseline and no bands.
@@ -70,21 +70,16 @@ internal fun RecoveryCard(
                     baseline = null,
                     current = today,
                     formatValue = { it.roundToLong().toString() },
-                    label = stringResource(if (finished) R.string.glance_recovery_strip_finished else R.string.glance_recovery_strip),
-                    description = caption,
+                    label = strip.label,
+                    description = strip.description,
                     openLabel = { Strings.fill(openNamed, mapOf("date" to GlanceFormat.longDate(it, text.locale))) },
                     onOpenDay = onOpenDay,
                 )
-                Caption(caption)
+                Caption(strip.caption)
             }
         }
-        val line = if (score == null) {
-            stringResource(if (finished) R.string.glance_recovery_unscored_finished else R.string.glance_recovery_unscored)
-        } else {
-            bandWords
-        }
-        if (line != null) {
-            Text(line, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        words.recoveryLine(recovery, finished)?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
         words.respiratoryLine(recovery.respiratoryRate)?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = colors.negative)
@@ -92,49 +87,43 @@ internal fun RecoveryCard(
     }
 }
 
-/** A dial and its label under it. */
+/** A dial and its label under it, with the as-of line when there is one. */
 @Composable
-private fun Dial(label: String, extra: String? = null, content: @Composable () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun Dial(label: String, extra: String?, modifier: Modifier, content: @Composable () -> Unit) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         content()
-        CardLabel(label)
+        CardLabel(label, textAlign = TextAlign.Center)
         if (extra != null) {
-            Text(extra, style = MaterialTheme.typography.labelSmall, color = LocalGlanceColors.current.textFaint)
+            Text(extra, style = MaterialTheme.typography.labelSmall, color = LocalGlanceColors.current.textFaint, textAlign = TextAlign.Center)
         }
     }
 }
 
-/**
- * A reading's gauge, or "No reading yet" in its place. The gauge's description is the web's: the
- * name, the value and its unit, then the usual line.
- */
+/** A reading's gauge, as [com.haelan.android.glance.format.GlanceWords.gaugeDial] words it, or "No reading yet" in its place. */
 @Composable
 private fun GaugeDial(
-    label: String,
-    figure: GlanceFigure,
-    unit: String,
+    kind: GaugeKind,
     recovery: GlanceRecovery,
     today: String,
     finished: Boolean,
     text: CardText,
+    size: Float,
+    modifier: Modifier,
 ) {
-    val value = figure.value
-    if (value == null) {
-        Dial(label) {
+    val dial = text.words.gaugeDial(kind, recovery, today, finished)
+    if (dial == null) {
+        val name = stringResource(if (kind == GaugeKind.HRV) R.string.glance_recovery_hrv else R.string.glance_recovery_rhr)
+        Dial(name, null, modifier) {
             Text(
                 stringResource(if (finished) R.string.glance_no_reading_finished else R.string.glance_no_reading),
                 style = MaterialTheme.typography.bodySmall,
                 color = LocalGlanceColors.current.textMuted,
+                textAlign = TextAlign.Center,
             )
         }
         return
     }
-    val words = text.words
-    val asOf = if (figure.asOfDate != recovery.index.asOfDate) words.asOfLine(figure, today, finished = finished) else null
-    val description = listOfNotNull("$label ${words.figure(figure)} $unit", words.usualLine(figure)).joinToString(", ")
-    Dial(label, asOf) {
-        // The web hands its gauge no baseline at all when the usual is thin, so the arc centres on
-        // the value rather than on a usual too thin to judge by.
-        Gauge(value, figure.baseline?.takeUnless { it.thin }, figure.standing, unit, description)
+    Dial(dial.name, dial.asOf, modifier) {
+        Gauge(dial.value, dial.baseline, dial.standing, dial.unit, dial.description, size = size.dp)
     }
 }
