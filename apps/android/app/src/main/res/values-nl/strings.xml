@@ -104,6 +104,7 @@
     <string name="rationale_continue">Doorgaan</string>
 
     <string name="glance_sync_open">Synchroniseren</string>
+    <string name="web_page_up">Terug</string>
     <!-- De woorden van de glance-kaarten, letterlijk uit apps/web/src/i18n/nl.json; zie values/strings.xml. -->
     <string name="recovery_units_breaths_per_minute_short">ademh./min</string>
     <string name="activity_units_min">min</string>

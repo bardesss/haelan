@@ -121,6 +121,8 @@
 
     <!-- The glance: the screen after sign-in, a copy of the web dashboard. -->
     <string name="glance_sync_open">Sync</string>
+    <!-- The in-app page behind a card: its up arrow. The web has no bare "Back" to copy. -->
+    <string name="web_page_up">Back</string>
     <!-- The glance cards' words, copied from apps/web/src/i18n/en.json under the key path in
          snake case (glance.usual.within is glance_usual_within). The {{name}} placeholders are
          the web's own, filled by Strings.fill rather than getString's %1$s, so the text stays the

@@ -69,8 +69,7 @@ class GlanceActivity : ComponentActivity() {
                     nowMs = System.currentTimeMillis(),
                     onOpenSync = ::openSync,
                     onOpenDay = model::open,
-                    // Task 9 opens a page of the web here; until then a tap is a no-op.
-                    onOpenPage = {},
+                    onOpenPage = ::openPage,
                     calendar = calendar,
                     onToday = model::showToday,
                     onRefresh = model::refresh,
@@ -133,12 +132,33 @@ class GlanceActivity : ComponentActivity() {
     /**
      * Started on top rather than instead: back from the sync screen returns to the glance.
      *
-     * The session is read again here rather than taken from the launch: a sync that met a 401
-     * while the glance was up has already forgotten the cookie, and handing the old one to the
-     * sync screen would only have it meet the same 401. An empty store means exactly that, since
-     * sign-in saves the session before the glance ever starts, so it is the expired notice.
+     * The session is read again here rather than taken from the launch ([currentSession]).
      */
     private fun openSync() {
+        val current = currentSession() ?: return
+        startActivity(Intent(this, MainActivity::class.java).withSession(current))
+    }
+
+    /**
+     * The web page behind a card or a workout row, on top of the glance so back returns to it. The
+     * session is read again for the same reason as the sync screen's: a cookie the instance has
+     * already let go would only open the web app's sign-in.
+     */
+    private fun openPage(path: String) {
+        val current = currentSession() ?: return
+        startActivity(Intent(this, WebPageActivity::class.java).withSession(current).putExtra(WebPageActivity.EXTRA_PATH, path))
+    }
+
+    /**
+     * The session as the store has it now, for a screen started on top of the glance, or null after
+     * sending the person to sign in again.
+     *
+     * Read again rather than taken from the launch: a sync that met a 401 while the glance was up
+     * has already forgotten the cookie, and handing the old one on would only have it meet the same
+     * 401. An empty store means exactly that, since sign-in saves the session before the glance ever
+     * starts, so it is the expired notice.
+     */
+    private fun currentSession(): SessionStore.Session? {
         val current = SessionStore.loadSession(SessionStore.prefs(this))
         if (current == null) {
             startActivity(Intent(this, LoginActivity::class.java).apply {
@@ -146,16 +166,19 @@ class GlanceActivity : ComponentActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             })
             finish()
-            return
+            return null
         }
         // The store is the newer word on the cookie; the glance's reads follow it too.
         if (current.personId == session.personId && current.server == session.server) model.useCookie(current.cookie)
         session = current
-        startActivity(Intent(this, MainActivity::class.java).apply {
-            putExtra(LoginActivity.EXTRA_SERVER, current.server)
-            putExtra(LoginActivity.EXTRA_PERSON_ID, current.personId)
-            putExtra(LoginActivity.EXTRA_COOKIE, current.cookie)
-            putExtra(LoginActivity.EXTRA_USERNAME, current.username)
-        })
+        return current
+    }
+
+    /** The session in the extras sign-in uses, which every screen after it reads. */
+    private fun Intent.withSession(current: SessionStore.Session): Intent = apply {
+        putExtra(LoginActivity.EXTRA_SERVER, current.server)
+        putExtra(LoginActivity.EXTRA_PERSON_ID, current.personId)
+        putExtra(LoginActivity.EXTRA_COOKIE, current.cookie)
+        putExtra(LoginActivity.EXTRA_USERNAME, current.username)
     }
 }

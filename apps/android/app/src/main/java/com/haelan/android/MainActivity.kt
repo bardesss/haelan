@@ -8,6 +8,8 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebStorage
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -638,6 +640,11 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
                 forgetGlances(GlanceRegistry.app) { GlanceStore.encrypted(this@MainActivity).delete() }
             }
             SessionStore.clearSession(SessionStore.prefs(this@MainActivity))
+            // The in-app web page (WebPageActivity) keeps the session as a cookie of its own, and
+            // the web app's own storage beside it; both leave with the session. On the main thread,
+            // where CookieManager wants to be called.
+            CookieManager.getInstance().removeAllCookies { CookieManager.getInstance().flush() }
+            WebStorage.getInstance().deleteAllData()
             goLogin(expired = false)
         }
     }

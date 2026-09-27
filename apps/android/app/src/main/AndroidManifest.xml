@@ -57,6 +57,12 @@
             android:name=".MainActivity"
             android:exported="false" />
 
+        <!-- The web page behind a card, signed in with the app's session. Not exported: the
+             session and the path come only from the glance. -->
+        <activity
+            android:name=".WebPageActivity"
+            android:exported="false" />
+
         <!-- Required by Health Connect 1.1: without an activity answering the rationale
              intent, its permission screen finishes immediately instead of asking anything.
              Both action spellings: the documented one and the one the on-device controller
