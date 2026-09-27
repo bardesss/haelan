@@ -1345,6 +1345,10 @@ button.week-bar-slot { cursor: pointer; }
 .override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
 .override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
 .override-table tbody tr:last-child td { border-bottom: 0; }
+/* NotesList.tsx's table in a scroller of its own, so a table wider than its card (five columns
+   and a Remove button, at phone width in Dutch) scrolls inside the card rather than widening the
+   page. Found once the demo seed gave the Notes page rows (M9c). */
+.table-scroll { overflow-x: auto; }
 
 /* NotesList.tsx only: an override row carries no numeric value cell to share this with. */
 .notes-value { text-align: right; font-variant-numeric: tabular-nums; }
