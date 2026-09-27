@@ -13,9 +13,9 @@ import java.net.URL
  * again after the body has been taken can throw on a connection that has nothing left to say. One
  * read, and the status, the body and the cookies all come out of it together.
  *
- * There is no Apache HttpClient here and no OkHttp: this is a POST to one address the person typed,
- * optionally with a session cookie, and a client library would be a dependency to keep patched for
- * a call the platform already makes.
+ * There is no Apache HttpClient here and no OkHttp: these are JSON calls to one address the person
+ * typed, optionally with a session cookie, and a client library would be a dependency to keep
+ * patched for calls the platform already makes.
  */
 object InstanceClient {
 
@@ -31,6 +31,9 @@ object InstanceClient {
      */
     const val SESSION_COOKIE = "haelan_session"
 
+    /** Not Modified: the answer to a conditional read whose copy is still current. */
+    const val NOT_MODIFIED = 304
+
     /**
      * The Cookie header for a stored session value. The name rides with it: the instance reads
      * `request.cookies[SESSION_COOKIE]`, so a bare value authenticates nothing and every call
@@ -39,9 +42,20 @@ object InstanceClient {
      */
     fun cookieHeader(sessionCookie: String) = "$SESSION_COOKIE=$sessionCookie"
 
-    /** What the instance answered: its status, its body, and every cookie it set. */
-    data class Reply(val status: Int, val body: String, val cookies: Map<String, String>) {
+    /**
+     * What the instance answered: its status, its body, every cookie it set, and its headers by
+     * lower-case name. The names are folded because HTTP never cared about their case and the
+     * platform hands them back however the server spelled them: the glance's `ETag` arrives as
+     * `etag` from Fastify, and a reader looking up either spelling should find it.
+     */
+    data class Reply(
+        val status: Int,
+        val body: String,
+        val cookies: Map<String, String>,
+        val headers: Map<String, String> = emptyMap(),
+    ) {
         fun cookie(name: String): String? = cookies[name]
+        fun header(name: String): String? = headers[name.lowercase()]
     }
 
     /**
@@ -59,65 +73,95 @@ object InstanceClient {
     class InstanceHttpException(val status: Int, val answer: String) : Exception("$status: $answer")
 
     /**
-     * One JSON POST. [parse] runs on a 200 and returns what this caller cares about, which is the
-     * whole point of the shape: the ingest calls it for nothing and the login for the person id,
-     * and neither builds a connection of its own.
+     * One JSON GET. The cursors call reads through here: a cursor fetch that fails is not a sync
+     * failure, the caller falls back to the full window instead.
      *
-     * Everything is opened, used and disconnected inside this call. A connection left open holds
-     * its socket until the read timeout expires, which is how "the sync is slow" becomes true for
-     * a request that has already been answered.
-     */
-    /**
-     * One JSON GET. The cursors call reads through here: a cursor fetch that fails
-     * is not a sync failure, the caller falls back to the full window instead.
+     * [headers] is for the glance, which sends `If-None-Match` with the ETag of what it already
+     * shows. That is also the only way a 304 can arrive: the instance answers one only to a
+     * request that asked for it, so the cursors call, which never does, keeps the 200-only answer
+     * it always had.
      */
     fun <T> get(
         server: String,
         path: String,
         cookie: String? = null,
+        headers: Map<String, String> = emptyMap(),
         parse: (Reply) -> T,
-    ): Outcome<T> {
-        var connection: HttpURLConnection? = null
-        return try {
-            connection = URL("$server$path").openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = CONNECT_TIMEOUT_MS
-            connection.readTimeout = READ_TIMEOUT_MS
-            if (cookie != null) connection.setRequestProperty("Cookie", cookieHeader(cookie))
-            val status = connection.responseCode
-            val reply = Reply(status, connection.readOnce(status), connection.cookiesOf())
-            if (status == 200) Outcome.Ok(parse(reply)) else Outcome.Failed(InstanceHttpException(status, reply.body))
-        } catch (e: Exception) {
-            Outcome.Failed(e)
-        } finally {
-            connection?.disconnect()
-        }
-    }
+    ): Outcome<T> = exchange("GET", server, path, null, cookie, headers, parse)
 
+    /**
+     * One JSON POST. [parse] runs on a 200 and returns what this caller cares about, which is the
+     * whole point of the shape: the ingest calls it for nothing and the login for the person id,
+     * and neither builds a connection of its own.
+     */
     fun <T> post(
         server: String,
         path: String,
         body: String,
         cookie: String? = null,
         parse: (Reply) -> T,
+    ): Outcome<T> = exchange("POST", server, path, body, cookie, emptyMap(), parse)
+
+    /** One JSON PUT, for the log sheet's writes; the same answer as [post]. */
+    fun <T> put(
+        server: String,
+        path: String,
+        body: String,
+        cookie: String? = null,
+        parse: (Reply) -> T,
+    ): Outcome<T> = exchange("PUT", server, path, body, cookie, emptyMap(), parse)
+
+    /** One DELETE, with no body: the instance's deletes name what they remove in the path. */
+    fun <T> delete(
+        server: String,
+        path: String,
+        cookie: String? = null,
+        parse: (Reply) -> T,
+    ): Outcome<T> = exchange("DELETE", server, path, null, cookie, emptyMap(), parse)
+
+    /**
+     * The exchange every verb shares. [parse] runs on a 200, and on a 304, which is an answer and
+     * not a failure: "what you have is still current" is exactly what a conditional read asked to
+     * hear, and it carries no body, so [Reply.body] is empty and [parse] reads the status instead.
+     * Everything else is [Outcome.Failed] with the status, for the caller to decide about.
+     *
+     * Everything is opened, used and disconnected inside this call. A connection left open holds
+     * its socket until the read timeout expires, which is how "the sync is slow" becomes true for
+     * a request that has already been answered.
+     */
+    private fun <T> exchange(
+        method: String,
+        server: String,
+        path: String,
+        body: String?,
+        cookie: String?,
+        headers: Map<String, String>,
+        parse: (Reply) -> T,
     ): Outcome<T> {
         var connection: HttpURLConnection? = null
         return try {
             connection = URL("$server$path").openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.doOutput = true
+            connection.requestMethod = method
             connection.connectTimeout = CONNECT_TIMEOUT_MS
             connection.readTimeout = READ_TIMEOUT_MS
-            connection.setRequestProperty("Content-Type", "application/json")
             // No Origin header on purpose: the server's origin check passes requests that
             // carry none, the same way its own tests reach mutating routes without one.
             if (cookie != null) connection.setRequestProperty("Cookie", cookieHeader(cookie))
-            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            for ((name, value) in headers) connection.setRequestProperty(name, value)
+            if (body != null) {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
 
             // Once. Everything below reads what this returned rather than asking again.
             val status = connection.responseCode
-            val reply = Reply(status, connection.readOnce(status), connection.cookiesOf())
-            if (status == 200) Outcome.Ok(parse(reply)) else Outcome.Failed(InstanceHttpException(status, reply.body))
+            val reply = Reply(status, connection.readOnce(status), connection.cookiesOf(), connection.headersOf())
+            if (status == 200 || status == NOT_MODIFIED) {
+                Outcome.Ok(parse(reply))
+            } else {
+                Outcome.Failed(InstanceHttpException(status, reply.body))
+            }
         } catch (e: Exception) {
             Outcome.Failed(e)
         } finally {
@@ -126,9 +170,10 @@ object InstanceClient {
     }
 
     /**
-     * The body of an answer already known to be an error, read for the log rather than for a
-     * screen. A status with no body at all is a real answer - some proxies send one - so this
-     * says "empty" instead of throwing on a null stream.
+     * The body of an answer, read once. For an error it is read for the log rather than for a
+     * screen, and a status with no body at all is a real answer - some proxies send one - so this
+     * says "empty" instead of throwing on a null stream. A 304 goes through the first branch and
+     * reads as an empty body; InstanceClientHttpTest holds that against a real connection.
      */
     private fun HttpURLConnection.readOnce(status: Int): String {
         val stream = if (status < 400) inputStream else errorStream ?: return ""
@@ -151,5 +196,19 @@ object InstanceClient {
             }
         }
         return jar
+    }
+
+    /**
+     * Every header by lower-case name, repeated ones joined with a comma as HTTP defines them.
+     * The status line sits in the same map under a null name and is left out: the status already
+     * has its own field.
+     */
+    private fun HttpURLConnection.headersOf(): Map<String, String> {
+        val out = mutableMapOf<String, String>()
+        for ((name, values) in headerFields ?: emptyMap()) {
+            if (name == null || values == null) continue
+            out[name.lowercase()] = values.joinToString(", ")
+        }
+        return out
     }
 }
