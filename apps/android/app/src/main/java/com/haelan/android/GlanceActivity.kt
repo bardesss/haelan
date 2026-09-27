@@ -5,20 +5,20 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.haelan.android.glance.GlanceClient
+import com.haelan.android.glance.GlanceRepository
+import com.haelan.android.glance.GlanceStore
+import com.haelan.android.glance.ui.GlanceScreen
 import com.haelan.android.glance.ui.GlanceTheme
+import com.haelan.android.glance.ui.rememberCardText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.time.ZoneId
 
 /**
  * The screen after sign-in: the web dashboard, drawn natively. The sync screen, which used to be
@@ -28,6 +28,32 @@ class GlanceActivity : ComponentActivity() {
 
     /** Who the glance is for; refreshed from the store whenever the app acts on it. */
     private lateinit var session: SessionStore.Session
+
+    /** The glance's state machine, for as long as this screen exists; null before a session is known. */
+    private var repository: GlanceRepository? = null
+
+    companion object {
+        /**
+         * The repository of the glance screen that is up, if one is; main thread only. Held so
+         * that [closeForSignOut] can reach it from the sync screen, which sits on top of it.
+         * A repository holds no Context (the store keeps the application's), so this leaks nothing.
+         */
+        private var open: GlanceRepository? = null
+
+        /**
+         * **Sign-out closes the glance before the store is deleted.** Called by the sync screen's
+         * sign-out on the main thread, before it deletes the stored glance off the main thread: a
+         * today read still blocked in the client can answer 200 after the delete, and only a closed
+         * repository is sure not to write that answer back (GlanceRepository's KDoc). The glance
+         * screen is underneath the sync screen and is not destroyed until the sign-out clears the
+         * task, which is after the delete has been started, so its own onDestroy is too late to be
+         * the guarantee. Closing twice is harmless: onDestroy closes again.
+         */
+        fun closeForSignOut() {
+            open?.close()
+            open = null
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,14 +74,64 @@ class GlanceActivity : ComponentActivity() {
             return
         }
 
+        val repo = GlanceRepository(
+            reads = GlanceClient(session.server, session.personId, session.cookie),
+            store = GlanceStore.encrypted(this),
+            server = session.server,
+            personId = session.personId,
+            clock = System::currentTimeMillis,
+            dispatcher = Dispatchers.IO,
+        )
+        repository = repo
+        open = repo
+        // The 401 waits in the repository's channel until the screen is started, so an expiry met
+        // while the sync screen is on top is acted on when the glance comes back, not from behind.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { repo.signedOut.collect { sessionExpired() } }
+        }
+        repo.open()
+
         // Scaffold pads for the system bars itself, so the glance asks for the whole window
         // instead of borrowing padForSystemBars from the view screens.
         enableEdgeToEdge()
         setContent {
             GlanceTheme {
-                GlanceScreen(onOpenSync = ::openSync)
+                val state by repo.state.collectAsStateWithLifecycle()
+                GlanceScreen(
+                    state = state,
+                    // The payload names no timezone and the session does not keep the person's, so
+                    // the phone's zone reads the clock times; the payload's dates need none.
+                    text = rememberCardText(ZoneId.systemDefault()),
+                    nowMs = System.currentTimeMillis(),
+                    onOpenSync = ::openSync,
+                    // Task 8 opens a day here and Task 9 a page of the web; until then a tap is a no-op.
+                    onOpenDay = {},
+                    onOpenPage = {},
+                )
             }
         }
+    }
+
+    override fun onDestroy() {
+        repository?.let { repo ->
+            repo.close()
+            if (open === repo) open = null
+        }
+        super.onDestroy()
+    }
+
+    /**
+     * The instance refused the session. The cookie is forgotten and the person signs in again; the
+     * stored glance stays, keyed by server and person, so the same person gets it back and nobody
+     * else ever reads it (only an explicit sign-out deletes it).
+     */
+    private fun sessionExpired() {
+        SessionStore.clearSession(SessionStore.prefs(this))
+        startActivity(Intent(this, LoginActivity::class.java).apply {
+            putExtra(LoginActivity.EXTRA_EXPIRED, true)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        })
+        finish()
     }
 
     /**
@@ -83,29 +159,5 @@ class GlanceActivity : ComponentActivity() {
             putExtra(LoginActivity.EXTRA_COOKIE, current.cookie)
             putExtra(LoginActivity.EXTRA_USERNAME, current.username)
         })
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GlanceScreen(onOpenSync: () -> Unit) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                // A placeholder until the day navigation takes this slot.
-                title = { Text(stringResource(R.string.app_name)) },
-                actions = {
-                    IconButton(onClick = onOpenSync) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_sync),
-                            contentDescription = stringResource(R.string.glance_sync_open),
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        // Empty until the cards arrive; they go inside the Scaffold's padding, below the bar.
-        Box(Modifier.fillMaxSize().padding(padding))
     }
 }

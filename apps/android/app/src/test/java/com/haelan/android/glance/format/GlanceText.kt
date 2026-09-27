@@ -2,7 +2,9 @@ package com.haelan.android.glance.format
 
 // The web's glance sentences, copied from apps/web/src/i18n/{en,nl}.json under the resource names
 // GlanceWords asks for (the key path in snake case), so a test asserts the sentence a reader of the
-// web reads. The same text goes into values/strings.xml and values-nl/strings.xml.
+// web reads. The same text goes into values/strings.xml and values-nl/strings.xml, and
+// GlanceStringResourcesTest holds the two files to it. The activity_ keys at the end are the
+// Activity list's own row words, which the Today card's workout rows print as SessionRow does.
 
 internal val ENGLISH_TEXT: Map<String, String> = mapOf(
     "recovery_units_breaths_per_minute_short" to "breaths/min",
@@ -144,6 +146,29 @@ internal val ENGLISH_TEXT: Map<String, String> = mapOf(
     "glance_calendar_spoken_steps_reached" to "steps reached your usual",
     "glance_calendar_spoken_steps_below" to "steps below your usual",
     "glance_calendar_spoken_steps_none" to "steps not judged",
+    "charts_units_bpm" to "bpm",
+    "charts_units_milliseconds" to "ms",
+    "activity_units_km" to "km",
+    "activity_units_kcal_short" to "kcal",
+    "activity_units_bpm" to "bpm",
+    "activity_units_pace_suffix" to "/km",
+    "activity_units_elevation_gain_short" to "m gained",
+    "activity_sessions_excluded" to "Excluded: {{reason}}",
+    "activity_sessions_excluded_no_reason" to "Excluded",
+    "activity_exercise_types_walking" to "Walking",
+    "activity_exercise_types_cardio_workout" to "Cardio workout",
+    "activity_exercise_types_running" to "Running",
+    "activity_exercise_types_workout" to "Workout",
+    "activity_exercise_types_spinning" to "Spinning",
+    "activity_exercise_types_biking" to "Biking",
+    "activity_exercise_types_treadmill" to "Treadmill",
+    "activity_exercise_types_hiking" to "Hiking",
+    "activity_exercise_types_weightlifting" to "Weightlifting",
+    "activity_exercise_types_stroller_walk" to "Stroller walk",
+    "activity_exercise_types_swimming_pool" to "Swimming pool",
+    "activity_exercise_types_sport" to "Sport",
+    "activity_exercise_types_household_chores" to "Household chores",
+    "activity_exercise_types_unknown" to "Unknown",
 )
 
 internal val DUTCH_TEXT: Map<String, String> = mapOf(
@@ -286,6 +311,29 @@ internal val DUTCH_TEXT: Map<String, String> = mapOf(
     "glance_calendar_spoken_steps_reached" to "je gebruikelijke aantal stappen gehaald",
     "glance_calendar_spoken_steps_below" to "minder stappen dan gewoonlijk",
     "glance_calendar_spoken_steps_none" to "stappen niet beoordeeld",
+    "charts_units_bpm" to "bpm",
+    "charts_units_milliseconds" to "ms",
+    "activity_units_km" to "km",
+    "activity_units_kcal_short" to "kcal",
+    "activity_units_bpm" to "bpm",
+    "activity_units_pace_suffix" to "/km",
+    "activity_units_elevation_gain_short" to "m omhoog",
+    "activity_sessions_excluded" to "Uitgesloten: {{reason}}",
+    "activity_sessions_excluded_no_reason" to "Uitgesloten",
+    "activity_exercise_types_walking" to "Wandelen",
+    "activity_exercise_types_cardio_workout" to "Cardiotraining",
+    "activity_exercise_types_running" to "Hardlopen",
+    "activity_exercise_types_workout" to "Work-out",
+    "activity_exercise_types_spinning" to "Spinning",
+    "activity_exercise_types_biking" to "Fietsen",
+    "activity_exercise_types_treadmill" to "Loopband",
+    "activity_exercise_types_hiking" to "Hiken",
+    "activity_exercise_types_weightlifting" to "Krachttraining",
+    "activity_exercise_types_stroller_walk" to "Wandelen met kinderwagen",
+    "activity_exercise_types_swimming_pool" to "Baanzwemmen",
+    "activity_exercise_types_sport" to "Sport",
+    "activity_exercise_types_household_chores" to "Huishoudelijke klussen",
+    "activity_exercise_types_unknown" to "Onbekend",
 )
 
 /** Strings over one of the maps above, failing loudly on a key the map does not have. */

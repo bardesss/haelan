@@ -36,6 +36,8 @@ class GlanceColorsTest {
             "textFaint" to (colors.textFaint to R.color.text_faint),
             "borderChosen" to (colors.borderChosen to R.color.border_chosen),
             "surfaceCard" to (colors.surfaceCard to R.color.surface_card),
+            "textPrimary" to (colors.textPrimary to R.color.text_primary),
+            "surfaceInset" to (colors.surfaceInset to R.color.surface_inset),
         )
         // The table itself names each token once, so a copy-paste slip that gave two roles the
         // same expected token (and so passed below for both) is caught here.

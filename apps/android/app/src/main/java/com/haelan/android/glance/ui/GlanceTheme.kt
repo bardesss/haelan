@@ -40,6 +40,10 @@ data class GlanceColors(
     val textFaint: Color,
     val borderChosen: Color,
     val surfaceCard: Color,
+    /** The latest strip dot and a gauge's marker, which the web paints in the primary text colour. */
+    val textPrimary: Color,
+    /** The empty track under a gauge's arc and the score ring. */
+    val surfaceInset: Color,
 )
 
 /**
@@ -64,6 +68,8 @@ inline fun glanceColorsFrom(color: (Int) -> Color): GlanceColors = GlanceColors(
     textFaint = color(R.color.text_faint),
     borderChosen = color(R.color.border_chosen),
     surfaceCard = color(R.color.surface_card),
+    textPrimary = color(R.color.text_primary),
+    surfaceInset = color(R.color.surface_inset),
 )
 
 /** Outside a [GlanceTheme] there is no palette to read, and a silent default would be a guess. */

@@ -624,6 +624,9 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     }
 
     private fun signOut() {
+        // First, and here on the main thread: the glance underneath this screen stops keeping
+        // anything before the delete below can run (GlanceActivity.closeForSignOut says why).
+        GlanceActivity.closeForSignOut()
         scope.launch {
             withContext(Dispatchers.IO) {
                 // Best effort by construction: the client returns the failure rather than
@@ -631,8 +634,8 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
                 // that is unreachable must not be able to keep somebody signed in.
                 InstanceClient.post(server, "/api/auth/logout", "{}", cookie) { }
                 // The last glance is health data on the device; it leaves with the session. The
-                // glance screen's repository has to be closed before this runs (GlanceRepository's
-                // KDoc), or a read it still has in flight can write the glance back.
+                // glance screen's repository was closed before this coroutine started, so a read
+                // it still has in flight cannot write the glance back after it.
                 GlanceStore.encrypted(this@MainActivity).delete()
             }
             SessionStore.clearSession(SessionStore.prefs(this@MainActivity))
