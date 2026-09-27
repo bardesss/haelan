@@ -296,4 +296,43 @@
     <string name="activity_exercise_types_sport">Sport</string>
     <string name="activity_exercise_types_household_chores">Household chores</string>
     <string name="activity_exercise_types_unknown">Unknown</string>
+    <!-- The log sheet: the web's logPanel.* and annotate.event.kinds.* text; the two move
+         buttons at the end are the phone's own, since the web reorders chips by dragging. -->
+    <string name="log_panel_open">Log</string>
+    <string name="log_panel_title_today">Log for today</string>
+    <string name="log_panel_title_yesterday">Log for yesterday</string>
+    <string name="log_panel_title_day">Log for {{day}}</string>
+    <string name="log_panel_previous_day">Previous day</string>
+    <string name="log_panel_next_day">Next day</string>
+    <string name="log_panel_mood_label">How do you feel?</string>
+    <string name="log_panel_mood_1">Bad</string>
+    <string name="log_panel_mood_2">Poor</string>
+    <string name="log_panel_mood_3">Okay</string>
+    <string name="log_panel_mood_4">Good</string>
+    <string name="log_panel_mood_5">Great</string>
+    <string name="log_panel_chips_label">What happened?</string>
+    <string name="log_panel_chips_count_today">{{kind}}, {{count}} today</string>
+    <string name="log_panel_chips_count_day">{{kind}}, {{count}} that day</string>
+    <string name="log_panel_chips_edit">Edit</string>
+    <string name="log_panel_edit_remove">Remove {{kind}}</string>
+    <string name="log_panel_edit_add">Add a kind</string>
+    <string name="log_panel_edit_moved">{{kind}} moved to position {{position}}</string>
+    <string name="log_panel_edit_done">Done</string>
+    <string name="log_panel_edit_cancel">Cancel</string>
+    <string name="log_panel_edit_full">At most 16 chips</string>
+    <string name="log_panel_edit_duplicate">{{kind}} is already a chip</string>
+    <string name="log_panel_undo_today">{{kind}} logged</string>
+    <string name="log_panel_undo_day">{{kind}} logged for {{day}}</string>
+    <string name="log_panel_undo_action">Undo</string>
+    <string name="log_panel_note_label">Note</string>
+    <string name="log_panel_note_placeholder">Something to remember about this day…</string>
+    <string name="annotate_event_kinds_illness">Illness</string>
+    <string name="annotate_event_kinds_travel">Travel</string>
+    <string name="annotate_event_kinds_alcohol">Alcohol</string>
+    <string name="annotate_event_kinds_medication">Medication</string>
+    <string name="annotate_event_kinds_injury">Injury</string>
+    <string name="annotate_event_kinds_caffeine">Caffeine</string>
+    <string name="control_row_close">Close</string>
+    <string name="log_panel_edit_move_earlier">Move {{kind}} earlier</string>
+    <string name="log_panel_edit_move_later">Move {{kind}} later</string>
 </resources>

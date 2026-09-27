@@ -273,4 +273,43 @@
     <string name="activity_exercise_types_sport">Sport</string>
     <string name="activity_exercise_types_household_chores">Huishoudelijke klussen</string>
     <string name="activity_exercise_types_unknown">Onbekend</string>
+    <!-- The log sheet: the web's logPanel.* and annotate.event.kinds.* text; the two move
+         buttons at the end are the phone's own, since the web reorders chips by dragging. -->
+    <string name="log_panel_open">Loggen</string>
+    <string name="log_panel_title_today">Loggen voor vandaag</string>
+    <string name="log_panel_title_yesterday">Loggen voor gisteren</string>
+    <string name="log_panel_title_day">Loggen voor {{day}}</string>
+    <string name="log_panel_previous_day">Vorige dag</string>
+    <string name="log_panel_next_day">Volgende dag</string>
+    <string name="log_panel_mood_label">Hoe voel je je?</string>
+    <string name="log_panel_mood_1">Slecht</string>
+    <string name="log_panel_mood_2">Matig</string>
+    <string name="log_panel_mood_3">Gaat wel</string>
+    <string name="log_panel_mood_4">Goed</string>
+    <string name="log_panel_mood_5">Top</string>
+    <string name="log_panel_chips_label">Wat speelde er?</string>
+    <string name="log_panel_chips_count_today">{{kind}}, {{count}} vandaag</string>
+    <string name="log_panel_chips_count_day">{{kind}}, {{count}} die dag</string>
+    <string name="log_panel_chips_edit">Bewerken</string>
+    <string name="log_panel_edit_remove">{{kind}} verwijderen</string>
+    <string name="log_panel_edit_add">Soort toevoegen</string>
+    <string name="log_panel_edit_moved">{{kind}} verplaatst naar plek {{position}}</string>
+    <string name="log_panel_edit_done">Klaar</string>
+    <string name="log_panel_edit_cancel">Annuleren</string>
+    <string name="log_panel_edit_full">Hoogstens 16 knoppen</string>
+    <string name="log_panel_edit_duplicate">{{kind}} is al een knop</string>
+    <string name="log_panel_undo_today">{{kind}} gelogd</string>
+    <string name="log_panel_undo_day">{{kind}} gelogd voor {{day}}</string>
+    <string name="log_panel_undo_action">Ongedaan maken</string>
+    <string name="log_panel_note_label">Notitie</string>
+    <string name="log_panel_note_placeholder">Iets om te onthouden over deze dag…</string>
+    <string name="annotate_event_kinds_illness">Ziekte</string>
+    <string name="annotate_event_kinds_travel">Reis</string>
+    <string name="annotate_event_kinds_alcohol">Alcohol</string>
+    <string name="annotate_event_kinds_medication">Medicatie</string>
+    <string name="annotate_event_kinds_injury">Blessure</string>
+    <string name="annotate_event_kinds_caffeine">Cafeïne</string>
+    <string name="control_row_close">Sluiten</string>
+    <string name="log_panel_edit_move_earlier">{{kind}} naar voren</string>
+    <string name="log_panel_edit_move_later">{{kind}} naar achteren</string>
 </resources>

@@ -114,6 +114,23 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
     // Conflated like the repository's: a calendar 401 can land while the screen is stopped.
     private val calendarSignedOut = Channel<Unit>(Channel.CONFLATED)
 
+    /**
+     * The log sheet: its calls follow the session's cookie as the reads do, a write that lands
+     * refreshes the glance behind it, and a 401 signs out as a calendar 401 does.
+     */
+    private val logSheetModel = LogSheetModel(
+        calls = { QuickLogClient(server, personId, cookie) },
+        dispatcher = Dispatchers.IO,
+        onWrote = { viewModelScope.launch { repository.refresh() } },
+        onSignedOut = { calendarSignedOut.trySend(Unit) },
+    )
+
+    /** The log sheet, or null while it is closed. */
+    val logSheet: StateFlow<LogSheetState?> = logSheetModel.state
+
+    /** What the log sheet's gestures call. */
+    val logActions: LogSheetActions = logSheetModel
+
     /** Fires when the instance refused the session, from a glance read or a calendar read. */
     val signedOut: Flow<Unit> = merge(repository.signedOut, calendarSignedOut.receiveAsFlow())
 
@@ -128,6 +145,16 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
         repository.open()
         readZone()
         syncSignal.start()
+        // Each glance that arrives tells the log sheet what the server now holds for its day.
+        viewModelScope.launch {
+            state.collect { ui -> ui.glance?.let { glance -> glance.log?.let { logSheetModel.glanceArrived(glance.today, it) } } }
+        }
+    }
+
+    /** The + in the top bar: the log sheet on the day the glance shows, from the glance's own log. */
+    fun openLog() {
+        val glance = state.value.glance ?: return
+        logSheetModel.open(glance.today, glance.log ?: return)
     }
 
     /** Opens [localDate], as a payload named it; [DayRequest.of] decides which read that is. */
@@ -184,6 +211,7 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
 
     override fun onCleared() {
         syncSignal.close()
+        logSheetModel.close()
         GlanceRegistry.app.close(repository)
     }
 

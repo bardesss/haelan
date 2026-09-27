@@ -63,6 +63,7 @@ class GlanceActivity : ComponentActivity() {
                 val state by model.state.collectAsStateWithLifecycle()
                 val zone by model.zone.collectAsStateWithLifecycle()
                 val calendar by model.calendar.collectAsStateWithLifecycle()
+                val logSheet by model.logSheet.collectAsStateWithLifecycle()
                 GlanceScreen(
                     state = state,
                     text = rememberCardText(zone),
@@ -76,6 +77,9 @@ class GlanceActivity : ComponentActivity() {
                     onOpenCalendar = model::openCalendar,
                     onShowMonth = model::showMonth,
                     onCloseCalendar = model::closeCalendar,
+                    logSheet = logSheet,
+                    logActions = model.logActions,
+                    onOpenLog = model::openLog,
                 )
             }
         }

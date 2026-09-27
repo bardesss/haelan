@@ -1,5 +1,6 @@
 package com.haelan.android.glance.ui
 
+import com.haelan.android.glance.DayLog
 import com.haelan.android.glance.Glance
 import com.haelan.android.glance.GlanceParser
 import com.haelan.android.glance.GlanceUiState
@@ -126,5 +127,15 @@ class GlanceScreenRulesTest {
         assertEquals(GlanceNotice.TooOld, noticeOf(state(null, Problem.TooOld)))
         assertEquals(GlanceNotice.Refused("no person p9"), noticeOf(state(shown, Problem.Refused("no person p9"))))
         assertEquals(null, noticeOf(state(shown, Problem.FirstRun)))
+    }
+
+    @Test
+    fun `the log sheet's + shows only when the glance carries a log`() {
+        fun on(glance: Glance?) = GlanceUiState(shownDay = null, glance = glance, fetchedAtMs = null, reachable = true, loading = false, problem = null)
+        val log = DayLog(listOf("caffeine"), null, emptyMap(), null, "2026-08-20")
+        assertEquals(true, showsLogButton(on(glance().copy(log = log))))
+        assertEquals(false, showsLogButton(on(glance())))
+        assertEquals(false, showsLogButton(on(null)))
+        assertEquals(false, showsLogButton(null))
     }
 }

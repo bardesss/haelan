@@ -46,6 +46,8 @@ import com.haelan.android.R
 import com.haelan.android.glance.CalendarUiState
 import com.haelan.android.glance.Glance
 import com.haelan.android.glance.GlanceUiState
+import com.haelan.android.glance.LogSheetActions
+import com.haelan.android.glance.LogSheetState
 import com.haelan.android.glance.GlanceUiState.Problem
 import com.haelan.android.glance.format.GlanceFormat
 import com.haelan.android.glance.format.GlanceWords
@@ -88,6 +90,12 @@ internal fun cardRows(glance: Glance): List<CardSlot> {
         if (hasWeek(glance)) add(CardSlot(CardKind.WEEK))
     }
 }
+
+/**
+ * Whether the top bar offers the log sheet's +: only while the glance on screen carries `log`, the
+ * server's word that the person turned quick logging on. The phone keeps no switch of its own.
+ */
+internal fun showsLogButton(state: GlanceUiState?): Boolean = state?.glance?.log != null
 
 /** What goes under the top bar. */
 sealed interface GlanceBody {
@@ -174,6 +182,10 @@ fun rememberCardText(zone: ZoneId): CardText {
  * the pull's spinner shows only for a pull, since the page also revalidates on its own (on resume,
  * after a sync) and the web does not announce those either.
  *
+ * A + beside sync opens the log sheet ([onOpenLog]) only when the glance carries `log`, which is
+ * the person's quick-logging switch as the server reports it; the sheet itself is [logSheet],
+ * drawn while it is open, with [logActions] for everything done in it.
+ *
  * [nowMs] is read once for the greeting, which is the only thing on the page the payload does not
  * say: it is the person's hour, not a fact about their data.
  */
@@ -192,6 +204,9 @@ fun GlanceScreen(
     onOpenCalendar: (selected: String, today: String) -> Unit = { _, _ -> },
     onShowMonth: (String) -> Unit = {},
     onCloseCalendar: () -> Unit = {},
+    logSheet: LogSheetState? = null,
+    logActions: LogSheetActions? = null,
+    onOpenLog: () -> Unit = {},
 ) {
     val shownDay = state?.shownDay
     val nav = DayNavState.from(state)
@@ -201,6 +216,11 @@ fun GlanceScreen(
             TopAppBar(
                 title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
+                    if (showsLogButton(state)) {
+                        IconButton(onClick = onOpenLog) {
+                            Icon(painterResource(R.drawable.ic_add), stringResource(R.string.log_panel_open))
+                        }
+                    }
                     IconButton(onClick = onOpenSync) {
                         Icon(
                             painter = painterResource(R.drawable.ic_sync),
@@ -252,6 +272,7 @@ fun GlanceScreen(
             onDismiss = onCloseCalendar,
         )
     }
+    if (logSheet != null && logActions != null) LogSheet(logSheet, text, logActions)
 }
 
 /**
