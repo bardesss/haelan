@@ -958,19 +958,21 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .log-edit-remove svg { width: 13px; height: 13px; }
 .log-edit-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
-/* LogButton.tsx: the Log button leading the day navigator, in .button-primary's accent (the
-   approved header draws it so), and the panel's two containers. The popover is fixed and portalled
-   like .cal-popover and placed the same way, its left edge on the button's; unlike the calendar
-   it opens over the cards' figures, so it carries the app's one shadow to lift it off them. The
-   phone's sheet repeats .cal-sheet. */
-.log-btn { color: var(--accent-soft); background: var(--surface-accent); border-color: var(--border-accent); }
-.log-btn:hover { color: var(--text-primary); background: var(--surface-accent-hover); }
+/* LogButton.tsx: the panel's two containers (the Log button itself is .button-primary, as the
+   approved header draws it). The popover is fixed and portalled like .cal-popover and placed the
+   same way, its left edge on the button's; unlike the calendar it opens over the cards' figures, so
+   it carries the app's one shadow to lift it off them. The shadow has to be dark in both themes and
+   no single token is, so light-dark() picks one per theme off the color-scheme the tokens set: the
+   page surface in dark, the primary text in light. The phone's sheet repeats .cal-sheet. */
 .log-popover {
   position: fixed; width: min(380px, calc(100vw - 12px)); box-sizing: border-box; padding: 14px;
   max-height: calc(100dvh - 12px); overflow-y: auto;
   background: var(--surface-card); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl); color: var(--text-primary); z-index: 30;
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--surface-page) 70%, transparent);
+  box-shadow: 0 12px 32px light-dark(
+    color-mix(in srgb, var(--text-primary) 16%, transparent),
+    color-mix(in srgb, var(--surface-page) 70%, transparent)
+  );
 }
 .log-sheet {
   margin: auto auto 0; padding: 0; border: 0; max-height: 85dvh;
@@ -1990,9 +1992,10 @@ button.week-bar-slot { cursor: pointer; }
   /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
      header draws them) but hold only an icon, so they need .icon-button's square minimum too. */
   .day-nav-btn { min-width: 44px; }
-  /* The Log button drops to a round + the size of the arrows: labelled, it truncated the greeting
-     beside it. The label is clipped the .sr-only way, so the button is still named "Log". */
-  .log-btn { width: 44px; padding: 0; justify-content: center; border-radius: 50%; }
+  /* The Log button drops to a + in a 44px square shaped like the arrows beside it: labelled, it
+     truncated the greeting. The label is clipped the .sr-only way, so the button is still named
+     "Log". */
+  .log-btn { width: 44px; padding: 0; justify-content: center; }
   .log-btn-label {
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip-path: inset(50%); white-space: nowrap; border: 0; padding: 0; margin: -1px;

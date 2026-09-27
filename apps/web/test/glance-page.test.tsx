@@ -136,7 +136,7 @@ describe('the glance Dashboard', () => {
     const { restore } = await mountPage({ ...glanceBody(), log: glanceLog() })
     try {
       const first = container!.querySelector('.day-nav')!.firstElementChild!
-      expect([first.tagName.toLowerCase(), first.className, first.textContent]).toEqual(['button', 'button log-btn', 'Log'])
+      expect([first.tagName.toLowerCase(), first.className, first.textContent]).toEqual(['button', 'button button-primary log-btn', 'Log'])
     } finally { restore() }
   })
 

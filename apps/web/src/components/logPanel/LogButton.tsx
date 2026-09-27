@@ -158,8 +158,10 @@ function LogLayer({ shownDay, today, log, anchor, onClose }: {
       onStep={setDay} onClose={onClose} titleId={titleId} />
   )
 
+  // Both containers are portalled to the body, so neither sits inside the day navigator's
+  // role="group" and neither is announced as part of it.
   if (isPhone) {
-    return (
+    return createPortal(
       <dialog ref={sheet} className="log-sheet" data-log-panel="" aria-labelledby={titleId}
         onClick={(event) => { if (event.target === sheet.current) onClose() }}
         onKeyDown={(event) => { if (event.key === 'Escape') escapeClaimed.current = false }}>
@@ -167,7 +169,8 @@ function LogLayer({ shownDay, today, log, anchor, onClose }: {
           <span className="log-grab" aria-hidden="true" />
           {panel}
         </div>
-      </dialog>
+      </dialog>,
+      document.body,
     )
   }
 
@@ -185,8 +188,8 @@ function LogLayer({ shownDay, today, log, anchor, onClose }: {
  * The dashboard's Log button (DayNav's `logButton`), owning whether the panel is open. Rendered
  * only while quick logging is on, which the Dashboard reads off the glance carrying a `log`.
  *
- * At phone width the label is hidden by app.css and the button is a round + the size of the day
- * arrows: the labelled button truncated the greeting beside it. The label stays in the tree, so the
+ * At phone width the label is hidden by app.css and the button is a + in a 44px square shaped like
+ * the day arrows: the labelled button truncated the greeting beside it. The label stays in the tree, so the
  * button's name is still "Log" there.
  *
  * `log` is undefined while the dashboard is loading the day it names (the glance on screen is still
@@ -214,7 +217,7 @@ export function LogButton({ shownDay, today, log }: {
 
   return (
     <>
-      <button ref={trigger} type="button" className="button log-btn"
+      <button ref={trigger} type="button" className="button button-primary log-btn"
         aria-haspopup={isPhone ? 'dialog' : 'true'} aria-expanded={open}
         onClick={() => setOpen((current) => !current)} onKeyDown={onTriggerKeyDown}>
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"

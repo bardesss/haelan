@@ -107,7 +107,7 @@ function open(): void { act(() => { trigger().click() }) }
 describe('the Log button', () => {
   it('is a labelled button that says it opens a popover', () => {
     mount()
-    expect(trigger().className).toBe('button log-btn')
+    expect(trigger().className).toBe('button button-primary log-btn')
     expect(trigger().textContent).toBe('Log')
     expect(trigger().getAttribute('aria-label')).toBeNull()
     expect(trigger().getAttribute('aria-haspopup')).toBe('true')
@@ -285,13 +285,16 @@ describe('the sheet, on a phone', () => {
     open()
     const dialog = sheet()!
     expect(dialog.hasAttribute('open')).toBe(true)
+    // Outside the day navigator's role="group", as the popover is.
+    expect(dialog.parentElement).toBe(document.body)
+    expect(dialog.closest('[role="group"]')).toBeNull()
     expect(dialog.hasAttribute('data-log-panel')).toBe(true)
     expect(document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent).toBe('Log for today')
     expect(dialog.querySelector('.log-grab')?.getAttribute('aria-hidden')).toBe('true')
     expect(popover()).toBeNull()
   })
 
-  it('hides the label visually at phone width and makes the button a 44px square', () => {
+  it('hides the label visually at phone width and makes the button a 44px square shaped like the arrows', () => {
     const css = readFileSync('apps/web/src/app.css', 'utf8')
     // The media block that sizes the day arrows for a finger is the one the button joins.
     const block = css.slice(css.indexOf('.day-nav-btn { min-width: 44px; }'))
@@ -300,6 +303,11 @@ describe('the sheet, on a phone', () => {
     expect(label).toMatch(/clip-path: inset\(50%\)/)
     const button = /\.log-btn \{([^}]*)\}/.exec(block)?.[1] ?? ''
     expect(button).toMatch(/width: 44px/)
+    // Shaped like the day arrows beside it: no .log-btn rule anywhere gives it a radius of its own,
+    // so it keeps .button's, which is what .day-nav-btn has too.
+    const radii = [...css.replace(/\/\*[\s\S]*?\*\//g, ' ').matchAll(/([^{}]*)\{([^}]*)\}/g)]
+      .filter((rule) => /\.(log-btn|day-nav-btn)\b/.test(rule[1]!) && /border-radius/.test(rule[2]!))
+    expect(radii.map((rule) => rule[1]!.trim())).toEqual([])
   })
 
   it('closes on its close event, a backdrop click and ✕, focus back on the button each time', () => {
