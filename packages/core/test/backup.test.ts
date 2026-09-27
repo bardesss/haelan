@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { databaseBloat } from '../src/db/maintenance.ts'
+import { MoodStore } from '../src/store/moods.ts'
 import {
   BACKUP_DIR_NAME, backupDecision, listBackups, pruneBackups, runBackup, verifyBackup,
 } from '../src/backup/runBackup.ts'
@@ -94,6 +95,19 @@ describe('runBackup', () => {
         `insert into daily (person_id, local_date, metric, agg, source, value, derivation_version)
          values ('p1', '2026-09-10', 'steps', 'sum', 'provider', 1200, 1)`,
       ).run()
+
+      expect(() => verifyBackup(file.path, test.db)).toThrow('does not hold the same rows')
+    } finally { test.cleanup() }
+  })
+
+  // moods (M9c) are typed in by hand, like notes and events, and no rebuild can bring them back,
+  // so a copy that lost one is not the same database.
+  it('rejects a backup that no longer holds the same moods', () => {
+    const test = createTestDatabase()
+    try {
+      seedPerson(test.db, 'p1')
+      const file = runBackup({ db: test.db, dir: test.dir, nowMs: 1_770_000_000_000 })
+      new MoodStore(test.db).put({ personId: 'p1', localDate: '2026-09-10', score: 4, nowMs: 1 })
 
       expect(() => verifyBackup(file.path, test.db)).toThrow('does not hold the same rows')
     } finally { test.cleanup() }

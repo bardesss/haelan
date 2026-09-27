@@ -102,48 +102,52 @@ export function NotesList({ range }: { range: AnnotationRange }) {
         : rows.length === 0 ? (
           <EmptyState title={t('notes.empty.title')} detail={t('notes.empty.detail')} />
         ) : (
-          <table className="override-table">
-            <caption className="sr-only">{t('notes.list.title')}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t('notes.columns.date')}</th>
-                <th scope="col">{t('notes.columns.kind')}</th>
-                <th scope="col">{t('notes.columns.text')}</th>
-                <th scope="col">{t('notes.columns.value')}</th>
-                <th scope="col"><span className="sr-only">{t('notes.columns.remove')}</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const isEvent = row.eventId !== null
-                const removing = isEvent
-                  ? removeEvent.isPending && removeEvent.variables?.eventId === row.eventId
-                  : removeNote.isPending && removeNote.variables?.localDate === row.localDate
-                return (
-                  <tr key={row.id}>
-                    <td>{row.localDate}</td>
-                    <td>{row.kind ?? ''}</td>
-                    <td>{row.text}</td>
-                    <td className="notes-value">
-                      {row.value === null ? '' : formatEventValue(row.value, i18n.language)}
-                    </td>
-                    <td>
-                      <button type="button" className="button"
-                        aria-label={isEvent
-                          ? t('notes.removeAria', { kind: row.kind, date: row.localDate })
-                          : t('notes.removeNoteAria', { date: row.localDate })}
-                        disabled={removing}
-                        onClick={() => (isEvent
-                          ? removeEvent.mutate({ eventId: row.eventId! })
-                          : removeNote.mutate({ localDate: row.localDate }))}>
-                        {removing ? t('notes.removing') : t('notes.remove')}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          // In a scroller of its own: five columns and a Remove button are wider than a phone's card
+          // in some languages, and the table scrolling inside the card beats the page scrolling.
+          <div className="table-scroll">
+            <table className="override-table">
+              <caption className="sr-only">{t('notes.list.title')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t('notes.columns.date')}</th>
+                  <th scope="col">{t('notes.columns.kind')}</th>
+                  <th scope="col">{t('notes.columns.text')}</th>
+                  <th scope="col">{t('notes.columns.value')}</th>
+                  <th scope="col"><span className="sr-only">{t('notes.columns.remove')}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const isEvent = row.eventId !== null
+                  const removing = isEvent
+                    ? removeEvent.isPending && removeEvent.variables?.eventId === row.eventId
+                    : removeNote.isPending && removeNote.variables?.localDate === row.localDate
+                  return (
+                    <tr key={row.id}>
+                      <td>{row.localDate}</td>
+                      <td>{row.kind ?? ''}</td>
+                      <td>{row.text}</td>
+                      <td className="notes-value">
+                        {row.value === null ? '' : formatEventValue(row.value, i18n.language)}
+                      </td>
+                      <td>
+                        <button type="button" className="button"
+                          aria-label={isEvent
+                            ? t('notes.removeAria', { kind: row.kind, date: row.localDate })
+                            : t('notes.removeNoteAria', { date: row.localDate })}
+                          disabled={removing}
+                          onClick={() => (isEvent
+                            ? removeEvent.mutate({ eventId: row.eventId! })
+                            : removeNote.mutate({ localDate: row.localDate }))}>
+                          {removing ? t('notes.removing') : t('notes.remove')}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       {(removeEvent.isError || removeNote.isError) && (
         <p className="form-error" role="alert">{t('notes.removeFailed')}</p>

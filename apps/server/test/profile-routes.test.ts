@@ -305,6 +305,36 @@ describe('PUT /api/profile baseline switch', () => {
   })
 })
 
+describe('PUT /api/profile quick-log switch (M9c)', () => {
+  it('answers off for a person who has never touched it', async () => {
+    expect((await me(adminToken)).json().quickLogEnabled).toBe(false)
+  })
+
+  it('saves it and carries it on the session', async () => {
+    const response = await saveProfile(adminToken, { quickLogEnabled: true })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().quickLogEnabled).toBe(true)
+    expect((await me(adminToken)).json().quickLogEnabled).toBe(true)
+  })
+
+  it('refuses a switch that is not a boolean', async () => {
+    const response = await saveProfile(adminToken, { quickLogEnabled: 'yes' })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toContain('quickLogEnabled must be a boolean')
+  })
+
+  // The pre-check above is not only a nicer message than the store's own: it is what keeps this
+  // request atomic. displayName is written earlier in the handler than quickLogEnabled is
+  // validated (see the field order in profile.ts), so without the pre-check the 400 from
+  // PeopleStore.setQuickLogEnabled would arrive after displayName had already been saved, and a
+  // caller who saw a 400 would reasonably assume nothing changed.
+  it('refuses the whole request atomically: an earlier field is not saved when quickLogEnabled fails', async () => {
+    const response = await saveProfile(adminToken, { displayName: 'Changed', quickLogEnabled: 'yes' })
+    expect(response.statusCode).toBe(400)
+    expect((await me(adminToken)).json().displayName).toBe('Robin')
+  })
+})
+
 describe('PUT /api/profile/password', () => {
   const NEW_PASSWORD = 'an even better password'
 

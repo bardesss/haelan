@@ -17,6 +17,8 @@ const person = (over: Partial<PersonRow> = {}): PersonRow => ({
   companionPath: false,
   sleepTargetMinutes: DEFAULT_SLEEP_TARGET_MINUTES,
   sleepUseBaseline: true,
+  quickLogEnabled: false,
+  quickLogPresets: null,
   builtMappingVersion: MAPPING_VERSION,
   builtDerivationVersion: DERIVATION_VERSION,
   ...over,

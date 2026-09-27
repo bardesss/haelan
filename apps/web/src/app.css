@@ -132,9 +132,9 @@ body {
 .rail-menu {
   position: absolute; bottom: calc(100% + var(--space-1)); left: 0; min-width: max(100%, 10rem);
   display: flex; flex-direction: column; padding: var(--space-1);
-  /* A border and the card surface, and no shadow: there is not one box-shadow anywhere else in
-     this stylesheet, and a raised menu would be the only thing in the app casting one. The
-     surface change against the rail is what separates it. */
+  /* A border and the card surface, and no shadow: the one box-shadow in this stylesheet is the log
+     popover's, which opens over the dashboard's cards, and this menu opens over the rail, where
+     the surface change against it is what separates it. */
   background: var(--surface-card); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   z-index: 2;
@@ -365,7 +365,8 @@ a.segment { text-decoration: none; display: inline-block; }
    element's own open state rather than a class, so a sheet closed by Escape - which never tells
    React anything - unlocks the page by the same declaration that locked it. The rail drawer takes
    this exact measure for the same reason. */
-html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:has(dialog.cal-sheet[open]) { overflow: hidden; }
+html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:has(dialog.cal-sheet[open]),
+html:has(dialog.log-sheet[open]) { overflow: hidden; }
 
 .button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
 .button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
@@ -880,6 +881,115 @@ html:has(dialog.period-sheet[open]), html:has(dialog.status-sheet[open]), html:h
 .cal-sheet .cal-nav { width: 44px; height: 44px; }
 .cal-sheet .cal-today { min-height: 44px; padding: 0 var(--space-2); }
 
+/* LogPanel (components/logPanel), spec 2026-09-27-m9c-quick-logging: the panel's contents, the
+   mockup's lg-* classes renamed. Its container (popover or sheet) owns the surface, border and
+   shadow; this block only lays out what is inside. The date line sits beside the heading rather
+   than inside it, the .dash-card-title reason: the tokens carry no regular weight to put a
+   <small> inside a semibold heading back to. */
+.log-panel { display: flex; flex-direction: column; gap: var(--space-4); }
+.log-top { display: flex; align-items: center; gap: var(--space-2); }
+.log-top .icon-button {
+  width: 34px; height: 34px; justify-content: center; align-items: center;
+  border: 1px solid var(--border-subtle); color: var(--text-secondary);
+}
+/* › on today: the whole button fades, border and all, as P2 draws it, and the cursor stays plain
+   (there is simply no tomorrow yet, nothing refused). aria-disabled rather than disabled, so it
+   keeps its place in the tab order (LogPanel's own comment). */
+.log-top .icon-button[aria-disabled='true'] { opacity: .35; cursor: default; }
+.log-title { flex: 1; min-width: 0; text-align: center; }
+.log-title h2 { margin: 0; font-size: var(--font-size-md); font-weight: var(--weight-semibold); color: var(--text-primary); line-height: var(--leading-tight); }
+.log-title small { display: block; margin-top: 2px; font-size: var(--font-size-xs); color: var(--text-muted); }
+.log-sec { display: flex; flex-direction: column; gap: var(--space-2); }
+.log-sec-head { display: flex; justify-content: space-between; align-items: baseline; }
+/* An empty undo line keeps its place as the live region (a region added with its text is often
+   not announced) but gives back the gap the section would put above it. */
+.log-undo-slot:empty { margin-top: calc(-1 * var(--space-2)); }
+.log-faces { display: flex; justify-content: space-between; gap: 6px; }
+.log-face {
+  appearance: none; font: inherit; cursor: pointer; flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-2) 0;
+  background: none; border: 1px solid transparent; border-radius: var(--radius-md);
+  color: var(--text-muted); font-size: var(--font-size-micro);
+}
+.log-face:hover { color: var(--text-primary); }
+.log-face svg { width: 30px; height: 30px; }
+.log-face.is-on { background: var(--surface-accent); border-color: var(--border-accent); color: var(--text-primary); }
+.log-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.log-chip {
+  appearance: none; font: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 14px; border-radius: 999px;
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  color: var(--text-secondary); font-size: var(--font-size-sm);
+}
+.log-chip:hover { color: var(--text-primary); border-color: var(--text-faint); }
+.log-chip.is-on { background: var(--surface-accent); border-color: var(--border-accent); color: var(--text-primary); }
+.log-count {
+  font-size: var(--font-size-micro); font-weight: var(--weight-bold); line-height: var(--leading-tight);
+  color: var(--accent-soft); background: var(--surface-card); border-radius: 999px; padding: 1px 7px;
+}
+.log-undo {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
+  background: var(--surface-inset); font-size: var(--font-size-xs); color: var(--text-secondary);
+}
+.log-link { appearance: none; font: inherit; padding: 0; background: none; border: 0; color: var(--accent-soft); cursor: pointer; }
+.log-link:hover { text-decoration: underline; }
+.log-note { min-height: 64px; resize: vertical; }
+.log-error { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
+/* PresetEditor.tsx: the chips in edit mode, each still chip-shaped so the list reads as the row it
+   replaces, with its remove button inside the pill. grab says it can be dragged; touch-action: none
+   hands a finger's moves to the drag rather than to scrolling the sheet, and user-select: none keeps
+   a mouse drag from selecting the names it passes. */
+.log-editor { display: flex; flex-direction: column; gap: var(--space-2); }
+.log-editor:focus { outline: none; }
+.log-edit-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.log-edit-item {
+  display: inline-flex; align-items: center; gap: var(--space-1); min-height: 40px; padding: 0 var(--space-1) 0 14px;
+  border-radius: 999px; background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  color: var(--text-secondary); font-size: var(--font-size-sm); cursor: grab; max-width: 100%;
+  touch-action: none; user-select: none;
+}
+/* A kind runs to 40 characters, wider than a phone's sheet: it ends in an ellipsis so the remove
+   button stays inside the pill. */
+.log-edit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-edit-item:focus-visible { border-color: var(--border-accent); color: var(--text-primary); }
+.log-edit-remove {
+  appearance: none; font: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--text-muted);
+}
+.log-edit-remove:hover { color: var(--text-primary); background: var(--surface-card); }
+.log-edit-remove svg { width: 13px; height: 13px; }
+.log-edit-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+/* LogButton.tsx: the panel's two containers (the Log button itself is .button-primary, as the
+   approved header draws it). The popover is fixed and portalled like .cal-popover and placed the
+   same way, its left edge on the button's; unlike the calendar it opens over the cards' figures, so
+   it carries the app's one shadow to lift it off them. The shadow has to be dark in both themes and
+   no single token is, so light-dark() picks one per theme off the color-scheme the tokens set: the
+   page surface in dark, the primary text in light. The phone's sheet repeats .cal-sheet. */
+.log-popover {
+  position: fixed; width: min(380px, calc(100vw - 12px)); box-sizing: border-box; padding: 14px;
+  max-height: calc(100dvh - 12px); overflow-y: auto;
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl); color: var(--text-primary); z-index: 30;
+  box-shadow: 0 12px 32px light-dark(
+    color-mix(in srgb, var(--text-primary) 16%, transparent),
+    color-mix(in srgb, var(--surface-page) 70%, transparent)
+  );
+}
+.log-sheet {
+  margin: auto auto 0; padding: 0; border: 0; max-height: 85dvh;
+  width: 100%; max-width: none;
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-primary);
+}
+.log-sheet::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
+.log-sheet-body { padding: var(--space-2) var(--space-3) var(--space-3); }
+/* Decorative: the sheet does not drag. It says "this came up from the bottom" and nothing more. */
+.log-grab { display: block; width: 36px; height: 4px; margin: 0 auto var(--space-3); border-radius: 2px; background: var(--border-subtle); }
+
 /* The weight sits on the title's own <strong> rather than on the heading: the tokens carry no
    regular weight to put the muted subtitle back to, so the heading is left at the body's weight
    and only the title is raised. */
@@ -1238,6 +1348,10 @@ button.week-bar-slot { cursor: pointer; }
 .override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
 .override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
 .override-table tbody tr:last-child td { border-bottom: 0; }
+/* NotesList.tsx's table in a scroller of its own, so a table wider than its card (five columns
+   and a Remove button, at phone width in Dutch) scrolls inside the card rather than widening the
+   page. Found once the demo seed gave the Notes page rows (M9c). */
+.table-scroll { overflow-x: auto; }
 
 /* NotesList.tsx only: an override row carries no numeric value cell to share this with. */
 .notes-value { text-align: right; font-variant-numeric: tabular-nums; }
@@ -1870,13 +1984,30 @@ button.week-bar-slot { cursor: pointer; }
      drawer open as well as closed, which is what turned this from an argument into a failure. */
   .button, .icon-button, .chart-table-toggle, .chart-annotate, .card-link,
   .session-row-link, .night-row-link, .date-picker, .input, .rail-item, .rail-person,
-  .source-order-list button {
+  .source-order-list button, .log-face, .log-chip, .log-edit-item {
     min-height: 44px;
   }
+  /* The log panel's Undo is a bare word in its row, so it takes the height the row would otherwise
+     pad on, the .cal-sheet .cal-today way; the row's own vertical padding goes to keep it compact. */
+  .log-undo { padding-top: 0; padding-bottom: 0; }
+  /* min-width too: a short word ("Undo", "Edit") in CI's fonts measured 43px wide. */
+  .log-undo .log-link { min-height: 44px; min-width: 44px; padding: 0 var(--space-2); }
+  /* The editor's remove button is square inside its pill, so it takes both sides, as .icon-button
+     does; the pill's own 44px leaves it room. Edit is a bare word beside the section's label. */
+  .log-edit-remove { width: 44px; height: 44px; }
+  .log-sec-head .log-link { min-height: 44px; min-width: 44px; padding: 0 var(--space-2); }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
   /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
      header draws them) but hold only an icon, so they need .icon-button's square minimum too. */
   .day-nav-btn { min-width: 44px; }
+  /* The Log button drops to a + in a 44px square shaped like the arrows beside it: labelled, it
+     truncated the greeting. The label is clipped the .sr-only way, so the button is still named
+     "Log". */
+  .log-btn { width: 44px; padding: 0; justify-content: center; }
+  .log-btn-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0; padding: 0; margin: -1px;
+  }
   /* One line on a phone: the title takes what the buttons leave and ends in an ellipsis rather than
      wrapping beside them (Dashboard.tsx already prints the short date here). */
   .dash-header { gap: var(--space-2); }

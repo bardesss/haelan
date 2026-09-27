@@ -382,6 +382,75 @@ describe('GET /api/v1/p/:personId/glance?day=', () => {
   })
 })
 
+// M9c: the day's log rides on the glance only for a person who turned quick logging on, so a
+// client never needs a second read to know whether to show the button. Absent, not null, when off.
+describe('log on the glance', () => {
+  it('carries no log key while the switch is off', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const body = (await get(harness, token, '/glance')).json()
+    expect('log' in body).toBe(false)
+  })
+
+  it("carries today's log, with the seed presets and no mood yet, once the switch is on; a saved mood moves the etag", async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    harness.app.haelan.stores.people.setQuickLogEnabled('p1', true)
+
+    const first = await get(harness, token, '/glance')
+    const firstBody = first.json()
+    expect(firstBody.log).toMatchObject({
+      presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'], mood: null, today: '2026-08-20',
+    })
+
+    const written = await harness.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/moods/2026-08-20',
+      headers: { authorization: `Bearer ${token}`, origin: 'http://localhost:4235', host: 'localhost:4235' },
+      payload: { score: 3 },
+    })
+    expect(written.statusCode).toBe(200)
+
+    const second = await get(harness, token, '/glance')
+    expect(second.headers.etag).not.toBe(first.headers.etag)
+    expect(second.json().log.mood).toBe(3)
+
+    const again = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/glance',
+      headers: { authorization: `Bearer ${token}`, 'if-none-match': second.headers.etag as string },
+    })
+    expect(again.statusCode).toBe(304)
+  })
+
+  it('carries a past day\'s own log for ?day=', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    harness.app.haelan.stores.people.setQuickLogEnabled('p1', true)
+    const db = harness.app.haelan.instance.db
+    for (let d = 1; d <= 19; d += 1) {
+      const localDate = `2026-08-${String(d).padStart(2, '0')}`
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate, metric: 'steps', agg: 'sum', source: 'merged', value: 8000, coverage: 1, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+    await harness.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/moods/2026-08-18',
+      headers: { authorization: `Bearer ${token}`, origin: 'http://localhost:4235', host: 'localhost:4235' },
+      payload: { score: 5 },
+    })
+
+    const body = (await get(harness, token, '/glance?day=2026-08-18')).json()
+    expect(body.log.mood).toBe(5)
+    // The glance's own `today` names the day shown; only the log still carries the real today,
+    // which is what the Log button needs to know where its › stops and which day a tap may go to.
+    expect(body.today).toBe('2026-08-18')
+    expect(body.log.today).toBe('2026-08-20')
+  })
+})
+
 // A strip dot opens its own day, and the route re-judges both on rounded numbers: the dot against
 // its own day's rounded band, the opened day against the same rounded band. Rounding matters here:
 // 08-14's 420.4 minutes is above an unrounded high of 420.2 (sixty days of exactly 420.2 behind

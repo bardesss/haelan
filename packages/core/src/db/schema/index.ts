@@ -5,6 +5,7 @@ export { people, sources, sourcePriority, sourceAliases, sourcePanelVisibility }
 export { oauthClient, credentials } from './credentials.ts'
 export { notes, events, overrides } from './annotations.ts'
 export { rawPayloads } from './raw.ts'
+export { moods } from './moods.ts'
 export {
   samples, sessions, sessionSegments, sessionRoutes, daily, observations, metricDictionary,
   SAMPLE_AGGS, SAMPLE_AGG_REFS, sampleAggOf, SESSION_KINDS,

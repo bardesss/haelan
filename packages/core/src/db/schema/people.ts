@@ -72,6 +72,14 @@ export const people = sqliteTable('people', {
   // preference in the app, after the column above, and cheap in the same way: nothing derived
   // reads it, so a write here clears no stamp either.
   sleepUseBaseline: integer('sleep_use_baseline', { mode: 'boolean' }).notNull().default(true),
+  // Whether this person sees the quick-log button (M9c). Off by default: nobody gets it
+  // uninvited. Nothing derived reads it, so a write clears no stamp.
+  quickLogEnabled: integer('quick_log_enabled', { mode: 'boolean' }).notNull().default(false),
+  // The person's quick-log chips as a JSON array of kinds, in order. Null means never edited and
+  // reads as SEED_KINDS (api/eventKinds.ts); an empty array means no chips. A column rather than
+  // a table so a read never has to seed anything: a write on a GET would wait on the boot
+  // rebuild's write lock.
+  quickLogPresets: text('quick_log_presets'),
   // What this person's tiers 2 and 3 were built with. Per person rather than instance wide,
   // because that is what makes an interrupted rebuild resumable: a person carrying the current
   // numbers is already done. Null on a database whose data predates M2e, which is the case the

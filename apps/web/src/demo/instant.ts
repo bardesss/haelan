@@ -36,7 +36,9 @@ function lastSundayUtcMs(year: number, monthIndex0: number): number {
   return Date.UTC(year, monthIndex0, sunday, 1, 0, 0)
 }
 
-function amsterdamOffsetSeconds(ms: number): number {
+// Exported for the overlay (overlay.ts), which files a demo visitor's quick-log tap at a local
+// wall-clock time and needs the offset that time carries.
+export function amsterdamOffsetSeconds(ms: number): number {
   const year = new Date(ms).getUTCFullYear()
   const dstStarts = lastSundayUtcMs(year, 2) // March
   const dstEnds = lastSundayUtcMs(year, 9) // October

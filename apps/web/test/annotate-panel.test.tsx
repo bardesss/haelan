@@ -42,6 +42,7 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
+  quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
@@ -245,6 +246,55 @@ describe('the event kind field', () => {
     mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
     click(segment('Add an event'))
     const options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
+    expect(options.map((o) => o.value)).toEqual(['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'])
+  })
+
+  // The person's own chips (M9c), offered ahead of the seed set once GET /quick-log/presets has
+  // answered: 'sauna' is not in SEED_KINDS, so it is labelled with itself, while 'alcohol' is,
+  // so it keeps its translated label (the same rule NotesList.tsx's own kindLabel applies).
+  it('offers the person\'s own presets once they have loaded, labelling only the seed ones', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('quick-log/presets')) return respond(200, { kinds: ['sauna', 'alcohol'] })
+      return respond(200, {})
+    }) as typeof fetch
+
+    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
+    click(segment('Add an event'))
+    await settle()
+    globalThis.fetch = original
+
+    const options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
+    expect(options.map((o) => [o.value, o.getAttribute('label')])).toEqual([
+      ['sauna', 'sauna'],
+      ['alcohol', 'Alcohol'],
+    ])
+  })
+
+  // While the presets request is still pending, or once it has failed, the field falls back to the
+  // seed set - the same options a reader saw before presets existed at all, rather than an empty
+  // datalist.
+  it('falls back to the seed set while presets are pending or have failed', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('quick-log/presets')) return respond(500, { error: 'internal' })
+      return respond(200, {})
+    }) as typeof fetch
+
+    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
+    click(segment('Add an event'))
+
+    // Pending: no request has resolved yet, so the panel already shows the seed set.
+    let options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
+    expect(options.map((o) => o.value)).toEqual(['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'])
+
+    await settle()
+    globalThis.fetch = original
+
+    // Failed: still the seed set, not an empty list.
+    options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
     expect(options.map((o) => o.value)).toEqual(['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'])
   })
 

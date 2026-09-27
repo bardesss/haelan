@@ -369,6 +369,15 @@ describe('the capture sweep', () => {
     expect([...server.recorded.keys()].filter((url) => !beforeDay.has(url)), 'a past day read more than its glance')
       .toEqual([])
 
+    // The log panel's days (M9c): every day of the window and the demo day, since the panel steps
+    // one day at a time whether or not a day has data, and the chips the chart panel suggests.
+    // Fetched after the mount above, so that check still proves the dashboard reads none of them
+    // until the panel is stepped (or the chart panel opened).
+    for (let day = windowStart; day <= DEMO_DATE; day = addDays(day, 1)) {
+      await server.fetch(`/api/v1/p/${server.personId}/quick-log/day/${day}`)
+    }
+    await server.fetch(`/api/v1/p/${server.personId}/quick-log/presets`)
+
     // Each past day's night card links to that night's own page.
     const mountedNights = new Set(nights.map((night) => night.localDate))
     for (const night of [...pastNights].sort()) {

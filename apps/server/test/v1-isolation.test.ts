@@ -443,6 +443,40 @@ const ROUTES: readonly RouteCase[] = [
     // and that merge takes the larger windowEndMs: p2's windowEndMs, one past its windowStartMs.
     otherNeedle: '9999999999001',
   },
+  // M9c (Task 3): the quick-log surface. quick-log/day carries a note through readDayLog, so its
+  // needle rides on the same note body the notes case above uses the shape of, not on a computed
+  // figure; presets and moods carry their own seeded values verbatim, the same as sources above.
+  {
+    name: 'quick-log/presets',
+    template: '/api/v1/p/:personId/quick-log/presets',
+    path: (p) => `/api/v1/p/${p}/quick-log/presets`,
+    seedOwn: (h) => h.app.haelan.stores.people.setQuickLogPresets('p1', ['own-kind-ok']),
+    seedOther: (h, personId) => h.app.haelan.stores.people.setQuickLogPresets(personId, ['leaked-kind-999999']),
+    ownNeedle: 'own-kind-ok',
+    otherNeedle: 'leaked-kind-999999',
+  },
+  {
+    name: 'quick-log/day',
+    template: '/api/v1/p/:personId/quick-log/day/:localDate',
+    // The harness clock's own local date (2026-02-02) is "today" for p1, so 2026-02-01 is a
+    // reachable past day for this route's own 400-on-a-future-date check.
+    path: (p) => `/api/v1/p/${p}/quick-log/day/2026-02-01`,
+    seedOwn: (h) => h.app.haelan.instance.notes.put({ personId: 'p1', localDate: '2026-02-01', body: 'own-note-ok', nowMs: h.clock.nowMs }),
+    seedOther: (h, personId) => h.app.haelan.instance.notes.put({ personId, localDate: '2026-02-01', body: 'leaked-note-999999', nowMs: h.clock.nowMs }),
+    ownNeedle: 'own-note-ok',
+    otherNeedle: 'leaked-note-999999',
+  },
+  {
+    name: 'moods',
+    template: '/api/v1/p/:personId/moods',
+    // A mood score of 5 vs 1 makes no needle (neither number is unmistakable), so each person's
+    // mood lands on a distinct date instead and the dates themselves are the needles.
+    path: (p) => `/api/v1/p/${p}/moods?from=2026-01-01&to=2026-01-31`,
+    seedOwn: (h) => h.app.haelan.instance.moods.put({ personId: 'p1', localDate: '2026-01-11', score: 5, nowMs: h.clock.nowMs }),
+    seedOther: (h, personId) => h.app.haelan.instance.moods.put({ personId, localDate: '2026-01-22', score: 1, nowMs: h.clock.nowMs }),
+    ownNeedle: '2026-01-11',
+    otherNeedle: '2026-01-22',
+  },
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
@@ -574,6 +608,10 @@ describe('the versioned surface, beyond the per-route table', () => {
     'PUT /api/v1/p/:personId/data-types',
     'PUT /api/v1/p/:personId/source-priority',
     'POST /api/v1/p/:personId/ingest/:dataTypeId',
+    'PUT /api/v1/p/:personId/quick-log/presets',
+    'POST /api/v1/p/:personId/quick-log',
+    'PUT /api/v1/p/:personId/moods/:localDate',
+    'DELETE /api/v1/p/:personId/moods/:localDate',
   ]
 
   // A mutating request is refused by the origin hook unless these two agree, so a write test that
@@ -1297,6 +1335,183 @@ describe('the versioned surface, beyond the per-route table', () => {
       expect(written.statusCode).toBe(200)
       expect((written.json() as { order: { sourceId: string }[] }).order.map((e) => e.sourceId)).toEqual(['mine'])
       expect(sourcePriority.lists('p1')).toEqual([{ metric: DEFAULT_LIST, sourceIds: ['mine'] }])
+    })
+  })
+
+  // M9c (Task 3): the quick-log surface's three write families, each following the shape every
+  // write family above does (401 with no session, 403 for another person with a read-back proving
+  // nothing was written for them, 200 for the owner). Copied from the note writes family, with the
+  // route and the read-back changed.
+  describe('quick-log presets writes', () => {
+    it('answers 401 with no session at all, before touching anything', async () => {
+      harness = await withServer()
+      await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const people = harness.app.haelan.stores.people
+      people.setQuickLogPresets('p2', ['theirs'])
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/quick-log/presets',
+        payload: { kinds: ['no session to write with'] },
+      })
+      expect(written.statusCode).toBe(401)
+      expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+      // p1, not p2: this request names p1 in the path, so a guard that failed open would write
+      // p1's own presets, never p2's. p2's presets are read too, for the symmetry, but they were
+      // never the ones a broken guard here would touch.
+      expect(people.get('p1')!.quickLogPresets).toBeNull()
+      expect(people.get('p2')!.quickLogPresets).toEqual(['theirs'])
+    })
+
+    it('refuses a write against another person, and leaves their presets unchanged', async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const people = harness.app.haelan.stores.people
+      people.setQuickLogPresets('p2', ['theirs'])
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p2/quick-log/presets',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { kinds: ['not mine to write'] },
+      })
+      expect(written.statusCode).toBe(403)
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+      expect(people.get('p2')!.quickLogPresets).toEqual(['theirs'])
+    })
+
+    it("saves presets for the session's own person", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      const people = harness.app.haelan.stores.people
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/quick-log/presets',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { kinds: ['own write'] },
+      })
+      expect(written.statusCode).toBe(200)
+      expect(people.get('p1')!.quickLogPresets).toEqual(['own write'])
+    })
+  })
+
+  describe('quick-log writes', () => {
+    it('answers 401 with no session at all, before touching anything', async () => {
+      harness = await withServer()
+      await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const events = harness.app.haelan.instance.events
+
+      const written = await harness.app.inject({
+        method: 'POST', url: '/api/v1/p/p1/quick-log',
+        payload: { kind: 'illness', day: '2026-02-01' },
+      })
+      expect(written.statusCode).toBe(401)
+      expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+      // p1, not p2: this request names p1 in the path, so a guard that failed open would create
+      // p1's own event, never p2's.
+      expect(events.listFor('p1', '2026-02-01', '2026-02-01')).toEqual([])
+    })
+
+    it('refuses a write against another person, and leaves their events unchanged', async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const events = harness.app.haelan.instance.events
+
+      const written = await harness.app.inject({
+        method: 'POST', url: '/api/v1/p/p2/quick-log',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { kind: 'illness', day: '2026-02-01' },
+      })
+      expect(written.statusCode).toBe(403)
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+      expect(events.listFor('p2', '2026-02-01', '2026-02-01')).toEqual([])
+    })
+
+    it("logs an event for the session's own person", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      const events = harness.app.haelan.instance.events
+
+      const written = await harness.app.inject({
+        method: 'POST', url: '/api/v1/p/p1/quick-log',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { kind: 'own write', day: '2026-02-01' },
+      })
+      expect(written.statusCode).toBe(200)
+      expect(events.listFor('p1', '2026-02-01', '2026-02-01')).toMatchObject([{ kind: 'own write' }])
+    })
+  })
+
+  describe('mood writes', () => {
+    it('answers 401 with no session at all, before touching anything', async () => {
+      harness = await withServer()
+      await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const moods = harness.app.haelan.instance.moods
+      moods.put({ personId: 'p2', localDate: '2026-02-01', score: 3, nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/moods/2026-02-01',
+        payload: { score: 4 },
+      })
+      expect(written.statusCode).toBe(401)
+      expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+
+      const removed = await harness.app.inject({ method: 'DELETE', url: '/api/v1/p/p1/moods/2026-02-01' })
+      expect(removed.statusCode).toBe(401)
+      expect(removed.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+      // p1, not p2: both requests above name p1 in the path, so a guard that failed open would
+      // write or remove p1's mood, never p2's. p2's mood is read too, for the symmetry, but it was
+      // never at risk.
+      expect(moods.get('p1', '2026-02-01')).toBeNull()
+      expect(moods.get('p2', '2026-02-01')).toBe(3)
+    })
+
+    it('refuses both writes against another person, and leaves their mood unchanged', async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const moods = harness.app.haelan.instance.moods
+      moods.put({ personId: 'p2', localDate: '2026-02-01', score: 3, nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p2/moods/2026-02-01',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { score: 4 },
+      })
+      expect(written.statusCode).toBe(403)
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p2/moods/2026-02-01',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(403)
+      expect(removed.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+      expect(moods.get('p2', '2026-02-01')).toBe(3)
+    })
+
+    it("writes and removes a mood for the session's own person", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      const moods = harness.app.haelan.instance.moods
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/moods/2026-02-01',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { score: 4 },
+      })
+      expect(written.statusCode).toBe(200)
+      expect(moods.get('p1', '2026-02-01')).toBe(4)
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p1/moods/2026-02-01',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(200)
+      expect(moods.get('p1', '2026-02-01')).toBeNull()
     })
   })
 

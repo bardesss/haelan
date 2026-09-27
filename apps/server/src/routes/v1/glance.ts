@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import {
-  ConfigError, localDateInZone, localMidnightMs, requireDate, shiftLocalDate, standingOf,
+  ConfigError, localDateInZone, localMidnightMs, readDayLog, requireDate, shiftLocalDate, standingOf,
   judgeCalendarDay, readGlanceCalendarRaw,
 } from '@haelan/core'
 import type {
@@ -207,7 +207,15 @@ export function registerGlanceRoutes(app: FastifyInstance): void {
     const result: Glance = q.glance(effectiveDay === today
       ? { today, nowMs, nameOf }
       : { today, nowMs, nameOf, day: effectiveDay, dayEndMs: localMidnightMs(shiftLocalDate(effectiveDay, 1), tz) - 1 })
-    return sendHashed(reply, request, roundGlance(result))
+
+    // The day's log rides on the glance only for a person who turned quick logging on (M9c), so
+    // one request still draws the page and a client needs no second read to know whether to show
+    // the button. Absent, not null, when off. The log carries the real today even on a past day's
+    // glance, whose own `today` names the day shown.
+    const body = person?.quickLogEnabled === true
+      ? { ...roundGlance(result), log: readDayLog(app.haelan.instance, person, effectiveDay, today) }
+      : roundGlance(result)
+    return sendHashed(reply, request, body)
   })
 
   app.get<{ Params: PersonParams, Querystring: { month?: string } }>('/p/:personId/glance/calendar', async (request, reply) => {

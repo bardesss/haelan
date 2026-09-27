@@ -67,3 +67,8 @@ export function localMidnightMs(date: string, timeZone: string): number {
   const guess = utcMidnight - zoneOffsetMs(utcMidnight, timeZone)
   return utcMidnight - zoneOffsetMs(guess, timeZone)
 }
+
+/** How far `timeZone` is ahead of UTC at `utcMs`, in whole minutes: the offset an event row stores. */
+export function zoneOffsetMinutes(utcMs: number, timeZone: string): number {
+  return Math.round(zoneOffsetMs(utcMs, timeZone) / 60_000)
+}

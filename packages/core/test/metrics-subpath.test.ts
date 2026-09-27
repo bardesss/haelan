@@ -57,7 +57,7 @@ describe('the @haelan/core/metrics subpath', () => {
     // status-panel-subpath.test.ts holds ./status-panel, whose 30-day default rule the server's
     // panel and the source list's switch share, to that empty list too.
     expect(Object.keys(pkg.exports).sort()).toEqual([
-      '.', './baseline-window', './cardio-load', './coverage-signal', './metric-data-type', SUBPATH,
+      '.', './baseline-window', './cardio-load', './coverage-signal', './event-kinds', './metric-data-type', SUBPATH,
       './nights', './recovery-index', './source-cadence', './split-heart-rate', './status-panel', './target-key', './training-load',
       './workout-comparison', './workout-summary',
     ])

@@ -120,6 +120,21 @@ export interface GlanceNav {
   next: string | null
 }
 
+/**
+ * The day's own quick log (M9c): its presets, the mood set for it (null unanswered), how many
+ * times each preset was tapped, and its note (null when nobody wrote one). Mirrors what
+ * readDayLog answers (apps/server/src/routes/v1/quickLog.ts's GET /quick-log/day/:localDate),
+ * which useQuickLog.ts's useDayLog reads directly for a day other than this glance's own.
+ */
+export interface GlanceLog {
+  presets: string[]
+  mood: number | null
+  counts: Record<string, number>
+  note: string | null
+  /** The person's today as the server computes it, whichever day the log is for (core's DayLog). */
+  today: string
+}
+
 export interface Glance {
   today: string
   sleep: GlanceSleep | null
@@ -130,6 +145,9 @@ export interface Glance {
   finished: boolean
   /** Where the day-navigation arrows on a finished day's page go. */
   nav: GlanceNav
+  /** Present only when this person turned quick logging on (routes/v1/glance.ts's own comment on
+   *  why it rides on the glance rather than a request of its own); absent otherwise. */
+  log?: GlanceLog
 }
 
 /**

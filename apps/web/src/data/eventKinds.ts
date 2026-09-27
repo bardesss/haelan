@@ -11,4 +11,4 @@
  * not the reverse). A data file reading a component file's constant would invert that, so the
  * list lives here instead, imported by both.
  */
-export const SEED_KINDS: readonly string[] = ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine']
+export { SEED_KINDS } from '@haelan/core/event-kinds'
