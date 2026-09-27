@@ -63,7 +63,7 @@ export type { QueueEntry } from './store/deriveQueue.ts'
 // from an empty volume to a syncing household, and nothing it does not. `apps/server` reaches
 // core only through this file, which is why the store classes are here rather than deep
 // imported: `exports` in package.json publishes this module and no other.
-export { PeopleStore } from './store/people.ts'
+export { PeopleStore, quickLogPresetsOf } from './store/people.ts'
 export { DEFAULT_SLEEP_TARGET_MINUTES, SLEEP_TARGET_MINUTES_RANGE } from './derive/metrics.ts'
 export { declaredColumnDefaults } from './db/schema/index.ts'
 export type { PersonRow } from './store/people.ts'
@@ -161,6 +161,8 @@ export { NoteStore } from './store/notes.ts'
 export type { PutNoteInput, StoredNote } from './store/notes.ts'
 export { EventStore } from './store/events.ts'
 export type { AddEventInput, StoredEvent } from './store/events.ts'
+export { MoodStore } from './store/moods.ts'
+export type { StoredMood } from './store/moods.ts'
 export { ObservationStore } from './store/observations.ts'
 export type { ObservationRow } from './store/observations.ts'
 export { InviteStore, INVITE_TTL_MS } from './store/invites.ts'

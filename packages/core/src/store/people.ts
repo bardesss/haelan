@@ -5,6 +5,7 @@ import { ConfigError } from '../errors.ts'
 import { DEFAULT_SLEEP_TARGET_MINUTES, SLEEP_TARGET_MINUTES_RANGE } from '../derive/metrics.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
+import { SEED_KINDS, validatePresets } from '../api/eventKinds.ts'
 
 export interface PersonRow {
   id: string
@@ -15,8 +16,25 @@ export interface PersonRow {
   companionPath: boolean
   sleepTargetMinutes: number
   sleepUseBaseline: boolean
+  quickLogEnabled: boolean
+  quickLogPresets: string[] | null
   builtMappingVersion: number | null
   builtDerivationVersion: number | null
+}
+
+// A stored list that no longer parses (hand-edited database) reads as never edited rather than
+// breaking every read of the person.
+function parsePresets(raw: string | null): string[] | null {
+  if (raw === null) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) && parsed.every((k) => typeof k === 'string') ? parsed : null
+  } catch { return null }
+}
+
+/** The chips a person sees: their saved list, or the seed kinds when they never saved one. */
+export function quickLogPresetsOf(row: Pick<PersonRow, 'quickLogPresets'>): string[] {
+  return row.quickLogPresets ?? [...SEED_KINDS]
 }
 
 // The server needs a display name and a timezone and has no other reason to know what a table
@@ -41,8 +59,8 @@ export class PeopleStore {
    * rows built by something older" rather than "has rows, or does not, we cannot tell".
    */
   create(
-    input: Omit<PersonRow, 'birthDate' | 'sex' | 'sleepTargetMinutes' | 'sleepUseBaseline' | 'builtMappingVersion'
-      | 'builtDerivationVersion' | 'companionPath'>
+    input: Omit<PersonRow, 'birthDate' | 'sex' | 'sleepTargetMinutes' | 'sleepUseBaseline' | 'quickLogEnabled'
+      | 'quickLogPresets' | 'builtMappingVersion' | 'builtDerivationVersion' | 'companionPath'>
       & { nowMs: number, companionPath?: boolean },
   ): PersonRow {
     this.#db.insert(people).values({
@@ -70,6 +88,10 @@ export class PeopleStore {
       // against the migration's, and the default test below holds this return against both, so
       // the three cannot drift to three answers.
       sleepUseBaseline: true,
+      // Off by default, and never edited: the column's own default, restated the same way
+      // sleepUseBaseline is above.
+      quickLogEnabled: false,
+      quickLogPresets: null,
       builtMappingVersion: MAPPING_VERSION,
       builtDerivationVersion: DERIVATION_VERSION,
     }
@@ -87,6 +109,8 @@ export class PeopleStore {
         companionPath: row.companionPath ?? false,
         sleepTargetMinutes: row.sleepTargetMinutes,
         sleepUseBaseline: row.sleepUseBaseline,
+        quickLogEnabled: row.quickLogEnabled,
+        quickLogPresets: parsePresets(row.quickLogPresets),
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }
@@ -104,6 +128,8 @@ export class PeopleStore {
         companionPath: row.companionPath ?? false,
         sleepTargetMinutes: row.sleepTargetMinutes,
         sleepUseBaseline: row.sleepUseBaseline,
+        quickLogEnabled: row.quickLogEnabled,
+        quickLogPresets: parsePresets(row.quickLogPresets),
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }))
@@ -228,6 +254,23 @@ export class PeopleStore {
       throw new ConfigError(`whether to use the baseline must be a boolean, got '${useBaseline}'`)
     }
     this.#db.update(people).set({ sleepUseBaseline: useBaseline }).where(eq(people.id, id)).run()
+  }
+
+  /**
+   * Whether this person sees the quick-log button. Cheap, like setBirthDate and unlike
+   * setTimezone: nothing derived reads this column.
+   */
+  setQuickLogEnabled(id: string, enabled: boolean): void {
+    if (typeof enabled !== 'boolean') throw new ConfigError('quickLogEnabled must be a boolean')
+    this.#db.update(people).set({ quickLogEnabled: enabled }).where(eq(people.id, id)).run()
+  }
+
+  /** Validated by validatePresets; its message becomes the ConfigError's. */
+  setQuickLogPresets(id: string, kinds: unknown): string[] {
+    let valid: string[]
+    try { valid = validatePresets(kinds) } catch (error) { throw new ConfigError((error as Error).message) }
+    this.#db.update(people).set({ quickLogPresets: JSON.stringify(valid) }).where(eq(people.id, id)).run()
+    return valid
   }
 
   /**

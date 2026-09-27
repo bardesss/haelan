@@ -15,6 +15,7 @@ import { EventStore } from './store/events.ts'
 import { ObservationStore } from './store/observations.ts'
 import { InviteStore } from './store/invites.ts'
 import { RebuildStateStore } from './store/rebuildState.ts'
+import { MoodStore } from './store/moods.ts'
 import type { Database } from './db/open.ts'
 
 export interface Instance {
@@ -30,6 +31,7 @@ export interface Instance {
   overrides: OverrideStore
   notes: NoteStore
   events: EventStore
+  moods: MoodStore
   observations: ObservationStore
   settings: SettingsStore
   invites: InviteStore
@@ -63,6 +65,7 @@ export function openHaelan(dir: string, env: NodeJS.ProcessEnv = process.env): I
       overrides: new OverrideStore(db, deriveQueue),
       notes: new NoteStore(db),
       events: new EventStore(db),
+      moods: new MoodStore(db),
       observations: new ObservationStore(db),
       settings: new SettingsStore(db),
       invites: new InviteStore(db),
