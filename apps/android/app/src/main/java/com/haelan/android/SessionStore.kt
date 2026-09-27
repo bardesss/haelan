@@ -103,6 +103,28 @@ object SessionStore {
     fun serverAndUsername(prefs: SharedPreferences): Pair<String, String> =
         (prefs.getString(KEY_SERVER, "") ?: "") to (prefs.getString(KEY_USERNAME, "") ?: "")
 
+    /**
+     * The person's timezone as the instance last named it (`/api/auth/me`), kept so the glance reads
+     * its clock times in the person's zone from the first frame of the next open, before the instance
+     * has answered again. Kept beside whose it is: a different person signing in on this phone must
+     * not have their times read in the previous person's zone.
+     */
+    fun saveTimezone(prefs: SharedPreferences, server: String, personId: String, zone: String) {
+        prefs.edit()
+            .putString(KEY_TIMEZONE, zone)
+            .putString(KEY_TIMEZONE_FOR, timezoneOwner(server, personId))
+            .apply()
+    }
+
+    /** The zone [saveTimezone] kept for this person on this server, or null for anyone else or none. */
+    fun loadTimezone(prefs: SharedPreferences, server: String, personId: String): String? =
+        prefs.getString(KEY_TIMEZONE, null)?.takeIf { prefs.getString(KEY_TIMEZONE_FOR, null) == timezoneOwner(server, personId) }
+
+    private const val KEY_TIMEZONE = "person_timezone"
+    private const val KEY_TIMEZONE_FOR = "person_timezone_for"
+
+    private fun timezoneOwner(server: String, personId: String) = "$personId@$server"
+
     /** Forgets the session, keeps server address and username to prefill login. */
     fun clearSession(prefs: SharedPreferences) {
         prefs.edit().remove(KEY_PERSON_ID).remove(KEY_COOKIE).apply()

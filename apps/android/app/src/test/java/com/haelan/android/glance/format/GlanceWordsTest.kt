@@ -1,5 +1,7 @@
 package com.haelan.android.glance.format
 
+import com.haelan.android.glance.geometry.StepsDot
+import com.haelan.android.glance.geometry.SleepDot
 import com.haelan.android.glance.GlanceStanding
 import com.haelan.android.glance.GlanceStepsPace
 import com.haelan.android.glance.GlanceWeek
@@ -340,5 +342,45 @@ class GlanceWordsTest {
         assertEquals("9.840", dutch.weekBarValue(WeekRowKind.STEPS, 9840.0))
         assertEquals("42 min", english.weekBarValue(WeekRowKind.ACTIVE, 41.6))
         assertEquals("7h 00m", english.weekBarValue(WeekRowKind.ASLEEP, 420.0))
+    }
+
+    @Test
+    fun `the offline line dates the glance in the person's zone`() {
+        // 07:42 in Amsterdam is 05:42 UTC in summer.
+        val at = ms("2026-08-20T05:42:00Z")
+        assertEquals("Shown from 07:42, not reachable", english.offlineLine(at))
+        assertEquals("Weergegeven van 07:42, niet bereikbaar", dutch.offlineLine(at))
+        val london = GlanceWords(MapStrings(ENGLISH_TEXT), Locale.ENGLISH, ZoneId.of("Europe/London"))
+        assertEquals("Shown from 06:42, not reachable", london.offlineLine(at))
+    }
+
+    @Test
+    fun `while a past day loads the line is already that day's, its night unknown yet`() {
+        val today = glance(day = day(heartRateAsOfMs = elevenForty))
+        assertEquals("that night, and the whole day", english.dayLine(today.copy(sleep = null), "2026-08-18", stepping = true))
+        assertEquals("die nacht, en de hele dag", dutch.dayLine(today, "2026-08-18", stepping = true))
+        // Settled, or stepping back to today, it is the glance's own line.
+        assertEquals(english.headerLine(today), english.dayLine(today, null, stepping = false))
+        assertEquals(english.headerLine(today), english.dayLine(today, null, stepping = true))
+        val past = glance(today = "2026-08-18", sleep = null, finished = true)
+        assertEquals("no night recorded · the whole day", english.dayLine(past, "2026-08-18", stepping = false))
+    }
+
+    @Test
+    fun `a calendar day is heard with its date and both verdicts, a grey one as no data`() {
+        assertEquals(
+            "Tuesday, August 18, slept in your usual range, steps below your usual",
+            english.calendarDay("2026-08-18", SleepDot.WITHIN, StepsDot.BELOW),
+        )
+        assertEquals(
+            "Tuesday, August 18, slept outside your usual range, steps reached your usual",
+            english.calendarDay("2026-08-18", SleepDot.OUTSIDE, StepsDot.REACHED),
+        )
+        assertEquals(
+            "dinsdag 18 augustus, slaap niet beoordeeld, stappen niet beoordeeld",
+            dutch.calendarDay("2026-08-18", SleepDot.NOT_JUDGED, StepsDot.NOT_JUDGED),
+        )
+        assertEquals("Tuesday, August 18, no data", english.calendarDay("2026-08-18", null, null))
+        assertEquals("dinsdag 18 augustus, geen gegevens", dutch.calendarDay("2026-08-18", null, null))
     }
 }

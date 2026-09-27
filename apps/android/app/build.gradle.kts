@@ -179,6 +179,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
+    // The glance's ViewModel (viewModelScope, viewModelFactory), so a rotation keeps the day on
+    // screen; the same lifecycle release as the line above.
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")

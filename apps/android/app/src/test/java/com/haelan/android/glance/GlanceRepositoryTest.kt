@@ -516,4 +516,31 @@ class GlanceRepositoryTest {
         assertEquals(GlanceUiState(null, null, null, reachable = true, loading = false, problem = null), state)
         assertTrue(reads.etagsSent.isEmpty())
     }
+
+    @Test
+    fun `the person's today is the kept today glance's day, whichever day is on screen`() {
+        assertNull(state.today)
+        reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v2\"")
+        repository.open()
+        assertEquals("2026-08-20", state.today)
+
+        var whileLoading: GlanceUiState? = null
+        reads.onDay = { whileLoading = state }
+        reads.answerDay("2026-08-18", GlanceRead.Fresh(pastJson, null))
+        repository.showDay("2026-08-18")
+        assertEquals("2026-08-20", checkNotNull(whileLoading).today)
+        assertEquals("2026-08-18", state.shownDay)
+        assertEquals("2026-08-20", state.today)
+    }
+
+    @Test
+    fun `the stored glance names today before the instance has answered`() {
+        storedEarlier()
+        var onScreenWhenAsked: GlanceUiState? = null
+        reads.onToday = { onScreenWhenAsked = state }
+        reads.todayAnswers += GlanceRead.Unreachable(IOException("down"))
+        repository.open()
+        assertEquals("2026-08-20", checkNotNull(onScreenWhenAsked).today)
+        assertEquals("2026-08-20", state.today)
+    }
 }

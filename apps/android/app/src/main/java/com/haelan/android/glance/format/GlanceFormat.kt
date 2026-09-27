@@ -11,13 +11,18 @@ import com.haelan.android.glance.GlanceStanding
 import com.haelan.android.glance.GlanceStepsPace
 import com.haelan.android.glance.PaceStanding
 import com.haelan.android.glance.RecoveryBand
+import com.haelan.android.glance.geometry.SleepDot
 import com.haelan.android.glance.geometry.StageTotal
+import com.haelan.android.glance.geometry.StepsDot
 import java.math.RoundingMode
 import java.text.NumberFormat
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -133,6 +138,21 @@ object GlanceFormat {
     }
 
     private const val RANGE_DASH = " – "
+
+    /**
+     * The calendar's month title for [month] (YYYY-MM): "September 2026", "september 2026", Intl's
+     * long month and numeric year. The stand-alone month form, as Intl uses for a month with no day.
+     */
+    fun monthTitle(month: String, locale: Locale): String =
+        DateTimeFormatter.ofPattern("LLLL y", locale).format(YearMonth.parse(month))
+
+    /**
+     * The calendar's column heads, Monday first: the short weekday's first two letters ("Mo",
+     * "ma") as the web slices them, and the full name a screen reader hears.
+     */
+    fun weekdays(locale: Locale): List<Pair<String, String>> = DayOfWeek.entries.map {
+        it.getDisplayName(TextStyle.SHORT, locale).take(2) to it.getDisplayName(TextStyle.FULL, locale)
+    }
 
     private class Patterns(
         val long: String,
@@ -373,6 +393,45 @@ class GlanceWords(
     /** The greeting for [nowMs] read in the person's zone. */
     fun greeting(nowMs: Long): String =
         t(GlanceFormat.greetingKey(Instant.ofEpochMilli(nowMs).atZone(zone).hour))
+
+    /**
+     * The line under the title, [stepping] included: while a past day loads over the previous day's
+     * cards the line is already that day's, as the header is, and its no-night form waits for the
+     * day's own answer, since the held cards' night is not the new day's (the web's Dashboard line).
+     */
+    fun dayLine(glance: Glance, shownDay: String?, stepping: Boolean): String =
+        if (stepping && shownDay != null) t("glance_day_nav_past_line") else headerLine(glance)
+
+    /**
+     * The line over a glance the instance could not confirm: "Shown from 07:42, not reachable", the
+     * time it was last confirmed, read in the person's zone.
+     */
+    fun offlineLine(fetchedAtMs: Long): String = t("glance_offline", "time" to GlanceFormat.clock(fetchedAtMs, zone))
+
+    /**
+     * A calendar day as a screen reader hears it: its long date and both verdicts in words, or "no
+     * data" for a grey day ([sleep] and [steps] null), the web's dayName.
+     */
+    fun calendarDay(localDate: String, sleep: SleepDot?, steps: StepsDot?): String {
+        val date = GlanceFormat.longDate(localDate, locale)
+        if (sleep == null || steps == null) return t("glance_calendar_no_data", "date" to date)
+        val sleepKey = when (sleep) {
+            SleepDot.WITHIN -> "within"
+            SleepDot.OUTSIDE -> "outside"
+            SleepDot.NOT_JUDGED -> "none"
+        }
+        val stepsKey = when (steps) {
+            StepsDot.REACHED -> "reached"
+            StepsDot.BELOW -> "below"
+            StepsDot.NOT_JUDGED -> "none"
+        }
+        return t(
+            "glance_calendar_day",
+            "date" to date,
+            "sleep" to t("glance_calendar_spoken_sleep_$sleepKey"),
+            "steps" to t("glance_calendar_spoken_steps_$stepsKey"),
+        )
+    }
 
     /** The Last night card's subtitle. */
     fun nightRange(sleep: GlanceSleep): String = GlanceFormat.nightRange(sleep.startMs, sleep.endMs, zone, locale)

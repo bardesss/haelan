@@ -74,6 +74,13 @@ fun calendarGrid(month: String, days: List<CalendarDay>, today: String, firstDay
 }
 
 /**
+ * The month [by] months from [month] (YYYY-MM), for the calendar's month arrows. Paging a month of a
+ * picker the payload bounds, not a day to request: the month is only read when [monthReachable]
+ * says it lies between the archive's first day and today, both the server's.
+ */
+fun shiftMonth(month: String, by: Long): String = YearMonth.parse(month).plusMonths(by).toString()
+
+/**
  * Whether the month arrows may reach [month]: from [firstDay]'s month to [today]'s. None at all
  * before the archive's first day is known.
  */

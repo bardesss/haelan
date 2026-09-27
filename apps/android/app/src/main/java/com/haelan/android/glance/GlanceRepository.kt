@@ -28,6 +28,12 @@ data class GlanceUiState(
     /** A read is in flight: the day arrows wait for it. */
     val loading: Boolean,
     val problem: Problem?,
+    /**
+     * The person's own today, as the newest today glance kept names it; null before there is one.
+     * The calendar's last pickable day and its Today link: a payload's word for today rather than
+     * the phone's clock, which could sit on the other side of midnight from the server.
+     */
+    val today: String? = null,
 ) {
     /** What the screen says instead of, or over, the cards. */
     sealed interface Problem {
@@ -157,7 +163,7 @@ class GlanceRepository(
     /** Numbers a call, marks it pending on screen at once, and runs [block] on the dispatcher. */
     private fun start(pending: (GlanceUiState) -> GlanceUiState, block: (Int) -> Unit) {
         val gen = synchronized(lock) {
-            mutableState.value = pending(mutableState.value)
+            mutableState.value = withToday(pending(mutableState.value))
             ++generation
         }
         scope.launch { block(gen) }
@@ -165,8 +171,11 @@ class GlanceRepository(
 
     /** Applies [change] only while [gen] is still the latest call. */
     private fun emit(gen: Int, change: (GlanceUiState) -> GlanceUiState) = synchronized(lock) {
-        if (gen == generation) mutableState.value = change(mutableState.value)
+        if (gen == generation) mutableState.value = withToday(change(mutableState.value))
     }
+
+    /** [state] carrying the kept today glance's day, whatever day is on screen; called under [lock]. */
+    private fun withToday(state: GlanceUiState): GlanceUiState = state.copy(today = today?.glance?.today ?: state.today)
 
     private fun problemOf(glance: Glance?): Problem? =
         if (glance != null && holdsNoValue(glance)) Problem.FirstRun else null
@@ -251,7 +260,7 @@ class GlanceRepository(
                 }
                 val now = clock()
                 emit(gen) {
-                    GlanceUiState(
+                    it.copy(
                         shownDay = shownDayOf(glance), glance = glance, fetchedAtMs = now,
                         reachable = true, loading = false, problem = problemOf(glance),
                     )

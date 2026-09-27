@@ -7,106 +7,113 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.haelan.android.glance.GlanceClient
-import com.haelan.android.glance.GlanceRegistry
-import com.haelan.android.glance.GlanceRepository
-import com.haelan.android.glance.GlanceStore
+import com.haelan.android.glance.GlanceViewModel
 import com.haelan.android.glance.ui.GlanceScreen
 import com.haelan.android.glance.ui.GlanceTheme
 import com.haelan.android.glance.ui.rememberCardText
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.ZoneId
 
 /**
  * The screen after sign-in: the web dashboard, drawn natively. The sync screen, which used to be
  * the whole app, is one tap away in the top bar and is where the phone's own settings still live.
+ *
+ * The glance's state lives in [GlanceViewModel], which outlives a rotation: the day on screen, the
+ * open calendar and the reads in flight all carry over, and the repository is closed when the
+ * screen is gone for good (the model's onCleared), not each time the Activity is rebuilt.
  */
 class GlanceActivity : ComponentActivity() {
 
     /** Who the glance is for; refreshed from the store whenever the app acts on it. */
     private lateinit var session: SessionStore.Session
 
-    /** The glance's state machine, for as long as this screen exists; null before a session is known. */
-    private var repository: GlanceRepository? = null
+    private lateinit var model: GlanceViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // The same order MainActivity reads it in: what sign-in handed over, then what was saved,
         // and with neither there is nobody to show a glance for.
-        session = SessionStore.Session(
-            intent.getStringExtra(LoginActivity.EXTRA_SERVER) ?: "",
-            intent.getStringExtra(LoginActivity.EXTRA_PERSON_ID) ?: "",
-            intent.getStringExtra(LoginActivity.EXTRA_COOKIE) ?: "",
-            intent.getStringExtra(LoginActivity.EXTRA_USERNAME) ?: "",
-        ).takeIf {
-            it.server.isNotEmpty() && it.personId.isNotEmpty()
-                && it.cookie.isNotEmpty() && it.username.isNotEmpty()
-        } ?: SessionStore.loadSession(SessionStore.prefs(this)) ?: run {
+        session = sessionOf(intent) ?: SessionStore.loadSession(SessionStore.prefs(this)) ?: run {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
         }
 
-        // Registered so the sign-out can close it before it deletes the stored glance.
-        val repo = GlanceRegistry.app.register(GlanceRepository(
-            reads = GlanceClient(session.server, session.personId, session.cookie),
-            store = GlanceStore.encrypted(this),
-            server = session.server,
-            personId = session.personId,
-            clock = System::currentTimeMillis,
-            dispatcher = Dispatchers.IO,
-        ))
-        repository = repo
-        // The 401 waits in the repository's channel until the screen is started, so an expiry met
-        // while the sync screen is on top is acted on when the glance comes back, not from behind.
+        // The factory runs only the first time: a rotation hands back the model already built.
+        model = ViewModelProvider(this, GlanceViewModel.factory(application, session))[GlanceViewModel::class.java]
+
+        // The 401 waits in a conflated channel until the screen is started, so an expiry met while
+        // the sync screen is on top is acted on when the glance comes back, not from behind.
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) { repo.signedOut.collect { sessionExpired() } }
+            repeatOnLifecycle(Lifecycle.State.STARTED) { model.signedOut.collect { sessionExpired() } }
         }
-        repo.open()
+        // Back from the sync screen, from another app, or from the phone asleep: ask again.
+        lifecycle.addObserver(LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) model.resumed() })
 
         // Scaffold pads for the system bars itself, so the glance asks for the whole window
         // instead of borrowing padForSystemBars from the view screens.
         enableEdgeToEdge()
         setContent {
             GlanceTheme {
-                val state by repo.state.collectAsStateWithLifecycle()
+                val state by model.state.collectAsStateWithLifecycle()
+                val zone by model.zone.collectAsStateWithLifecycle()
+                val calendar by model.calendar.collectAsStateWithLifecycle()
                 GlanceScreen(
                     state = state,
-                    // The payload names no timezone and the session does not keep the person's, so
-                    // the phone's zone reads the clock times; the payload's dates need none.
-                    text = rememberCardText(ZoneId.systemDefault()),
+                    text = rememberCardText(zone),
                     nowMs = System.currentTimeMillis(),
                     onOpenSync = ::openSync,
-                    // Task 8 opens a day here and Task 9 a page of the web; until then a tap is a no-op.
-                    onOpenDay = {},
+                    onOpenDay = model::open,
+                    // Task 9 opens a page of the web here; until then a tap is a no-op.
                     onOpenPage = {},
+                    calendar = calendar,
+                    onToday = model::showToday,
+                    onRefresh = model::refresh,
+                    onOpenCalendar = model::openCalendar,
+                    onShowMonth = model::showMonth,
+                    onCloseCalendar = model::closeCalendar,
                 )
             }
         }
     }
 
-    override fun onDestroy() {
-        repository?.let { GlanceRegistry.app.close(it) }
-        super.onDestroy()
-    }
-
     /**
      * Sign-in reuses the glance already in the task (FLAG_ACTIVITY_CLEAR_TOP with SINGLE_TOP) rather
      * than stacking a second. Every path that changes who is signed in clears the task first, so
-     * the session here is normally the one already shown; a different one starts the screen afresh
-     * rather than drawing one person's glance under another's session.
+     * the session here is normally the one already shown.
+     *
+     * A different person or server gets a fresh screen: this one finishes, taking its model and
+     * repository with it, and a new one starts from the incoming intent. Not recreate(), which may
+     * rebuild from the intent this screen was first launched with and draw the old person again.
+     * The same person with a new cookie keeps the screen and moves the reads to the new session,
+     * so no read goes on sending a cookie the instance has already let go.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        val incoming = sessionOf(intent) ?: return
+        if (incoming.personId != session.personId || incoming.server != session.server) {
+            finish()
+            startActivity(Intent(this, GlanceActivity::class.java).putExtras(intent))
+            return
+        }
         setIntent(intent)
-        val incoming = intent.getStringExtra(LoginActivity.EXTRA_PERSON_ID)
-        val server = intent.getStringExtra(LoginActivity.EXTRA_SERVER)
-        if ((incoming != null && incoming != session.personId) || (server != null && server != session.server)) recreate()
+        session = incoming
+        model.useCookie(incoming.cookie)
+    }
+
+    /** The session sign-in handed over in [intent], or null when it did not carry a whole one. */
+    private fun sessionOf(intent: Intent): SessionStore.Session? = SessionStore.Session(
+        intent.getStringExtra(LoginActivity.EXTRA_SERVER) ?: "",
+        intent.getStringExtra(LoginActivity.EXTRA_PERSON_ID) ?: "",
+        intent.getStringExtra(LoginActivity.EXTRA_COOKIE) ?: "",
+        intent.getStringExtra(LoginActivity.EXTRA_USERNAME) ?: "",
+    ).takeIf {
+        it.server.isNotEmpty() && it.personId.isNotEmpty() && it.cookie.isNotEmpty() && it.username.isNotEmpty()
     }
 
     /**
@@ -141,6 +148,8 @@ class GlanceActivity : ComponentActivity() {
             finish()
             return
         }
+        // The store is the newer word on the cookie; the glance's reads follow it too.
+        if (current.personId == session.personId && current.server == session.server) model.useCookie(current.cookie)
         session = current
         startActivity(Intent(this, MainActivity::class.java).apply {
             putExtra(LoginActivity.EXTRA_SERVER, current.server)

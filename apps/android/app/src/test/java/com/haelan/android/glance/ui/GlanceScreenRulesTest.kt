@@ -97,4 +97,34 @@ class GlanceScreenRulesTest {
         val shown = glance(week = week)
         assertEquals(GlanceBody.Cards(shown, cardRows(shown)), bodyOf(state(shown, Problem.TooOld)))
     }
+
+    private fun unreachable(glance: Glance?, fetchedAtMs: Long? = 100L, loading: Boolean = false) =
+        GlanceUiState(shownDay = null, glance = glance, fetchedAtMs = fetchedAtMs, reachable = false, loading = loading, problem = null)
+
+    @Test
+    fun `nothing kept and nothing reached is the unreachable page, not a spinner`() {
+        assertEquals(GlanceBody.Unreachable, bodyOf(unreachable(null, fetchedAtMs = null)))
+        // Try again is in flight: the page waits for its answer instead.
+        assertEquals(GlanceBody.Waiting, bodyOf(unreachable(null, fetchedAtMs = null, loading = true)))
+        val shown = glance(week = week)
+        assertEquals(GlanceBody.Cards(shown, cardRows(shown)), bodyOf(unreachable(shown)))
+    }
+
+    @Test
+    fun `a glance the instance could not confirm is dated, and nothing shown has nothing to date`() {
+        val shown = glance(week = week)
+        assertEquals(GlanceNotice.Offline(100L), noticeOf(unreachable(shown)))
+        assertEquals(null, noticeOf(unreachable(null, fetchedAtMs = null)))
+        assertEquals(null, noticeOf(state(shown)))
+        assertEquals(null, noticeOf(null))
+    }
+
+    @Test
+    fun `what the instance says about itself is the line, over the cards or over nothing`() {
+        val shown = glance(week = week)
+        assertEquals(GlanceNotice.TooOld, noticeOf(state(shown, Problem.TooOld)))
+        assertEquals(GlanceNotice.TooOld, noticeOf(state(null, Problem.TooOld)))
+        assertEquals(GlanceNotice.Refused("no person p9"), noticeOf(state(shown, Problem.Refused("no person p9"))))
+        assertEquals(null, noticeOf(state(shown, Problem.FirstRun)))
+    }
 }

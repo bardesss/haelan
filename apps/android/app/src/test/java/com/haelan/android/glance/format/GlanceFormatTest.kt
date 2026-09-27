@@ -108,4 +108,19 @@ class GlanceFormatTest {
         assertEquals("glance_greeting_afternoon", GlanceFormat.greetingKey(17))
         assertEquals("glance_greeting_evening", GlanceFormat.greetingKey(18))
     }
+
+    @Test
+    fun `the calendar's month title is the long month and the year`() {
+        assertEquals("September 2026", GlanceFormat.monthTitle("2026-09", en))
+        assertEquals("september 2026", GlanceFormat.monthTitle("2026-09", nl))
+        assertEquals("January 2027", GlanceFormat.monthTitle("2027-01", en))
+    }
+
+    @Test
+    fun `the calendar's columns start on Monday, two letters each, the full name for a screen reader`() {
+        assertEquals(listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"), GlanceFormat.weekdays(en).map { it.first })
+        assertEquals(listOf("ma", "di", "wo", "do", "vr", "za", "zo"), GlanceFormat.weekdays(nl).map { it.first })
+        assertEquals("Monday", GlanceFormat.weekdays(en).first().second)
+        assertEquals("zondag", GlanceFormat.weekdays(nl).last().second)
+    }
 }

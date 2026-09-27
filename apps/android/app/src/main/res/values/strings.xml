@@ -239,6 +239,13 @@
     <string name="glance_subtitle_day_before">the day before</string>
     <string name="glance_empty_title">Nothing here yet</string>
     <string name="glance_empty_detail">Once a sync brings in a night or a day, it shows up here.</string>
+    <!-- The phone's own freshness lines, which the web has no counterpart for (the browser is
+         online or shows nothing): worded in the spec, the unreachable page in the web's shell.error. -->
+    <string name="glance_offline">Shown from {{time}}, not reachable</string>
+    <string name="glance_too_old">This server is too old for the glance; update it to 2.13.0 or later</string>
+    <string name="shell_error_title">This instance did not answer.</string>
+    <string name="shell_error_detail">It may be restarting or temporarily unreachable. Try again in a moment.</string>
+    <string name="shell_error_retry">Try again</string>
     <string name="glance_day_nav_label">Day</string>
     <string name="glance_day_nav_previous">Previous day</string>
     <string name="glance_day_nav_next">Next day</string>

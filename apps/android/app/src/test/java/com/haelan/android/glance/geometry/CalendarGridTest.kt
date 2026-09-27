@@ -85,4 +85,12 @@ class CalendarGridTest {
         assertFalse(monthReachable("2026-10", "2026-01-04", "2026-09-27"))
         assertFalse(monthReachable("2026-05", null, "2026-09-27"))
     }
+
+    @Test
+    fun `a month arrow pages one month, across the turn of the year`() {
+        assertEquals("2026-08", shiftMonth("2026-09", -1))
+        assertEquals("2026-10", shiftMonth("2026-09", 1))
+        assertEquals("2025-12", shiftMonth("2026-01", -1))
+        assertEquals("2027-01", shiftMonth("2026-12", 1))
+    }
 }
