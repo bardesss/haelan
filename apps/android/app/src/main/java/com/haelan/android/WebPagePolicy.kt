@@ -50,14 +50,35 @@ object WebPagePolicy {
     }
 
     /**
-     * The cookie the view is handed before it loads anything: the name the instance reads, for the
-     * whole site, and `Secure` when the instance is https so the view never sends it in the clear.
-     * Over http it travels in the clear on the local network, as every request of the app does
-     * (network_security_config.xml says why).
+     * Whether the view's shouldOverrideUrlLoading takes the navigation away from the view: every
+     * decision but [Decision.Stay] does, the browser opening for one and nothing at all for the other.
+     */
+    fun shouldOverride(decision: Decision): Boolean = decision != Decision.Stay
+
+    /**
+     * Whether a navigation goes to the browser: another web origin, and only when it is the page
+     * itself navigating. A frame inside the page pointing elsewhere is simply not loaded, rather
+     * than a browser opening by surprise.
+     */
+    fun opensBrowser(decision: Decision, isForMainFrame: Boolean): Boolean = decision == Decision.External && isForMainFrame
+
+    /**
+     * The top bar's title: the heading of the card that was tapped, as the card shows it, or the
+     * app's name when none came. Not the page's document title, which the web app never sets.
+     */
+    fun title(passed: String?, appName: String): String = passed?.takeIf { it.isNotBlank() } ?: appName
+
+    /**
+     * The cookie the view is handed before it loads anything, with the attributes the instance
+     * gives its own (apps/server/src/auth/cookie.ts): the name it reads, for the whole site,
+     * HttpOnly so no script on the page can read it, SameSite=Lax so another site cannot send it
+     * with a request of its own, and `Secure` when the instance is https so the view never sends it
+     * in the clear. Over http it travels in the clear on the local network, as every request of the
+     * app does (network_security_config.xml says why).
      */
     fun sessionCookie(server: String, cookie: String): String {
         val secure = server.trim().lowercase().startsWith("https://")
-        return InstanceClient.cookieHeader(cookie) + "; Path=/" + if (secure) "; Secure" else ""
+        return InstanceClient.cookieHeader(cookie) + "; Path=/; HttpOnly; SameSite=Lax" + if (secure) "; Secure" else ""
     }
 
     private data class Origin(val scheme: String, val host: String, val port: Int)
@@ -74,8 +95,24 @@ object WebPagePolicy {
             "https" -> 443
             else -> return null
         }
-        val host = uri.host?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
-        val port = if (uri.port == -1) defaultPort else uri.port
-        return Origin(scheme, host, port)
+        val (host, port) = if (!uri.host.isNullOrEmpty()) uri.host.lowercase() to uri.port
+        else registryHostOf(uri.rawAuthority) ?: return null
+        return Origin(scheme, host, if (port == -1) defaultPort else port)
     }
+
+    /**
+     * A self-hosted instance is often reached by its container's name, and Docker's names carry an
+     * underscore (`http://haelan_server:4235`), which is not a hostname to `java.net.URI`: it keeps
+     * the authority and gives no host. The authority is read here instead, strictly: letters,
+     * digits, dots, dashes and underscores, an optional port, and nothing else, so credentials, a
+     * second colon or an empty host still make no origin.
+     */
+    private fun registryHostOf(authority: String?): Pair<String, Int>? {
+        val match = REGISTRY_AUTHORITY.matchEntire(authority ?: return null) ?: return null
+        val port = match.groupValues[2].takeIf { it.isNotEmpty() }?.toInt() ?: -1
+        if (port == 0 || port > 65535) return null
+        return match.groupValues[1].lowercase() to port
+    }
+
+    private val REGISTRY_AUTHORITY = Regex("^([A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)(?::([0-9]{1,5}))?$")
 }

@@ -4,13 +4,13 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -36,6 +36,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import com.haelan.android.glance.ui.GlanceTheme
 
 /**
@@ -49,8 +50,8 @@ import com.haelan.android.glance.ui.GlanceTheme
  *
  * The session is the app's, handed over in the extras the glance passes to the sync screen, and set
  * as the instance's cookie before the page loads. It is not removed when this screen closes (the
- * next card opens signed in without it being set again for nothing); sign-out clears it
- * (MainActivity.signOut). A session the instance has let go shows the web app's own sign-in, which
+ * next card opens signed in without it being set again for nothing); sign-out and a different
+ * person signing in clear it, with the rest of what the view kept ([WebData]). A session the instance has let go shows the web app's own sign-in, which
  * this screen leaves alone.
  */
 class WebPageActivity : ComponentActivity() {
@@ -58,12 +59,12 @@ class WebPageActivity : ComponentActivity() {
     companion object {
         /** The web path to open, as a card names it: `/recovery`, `/activity/{sessionId}`. */
         const val EXTRA_PATH = "path"
+
+        /** The top bar's title: the tapped card's heading, as the card shows it. */
+        const val EXTRA_TITLE = "title"
     }
 
     private var web: WebView? = null
-
-    /** The page's document title, and the app's name until the page has one. */
-    private var pageTitle by mutableStateOf("")
 
     /** Whether back walks the page's history; once it cannot, back leaves the screen. */
     private var canGoBack by mutableStateOf(false)
@@ -82,7 +83,7 @@ class WebPageActivity : ComponentActivity() {
             finish()
             return
         }
-        pageTitle = getString(R.string.app_name)
+        val pageTitle = WebPagePolicy.title(intent.getStringExtra(EXTRA_TITLE), getString(R.string.app_name))
 
         val view = WebView(this).apply {
             // The web app is a script and keeps its choices (the person picked in a picker, a
@@ -92,19 +93,17 @@ class WebPageActivity : ComponentActivity() {
             // The page is the instance's, never a file or another app's content.
             settings.allowFileAccess = false
             settings.allowContentAccess = false
+            // The pages are health data and the instance sends its API answers without no-store,
+            // so the view would otherwise keep them in its disk cache. Not reading the cache is
+            // what this setting promises; a cache written anyway is cleared with the session
+            // (WebData.clear). The cost is the web app's scripts fetched again per page, over a LAN.
+            settings.cacheMode = WebSettings.LOAD_NO_CACHE
             // The web app has its own dark theme, chosen by prefers-color-scheme, which the view
             // takes from this app's DayNight theme. Darkening the light page by algorithm instead
             // would draw neither theme. Off is already the default for an app targeting 33 and up;
             // saying so keeps it off whatever a WebView update decides.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) settings.isAlgorithmicDarkeningAllowed = false
             webViewClient = PageClient(server)
-            webChromeClient = object : WebChromeClient() {
-                // Until the document names itself the view reports its address as the title,
-                // which is not a title; the app's name stays until the real one arrives.
-                override fun onReceivedTitle(view: WebView, received: String?) {
-                    if (!received.isNullOrBlank() && received != view.url && !received.startsWith("http")) pageTitle = received
-                }
-            }
         }
         web = view
 
@@ -160,25 +159,24 @@ class WebPageActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        web?.destroy()
+        web?.let(::release)
         web = null
         super.onDestroy()
+    }
+
+    /** Out of the layout first: a view destroyed while still attached can leak its window. */
+    private fun release(view: WebView) {
+        (view.parent as? ViewGroup)?.removeView(view)
+        view.destroy()
     }
 
     private inner class PageClient(private val server: String) : WebViewClient() {
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
-            return when (WebPagePolicy.decide(server, url)) {
-                WebPagePolicy.Decision.Stay -> false
-                WebPagePolicy.Decision.External -> {
-                    // Only a navigation of the page itself goes to the browser; a frame inside it
-                    // pointing elsewhere is simply not loaded, not a browser opening by surprise.
-                    if (request.isForMainFrame) openInBrowser(url)
-                    true
-                }
-                WebPagePolicy.Decision.Refuse -> true
-            }
+            val decision = WebPagePolicy.decide(server, url)
+            if (WebPagePolicy.opensBrowser(decision, request.isForMainFrame)) openInBrowser(url)
+            return WebPagePolicy.shouldOverride(decision)
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
@@ -196,7 +194,7 @@ class WebPageActivity : ComponentActivity() {
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             if (web === view) {
                 web = null
-                view.destroy()
+                release(view)
             }
             finish()
             return true
@@ -210,7 +208,7 @@ class WebPageActivity : ComponentActivity() {
      */
     private fun openInBrowser(url: String) {
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE))
+            startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE))
         } catch (e: ActivityNotFoundException) {
             // Nothing to open it with: the link does nothing, as it would on a phone with no browser.
         }

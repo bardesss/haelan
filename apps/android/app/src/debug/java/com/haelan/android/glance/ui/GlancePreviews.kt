@@ -115,7 +115,7 @@ private fun state(glance: Glance?, problem: GlanceUiState.Problem? = null) =
 @Composable
 private fun TodayPreview() {
     GlanceTheme {
-        GlanceScreen(state(previewGlance), rememberCardText(zone), at(11, 45), onOpenSync = {}, onOpenDay = {}, onOpenPage = {})
+        GlanceScreen(state(previewGlance), rememberCardText(zone), at(11, 45), onOpenSync = {}, onOpenDay = {}, onOpenPage = { _, _ -> })
     }
 }
 
@@ -124,7 +124,7 @@ private fun TodayPreview() {
 private fun PastDayPreview() {
     val past = previewGlance.copy(sleep = null, finished = true, day = previewGlance.day.copy(stepsPace = null))
     GlanceTheme {
-        GlanceScreen(state(past).copy(shownDay = DAY), rememberCardText(zone), at(11, 45), onOpenSync = {}, onOpenDay = {}, onOpenPage = {})
+        GlanceScreen(state(past).copy(shownDay = DAY), rememberCardText(zone), at(11, 45), onOpenSync = {}, onOpenDay = {}, onOpenPage = { _, _ -> })
     }
 }
 
@@ -132,6 +132,6 @@ private fun PastDayPreview() {
 @Composable
 private fun EmptyPreview() {
     GlanceTheme {
-        GlanceScreen(state(previewGlance, GlanceUiState.Problem.FirstRun), rememberCardText(zone), at(11, 45), onOpenSync = {}, onOpenDay = {}, onOpenPage = {})
+        GlanceScreen(state(previewGlance, GlanceUiState.Problem.FirstRun), rememberCardText(zone), at(11, 45), onOpenSync = {}, onOpenDay = {}, onOpenPage = { _, _ -> })
     }
 }

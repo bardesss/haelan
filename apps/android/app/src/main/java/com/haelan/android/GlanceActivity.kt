@@ -142,11 +142,16 @@ class GlanceActivity : ComponentActivity() {
     /**
      * The web page behind a card or a workout row, on top of the glance so back returns to it. The
      * session is read again for the same reason as the sync screen's: a cookie the instance has
-     * already let go would only open the web app's sign-in.
+     * already let go would only open the web app's sign-in. [title] is the tapped card's heading,
+     * for the page's top bar.
      */
-    private fun openPage(path: String) {
+    private fun openPage(path: String, title: String) {
         val current = currentSession() ?: return
-        startActivity(Intent(this, WebPageActivity::class.java).withSession(current).putExtra(WebPageActivity.EXTRA_PATH, path))
+        startActivity(
+            Intent(this, WebPageActivity::class.java).withSession(current)
+                .putExtra(WebPageActivity.EXTRA_PATH, path)
+                .putExtra(WebPageActivity.EXTRA_TITLE, title),
+        )
     }
 
     /**

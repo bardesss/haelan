@@ -33,7 +33,7 @@ internal fun WeekCard(glance: Glance, text: CardText, onOpenDay: (String) -> Uni
         title = stringResource(if (glance.finished) R.string.glance_week_title_finished else R.string.glance_week_title),
         subtitle = stringResource(if (glance.finished) R.string.glance_week_subtitle_finished else R.string.glance_week_subtitle),
         link = null,
-        onOpenPage = {},
+        onOpenPage = { _, _ -> },
     ) {
         text.words.weekLines(glance).forEach { row ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -39,7 +39,7 @@ internal fun RecoveryCard(
     wide: Boolean,
     text: CardText,
     onOpenDay: (String) -> Unit,
-    onOpenPage: (String) -> Unit,
+    onOpenPage: (path: String, title: String) -> Unit,
 ) {
     val words = text.words
     val colors = LocalGlanceColors.current
@@ -47,7 +47,7 @@ internal fun RecoveryCard(
     DashCard(
         title = stringResource(R.string.glance_recovery_title),
         subtitle = words.recoverySubtitle(recovery, today, finished),
-        link = CardLink(stringResource(R.string.glance_recovery_link), "/recovery"),
+        link = CardLink(stringResource(R.string.glance_recovery_link), "/recovery", stringResource(R.string.glance_recovery_title)),
         onOpenPage = onOpenPage,
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {

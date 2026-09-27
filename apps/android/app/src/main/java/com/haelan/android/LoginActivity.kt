@@ -103,6 +103,12 @@ class LoginActivity : ComponentActivity() {
                 button.setText(R.string.login_submit)
                 when (result) {
                     is LoginResult.Ok -> {
+                        // Somebody else than last time: the web page's cookies, storage and cache
+                        // were theirs, and go before this person's first card is opened.
+                        if (WebData.changesHands(SessionStore.loadWebOwner(stored), server, result.personId)) {
+                            WebData.clear(this@LoginActivity)
+                        }
+                        SessionStore.saveWebOwner(stored, WebData.owner(server, result.personId))
                         SessionStore.saveSession(stored, server, username, result.personId, result.cookie)
                         startMain(SessionStore.Session(server, result.personId, result.cookie, username))
                     }

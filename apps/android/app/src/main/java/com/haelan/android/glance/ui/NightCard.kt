@@ -39,7 +39,7 @@ internal fun NightCard(
     finished: Boolean,
     text: CardText,
     onOpenDay: (String) -> Unit,
-    onOpenPage: (String) -> Unit,
+    onOpenPage: (path: String, title: String) -> Unit,
 ) {
     val words = text.words
     val noReading = stringResource(if (finished) R.string.glance_no_reading_finished else R.string.glance_no_reading)
@@ -47,7 +47,7 @@ internal fun NightCard(
     DashCard(
         title = stringResource(if (finished) R.string.glance_sleep_title_finished else R.string.glance_sleep_title),
         subtitle = words.nightRange(sleep),
-        link = CardLink(stringResource(R.string.glance_sleep_link), "/sleep/night/${sleep.localDate}"),
+        link = CardLink(stringResource(R.string.glance_sleep_link), "/sleep/night/${sleep.localDate}", words.nightRange(sleep)),
         onOpenPage = onOpenPage,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

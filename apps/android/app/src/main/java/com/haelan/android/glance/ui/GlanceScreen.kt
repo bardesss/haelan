@@ -167,7 +167,7 @@ fun rememberCardText(zone: ZoneId): CardText {
  * today and names the date on a finished day. Draws [state] and nothing else; every tap leaves
  * through a callback, [onOpenDay] for an arrow, a strip dot, a week bar or a calendar day (a local
  * date from the payload) and [onOpenPage] for a card's link or a workout row (the web path it would
- * open).
+ * open, and the card's heading as the opened page's title).
  *
  * A row under the top bar carries the day controls ([DayNavState]): ‹ and ›, the calendar, and
  * Today on a past day. Pulling the page down asks again ([onRefresh]), as Try again does on the unreachable page;
@@ -185,7 +185,7 @@ fun GlanceScreen(
     nowMs: Long,
     onOpenSync: () -> Unit,
     onOpenDay: (String) -> Unit,
-    onOpenPage: (String) -> Unit,
+    onOpenPage: (path: String, title: String) -> Unit,
     calendar: CalendarUiState? = null,
     onToday: () -> Unit = {},
     onRefresh: () -> Unit = {},
@@ -339,7 +339,7 @@ private fun Cards(
     stepping: Boolean,
     text: CardText,
     onOpenDay: (String) -> Unit,
-    onOpenPage: (String) -> Unit,
+    onOpenPage: (path: String, title: String) -> Unit,
 ) {
     val glance = body.glance
     Column(

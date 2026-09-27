@@ -27,8 +27,11 @@ import androidx.compose.ui.unit.sp
 // The chrome every glance card wears, the web's cardShared.tsx: a card, a head row with its title,
 // a muted span beside it and a link to the page that says the rest, then the card's own content.
 
-/** A card's link: its words and the web path it opens. */
-data class CardLink(val text: String, val path: String)
+/**
+ * A card's link: its words, the web path it opens, and the title the opened page's top bar shows
+ * (the card's own heading, as the card shows it; the web app never titles its pages).
+ */
+data class CardLink(val text: String, val path: String, val pageTitle: String)
 
 /**
  * A glance card. The card is painted with the token card surface rather than the Material one:
@@ -40,7 +43,7 @@ internal fun DashCard(
     title: String,
     subtitle: String?,
     link: CardLink?,
-    onOpenPage: (String) -> Unit,
+    onOpenPage: (path: String, title: String) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalGlanceColors.current
@@ -62,7 +65,7 @@ internal fun DashCard(
                     modifier = Modifier.weight(1f).semantics { heading() },
                 )
                 if (link != null) {
-                    TextButton(onClick = { onOpenPage(link.path) }) { Text(link.text) }
+                    TextButton(onClick = { onOpenPage(link.path, link.pageTitle) }) { Text(link.text) }
                 }
             }
             content()

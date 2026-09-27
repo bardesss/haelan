@@ -1,6 +1,8 @@
 package com.haelan.android
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -97,13 +99,54 @@ class WebPagePolicyTest {
     }
 
     @Test
-    fun `the session cookie is the one the instance reads, for the whole site`() {
-        assertEquals("haelan_session=abc; Path=/", WebPagePolicy.sessionCookie(server, "abc"))
+    fun `the session cookie is the one the instance sets, for the whole site, out of a script's reach`() {
+        // The attributes of apps/server/src/auth/cookie.ts: HttpOnly and SameSite=Lax as there.
+        assertEquals("haelan_session=abc; Path=/; HttpOnly; SameSite=Lax", WebPagePolicy.sessionCookie(server, "abc"))
     }
 
     @Test
     fun `over https the session cookie is never sent in the clear`() {
-        assertEquals("haelan_session=abc; Path=/; Secure", WebPagePolicy.sessionCookie("https://haelan.example", "abc"))
-        assertEquals("haelan_session=abc; Path=/; Secure", WebPagePolicy.sessionCookie("HTTPS://haelan.example", "abc"))
+        assertEquals("haelan_session=abc; Path=/; HttpOnly; SameSite=Lax; Secure", WebPagePolicy.sessionCookie("https://haelan.example", "abc"))
+        assertEquals("haelan_session=abc; Path=/; HttpOnly; SameSite=Lax; Secure", WebPagePolicy.sessionCookie("HTTPS://haelan.example", "abc"))
+    }
+
+    @Test
+    fun `only the instance's own page is left to the view`() {
+        assertFalse(WebPagePolicy.shouldOverride(WebPagePolicy.Decision.Stay))
+        assertTrue(WebPagePolicy.shouldOverride(WebPagePolicy.Decision.External))
+        assertTrue(WebPagePolicy.shouldOverride(WebPagePolicy.Decision.Refuse))
+    }
+
+    @Test
+    fun `the browser opens only for the page itself going to another origin`() {
+        assertTrue(WebPagePolicy.opensBrowser(WebPagePolicy.Decision.External, isForMainFrame = true))
+        assertFalse(WebPagePolicy.opensBrowser(WebPagePolicy.Decision.External, isForMainFrame = false))
+        assertFalse(WebPagePolicy.opensBrowser(WebPagePolicy.Decision.Refuse, isForMainFrame = true))
+        assertFalse(WebPagePolicy.opensBrowser(WebPagePolicy.Decision.Stay, isForMainFrame = true))
+    }
+
+    @Test
+    fun `the top bar reads the tapped card's heading, or the app's name without one`() {
+        assertEquals("Recovery", WebPagePolicy.title("Recovery", "Hælan"))
+        assertEquals("Hælan", WebPagePolicy.title(null, "Hælan"))
+        assertEquals("Hælan", WebPagePolicy.title(" ", "Hælan"))
+    }
+
+    @Test
+    fun `an instance reached by a container name with an underscore is an origin like any other`() {
+        val docker = "http://haelan_server:4235"
+        assertEquals(WebPagePolicy.Decision.Stay, WebPagePolicy.decide(docker, "http://haelan_server:4235/recovery"))
+        assertEquals(WebPagePolicy.Decision.Stay, WebPagePolicy.decide("http://Haelan_Server", "http://haelan_server:80/recovery"))
+        assertEquals(WebPagePolicy.Decision.External, WebPagePolicy.decide(docker, "http://haelan_server:8080/recovery"))
+        assertEquals(WebPagePolicy.Decision.External, WebPagePolicy.decide(docker, "http://other_server:4235/recovery"))
+        assertEquals("http://haelan_server:4235/activity/abc", WebPagePolicy.pageUrl(docker, "/activity/abc"))
+    }
+
+    @Test
+    fun `an underscore host is read strictly, so a malformed one is still no origin`() {
+        assertEquals(WebPagePolicy.Decision.Refuse, WebPagePolicy.decide(server, "http://haelan_server:4235:1/"))
+        assertEquals(WebPagePolicy.Decision.Refuse, WebPagePolicy.decide(server, "http://haelan_server:99999/"))
+        assertEquals(WebPagePolicy.Decision.Refuse, WebPagePolicy.decide(server, "http://_haelan:4235/"))
+        assertEquals(WebPagePolicy.Decision.Refuse, WebPagePolicy.decide(server, "http://haelan_server:/"))
     }
 }

@@ -47,15 +47,16 @@ internal fun TodayCard(
     finished: Boolean,
     text: CardText,
     onOpenDay: (String) -> Unit,
-    onOpenPage: (String) -> Unit,
+    onOpenPage: (path: String, title: String) -> Unit,
 ) {
     val words = text.words
     val colors = LocalGlanceColors.current
     val noReading = stringResource(if (finished) R.string.glance_no_reading_finished else R.string.glance_no_reading)
+    val title = stringResource(if (finished) R.string.glance_today_that_day else R.string.glance_today_title)
     DashCard(
-        title = stringResource(if (finished) R.string.glance_today_that_day else R.string.glance_today_title),
+        title = title,
         subtitle = if (finished) GlanceFormat.longDate(today, text.locale) else stringResource(R.string.glance_today_subtitle),
-        link = CardLink(stringResource(R.string.glance_today_link), "/activity"),
+        link = CardLink(stringResource(R.string.glance_today_link), "/activity", title),
         onOpenPage = onOpenPage,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -143,13 +144,13 @@ private fun TodayLineText(line: TodayLine) {
  * stays listed, struck through, with why.
  */
 @Composable
-private fun WorkoutRow(session: WorkoutSession, text: CardText, onOpenPage: (String) -> Unit) {
+private fun WorkoutRow(session: WorkoutSession, text: CardText, onOpenPage: (path: String, title: String) -> Unit) {
     val colors = LocalGlanceColors.current
     val line = text.workouts.line(session)
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button) { onOpenPage("/activity/${Uri.encode(session.id)}") }
+            .clickable(role = Role.Button) { onOpenPage("/activity/${Uri.encode(session.id)}", line.type) }
             .padding(vertical = 6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

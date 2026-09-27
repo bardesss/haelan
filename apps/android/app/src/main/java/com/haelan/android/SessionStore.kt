@@ -136,6 +136,19 @@ object SessionStore {
 
     private fun timezoneOwner(server: String, personId: String) = "$personId@$server"
 
+    /**
+     * Whose data the in-app web page last held ([WebData.owner]). Kept apart from the session, which
+     * an expiry or a sign-out clears: the question it answers is who signed in last, asked at the
+     * next sign-in, after both are gone.
+     */
+    fun saveWebOwner(prefs: SharedPreferences, owner: String) {
+        prefs.edit { putString(KEY_WEB_OWNER, owner) }
+    }
+
+    fun loadWebOwner(prefs: SharedPreferences): String? = prefs.getString(KEY_WEB_OWNER, null)
+
+    private const val KEY_WEB_OWNER = "web_owner"
+
     /** Forgets the session, keeps server address and username to prefill login. */
     fun clearSession(prefs: SharedPreferences) {
         prefs.edit().remove(KEY_PERSON_ID).remove(KEY_COOKIE).apply()
