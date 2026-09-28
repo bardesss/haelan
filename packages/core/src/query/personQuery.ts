@@ -4,7 +4,7 @@ import { readSourceActivity } from './sourceActivity.ts'
 import { readAllTime } from './allTime.ts'
 import type { AllTime } from './allTime.ts'
 import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
-import { daily, people, samples, overrides as overridesTable, SESSION_KINDS, sources } from '../db/schema/index.ts'
+import { daily, metricDictionary, people, samples, sessions, overrides as overridesTable, SESSION_KINDS, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { SampleLike } from '../derive/rollup.ts'
@@ -563,6 +563,32 @@ export class PersonQuery {
       inArray(daily.metric, GLANCE_DAY_METRICS as readonly string[]),
     )).all().map((row) => row.localDate)
     return [...new Set(dailyDates)].sort()
+  }
+
+  /**
+   * The local date an instant was recorded on, read under the offset stored with the sample or
+   * session that begins at it, or null when no row of this person's does. For the phone's history
+   * start, which is the earliest row an upload carried: formatting that instant in whatever zone
+   * the reader is in now would move it a day when they are abroad, and the row already says which
+   * day it was.
+   *
+   * Both lookups stay on an index: samples through `samples_person_metric_time`, one probe per
+   * metric in the dictionary, and sessions through the person's own rows.
+   */
+  recordedDateOf(input: { utcMs: number }): string | null {
+    requireFiniteNumber('utcMs', input.utcMs)
+    const personRef = new SampleKeys(this.#db).personRefIfKnown(this.#personId)
+    const sample = personRef === undefined ? undefined : this.#db.select({ offset: samples.tzOffsetMinutes }).from(samples).where(and(
+      eq(samples.personRef, personRef),
+      inArray(samples.metricRef, this.#db.select({ ref: metricDictionary.ref }).from(metricDictionary)),
+      eq(samples.utcMs, input.utcMs),
+    )).limit(1).get()
+    if (sample !== undefined) return localDateOf(input.utcMs, sample.offset)
+    const session = this.#db.select({ offset: sessions.startOffsetMinutes }).from(sessions).where(and(
+      eq(sessions.personId, this.#personId),
+      eq(sessions.startMs, input.utcMs),
+    )).limit(1).get()
+    return session === undefined ? null : localDateOf(input.utcMs, session.offset)
   }
 
   /**

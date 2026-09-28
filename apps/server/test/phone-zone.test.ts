@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, peopleNeedingRebuild, samplePoint } from '@haelan/core'
+import { DERIVATION_VERSION, insertSample, peopleNeedingRebuild, samplePoint, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -127,6 +127,39 @@ describe('read-time today follows the effective zone', () => {
     expect(written.statusCode).toBe(200)
     // 21:00 in Tokyo, UTC+9; in the home zone it would have been 19:00Z.
     expect(written.json().startedAtMs).toBe(Date.parse('2026-09-24T12:00:00Z'))
+  })
+})
+
+describe('recorded times stay where they were recorded', () => {
+  it('a finished day\'s heart rate carries the offset it was recorded under, whatever zone it is viewed from', async () => {
+    const { h, token } = await start()
+    const db = h.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    db.insert(schema.daily).values({
+      personId: 'p1', localDate: '2026-09-20', metric: 'heart_rate', agg: 'mean', source: 'merged', value: 60, coverage: 1, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    insertSample(db, { personId: 'p1', sourceId: 'w1', metric: 'heart_rate', utcMs: Date.parse('2026-09-20T08:00:00Z'), tzOffsetMinutes: 120, agg: 'mean', value: 60 })
+    h.app.haelan.stores.people.setCurrentTimezone('p1', 'Asia/Tokyo')
+    const body = (await get(h, token, '/api/v1/p/p1/glance?day=2026-09-20')).json()
+    expect(body.day.heartRate.offsetMinutes).toBe(120)
+    const intraday = (await get(h, token, '/api/v1/p/p1/intraday?metric=heart_rate&date=2026-09-20')).json()
+    expect(intraday.offsetMinutes).toBe(120)
+  })
+
+  it('the phone\'s history start is dated by the offset it was recorded under, not by where the person is now', async () => {
+    const { h, token } = await start()
+    // Recorded in New York at 22:30 on the 20th, which is already the 21st at home.
+    await h.app.inject({
+      method: 'POST', url: '/api/v1/p/p1/ingest/weight',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN, 'x-haelan-zone': 'Asia/Tokyo' },
+      payload: { dataPoints: [samplePoint({
+        payloadKey: 'weight', valuePath: 'weightGrams', value: '80000', physicalTime: '2026-09-21T02:30:00Z', utcOffset: '-14400s',
+      })] },
+    })
+    const body = (await get(h, token, '/api/v1/p/p1/companion/cursors')).json()
+    expect(body.historyStartMs).toBe(Date.parse('2026-09-21T02:30:00Z'))
+    expect(body.historyStartLocalDate).toBe('2026-09-20')
   })
 })
 

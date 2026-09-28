@@ -104,6 +104,40 @@ describe('glance for a finished day', () => {
   })
 })
 
+describe('the finished day\'s heart rate and last night keep the offset they were recorded under', () => {
+  it('carries the heart-rate trace\'s own offset, for a chart that draws the day in the time it was lived', () => {
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: Date.parse(`${DAY}T08:00:00Z`), agg: 'mean', value: 60, tzOffsetMinutes: 120 })
+    const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: dayEndMs(DAY) })
+    expect(glance.day.heartRate.offsetMinutes).toBe(120)
+  })
+
+  // A view from UTC+14 of nights slept at UTC-10: the finished day ends at 09:59Z there, while
+  // the night woken from on it (05:00 local) ended at 15:00Z, so an end-time window would pass
+  // over it and pick the night before.
+  const EAST_DAY_END = dayEndMs(DAY) - 14 * 3_600_000
+  function nightAtMinusTen(localDate: string) {
+    const endMs = Date.parse(`${localDate}T15:00:00Z`)
+    test.db.insert(sessions).values({
+      id: `west-${localDate}`, personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: `west-${localDate}`,
+      startMs: endMs - 7 * 3_600_000, startOffsetMinutes: -600, endMs, endOffsetMinutes: -600,
+      localDate, attrs: JSON.stringify({}), rawPayloadId: null,
+    }).run()
+  }
+
+  it('picks the night filed under the finished day, not the one an end-time window in the viewer\'s zone reaches', () => {
+    nightAtMinusTen('2026-08-14')
+    nightAtMinusTen(DAY)
+    const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: EAST_DAY_END })
+    expect(glance.sleep?.localDate).toBe(DAY)
+  })
+
+  it('has no last night on a finished day with none filed under it, rather than the night before', () => {
+    nightAtMinusTen('2026-08-14')
+    const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: EAST_DAY_END })
+    expect(glance.sleep).toBeNull()
+  })
+})
+
 describe('glance recovery on a finished day', () => {
   // The day before DAY (2026-08-14) scores, standing in for the "today" of glance.test.ts's own
   // seedBaselines pattern; DAY itself (2026-08-15) has no reading at all.

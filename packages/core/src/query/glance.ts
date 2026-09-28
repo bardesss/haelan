@@ -266,7 +266,17 @@ export function readStepsPace(ctx: GlanceContext): GlanceStepsPace | null {
   return { ...band, value: read.today, atMs: read.atMs, standing }
 }
 
-export interface GlanceHeartRate { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
+export interface GlanceHeartRate {
+  points: IntradayPoint[]
+  asOfMs: number | null
+  /**
+   * The offset the day's readings were recorded under (readIntraday's `offsetMinutes`: its first
+   * reading's), or null with no readings. A finished day is drawn in the time it was recorded, so
+   * a day lived in Amsterdam and viewed from Tokyo still runs 00:00 to 24:00 Amsterdam time.
+   */
+  offsetMinutes: number | null
+  staleSources: GlanceStaleSource[]
+}
 export interface GlanceDay {
   steps: GlanceFigure
   stepsPace: GlanceStepsPace | null
@@ -356,12 +366,20 @@ export interface GlanceSleep {
  * depend on which date key a night carries. Thirty-six hours reaches back past one missed night
  * without reaching two, and a night still in progress at `nowMs` is not last night yet. Naps are
  * never last night: readSleepNights already files them apart from the night.
+ *
+ * A finished day is the exception, and picks by the date instead: its last night is the main
+ * night filed under that day, the one woken up from on it, or none. Its `nowMs` is the day's end
+ * in the zone the person is viewing from, which is not the zone the night was slept in, so a view
+ * from west of where the night was slept would otherwise reach into the next morning and show the
+ * following night. The date a night is filed under was fixed by its own offset when it was stored.
  */
 export const LAST_NIGHT_WINDOW_MS = 36 * 3_600_000
 
 export function readLastNight(ctx: GlanceContext): GlanceSleep | null {
   const nights = oneNightPerDate(ctx.q.sleepNights({ from: shiftLocalDate(ctx.today, -2), to: ctx.today }))
-  const candidates = nights.filter((n) => n.endMs <= ctx.nowMs && n.endMs >= ctx.nowMs - LAST_NIGHT_WINDOW_MS)
+  const candidates = ctx.finished
+    ? nights.filter((n) => n.localDate === ctx.today)
+    : nights.filter((n) => n.endMs <= ctx.nowMs && n.endMs >= ctx.nowMs - LAST_NIGHT_WINDOW_MS)
   const night = candidates.reduce<(typeof candidates)[number] | null>((best, n) => (best === null || n.endMs > best.endMs ? n : best), null)
   if (night === null) return null
   const figure = (metric: string, agg: string) =>
@@ -483,7 +501,7 @@ export function readDay(ctx: GlanceContext): GlanceDay {
     steps,
     stepsPace: ctx.finished ? null : readStepsPace(ctx),
     activeMinutes: activeMinutesFigure(ctx),
-    heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heartFeeding) },
+    heartRate: { points: heart.points, asOfMs: heartAsOf, offsetMinutes: heart.offsetMinutes, staleSources: staleFeeding(ctx, heartFeeding) },
     // Filed under the date a workout ended on, the same key the Activity list groups by, so a run
     // that crosses midnight is today's once it is over rather than yesterday's.
     workouts: ctx.q.sessions({ kind: 'exercise', from: ctx.today, to: ctx.today }),
