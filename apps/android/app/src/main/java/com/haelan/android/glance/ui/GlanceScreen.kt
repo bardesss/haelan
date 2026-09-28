@@ -49,6 +49,7 @@ import com.haelan.android.glance.GlanceUiState
 import com.haelan.android.glance.LogSheetActions
 import com.haelan.android.glance.LogSheetState
 import com.haelan.android.glance.GlanceUiState.Problem
+import com.haelan.android.glance.confirmedNow
 import com.haelan.android.glance.format.GlanceFormat
 import com.haelan.android.glance.format.GlanceWords
 import com.haelan.android.glance.format.WorkoutWords
@@ -95,11 +96,13 @@ internal fun cardRows(glance: Glance): List<CardSlot> {
  * Whether the top bar offers the log sheet's +: only while the glance on screen carries `log`, the
  * server's word that the person turned quick logging on. The phone keeps no switch of its own.
  *
- * And only once the instance has confirmed that glance ([GlanceUiState.confirmed]): the stored one
- * drawn at open may be from last night, and a sheet opened on it would be titled today and log for
- * yesterday.
+ * And only once the instance has confirmed that glance today, as [nowMs] falls in the person's
+ * [zone] ([confirmedNow]): the stored one drawn at open may be from last night, and so may one a
+ * screen left up past midnight confirmed yesterday; a sheet opened on either would be titled today
+ * and log for yesterday.
  */
-internal fun showsLogButton(state: GlanceUiState?): Boolean = state?.confirmed == true && state.glance?.log != null
+internal fun showsLogButton(state: GlanceUiState?, nowMs: Long, zone: ZoneId): Boolean =
+    confirmedNow(state, nowMs, zone) && state?.glance?.log != null
 
 /** What goes under the top bar. */
 sealed interface GlanceBody {
@@ -221,7 +224,7 @@ fun GlanceScreen(
             TopAppBar(
                 title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
-                    if (showsLogButton(state)) {
+                    if (showsLogButton(state, nowMs, text.zone)) {
                         IconButton(onClick = onOpenLog) {
                             Icon(painterResource(R.drawable.ic_add), stringResource(R.string.log_panel_open))
                         }

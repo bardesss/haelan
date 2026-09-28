@@ -13,6 +13,9 @@ import com.haelan.android.glance.glanceFixture
 import com.haelan.android.glance.recovery
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * Which cards the glance shows and in what order: the web's dashboardRows.ts cases, read for a
@@ -24,6 +27,8 @@ class GlanceScreenRulesTest {
     private val noWeek = GlanceWeek(steps = null, activeMinutes = null, asleep = null)
     private val unscored = recovery(index = figure("recovery_index", null), band = null)
     private val noRecovery = unscored.copy(restingHeartRate = figure("resting_heart_rate", null), hrv = figure("daily_hrv", null))
+
+    private val utc = ZoneOffset.UTC
 
     private val night = CardSlot(CardKind.NIGHT)
     private val today = CardSlot(CardKind.TODAY)
@@ -132,19 +137,29 @@ class GlanceScreenRulesTest {
     @Test
     fun `the log sheet's + shows only when the glance carries a log`() {
         fun on(glance: Glance?) =
-            GlanceUiState(shownDay = null, glance = glance, fetchedAtMs = null, reachable = true, loading = false, problem = null, confirmed = true)
+            GlanceUiState(shownDay = null, glance = glance, fetchedAtMs = 100L, reachable = true, loading = false, problem = null, confirmed = true)
         val log = DayLog(listOf("caffeine"), null, emptyMap(), null, "2026-08-20")
-        assertEquals(true, showsLogButton(on(glance().copy(log = log))))
-        assertEquals(false, showsLogButton(on(glance())))
-        assertEquals(false, showsLogButton(on(null)))
-        assertEquals(false, showsLogButton(null))
+        assertEquals(true, showsLogButton(on(glance().copy(log = log)), 100L, utc))
+        assertEquals(false, showsLogButton(on(glance()), 100L, utc))
+        assertEquals(false, showsLogButton(on(null), 100L, utc))
+        assertEquals(false, showsLogButton(null, 100L, utc))
     }
 
     @Test
     fun `the + waits for the instance to confirm the glance, so a stored one cannot log for yesterday`() {
         val log = DayLog(listOf("caffeine"), null, emptyMap(), null, "2026-08-20")
         val stored = GlanceUiState(shownDay = null, glance = glance().copy(log = log), fetchedAtMs = 100L, reachable = true, loading = true, problem = null)
-        assertEquals(false, showsLogButton(stored))
-        assertEquals(true, showsLogButton(stored.copy(loading = false, confirmed = true)))
+        assertEquals(false, showsLogButton(stored, 100L, utc))
+        assertEquals(true, showsLogButton(stored.copy(loading = false, confirmed = true), 100L, utc))
+    }
+
+    @Test
+    fun `a glance confirmed before the person's midnight no longer shows the +`() {
+        val log = DayLog(listOf("caffeine"), null, emptyMap(), null, "2026-08-20")
+        val zone = ZoneId.of("Europe/Amsterdam")
+        val lateEvening = Instant.parse("2026-08-20T21:50:00Z").toEpochMilli() // 23:50 there
+        val confirmed = GlanceUiState(shownDay = null, glance = glance().copy(log = log), fetchedAtMs = lateEvening, reachable = true, loading = false, problem = null, confirmed = true)
+        assertEquals(true, showsLogButton(confirmed, Instant.parse("2026-08-20T21:59:00Z").toEpochMilli(), zone))
+        assertEquals(false, showsLogButton(confirmed, Instant.parse("2026-08-20T22:01:00Z").toEpochMilli(), zone))
     }
 }

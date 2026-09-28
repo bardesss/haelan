@@ -3,6 +3,7 @@ package com.haelan.android.glance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
 import java.time.ZoneId
 
 /**
@@ -44,5 +45,45 @@ class PersonZoneTest {
         assertEquals(phone, PersonZone.choose(null, phone))
         assertEquals(phone, PersonZone.choose("Mars/Olympus_Mons", phone))
         assertEquals(phone, PersonZone.choose("", phone))
+    }
+
+    private val amsterdam = ZoneId.of("Europe/Amsterdam")
+    private fun at(instant: String) = Instant.parse(instant).toEpochMilli()
+    private val hour = 3_600_000L
+
+    @Test
+    fun `the next midnight is the person's, not the phone's or UTC's`() {
+        // 23:00 in Amsterdam (summer time) is 21:00 UTC and 17:00 in New York.
+        assertEquals(hour, PersonZone.untilNextMidnight(at("2026-09-27T21:00:00Z"), amsterdam))
+        assertEquals(7 * hour, PersonZone.untilNextMidnight(at("2026-09-27T21:00:00Z"), phone))
+        // Exactly at midnight, the next one is a whole day away.
+        assertEquals(24 * hour, PersonZone.untilNextMidnight(at("2026-09-27T22:00:00Z"), amsterdam))
+    }
+
+    @Test
+    fun `a day the clocks change on is as long as the zone makes it`() {
+        // Amsterdam, 25 October 2026: the clocks go back at 03:00, so the day runs 25 hours.
+        assertEquals(25 * hour, PersonZone.untilNextMidnight(at("2026-10-24T22:00:00Z"), amsterdam))
+        // 29 March 2026: forward at 02:00, 23 hours.
+        assertEquals(23 * hour, PersonZone.untilNextMidnight(at("2026-03-28T23:00:00Z"), amsterdam))
+    }
+
+    @Test
+    fun `a confirmation holds until the person's midnight, however long that day is`() {
+        fun confirmedAt(ms: Long) = GlanceUiState(
+            shownDay = null, glance = null, fetchedAtMs = ms, reachable = true, loading = false, problem = null, confirmed = true,
+        )
+        // 00:30 and 23:30 on the 25-hour day are 24 hours apart and still the same day there.
+        val early = confirmedAt(at("2026-10-24T22:30:00Z"))
+        assertEquals(true, confirmedNow(early, at("2026-10-25T22:30:00Z"), amsterdam))
+        // Past that day's midnight (00:00 +01:00 is 23:00 UTC), it no longer holds.
+        assertEquals(false, confirmedNow(early, at("2026-10-25T23:01:00Z"), amsterdam))
+        // Within the hour after midnight in spring, when an hour is skipped.
+        val lateSpring = confirmedAt(at("2026-03-28T22:50:00Z")) // 23:50 +01:00
+        assertEquals(false, confirmedNow(lateSpring, at("2026-03-28T23:10:00Z"), amsterdam))
+        // Never without the flag, or without an instant to date it by.
+        assertEquals(false, confirmedNow(early.copy(confirmed = false), at("2026-10-24T22:31:00Z"), amsterdam))
+        assertEquals(false, confirmedNow(early.copy(fetchedAtMs = null), at("2026-10-24T22:31:00Z"), amsterdam))
+        assertEquals(false, confirmedNow(null, at("2026-10-24T22:31:00Z"), amsterdam))
     }
 }

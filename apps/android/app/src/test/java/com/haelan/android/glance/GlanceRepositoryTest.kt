@@ -17,6 +17,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * The state the glance screen renders, driven through a fake instance and the in-memory store.
@@ -33,6 +35,7 @@ class GlanceRepositoryTest {
     private val store = GlanceStore(storage)
     private var now = 500L
     private val logged = mutableListOf<String>()
+    private val zone: ZoneId = ZoneId.of("Europe/Amsterdam")
     private var repository = repository(Dispatchers.Unconfined)
 
     private val todayJson = glanceFixture("today.json")
@@ -40,7 +43,7 @@ class GlanceRepositoryTest {
     private val pastJson = glanceFixture("past-day.json")
 
     private fun repository(dispatcher: kotlinx.coroutines.CoroutineDispatcher) =
-        GlanceRepository(reads, store, server, "p1", { now }, dispatcher, log = { logged += it })
+        GlanceRepository(reads, store, server, "p1", { now }, dispatcher, log = { logged += it }, zone = { zone })
 
     private val state get() = repository.state.value
 
@@ -220,9 +223,9 @@ class GlanceRepositoryTest {
         val then = checkNotNull(whenAsked)
         assertTrue("the stored glance carries a log", then.glance?.log != null)
         assertFalse(then.confirmed)
-        assertFalse(showsLogButton(then))
+        assertFalse(showsLogButton(then, now, zone))
         assertTrue(state.confirmed)
-        assertTrue(showsLogButton(state))
+        assertTrue(showsLogButton(state, now, zone))
     }
 
     @Test
@@ -231,7 +234,7 @@ class GlanceRepositoryTest {
         reads.todayAnswers += GlanceRead.Unreachable(IOException("no route"))
         repository.open()
         assertFalse(state.confirmed)
-        assertFalse(showsLogButton(state))
+        assertFalse(showsLogButton(state, now, zone))
     }
 
     @Test
@@ -249,6 +252,38 @@ class GlanceRepositoryTest {
         reads.todayAnswers += GlanceRead.NotModified
         repository.showToday()
         assertTrue("confirmed earlier in this life", checkNotNull(whenAsked).confirmed)
+    }
+
+    @Test
+    fun `a today read starting on a new day in the person's zone drops the confirmation it held`() {
+        now = Instant.parse("2026-09-27T21:50:00Z").toEpochMilli() // 23:50 in Amsterdam
+        reads.todayAnswers += GlanceRead.Fresh(glanceFixture("today-quick-log.json"), "\"v1\"")
+        repository.open()
+        assertTrue(state.confirmed)
+
+        // Ten minutes on it is the next day there, and the instance is out of reach: nothing
+        // confirms the new day, so the glance of the day before must not stay confirmed.
+        now = Instant.parse("2026-09-27T22:00:00Z").toEpochMilli()
+        reads.todayAnswers += GlanceRead.Unreachable(IOException("no route"))
+        repository.refresh()
+        assertFalse(state.confirmed)
+
+        // Still the next day on the next read: a later 304 confirms it again.
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.refresh()
+        assertTrue(state.confirmed)
+    }
+
+    @Test
+    fun `a today read on the same day in the person's zone keeps the confirmation through the read`() {
+        now = Instant.parse("2026-09-27T21:50:00Z").toEpochMilli()
+        reads.todayAnswers += GlanceRead.Fresh(glanceFixture("today-quick-log.json"), "\"v1\"")
+        repository.open()
+        // 23:59 in Amsterdam, though already the next day in UTC.
+        now = Instant.parse("2026-09-27T21:59:00Z").toEpochMilli()
+        reads.todayAnswers += GlanceRead.Unreachable(IOException("no route"))
+        repository.refresh()
+        assertTrue(state.confirmed)
     }
 
     @Test

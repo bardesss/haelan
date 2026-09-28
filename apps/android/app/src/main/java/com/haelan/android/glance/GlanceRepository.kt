@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import java.time.ZoneId
 
 /** Everything the glance screen draws, in one value. */
 data class GlanceUiState(
@@ -54,6 +55,18 @@ data class GlanceUiState(
         /** The glance holds no value at all: the web's "Nothing here yet". */
         data object FirstRun : Problem
     }
+}
+
+/**
+ * Whether [state]'s glance is confirmed at [nowMs]: [GlanceUiState.confirmed], and confirmed on the
+ * same day in the person's [zone] as now. A confirmation from before midnight says nothing about
+ * today, since the glance it confirmed calls yesterday today; a screen left up across midnight has
+ * had no read since, so the flag alone would go on offering the + for a day that has ended. The
+ * comparison [com.haelan.android.glance.format.GlanceWords.offlineLine] makes for its date.
+ */
+internal fun confirmedNow(state: GlanceUiState?, nowMs: Long, zone: ZoneId): Boolean {
+    val fetchedAtMs = state?.fetchedAtMs ?: return false
+    return state.confirmed && PersonZone.sameDay(fetchedAtMs, nowMs, zone)
 }
 
 /**
@@ -101,6 +114,8 @@ class GlanceRepository(
     private val clock: () -> Long,
     dispatcher: CoroutineDispatcher,
     private val log: (String) -> Unit = { Log.w(TAG, it) },
+    /** The person's zone, whose midnight ends a confirmation ([unconfirmIfStale]). */
+    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) : AutoCloseable {
 
     private companion object {
@@ -154,7 +169,9 @@ class GlanceRepository(
      */
     fun refresh() {
         val day = state.value.shownDay
-        start({ it.copy(loading = true) }) { gen -> if (day != null) readDay(gen, day, followNearest = true) else readToday(gen) }
+        start({ if (day != null) it.copy(loading = true) else unconfirmIfStale(it.copy(loading = true)) }) { gen ->
+            if (day != null) readDay(gen, day, followNearest = true) else readToday(gen)
+        }
     }
 
     /** Opens a finished day, [localDate] as a payload named it (`nav`, or the calendar). */
@@ -163,7 +180,20 @@ class GlanceRepository(
     }
 
     /** Back to today: the kept glance at once, then revalidated. */
-    fun showToday() = start({ it.copy(shownDay = null, loading = true) }) { gen -> backToToday(gen) }
+    fun showToday() = start({ unconfirmIfStale(it.copy(shownDay = null, loading = true)) }) { gen -> backToToday(gen) }
+
+    /**
+     * Called under [lock] as a today read starts. The kept today glance, confirmed on an earlier day
+     * in the person's zone than now, is not confirmed any more: it was the truth about a day that
+     * has since ended, and holding the flag through the read would let the + log to it until the
+     * answer lands, or for good if none does. The read's own answer confirms again.
+     */
+    private fun unconfirmIfStale(state: GlanceUiState): GlanceUiState {
+        val fetchedAtMs = today?.fetchedAtMs ?: return state
+        if (!todayConfirmed || PersonZone.sameDay(fetchedAtMs, clock(), zone())) return state
+        todayConfirmed = false
+        return state.copy(confirmed = false)
+    }
 
     /**
      * Stops every read in flight; the screen is gone, or the person is signing out. A read already

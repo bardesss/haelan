@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -68,6 +69,12 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
          */
         private const val SYNC_SETTLE_MS = 2_000L
 
+        /**
+         * How long past the person's midnight the glance asks for the new today: a few seconds, so a
+         * server clock a little behind the phone's has turned the day too by the time it answers.
+         */
+        private const val MIDNIGHT_MARGIN_MS = 5_000L
+
         /** Builds the model for [session]; a rotation gets the existing one back instead. */
         fun factory(app: Application, session: SessionStore.Session): ViewModelProvider.Factory =
             viewModelFactory { initializer { GlanceViewModel(app, session) } }
@@ -91,6 +98,8 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
             personId = personId,
             clock = System::currentTimeMillis,
             dispatcher = Dispatchers.IO,
+            // Read only once a read starts, after init: mutableZone is built by then.
+            zone = { mutableZone.value },
         ),
     )
 
@@ -154,15 +163,27 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
                 glance.log?.let { logSheetModel.glanceArrived(glance.today, it) }
             }
         }
+        // Midnight ends today while the screen may be up with no read due: ask again then, so the
+        // new today's glance arrives, and an open log sheet is retitled by its date (todayConfirmed).
+        // Re-armed after each refresh it fires, and from scratch when the person's zone is read.
+        viewModelScope.launch {
+            zone.collectLatest { zone ->
+                while (true) {
+                    delay(PersonZone.untilNextMidnight(System.currentTimeMillis(), zone) + MIDNIGHT_MARGIN_MS)
+                    repository.refresh()
+                }
+            }
+        }
     }
 
     /**
      * The + in the top bar: the log sheet on the day the glance shows, from the glance's own log.
-     * Only on a glance the instance confirmed, as the + itself (showsLogButton).
+     * Only on a glance the instance confirmed today, as the + itself (showsLogButton).
      */
     fun openLog() {
         val ui = state.value
-        val glance = ui.glance?.takeIf { ui.confirmed } ?: return
+        if (!confirmedNow(ui, System.currentTimeMillis(), zone.value)) return
+        val glance = ui.glance ?: return
         logSheetModel.open(glance.today, glance.log ?: return)
     }
 
