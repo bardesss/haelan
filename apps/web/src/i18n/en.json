@@ -597,7 +597,8 @@
     "units": {
       "bpm": "bpm",
       "percent": "%",
-      "milliseconds": "ms"
+      "milliseconds": "ms",
+      "celsius": "°C"
     },
     "tooltip": {
       "line": "{{label}}: {{value}}"
