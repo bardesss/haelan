@@ -40,7 +40,10 @@ export interface NightPage {
   balance: { zeroLine: ZeroLine, nights: { localDate: string, difference: number | null }[], total: number }
   traces: { heartRate: NightTrace, hrv: NightTrace, spo2: NightTrace }
   morning: {
+    /** The index and its band; the two figures below are the same readings, judged. */
     recovery: GlanceRecovery
+    restingHeartRate: PageFigure
+    hrv: PageFigure
     breathing: PageFigure
     spo2: PageFigure
     skinTemperature: PageFigure
@@ -130,6 +133,7 @@ export function readNightPage(q: PersonQuery, input: NightPageInput): NightPage 
   const strip = asleep.strip ?? []
   const balanced = balanceOf(strip.map((d) => d.value), zeroLine.minutes)
   const skinBaseline = skinTemperature.baseline
+  const recovery = readRecovery(ctx)
 
   return {
     localDate,
@@ -163,7 +167,11 @@ export function readNightPage(q: PersonQuery, input: NightPageInput): NightPage 
       spo2: nightTrace(q, 'spo2', night, history),
     },
     morning: {
-      recovery: readRecovery(ctx),
+      recovery,
+      // The glance's figures carry no direction or verdict of their own; as page figures they are
+      // judged like every other figure here, a higher resting heart rate worse, a lower HRV worse.
+      restingHeartRate: pageFigureOf(recovery.restingHeartRate, true),
+      hrv: pageFigureOf(recovery.hrv, true),
       breathing: figure('sleep_respiratory_rate', 'last'),
       spo2: figure('daily_spo2', 'last'),
       skinTemperature,

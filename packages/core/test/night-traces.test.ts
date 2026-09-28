@@ -62,7 +62,37 @@ describe('nightTrace', () => {
     hr(subject.startMs + H, 58)
     const trace = nightTrace(new PersonQuery(test.db, 'p1'), 'heart_rate', subject, history)
     expect(trace.stat.lowest?.value).toBe(58)
-    expect(trace.usualLowest?.thin).toBe(false)
-    expect(trace.usualLowest!.high).toBeLessThan(58)
+    // Judged as every other figure on the page is: a lowest heart rate above its usual is worse,
+    // heart rate being a down-is-better metric in the catalogue.
+    expect(trace.lowestFigure).toMatchObject({
+      metric: 'heart_rate', value: 58, unit: 'bpm', precision: 0, direction: 'down', standing: 'above', judged: 'worse',
+    })
+    expect(trace.lowestFigure.baseline?.thin).toBe(false)
+    expect(trace.lowestFigure.baseline!.high).toBeLessThan(58)
+    // The night's mean against the earlier nights' means: each earlier night read 50-52 and 65.
+    expect(trace.meanFigure).toMatchObject({ metric: 'heart_rate', value: 58, direction: 'down', standing: 'within', judged: null })
+    expect(trace.meanFigure.baseline!.center).toBeCloseTo(58, 0)
+  })
+
+  it('reads no figure for a night with no readings, and no usual from nights with none', () => {
+    const trace = nightTrace(new PersonQuery(test.db, 'p1'), 'spo2', night(1), [night(0)])
+    expect(trace.lowestFigure).toMatchObject({ metric: 'spo2', value: null, unit: 'percent', precision: 1, direction: 'up', baseline: null, judged: null })
+    expect(trace.meanFigure).toMatchObject({ value: null, baseline: null })
+  })
+
+  // A night is a sleep session's span, and a malformed one can run past intradayWindow's 48 hour
+  // cap, where the read throws. Read into every later night's history, that one row would turn
+  // every night page within sixty days of it into an error; skipped, it only has no trace.
+  it('skips a night longer than the intraday window can read, in the history and as the subject', () => {
+    const q = new PersonQuery(test.db, 'p1')
+    const history = Array.from({ length: 14 }, (_, i) => night(i))
+    history.forEach((n) => hr(n.startMs + H, 50))
+    const broken = { ...night(14), endMs: night(14).startMs + 50 * H }
+    hr(broken.startMs + H, 40)
+    const subject = night(17)
+    hr(subject.startMs + H, 50)
+    const trace = nightTrace(q, 'heart_rate', subject, [...history, broken])
+    expect(trace.lowestFigure.baseline!.center).toBe(50)
+    expect(nightTraceStat(q, 'heart_rate', broken)).toEqual({ lowest: null, highest: null, mean: null })
   })
 })

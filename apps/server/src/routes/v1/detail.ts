@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify'
-import { ConfigError, effectiveTimezone, localDateInZone, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
+import { balanceOf, ConfigError, effectiveTimezone, localDateInZone, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
 import type { NightPage, NightTrace, WorkoutPage } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
-  personIdOf, personQueryOf, roundBand, roundFigure, roundMetricValue, roundMetricValueOrNull, roundPageFigure,
+  personIdOf, personQueryOf, roundFigure, roundMetricValue, roundMetricValueOrNull, roundPageFigure,
   roundWorkoutFigure, sendHashed,
 } from './shared.ts'
 
@@ -17,8 +17,9 @@ function roundPercent(value: number | null): number | null {
 }
 
 /**
- * A night trace's extremes, mean and usual bands at the trace metric's catalogue precision:
- * heart_rate, hrv and spo2 are all catalogue metrics, unlike the page-only figures above them.
+ * A night trace's extremes and mean at the trace metric's catalogue precision (heart_rate, hrv and
+ * spo2 are all catalogue metrics, unlike the page-only figures above them), and its two figures by
+ * roundPageFigure, which carry that same precision and are re-judged on their rounded numbers.
  */
 function roundTrace(trace: NightTrace): NightTrace {
   const { metric, stat } = trace
@@ -26,8 +27,8 @@ function roundTrace(trace: NightTrace): NightTrace {
   return {
     ...trace,
     stat: { lowest: extreme(stat.lowest), highest: extreme(stat.highest), mean: roundMetricValueOrNull(metric, stat.mean) },
-    usualMean: roundBand(metric, trace.usualMean),
-    usualLowest: roundBand(metric, trace.usualLowest),
+    lowestFigure: roundPageFigure(trace.lowestFigure),
+    meanFigure: roundPageFigure(trace.meanFigure),
   }
 }
 
@@ -43,6 +44,14 @@ function roundNightPage(page: NightPage): NightPage {
     Object.entries(page.figures).map(([key, figure]) => [key, roundPageFigure(figure)]),
   ) as NightPage['figures']
   const { recovery } = page.morning
+  // The balance and the skin deviation are differences of numbers the page also shows, so each is
+  // taken again from those numbers as sent. Rounded separately, seven nights of -79.6 are sent as
+  // seven -80s beside a total of -557, and a deviation of 0.42 as 0.4 beside 33.5 and 33.0.
+  const zeroMinutes = roundMetricValue('sleep_asleep_minutes', page.balance.zeroLine.minutes)
+  const strip = figures.asleep.strip ?? []
+  const balanced = balanceOf(strip.map((d) => d.value), zeroMinutes)
+  const skinTemperature = roundPageFigure(page.morning.skinTemperature)
+  const skinBaseline = skinTemperature.baseline
   return {
     ...page,
     figures,
@@ -52,9 +61,9 @@ function roundNightPage(page: NightPage): NightPage {
       rem: roundPercent(page.stagePercent.rem),
     },
     balance: {
-      zeroLine: { ...page.balance.zeroLine, minutes: roundMetricValue('sleep_asleep_minutes', page.balance.zeroLine.minutes) },
-      nights: page.balance.nights.map((n) => ({ ...n, difference: roundMetricValueOrNull('sleep_asleep_minutes', n.difference) })),
-      total: roundMetricValue('sleep_asleep_minutes', page.balance.total),
+      zeroLine: { ...page.balance.zeroLine, minutes: zeroMinutes },
+      nights: strip.map((d, i) => ({ localDate: d.localDate, difference: balanced.values[i] ?? null })),
+      total: balanced.total,
     },
     traces: {
       heartRate: roundTrace(page.traces.heartRate),
@@ -69,10 +78,15 @@ function roundNightPage(page: NightPage): NightPage {
         hrv: roundFigure(recovery.hrv),
         respiratoryRate: recovery.respiratoryRate === null ? null : roundFigure(recovery.respiratoryRate),
       },
+      restingHeartRate: roundPageFigure(page.morning.restingHeartRate),
+      hrv: roundPageFigure(page.morning.hrv),
       breathing: roundPageFigure(page.morning.breathing),
       spo2: roundPageFigure(page.morning.spo2),
-      skinTemperature: roundPageFigure(page.morning.skinTemperature),
-      skinTemperatureDeviation: roundMetricValueOrNull('sleep_temperature', page.morning.skinTemperatureDeviation),
+      skinTemperature,
+      // Core's null rules, on the rounded pair; rounded once more because 33.5 - 33.0 in floating
+      // point need not come out exactly 0.5.
+      skinTemperatureDeviation: skinTemperature.value === null || skinBaseline === null || skinBaseline.thin
+        ? null : roundMetricValue('sleep_temperature', skinTemperature.value - skinBaseline.center),
     },
     day: {
       ...page.day,

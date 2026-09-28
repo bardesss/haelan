@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, schema, shiftLocalDate } from '@haelan/core'
+import { DERIVATION_VERSION, insertSample, schema, shiftLocalDate } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -19,9 +19,9 @@ const OFFSET = 120
 /** The instant of a local clock time on a local date, under OFFSET. */
 const at = (localDate: string, hhmm: string) => Date.parse(`${localDate}T${hhmm}:00Z`) - OFFSET * 60_000
 
-function seedSource(h: Harness, id: string): void {
+function seedSource(h: Harness, id: string, personId = 'p1'): void {
   h.app.haelan.instance.db.insert(schema.sources).values({
-    id, personId: 'p1', externalId: id, displayName: id, kind: 'device', createdAtMs: 0,
+    id, personId, externalId: id, displayName: id, kind: 'device', createdAtMs: 0,
   }).run()
 }
 
@@ -48,10 +48,10 @@ function seedNight(h: Harness, localDate: string, asleep: number): void {
 }
 
 /** One exercise session in the attrs shape mapSessions stores, as the core workout-page test seeds one; pace in seconds per km. */
-function seedRun(h: Harness, input: { id: string, sourceId: string, localDate: string, pace: number }): void {
+function seedRun(h: Harness, input: { id: string, sourceId: string, localDate: string, pace: number, personId?: string }): void {
   const startMs = at(input.localDate, '07:00')
   h.app.haelan.instance.db.insert(schema.sessions).values({
-    id: input.id, personId: 'p1', sourceId: input.sourceId, kind: 'exercise', externalId: input.id,
+    id: input.id, personId: input.personId ?? 'p1', sourceId: input.sourceId, kind: 'exercise', externalId: input.id,
     startMs, startOffsetMinutes: OFFSET, endMs: startMs + 30 * 60_000, endOffsetMinutes: OFFSET,
     localDate: input.localDate, rawPayloadId: null,
     attrs: JSON.stringify({
@@ -119,6 +119,72 @@ describe('GET /night/:localDate', () => {
     expect(body.sourceId).toBe('watch')
   })
 
+  // Core signs each night against the zero line unrounded: seven nights of 400.4 against a 480
+  // target are -79.6 each and -557.2 in all, sent as -80 a night and -557 in total, which the
+  // page would show as seven -80s adding up to -557. The total is recomputed from what is sent.
+  // Skin temperature the same way: 33.46 against a usual centred on 33.04 is 0.42, sent as 0.4,
+  // beside a value sent as 33.5 and a centre sent as 33.0.
+  it('sends a balance total and a skin deviation that add up from the numbers it sends beside them', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    for (let i = 1; i <= 6; i += 1) seedDaily(harness, shiftLocalDate(NIGHT, -i), 'sleep_asleep_minutes', 'sum', 400.4)
+    seedNight(harness, NIGHT, 400.4)
+    for (let i = 1; i <= 60; i += 1) seedDaily(harness, shiftLocalDate(NIGHT, -i), 'sleep_temperature', 'last', i % 2 === 0 ? 33.09 : 32.99)
+    seedDaily(harness, NIGHT, 'sleep_temperature', 'last', 33.46)
+
+    const body = (await get(harness, token, `/night/${NIGHT}`)).json()
+    expect(body.balance.zeroLine).toEqual({ minutes: 480, source: 'target' })
+    const nights = body.balance.nights as { difference: number | null }[]
+    expect(nights.map((n) => n.difference)).toEqual(Array(7).fill(-80))
+    expect(body.balance.total).toBe(-560)
+    const { skinTemperature } = body.morning
+    expect(skinTemperature.value).toBe(33.5)
+    expect(skinTemperature.baseline.center).toBe(33)
+    expect(body.morning.skinTemperatureDeviation).toBe(0.5)
+  })
+
+  // Each strip day is judged against its own day's band, and re-judged on the wire as the headline
+  // is: the day before sits at 400.2 under a band of 400.4 flat, below it unrounded, and both are
+  // 400 as sent, so the dot must say within or it contradicts the numbers beside it.
+  it('re-judges a strip day on its rounded value and band', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    for (let i = 2; i <= 70; i += 1) seedDaily(harness, shiftLocalDate(NIGHT, -i), 'sleep_asleep_minutes', 'sum', 400.4)
+    seedDaily(harness, shiftLocalDate(NIGHT, -1), 'sleep_asleep_minutes', 'sum', 400.2)
+    seedNight(harness, NIGHT, 420)
+
+    const body = (await get(harness, token, `/night/${NIGHT}`)).json()
+    const dayBefore = (body.figures.asleep.strip as { localDate: string, value: number, band: { thin: boolean }, standing: string }[])
+      .find((d) => d.localDate === shiftLocalDate(NIGHT, -1))!
+    expect(dayBefore.value).toBe(400)
+    expect(dayBefore.band).toMatchObject({ center: 400, low: 400, high: 400, thin: false })
+    expect(dayBefore.standing).toBe('within')
+  })
+
+  // The trace figures and the morning's resting heart rate and HRV are page figures like the rest,
+  // so they reach the wire judged and rounded rather than as bare numbers.
+  it('sends the lowest heart rate and the morning\'s resting heart rate judged, at catalogue precision', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    for (let i = 1; i <= 60; i += 1) seedDaily(harness, shiftLocalDate(NIGHT, -i), 'resting_heart_rate', 'last', i % 2 === 0 ? 50.4 : 52.4)
+    seedNight(harness, NIGHT, 420)
+    seedDaily(harness, NIGHT, 'resting_heart_rate', 'last', 60.3)
+    insertSample(harness.app.haelan.instance.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(NIGHT, '03:00'), tzOffsetMinutes: OFFSET, value: 52.6,
+    })
+
+    const body = (await get(harness, token, `/night/${NIGHT}`)).json()
+    expect(body.morning.restingHeartRate).toMatchObject({ value: 60, direction: 'down', standing: 'above', judged: 'worse' })
+    expect(body.traces.heartRate.lowestFigure).toMatchObject({ metric: 'heart_rate', value: 53, direction: 'down' })
+    expect(body.traces.heartRate).not.toHaveProperty('usualLowest')
+  })
+
   it('answers 304 to a repeat request carrying the first one\'s ETag', async () => {
     harness = await withServer()
     harness.clock.nowMs = NOW_MS
@@ -134,6 +200,21 @@ describe('GET /night/:localDate', () => {
 })
 
 describe('GET /workout/:sessionId', () => {
+  // The route reads through p1's own PersonQuery, so another person's session id is simply not
+  // there: a 404 like any unknown id, and nothing of that session (its source) in the body.
+  it('answers 404 for another person\'s session, and names nothing of it', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    await harness.addPerson({ id: 'p2', displayName: 'Wilma', username: 'wilma' })
+    seedSource(harness, 'wilma-watch-999', 'p2')
+    seedRun(harness, { id: 'wilma-run', sourceId: 'wilma-watch-999', localDate: '2026-09-04', pace: 300, personId: 'p2' })
+    const response = await get(harness, token, '/workout/wilma-run')
+    expect(response.statusCode).toBe(404)
+    expect(response.json().error.code).toBe('no_such_session')
+    expect(response.body).not.toContain('wilma-watch-999')
+  })
+
   it('answers 404 for an unknown session', async () => {
     harness = await withServer()
     harness.clock.nowMs = NOW_MS

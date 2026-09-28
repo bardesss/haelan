@@ -4,6 +4,7 @@
 import { shiftLocalDate } from '../derive/localDay.ts'
 import { ConfigError } from '../errors.ts'
 import type { PersonQuery } from './personQuery.ts'
+import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS } from './intraday.ts'
 import { activeMinutesFigure, contextFor, dailyFigure, standingOf } from './glance.ts'
 import { judge, pageFigureOf, usualOf } from './pageFigure.ts'
 import type { FigureDirection, PageFigure } from './pageFigure.ts'
@@ -107,8 +108,8 @@ const FIGURES: readonly FigureSpec[] = [
 ]
 
 // intradayWindow's own span cap, and a minute's reading each across it, so thinning never drops the peak.
-const MAX_HR_WINDOW_MS = 48 * 3_600_000
-const MAX_HR_POINTS = 48 * 60
+const MAX_HR_WINDOW_MS = INTRADAY_WINDOW_MAX_MS
+const MAX_HR_POINTS = INTRADAY_WINDOW_MAX_HOURS * 60
 
 function readingOf(session: WorkoutSession, hr: { banister: number | null, highestHr: number | null } = { banister: null, highestHr: null }): Reading {
   const detail = workoutDetail(session.attrs)

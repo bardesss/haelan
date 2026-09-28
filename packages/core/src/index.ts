@@ -276,6 +276,7 @@ export type { PageFigure, Judged } from './query/pageFigure.ts'
 export { FIGURE_METRIC_ALIAS, judge } from './query/pageFigure.ts'
 export type { NightTrace, NightTraceStat } from './query/nightTraces.ts'
 export type { ZeroLine } from './api/sleepBalance.ts'
+export { balanceOf } from './api/sleepBalance.ts'
 
 // M9c: day navigation. The calendar's verdicts, reachable through PersonQuery.glanceCalendar for
 // full precision; `readGlanceCalendarRaw` and `judgeCalendarDay` are exported too, unlike

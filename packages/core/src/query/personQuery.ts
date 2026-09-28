@@ -22,7 +22,7 @@ import type { Insight, PeriodPoint } from './insights.ts'
 import { localDateOf, localMinuteOf, shiftLocalDate, widenedUtcWindow } from '../derive/localDay.ts'
 import { thin } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
-import { readIntraday, readIntradayWindow } from './intraday.ts'
+import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS, readIntraday, readIntradayWindow } from './intraday.ts'
 import type { IntradayResult } from './intraday.ts'
 import { SampleKeys } from '../db/keys.ts'
 import { applyToSamples } from '../derive/overrides.ts'
@@ -115,19 +115,6 @@ const DEVICE_ROLLED_EQUIVALENT: Readonly<Record<string, { metric: string, agg: s
   daily_hrv: { metric: 'hrv', agg: 'mean' },
   daily_spo2: { metric: 'spo2', agg: 'mean' },
 }
-
-/**
- * The widest span `intradayWindow` will read.
- *
- * 48 rather than 24 because the two questions the window exists for both cross a midnight: a night
- * runs 23:15 to 07:02, and a caller asking for "yesterday and today" of a person in a different
- * zone is not making a mistake. It is the number M8's design chose independently for the same
- * function, and taking that one rather than picking a second means the HTTP route and the tool
- * surface cannot come to disagree about what is too much to ask for.
- */
-const MAX_WINDOW_HOURS = 48
-
-const MAX_WINDOW_MS = MAX_WINDOW_HOURS * 3_600_000
 
 /**
  * The metrics that count as "this day has something to show" for the dashboard's day navigation
@@ -494,9 +481,9 @@ export class PersonQuery {
     if (input.startMs > input.endMs) {
       throw new ConfigError(`startMs ${input.startMs} is after endMs ${input.endMs}`)
     }
-    if (input.endMs - input.startMs > MAX_WINDOW_MS) {
+    if (input.endMs - input.startMs > INTRADAY_WINDOW_MAX_MS) {
       throw new ConfigError(
-        `the window must be at most ${MAX_WINDOW_HOURS} hours, got ${
+        `the window must be at most ${INTRADAY_WINDOW_MAX_HOURS} hours, got ${
           Math.round((input.endMs - input.startMs) / 3_600_000)} hours. Use series or intraday for `
         + 'a longer span, which read derived rows rather than every sample in it.',
       )

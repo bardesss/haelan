@@ -182,6 +182,22 @@ describe('readNightPage', () => {
     expect(day.workouts.map((w) => w.id)).toEqual(['evening-run'])
   })
 
+  it('judges the morning\'s resting heart rate and HRV as page figures, the way the catalogue says is better', () => {
+    // Sixty mornings alternating 50 and 52 bpm and 40 and 44 ms, then a morning at 60 and 30: a
+    // higher resting heart rate is worse, a lower HRV is worse.
+    for (let i = 1; i <= 60; i += 1) {
+      seedDaily(shiftLocalDate(NIGHT, -i), 'resting_heart_rate', 'last', i % 2 === 0 ? 50 : 52)
+      seedDaily(shiftLocalDate(NIGHT, -i), 'daily_hrv', 'last', i % 2 === 0 ? 40 : 44)
+    }
+    seedNight(NIGHT, {})
+    seedDaily(NIGHT, 'resting_heart_rate', 'last', 60)
+    seedDaily(NIGHT, 'daily_hrv', 'last', 30)
+    const { morning } = readNightPage(q(), input(NIGHT))!
+    expect(morning.restingHeartRate).toMatchObject({ metric: 'resting_heart_rate', value: 60, direction: 'down', standing: 'above', judged: 'worse' })
+    expect(morning.restingHeartRate.strip).toHaveLength(7)
+    expect(morning.hrv).toMatchObject({ value: 30, direction: 'up', standing: 'below', judged: 'worse' })
+  })
+
   it('carries the morning\'s recovery index beside the night', () => {
     seedNight(NIGHT, {})
     const { recovery } = readNightPage(q(), input(NIGHT))!.morning
