@@ -7,8 +7,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { NightTop } from './sleep/night/NightTop.js'
 import { NightHero } from './sleep/night/NightHero.js'
 import { NightMinis } from './sleep/night/NightMinis.js'
-import { NightStages } from './sleep/NightStages.js'
-import { NightTraces } from './sleep/NightTraces.js'
+import { NightThrough } from './sleep/night/NightThrough.js'
 import { NightSessions } from './sleep/NightSessions.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -60,16 +59,15 @@ export function NightDetail() {
   if (query.isPending) return <div className="grid"><Card span={12}><Loading /></Card></div>
 
   const page = query.data
-  // The sections below the four figures are the pre-M10a ones, each still reading the night itself;
-  // they draw it from this payload's `night`, so the page makes one read for the night either way.
+  // The sessions card below the night is the pre-M10a one, still reading the night itself; it draws
+  // it from this payload's `night`, so the page makes one read for the night either way.
   return (
     <div className="night-page">
       <NightTop page={page} />
       <div className="grid">
         <NightHero asleep={page.figures.asleep} />
         <NightMinis figures={page.figures} />
-        <NightStages night={page.night} />
-        <NightTraces night={page.night} chosenSource={chosenSource} />
+        <NightThrough page={page} chosenSource={chosenSource} />
         <NightSessions night={page.night} />
       </div>
     </div>

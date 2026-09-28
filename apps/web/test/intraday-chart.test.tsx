@@ -427,6 +427,25 @@ describe('IntradayHeartRate, bounded to its session', () => {
     expect(band!.markArea!.data).toEqual([[{ yAxis: 52 }, { yAxis: 58 }]])
   })
 
+  // M10a-1 final review: a night whose readings all sit above the usual band scaled the axis to the
+  // readings alone and clipped the band off the plot. The axis now reaches both ends of the band,
+  // and still reaches the readings wherever they stray past it.
+  it('stretches the y axis to keep the usual band on the plot', () => {
+    const option = optionFor({ points: ONE, startMs: START, endMs: END, usualBand: { low: 52, high: 58 } })
+    const y = option.yAxis as { min: (extent: { min: number, max: number }) => number, max: (extent: { min: number, max: number }) => number }
+    expect(y.min({ min: 140, max: 160 })).toBe(52)
+    expect(y.max({ min: 140, max: 160 })).toBe(160)
+    expect(y.min({ min: 54, max: 56 })).toBe(52)
+    expect(y.max({ min: 54, max: 56 })).toBe(58)
+  })
+
+  it('leaves the y axis to the readings when there is no usual band', () => {
+    const option = optionFor({ points: ONE, startMs: START, endMs: END })
+    const y = option.yAxis as { min?: unknown, max?: unknown }
+    expect(y.min).toBeUndefined()
+    expect(y.max).toBeUndefined()
+  })
+
   // Fix round 1 review finding: the accessible table (ChartFigure's own sr-only table) is the only
   // way this chart's data reaches a screen-reader user. Before this fix its time column called
   // `clock` unconditionally, so a workout's table read a clock time while the visible axis and

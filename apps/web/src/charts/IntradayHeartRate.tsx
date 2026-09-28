@@ -97,8 +97,8 @@ type Props = {
   axis?: 'clock' | 'elapsed'
   /**
    * A shaded y range drawn behind the lines, the same visual device `spans` uses on the x axis
-   * (WorkoutTrace.tsx and NightTraces.tsx do not pass this yet; a future caller supplies a person's
-   * usual range for the metric). Unset by default, which draws exactly what the chart drew before
+   * (NightTraces.tsx passes the usual range of the night's mean; WorkoutTrace.tsx passes none), and
+   * the full-size y axis stretches to keep it on the plot. Unset by default, which draws exactly what the chart drew before
    * this existed. A caller that does pass one must memoise it: like `eventMarks` and `spans` above,
    * this object sits in `build`'s own dependency list, and a fresh `{low, high}` literal on every
    * render would dispose and reinitialise the chart every time (chart-lifecycle.test.tsx's own
@@ -329,7 +329,16 @@ export function IntradayHeartRate({
           },
       yAxis: compact
         ? { type: 'value' as const, scale: true, show: false }
-        : { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
+        : {
+            type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel,
+            // Reaches both ends of the usual band as well as the readings: scaled to the readings
+            // alone, a night that sat wholly above or below its usual drew the band off the plot
+            // (M10a-1's final review). ECharts hands each bound the data's own extent.
+            ...(usualBand !== undefined && {
+              min: (extent: { min: number }) => Math.min(extent.min, usualBand.low),
+              max: (extent: { max: number }) => Math.max(extent.max, usualBand.high),
+            }),
+          },
       series: [...series.flatMap(({ sourceId, points: ownPoints }, index) => {
         const color = colors[index % colors.length]!
         const label = nameOf(sourceId)

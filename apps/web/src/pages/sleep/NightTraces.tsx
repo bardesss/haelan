@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Card } from '../../components/Card.js'
 import { ErrorState } from '../../components/ErrorState.js'
@@ -6,6 +7,9 @@ import { IntradayHeartRate, intradayBasis } from '../../charts/IntradayHeartRate
 import { useSourceTrace } from '../../data/useSourceTrace.js'
 import { useSourceNames } from '../../data/useSourceNames.js'
 import type { Night } from '../../data/useNights.js'
+import type { NightTrace as NightTraceFigures } from '../../data/useNightPage.js'
+import { formatRecordedClock } from '../../format.js'
+import { formatFigureValue, verdictLine } from './night/figureText.js'
 
 /**
  * The three metrics the night detail page charts across the night's own window, section 4's
@@ -14,6 +18,12 @@ import type { Night } from '../../data/useNights.js'
  * 'blood_oxygen' or 'heart_rate_variability'.
  */
 export const NIGHT_TRACE_METRICS: readonly string[] = ['heart_rate', 'spo2', 'hrv']
+
+/**
+ * What the server made of each trace (the night page's `traces`, keyed by metric id here), for the
+ * cards that have one: the night's extremes and its mean, each already judged against its usual.
+ */
+export type NightTracesFigures = Partial<Record<'heart_rate' | 'hrv' | 'spo2', NightTraceFigures>>
 
 /**
  * One metric's card: a single useSourceTrace call, pinned to the night's own source, over the
@@ -30,18 +40,27 @@ export const NIGHT_TRACE_METRICS: readonly string[] = ['heart_rate', 'spo2', 'hr
  * needs its own component instance to make its own single call. That also keeps each card's
  * absence independent - one metric finding nothing does not affect whether another renders.
  */
-function NightTrace({ metric, night, chosenSource }: {
+function NightTrace({ metric, night, chosenSource, figures }: {
   metric: string
   night: Night
   chosenSource: string | null
+  figures?: NightTraceFigures | undefined
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { nameOf } = useSourceNames()
   const trace = useSourceTrace({
     metric, startMs: night.startMs, endMs: night.endMs,
     sessionSourceId: night.sourceId, chosenSource,
   })
   const label = t(`sleep.night.traces.${metric}`)
+  // The usual range of the night's mean, shaded behind the trace; none on a thin baseline, which
+  // would draw three nights' worth of history as confidently as sixty. Memoised on the payload's
+  // own baseline object: the chart rebuilds whenever this reference changes.
+  const baseline = figures?.meanFigure.baseline ?? null
+  const usualBand = useMemo(
+    () => (baseline !== null && !baseline.thin ? { low: baseline.low, high: baseline.high } : undefined),
+    [baseline],
+  )
 
   if (trace.isError) {
     return (
@@ -76,15 +95,33 @@ function NightTrace({ metric, night, chosenSource }: {
     })
     : intradayBasis(t, trace.reduction, trace.points.length)
 
+  // The night's extreme in words: its lowest heart rate and blood oxygen, its highest HRV, the end
+  // of each that says the most about a night. The time reads at the night's own offset, the clock
+  // the chart below prints. Heart rate and blood oxygen also say how their lowest sits against the
+  // usual lowest, the server's verdict; HRV's lowest-figure would answer a question its line never
+  // asked, so it has none.
+  const highest = metric === 'hrv'
+  const extreme = figures === undefined ? null : highest ? figures.stat.highest : figures.stat.lowest
+  const summary = figures === undefined || extreme === null ? null : t(
+    highest ? 'sleep.night.traces.highest' : 'sleep.night.traces.lowest',
+    {
+      value: formatFigureValue(figures.lowestFigure, extreme.value, i18n.language, t),
+      time: formatRecordedClock(extreme.atMs, night.startOffsetMinutes),
+    },
+  )
+  const verdict = figures === undefined || highest ? null : verdictLine(figures.lowestFigure, i18n.language, t)
+
   return (
     <div className="night-trace">
       <Card span={12} label={label} basis={basis}>
+        {summary !== null && <p className="night-trace-summary">{summary}</p>}
+        {verdict !== null && <p className="night-trace-verdict">{verdict}</p>}
         {/* Read in the offset the night began under, so its clock times are the night's own. */}
         {/* Bounds the axis to the night itself, not just whatever the trace's own samples cover
             (Task 9's fix) - clock time, not elapsed: unlike a workout's own duration, a night's
             reader wants to see when in the night something happened, on the clock. */}
         <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={label} metric={metric}
-          offsetMinutes={night.startOffsetMinutes} startMs={night.startMs} endMs={night.endMs} />
+          offsetMinutes={night.startOffsetMinutes} startMs={night.startMs} endMs={night.endMs} usualBand={usualBand} />
       </Card>
     </div>
   )
@@ -99,7 +136,12 @@ function NightTrace({ metric, night, chosenSource }: {
  * fragment children rather than one wrapping element, the same shape NightStages and NightTiles
  * already sit in that grid as.
  */
-export function NightTraces({ night, chosenSource }: { night: Night, chosenSource: string | null }) {
+export function NightTraces({ night, chosenSource, traces }: {
+  night: Night
+  chosenSource: string | null
+  /** The night page's own figures for each trace; without them a card is the chart alone. */
+  traces?: NightTracesFigures
+}) {
   // The three literal calls below and NIGHT_TRACE_METRICS above are the same list written out
   // twice, kept in lockstep by hand rather than by a `.map()`: NightTrace's own comment explains
   // why a hook cannot be called a variable number of times, so this list cannot be exported once
@@ -109,9 +151,9 @@ export function NightTraces({ night, chosenSource }: { night: Night, chosenSourc
   // to (or dropped from) one without the other. Update both together, and keep that test passing.
   return (
     <>
-      <NightTrace metric="heart_rate" night={night} chosenSource={chosenSource} />
-      <NightTrace metric="spo2" night={night} chosenSource={chosenSource} />
-      <NightTrace metric="hrv" night={night} chosenSource={chosenSource} />
+      <NightTrace metric="heart_rate" night={night} chosenSource={chosenSource} figures={traces?.heart_rate} />
+      <NightTrace metric="spo2" night={night} chosenSource={chosenSource} figures={traces?.spo2} />
+      <NightTrace metric="hrv" night={night} chosenSource={chosenSource} figures={traces?.hrv} />
     </>
   )
 }

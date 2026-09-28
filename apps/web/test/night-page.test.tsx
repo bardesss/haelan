@@ -174,6 +174,26 @@ describe('the night page\'s four figures', () => {
   })
 })
 
+describe('the night page\'s night card', () => {
+  it('draws the stages under its own label, with each stage\'s time and share of the night', async () => {
+    const host = await mount(nightPageFixture())
+    const card = host.querySelector('.night-legend')?.closest('.card')
+    expect(card?.querySelector('.label')?.textContent).toBe('The night')
+    expect(card?.querySelector('[role="img"][aria-label="The night"]')).not.toBeNull()
+    // Deep, light and REM carry the server's share of the night; awake is its minutes alone.
+    expect([...host.querySelectorAll('.night-legend li')].map((item) => item.textContent)).toEqual([
+      'Deep 1h 04m · 16 %', 'Light 3h 29m · 53 %', 'REM 2h 03m · 31 %', 'Awake 0h 25m',
+    ])
+    expect(card?.querySelector('.night-naps')?.textContent).toBe('No naps recorded on this date.')
+  })
+
+  it('leaves a stage\'s share off when the server sent none for it', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, stagePercent: { ...page.stagePercent, rem: null } })
+    expect([...host.querySelectorAll('.night-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h 03m')
+  })
+})
+
 describe('the night page without a night', () => {
   it('says no night was recorded on a date the server has none for', async () => {
     const host = await mount(null)

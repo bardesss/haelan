@@ -15,6 +15,8 @@ import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { Night } from '../src/data/useNights.js'
 import { NightTraces, NIGHT_TRACE_METRICS } from '../src/pages/sleep/NightTraces.js'
+import type { NightTracesFigures } from '../src/pages/sleep/NightTraces.js'
+import { nightPageFixture } from './fixtures/nightPage.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush, pumpUntil } from './flush.js'
 
@@ -80,6 +82,31 @@ const NIGHT: Night = {
 const point = (sourceId: string) => ({
   sourceId, utcMs: Date.UTC(2026, 7, 2, 23, 0), min: 48, mean: 52, max: 58, n: 1, excluded: false,
 })
+
+/**
+ * The page's three traces (the shared night page fixture's figures), with their extremes moved
+ * into this file's night: heart rate's lowest at 03:00Z, HRV's highest at 23:30Z.
+ */
+function traces(): NightTracesFigures {
+  const { heartRate, hrv, spo2 } = nightPageFixture().traces
+  return {
+    heart_rate: { ...heartRate, stat: { ...heartRate.stat, lowest: { value: 56, atMs: Date.UTC(2026, 7, 3, 3, 0) } } },
+    hrv: { ...hrv, stat: { ...hrv.stat, highest: { value: 62, atMs: Date.UTC(2026, 7, 2, 23, 30) } } },
+    spo2,
+  }
+}
+
+/** The option the first chart that drew was last handed. */
+function drawnOption(): { series: { markArea?: { data: unknown[] } }[] } {
+  return charts.find((c) => c.setOption.mock.calls.length > 0)!.setOption.mock.calls.at(-1)![0] as {
+    series: { markArea?: { data: unknown[] } }[]
+  }
+}
+
+/** The usual band's shading, the one markArea spanning the y axis rather than the x. */
+function usualBandOf(option: { series: { markArea?: { data: unknown[] } }[] }): unknown[] | undefined {
+  return option.series.find((s) => JSON.stringify(s.markArea?.data ?? []).includes('yAxis'))?.markArea?.data
+}
 
 /** Keyed by `<metric>|<source>`, where an absent `source` parameter is the empty string. */
 function stub(answers: Record<string, unknown[]>): () => void {
@@ -226,6 +253,52 @@ describe('the overnight traces', () => {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} />)
       await flush(client, html)
       expect(container?.querySelectorAll('.night-trace')).toHaveLength(NIGHT_TRACE_METRICS.length)
+    } finally { restore() }
+  })
+
+  // M10a-2: the night page hands each trace what the server made of it, and the card says the
+  // night's extreme in words, at the night's own clock, above the chart.
+  it('says the night\'s lowest heart rate and when, and how that sits against the usual', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
+      // 03:00Z read at the night's +02:00 is 05:00.
+      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('lowest 56 bpm at 05:00')
+      expect(container!.querySelector('.night-trace-verdict')?.textContent).toBe('within your usual 51 bpm – 59 bpm')
+    } finally { restore() }
+  })
+
+  it('says the night\'s highest HRV rather than its lowest', async () => {
+    const restore = stub({ 'hrv|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
+      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('highest 62 ms at 01:30')
+    } finally { restore() }
+  })
+
+  it('shades the usual range of the night\'s mean behind the trace', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => charts.some((c) => c.setOption.mock.calls.length > 0), 'the heart rate chart to draw')
+      expect(usualBandOf(drawnOption())).toEqual([[{ yAxis: 56 }, { yAxis: 64 }]])
+    } finally { restore() }
+  })
+
+  it('shades nothing when the usual range of the mean is thin', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const thin = traces()
+      thin.heart_rate = { ...thin.heart_rate!, meanFigure: { ...thin.heart_rate!.meanFigure, baseline: { center: 60, low: 56, high: 64, thin: true } } }
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={thin} />)
+      await flush(client, html)
+      await pumpUntil(() => charts.some((c) => c.setOption.mock.calls.length > 0), 'the heart rate chart to draw')
+      expect(usualBandOf(drawnOption())).toBeUndefined()
     } finally { restore() }
   })
 

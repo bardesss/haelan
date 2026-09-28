@@ -769,6 +769,10 @@
         "bedtime": "Bedtime",
         "caption": "each line: this night and the six before it · band = your usual range"
       },
+      "through": {
+        "label": "The night",
+        "share": "{{duration}} · {{percent}} %"
+      },
       "tiles": {
         "asleep": "Time asleep",
         "inBed": "Time in bed",
@@ -796,7 +800,9 @@
           "spo2": "blood oxygen",
           "hrv": "heart rate variability"
         },
-        "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}"
+        "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}",
+        "lowest": "lowest {{value}} at {{time}}",
+        "highest": "highest {{value}} at {{time}}"
       },
       "sessions": {
         "label": "Sessions in this night",
