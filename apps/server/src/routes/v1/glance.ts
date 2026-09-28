@@ -205,8 +205,9 @@ export function registerGlanceRoutes(app: FastifyInstance): void {
     }
 
     // A past day's end in the effective zone bounds nothing a reader sees as a time: its last
-    // night is the night filed under that day (readLastNight), and its heart-rate trace carries
-    // the offset it was recorded under, so a day lived elsewhere is not shifted into this zone.
+    // night is the night filed under that day (readLastNight), from east or west of where it was
+    // slept, and its heart-rate trace carries the offset it was recorded under, so a day lived
+    // elsewhere is not shifted into this zone.
     // core's own readGlance already fills in `finished` and `nav` (Glance's own fields); nothing
     // here needs to recompute either, and roundGlance's `...glance` spread carries both through
     // to the wire unchanged.

@@ -136,6 +136,29 @@ describe('the finished day\'s heart rate and last night keep the offset they wer
     const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: EAST_DAY_END })
     expect(glance.sleep).toBeNull()
   })
+
+  // The other direction: an Amsterdam day (UTC+2) viewed from Los Angeles (UTC-7). The day ends at
+  // 06:59Z the next morning there, after the next night's 07:00 Amsterdam wake (05:00Z), so an
+  // end-time window would reach it; the finished day's own night, filed under the day, is the pick.
+  // The next night is also outside the D-2..D range readLastNight reads, so this case stays green
+  // under an end-time window alone and pins the pair of rules together.
+  function amsterdamNight(localDate: string) {
+    const endMs = Date.parse(`${localDate}T05:00:00Z`)
+    test.db.insert(sessions).values({
+      id: `ams-${localDate}`, personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: `ams-${localDate}`,
+      startMs: endMs - 8 * 3_600_000, startOffsetMinutes: 120, endMs, endOffsetMinutes: 120,
+      localDate, attrs: JSON.stringify({}), rawPayloadId: null,
+    }).run()
+  }
+
+  it('from west of where it was slept, never picks the next morning\'s night', () => {
+    amsterdamNight(DAY)
+    amsterdamNight('2026-08-16')
+    const westDayEnd = dayEndMs(DAY) + 7 * 3_600_000
+    const glance = new PersonQuery(test.db, 'p1').glance({ today: TODAY, nowMs: NOW, day: DAY, dayEndMs: westDayEnd })
+    expect(glance.sleep?.localDate).toBe(DAY)
+    expect(glance.sleep?.endMs).toBe(Date.parse(`${DAY}T05:00:00Z`))
+  })
 })
 
 describe('glance recovery on a finished day', () => {

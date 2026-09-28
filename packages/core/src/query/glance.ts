@@ -369,9 +369,11 @@ export interface GlanceSleep {
  *
  * A finished day is the exception, and picks by the date instead: its last night is the main
  * night filed under that day, the one woken up from on it, or none. Its `nowMs` is the day's end
- * in the zone the person is viewing from, which is not the zone the night was slept in, so a view
- * from west of where the night was slept would otherwise reach into the next morning and show the
- * following night. The date a night is filed under was fixed by its own offset when it was stored.
+ * in the zone the person is viewing from, which is not the zone the night was slept in, and an
+ * end-time window is wrong in both directions: from east of where the night was slept the day ends
+ * before the night woken from on it did, so the window passes over it to the night before; from
+ * west it ends after the next morning's wake, and only the date range read below keeps that night
+ * out. The date a night is filed under was fixed by its own offset when it was stored.
  */
 export const LAST_NIGHT_WINDOW_MS = 36 * 3_600_000
 
