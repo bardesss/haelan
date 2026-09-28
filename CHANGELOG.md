@@ -9,6 +9,19 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.14.0](https://github.com/bardesss/haelan/compare/v2.13.0...v2.14.0) (2026-09-28)
+
+
+### Features
+
+* **android:** the glance on the phone (M9d) ([09ed379](https://github.com/bardesss/haelan/commit/09ed379b28beb9e7970e21ea89d1721f0c029250))
+* **web:** inside the Android app the page shows only its content ([09ed379](https://github.com/bardesss/haelan/commit/09ed379b28beb9e7970e21ea89d1721f0c029250))
+
+
+### Bug Fixes
+
+* **server:** an unparseable content type answers 415, not 500 ([09ed379](https://github.com/bardesss/haelan/commit/09ed379b28beb9e7970e21ea89d1721f0c029250))
+
 ## [2.13.0](https://github.com/bardesss/haelan/compare/v2.12.0...v2.13.0) (2026-09-27)
 
 
