@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq, sql } from 'drizzle-orm'
 import {
-  COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, localDateOf,
-  mapSessions, mapWindowSamples, schema, supports,
+  COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
+  localDateOf, mapSessions, mapWindowSamples, schema, supports,
 } from '@haelan/core'
 import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
 import { drainPersonDerivation } from './annotations.ts'
@@ -151,6 +151,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     // window that maps to nothing today may map to something when a reading settles or a stage
     // is written into Health Connect, and a cursor that had moved past it would never look.
     if (mapped.samples.length === 0 && mapped.sessions.length === 0) {
+      recordPhoneZone(app, request, personId)
       return reply.send({
         payloadId: null, deduplicated: false, rowsWritten: 0, affected: null, applied: true,
       })
@@ -210,6 +211,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     drainPersonDerivation(app, personId, 'ingest', 1)
     const applied = !written.localDates.some((localDate) => stillQueued(app, personId, localDate))
     const ordered = [...written.localDates].sort()
+    recordPhoneZone(app, request, personId)
     return reply.send({
       payloadId: written.id,
       deduplicated: written.deduplicated,
@@ -352,6 +354,27 @@ function writeSessions(
  */
 function personIdOf(request: FastifyRequest<{ Params: PersonParams }>): string {
   return request.params.personId
+}
+
+/**
+ * The phone's zone, from the X-Haelan-Zone header, kept as the person's current zone once an
+ * ingest has succeeded. On this write path only, never on a GET: a write on a GET waits on the
+ * boot rebuild's write lock, and this route has already refused a request during one.
+ *
+ * Only ever a side note to the upload: a missing or unknown zone changes nothing, and a failing
+ * write is logged rather than thrown, so the phone's data is never refused over its clock. The
+ * home zone is not touched (it drives Google sync and rebuilds), and the store writes only when
+ * the zone differs, so every chunk of a sync repeating it costs nothing.
+ */
+function recordPhoneZone(app: FastifyInstance, request: FastifyRequest<{ Params: PersonParams }>, personId: string): void {
+  const header = request.headers['x-haelan-zone']
+  const zone = typeof header === 'string' ? header.trim() : ''
+  if (zone === '' || !isKnownTimezone(zone)) return
+  try {
+    app.haelan.stores.people.setCurrentTimezone(personId, zone)
+  } catch (error) {
+    console.error(`ingest: could not record the phone's zone for ${personId}, ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 /** A queue that cannot be read answers "still queued", so an unknown state is never called applied. */
