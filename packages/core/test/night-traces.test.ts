@@ -39,6 +39,21 @@ describe('nightTraceStat', () => {
   })
 })
 
+describe('nightTraceStat mean (#191)', () => {
+  it('computes the true mean from every reading, not a thinned sample', () => {
+    // 600 one-minute readings, more than TRACE_POINTS ever was (240), so a thinned read would
+    // drop most of them. Mostly 60 bpm with a spike to 200 every 50th minute: thinBand's minmax
+    // bucketing keeps each bucket's extremes, so a thinned mean is pulled toward the spikes and
+    // moves with the point budget - exactly the #191 shape CONTRIBUTING.md names.
+    const startMs = NIGHT0
+    const values = Array.from({ length: 600 }, (_, i) => (i % 50 === 0 ? 200 : 60))
+    values.forEach((v, i) => hr(startMs + i * 60_000, v))
+    const exactMean = values.reduce((sum, v) => sum + v, 0) / values.length
+    const stat = nightTraceStat(new PersonQuery(test.db, 'p1'), 'heart_rate', { startMs, endMs: startMs + 600 * 60_000 })
+    expect(stat.mean).toBeCloseTo(exactMean, 6)
+  })
+})
+
 describe('nightTrace', () => {
   it('judges the night against the nightly lowest of the nights before it', () => {
     const history = Array.from({ length: 14 }, (_, i) => night(i))
