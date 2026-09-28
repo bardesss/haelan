@@ -138,9 +138,10 @@ object WebPagePolicy {
      * underscore (`http://haelan_server:4235`), which is not a hostname to `java.net.URI`: it keeps
      * the authority and gives no host. The authority is read here instead, strictly: letters,
      * digits, dots, dashes and underscores, an optional port, and nothing else, so credentials, a
-     * second colon or an empty host still make no origin.
+     * second colon or an empty host still make no origin. Sign-in reads a typed address by the
+     * same rule ([InstanceAddress]), so an instance it accepts is one this can place.
      */
-    private fun registryHostOf(authority: String?): Pair<String, Int>? {
+    internal fun registryHostOf(authority: String?): Pair<String, Int>? {
         val match = REGISTRY_AUTHORITY.matchEntire(authority ?: return null) ?: return null
         val port = match.groupValues[2].takeIf { it.isNotEmpty() }?.toInt() ?: -1
         if (port == 0 || port > 65535) return null
