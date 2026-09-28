@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/bardesss/haelan/compare/android-v0.5.1...android-v0.6.0) (2026-09-28)
+
+
+### Features
+
+* **android:** the glance on the phone (M9d) ([09ed379](https://github.com/bardesss/haelan/commit/09ed379b28beb9e7970e21ea89d1721f0c029250))
+* **web:** inside the Android app the page shows only its content ([09ed379](https://github.com/bardesss/haelan/commit/09ed379b28beb9e7970e21ea89d1721f0c029250))
+
+
+### Bug Fixes
+
+* **server:** an unparseable content type answers 415, not 500 ([09ed379](https://github.com/bardesss/haelan/commit/09ed379b28beb9e7970e21ea89d1721f0c029250))
+
 ## [0.5.1](https://github.com/bardesss/haelan/compare/android-v0.5.0...android-v0.5.1) (2026-09-24)
 
 
