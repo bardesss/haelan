@@ -810,6 +810,13 @@
         "basis": "a night is assembled from these recordings; excluding one re-derives the night without it",
         "exclude": "Exclude or add a note",
         "excluded": "Excluded"
+      },
+      "week": {
+        "schedule": "Sleep schedule",
+        "balance": "Sleep balance",
+        "variability": "Bedtime varied ±{{value}} this week",
+        "balanceAgainstTarget": "against your target of {{target}}",
+        "balanceAgainstBaseline": "against your usual {{usual}}"
       }
     }
   },

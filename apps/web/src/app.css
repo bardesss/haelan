@@ -598,6 +598,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .night-hero-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .night-hero-verdict.better { color: var(--positive); }
 .night-hero-verdict.worse { color: var(--negative); }
+.night-week-variability { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.night-week-total { font-variant-numeric: tabular-nums; }
+.night-week-against { margin: var(--space-1) 0 var(--space-3); font-size: var(--font-size-sm); color: var(--text-secondary); }
 /* Four across on a wide screen, two on a phone, the mockup's two layouts. */
 .night-minis-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 @media (max-width: 620px) {

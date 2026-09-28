@@ -208,6 +208,48 @@ describe('the night page\'s night card', () => {
   })
 })
 
+describe('the night page\'s week', () => {
+  it('draws the week\'s bed and wake times in the schedule card, and how much bedtime varied', async () => {
+    const host = await mount(nightPageFixture())
+    const card = host.querySelector('[aria-label="Sleep schedule"]')?.closest('.card')
+    expect(card?.querySelector('.label')?.textContent).toBe('Sleep schedule')
+    expect(card?.querySelectorAll('tbody tr')).toHaveLength(7)
+    expect(card?.textContent).toContain('Bedtime varied ±0h 28m this week')
+    expect(card?.textContent).toContain('within your usual 0h 20m – 0h 35m')
+  })
+
+  it('hides the schedule card when neither bedtime nor waketime carries a strip', async () => {
+    const page = nightPageFixture()
+    const host = await mount({
+      ...page,
+      figures: {
+        ...page.figures,
+        bedtime: { ...page.figures.bedtime, strip: null },
+        waketime: { ...page.figures.waketime, strip: null },
+      },
+    })
+    expect(host.querySelector('[aria-label="Sleep schedule"]')).toBeNull()
+    // The balance card, its neighbour in the same row, is unaffected.
+    expect(host.querySelector('[aria-label="Sleep balance"]')).not.toBeNull()
+  })
+
+  it('totals the week\'s balance, signed, against the target it was drawn from', async () => {
+    const host = await mount(nightPageFixture())
+    const card = host.querySelector('[aria-label="Sleep balance"]')?.closest('.card')
+    expect(card?.querySelector('.label')?.textContent).toBe('Sleep balance')
+    expect(card?.textContent).toContain('-7h 24m')
+    expect(card?.textContent).toContain('against your target of 7h 30m')
+    expect(card?.querySelectorAll('tbody tr')).toHaveLength(7)
+  })
+
+  it('names the usual instead of a target when the zero line is the baseline', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, balance: { ...page.balance, zeroLine: { minutes: 400, source: 'baseline' } } })
+    const card = host.querySelector('[aria-label="Sleep balance"]')?.closest('.card')
+    expect(card?.textContent).toContain('against your usual 6h 40m')
+  })
+})
+
 describe('the night page without a night', () => {
   it('says no night was recorded on a date the server has none for', async () => {
     const host = await mount(null)

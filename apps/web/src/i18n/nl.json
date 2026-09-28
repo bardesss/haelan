@@ -810,6 +810,13 @@
         "basis": "een nacht wordt samengesteld uit deze registraties; door er een uit te sluiten wordt de nacht opnieuw afgeleid zonder die registratie",
         "exclude": "Uitsluiten of notitie toevoegen",
         "excluded": "Uitgesloten"
+      },
+      "week": {
+        "schedule": "Slaapschema",
+        "balance": "Slaapbalans",
+        "variability": "Bedtijd varieerde ±{{value}} deze week",
+        "balanceAgainstTarget": "tegen je doel van {{target}}",
+        "balanceAgainstBaseline": "tegen je gebruikelijke {{usual}}"
       }
     }
   },

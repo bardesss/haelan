@@ -483,14 +483,17 @@ describe('the charts across a rerender', () => {
     // The hero's time-asleep strip and the four figures' strips (M10a: each a Sparkline whose
     // arrays and formatter come out of a memo on the payload), then the hypnogram (one staged
     // segment) and the heart_rate trace (pinned to the night's own source, which answered real
-    // points): seven charts on this fixture, none absent. spo2 and hrv both pin to 'watch', find
-    // nothing, and fall back to every other source finding nothing either, so they stay absent the
-    // same way NightTraces' own "renders a row only for the metrics something actually recorded"
-    // test already covers - this fixture does not need all three to exercise the same identity
-    // chain a fourth trace would.
+    // points), then the week row's own two (M10a-2's NightWeek: SleepSchedule over the bedtime and
+    // waketime strips, BalanceBars over `balance.nights`, both memoised the same way): nine charts
+    // on this fixture, none absent. spo2 and hrv both pin to 'watch', find nothing, and fall back to
+    // every other source finding nothing either, so they stay absent the same way NightTraces' own
+    // "renders a row only for the metrics something actually recorded" test already covers - this
+    // fixture does not need all three to exercise the same identity chain a fourth trace would.
     expect(container!.querySelector('.night-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
     expect(container!.querySelectorAll('.night-minis [role="img"]')).toHaveLength(4)
-    expect(before).toHaveLength(7)
+    expect(container!.querySelector('[role="img"][aria-label="Sleep schedule"]')).not.toBeNull()
+    expect(container!.querySelector('[role="img"][aria-label="Sleep balance"]')).not.toBeNull()
+    expect(before).toHaveLength(9)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled
