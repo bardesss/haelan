@@ -238,6 +238,20 @@ class LogSheetModelTest {
     }
 
     @Test
+    fun `chips saved on another day reach the screen's day even after its kept sheet was let go`() {
+        model.open(today, glanceLog)
+        model.step("2026-09-26")
+        // The glance caught up while the sheet was on the day before: today's kept sheet is let
+        // go, so stepping back rebuilds it from the screen's log, which must carry the new chips.
+        model.glanceArrived(today, glanceLog)
+        model.startEdit()
+        model.addSuggestion("caffeine")
+        model.saveEdit()
+        model.step(today)
+        assertEquals(listOf("travel", "caffeine"), sheet?.log?.presets)
+    }
+
+    @Test
     fun `Done with the chips unchanged sends nothing and refreshes nothing`() {
         model.open(today, glanceLog)
         model.startEdit()

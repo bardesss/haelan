@@ -190,7 +190,7 @@ class LogSheetModel(
     override fun chooseMood(score: Int?) {
         val next = change { it.moodChosen(score) } ?: return
         val seq = next.moodSeq
-        write(next.day, { calls().setMood(next.day, score) }) { state, done, problem ->
+        write(next.day, { calls().setMood(next.day, score) }) { state, done, problem, _ ->
             if (done != null) state.moodSaved(seq, score) else state.moodFailed(seq, problem!!)
         }
     }
@@ -198,8 +198,7 @@ class LogSheetModel(
     override fun tap(kind: String) {
         val next = change { it.tapped(kind) } ?: return
         val seq = next.tapSeq
-        val since = next.generation
-        write(next.day, { calls().tap(kind, next.day) }) { state, event, problem ->
+        write(next.day, { calls().tap(kind, next.day) }) { state, event, problem, since ->
             if (event != null) state.tapLogged(seq, kind, event.id, since) else state.tapFailed(kind, problem!!)
         }
     }
@@ -212,8 +211,7 @@ class LogSheetModel(
             publish()
             state to slot
         }
-        val since = state.generation
-        write(state.day, { calls().undo(slot.eventId) }) { day, done, problem ->
+        write(state.day, { calls().undo(slot.eventId) }) { day, done, problem, since ->
             if (done != null) day.undone(slot.kind, since) else day.undoFailed(slot.kind, problem!!)
         }
     }
@@ -236,7 +234,7 @@ class LogSheetModel(
         if (save == null) return
         days[state.day] = next
         publish()
-        write(save.day, { calls().saveNote(save.day, save.body) }) { day, done, problem ->
+        write(save.day, { calls().saveNote(save.day, save.body) }) { day, done, problem, _ ->
             if (done != null) day.noteSettled() else day.noteFailed(save, problem!!)
         }
     }
@@ -278,7 +276,7 @@ class LogSheetModel(
             // An unchanged list has already left edit mode, and sends nothing.
             state.day to (kinds ?: return)
         }
-        write(day, { calls().savePresets(kinds) }) { state, saved, problem ->
+        write(day, { calls().savePresets(kinds) }) { state, saved, problem, _ ->
             if (saved == null) return@write state.editFailed(problem!!)
             // Inside settle, so under [lock]: the list is the person's, and every kept day takes it.
             for (other in days.keys.toList()) if (other != day) days[other] = days.getValue(other).presetsSaved(saved)
@@ -302,18 +300,25 @@ class LogSheetModel(
 
     /**
      * Sends [send] for [day] and folds its answer in with [fold]: the answer's value on success,
-     * otherwise null and the problem. A write that lands refreshes the glance; the sheet already
-     * shows it, so only the screen behind it has something to catch up on.
+     * otherwise null and the problem, and the day's [LogSheetState.generation] as the write was
+     * registered. A write that lands refreshes the glance; the sheet already shows it, so only the
+     * screen behind it has something to catch up on.
+     *
+     * The generation is taken in the same lock that registers the write, not by the caller after
+     * its change: a read settling between the two would move the generation on without having
+     * counted the write, whose answer, measured against the older one, would then not count itself
+     * either. From registration on, a read that settles is discarded instead ([read]).
      */
     private fun <T> write(
         day: String,
         send: () -> Answer<T>,
-        fold: (LogSheetState, T?, SheetProblem?) -> LogSheetState,
+        fold: (LogSheetState, T?, SheetProblem?, Int) -> LogSheetState,
     ): Job {
+        var since = 0
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val answer = send()
-                settle(day, answer, fold)
+                settle(day, answer) { state, value, problem -> fold(state, value, problem, since) }
                 if (answer is Answer.Ok && !closed) onWrote()
             } finally {
                 synchronized(lock) { pending[day]?.remove(coroutineContext[Job]) }
@@ -323,6 +328,7 @@ class LogSheetModel(
         synchronized(lock) {
             pending.getOrPut(day) { mutableSetOf() } += job
             started[day] = (started[day] ?: 0) + 1
+            since = days[day]?.generation ?: 0
         }
         job.start()
         return job
