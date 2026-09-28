@@ -29,6 +29,7 @@ import com.haelan.android.glance.GlanceRegistry
 import com.haelan.android.glance.GlanceStore
 import com.haelan.android.glance.forgetGlances
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -614,8 +615,12 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         }
     }
 
+    /**
+     * Through the application's context, with a task of its own, so a sign-out that finishes after
+     * this screen was destroyed (back pressed mid-way) still lands on sign-in.
+     */
     private fun goLogin(expired: Boolean) {
-        startActivity(Intent(this, LoginActivity::class.java).apply {
+        applicationContext.startActivity(Intent(applicationContext, LoginActivity::class.java).apply {
             putExtra(LoginActivity.EXTRA_EXPIRED, expired)
             // This screen is opened from the glance, which stays underneath it. Signing out or
             // losing the session has to take the glance with it: otherwise back from sign-in
@@ -625,24 +630,36 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         finish()
     }
 
+    /**
+     * Signs out in [signOutInOrder]'s order: the phone forgets first, the instance is told after,
+     * and nothing waits on it. Started undispatched, so a back press landing before the main thread
+     * gets round to it cannot cancel it before it has begun; past that, NonCancellable holds.
+     */
     private fun signOut() {
-        scope.launch {
-            withContext(Dispatchers.IO) {
-                // Best effort by construction: the client returns the failure rather than
-                // throwing it, and the session cookie is dropped either way below. An instance
-                // that is unreachable must not be able to keep somebody signed in.
-                InstanceClient.post(server, "/api/auth/logout", "{}", cookie) { }
+        val app = applicationContext
+        val session = SessionStore.prefs(app)
+        // Read before the session is cleared: the POST names the session it ends.
+        val instance = server
+        val ending = cookie
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            signOutInOrder(
+                io = Dispatchers.IO,
                 // The last glance is health data on the device; it leaves with the session. Every
                 // open glance is closed first (forgetGlances), so a read still in flight on the
                 // glance screen underneath cannot write the glance back after the delete.
-                forgetGlances(GlanceRegistry.app) { GlanceStore.encrypted(this@MainActivity).delete() }
-            }
-            SessionStore.clearSession(SessionStore.prefs(this@MainActivity))
-            // The in-app web page (WebPageActivity) keeps the session as a cookie of its own, the
-            // web app's storage beside it and the view's cache; all of it leaves with the session.
-            // On the main thread, where the web view's pieces want to be called.
-            WebData.clear(this@MainActivity)
-            goLogin(expired = false)
+                forgetGlances = { forgetGlances(GlanceRegistry.app) { GlanceStore.encrypted(app).delete() } },
+                clearSession = { SessionStore.clearSession(session) },
+                // The in-app web page (WebPageActivity) keeps the session as a cookie of its own, the
+                // web app's storage beside it and the view's cache; all of it leaves with the session.
+                // On the main thread, where the web view's pieces want to be called.
+                clearWebData = { WebData.clear(app) },
+                // An instance that is unreachable must not be able to keep somebody signed in, nor
+                // hold the screen: the POST goes on its own, and sign-in opens meanwhile.
+                sendLogout = {
+                    SignOut.background.launch { InstanceClient.post(instance, "/api/auth/logout", "{}", ending) { } }
+                },
+                goLogin = { goLogin(expired = false) },
+            )
         }
     }
 

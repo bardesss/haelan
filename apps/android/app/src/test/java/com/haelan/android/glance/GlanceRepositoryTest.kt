@@ -639,6 +639,20 @@ class GlanceRepositoryTest {
     }
 
     @Test
+    fun `a refresh on a closed glance settles at once, with no read and no loading left on`() {
+        reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v2\"")
+        repository.open()
+        repository.close()
+
+        repository.refresh()
+        assertFalse("a pull on a closed glance spins for good", state.loading)
+        repository.showDay("2026-08-18")
+        assertFalse(state.loading)
+        assertEquals(listOf<String?>(null), reads.etagsSent)
+        assertEquals(emptyList<String>(), reads.daysAsked)
+    }
+
+    @Test
     fun `a read that fails in a way nobody planned for still settles, as unreachable`() {
         reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v2\"")
         repository.open()

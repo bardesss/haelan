@@ -182,6 +182,12 @@ class GlanceRepository(
     /** Numbers a call, marks it pending on screen at once, and runs [block] on the dispatcher. */
     private fun start(pending: (GlanceUiState) -> GlanceUiState, block: (Int) -> Unit) {
         val gen = synchronized(lock) {
+            if (closed) {
+                // Its scope is cancelled, so a read launched on it would never run, and nothing
+                // would end the loading it set: a pull on a glance the sign-out closed spun for good.
+                mutableState.value = mutableState.value.copy(loading = false)
+                return
+            }
             mutableState.value = withToday(pending(mutableState.value))
             ++generation
         }
