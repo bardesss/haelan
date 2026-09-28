@@ -8,5 +8,6 @@ export function copyDemo(fromDir: string, outDir: string): string[]
 export function buildSite(rootDir: string, outDir: string): string[]
 export function ribbonHtml(): string
 export function shotId(shot: { file: string }): string
-export function galleryHtml(): string
-export function lightboxHtml(): string
+export function pngSize(path: string): { width: number, height: number }
+export function galleryHtml(dir?: string): string
+export function lightboxHtml(dir?: string): string

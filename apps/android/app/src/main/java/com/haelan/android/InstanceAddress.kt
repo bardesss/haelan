@@ -31,7 +31,10 @@ object InstanceAddress {
         }
         val scheme = uri.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") return null
-        if (uri.host.isNullOrEmpty()) return null
+        // A container name (`haelan_server`) is no hostname to URI, which then gives no host at
+        // all; the authority is read by the in-app page's strict rule instead, so an instance
+        // reached by its Docker name signs in and its pages open.
+        if (uri.host.isNullOrEmpty() && WebPagePolicy.registryHostOf(uri.rawAuthority) == null) return null
         // Credentials, a query or a fragment would ride along in every request or be dropped
         // silently. Refusing the address beats picking a half of it.
         if (uri.userInfo != null || uri.query != null || uri.fragment != null) return null

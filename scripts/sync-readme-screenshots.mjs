@@ -20,13 +20,35 @@ const END = '<!-- screenshots:end -->'
 const WIDTH = 100
 
 /**
- * Greedy wrap at spaces. Safe for the markdown here because a link - `[Sleep](assets/…png)` - has
- * no space inside it and so is never split across lines, which markdown would not survive. A word
- * longer than the width goes over it rather than being broken.
+ * The sentence's words, with a link's text kept whole: `[Log panel](assets/…png)` is one word
+ * however many spaces its text holds. Splitting inside the brackets is harmless to markdown, which
+ * joins the lines again, but it breaks a link's name across two lines of the diff, and a title
+ * with a space in it used to do exactly that.
  */
-function wrap(sentence) {
-  const lines = ['']
+function words(sentence) {
+  const out = []
+  let open = null
   for (const word of sentence.split(' ')) {
+    const joined = open === null ? word : `${open} ${word}`
+    // Unbalanced brackets so far: inside a link's text, so the next word joins this one.
+    const depth = [...joined].reduce((d, c) => d + (c === '[' ? 1 : c === ']' ? -1 : 0), 0)
+    if (depth > 0) open = joined
+    else {
+      out.push(joined)
+      open = null
+    }
+  }
+  if (open !== null) out.push(open)
+  return out
+}
+
+/**
+ * Greedy wrap at spaces, never inside a link's text ([words]). A word longer than the width goes
+ * over it rather than being broken.
+ */
+export function wrap(sentence) {
+  const lines = ['']
+  for (const word of words(sentence)) {
     const line = lines.at(-1)
     if (line === '') lines[lines.length - 1] = word
     else if (line.length + 1 + word.length <= WIDTH) lines[lines.length - 1] = `${line} ${word}`

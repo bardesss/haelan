@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.contracts.ExerciseRouteRequestContract
@@ -21,11 +22,17 @@ import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseRouteResult
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.Lifecycle
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.haelan.android.glance.GlanceRegistry
+import com.haelan.android.glance.GlanceStore
+import com.haelan.android.glance.forgetGlances
+import com.haelan.android.glance.ui.DynamicChrome
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -167,6 +174,11 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The chrome follows the phone by the glance's own rule (DynamicChrome): Material You's
+        // wallpaper colours where Material says the phone has them, for the bar, the buttons and
+        // the switches. Only those read the theme; the page, the cards and every word are token
+        // colours named in the layout, so the screen keeps the palette it shares with the glance.
+        DynamicChrome.applyTo(this)
         super.onCreate(savedInstanceState)
 
         val stored = SessionStore.prefs(this)
@@ -193,8 +205,14 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         // with no session no-ops until the next sign-in enqueues again.
         SyncSchedule.enqueue(this)
 
+        // As the glance and the web page do: the status bar's icons then follow the phone's light or
+        // dark, where the theme alone left them white over the light bar.
+        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
-        findViewById<android.view.View>(R.id.mainRoot).padForSystemBars()
+        findViewById<View>(R.id.topBarFrame).padForSystemBars(bottom = false)
+        findViewById<View>(R.id.mainScroll).padForSystemBars(top = false)
+        // A screen below the glance, as the in-app web page is: back to it, whatever opened this.
+        findViewById<MaterialToolbar>(R.id.topBar).setNavigationOnClickListener { finish() }
         permCheck = findViewById(R.id.permCheck)
         permStatus = findViewById(R.id.permStatus)
         syncButton = findViewById(R.id.buttonSync)
@@ -546,20 +564,23 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
+            // The glance's body type: bodyMedium for the type's name, bodySmall for the two lines
+            // under it. The appearance first, because it carries a colour of its own and the token
+            // colour set after it is the one that has to win.
             val title = TextView(this).apply {
                 text = getString(option.titleRes)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
                 setTextColor(getColor(R.color.text_primary))
-                textSize = 15f
             }
             val subtitle = TextView(this).apply {
                 setText(R.string.src_health_connect)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
                 setTextColor(getColor(R.color.text_muted))
-                textSize = 12f
             }
             val status = TextView(this).apply {
                 setText(R.string.status_never)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
                 setTextColor(getColor(R.color.text_secondary))
-                textSize = 12f
             }
             texts.addView(title)
             texts.addView(subtitle)
@@ -611,23 +632,51 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         }
     }
 
+    /**
+     * Through the application's context, with a task of its own, so a sign-out that finishes after
+     * this screen was destroyed (back pressed mid-way) still lands on sign-in.
+     */
     private fun goLogin(expired: Boolean) {
-        startActivity(Intent(this, LoginActivity::class.java).apply {
+        applicationContext.startActivity(Intent(applicationContext, LoginActivity::class.java).apply {
             putExtra(LoginActivity.EXTRA_EXPIRED, expired)
+            // This screen is opened from the glance, which stays underneath it. Signing out or
+            // losing the session has to take the glance with it: otherwise back from sign-in
+            // lands on a glance for a session that is gone.
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         })
         finish()
     }
 
+    /**
+     * Signs out in [signOutInOrder]'s order: the phone forgets first, the instance is told after,
+     * and nothing waits on it. Started undispatched, so a back press landing before the main thread
+     * gets round to it cannot cancel it before it has begun; past that, NonCancellable holds.
+     */
     private fun signOut() {
-        scope.launch {
-            withContext(Dispatchers.IO) {
-                // Best effort by construction: the client returns the failure rather than
-                // throwing it, and the session cookie is dropped either way below. An instance
-                // that is unreachable must not be able to keep somebody signed in.
-                InstanceClient.post(server, "/api/auth/logout", "{}", cookie) { }
-            }
-            SessionStore.clearSession(SessionStore.prefs(this@MainActivity))
-            goLogin(expired = false)
+        val app = applicationContext
+        val session = SessionStore.prefs(app)
+        // Read before the session is cleared: the POST names the session it ends.
+        val instance = server
+        val ending = cookie
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            signOutInOrder(
+                io = Dispatchers.IO,
+                // The last glance is health data on the device; it leaves with the session. Every
+                // open glance is closed first (forgetGlances), so a read still in flight on the
+                // glance screen underneath cannot write the glance back after the delete.
+                forgetGlances = { forgetGlances(GlanceRegistry.app) { GlanceStore.encrypted(app).delete() } },
+                clearSession = { SessionStore.clearSession(session) },
+                // The in-app web page (WebPageActivity) keeps the session as a cookie of its own, the
+                // web app's storage beside it and the view's cache; all of it leaves with the session.
+                // On the main thread, where the web view's pieces want to be called.
+                clearWebData = { WebData.clear(app) },
+                // An instance that is unreachable must not be able to keep somebody signed in, nor
+                // hold the screen: the POST goes on its own, and sign-in opens meanwhile.
+                sendLogout = {
+                    SignOut.background.launch { InstanceClient.post(instance, "/api/auth/logout", "{}", ending) { } }
+                },
+                goLogin = { goLogin(expired = false) },
+            )
         }
     }
 

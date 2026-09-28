@@ -98,6 +98,22 @@ class InstanceErrorTest {
         )
     }
 
+    /**
+     * A type whose read permission Health Connect has not granted fails before anything is sent,
+     * and connect-client throws it as a SecurityException wrapping the platform's own exception
+     * (ExceptionConverter, connect-client 1.1.0). Found on the emulator, where every row read "the
+     * connection to the instance broke" while the instance's log showed no upload at all: the
+     * fault was on the phone, and the sentence sent the person looking at the network.
+     */
+    @Test
+    fun aReadHealthConnectRefusedSaysPermissionNotConnection() {
+        val refused = SecurityException(
+            IllegalStateException("Caller doesn't have android.permission.health.READ_STEPS"),
+        )
+
+        assertEquals(R.string.error_permission, InstanceError.forThrowable(refused))
+    }
+
     @Test
     fun otherAnswersKeepTheirOwnSentenceOnTheLoginScreenToo() {
         assertEquals(

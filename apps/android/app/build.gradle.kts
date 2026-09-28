@@ -3,6 +3,7 @@ import java.util.Base64
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // The palette is a target of @haelan/tokens and reaches this module as generated resources: no
@@ -149,6 +150,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // The glance is Compose; the sign-in and sync screens stay the views they are.
+    buildFeatures {
+        compose = true
+    }
 }
 
 dependencies {
@@ -160,6 +166,24 @@ dependencies {
     // Periodic background sync: the only scheduler in this app. Version lives here,
     // next to the other five, so there is no catalog to drift (root build file, line 1).
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Compose, for the glance. The BOM pins every Compose artifact to one release, which is why
+    // the lines under it carry no version. activity-compose matches activity above, and the
+    // lifecycle artifact is not in the BOM, so it names the lifecycle release Compose resolves to.
+    // 2026.03.01 is chosen as the newest BOM whose Compose asks for a Kotlin 2.0 standard library,
+    // matching the Kotlin this module compiles with; later BOMs ask for 2.1, and moving to them is
+    // a Kotlin bump taken on purpose rather than a side effect of this one.
+    implementation(platform("androidx.compose:compose-bom:2026.03.01"))
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
+    // The glance's ViewModel (viewModelScope, viewModelFactory), so a rotation keeps the day on
+    // screen; the same lifecycle release as the line above.
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
+    // The previews live in src/debug alone (GlancePreviews), so their annotation stays out of release.
+    debugImplementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
     // The platform's org.json is a stub under a JVM unit test (TypeChunkLimitTest's own comment:

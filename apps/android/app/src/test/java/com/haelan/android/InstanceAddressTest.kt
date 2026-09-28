@@ -41,6 +41,18 @@ class InstanceAddressTest {
     }
 
     @Test
+    fun aContainerNameWithAnUnderscoreIsAnAddress() {
+        assertEquals("http://haelan_server:4235", InstanceAddress.normalize("http://haelan_server:4235"))
+        assertEquals("http://haelan_server:4235", InstanceAddress.normalize("haelan_server:4235/"))
+        assertEquals("http://haelan_server", InstanceAddress.normalize("haelan_server"))
+        // The same strict rule as the in-app page: no credentials, no bad port, no empty name.
+        assertNull(InstanceAddress.normalize("http://user@haelan_server:4235"))
+        assertNull(InstanceAddress.normalize("http://haelan_server:99999"))
+        assertNull(InstanceAddress.normalize("http://haelan_server:4235:1"))
+        assertNull(InstanceAddress.normalize("http://_:4235"))
+    }
+
+    @Test
     fun anAddressCarryingMoreThanTheInstanceIsRefused() {
         assertNull(InstanceAddress.normalize("http://user:secret@nas:4235"))
         assertNull(InstanceAddress.normalize("http://nas:4235/?debug=1"))

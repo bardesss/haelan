@@ -1,0 +1,306 @@
+{
+  "today": "2026-08-20",
+  "sleep": null,
+  "recovery": {
+    "index": {
+      "metric": "recovery_index",
+      "value": null,
+      "unit": "score",
+      "baseline": null,
+      "asOfDate": null,
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-14",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-19",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-20",
+          "value": null,
+          "band": null,
+          "standing": null
+        }
+      ],
+      "standing": null
+    },
+    "band": null,
+    "missing": [
+      "hrv",
+      "restingHeartRate"
+    ],
+    "restingHeartRate": {
+      "metric": "resting_heart_rate",
+      "value": null,
+      "unit": "bpm",
+      "baseline": null,
+      "asOfDate": null,
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-13",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-19",
+          "value": null,
+          "band": null,
+          "standing": null
+        }
+      ],
+      "standing": null
+    },
+    "hrv": {
+      "metric": "daily_hrv",
+      "value": null,
+      "unit": "milliseconds",
+      "baseline": null,
+      "asOfDate": null,
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-13",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-19",
+          "value": null,
+          "band": null,
+          "standing": null
+        }
+      ],
+      "standing": null
+    },
+    "respiratoryRate": null
+  },
+  "day": {
+    "steps": {
+      "metric": "steps",
+      "value": null,
+      "unit": "count",
+      "baseline": null,
+      "asOfDate": null,
+      "asOfMs": null,
+      "partial": true,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-14",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-19",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-20",
+          "value": null,
+          "band": null,
+          "standing": null
+        }
+      ],
+      "standing": null
+    },
+    "stepsPace": null,
+    "activeMinutes": {
+      "metric": "active_minutes",
+      "value": null,
+      "unit": "minutes",
+      "baseline": null,
+      "asOfDate": null,
+      "asOfMs": null,
+      "partial": true,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-14",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-19",
+          "value": null,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-20",
+          "value": null,
+          "band": null,
+          "standing": null
+        }
+      ],
+      "standing": null
+    },
+    "heartRate": {
+      "points": [],
+      "asOfMs": null,
+      "staleSources": []
+    },
+    "workouts": []
+  },
+  "week": {
+    "steps": null,
+    "activeMinutes": null,
+    "asleep": null
+  },
+  "finished": false,
+  "nav": {
+    "previous": null,
+    "next": null
+  }
+}

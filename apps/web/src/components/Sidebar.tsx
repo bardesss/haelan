@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from '../i18n/index.js'
+import { isInAndroidApp } from '../auth/inAndroidApp.js'
 import { BrandMark } from './BrandMark.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
@@ -303,9 +304,12 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
       <Link to="/account" className="rail-menu-item" role="menuitem">
         <Icon name="account" />{t('sidebar.items.account')}
       </Link>
-      <button type="button" className="rail-menu-item" role="menuitem" onClick={onSignOut}>
-        <Icon name="signOut" />{t('shell.signOut')}
-      </button>
+      {/* Not inside the Android app, whose page shares the app's session (auth/inAndroidApp.ts). */}
+      {!isInAndroidApp() && (
+        <button type="button" className="rail-menu-item" role="menuitem" onClick={onSignOut}>
+          <Icon name="signOut" />{t('shell.signOut')}
+        </button>
+      )}
     </div>
   )
 

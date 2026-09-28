@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { buildSite } from '../build-site.mjs'
 import { SCREENSHOTS, heroShot, galleryShots } from '../screenshots.mjs'
-import { readmeScreenshots } from '../sync-readme-screenshots.mjs'
+import { readmeScreenshots, wrap } from '../sync-readme-screenshots.mjs'
 import { ensurePalette } from './palette.js'
 
 const root = new URL('../../', import.meta.url)
@@ -112,6 +112,21 @@ describe('the README screenshot block', () => {
   it('is delimited by markers, so the generator has somewhere to write', () => {
     expect(readme).toContain('<!-- screenshots:start -->')
     expect(readme).toContain('<!-- screenshots:end -->')
+  })
+
+  it('never breaks a line inside a link\'s text', () => {
+    const long = `${'word '.repeat(17)}[Log panel](assets/screenshots/log-panel.png) and [Sleep](assets/screenshots/sleep.png).`
+    const lines = wrap(long).split('\n')
+    expect(lines.some((line) => line.includes('[Log panel](assets/screenshots/log-panel.png)'))).toBe(true)
+    for (const line of lines) {
+      const opens = line.split('[').length - 1
+      const closes = line.split(']').length - 1
+      expect(opens, line).toBe(closes)
+    }
+    // And the block the README carries holds to it too.
+    for (const line of readmeScreenshots().split('\n')) {
+      expect(line.split('[').length, line).toBe(line.split(']').length)
+    }
   })
 
   it('matches what the manifest renders', () => {

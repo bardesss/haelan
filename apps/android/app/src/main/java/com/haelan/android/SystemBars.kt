@@ -19,8 +19,12 @@ import androidx.core.view.WindowInsetsCompat
  *
  * The base padding is read once, on the first call, because the listener can fire again on a
  * rotation or a keyboard and reading the already-padded values would add the inset a second time.
+ *
+ * [top] and [bottom] say which of the two edges this view owns. A screen with a top bar splits
+ * them: the bar takes the status bar's inset, so its colour runs up under the clock, and the
+ * scrolling page under it takes the navigation bar's.
  */
-fun View.padForSystemBars() {
+fun View.padForSystemBars(top: Boolean = true, bottom: Boolean = true) {
     val baseTop = paddingTop
     val baseBottom = paddingBottom
     val baseLeft = paddingLeft
@@ -29,9 +33,9 @@ fun View.padForSystemBars() {
         val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
         view.setPadding(
             baseLeft + bars.left,
-            baseTop + bars.top,
+            baseTop + if (top) bars.top else 0,
             baseRight + bars.right,
-            baseBottom + bars.bottom,
+            baseBottom + if (bottom) bars.bottom else 0,
         )
         insets
     }

@@ -78,6 +78,23 @@ describe('the person menu in the rail foot', () => {
     expect(items()[0]!.getAttribute('href')).toBe('/account')
   })
 
+  // The Android app's page shares the app's session: signing out there would sign the app out.
+  it('leaves sign out out inside the Android app, and keeps it in a browser', () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36 HaelanAndroid/1.4.0')
+    render()
+    press(trigger())
+    expect(items().map((el) => el.textContent?.trim())).toEqual(['Account'])
+    act(() => root!.unmount())
+    root = createRoot(container!)
+
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36')
+    render()
+    press(trigger())
+    expect(items().map((el) => el.textContent?.trim())).toEqual(['Account', 'Sign out'])
+  })
+
   // The defect a first version of this shipped with, and the reason the helper above sends a
   // pointerdown. Closing the menu on any press inside it unmounts the button between pointerdown
   // and click, so the click lands on nothing and sign out silently does nothing at all - which no

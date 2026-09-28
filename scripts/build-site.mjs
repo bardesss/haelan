@@ -112,18 +112,42 @@ function text(value) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
 
+/** Where the screenshots live in this tree; the build passes its own root's copy. */
+const SCREENSHOTS_DIR = fileURLToPath(new URL('../assets/screenshots', import.meta.url))
+
+/**
+ * A PNG's width and height, read off its IHDR chunk: bytes 16 to 23, big-endian, right after the
+ * eight-byte signature and the chunk's length and type. Read rather than assumed, because the shots
+ * are not all one size (the phone composite is portrait), and an `<img>` whose width and height
+ * disagree with the file reserves the wrong box and stretches it until the page's CSS wins.
+ */
+export function pngSize(path) {
+  const head = readFileSync(path).subarray(0, 24)
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  if (head.length < 24 || signature.some((byte, i) => head[i] !== byte) || head.toString('latin1', 12, 16) !== 'IHDR') {
+    throw new Error(`${path} is not a PNG`)
+  }
+  return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) }
+}
+
+/** A shot's `<img>`, sized from its own file in `dir`. */
+function shotImg(shot, dir) {
+  const { width, height } = pngSize(join(dir, shot.file))
+  return `<img src="screenshots/${shot.file}" alt="${attr(shot.alt)}" width="${width}" height="${height}" loading="lazy" />`
+}
+
 /**
  * The gallery figures: every screenshot that is not the hero, in manifest order.
  *
  * Each image is wrapped in a link to its own full-size view rather than carrying one alongside,
  * so the thing a reader instinctively clicks - the picture - is the thing that opens it.
  */
-export function galleryHtml() {
+export function galleryHtml(dir = SCREENSHOTS_DIR) {
   return galleryShots()
     .map((shot) => (
       `<figure>`
       + `<a class="shot-link" href="#${shotId(shot)}">`
-      + `<img src="screenshots/${shot.file}" alt="${attr(shot.alt)}" width="1440" height="900" loading="lazy" />`
+      + shotImg(shot, dir)
       + `</a>`
       + `<figcaption>${text(shot.title)}</figcaption>`
       + `</figure>`
@@ -145,14 +169,14 @@ export function galleryHtml() {
  * return focus on close, and announcing a dialog that behaves like nothing of the sort is worse
  * for a screen reader than the plain labelled region this actually is.
  */
-export function lightboxHtml() {
+export function lightboxHtml(dir = SCREENSHOTS_DIR) {
   return SCREENSHOTS
     .map((shot) => {
       const exit = closeHref(shot)
       return `<div class="lightbox" id="${shotId(shot)}" aria-label="${attr(shot.title)}, full size">`
         + `<a class="lightbox-backdrop" href="${exit}" aria-label="Close the full-size ${attr(shot.title)} screenshot"></a>`
         + `<figure class="lightbox-figure">`
-        + `<img src="screenshots/${shot.file}" alt="${attr(shot.alt)}" width="1440" height="900" loading="lazy" />`
+        + shotImg(shot, dir)
         + `<figcaption>${text(shot.title)}<a class="lightbox-close" href="${exit}">Close</a></figcaption>`
         + `</figure>`
         + `</div>`
@@ -252,8 +276,8 @@ export function buildSite(rootDir, outDir) {
   const values = {
     ...releaseStamp(rootDir),
     ribbon: ribbonHtml(),
-    gallery: galleryHtml(),
-    lightboxes: lightboxHtml(),
+    gallery: galleryHtml(join(rootDir, 'assets/screenshots')),
+    lightboxes: lightboxHtml(join(rootDir, 'assets/screenshots')),
   }
   writeFileSync(join(outDir, 'index.html'), renderPage(template, values))
   written.push('index.html')
