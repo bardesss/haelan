@@ -817,6 +817,27 @@
         "variability": "Bedtijd varieerde ±{{value}} deze week",
         "balanceAgainstTarget": "tegen je doel van {{target}}",
         "balanceAgainstBaseline": "tegen je gebruikelijke {{usual}}"
+      },
+      "morning": {
+        "label": "De ochtend erna",
+        "labelDated": "Herstel op {{date}}",
+        "restingHeartRate": "Rusthartslag",
+        "hrv": "HRV",
+        "breathing": "Ademhaling in slaap",
+        "spo2": "Zuurstof (SpO2)",
+        "skinTemperature": "Huidtemperatuur"
+      },
+      "more": {
+        "label": "Meer over de slaap",
+        "light": "Lichte slaap",
+        "awake": "Wakker in bed",
+        "inBed": "Tijd in bed",
+        "waketime": "Wakker geworden",
+        "minutesToFallAsleep": "In slaap vallen",
+        "awakenings": "Keren wakker",
+        "minutesAfterWakeUp": "Na wakker in bed",
+        "naps": "Dutjes",
+        "napsNone": "geen"
       }
     }
   },

@@ -817,6 +817,27 @@
         "variability": "Bedtime varied ±{{value}} this week",
         "balanceAgainstTarget": "against your target of {{target}}",
         "balanceAgainstBaseline": "against your usual {{usual}}"
+      },
+      "morning": {
+        "label": "The morning after",
+        "labelDated": "Recovery on {{date}}",
+        "restingHeartRate": "Resting HR",
+        "hrv": "HRV",
+        "breathing": "Breathing in sleep",
+        "spo2": "Oxygen (SpO2)",
+        "skinTemperature": "Skin temperature"
+      },
+      "more": {
+        "label": "More about the sleep",
+        "light": "Light sleep",
+        "awake": "Awake in bed",
+        "inBed": "Time in bed",
+        "waketime": "Wake time",
+        "minutesToFallAsleep": "Time to fall asleep",
+        "awakenings": "Times woken",
+        "minutesAfterWakeUp": "Minutes after waking",
+        "naps": "Naps",
+        "napsNone": "none"
       }
     }
   },

@@ -250,6 +250,129 @@ describe('the night page\'s week', () => {
   })
 })
 
+describe('the night page\'s morning after', () => {
+  it('labels the card "The morning after" when the recovery it shows is this same night\'s morning', async () => {
+    const host = await mount(nightPageFixture())
+    const card = host.querySelector('.night-grp')?.closest('.card')
+    expect(card?.querySelector('.label')?.textContent).toBe('The morning after')
+  })
+
+  it('names the recovery\'s own date instead when it belongs to a different day', async () => {
+    const page = nightPageFixture()
+    const host = await mount({
+      ...page,
+      morning: { ...page.morning, recovery: { ...page.morning.recovery, index: { ...page.morning.recovery.index, asOfDate: NIGHT_PREVIOUS } } },
+    })
+    const card = host.querySelector('.night-grp')?.closest('.card')
+    expect(card?.querySelector('.label')?.textContent).toBe('Recovery on Sep 5, 2026')
+  })
+
+  it('draws the recovery ring with the index and its band, resting HR and HRV as strips, and breathing, oxygen and skin temperature as bars', async () => {
+    const host = await mount(nightPageFixture())
+    const card = host.querySelector('.night-grp')?.closest('.card')!
+    expect(card.querySelector('[role="img"]')?.getAttribute('aria-label')).toContain('Recovery index 68')
+    expect(card.querySelector('.score-ring-value')?.textContent).toBe('68')
+    expect(card.textContent).toContain('Around your usual')
+
+    const rows = [...card.querySelectorAll('.figure-row')].map((row) => [
+      text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '', text(row, '.figure-row-verdict') ?? '',
+    ])
+    expect(rows).toEqual([
+      ['Resting HR', '54 bpm', 'within your usual 51 bpm – 57 bpm'],
+      ['HRV', '49 ms', 'within your usual 42 ms – 60 ms'],
+      ['Breathing in sleep', '14.2 breaths/min', 'within your usual 13.0 breaths/min – 15.5 breaths/min'],
+      ['Oxygen (SpO2)', '95.4 %', 'within your usual 94.5 % – 97.0 %'],
+      ['Skin temperature', '+0.6 °C', 'above your usual 32.7 °C – 33.3 °C'],
+    ])
+    // Resting HR and HRV are the two rows with a trend (a strip); breathing, oxygen and skin
+    // temperature draw a bar instead, the mockup's own split.
+    expect(card.querySelectorAll('[role="img"][aria-label="Resting HR"]')).toHaveLength(1)
+    expect(card.querySelectorAll('[role="img"][aria-label="HRV"]')).toHaveLength(1)
+    expect(card.querySelectorAll('.figure-row-bar')).toHaveLength(3)
+  })
+
+  it('says there is no usual to compare against rather than leaving a row\'s hidden description empty', async () => {
+    const page = nightPageFixture()
+    const host = await mount({
+      ...page,
+      morning: { ...page.morning, restingHeartRate: { ...page.morning.restingHeartRate, baseline: null, standing: null, judged: null } },
+    })
+    const card = host.querySelector('.night-grp')?.closest('.card')!
+    expect(text(card, '.figure-row-verdict')).toBe('no baseline yet to compare against')
+  })
+
+  it('leaves out a reading the morning has none for, and only that one', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, morning: { ...page.morning, breathing: { ...page.morning.breathing, value: null } } })
+    const card = host.querySelector('.night-grp')?.closest('.card')!
+    const labels = [...card.querySelectorAll('.figure-row-label')].map((el) => el.textContent)
+    expect(labels).toEqual(['Resting HR', 'HRV', 'Oxygen (SpO2)', 'Skin temperature'])
+  })
+
+  it('hides the whole card when the morning has nothing at all', async () => {
+    const page = nightPageFixture()
+    const host = await mount({
+      ...page,
+      morning: {
+        recovery: { ...page.morning.recovery, index: { ...page.morning.recovery.index, value: null, asOfDate: null }, band: null },
+        restingHeartRate: { ...page.morning.restingHeartRate, value: null, standing: null, judged: null },
+        hrv: { ...page.morning.hrv, value: null, standing: null, judged: null },
+        breathing: { ...page.morning.breathing, value: null, standing: null, judged: null },
+        spo2: { ...page.morning.spo2, value: null, standing: null, judged: null },
+        skinTemperature: { ...page.morning.skinTemperature, value: null, standing: null, judged: null },
+        skinTemperatureDeviation: null,
+      },
+    })
+    expect(host.querySelector('.night-grp')).toBeNull()
+  })
+})
+
+describe('the night page\'s more about the sleep', () => {
+  it('draws every remaining figure with its own verdict, in the mockup\'s order', async () => {
+    const host = await mount(nightPageFixture())
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'More about the sleep')!
+    const rows = [...card.querySelectorAll('.figure-row')].map((row) => [
+      text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '', text(row, '.figure-row-verdict') ?? '',
+    ])
+    expect(rows).toEqual([
+      ['Light sleep', '3h 29m', 'within your usual 3h 00m – 4h 00m'],
+      ['Awake in bed', '0h 25m', 'within your usual 0h 10m – 0h 40m'],
+      ['Time in bed', '7h 01m', 'within your usual 6h 00m – 8h 20m'],
+      ['Wake time', '07:09', 'within your usual 06:30 – 07:30'],
+      ['Time to fall asleep', '0h 12m', 'within your usual 0h 05m – 0h 20m'],
+      ['Times woken', '14', 'within your usual 8 – 18'],
+      ['Minutes after waking', '0h 04m', 'within your usual 0h 00m – 0h 10m'],
+      ['Naps', 'none', 'within your usual 0 – 1'],
+    ])
+    expect(card.querySelectorAll('.figure-row-bar')).toHaveLength(rows.length)
+  })
+
+  it('reads the naps row as its minutes once there was at least one', async () => {
+    const page = nightPageFixture()
+    const host = await mount({
+      ...page,
+      figures: { ...page.figures, napCount: { ...page.figures.napCount, value: 1 }, napMinutes: { ...page.figures.napMinutes, value: 22, standing: 'within' } },
+    })
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'More about the sleep')!
+    expect(text(card, '.figure-row:last-child .figure-row-value')).toBe('0h 22m')
+  })
+
+  it('leaves out a figure the night has no reading for, and only that one', async () => {
+    const host = await mount(withBlankFigures(nightPageFixture(), ['light', 'awakenings']))
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'More about the sleep')!
+    const labels = [...card.querySelectorAll('.figure-row-label')].map((el) => el.textContent)
+    expect(labels).toEqual(['Awake in bed', 'Time in bed', 'Wake time', 'Time to fall asleep', 'Minutes after waking', 'Naps'])
+  })
+
+  it('leaves out the whole card when nothing on it has a reading', async () => {
+    const host = await mount(withBlankFigures(nightPageFixture(), [
+      'light', 'awake', 'inBed', 'waketime', 'minutesToFallAsleep', 'awakenings', 'minutesAfterWakeUp', 'napCount',
+    ]))
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'More about the sleep')
+    expect(card).toBeUndefined()
+  })
+})
+
 describe('the night page without a night', () => {
   it('says no night was recorded on a date the server has none for', async () => {
     const host = await mount(null)

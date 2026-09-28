@@ -9,6 +9,8 @@ import { NightHero } from './sleep/night/NightHero.js'
 import { NightMinis } from './sleep/night/NightMinis.js'
 import { NightThrough } from './sleep/night/NightThrough.js'
 import { NightWeek } from './sleep/night/NightWeek.js'
+import { NightMorning } from './sleep/night/NightMorning.js'
+import { NightMore } from './sleep/night/NightMore.js'
 import { NightSessions } from './sleep/NightSessions.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -70,6 +72,8 @@ export function NightDetail() {
         <NightMinis figures={page.figures} />
         <NightThrough page={page} chosenSource={chosenSource} />
         <NightWeek page={page} />
+        <NightMorning page={page} />
+        <NightMore figures={page.figures} />
         <NightSessions night={page.night} />
       </div>
     </div>

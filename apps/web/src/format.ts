@@ -199,6 +199,25 @@ export function formatSignedDuration(value: number | null, absent: string): stri
   return minutes < 60 ? `${sign}${minutes}m` : `${sign}${formatDuration(minutes)}`
 }
 
+/**
+ * A number that can be either side of zero, signed the way a deviation reads: "+0.6", "-0.4", and
+ * a value that rounds to nothing at the given precision carrying no sign at all ("0.0", never
+ * "-0.0" or "+0.0"). formatNumber itself never signs a positive value - every other caller in this
+ * app hands it a plain magnitude - so this exists beside it for the one figure on the night page
+ * that reads better as a deviation from its usual than as the raw reading (skin temperature; see
+ * NightMorning.tsx's own comment on why).
+ *
+ * Rounds before deciding the sign, the same guard formatSignedDuration already keeps for the same
+ * reason: deciding from the unrounded value would print "-0.0" for an input like -0.04 that rounds
+ * away to nothing at the display precision.
+ */
+export function formatSignedNumber(value: number | null, precision: number, language: string, absent: string): string {
+  if (value === null) return absent
+  const rounded = Number(Math.abs(value).toFixed(precision))
+  const sign = rounded === 0 ? '' : value < 0 ? '-' : '+'
+  return `${sign}${rounded.toLocaleString(language, { minimumFractionDigits: precision, maximumFractionDigits: precision })}`
+}
+
 // Wrapped into the day before splitting, and wrapped in the direction that survives a negative.
 // A bed time is minutes from the local midnight of the date the night ENDED (see
 // packages/core/src/derive/metrics.ts on sleep_bedtime_minutes: "an 23:30 bedtime is -30"), so

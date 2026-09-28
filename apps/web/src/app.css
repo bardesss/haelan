@@ -601,11 +601,21 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .night-week-variability { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .night-week-total { font-variant-numeric: tabular-nums; }
 .night-week-against { margin: var(--space-1) 0 var(--space-3); font-size: var(--font-size-sm); color: var(--text-secondary); }
-/* Four across on a wide screen, two on a phone, the mockup's two layouts. */
-.night-minis-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+/* Four across on a wide screen, two on a phone, the mockup's two layouts. Shared by NightMinis
+   (the four figures under the hero), NightMorning (the five readings beside the recovery ring)
+   and NightMore (the eight remaining sleep figures): the same grid, drawn three times over. */
+.night-minis-rows, .night-morning-rows, .night-more-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 @media (max-width: 620px) {
-  .night-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .night-minis-rows, .night-morning-rows, .night-more-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .night-all { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
+/* NightMorning.tsx's own two-column layout: the recovery ring at a quarter width, its five
+   readings taking the rest, stacked on a phone the way every other side-by-side pair on this page
+   already collapses. */
+.night-grp { display: grid; grid-template-columns: 1fr 3fr; gap: var(--space-4); align-items: center; }
+@media (max-width: 620px) {
+  .night-grp { grid-template-columns: 1fr; }
 }
 
 /* Not a grid of its own: WorkoutTiles.tsx's own comment says why - the page's `.grid` above is

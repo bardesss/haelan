@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import {
   formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset,
-  formatNumber, formatMetricValue, formatLocalDate, formatSignedDuration,
+  formatNumber, formatMetricValue, formatLocalDate, formatSignedDuration, formatSignedNumber,
 } from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
@@ -50,6 +50,23 @@ describe('formatSignedDuration', () => {
 
   it('answers the absent text for null', () => {
     expect(formatSignedDuration(null, '-')).toBe('-')
+  })
+})
+
+describe('formatSignedNumber', () => {
+  it('signs a positive or negative deviation and leaves a zero one bare', () => {
+    expect(formatSignedNumber(0.6, 1, 'en', '—')).toBe('+0.6')
+    expect(formatSignedNumber(-0.4, 1, 'en', '—')).toBe('-0.4')
+    expect(formatSignedNumber(0, 1, 'en', '—')).toBe('0.0')
+  })
+
+  it('carries no sign on a value that rounds to zero at the given precision', () => {
+    expect(formatSignedNumber(0.04, 1, 'en', '—')).toBe('0.0')
+    expect(formatSignedNumber(-0.04, 1, 'en', '—')).toBe('0.0')
+  })
+
+  it('answers the absent text for null', () => {
+    expect(formatSignedNumber(null, 1, 'en', '—')).toBe('—')
   })
 })
 
