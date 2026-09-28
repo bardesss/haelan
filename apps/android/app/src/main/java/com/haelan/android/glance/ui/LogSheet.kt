@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -409,16 +410,25 @@ private fun PresetEditor(edit: PresetEdit, suggestions: List<String>, words: Log
             val position = edit.kinds.indexOf(kind) + 1
             Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = words.moved(kind, position) })
         }
-        OutlinedTextField(
-            value = edit.draft,
-            onValueChange = actions::typeDraft,
-            enabled = !edit.full,
-            singleLine = true,
-            placeholder = { Text(stringResource(R.string.log_panel_edit_add)) },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { actions.addDraft() }),
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // The keyboard's done key adds, and so does Add beside the field, for a reader who never
+        // finds the key; Done below takes a kind still typed here with it (editSaving).
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = edit.draft,
+                onValueChange = actions::typeDraft,
+                enabled = !edit.full,
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.log_panel_edit_add)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { actions.addDraft() }),
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = actions::addDraft,
+                enabled = edit.canAdd,
+                modifier = Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp),
+            ) { Text(stringResource(R.string.log_panel_edit_add_button)) }
+        }
         if (!edit.full && suggestions.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 suggestions.forEach { kind ->

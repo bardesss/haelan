@@ -41,6 +41,9 @@ data class PresetEdit(
     val moved: String? = null,
 ) {
     val full: Boolean get() = kinds.size >= LogSheetState.MAX_PRESETS
+
+    /** Whether the Add button beside the field is live: something typed, and room for it. */
+    val canAdd: Boolean get() = draft.isNotBlank() && !full
 }
 
 /** A note save to send: [body] for [day], and the note it replaces, to put back if it fails. */
@@ -308,12 +311,22 @@ data class LogSheetState(
     /**
      * Done: the list to send and the state saving it, or, for a list left as it was, the state out
      * of edit mode and nothing to send. Null while a save is already out.
+     *
+     * A kind still in the add field goes with the list, added first with [draftAdded]'s checks;
+     * one those checks refuse keeps edit mode open with the reason, and nothing is sent, rather
+     * than the kind being dropped from the save unseen.
      */
     fun editSaving(): Pair<LogSheetState, List<String>?>? {
         val open = edit ?: return null
         if (open.saving) return null
-        if (open.kinds == log?.presets) return copy(edit = null) to null
-        return copy(edit = open.copy(saving = true, problem = null), inFlight = inFlight + 1) to open.kinds
+        val value = open.draft.trim()
+        val ready = if (value.isEmpty()) {
+            open
+        } else {
+            add(open, value)?.copy(draft = "") ?: return copy(edit = open.copy(problem = problemAdding(open, value))) to null
+        }
+        if (ready.kinds == log?.presets) return copy(edit = null) to null
+        return copy(edit = ready.copy(saving = true, problem = null), inFlight = inFlight + 1) to ready.kinds
     }
 
     /** Saved: the chips come back in the list the instance answered with, and edit mode ends. */

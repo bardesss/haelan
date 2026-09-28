@@ -393,6 +393,44 @@ class LogSheetStateTest {
     }
 
     @Test
+    fun `Done adds a typed kind first, trimmed, and sends the list with it`() {
+        val (saving, kinds) = editing.draftTyped("  Travel ").editSaving()!!
+        assertEquals(listOf("caffeine", "alcohol", "illness", "Travel"), kinds)
+        assertEquals("", saving.edit?.draft)
+        assertTrue(saving.edit!!.saving)
+        assertEquals(1, saving.inFlight)
+    }
+
+    @Test
+    fun `Done with a duplicate typed kind stays in edit mode with the reason, and sends nothing`() {
+        val (refused, kinds) = editing.draftTyped("ALCOHOL").editSaving()!!
+        assertNull(kinds)
+        assertEquals(EditProblem.Duplicate("alcohol"), refused.edit?.problem)
+        assertEquals("ALCOHOL", refused.edit?.draft)
+        assertFalse(refused.edit!!.saving)
+        assertEquals(0, refused.inFlight)
+    }
+
+    @Test
+    fun `Done with a typed kind and the list full stays in edit mode, and sends nothing`() {
+        val full = LogSheetState.open("2026-09-27", "2026-09-27", log.copy(presets = List(16) { "k$it" })).editStarted()
+        val (refused, kinds) = full.draftTyped("one more").editSaving()!!
+        assertNull(kinds)
+        assertEquals(EditProblem.Full, refused.edit?.problem)
+        assertEquals(16, refused.edit?.kinds?.size)
+    }
+
+    @Test
+    fun `Add is offered only for a typed kind while the list has room`() {
+        assertFalse(editing.edit!!.canAdd)
+        assertFalse(editing.draftTyped("   ").edit!!.canAdd)
+        assertTrue(editing.draftTyped("travel").edit!!.canAdd)
+        val full = LogSheetState.open("2026-09-27", "2026-09-27", log.copy(presets = List(16) { "k$it" })).editStarted()
+        assertFalse(full.draftTyped("travel").edit!!.canAdd)
+        assertTrue(full.draftTyped("travel").kindRemoved("k0").edit!!.canAdd)
+    }
+
+    @Test
     fun `chips saved from another day's sheet replace this day's`() {
         assertEquals(listOf("travel"), sheet.presetsSaved(listOf("travel")).log?.presets)
     }

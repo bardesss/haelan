@@ -320,6 +320,7 @@
     <string name="log_panel_chips_edit">Edit</string>
     <string name="log_panel_edit_remove">Remove {{kind}}</string>
     <string name="log_panel_edit_add">Add a kind</string>
+    <string name="log_panel_edit_add_button">Add</string>
     <string name="log_panel_edit_moved">{{kind}} moved to position {{position}}</string>
     <string name="log_panel_edit_done">Done</string>
     <string name="log_panel_edit_cancel">Cancel</string>

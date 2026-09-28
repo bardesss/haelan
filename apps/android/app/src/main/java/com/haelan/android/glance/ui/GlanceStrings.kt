@@ -200,6 +200,7 @@ internal val GLANCE_STRING_IDS: Map<String, Int> = mapOf(
     "log_panel_chips_edit" to R.string.log_panel_chips_edit,
     "log_panel_edit_remove" to R.string.log_panel_edit_remove,
     "log_panel_edit_add" to R.string.log_panel_edit_add,
+    "log_panel_edit_add_button" to R.string.log_panel_edit_add_button,
     "log_panel_edit_moved" to R.string.log_panel_edit_moved,
     "log_panel_edit_done" to R.string.log_panel_edit_done,
     "log_panel_edit_cancel" to R.string.log_panel_edit_cancel,

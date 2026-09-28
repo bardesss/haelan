@@ -273,7 +273,8 @@ class LogSheetModel(
             val (next, kinds) = state.editSaving() ?: return
             days[state.day] = next
             publish()
-            // An unchanged list has already left edit mode, and sends nothing.
+            // An unchanged list has already left edit mode, and a refused draft stayed in it with
+            // its reason: neither sends anything.
             state.day to (kinds ?: return)
         }
         write(day, { calls().savePresets(kinds) }) { state, saved, problem, _ ->

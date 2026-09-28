@@ -295,6 +295,7 @@
     <string name="log_panel_chips_edit">Bewerken</string>
     <string name="log_panel_edit_remove">{{kind}} verwijderen</string>
     <string name="log_panel_edit_add">Soort toevoegen</string>
+    <string name="log_panel_edit_add_button">Toevoegen</string>
     <string name="log_panel_edit_moved">{{kind}} verplaatst naar plek {{position}}</string>
     <string name="log_panel_edit_done">Klaar</string>
     <string name="log_panel_edit_cancel">Annuleren</string>
