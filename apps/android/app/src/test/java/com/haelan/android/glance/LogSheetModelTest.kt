@@ -67,22 +67,23 @@ class LogSheetModelTest {
     }
 
     @Test
-    fun `a new today confirmed under an open sheet closes it, and its typed note is not sent to the old day`() {
-        // Queued, so the stepped day's read below stays out and the kept state is what shows.
+    fun `a new today confirmed under an open sheet retitles it in place, and the typed note survives unsent`() {
         val queue = QueueDispatcher()
         val model = model(queue)
         model.open(today, glanceLog)
         model.typeNote("Birthday")
         model.todayConfirmed("2026-09-28")
-        assertNull(model.state.value)
+        val open = model.state.value
+        assertEquals(today, open?.day)
+        assertEquals(false, open?.isToday)
+        assertEquals("2026-09-28", open?.nextDay)
+        assertEquals("Birthday", open?.noteText)
         assertEquals(0, queue.tasks.size)
 
-        // The day it was on is yesterday now: titled by its date, with › live, if stepped back to.
-        val tomorrowLog = glanceLog.copy(today = "2026-09-28", counts = emptyMap(), note = null)
-        model.open("2026-09-28", tomorrowLog)
-        model.step(today)
-        assertEquals(false, model.state.value?.isToday)
-        assertEquals("2026-09-28", model.state.value?.nextDay)
+        // The draft goes out only when the reader leaves the sheet, and to the day it was typed for.
+        model.dismiss()
+        while (queue.tasks.isNotEmpty()) queue.runFirst()
+        assertEquals(listOf("note 2026-09-27 Birthday"), calls.sent)
     }
 
     @Test
