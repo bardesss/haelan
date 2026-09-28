@@ -1,7 +1,7 @@
 import { useTranslation } from '../i18n/index.js'
 import { useSession } from '../auth/session.js'
 import { useHistoryStart } from '../data/useHistoryStart.js'
-import { historyStartLocalDate } from '../controls/range.js'
+import { historyStartDate } from '../controls/range.js'
 
 /**
  * Where the backfill step would be on a phone path: there is no horizon
@@ -16,8 +16,9 @@ export function CompanionHistoryStep() {
   const history = useHistoryStart()
   const timezone = session.data?.effectiveTimezone
   const startMs = history.data?.historyStartMs ?? null
-  const date = startMs !== null && timezone !== undefined
-    ? historyStartLocalDate(startMs, timezone)
+  // The server's recorded date first (the row knows which day it was), then the instant in the zone.
+  const date = startMs !== null && history.data !== undefined
+    ? historyStartDate(history.data, timezone ?? '')
     : null
   // Pending, or a start with no zone to read it in yet: the date sentence cannot
   // be honestly rendered either way, so the loading line stands in for both.

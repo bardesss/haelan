@@ -97,7 +97,8 @@ export interface GlanceDay {
   steps: GlanceFigure
   stepsPace: GlanceStepsPace | null
   activeMinutes: GlanceFigure
-  heartRate: { points: IntradayPoint[], asOfMs: number | null, staleSources: GlanceStaleSource[] }
+  /** `offsetMinutes`: the offset the day's readings were recorded under (core's GlanceHeartRate), null with none. */
+  heartRate: { points: IntradayPoint[], asOfMs: number | null, offsetMinutes?: number | null, staleSources: GlanceStaleSource[] }
   /** Today's workouts, oldest first, merged across sources: the Activity list's own row shape. */
   workouts: WorkoutSession[]
 }

@@ -95,6 +95,13 @@ export function datesFor(tab: RangeKey, anchor: string): { from: string, to: str
 export interface HistoryBounds {
   historyStartMs: number | null
   googleConnected: boolean
+  /**
+   * The history start's own date, read by the server under the offset stored with the row it came
+   * from. Preferred over formatting `historyStartMs` in the reader's zone, which moves it a day for
+   * somebody abroad. Absent or null (an older server, or no row left at that instant), the instant
+   * is formatted in the zone instead.
+   */
+  historyStartLocalDate?: string | null
 }
 
 /**
@@ -106,6 +113,17 @@ export function historyStartLocalDate(historyStartMs: number, timezone: string):
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date(historyStartMs))
+}
+
+/**
+ * The date the history starts on: the server's own recorded date when it sent one, since a row
+ * keeps the day it was recorded on wherever the person is now, and otherwise the instant read in
+ * `timezone`. Null when there is no start to read.
+ */
+export function historyStartDate(history: HistoryBounds, timezone: string): string | null {
+  if (typeof history.historyStartLocalDate === 'string') return history.historyStartLocalDate
+  if (typeof history.historyStartMs !== 'number' || timezone === '') return null
+  return historyStartLocalDate(history.historyStartMs, timezone)
 }
 
 /**
@@ -124,9 +142,8 @@ export function clampFromToHistory(
   // A history the hook has not resolved yet, or a wire answer with no number in it,
   // leaves the range alone: the clamp only ever narrows on a measured start.
   if (history === undefined || typeof history.historyStartMs !== 'number' || history.googleConnected) return from
-  if (timezone === '') return from
-  const start = historyStartLocalDate(history.historyStartMs, timezone)
-  if (start <= from || start > to) return from
+  const start = historyStartDate(history, timezone)
+  if (start === null || start <= from || start > to) return from
   return start
 }
 

@@ -212,6 +212,17 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 
+  // A run recorded in New York reads at New York's clock, not at the reader's zone (Amsterdam
+  // here, where 06:00Z would read 08:00): anything already recorded keeps the time it was recorded in.
+  it('prints the workout\'s clock times under the offsets it was recorded with', async () => {
+    const restore = stub({ run1: { ...RUN, startOffsetMinutes: -240, endOffsetMinutes: -240 } })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container!.querySelector('.workout-when')!.textContent).toContain('02:00–02:54')
+    } finally { restore() }
+  })
+
   // The route answers one workout for a run two sources recorded (mergedWorkouts.ts), and the
   // heading names the primary's source as it always has. The other copy is named on a line of its
   // own, by the name the person gave it, so the reader can see the phone saw this run too.

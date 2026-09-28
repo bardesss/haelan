@@ -37,7 +37,7 @@ const EMPTY = Object.freeze([]) as never[]
  * card would otherwise have to duplicate against a page's own overridesByMetricMap.
  */
 export function HeartRateCard({
-  from, to, historicalTo, source, tab, rangeDates, period, annotations, excluded, onDayClick, onSampleClick, span,
+  from, to, historicalTo, source, tab, rangeDates, period, annotations, excluded, onDayClick, onSampleClick, span, today,
 }: {
   from: string
   to: string
@@ -51,6 +51,12 @@ export function HeartRateCard({
   onDayClick: (localDate: string) => void
   onSampleClick: (point: { sourceId: string, utcMs: number, n: number }) => void
   span: number
+  /**
+   * The person's today in the effective zone. A Day tab on an earlier day draws its trace in the
+   * offset the day was recorded under; today's, still running, stays in the effective zone.
+   * Unset, every day is drawn in the effective zone.
+   */
+  today?: string
 }) {
   const { t } = useTranslation()
   const range = { from, to, source }
@@ -208,6 +214,7 @@ export function HeartRateCard({
           ) : (
             <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
               label={t('recovery.heartRateRange.intradayChartLabel', { date: from })}
+              offsetMinutes={today !== undefined && from < today ? intraday.data.offsetMinutes ?? null : null}
               onPointClick={onSampleClick} />
           )}
       </Card>

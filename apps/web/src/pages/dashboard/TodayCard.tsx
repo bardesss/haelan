@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { IntradayHeartRate } from '../../charts/IntradayHeartRate.js'
 import { Sparkline } from '../../charts/Sparkline.js'
@@ -45,9 +45,17 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
     low: formatFigure({ ...day.steps, value: band.low }, language) ?? '',
     high: formatFigure({ ...day.steps, value: band.high }, language) ?? '',
   }, [band, language])
+  // A finished day is drawn in the offset it was recorded under, so a day lived in Amsterdam still
+  // runs 00:00 to 24:00 Amsterdam time when viewed from Tokyo; the day still running keeps the
+  // effective zone, which is where "today" is. Without an offset (no readings, an older server)
+  // the effective zone stands in for both.
+  const recordedOffset = finished ? day.heartRate.offsetMinutes ?? null : null
+  const midnightOf = useCallback((date: string) => recordedOffset === null
+    ? localMidnightMs(date, timezone)
+    : Date.parse(`${date}T00:00:00Z`) - recordedOffset * 60_000, [recordedOffset, timezone])
   // Memoised for the same reason: both reach IntradayHeartRate's own `build` dependencies.
-  const midnight = useMemo(() => localMidnightMs(today, timezone), [today, timezone])
-  const endMs = useMemo(() => finished ? localMidnightMs(nextDayOf(today), timezone) : undefined, [finished, today, timezone])
+  const midnight = useMemo(() => midnightOf(today), [midnightOf, today])
+  const endMs = useMemo(() => finished ? midnightOf(nextDayOf(today)) : undefined, [finished, midnightOf, today])
   const workoutSpans = useMemo(() => day.workouts.map((w) => ({ startMs: w.startMs, endMs: w.endMs })), [day.workouts])
   // Never a pace on a finished day, whatever the payload carries: a day that is over has no "so
   // far" to be ahead or behind in.
@@ -119,7 +127,7 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
               : t('glance.asOf.today')}>
             <IntradayHeartRate points={day.heartRate.points} reduction={null}
               label={t(finished ? 'glance.today.heartRateChartThatDay' : 'glance.today.heartRateChart')}
-              compact startMs={midnight} endMs={endMs} spans={workoutSpans} />
+              compact startMs={midnight} endMs={endMs} spans={workoutSpans} offsetMinutes={recordedOffset} />
           </Described>
         </div>
       )}

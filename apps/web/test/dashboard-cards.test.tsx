@@ -92,7 +92,7 @@ function sleepFixture(over: {
 function renderNight(props: Partial<Parameters<typeof NightCard>[0]> = {}): string {
   return renderToStaticMarkup(
     <I18nProvider lng="en">
-      <NightCard sleep={sleepFixture()} span={8} today={TODAY} timezone="Europe/Amsterdam" {...props} />
+      <NightCard sleep={sleepFixture()} span={8} today={TODAY} {...props} />
     </I18nProvider>,
   )
 }
@@ -113,6 +113,23 @@ describe('NightCard', () => {
     const html = renderNight({ sleep })
     expect(html).toMatch(/class="dash-mini-value is-out"[^>]*>00:14</)
     expect(html).toContain('later than usual')
+  })
+
+  // A night slept in Honolulu (UTC-10), 22:00 to 06:00 local: its own dates are the 22nd and the
+  // 23rd. Read in Amsterdam, where the card used to read it, both ends fall on the 23rd.
+  it('dates the night by the offsets it was recorded under, not by the reader\'s zone', () => {
+    const sleep = {
+      ...sleepFixture(), startMs: Date.UTC(2026, 8, 23, 8, 0), endMs: Date.UTC(2026, 8, 23, 16, 0),
+      startOffsetMinutes: -600, endOffsetMinutes: -600,
+    }
+    expect(renderNight({ sleep })).toMatch(/<h2 class="dash-card-title"><strong>Last night<\/strong> <span>Tue, Sep 22[^<]*Wed, Sep 23<\/span><\/h2>/)
+    // And the wake end by its own offset: slept in Auckland (UTC+12), 22:00 to 06:00 local, which
+    // read at +120 would end on the 22nd, the same day it began.
+    const auckland = {
+      ...sleepFixture(), startMs: Date.UTC(2026, 8, 22, 10, 0), endMs: Date.UTC(2026, 8, 22, 18, 0),
+      startOffsetMinutes: 720, endOffsetMinutes: 720,
+    }
+    expect(renderNight({ sleep: auckland })).toMatch(/<span>Tue, Sep 22[^<]*Wed, Sep 23<\/span><\/h2>/)
   })
 
   // A past day's page is "that night, and the whole day": its night is that night, not last night.
@@ -529,6 +546,27 @@ describe('TodayCard on a finished day', () => {
     // Amsterdam is UTC+2 on both midnights.
     expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 8, 21, 22, 0))
     expect(heartRateProps?.endMs).toBe(Date.UTC(2026, 8, 22, 22, 0))
+  })
+
+  // A day lived in Amsterdam (UTC+2) and viewed from Tokyo: the trace still runs from Amsterdam's
+  // midnight to the next, and its clock times are read at +120, because the day is already recorded.
+  it('draws a finished day in the offset it was recorded under, whatever zone it is viewed from', () => {
+    const base = finishedDay()
+    const day = { ...base, heartRate: { ...base.heartRate, offsetMinutes: 120 } }
+    renderToday({ day, today: '2026-09-22', timezone: 'Asia/Tokyo', finished: true })
+    expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 8, 21, 22, 0))
+    expect(heartRateProps?.endMs).toBe(Date.UTC(2026, 8, 22, 22, 0))
+    expect(heartRateProps?.offsetMinutes).toBe(120)
+  })
+
+  // Today is where the person is: the day still running starts at the effective zone's midnight
+  // and reads its clock there, whatever offset its readings so far carry.
+  it('keeps the day still running in the effective zone, even when its readings name an offset', () => {
+    const base = dayFixture()
+    const day = { ...base, heartRate: { ...base.heartRate, offsetMinutes: 120 } }
+    renderToday({ day, timezone: 'Asia/Tokyo' })
+    expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 8, 22, 15, 0))
+    expect(heartRateProps?.offsetMinutes).toBeNull()
   })
 
   it('leaves the trace\'s end to its last reading on today\'s own card', () => {

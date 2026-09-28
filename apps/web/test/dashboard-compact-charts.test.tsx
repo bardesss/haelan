@@ -240,6 +240,35 @@ describe('IntradayHeartRate, compact', () => {
   })
 })
 
+// Something already recorded reads at the offset it was recorded under: 04:00Z taken in New York
+// (UTC-4) is 00:00 there, where the reader's zone (Amsterdam, UTC+2) would call it 06:00. One offset
+// for the whole chart, so the axis labels, the tooltip and the table all agree.
+describe('IntradayHeartRate, recorded offset', () => {
+  const at = (utcMs: number, mean: number): IntradayPoint => ({ sourceId: 'watch', utcMs, min: mean - 5, mean, max: mean + 5, n: 1, excluded: false })
+  const POINTS = [at(Date.UTC(2026, 8, 23, 4, 0), 58), at(Date.UTC(2026, 8, 23, 9, 38), 71)]
+  type Option = {
+    xAxis: { axisLabel: { formatter: (value: number) => string } }
+    tooltip: { formatter: (params: unknown) => string }
+  }
+
+  it('reads the axis, the tooltip and the table at the offset it is given', () => {
+    const host = mount(<IntradayHeartRate points={POINTS} reduction={null} label="Heart rate" offsetMinutes={-240} />)
+    const option = lastOption as Option
+    expect(option.xAxis.axisLabel.formatter(POINTS[0]!.utcMs)).toBe('00:00')
+    expect(option.tooltip.formatter([{ seriesIndex: 2, dataIndex: 1 }])).toContain('05:38')
+    const cells = [...host.querySelectorAll('table tbody tr')].map((row) => row.querySelector('td, th')?.textContent)
+    expect(cells).toEqual(['00:00', '05:38'])
+  })
+
+  it('reads them in the effective zone without one', () => {
+    const host = mount(<IntradayHeartRate points={POINTS} reduction={null} label="Heart rate" />)
+    const option = lastOption as Option
+    expect(option.xAxis.axisLabel.formatter(POINTS[0]!.utcMs)).toBe('06:00')
+    const cells = [...host.querySelectorAll('table tbody tr')].map((row) => row.querySelector('td, th')?.textContent)
+    expect(cells).toEqual(['06:00', '11:38'])
+  })
+})
+
 describe('localMidnightMs', () => {
   it('answers the zone\'s own midnight, on either side of a clock change', () => {
     expect(localMidnightMs('2026-09-23', 'UTC')).toBe(Date.UTC(2026, 8, 23))

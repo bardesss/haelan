@@ -1,18 +1,11 @@
 import { useTranslation } from '../../i18n/index.js'
-import { formatSessionDateHeading } from '../../format.js'
+import { formatRecordedClock, formatSessionDateHeading } from '../../format.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import type { RoutePoint, WorkoutSession } from '../../data/useSessions.js'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
 import { useSourceNames } from '../../data/useSourceNames.js'
 
-/** The clock at both ends of the session, in the reader's own configured zone rather than the
- *  browser's: the same rule timeOfDay in IntradayHeartRate.tsx states, for the same reason. */
-function clock(utcMs: number, timeZone: string, language: string): string {
-  return new Date(utcMs).toLocaleTimeString(language, {
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone,
-  })
-}
 
 /**
  * Which of the three sentences about a route belongs under this workout's heading, or null for
@@ -63,10 +56,9 @@ function gpsSentenceKey(detail: WorkoutDetail, routePointCount: number): string 
  * describes for this page (stat tiles, zones, the heart rate trace, splits, the comparison card) is
  * a later task's card, added inside WorkoutDetail's own `.grid` below this.
  */
-export function WorkoutHeader({ session, detail, timezone, route }: {
+export function WorkoutHeader({ session, detail, route }: {
   session: WorkoutSession
   detail: WorkoutDetail
-  timezone: string
   // Possibly undefined, not trusted as the always-present array WorkoutSessionDetail declares it:
   // WorkoutRoute.tsx's own comment on its `route` prop gives the reason (an older cached response
   // or any shape that predates this deploy can simply be missing the field), and it applies here
@@ -95,8 +87,10 @@ export function WorkoutHeader({ session, detail, timezone, route }: {
       <p className="workout-when">
         {t('activity.workout.when', {
           date: formatSessionDateHeading(session.localDate, language),
-          start: clock(session.startMs, timezone, language),
-          end: clock(session.endMs, timezone, language),
+          // Each end under the offset it was recorded with, not the reader's zone: a run in
+          // Amsterdam at 07:00 reads 07:00 from Tokyo, and a flight between the ends keeps both true.
+          start: formatRecordedClock(session.startMs, session.startOffsetMinutes),
+          end: formatRecordedClock(session.endMs, session.endOffsetMinutes),
           source: nameOf(session.sourceId),
         })}
       </p>

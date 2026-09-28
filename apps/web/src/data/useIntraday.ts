@@ -32,6 +32,12 @@ export interface IntradayResult {
   // thinned one standing in for 130,000; this distinction drives whether a basis line anchors on
   // the visible points (full series) or the original count (thinned).
   reduction: { method: 'lttb' | 'minmax', from: number, to: number } | null
+  /**
+   * The offset, in minutes, the day was recorded under: its first reading's, one per day and never
+   * per point (core's readIntraday). Null with no readings. Optional because a caller's own
+   * window reads and test fixtures may leave it out; a chart treats absent like null.
+   */
+  offsetMinutes?: number | null
 }
 
 /**

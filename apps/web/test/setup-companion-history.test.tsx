@@ -51,7 +51,7 @@ afterEach(() => {
  * absent: on the companion path nothing must ever ask for Google sync progress,
  * and this mock throws on any request it was not told to expect.
  */
-function mockApi(companionMode: boolean, historyStartMs: number | null): () => void {
+function mockApi(companionMode: boolean, historyStartMs: number | null, historyStartLocalDate?: string): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -71,7 +71,7 @@ function mockApi(companionMode: boolean, historyStartMs: number | null): () => v
       return json(200, { items: [] })
     }
     if (url.startsWith('/api/v1/p/p1/companion/cursors')) {
-      return json(200, { items: [], historyStartMs, googleConnected: false })
+      return json(200, { items: [], historyStartMs, historyStartLocalDate, googleConnected: false })
     }
     throw new Error(`unexpected request: ${method} ${url}`)
   }) as typeof fetch
@@ -131,6 +131,20 @@ describe("the wizard's companion history step", () => {
     restore()
 
     expect(container!.textContent).toContain('2026-09-13')
+  })
+
+  // The first reading was taken in New York at 22:30 on the 12th, 02:30Z on the 13th. The server
+  // dates it the 12th by the offset it was stored with; the reader's zone (Amsterdam) would say the
+  // 13th, a day late, which is what this step printed before it read the server's date.
+  it('names the date the server read off the stored row, not the instant in the reader’s zone', async () => {
+    const restore = mockApi(true, Date.parse('2026-09-13T02:30:00Z'), '2026-09-12')
+    mount()
+
+    clickContinue()
+    await pumpUntil(() => container!.textContent!.includes('2026-09-12'), 'the recorded history date to render')
+    restore()
+
+    expect(container!.textContent).not.toContain('2026-09-13')
   })
 
   // Step 2: the Google path is untouched, horizon question included.

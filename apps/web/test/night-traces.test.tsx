@@ -105,6 +105,19 @@ function mount(node: ReactNode): { client: QueryClient, html: () => string } {
 }
 
 describe('the overnight traces', () => {
+  // Slept in New York (UTC-4): the 23:00Z reading reads 19:00, the night's own clock, not 01:00 in
+  // the reader's zone.
+  it('reads each trace at the offset the night began under', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const night = { ...NIGHT, startOffsetMinutes: -240, endOffsetMinutes: -240 }
+      const { client, html } = mount(<NightTraces night={night} chosenSource={null} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('table tbody tr') !== null, 'the trace table to render')
+      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('19:00')
+    } finally { restore() }
+  })
+
   it('asks for each metric across the night\'s own window, not its local date', async () => {
     const restore = stub({ 'heart_rate|watch': [point('watch')] })
     try {

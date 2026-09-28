@@ -5,7 +5,6 @@ import { useRoute, routeParams, readQuery } from '../router.js'
 import { WORKOUT_ROUTE } from '../routes.js'
 import { useWorkoutSession } from '../data/useWorkoutSession.js'
 import { useSourceNames } from '../data/useSourceNames.js'
-import { useSession } from '../auth/session.js'
 import { ApiError } from '../api/client.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
@@ -67,8 +66,6 @@ export function WorkoutDetail() {
   const { t } = useTranslation()
   const route = useRoute()
   const sessionId = routeParams(WORKOUT_ROUTE, route)?.sessionId
-  const session = useSession()
-  const timezone = session.data?.effectiveTimezone ?? 'UTC'
   const query = useWorkoutSession(sessionId)
   const { sources } = useSourceNames()
   const [annotating, setAnnotating] = useState(false)
@@ -126,7 +123,7 @@ export function WorkoutDetail() {
 
   return (
     <>
-      <WorkoutHeader session={query.data} detail={detail} timezone={timezone} route={query.data.route} />
+      <WorkoutHeader session={query.data} detail={detail} route={query.data.route} />
       <div className="workout-actions">
         <button type="button" className="button" onClick={() => setAnnotating(true)}>
           {t('activity.workout.annotate')}
