@@ -1082,6 +1082,19 @@ button.week-bar-slot { cursor: pointer; }
    tokens carry no regular weight to put a child of the bold figure back to. */
 .dash-week-per { font-size: var(--font-size-xs); color: var(--text-faint); }
 
+/* FigureRow (M10a): one figure on a detail page against its usual range, shared by the night and
+   workout pages. */
+.figure-row { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.figure-row-label { font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.figure-row-value { font-size: var(--font-size-lg); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.figure-row-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-inset); }
+.figure-row-band { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--chart-band-baseline); }
+.figure-row-mark { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text-primary); }
+.figure-row-mark.worse { background: var(--negative); }
+.figure-row-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
+.figure-row-verdict.better { color: var(--positive); }
+.figure-row-verdict.worse { color: var(--negative); }
+
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
