@@ -16,13 +16,11 @@ import com.haelan.android.glance.geometry.StageTotal
 import com.haelan.android.glance.geometry.StepsDot
 import java.math.RoundingMode
 import java.text.NumberFormat
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -115,16 +113,13 @@ object GlanceFormat {
      */
     fun nightRange(startMs: Long, endMs: Long, zone: ZoneId, locale: Locale): String {
         val p = patterns(locale)
+        val n = names(locale)
         val start = Instant.ofEpochMilli(startMs).atZone(zone).toLocalDate()
         val end = Instant.ofEpochMilli(endMs).atZone(zone).toLocalDate()
-        val short = DateTimeFormatter.ofPattern(p.short, locale)
-        if (start == end) return short.format(start)
-        if (start.year != end.year) {
-            val withYear = DateTimeFormatter.ofPattern(p.shortWithYear, locale)
-            return withYear.format(start) + RANGE_DASH + withYear.format(end)
-        }
+        if (start == end) return render(p.short, start, n)
+        if (start.year != end.year) return render(p.shortWithYear, start, n) + RANGE_DASH + render(p.shortWithYear, end, n)
         val first = if (p.collapsesMonth && start.month == end.month) p.weekdayDay else p.short
-        return DateTimeFormatter.ofPattern(first, locale).format(start) + RANGE_DASH + short.format(end)
+        return render(first, start, n) + RANGE_DASH + render(p.short, end, n)
     }
 
     /**
@@ -144,14 +139,73 @@ object GlanceFormat {
      * long month and numeric year. The stand-alone month form, as Intl uses for a month with no day.
      */
     fun monthTitle(month: String, locale: Locale): String =
-        DateTimeFormatter.ofPattern("LLLL y", locale).format(YearMonth.parse(month))
+        render("LLLL y", YearMonth.parse(month).atDay(1), names(locale))
 
     /**
      * The calendar's column heads, Monday first: the short weekday's first two letters ("Mo",
      * "ma") as the web slices them, and the full name a screen reader hears.
      */
-    fun weekdays(locale: Locale): List<Pair<String, String>> = DayOfWeek.entries.map {
-        it.getDisplayName(TextStyle.SHORT, locale).take(2) to it.getDisplayName(TextStyle.FULL, locale)
+    fun weekdays(locale: Locale): List<Pair<String, String>> {
+        val n = names(locale)
+        return n.shortWeekdays.zip(n.weekdays).map { (short, full) -> short.take(2) to full }
+    }
+
+    /** The month and weekday names, Monday and January first. */
+    private class Names(
+        val months: List<String>,
+        val shortMonths: List<String>,
+        val weekdays: List<String>,
+        val shortWeekdays: List<String>,
+    )
+
+    // The names as the web's Intl writes them, written out rather than taken from the platform:
+    // Android's ICU moves with the OS version (Android 8 to 11 write the Dutch short month "sep.",
+    // where current CLDR and the JDK the tests run on write "sep"), so the phone would print a
+    // different date than the web, and than its own tests, depending on which Android it runs.
+    private val ENGLISH_NAMES = Names(
+        months = listOf(
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December",
+        ),
+        shortMonths = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+        weekdays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+        shortWeekdays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"),
+    )
+    private val DUTCH_NAMES = Names(
+        months = listOf(
+            "januari", "februari", "maart", "april", "mei", "juni",
+            "juli", "augustus", "september", "oktober", "november", "december",
+        ),
+        shortMonths = listOf("jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"),
+        weekdays = listOf("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
+        shortWeekdays = listOf("ma", "di", "wo", "do", "vr", "za", "zo"),
+    )
+
+    private fun names(locale: Locale): Names = if (locale.language == "nl") DUTCH_NAMES else ENGLISH_NAMES
+
+    /**
+     * [pattern] written for [date] from [names]: the few pattern letters the dates here use (`EEEE`
+     * and `EEE` a weekday, `MMMM`/`LLLL` and `MMM` a month, `d` the day, `y` the year), everything
+     * else as it stands. Four letters is the full name, fewer the short one.
+     */
+    private fun render(pattern: String, date: LocalDate, names: Names): String {
+        val out = StringBuilder()
+        var i = 0
+        while (i < pattern.length) {
+            val letter = pattern[i]
+            var end = i
+            while (end < pattern.length && pattern[end] == letter) end++
+            val full = end - i >= 4
+            when (letter) {
+                'E' -> out.append((if (full) names.weekdays else names.shortWeekdays)[date.dayOfWeek.value - 1])
+                'M', 'L' -> out.append((if (full) names.months else names.shortMonths)[date.monthValue - 1])
+                'd' -> out.append(date.dayOfMonth)
+                'y' -> out.append(date.year)
+                else -> out.append(pattern, i, end)
+            }
+            i = end
+        }
+        return out.toString()
     }
 
     private class Patterns(
@@ -165,7 +219,7 @@ object GlanceFormat {
 
     // What Intl writes for the web's option sets, per language: the JVM has no skeleton formatter
     // (Android's getBestDateTimePattern is not on it), so the two languages the app speaks are
-    // written out, English the fallback. The names inside ("Sep", "sep", "za") are CLDR's.
+    // written out, English the fallback. The names inside ("Sep", "sep", "za") are [names]'.
     private val ENGLISH = Patterns(
         long = "EEEE, MMMM d",
         short = "EEE, MMM d",
@@ -186,7 +240,7 @@ object GlanceFormat {
     private fun patterns(locale: Locale): Patterns = if (locale.language == "nl") DUTCH else ENGLISH
 
     private fun date(localDate: String, pattern: String, locale: Locale): String =
-        DateTimeFormatter.ofPattern(pattern, locale).format(LocalDate.parse(localDate))
+        render(pattern, LocalDate.parse(localDate), names(locale))
 }
 
 /** Which of the Last night card's three small figures a standing note is for. */

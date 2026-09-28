@@ -70,6 +70,28 @@ class GlanceFormatTest {
         assertEquals("Tuesday, September 22", GlanceFormat.headerDate("2026-09-22", en, short = false))
     }
 
+    /**
+     * Every month's short name, as the web's Intl writes it (checked against Node's full ICU), so a
+     * phone whose own ICU writes "sep." or "Sept" still prints the web's. Pinned month by month,
+     * since the one a platform disagrees on is the one a sample date would miss.
+     */
+    @Test
+    fun `every month's short name is the web's in both languages, whatever the platform's ICU says`() {
+        val months = (1..12).map { "2026-${it.toString().padStart(2, '0')}-05" }
+        assertEquals(
+            listOf("Jan 5", "Feb 5", "Mar 5", "Apr 5", "May 5", "Jun 5", "Jul 5", "Aug 5", "Sep 5", "Oct 5", "Nov 5", "Dec 5"),
+            months.map { GlanceFormat.shortDate(it, en) },
+        )
+        assertEquals(
+            listOf("5 jan", "5 feb", "5 mrt", "5 apr", "5 mei", "5 jun", "5 jul", "5 aug", "5 sep", "5 okt", "5 nov", "5 dec"),
+            months.map { GlanceFormat.shortDate(it, nl) },
+        )
+        assertEquals("zaterdag 5 december", GlanceFormat.longDate("2026-12-05", nl))
+        assertEquals("maart 2026", GlanceFormat.monthTitle("2026-03", nl))
+        assertEquals(listOf("ma" to "maandag", "di" to "dinsdag"), GlanceFormat.weekdays(nl).take(2))
+        assertEquals("Su" to "Sunday", GlanceFormat.weekdays(en).last())
+    }
+
     @Test
     fun `a night's range repeats the month in English and collapses it in Dutch`() {
         val start = ms("2026-09-05T21:30:00Z")
