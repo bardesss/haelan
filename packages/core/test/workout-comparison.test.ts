@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  compareWorkout, COMPARISON_LIMIT, COMPARISON_MIN, COMPARISON_WINDOW_DAYS,
+  compareWorkout, sameTypeWindow, COMPARISON_LIMIT, COMPARISON_MIN, COMPARISON_WINDOW_DAYS,
 } from '../src/api/workoutComparison.ts'
 
 const DAY = 86_400_000
@@ -152,5 +152,50 @@ describe('comparing a workout on cardio load', () => {
     const heavy = run('subject', 0, zones(1200, 1200, 1200, 1200))
     const result = compareWorkout(heavy, [loaded('a', 1, 600), run('b', 2), run('c', 3)])
     expect(result.cardioLoad).toBeNull()
+  })
+})
+
+/**
+ * The window both the comparison and the workout page's usual ranges are taken over, so the two
+ * cannot come to disagree about which earlier sessions count.
+ */
+describe('sameTypeWindow', () => {
+  // By start instant rather than days ago, so the twenty-five close together can sit a minute apart.
+  const runAt = (id: string, startMs: number) => ({ ...run(id, 0), startMs })
+  const rideAt = (id: string, startMs: number) => ({ ...runAt(id, startMs), attrs: { exerciseType: 'BIKING', metricsSummary: {} } })
+
+  it('keeps the earlier same-type sessions inside the window, newest first, at most twenty', () => {
+    const subject = runAt('s', DAY * 100)
+    const candidates = [
+      runAt('old', DAY * 5), // 95 days before: outside the 90-day window
+      runAt('a', DAY * 50), runAt('b', DAY * 80),
+      { ...runAt('x', DAY * 60), excluded: true },
+      rideAt('bike', DAY * 70),
+      runAt('later', DAY * 101),
+      ...Array.from({ length: 25 }, (_, i) => runAt(`m${i}`, DAY * 81 + i * 60_000)),
+    ]
+    const window = sameTypeWindow(subject, candidates)
+    expect(window).toHaveLength(20)
+    expect(window[0]!.id).toBe('m24')
+    expect(window.map((s) => s.id)).not.toContain('old')
+    expect(window.map((s) => s.id)).not.toContain('x')
+    expect(window.map((s) => s.id)).not.toContain('bike')
+    expect(window.map((s) => s.id)).not.toContain('later')
+  })
+
+  // The test above fills the window with twenty-five close runs, which push every other candidate
+  // out on the limit alone; a short list is what shows each filter doing its own work.
+  it('drops each kind of candidate on its own filter, not only on the limit', () => {
+    const subject = runAt('s', DAY * 100)
+    const window = sameTypeWindow(subject, [
+      runAt('old', DAY * 5), runAt('a', DAY * 50), { ...runAt('x', DAY * 60), excluded: true },
+      rideAt('bike', DAY * 70), runAt('later', DAY * 101), runAt('s', DAY * 100), runAt('b', DAY * 80),
+    ])
+    expect(window.map((s) => s.id)).toEqual(['b', 'a'])
+  })
+
+  it('answers nothing for a subject with no type', () => {
+    const untyped = { id: 's', startMs: DAY * 100, excluded: false, attrs: {} }
+    expect(sameTypeWindow(untyped, [runAt('a', DAY * 99)])).toEqual([])
   })
 })

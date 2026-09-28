@@ -53,6 +53,8 @@ import { readGlanceCalendar } from './glanceCalendar.ts'
 import type { GlanceCalendar } from './glanceCalendar.ts'
 import { readNightPage } from './nightPage.ts'
 import type { NightPage, NightPageInput } from './nightPage.ts'
+import { readWorkoutPage } from './workoutPage.ts'
+import type { WorkoutPage } from './workoutPage.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -299,6 +301,18 @@ export class PersonQuery {
     requireDate('today', input.today)
     if (input.localDate > input.today) throw new ConfigError(`localDate '${input.localDate}' is after today '${input.today}'`)
     return readNightPage(this, input)
+  }
+
+  /**
+   * The workout page (M10a): one workout, every figure judged against the earlier sessions of its
+   * type, or null for an id naming no workout (a night's id included), the answer `sessionById`
+   * gives and for the same reason.
+   */
+  workoutPage(input: { sessionId: string, today: string, nowMs: number, nameOf?: (id: string) => string }): WorkoutPage | null {
+    // The session id is refused by sessionById, which readWorkoutPage starts from.
+    requireDate('today', input.today)
+    requireFiniteNumber('nowMs', input.nowMs)
+    return readWorkoutPage(this, { sessionId: input.sessionId, today: input.today, nowMs: input.nowMs, nameOf: input.nameOf ?? ((id) => id) })
   }
 
   /**

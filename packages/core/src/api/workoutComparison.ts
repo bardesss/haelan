@@ -81,6 +81,28 @@ function facet(
   return { better, of: present.length }
 }
 
+/**
+ * The earlier sessions a workout is judged against: the same exercise type, inside the trailing
+ * COMPARISON_WINDOW_DAYS, not excluded, newest first, at most COMPARISON_LIMIT. One definition for
+ * the "better than N of M" count below and for the workout page's usual ranges, so the two cannot
+ * come to disagree about which sessions count. Empty for a subject with no type.
+ */
+export function sameTypeWindow<T extends ComparableSession>(subject: ComparableSession, candidates: readonly T[]): T[] {
+  const exerciseType = workoutSummary(subject.attrs).exerciseType
+  if (exerciseType === null) return []
+  const windowStart = subject.startMs - COMPARISON_WINDOW_DAYS * DAY_MS
+  return candidates
+    .filter((candidate) => candidate.id !== subject.id)
+    // Strictly before the subject: an earlier run on the same day counts, and a later one is not
+    // something this workout can already have been compared against.
+    .filter((candidate) => candidate.startMs < subject.startMs && candidate.startMs >= windowStart)
+    // A person who excluded a session has already said it should not count.
+    .filter((candidate) => !candidate.excluded)
+    .filter((candidate) => workoutSummary(candidate.attrs).exerciseType === exerciseType)
+    .sort((a, b) => b.startMs - a.startMs)
+    .slice(0, COMPARISON_LIMIT)
+}
+
 export function compareWorkout(
   subject: ComparableSession,
   candidates: readonly ComparableSession[],
@@ -89,24 +111,13 @@ export function compareWorkout(
   const exerciseType = subjectSummary.exerciseType
   if (exerciseType === null) return { exerciseType, of: 0, reason: 'no-type', ...WITHHELD }
 
-  const windowStart = subject.startMs - COMPARISON_WINDOW_DAYS * DAY_MS
-  const compared = candidates
-    .filter((candidate) => candidate.id !== subject.id)
-    // Strictly before the subject: an earlier run on the same day counts, and a later one is not
-    // something this workout can already have been compared against.
-    .filter((candidate) => candidate.startMs < subject.startMs && candidate.startMs >= windowStart)
-    // A person who excluded a session has already said it should not count.
-    .filter((candidate) => !candidate.excluded)
-    .map((candidate) => ({
-      candidate,
-      summary: workoutSummary(candidate.attrs),
-      // The zone durations live on the detail rather than the summary, so this is a second pass
-      // over the same attrs. Bounded by COMPARISON_LIMIT, which is twenty.
-      load: edwardsLoadFromSeconds(workoutDetail(candidate.attrs).zones),
-    }))
-    .filter((entry) => entry.summary.exerciseType === exerciseType)
-    .sort((a, b) => b.candidate.startMs - a.candidate.startMs)
-    .slice(0, COMPARISON_LIMIT)
+  const compared = sameTypeWindow(subject, candidates).map((candidate) => ({
+    candidate,
+    summary: workoutSummary(candidate.attrs),
+    // The zone durations live on the detail rather than the summary, so this is a second pass
+    // over the same attrs. Bounded by COMPARISON_LIMIT, which is twenty.
+    load: edwardsLoadFromSeconds(workoutDetail(candidate.attrs).zones),
+  }))
 
   if (compared.length < COMPARISON_MIN) {
     return { exerciseType, of: compared.length, reason: 'too-few', ...WITHHELD }
