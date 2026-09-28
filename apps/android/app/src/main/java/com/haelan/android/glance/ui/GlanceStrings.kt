@@ -234,10 +234,15 @@ internal class ResourceStrings(private val resources: Resources) : Strings {
 }
 
 /**
- * The locale numbers and dates are written in: Dutch when the phone reads Dutch, otherwise English,
- * because English is the text the resources fall back to. A German phone reads the English
- * sentences, and "1.827 steps" inside one would be a German number in an English sentence.
+ * The locale numbers and dates are written in, from [resolved], the `glance_locale` string as the
+ * resources resolved it: Dutch when the sentences are Dutch, otherwise English, because English is
+ * the text the resources fall back to. A German phone reads the English sentences, and "1.827
+ * steps" inside one would be a German number in an English sentence.
+ *
+ * Read from the resources rather than the phone's first locale: a phone set to German then Dutch
+ * resolves the resources to values-nl, and its first locale would have written English numbers
+ * and dates into Dutch sentences.
  */
-internal fun glanceLocale(phone: Locale): Locale = if (phone.language == "nl") DUTCH else Locale.ENGLISH
+internal fun glanceLocale(resolved: String): Locale = if (resolved == "nl") DUTCH else Locale.ENGLISH
 
 private val DUTCH: Locale = Locale.forLanguageTag("nl-NL")

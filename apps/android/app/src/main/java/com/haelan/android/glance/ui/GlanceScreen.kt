@@ -163,11 +163,12 @@ internal fun noticeOf(state: GlanceUiState?): GlanceNotice? {
  */
 class CardText(val words: GlanceWords, val workouts: WorkoutWords, val locale: Locale, val zone: ZoneId)
 
-/** The [CardText] for the phone's language and [zone], rebuilt when either changes. */
+/** The [CardText] for the language the resources resolved to and [zone], rebuilt when either changes. */
 @Composable
 fun rememberCardText(zone: ZoneId): CardText {
     val resources = LocalResources.current
-    val locale = glanceLocale(LocalConfiguration.current.locales[0])
+    // Read under the configuration, so a change of language reads it again.
+    val locale = remember(resources, LocalConfiguration.current) { glanceLocale(resources.getString(R.string.glance_locale)) }
     return remember(resources, locale, zone) {
         val strings = ResourceStrings(resources)
         CardText(GlanceWords(strings, locale, zone), WorkoutWords(strings, locale), locale, zone)

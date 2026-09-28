@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.w3c.dom.Element
 import java.io.File
+import java.util.Locale
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
@@ -79,6 +80,20 @@ class GlanceStringResourcesTest {
             id == null || GLANCE_STRING_IDS[key] != id
         }
         assertEquals(emptyList<String>(), wrong)
+    }
+
+    /**
+     * A phone set to German then Dutch resolves values-nl, and its first locale is German: the
+     * numbers and dates follow the sentences, so each resource file names its own language.
+     */
+    @Test
+    fun `numbers and dates are written in the language the sentences resolved to`() {
+        val english = strings(File(res, "values/strings.xml")).getValue("glance_locale")
+        val dutch = strings(File(res, "values-nl/strings.xml")).getValue("glance_locale")
+        assertEquals(Locale.ENGLISH, glanceLocale(english))
+        assertEquals(Locale.forLanguageTag("nl-NL"), glanceLocale(dutch))
+        // A language the app has no sentences in reads the English ones, in English numbers.
+        assertEquals(Locale.ENGLISH, glanceLocale("de"))
     }
 
     @Test
