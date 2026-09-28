@@ -248,7 +248,11 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     highestHr: highestHeartRate(q, session),
   })
   const exerciseType = subject.summary.exerciseType
-  const candidates = sameTypeSessions(q, exerciseType, session.localDate)
+  // One read of the type, up to today (or the workout's own date, should that ever lie later):
+  // the Records best is over all of it, and every comparison over what was done by this
+  // workout's date, the list the comparison and the previous run have always been given.
+  const everSameType = sameTypeSessions(q, exerciseType, input.today > session.localDate ? input.today : session.localDate)
+  const candidates = everSameType.filter((s) => s.localDate <= session.localDate)
   const window = sameTypeWindow(session, candidates).map((s) => readingOf(s))
   const figures = figuresOf(subject, window)
 
@@ -263,7 +267,7 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     comparison: compareWorkout(session, candidates),
     previous: previousOf(session, candidates),
     // The Records best, so it may be a session done after this one.
-    best: bestOf(input.today > session.localDate ? sameTypeSessions(q, exerciseType, input.today) : candidates),
+    best: bestOf(everSameType),
     day: dayOf(q, session, input),
     after: afterOf(q, session, input),
   }

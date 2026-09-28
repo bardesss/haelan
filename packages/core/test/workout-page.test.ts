@@ -148,6 +148,18 @@ describe('readWorkoutPage', () => {
     expect(strip.at(-1)).toEqual({ sessionId: 'subject', localDate: SUBJECT_DATE, value: 300 })
   })
 
+  it('leaves an excluded run out of the usual range and the strip', () => {
+    // Six earlier runs at 325 and 335 and, between them, an excluded one at a pace no run of this
+    // person's comes near: counted, it would drag the usual far below 330 and widen it past 300.
+    seedRuns(6, { pace: 330 })
+    seedRun('excluded', shiftLocalDate(SUBJECT_DATE, -1), { pace: 100 }, { excluded: true })
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    const pace = readWorkoutPage(q(), input('subject'))!.figures.pace!
+    expect(pace.baseline!.center).toBeCloseTo(330)
+    expect(pace.standing).toBe('below')
+    expect(pace.strip.map((p) => p.sessionId)).not.toContain('excluded')
+  })
+
   it('claims no standing below five earlier sessions of the type', () => {
     seedRuns(4, { pace: 330 })
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
