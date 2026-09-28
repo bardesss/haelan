@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import en from '../src/i18n/en.json' with { type: 'json' }
 import nl from '../src/i18n/nl.json' with { type: 'json' }
+import { SEED_KINDS } from '@haelan/core/event-kinds'
 
 // A key present in one catalogue and missing from the other renders as the raw key to whoever
 // chose that language. This catches the missing half; nothing here can catch a wrong translation,
@@ -33,6 +34,15 @@ describe('the message catalogues', () => {
     for (const path of paths(nl)) {
       const value = path.split('.').reduce<unknown>((at, key) => (at as Record<string, unknown>)[key], nl)
       expect(String(value).toLowerCase(), path).not.toContain('waaktijd')
+    }
+  })
+
+  // Keyed on SEED_KINDS rather than on the two catalogues: a seed kind missing from both passes the
+  // parity check above, and every chip and label that looks the kind up then prints the raw key.
+  it('translate every seed kind in both languages', () => {
+    for (const [locale, catalogue] of [['en', en], ['nl', nl]] as const) {
+      const kinds = catalogue.annotate.event.kinds as Record<string, string>
+      for (const kind of SEED_KINDS) expect(kinds[kind], `${locale}: annotate.event.kinds.${kind}`).toBeTypeOf('string')
     }
   })
 

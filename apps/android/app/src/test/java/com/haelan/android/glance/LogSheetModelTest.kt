@@ -262,6 +262,39 @@ class LogSheetModelTest {
     }
 
     @Test
+    fun `Done adds a typed kind before saving, rather than dropping it`() {
+        model.open(today, glanceLog)
+        model.startEdit()
+        model.typeDraft(" travel ")
+        model.saveEdit()
+        assertEquals(listOf("presets caffeine,alcohol,travel"), calls.sent)
+        assertEquals(listOf("caffeine", "alcohol", "travel"), sheet?.log?.presets)
+        assertNull(sheet?.edit)
+    }
+
+    @Test
+    fun `Add puts the typed kind on the list, empties the field, and sends nothing until Done`() {
+        model.open(today, glanceLog)
+        model.startEdit()
+        model.typeDraft("travel")
+        model.addDraft()
+        assertEquals(listOf("caffeine", "alcohol", "travel"), sheet?.edit?.kinds)
+        assertEquals("", sheet?.edit?.draft)
+        assertEquals(emptyList<String>(), calls.sent)
+    }
+
+    @Test
+    fun `Done with a duplicate typed kind shows why, and sends nothing`() {
+        model.open(today, glanceLog)
+        model.startEdit()
+        model.typeDraft("Caffeine")
+        model.saveEdit()
+        assertEquals(emptyList<String>(), calls.sent)
+        assertEquals(EditProblem.Duplicate("caffeine"), sheet?.edit?.problem)
+        assertEquals(0, refreshed)
+    }
+
+    @Test
     fun `undo deletes the latest tap's event`() {
         model.open(today, glanceLog)
         calls.nextEventId = "e9"

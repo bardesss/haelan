@@ -5,7 +5,12 @@
     "alcohol",
     "medication",
     "injury",
-    "caffeine"
+    "caffeine",
+    "meditation",
+    "sauna",
+    "reading",
+    "screen_free",
+    "stretching"
   ],
   "mood": 2,
   "counts": {

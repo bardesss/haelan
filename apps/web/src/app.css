@@ -960,6 +960,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .log-edit-remove:hover { color: var(--text-primary); background: var(--surface-card); }
 .log-edit-remove svg { width: 13px; height: 13px; }
 .log-edit-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+/* The add field and its Add button share a row, the field taking what the button leaves. */
+.log-edit-add { display: flex; gap: var(--space-2); }
+.log-edit-add .input { flex: 1; min-width: 0; }
 
 /* LogButton.tsx: the panel's two containers (the Log button itself is .button-primary, as the
    approved header draws it). The popover is fixed and portalled like .cal-popover and placed the
@@ -1996,6 +1999,8 @@ button.week-bar-slot { cursor: pointer; }
      does; the pill's own 44px leaves it room. Edit is a bare word beside the section's label. */
   .log-edit-remove { width: 44px; height: 44px; }
   .log-sec-head .log-link { min-height: 44px; min-width: 44px; padding: 0 var(--space-2); }
+  /* The editor's Add is a short word too, so it takes the square's width as well as its height. */
+  .log-edit-add .button { min-width: 44px; }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
   /* The dashboard's day arrows and calendar are .button (they carry its border, as the approved
      header draws them) but hold only an icon, so they need .icon-button's square minimum too. */

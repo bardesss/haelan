@@ -34,7 +34,7 @@ class QuickLogClientTest {
         assertEquals("/api/v1/p/p1/quick-log/day/2026-08-19", request.path)
         assertEquals("haelan_session=s3cret", request.headers["cookie"])
         val log = (answer as Answer.Ok).value
-        assertEquals(listOf("illness", "travel", "alcohol", "medication", "injury", "caffeine"), log.presets)
+        assertEquals(listOf("illness", "travel", "alcohol", "medication", "injury", "caffeine", "meditation", "sauna", "reading", "screen_free", "stretching"), log.presets)
         assertEquals(2, log.mood)
         assertEquals(mapOf("sauna" to 1), log.counts)
         assertEquals("2026-08-20", log.today)

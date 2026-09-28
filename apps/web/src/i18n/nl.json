@@ -936,7 +936,12 @@
         "alcohol": "Alcohol",
         "medication": "Medicatie",
         "injury": "Blessure",
-        "caffeine": "Cafeïne"
+        "caffeine": "Cafeïne",
+        "meditation": "Meditatie",
+        "sauna": "Sauna",
+        "reading": "Lezen voor het slapen",
+        "screen_free": "Geen schermen 's avonds",
+        "stretching": "Rekken"
       }
     }
   },
@@ -964,6 +969,7 @@
     "edit": {
       "remove": "{{kind}} verwijderen",
       "add": "Soort toevoegen",
+      "addButton": "Toevoegen",
       "moved": "{{kind}} verplaatst naar plek {{position}}",
       "done": "Klaar",
       "cancel": "Annuleren",

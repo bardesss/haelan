@@ -402,7 +402,11 @@ describe('log on the glance', () => {
     const first = await get(harness, token, '/glance')
     const firstBody = first.json()
     expect(firstBody.log).toMatchObject({
-      presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'], mood: null, today: '2026-08-20',
+      presets: [
+        'illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine',
+        'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+      ],
+      mood: null, today: '2026-08-20',
     })
 
     const written = await harness.app.inject({

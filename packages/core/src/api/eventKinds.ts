@@ -3,7 +3,10 @@
 // the Notes list and the server share one list and one set of rules.
 
 /** In chip order. Each has an `annotate.event.kinds.*` translation in the web app. */
-export const SEED_KINDS: readonly string[] = ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine']
+export const SEED_KINDS: readonly string[] = [
+  'illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine',
+  'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+]
 
 export const MAX_PRESETS = 16
 export const MAX_PRESET_LENGTH = 40

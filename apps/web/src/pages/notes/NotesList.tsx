@@ -23,7 +23,7 @@ interface Row {
   eventId: string | null
 }
 
-/** An event's own `kind` is free text past the six SEED_KINDS the chart panel's datalist offers
+/** An event's own `kind` is free text past the SEED_KINDS the chart panel's datalist offers
  * (eventKinds.ts's own comment on why the column is not an enum), so only a seed kind is looked up
  * in the catalogue; anything else is the reader's own words, printed exactly as typed. */
 function kindLabel(t: Translate, kind: string): string {

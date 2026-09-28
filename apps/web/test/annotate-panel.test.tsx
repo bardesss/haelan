@@ -246,17 +246,20 @@ describe('the event kind field', () => {
     mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
     click(segment('Add an event'))
     const options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
-    expect(options.map((o) => o.value)).toEqual(['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'])
+    expect(options.map((o) => o.value)).toEqual([
+      'illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine',
+      'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+    ])
   })
 
   // The person's own chips (M9c), offered ahead of the seed set once GET /quick-log/presets has
-  // answered: 'sauna' is not in SEED_KINDS, so it is labelled with itself, while 'alcohol' is,
+  // answered: 'yoga' is not in SEED_KINDS, so it is labelled with itself, while 'alcohol' is,
   // so it keeps its translated label (the same rule NotesList.tsx's own kindLabel applies).
   it('offers the person\'s own presets once they have loaded, labelling only the seed ones', async () => {
     const original = globalThis.fetch
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('quick-log/presets')) return respond(200, { kinds: ['sauna', 'alcohol'] })
+      if (url.includes('quick-log/presets')) return respond(200, { kinds: ['yoga', 'alcohol'] })
       return respond(200, {})
     }) as typeof fetch
 
@@ -267,7 +270,7 @@ describe('the event kind field', () => {
 
     const options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
     expect(options.map((o) => [o.value, o.getAttribute('label')])).toEqual([
-      ['sauna', 'sauna'],
+      ['yoga', 'yoga'],
       ['alcohol', 'Alcohol'],
     ])
   })
@@ -288,14 +291,20 @@ describe('the event kind field', () => {
 
     // Pending: no request has resolved yet, so the panel already shows the seed set.
     let options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
-    expect(options.map((o) => o.value)).toEqual(['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'])
+    expect(options.map((o) => o.value)).toEqual([
+      'illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine',
+      'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+    ])
 
     await settle()
     globalThis.fetch = original
 
     // Failed: still the seed set, not an empty list.
     options = [...container!.querySelectorAll('datalist option')] as HTMLOptionElement[]
-    expect(options.map((o) => o.value)).toEqual(['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'])
+    expect(options.map((o) => o.value)).toEqual([
+      'illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine',
+      'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+    ])
   })
 
   it('accepts a kind outside the seed set and sends exactly what was typed', async () => {

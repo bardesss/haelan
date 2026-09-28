@@ -246,10 +246,10 @@ describe('LogPanel chips', () => {
     handler = (req) => req.method === 'POST'
       ? new Promise<Response>((resolve) => { release = () => resolve(fakeServer(req)) })
       : fakeServer(req)
-    render({ initial: glanceLog({ presets: ['caffeine', 'sauna'], counts: { caffeine: 1 } }) })
+    render({ initial: glanceLog({ presets: ['caffeine', 'yoga'], counts: { caffeine: 1 } }) })
     expect(chip('Caffeine').getAttribute('aria-label')).toBe('Caffeine, 1 today')
-    expect(chip('sauna').getAttribute('aria-label')).toBe('sauna')
-    expect(chip('sauna').textContent).toBe('sauna')
+    expect(chip('yoga').getAttribute('aria-label')).toBe('yoga')
+    expect(chip('yoga').textContent).toBe('yoga')
     click(chip('Caffeine'))
     expect(chip('Caffeine').getAttribute('aria-label')).toBe('Caffeine, 2 today')
     await pumpUntil(() => writes().length > 0, 'the tap request')
