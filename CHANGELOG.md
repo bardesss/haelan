@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.15.0](https://github.com/bardesss/haelan/compare/v2.14.0...v2.15.0) (2026-09-28)
+
+
+### Features
+
+* today follows the phone's time zone ([#394](https://github.com/bardesss/haelan/issues/394)) ([58170a1](https://github.com/bardesss/haelan/commit/58170a18bd4a8791d2c1f45c7533ffc931a38b5f))
+
 ## [2.14.0](https://github.com/bardesss/haelan/compare/v2.13.0...v2.14.0) (2026-09-28)
 
 
