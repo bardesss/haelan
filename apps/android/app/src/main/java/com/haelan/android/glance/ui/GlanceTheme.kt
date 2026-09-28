@@ -1,6 +1,7 @@
 package com.haelan.android.glance.ui
 
-import android.os.Build
+import android.annotation.SuppressLint
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
+import com.google.android.material.color.DynamicColors
 import com.haelan.android.R
 
 /**
@@ -78,20 +80,54 @@ val LocalGlanceColors = staticCompositionLocalOf<GlanceColors> {
 }
 
 /**
- * The chrome follows the phone: Material You's wallpaper colours from Android 12, where the phone
- * has them. Before that, the same token mapping `values/themes.xml` gives the view screens, so the
- * glance and the sync screen one tap away look like one app. The page itself and the data colours
- * are the tokens either way, through [withTokenPage] and [LocalGlanceColors].
+ * Whether the chrome wears the wallpaper's colours, asked in one place for every screen. The sync
+ * screen is Views and themes itself through Material's `DynamicColors`, which says no on some
+ * Android 12 phones (a manufacturer allowlist) as well as below 12. The glance once asked only for
+ * Android 12, so on a phone left off that list its bar would be tinted and the sync screen's not.
+ * Both now take Material's answer: [GlanceTheme] through [available], the Views through [applyTo].
  */
+object DynamicChrome {
+    fun available(): Boolean = DynamicColors.isDynamicColorAvailable()
+
+    /** Before the views are inflated, which is when a theme overlay is read. */
+    fun applyTo(activity: Activity) {
+        DynamicColors.applyToActivityIfAvailable(activity)
+    }
+}
+
+/**
+ * The glance's chrome for a given answer from [DynamicChrome.available]. Pure, so a JVM test can
+ * see the decision; the builders are lambdas so only the chosen one runs, because the dynamic
+ * builders exist only from Android 12 and must not be called on a phone that said no. Inline so
+ * the lambdas may be composable in [GlanceTheme].
+ */
+inline fun chromeScheme(
+    dynamicAvailable: Boolean,
+    dynamic: () -> ColorScheme,
+    tokens: () -> ColorScheme,
+): ColorScheme = if (dynamicAvailable) dynamic() else tokens()
+
+/**
+ * The chrome follows the phone: Material You's wallpaper colours where the phone has them, by the
+ * same rule as the sync screen ([DynamicChrome]). Otherwise the same token mapping
+ * `values/themes.xml` gives the view screens, so the glance and the sync screen one tap away look
+ * like one app. The page itself and the data colours are the tokens either way, through
+ * [withTokenPage] and [LocalGlanceColors].
+ *
+ * NewApi is suppressed because lint cannot follow the answer into the lambda: Material's
+ * `isDynamicColorAvailable` says no below Android 12 before anything else, so the dynamic builders
+ * only ever run where they exist.
+ */
+@SuppressLint("NewApi")
 @Composable
 fun GlanceTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
-    val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val context = LocalContext.current
-        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else {
-        tokenColorScheme(dark)
-    }
+    val context = LocalContext.current
+    val base = chromeScheme(
+        dynamicAvailable = DynamicChrome.available(),
+        dynamic = { if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context) },
+        tokens = { tokenColorScheme(dark) },
+    )
     val scheme = withTokenPage(base) { colorResource(it) }
     val colors = glanceColorsFrom { colorResource(it) }
     CompositionLocalProvider(LocalGlanceColors provides colors) {

@@ -24,13 +24,13 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.Lifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.color.DynamicColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.haelan.android.glance.GlanceRegistry
 import com.haelan.android.glance.GlanceStore
 import com.haelan.android.glance.forgetGlances
+import com.haelan.android.glance.ui.DynamicChrome
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -174,12 +174,11 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // The chrome follows the phone as the glance's does (GlanceTheme): Material You's wallpaper
-        // colours from Android 12, for the bar, the buttons and the switches. Only those read the
-        // theme; the page, the cards and every word are token colours named in the layout, so the
-        // screen keeps the palette it shares with the glance. Before the views are inflated, which
-        // is when a theme overlay is read.
-        DynamicColors.applyToActivityIfAvailable(this)
+        // The chrome follows the phone by the glance's own rule (DynamicChrome): Material You's
+        // wallpaper colours where Material says the phone has them, for the bar, the buttons and
+        // the switches. Only those read the theme; the page, the cards and every word are token
+        // colours named in the layout, so the screen keeps the palette it shares with the glance.
+        DynamicChrome.applyTo(this)
         super.onCreate(savedInstanceState)
 
         val stored = SessionStore.prefs(this)

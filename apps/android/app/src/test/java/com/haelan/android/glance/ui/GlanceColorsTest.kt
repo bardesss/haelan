@@ -67,4 +67,31 @@ class GlanceColorsTest {
         assertEquals(chrome, scheme.primary)
         assertEquals(wallpaperPage, scheme.surface)
     }
+
+    /**
+     * The glance and the sync screen take one answer, Material's. When it says no (below Android
+     * 12, or a 12 phone off its allowlist) the chrome is the token scheme the sync screen's XML
+     * theme gives, and the dynamic builder never runs: it does not exist below Android 12.
+     */
+    @Test
+    fun `a phone Material turns down gets the token chrome, and the dynamic builder is not called`() {
+        val tokens = lightColorScheme(primary = Color(1))
+        val scheme = chromeScheme(
+            dynamicAvailable = false,
+            dynamic = { throw AssertionError("the dynamic builder ran on a phone that said no") },
+            tokens = { tokens },
+        )
+        assertEquals(tokens, scheme)
+    }
+
+    @Test
+    fun `a phone Material allows gets the wallpaper chrome`() {
+        val wallpaper = lightColorScheme(primary = Color(2))
+        val scheme = chromeScheme(
+            dynamicAvailable = true,
+            dynamic = { wallpaper },
+            tokens = { throw AssertionError("the token chrome replaced the wallpaper's") },
+        )
+        assertEquals(wallpaper, scheme)
+    }
 }
