@@ -155,15 +155,34 @@ function mount(node: React.ReactElement): { client: QueryClient, html: () => str
 const stillLoading = () => container?.querySelector('.empty') !== null
 
 describe('the workout trace card', () => {
-  // The run was recorded in New York (UTC-4): its 06:10Z reading reads 02:10, the clock its header
-  // prints, not 08:10 in the reader's zone.
-  it('reads the trace at the offset the workout started under', async () => {
+  // Task 9 (fix round 2): a workout's own chart moved onto an elapsed axis
+  // (WorkoutTrace.tsx's own `axis="elapsed"`, `startMs={session.startMs}`), so its accessible
+  // table now reads time into the session, not a clock time - the offset a session started under
+  // (formerly read here as '02:10' for a run recorded in New York, UTC-4) no longer reaches this
+  // cell at all: IntradayHeartRate's `tick` only falls back to `clock`/`offsetMinutes` when
+  // `axis` is left at its default 'clock', and this chart's only caller (WorkoutTrace.tsx) never
+  // does. The point is recorded ten minutes into the session (06:00Z session start, 06:10Z point),
+  // so the cell reads '10:00' regardless of what offset the session carries.
+  it('reads the trace as elapsed time into the session, not a clock time', async () => {
     const restore = stub({ watch: [point('watch')] })
     try {
       const session = { ...SESSION, startOffsetMinutes: -240, endOffsetMinutes: -240 }
       mount(<WorkoutTrace session={session} detail={workoutDetail({})} chosenSource={null} />)
       await pumpUntil(() => container?.querySelector('table tbody tr') !== null, 'the trace table to render')
-      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('02:10')
+      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('10:00')
+    } finally { restore() }
+  })
+
+  // The other half: not just that -240 no longer reads '02:10', but that the reading is the same
+  // regardless of which offset the session carries - proof this cell has stopped reading an offset
+  // clock at all, rather than happening to read the same clock time by coincidence of the fixture.
+  it('reads the same elapsed time under a different offset', async () => {
+    const restore = stub({ watch: [point('watch')] })
+    try {
+      // SESSION's own default offset (120 minutes, not -240): changing it changes nothing here.
+      mount(<WorkoutTrace session={SESSION} detail={workoutDetail({})} chosenSource={null} />)
+      await pumpUntil(() => container?.querySelector('table tbody tr') !== null, 'the trace table to render')
+      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('10:00')
     } finally { restore() }
   })
 
