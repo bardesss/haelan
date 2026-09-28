@@ -209,6 +209,17 @@ class GlanceRepository(
         it.copy(shownDay = shownDayOf(it.glance), reachable = false, loading = false)
     }
 
+    /**
+     * A 200 for today whose body the parser rejects. With a glance kept, the instance answered it
+     * before and this is a read gone wrong: unreachable, the kept one staying. With none, it is most
+     * likely a 2.6 to 2.9 server, whose today glance predates week, nav and finished; saying the
+     * instance was not reachable would send the person looking at their network, not their server.
+     */
+    private fun unreadable(gen: Int) {
+        if (synchronized(lock) { today } != null) return unreachable(gen)
+        emit(gen) { it.copy(reachable = true, loading = false, problem = Problem.TooOld) }
+    }
+
     private fun signOut(gen: Int) {
         signedOutEvents.trySend(Unit)
         emit(gen) { it.copy(loading = false) }
@@ -227,7 +238,7 @@ class GlanceRepository(
         val etag = synchronized(lock) { today?.etag }
         when (val read = reads.today(etag)) {
             is GlanceRead.Fresh -> {
-                val glance = parseOrNull(read.json, "today") ?: return unreachable(gen)
+                val glance = parseOrNull(read.json, "today") ?: return unreadable(gen)
                 val kept = GlanceStore.Kept(glance, read.json, read.etag, clock())
                 keep(kept, gen)
                 emit(gen) {

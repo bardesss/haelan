@@ -191,6 +191,24 @@ class GlanceRepositoryTest {
     }
 
     @Test
+    fun `a today glance too old to read, with nothing kept, is a server to update, not a network to check`() {
+        // 2.6 to 2.9 answer today without week, nav and finished, which 2.13.0's glance needs.
+        val older = JSONObject(todayJson).apply {
+            remove("week")
+            remove("nav")
+            remove("finished")
+        }.toString()
+        reads.todayAnswers += GlanceRead.Fresh(older, "\"v1\"")
+        repository.open()
+
+        assertEquals(Problem.TooOld, state.problem)
+        assertTrue(state.reachable)
+        assertFalse(state.loading)
+        assertNull(state.glance)
+        assertNull("nothing unreadable is kept", storage.bytes)
+    }
+
+    @Test
     fun `a record for another person is deleted on open and never drawn`() {
         store.save(server, "p2", "\"v1\"", 100L, todayJson)
         reads.todayAnswers += GlanceRead.Unreachable(IOException("no route"))
