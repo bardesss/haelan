@@ -1,6 +1,7 @@
 package com.haelan.android
 
 import android.content.Context
+import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -31,14 +32,34 @@ object WebData {
      *
      * The cache is cleared through a view made for the purpose because the platform offers no other
      * handle on it; the cache is shared by every view in the app, so clearing one clears it.
+     *
+     * Each step on its own ([clearEach]): CookieManager.getInstance() and a new WebView throw while
+     * the WebView provider is updating or missing, and a sign-in or sign-out that stopped there
+     * would leave somebody half signed in over a browser part nobody asked about.
      */
-    fun clear(context: Context) {
-        val cookies = CookieManager.getInstance()
-        cookies.removeAllCookies { cookies.flush() }
-        WebStorage.getInstance().deleteAllData()
-        WebView(context).apply {
-            clearCache(true)
-            destroy()
+    fun clear(context: Context, log: (String) -> Unit = { Log.w(TAG, it) }) = clearEach(
+        listOf(
+            "cookies" to {
+                val cookies = CookieManager.getInstance()
+                cookies.removeAllCookies { cookies.flush() }
+            },
+            "web storage" to { WebStorage.getInstance().deleteAllData() },
+            "cache" to {
+                WebView(context).apply {
+                    clearCache(true)
+                    destroy()
+                }
+            },
+        ),
+        log,
+    )
+
+    /** Runs every step, in order, whichever of them throws; a throw is logged by the step's name. */
+    internal fun clearEach(steps: List<Pair<String, () -> Unit>>, log: (String) -> Unit) {
+        for ((name, step) in steps) {
+            runCatching(step).onFailure { log("could not clear the web page's $name: $it") }
         }
     }
+
+    private const val TAG = "haelan-web"
 }
