@@ -20,6 +20,7 @@ import { Sparkline } from '../charts/Sparkline.js'
 import { BalanceBars } from '../charts/BalanceBars.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
+import { bandFrom } from '../charts/bands.js'
 import { localMinutesOf, inWindow, napInWindow, withinSchedule, WIDE_WINDOW } from '../charts/schedule.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
@@ -104,15 +105,6 @@ type Stage = 'deep' | 'light' | 'rem' | 'awake'
 
 const EMPTY_NIGHTS: Night[] = Object.freeze([]) as never[]
 const EMPTY_NAPS: number[] = Object.freeze([]) as never[]
-
-function bandFrom(baseline: Baseline | null): { low: number, high: number } | undefined {
-  // Thin stays undefined, not a band drawn thin: a band computed from three nights looks exactly
-  // as authoritative as one computed from thirty, and thin is the reader's only signal that it is
-  // not. Same reasoning as Recovery.tsx's own bandFrom.
-  return baseline !== null && !baseline.thin
-    ? { low: baseline.center - baseline.spread, high: baseline.center + baseline.spread }
-    : undefined
-}
 
 /**
  * The clause sleep_asleep_minutes' basis line states the deviation through, formatted as a
