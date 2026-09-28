@@ -35,6 +35,23 @@ class PersonZoneTest {
         assertNull(PersonZone.parseMe("<html>a proxy's page</html>"))
     }
 
+    private fun meWith(timezone: String, effective: String?): String {
+        val zone = if (effective == null) "null" else "\"$effective\""
+        return """{"personId":"p1","timezone":"$timezone","effectiveTimezone":$zone,"currentTimezone":$zone,"followPhoneZone":true}"""
+    }
+
+    @Test
+    fun `the effective zone wins over the home zone`() {
+        assertEquals("Asia/Tokyo", PersonZone.parseMe(meWith("Europe/Amsterdam", "Asia/Tokyo")))
+    }
+
+    @Test
+    fun `an unusable effective zone falls back to the home zone`() {
+        assertEquals("Europe/Amsterdam", PersonZone.parseMe(meWith("Europe/Amsterdam", null)))
+        assertEquals("Europe/Amsterdam", PersonZone.parseMe(meWith("Europe/Amsterdam", "Mars/Olympus_Mons")))
+        assertEquals("Europe/Amsterdam", PersonZone.parseMe(meWith("Europe/Amsterdam", "")))
+    }
+
     @Test
     fun `the kept zone wins over the phone's`() {
         assertEquals(ZoneId.of("Europe/Amsterdam"), PersonZone.choose("Europe/Amsterdam", phone))

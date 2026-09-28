@@ -2,6 +2,7 @@ package com.haelan.android
 
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.ZoneId
 
 /**
  * The one place this app talks to an instance, because it used to be three.
@@ -99,8 +100,27 @@ object InstanceClient {
         path: String,
         body: String,
         cookie: String? = null,
+        headers: Map<String, String> = emptyMap(),
         parse: (Reply) -> T,
-    ): Outcome<T> = exchange("POST", server, path, body, cookie, emptyMap(), parse)
+    ): Outcome<T> = exchange("POST", server, path, body, cookie, headers, parse)
+
+    /** The header an ingest carries the phone's zone in (apps/server/src/routes/v1/ingest.ts). */
+    const val ZONE_HEADER = "X-Haelan-Zone"
+
+    /**
+     * One ingest POST: [post], carrying the phone's current zone in [ZONE_HEADER]. The instance
+     * keeps it as the person's current zone, so "today" follows a traveller, and never touches the
+     * home zone that drives Google sync. Only on this write path: the instance writes the zone on
+     * the request, and a write on a GET would wait on a boot rebuild's write lock.
+     */
+    fun <T> ingest(
+        server: String,
+        path: String,
+        body: String,
+        cookie: String?,
+        zone: ZoneId = ZoneId.systemDefault(),
+        parse: (Reply) -> T,
+    ): Outcome<T> = post(server, path, body, cookie, mapOf(ZONE_HEADER to zone.id), parse)
 
     /** One JSON PUT, for the log sheet's writes; the same answer as [post]. */
     fun <T> put(

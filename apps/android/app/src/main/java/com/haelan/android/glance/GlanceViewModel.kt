@@ -274,6 +274,9 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
         syncRefresh?.cancel()
         syncRefresh = viewModelScope.launch {
             delay(SYNC_SETTLE_MS)
+            // A sync carries the phone's zone (InstanceClient.ingest), which can move the person's
+            // effective zone on the instance, so the zone is asked for again beside the glance.
+            readZone()
             if (shouldRefreshOnSync(state.value)) repository.refresh()
         }
     }
