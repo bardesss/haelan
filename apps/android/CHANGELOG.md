@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/bardesss/haelan/compare/android-v0.7.0...android-v0.7.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* adding a chip works, and five positive default chips ([#397](https://github.com/bardesss/haelan/issues/397)) ([4f84035](https://github.com/bardesss/haelan/commit/4f84035d4e82c58be3cda82fbca27e9c2aac912d))
+
 ## [0.7.0](https://github.com/bardesss/haelan/compare/android-v0.6.0...android-v0.7.0) (2026-09-28)
 
 
