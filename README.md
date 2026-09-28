@@ -51,8 +51,9 @@ catching them is a standing part of how the project is built rather than a past 
 ![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
 <sub>Dashboard and Activity above; [Quick logging](assets/screenshots/log-panel.png),
-[Sleep](assets/screenshots/sleep.png) and [Recovery](assets/screenshots/recovery.png) as well. All
-five are the demo data `scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
+[Sleep](assets/screenshots/sleep.png), [Recovery](assets/screenshots/recovery.png) and [Phone
+glance](assets/screenshots/android-glance.png) as well. All six are the demo data
+`scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
 <!-- screenshots:end -->
 
 ## What it does
@@ -312,7 +313,8 @@ from a fixed seed, so the data behind the screenshots above regenerates identica
 the log panel, Sleep and Recovery were taken on the week ending 2026-09-06, which is where the
 demo's data ends (the log panel after one tap on Caffeine);
 Activity was taken on August 2026, because a month is where its bar charts thin their date labels
-and a week is not. A fresh boot opens on the current month instead, so you would have to walk back
+and a week is not. The phone glance is the Android app on an emulator against the same seed, at
+midday on 2026-09-06, shown as it opens and scrolled to its end. A fresh boot opens on the current month instead, so you would have to walk back
 to frame the same pictures. The range and the day both live in the URL, which is the quickest way
 back: `?range=week&on=2026-09-06`.
 

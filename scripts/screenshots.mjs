@@ -59,6 +59,13 @@ export const SCREENSHOTS = [
     role: 'gallery',
     readme: 'link',
   },
+  {
+    file: 'android-glance.png',
+    title: 'Phone glance',
+    alt: 'The Android app\'s glance, as it opens and scrolled to its end: a Log button and the sync button in its top bar above the day arrows and the calendar; last night\'s time asleep with the seven-night strip and sleep stages, and a recovery score between resting heart rate and HRV gauges; today\'s steps with their pace against your usual, active minutes and heart rate, and the week\'s totals and averages.',
+    role: 'gallery',
+    readme: 'link',
+  },
 ]
 
 /**
