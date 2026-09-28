@@ -429,11 +429,13 @@ export function IntradayHeartRate({
   // A time of day rather than a date: this chart draws one day, and the point a reader tapped is a
   // minute inside it. The source is left out on purpose - two sources reporting the same minute
   // are two points, but the panel this opens is about the reading, and the card already names
-  // which sources it drew.
+  // which sources it drew. Reads `tick`, not `clock`, for the same reason the axis labels and the
+  // tooltip do: a workout's announce must say what its axis says (elapsed), not a clock time it
+  // draws nowhere else on the chart.
   const describe = useCallback((event: ECElementEvent) => {
     const point = pointAt(event)
-    return point === undefined ? undefined : clock(point.utcMs)
-  }, [pointAt, clock])
+    return point === undefined ? undefined : tick(point.utcMs)
+  }, [pointAt, tick])
 
   // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
   // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
@@ -452,10 +454,15 @@ export function IntradayHeartRate({
         // (whose reason reaches this chart's own annotations prop on the day_metric charts), a
         // sample override's reason lives with the row itself, on the corrections list
         // (Settings' own OverrideList), not threaded through readIntraday onto each point.
+        //
+        // The time cell reads `tick`, not `clock`: this table is the only way the data reaches a
+        // screen-reader user (ChartFigure's own sr-only table), so on a workout (axis='elapsed') it
+        // must read the same elapsed time the visible axis and tooltip do, not a clock time drawn
+        // nowhere else on the chart. Fix round 1 review finding.
         rows: points.map((p) => {
           const absent = t('charts.absence.noReading')
           return [
-            clock(p.utcMs),
+            tick(p.utcMs),
             nameOf(p.sourceId),
             formatMetricValue(p.min, metric, i18n.language, absent),
             formatMetricValue(p.mean, metric, i18n.language, absent),

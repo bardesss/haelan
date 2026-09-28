@@ -426,4 +426,27 @@ describe('IntradayHeartRate, bounded to its session', () => {
       .find((s) => JSON.stringify(s.markArea?.data ?? []).includes('yAxis'))
     expect(band!.markArea!.data).toEqual([[{ yAxis: 52 }, { yAxis: 58 }]])
   })
+
+  // Fix round 1 review finding: the accessible table (ChartFigure's own sr-only table) is the only
+  // way this chart's data reaches a screen-reader user. Before this fix its time column called
+  // `clock` unconditionally, so a workout's table read a clock time while the visible axis and
+  // tooltip - both already switched to `tick` - read elapsed. A reader using only the table saw a
+  // different, and wrong, account of when each reading happened.
+  it("reads the table's time column as elapsed on a workout, not a clock time", () => {
+    optionFor({ points: ONE, startMs: START, endMs: END, axis: 'elapsed' })
+    const table = container!.querySelector('table.sr-only')!
+    // ONE's single reading sits ten minutes into the session (START + 10 * 60_000).
+    const firstCell = table.querySelector('tbody tr th')
+    expect(firstCell?.textContent).toBe('10:00')
+  })
+
+  // Minor review finding: 'elapsed' asked for without a `startMs` to measure from has nothing to
+  // read time into, so `tick` falls back to `clock` - untested until now.
+  it('falls back to clock labels when elapsed axis is asked for without a startMs', () => {
+    const option = optionFor({ points: ONE, axis: 'elapsed' })
+    const formatter = (option.xAxis as { axisLabel: { formatter: (v: number) => string } }).axisLabel.formatter
+    // START + 5 minutes, read as a UTC clock time (the session's own effectiveTimezone in this
+    // helper), not '5:00' - there is no session start here for 'elapsed' to measure from.
+    expect(formatter(START + 5 * 60_000)).toBe('16:05')
+  })
 })
