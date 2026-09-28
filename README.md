@@ -51,8 +51,8 @@ catching them is a standing part of how the project is built rather than a past 
 ![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
 <sub>Dashboard and Activity above; [Quick logging](assets/screenshots/log-panel.png),
-[Sleep](assets/screenshots/sleep.png), [Recovery](assets/screenshots/recovery.png) and [Phone
-glance](assets/screenshots/android-glance.png) as well. All six are the demo data
+[Sleep](assets/screenshots/sleep.png), [Recovery](assets/screenshots/recovery.png) and
+[Phone glance](assets/screenshots/android-glance.png) as well. All six are the demo data
 `scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
 <!-- screenshots:end -->
 
