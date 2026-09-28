@@ -24,6 +24,7 @@ import com.haelan.android.R
 import com.haelan.android.glance.format.GlanceFormat
 import com.haelan.android.glance.format.Strings
 import com.haelan.android.glance.format.WeekLine
+import com.haelan.android.glance.geometry.WeekBarBox
 import com.haelan.android.glance.geometry.weekBars
 
 // The web's bars: every day at 55%, the day shown whole (app.css, .week-bar).
@@ -42,14 +43,15 @@ internal fun WeekBars(row: WeekLine, color: Color, current: String, text: CardTe
     val barWords = stringResource(R.string.glance_week_bar)
     val openWords = stringResource(R.string.glance_week_open_bar)
     Row(
-        modifier.width(112.dp).height(44.dp).semantics { contentDescription = row.barsLabel },
+        modifier.width(WeekBarBox.WIDTH.dp).height(WeekBarBox.TAP_HEIGHT.dp).semantics { contentDescription = row.barsLabel },
         verticalAlignment = Alignment.Bottom,
     ) {
         bars.forEachIndexed { index, bar ->
             val date = row.dates[index]
             val value = row.values[index]
+            val column = WeekBarBox.tapSlot(index, bars.size).let { (it.endInclusive - it.start).dp }
             if (bar == null || value == null) {
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(column))
                 return@forEachIndexed
             }
             val words = mapOf(
@@ -58,19 +60,23 @@ internal fun WeekBars(row: WeekLine, color: Color, current: String, text: CardTe
                 "value" to text.words.weekBarValue(row.kind, value),
             )
             val opens = date != current
+            // The slot is the whole column, TAP_HEIGHT tall; the bar draws in the bottom DRAW_HEIGHT
+            // of it, and the gap between bars is inside the slot, so it too opens the day.
             val slot = Modifier
-                .weight(1f)
+                .width(column)
                 .fillMaxHeight()
                 .then(if (opens) Modifier.clickable(role = Role.Button) { onOpenDay(date) } else Modifier)
                 .semantics { contentDescription = Strings.fill(if (opens) openWords else barWords, words) }
                 .padding(end = 3.dp)
             Box(slot, contentAlignment = Alignment.BottomCenter) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(bar.height)
-                        .background(color.copy(alpha = if (bar.shownDay) 1f else DAY_ALPHA), RoundedCornerShape(2.dp)),
-                )
+                Box(Modifier.fillMaxWidth().height(WeekBarBox.DRAW_HEIGHT.dp), contentAlignment = Alignment.BottomCenter) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(bar.height)
+                            .background(color.copy(alpha = if (bar.shownDay) 1f else DAY_ALPHA), RoundedCornerShape(2.dp)),
+                    )
+                }
             }
         }
     }
