@@ -5,6 +5,7 @@
 // one is modelled on) gives for its own file. echarts.init itself is mocked below so this file
 // never touches a real canvas.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { Mock } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -25,14 +26,16 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
  * Stands in for the real echarts instance, the same stub workout-trace-card.test.tsx uses, so a
  * card that actually has points to draw does not reach a real canvas.
  */
-function chartStub() {
+interface ChartStub { on: Mock, setOption: Mock, dispose: Mock, resize: Mock }
+
+/** Every chart instance init handed out, so a test can read the option a card drew with. */
+const charts: ChartStub[] = []
+
+function chartStub(): ChartStub {
   const stub = { on: vi.fn(), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn() }
   charts.push(stub)
   return stub
 }
-
-/** Every chart instance init handed out, so a test can read the option a card drew with. */
-const charts: ReturnType<typeof chartStub>[] = []
 
 vi.mock('echarts/core', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
