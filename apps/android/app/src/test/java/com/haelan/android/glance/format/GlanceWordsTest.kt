@@ -251,6 +251,19 @@ class GlanceWordsTest {
         assertEquals("za 5 – zo 6 sep", dutch.nightRange(night))
     }
 
+    // Slept in Honolulu (UTC-10), 22:00 on the 5th to 06:00 on the 6th local: read in the person's
+    // zone (Amsterdam) both ends fall on the 6th, but a night already recorded keeps its own dates.
+    // And slept in Auckland (UTC+12), where the wake end is what Amsterdam would move back a day.
+    @Test
+    fun `the night's subtitle reads each end at the offset it was recorded under`() {
+        val honolulu = sleep(startMs = ms("2026-09-06T08:00:00Z"), endMs = ms("2026-09-06T16:00:00Z"))
+            .copy(startOffsetMinutes = -600, endOffsetMinutes = -600)
+        assertEquals("Sat, Sep 5 – Sun, Sep 6", english.nightRange(honolulu))
+        val auckland = sleep(startMs = ms("2026-09-05T10:00:00Z"), endMs = ms("2026-09-05T18:00:00Z"))
+            .copy(startOffsetMinutes = 720, endOffsetMinutes = 720)
+        assertEquals("Sat, Sep 5 – Sun, Sep 6", english.nightRange(auckland))
+    }
+
     @Test
     fun `a small sleep figure outside its usual says which way`() {
         val late = figure("sleep_bedtime_minutes", -20.0, standing = GlanceStanding.ABOVE)

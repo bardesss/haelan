@@ -39,6 +39,17 @@ sealed interface DayRequest {
  */
 fun shouldRefreshOnSync(state: GlanceUiState): Boolean = state.shownDay == null
 
+/** What a finished sync asks the instance for again: the person's zone, and the glance. */
+data class SyncReads(val zone: Boolean, val glance: Boolean)
+
+/**
+ * The reads a finished sync makes. The zone always: a sync carries the phone's zone
+ * (InstanceClient.ingest), which can move the person's effective zone on the instance, and the
+ * glance's midnight and clock follow it whichever day is on screen. The glance only as
+ * [shouldRefreshOnSync] says.
+ */
+fun readsAfterSync(state: GlanceUiState): SyncReads = SyncReads(zone = true, glance = shouldRefreshOnSync(state))
+
 /**
  * Whether a return to the foreground asks again. The first resume after the screen's state was
  * built comes straight after the open, which already asked; every later one is a real return

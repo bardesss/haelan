@@ -44,6 +44,14 @@ class GlanceRequestsTest {
         assertEquals(DayRequest.None, DayRequest.today(on(null)))
     }
 
+    // A sync carries the phone's zone, which can move the person's effective zone on the instance,
+    // so the zone is read again after every sync, a past day on screen included.
+    @Test
+    fun `a finished sync reads the zone again whatever day is shown, and the glance only on today`() {
+        assertEquals(SyncReads(zone = true, glance = true), readsAfterSync(on(null)))
+        assertEquals(SyncReads(zone = true, glance = false), readsAfterSync(on("2026-08-18")))
+    }
+
     @Test
     fun `a finished sync asks again on today and leaves a past day alone`() {
         assertTrue(shouldRefreshOnSync(on(null)))

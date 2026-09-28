@@ -32,18 +32,30 @@ class CardGeometryTest {
 
     @Test
     fun `today's trace runs from local midnight to the last reading`() {
-        assertEquals(TraceWindow(ms("2026-08-19T22:00:00Z"), null), traceWindow("2026-08-20", finished = false, zone = amsterdam))
+        assertEquals(TraceWindow(ms("2026-08-19T22:00:00Z"), null), traceWindow("2026-08-20", finished = false, zone = amsterdam, offsetMinutes = null))
     }
 
     @Test
     fun `a finished day's trace runs to the next local midnight, however long the day was`() {
         assertEquals(
             TraceWindow(ms("2026-08-19T22:00:00Z"), ms("2026-08-20T22:00:00Z")),
-            traceWindow("2026-08-20", finished = true, zone = amsterdam),
+            traceWindow("2026-08-20", finished = true, zone = amsterdam, offsetMinutes = null),
         )
         // The clocks go back on 25 October 2026: that day is 25 hours long.
-        val autumn = traceWindow("2026-10-25", finished = true, zone = amsterdam)
+        val autumn = traceWindow("2026-10-25", finished = true, zone = amsterdam, offsetMinutes = null)
         assertEquals(25 * 3_600_000L, autumn.endMs!! - autumn.startMs)
+    }
+
+    // A day lived in Amsterdam (UTC+2) looked at from Tokyo: finished, it is drawn midnight to
+    // midnight at the offset it was recorded under; today, still running, stays where the person is.
+    @Test
+    fun `a finished day's trace is reckoned in the offset it was recorded under, today in the person's zone`() {
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        assertEquals(
+            TraceWindow(ms("2026-08-19T22:00:00Z"), ms("2026-08-20T22:00:00Z")),
+            traceWindow("2026-08-20", finished = true, zone = tokyo, offsetMinutes = 120),
+        )
+        assertEquals(TraceWindow(ms("2026-08-19T15:00:00Z"), null), traceWindow("2026-08-20", finished = false, zone = tokyo, offsetMinutes = 120))
     }
 
     @Test

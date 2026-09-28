@@ -269,15 +269,14 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
         GlanceRegistry.app.close(repository)
     }
 
-    /** A type finished syncing: once the run settles, [shouldRefreshOnSync] says whether to ask again. */
+    /** A type finished syncing: once the run settles, [readsAfterSync] says what to ask for again. */
     private fun syncFinished() {
         syncRefresh?.cancel()
         syncRefresh = viewModelScope.launch {
             delay(SYNC_SETTLE_MS)
-            // A sync carries the phone's zone (InstanceClient.ingest), which can move the person's
-            // effective zone on the instance, so the zone is asked for again beside the glance.
-            readZone()
-            if (shouldRefreshOnSync(state.value)) repository.refresh()
+            val reads = readsAfterSync(state.value)
+            if (reads.zone) readZone()
+            if (reads.glance) repository.refresh()
         }
     }
 

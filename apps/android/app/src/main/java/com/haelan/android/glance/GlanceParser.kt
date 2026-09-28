@@ -126,6 +126,9 @@ object GlanceParser {
                 },
                 asOfMs = heartRate.nullableLong("asOfMs"),
                 staleSources = staleSources(heartRate),
+                // Absent from a server that predates it, which is not a broken payload: the trace
+                // then draws a finished day in the person's zone, as it always did.
+                offsetMinutes = if (heartRate.has("offsetMinutes")) heartRate.nullableInt("offsetMinutes") else null,
             ),
             workouts = node.objects("workouts").map(::workout),
         )
