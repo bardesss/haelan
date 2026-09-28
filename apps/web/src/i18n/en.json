@@ -936,7 +936,12 @@
         "alcohol": "Alcohol",
         "medication": "Medication",
         "injury": "Injury",
-        "caffeine": "Caffeine"
+        "caffeine": "Caffeine",
+        "meditation": "Meditation",
+        "sauna": "Sauna",
+        "reading": "Reading before bed",
+        "screen_free": "No screens in the evening",
+        "stretching": "Stretching"
       }
     }
   },

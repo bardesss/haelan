@@ -210,6 +210,11 @@ internal val ENGLISH_TEXT: Map<String, String> = mapOf(
     "annotate_event_kinds_medication" to "Medication",
     "annotate_event_kinds_injury" to "Injury",
     "annotate_event_kinds_caffeine" to "Caffeine",
+    "annotate_event_kinds_meditation" to "Meditation",
+    "annotate_event_kinds_sauna" to "Sauna",
+    "annotate_event_kinds_reading" to "Reading before bed",
+    "annotate_event_kinds_screen_free" to "No screens in the evening",
+    "annotate_event_kinds_stretching" to "Stretching",
     "control_row_close" to "Close",
     // The phone's own: the web reorders chips by dragging, so it has no words for these buttons.
     "log_panel_edit_move_earlier" to "Move {{kind}} earlier",
@@ -422,6 +427,11 @@ internal val DUTCH_TEXT: Map<String, String> = mapOf(
     "annotate_event_kinds_medication" to "Medicatie",
     "annotate_event_kinds_injury" to "Blessure",
     "annotate_event_kinds_caffeine" to "Cafeïne",
+    "annotate_event_kinds_meditation" to "Meditatie",
+    "annotate_event_kinds_sauna" to "Sauna",
+    "annotate_event_kinds_reading" to "Lezen voor het slapen",
+    "annotate_event_kinds_screen_free" to "Geen schermen 's avonds",
+    "annotate_event_kinds_stretching" to "Rekken",
     "control_row_close" to "Sluiten",
     // The phone's own: the web reorders chips by dragging, so it has no words for these buttons.
     "log_panel_edit_move_earlier" to "{{kind}} naar voren verplaatsen",

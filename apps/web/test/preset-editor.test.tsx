@@ -138,9 +138,9 @@ beforeEach(() => {
 
 describe('PresetEditor', () => {
   it('removes a kind with its remove button', () => {
-    renderEditor(['caffeine', 'sauna', 'alcohol'])
-    expect(names()).toEqual(['Caffeine', 'sauna', 'Alcohol'])
-    click(byLabel('Remove sauna'))
+    renderEditor(['caffeine', 'yoga', 'alcohol'])
+    expect(names()).toEqual(['Caffeine', 'yoga', 'Alcohol'])
+    click(byLabel('Remove yoga'))
     expect(names()).toEqual(['Caffeine', 'Alcohol'])
     click(byLabel('Remove Caffeine'))
     expect(names()).toEqual(['Alcohol'])
@@ -148,10 +148,10 @@ describe('PresetEditor', () => {
 
   it('adds a trimmed kind on Enter and clears the field', () => {
     renderEditor(['caffeine'])
-    type(field(), '  sauna ')
+    type(field(), '  yoga ')
     const enter = key(field(), 'Enter')
     expect(enter.defaultPrevented).toBe(true)
-    expect(names()).toEqual(['Caffeine', 'sauna'])
+    expect(names()).toEqual(['Caffeine', 'yoga'])
     expect(field().value).toBe('')
     expect(errors()).toEqual([])
   })
@@ -180,73 +180,73 @@ describe('PresetEditor', () => {
   })
 
   it('leaves out a suggestion that differs from a listed kind only by case', () => {
-    renderEditor(['sauna'], ['Sauna', 'travel'])
+    renderEditor(['yoga'], ['Yoga', 'travel'])
     const options = [...container!.querySelectorAll('datalist option')].map((o) => o.getAttribute('value'))
     expect(options).toEqual(['travel'])
   })
 
   it('offers the suggestions not already in the list', () => {
-    renderEditor(['caffeine'], ['sauna', 'caffeine', 'travel'])
+    renderEditor(['caffeine'], ['yoga', 'caffeine', 'travel'])
     const options = [...container!.querySelectorAll('datalist option')].map((o) => o.getAttribute('value'))
-    expect(options).toEqual(['sauna', 'travel'])
+    expect(options).toEqual(['yoga', 'travel'])
     expect(field().getAttribute('list')).toBe(container!.querySelector('datalist')!.id)
   })
 
   it('moves a focused kind with the arrow keys, keeps it focused and announces the move', () => {
-    renderEditor(['caffeine', 'sauna', 'alcohol'])
+    renderEditor(['caffeine', 'yoga', 'alcohol'])
     const right = key(item('Caffeine'), 'ArrowRight')
     expect(right.defaultPrevented).toBe(true)
-    expect(names()).toEqual(['sauna', 'Caffeine', 'Alcohol'])
+    expect(names()).toEqual(['yoga', 'Caffeine', 'Alcohol'])
     expect(document.activeElement).toBe(item('Caffeine'))
     expect(announced()).toBe('Caffeine moved to position 2')
     key(item('Caffeine'), 'ArrowLeft')
     key(item('Caffeine'), 'ArrowLeft')
-    expect(names()).toEqual(['Caffeine', 'sauna', 'Alcohol'])
+    expect(names()).toEqual(['Caffeine', 'yoga', 'Alcohol'])
     expect(announced()).toBe('Caffeine moved to position 1')
   })
 
   it('leaves focus where the reader takes it after an arrow press at the end of the list', () => {
-    renderEditor(['caffeine', 'sauna'])
+    renderEditor(['caffeine', 'yoga'])
     act(() => { item('Caffeine').focus() })
     const left = key(item('Caffeine'), 'ArrowLeft')
     expect(left.defaultPrevented).toBe(true)
-    expect(names()).toEqual(['Caffeine', 'sauna'])
+    expect(names()).toEqual(['Caffeine', 'yoga'])
     act(() => { field().focus() })
     type(field(), 'x')
     expect(document.activeElement).toBe(field())
   })
 
   it('reorders live as a pointer drags one kind over the others, and announces where it landed', () => {
-    renderEditor(['caffeine', 'sauna', 'alcohol'])
+    renderEditor(['caffeine', 'yoga', 'alcohol'])
     const alcohol = item('Alcohol')
     pointer(alcohol, 'pointerdown')
-    under = item('sauna')
+    under = item('yoga')
     pointer(alcohol, 'pointermove')
-    expect(names()).toEqual(['Caffeine', 'Alcohol', 'sauna'])
+    expect(names()).toEqual(['Caffeine', 'Alcohol', 'yoga'])
     under = item('Caffeine')
     pointer(alcohol, 'pointermove')
-    expect(names()).toEqual(['Alcohol', 'Caffeine', 'sauna'])
+    expect(names()).toEqual(['Alcohol', 'Caffeine', 'yoga'])
     expect(announced()).toBe('')
     pointer(alcohol, 'pointerup')
     expect(announced()).toBe('Alcohol moved to position 1')
     // Once the pointer is up, passing over another kind moves nothing.
-    under = item('sauna')
+    under = item('yoga')
     pointer(alcohol, 'pointermove')
-    expect(names()).toEqual(['Alcohol', 'Caffeine', 'sauna'])
+    expect(names()).toEqual(['Alcohol', 'Caffeine', 'yoga'])
   })
 
   it('starts no drag from a remove button', () => {
-    renderEditor(['caffeine', 'sauna'])
+    renderEditor(['caffeine', 'yoga'])
     pointer(byLabel('Remove Caffeine'), 'pointerdown')
-    under = item('sauna')
+    under = item('yoga')
     pointer(item('Caffeine'), 'pointermove')
-    expect(names()).toEqual(['Caffeine', 'sauna'])
+    expect(names()).toEqual(['Caffeine', 'yoga'])
   })
 
   it('saves the new order on Done and then calls onDone', async () => {
-    const calls = renderEditor(['caffeine', 'sauna', 'alcohol'])
+    const calls = renderEditor(['caffeine', 'yoga', 'alcohol'])
     key(item('Alcohol'), 'ArrowLeft')
-    click(byLabel('Remove sauna'))
+    click(byLabel('Remove yoga'))
     click(button('Done'))
     await settle()
     expect(writes()).toEqual([{ method: 'PUT', url: '/api/v1/p/p1/quick-log/presets', body: { kinds: ['caffeine', 'alcohol'] } }])
@@ -351,8 +351,8 @@ describe('PresetEditor', () => {
     const spy = (event: KeyboardEvent) => { seen.push(event.key) }
     document.addEventListener('keydown', spy)
     try {
-      const calls = renderEditor(['caffeine', 'sauna'])
-      click(byLabel('Remove sauna'))
+      const calls = renderEditor(['caffeine', 'yoga'])
+      click(byLabel('Remove yoga'))
       key(item('Caffeine'), 'Escape')
       await settle()
       expect(calls).toEqual({ done: 0, cancel: 1 })
@@ -395,7 +395,7 @@ describe('PresetEditor', () => {
     expect(field().disabled).toBe(true)
     expect(container!.textContent).toContain('At most 16 chips')
     // Disabled is the browser's guard; a key that reaches the field regardless is refused in words.
-    type(field(), 'sauna')
+    type(field(), 'yoga')
     key(field(), 'Enter')
     expect(names()).toHaveLength(16)
     expect(errors()).toEqual(['At most 16 chips'])
@@ -408,7 +408,7 @@ describe('PresetEditor', () => {
 describe('LogPanel edit mode', () => {
   function renderPanel(): void {
     const queryClient = newClient()
-    const initial = glanceLog({ presets: ['caffeine', 'sauna'], counts: { alcohol: 2 } })
+    const initial = glanceLog({ presets: ['caffeine', 'yoga'], counts: { alcohol: 2 } })
     server = initial
     act(() => {
       root!.render(
@@ -424,9 +424,15 @@ describe('LogPanel edit mode', () => {
     renderPanel()
     click(button('Edit'))
     expect(container!.querySelector('.log-chips')).toBeNull()
-    expect(names()).toEqual(['Caffeine', 'sauna'])
+    expect(names()).toEqual(['Caffeine', 'yoga'])
     const options = [...container!.querySelectorAll('datalist option')].map((o) => o.getAttribute('value'))
-    expect(options).toEqual(['alcohol', 'illness', 'travel', 'medication', 'injury'])
+    expect(options).toEqual([
+      'alcohol', 'illness', 'travel', 'medication', 'injury',
+      'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+    ])
+    // A seed kind is offered under its name, not its id.
+    const labels = [...container!.querySelectorAll('datalist option')].map((o) => o.getAttribute('label'))
+    expect(labels.slice(5)).toEqual(['Meditation', 'Sauna', 'Reading before bed', 'No screens in the evening', 'Stretching'])
     // The mood stays in reach while editing.
     expect(container!.querySelector('[role="radiogroup"]')).not.toBeNull()
   })
@@ -434,11 +440,11 @@ describe('LogPanel edit mode', () => {
   it('returns to the chips on Done, drawn from the saved list', async () => {
     renderPanel()
     click(button('Edit'))
-    key(item('sauna'), 'ArrowLeft')
+    key(item('yoga'), 'ArrowLeft')
     click(button('Done'))
     await settle()
     expect(container!.querySelector('.log-editor')).toBeNull()
-    expect(chips()).toEqual(['sauna', 'Caffeine'])
+    expect(chips()).toEqual(['yoga', 'Caffeine'])
     expect(document.activeElement).toBe(button('Edit'))
   })
 
@@ -449,22 +455,22 @@ describe('LogPanel edit mode', () => {
       : fakeServer(req)
     renderPanel()
     click(button('Edit'))
-    key(item('sauna'), 'ArrowLeft')
+    key(item('yoga'), 'ArrowLeft')
     click(button('Done'))
     await pumpUntil(() => requests.some((r) => r.method === 'GET'), 'the refetch after saving')
     expect(container!.querySelector('.log-chips')).toBeNull()
-    expect(names()).toEqual(['sauna', 'Caffeine'])
+    expect(names()).toEqual(['yoga', 'Caffeine'])
     release()
     await settle()
-    expect(chips()).toEqual(['sauna', 'Caffeine'])
+    expect(chips()).toEqual(['yoga', 'Caffeine'])
   })
 
   it('returns to the unchanged chips on Cancel', () => {
     renderPanel()
     click(button('Edit'))
-    click(byLabel('Remove sauna'))
+    click(byLabel('Remove yoga'))
     click(button('Cancel'))
-    expect(chips()).toEqual(['Caffeine', 'sauna'])
+    expect(chips()).toEqual(['Caffeine', 'yoga'])
     expect(writes()).toEqual([])
   })
 })

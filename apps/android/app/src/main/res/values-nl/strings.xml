@@ -312,6 +312,11 @@
     <string name="annotate_event_kinds_medication">Medicatie</string>
     <string name="annotate_event_kinds_injury">Blessure</string>
     <string name="annotate_event_kinds_caffeine">Cafeïne</string>
+    <string name="annotate_event_kinds_meditation">Meditatie</string>
+    <string name="annotate_event_kinds_sauna">Sauna</string>
+    <string name="annotate_event_kinds_reading">Lezen voor het slapen</string>
+    <string name="annotate_event_kinds_screen_free">Geen schermen \'s avonds</string>
+    <string name="annotate_event_kinds_stretching">Rekken</string>
     <string name="control_row_close">Sluiten</string>
     <string name="log_panel_edit_move_earlier">{{kind}} naar voren verplaatsen</string>
     <string name="log_panel_edit_move_later">{{kind}} naar achteren verplaatsen</string>

@@ -25,7 +25,10 @@ describe('validatePresets', () => {
     expect(() => validatePresets(many)).toThrow(/at most 16/)
     expect(validatePresets(many.slice(0, MAX_PRESETS))).toHaveLength(MAX_PRESETS)
   })
-  it('seeds the six kinds in order', () => {
-    expect(SEED_KINDS).toEqual(['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'])
+  it('seeds the eleven kinds in order', () => {
+    expect(SEED_KINDS).toEqual([
+      'illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine',
+      'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+    ])
   })
 })

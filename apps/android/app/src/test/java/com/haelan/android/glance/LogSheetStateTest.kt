@@ -16,7 +16,7 @@ class LogSheetStateTest {
     private val log = DayLog(
         presets = listOf("caffeine", "alcohol", "illness"),
         mood = 3,
-        counts = mapOf("caffeine" to 1, "sauna" to 2),
+        counts = mapOf("caffeine" to 1, "yoga" to 2),
         note = "Slept badly.",
         today = "2026-09-27",
     )
@@ -345,8 +345,9 @@ class LogSheetStateTest {
 
     @Test
     fun `suggestions are the day's counted kinds then the seed set, less those on the list`() {
-        assertEquals(listOf("sauna", "travel", "medication", "injury"), editing.suggestions)
-        assertEquals(listOf("travel", "medication", "injury"), editing.suggestionAdded("Sauna").suggestions)
+        val seeds = listOf("travel", "medication", "injury", "meditation", "sauna", "reading", "screen_free", "stretching")
+        assertEquals(listOf("yoga") + seeds, editing.suggestions)
+        assertEquals(seeds, editing.suggestionAdded("Yoga").suggestions)
     }
 
     @Test

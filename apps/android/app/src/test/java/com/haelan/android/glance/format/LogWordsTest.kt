@@ -33,6 +33,29 @@ class LogWordsTest {
         assertEquals("zondag 6 september", dutch.subtitle(on("2026-09-06")))
     }
 
+    /** Keyed on SEED_KINDS: a seed kind missing from both texts would pass every key-for-key check. */
+    @Test
+    fun `every seed kind has its English and Dutch name`() {
+        val missing = LogSheetState.SEED_KINDS.flatMap { kind ->
+            listOf("en" to ENGLISH_TEXT, "nl" to DUTCH_TEXT)
+                .filter { (_, text) -> "annotate_event_kinds_$kind" !in text }
+                .map { (language, _) -> "$language: $kind" }
+        }
+        assertEquals(emptyList<String>(), missing)
+    }
+
+    @Test
+    fun `the five positive seed kinds read as the web names them`() {
+        assertEquals(
+            listOf("Meditation", "Sauna", "Reading before bed", "No screens in the evening", "Stretching"),
+            listOf("meditation", "sauna", "reading", "screen_free", "stretching").map(english::kind),
+        )
+        assertEquals(
+            listOf("Meditatie", "Sauna", "Lezen voor het slapen", "Geen schermen 's avonds", "Rekken"),
+            listOf("meditation", "sauna", "reading", "screen_free", "stretching").map(dutch::kind),
+        )
+    }
+
     @Test
     fun `seed kinds are translated, a person's own kind is shown as typed`() {
         assertEquals("Caffeine", english.kind("caffeine"))

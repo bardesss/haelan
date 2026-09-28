@@ -104,7 +104,10 @@ data class LogSheetState(
         const val MAX_PRESET_LENGTH = 40
 
         /** The seed kinds, which have translations; a person's own kinds show as typed. */
-        val SEED_KINDS = listOf("illness", "travel", "alcohol", "medication", "injury", "caffeine")
+        val SEED_KINDS = listOf(
+            "illness", "travel", "alcohol", "medication", "injury", "caffeine",
+            "meditation", "sauna", "reading", "screen_free", "stretching",
+        )
 
         /** The sheet opening on [day], drawn at once from [initial] when there is one. */
         fun open(day: String, today: String, initial: DayLog?): LogSheetState {
