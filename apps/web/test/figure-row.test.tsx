@@ -5,7 +5,7 @@ import { FigureRow } from '../src/components/FigureRow.js'
 import { gaugeScale, gaugeFraction } from '../src/pages/dashboard/UsualGauge.js'
 
 const render = (node: React.ReactNode) => renderToStaticMarkup(<I18nProvider lng="en">{node}</I18nProvider>)
-const BAND = { center: 85, low: 70, high: 100 }
+const BAND = { center: 85, low: 70, high: 100, thin: false }
 
 describe('FigureRow', () => {
   it('shows the label, the value and the verdict', () => {
@@ -29,6 +29,11 @@ describe('FigureRow', () => {
   })
   it('draws no bar without a band', () => {
     expect(render(<FigureRow label="a" value="1" verdict="v" judged={null} band={null} mark={64} />)).not.toContain('figure-row-bar')
+  })
+  it('draws no bar on a thin band, which would look as sure as a full one', () => {
+    const html = render(<FigureRow label="a" value="1" verdict="v" judged={null} band={{ ...BAND, thin: true }} mark={64} />)
+    expect(html).not.toContain('figure-row-bar')
+    expect(html).toContain('>v<')
   })
   it('wraps a strip in a description carrying the verdict', () => {
     const strip = {

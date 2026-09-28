@@ -2,6 +2,8 @@
 // words. The server has already judged it (standing, better or worse); this only draws. The bar uses
 // the dashboard gauge's scale, the usual band in the middle fifth, so "inside" and "outside" read the
 // same on every page. A strip of the last days replaces the bar where the trend is the point.
+// `band` takes a figure's baseline as the server sends it; a thin one draws no bar at all, since a
+// band from three nights looks exactly as authoritative as one from sixty (bandFrom's rule).
 import { gaugeFraction, gaugeScale } from '../pages/dashboard/UsualGauge.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { Described } from '../pages/dashboard/cardShared.js'
@@ -15,9 +17,9 @@ const pct = (f: number) => `${(f * 100).toFixed(1)}%`
 
 export function FigureRow({ label, value, verdict, judged, band, mark, strip }: {
   label: string, value: string, verdict: string, judged: 'better' | 'worse' | null
-  band: { center: number, low: number, high: number } | null, mark: number | null, strip?: FigureRowStrip
+  band: { center: number, low: number, high: number, thin: boolean } | null, mark: number | null, strip?: FigureRowStrip
 }) {
-  const scale = band === null ? null : gaugeScale(band)
+  const scale = band === null || band.thin ? null : gaugeScale(band)
   return (
     <div className="figure-row">
       <span className="figure-row-label">{label}</span>
