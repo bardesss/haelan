@@ -253,6 +253,73 @@ describe('PresetEditor', () => {
     expect(calls).toEqual({ done: 1, cancel: 0 })
   })
 
+  it('adds a typed kind on Done before saving, rather than dropping it', async () => {
+    const calls = renderEditor(['caffeine'])
+    type(field(), ' travel ')
+    click(button('Done'))
+    await settle()
+    expect(writes()).toEqual([{ method: 'PUT', url: '/api/v1/p/p1/quick-log/presets', body: { kinds: ['caffeine', 'travel'] } }])
+    expect(calls).toEqual({ done: 1, cancel: 0 })
+  })
+
+  it('refuses a duplicate typed kind on Done with the reason, and sends nothing', async () => {
+    const calls = renderEditor(['caffeine', 'alcohol'])
+    type(field(), 'Alcohol')
+    click(button('Done'))
+    await settle()
+    expect(writes()).toEqual([])
+    expect(calls).toEqual({ done: 0, cancel: 0 })
+    expect(errors()).toEqual(['Alcohol is already a chip'])
+    expect(field().value).toBe('Alcohol')
+  })
+
+  it('refuses a typed kind on Done when the list is full, and sends nothing', async () => {
+    const sixteen = Array.from({ length: 16 }, (_, i) => `kind${i + 1}`)
+    const calls = renderEditor(sixteen)
+    type(field(), 'one more')
+    click(button('Done'))
+    await settle()
+    expect(writes()).toEqual([])
+    expect(calls).toEqual({ done: 0, cancel: 0 })
+    expect(errors()).toEqual(['At most 16 chips'])
+  })
+
+  it('adds a trimmed kind with the Add button and clears the field', () => {
+    renderEditor(['caffeine'])
+    type(field(), '  travel ')
+    click(button('Add'))
+    expect(names()).toEqual(['Caffeine', 'Travel'])
+    expect(field().value).toBe('')
+    expect(errors()).toEqual([])
+    expect(writes()).toEqual([])
+  })
+
+  it('refuses a duplicate with the Add button as Enter does', () => {
+    renderEditor(['caffeine'])
+    type(field(), 'CAFFEINE')
+    click(button('Add'))
+    expect(names()).toEqual(['Caffeine'])
+    expect(errors()).toEqual(['Caffeine is already a chip'])
+  })
+
+  it('enables the Add button only for a draft that is not blank', () => {
+    renderEditor(['caffeine'])
+    expect(button('Add').disabled).toBe(true)
+    type(field(), '   ')
+    expect(button('Add').disabled).toBe(true)
+    type(field(), 'travel')
+    expect(button('Add').disabled).toBe(false)
+  })
+
+  it('disables the Add button when the list is full, whatever is typed', () => {
+    const sixteen = Array.from({ length: 16 }, (_, i) => `kind${i + 1}`)
+    renderEditor(sixteen)
+    type(field(), 'travel')
+    expect(button('Add').disabled).toBe(true)
+    click(byLabel('Remove kind16'))
+    expect(button('Add').disabled).toBe(false)
+  })
+
   it('disables Done while the save is in flight', async () => {
     let release: () => void = () => {}
     handler = (req) => req.method === 'PUT'

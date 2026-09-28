@@ -964,6 +964,7 @@
     "edit": {
       "remove": "{{kind}} verwijderen",
       "add": "Soort toevoegen",
+      "addButton": "Toevoegen",
       "moved": "{{kind}} verplaatst naar plek {{position}}",
       "done": "Klaar",
       "cancel": "Annuleren",

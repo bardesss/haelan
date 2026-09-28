@@ -964,6 +964,7 @@
     "edit": {
       "remove": "Remove {{kind}}",
       "add": "Add a kind",
+      "addButton": "Add",
       "moved": "{{kind}} moved to position {{position}}",
       "done": "Done",
       "cancel": "Cancel",

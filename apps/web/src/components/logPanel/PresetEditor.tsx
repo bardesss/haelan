@@ -132,25 +132,40 @@ export function PresetEditor({ kinds: initial, suggestions, onDone, onCancel }: 
     }
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
     event.preventDefault()
+    addDraft()
+  }
+
+  /**
+   * The draft added to the list, for Enter, the Add button and Done alike: the list with it (the
+   * list as it was for a blank draft), or null when it is refused and the reason is showing.
+   */
+  function addDraft(): string[] | null {
     const value = draft.trim()
-    if (value === '') return
+    if (value === '') return kinds
     // The cases a reader can reach are checked here, in their own language; validatePresets is
     // the server's rule and says it in English, so it only has the last word on anything else.
     const existing = kinds.find((kind) => kind.toLowerCase() === value.toLowerCase())
-    if (existing !== undefined) { setError(t('logPanel.edit.duplicate', { kind: kindLabel(existing) })); return }
-    if (full) { setError(t('logPanel.edit.full')); return }
+    if (existing !== undefined) { setError(t('logPanel.edit.duplicate', { kind: kindLabel(existing) })); return null }
+    if (full) { setError(t('logPanel.edit.full')); return null }
     try {
-      setKinds(validatePresets([...kinds, value]))
+      const next = validatePresets([...kinds, value])
+      setKinds(next)
       setDraft('')
       setError(null)
+      return next
     } catch (problem) {
       setError(failureText(problem))
+      return null
     }
   }
 
+  // Done takes a typed kind with it: a draft left in the field is added first, and one refused
+  // keeps the editor open with the reason, rather than being dropped from the save unseen.
   function onSave() {
+    const next = addDraft()
+    if (next === null) return
     setError(null)
-    save.mutateAsync(kinds).then(() => onDone(), (problem: unknown) => setError(failureText(problem)))
+    save.mutateAsync(next).then(() => onDone(), (problem: unknown) => setError(failureText(problem)))
   }
 
   function onRootKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -176,9 +191,14 @@ export function PresetEditor({ kinds: initial, suggestions, onDone, onCancel }: 
         ))}
       </ul>
       <p className="sr-only" aria-live="polite">{announcement}</p>
-      <input className="input" list={listId} value={draft} disabled={full} maxLength={MAX_PRESET_LENGTH}
-        aria-label={t('logPanel.edit.add')} placeholder={t('logPanel.edit.add')}
-        onChange={(event) => setDraft(event.target.value)} onKeyDown={onAddKeyDown} />
+      <div className="log-edit-add">
+        <input className="input" list={listId} value={draft} disabled={full} maxLength={MAX_PRESET_LENGTH}
+          aria-label={t('logPanel.edit.add')} placeholder={t('logPanel.edit.add')}
+          onChange={(event) => setDraft(event.target.value)} onKeyDown={onAddKeyDown} />
+        <button type="button" className="button" disabled={full || draft.trim() === ''} onClick={() => addDraft()}>
+          {t('logPanel.edit.addButton')}
+        </button>
+      </div>
       <datalist id={listId}>
         {offered.map((kind) => <option key={kind} value={kind} label={kindLabel(kind)} />)}
       </datalist>
