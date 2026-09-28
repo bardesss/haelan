@@ -22,7 +22,7 @@ const ANDROID_APP = 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/1
 const PHONE_BROWSER = 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36'
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,

@@ -20,6 +20,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToLong
@@ -110,12 +111,15 @@ object GlanceFormat {
      * to Intl's formatRange, which has no JVM twin, so its three outputs are written out here: English
      * repeats the month, Dutch collapses a shared one, both add the year only when the two differ,
      * and the dash is an en dash between thin spaces, as ICU writes it.
+     *
+     * [endZone] reads the wake end, [zone] the bed end: the Last night card hands each end the
+     * offset it was recorded under, so a night slept elsewhere keeps its own dates.
      */
-    fun nightRange(startMs: Long, endMs: Long, zone: ZoneId, locale: Locale): String {
+    fun nightRange(startMs: Long, endMs: Long, zone: ZoneId, locale: Locale, endZone: ZoneId = zone): String {
         val p = patterns(locale)
         val n = names(locale)
         val start = Instant.ofEpochMilli(startMs).atZone(zone).toLocalDate()
-        val end = Instant.ofEpochMilli(endMs).atZone(zone).toLocalDate()
+        val end = Instant.ofEpochMilli(endMs).atZone(endZone).toLocalDate()
         if (start == end) return render(p.short, start, n)
         if (start.year != end.year) return render(p.shortWithYear, start, n) + RANGE_DASH + render(p.shortWithYear, end, n)
         val first = if (p.collapsesMonth && start.month == end.month) p.weekdayDay else p.short
@@ -494,8 +498,15 @@ class GlanceWords(
         )
     }
 
-    /** The Last night card's subtitle. */
-    fun nightRange(sleep: GlanceSleep): String = GlanceFormat.nightRange(sleep.startMs, sleep.endMs, zone, locale)
+    /**
+     * The Last night card's subtitle, each end read under the offset it was recorded with rather
+     * than the person's zone: anything already recorded keeps the dates it was lived on, the web's
+     * nightSpan.
+     */
+    fun nightRange(sleep: GlanceSleep): String = GlanceFormat.nightRange(
+        sleep.startMs, sleep.endMs, ZoneOffset.ofTotalSeconds(sleep.startOffsetMinutes * 60), locale,
+        endZone = ZoneOffset.ofTotalSeconds(sleep.endOffsetMinutes * 60),
+    )
 
     /**
      * The words beside a small sleep figure outside its usual ("later than usual"), or null inside it

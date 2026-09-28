@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
-import { DEFAULT_LIST, DERIVATION_VERSION, RawArchive, dayMetricTarget, insertSample, schema } from '@haelan/core'
+import { DEFAULT_LIST, DERIVATION_VERSION, RawArchive, dayMetricTarget, insertSample, samplePoint, schema } from '@haelan/core'
 import { registeredRoutes, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -1441,6 +1441,39 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(written.statusCode).toBe(200)
       expect(events.listFor('p1', '2026-02-01', '2026-02-01')).toMatchObject([{ kind: 'own write' }])
+    })
+  })
+
+  // The phone's zone rides on ingest as a header and lands on a person row, so it is a write of
+  // its own: one person's upload must never move another person's current zone.
+  describe('the phone zone header on ingest', () => {
+    const weight = { dataPoints: [samplePoint({
+      payloadKey: 'weight', valuePath: 'weightGrams', value: '80000', physicalTime: '2026-01-20T10:00:00Z',
+    })] }
+
+    it("moves only the uploader's own current zone, never another person's", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const people = harness.app.haelan.stores.people
+
+      const own = await harness.app.inject({
+        method: 'POST', url: '/api/v1/p/p1/ingest/weight',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN, 'x-haelan-zone': 'Asia/Tokyo' },
+        payload: weight,
+      })
+      expect(own.statusCode).toBe(200)
+      expect(people.get('p1')!.currentTimezone).toBe('Asia/Tokyo')
+      expect(people.get('p2')!.currentTimezone).toBeNull()
+
+      const other = await harness.app.inject({
+        method: 'POST', url: '/api/v1/p/p2/ingest/weight',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN, 'x-haelan-zone': 'America/New_York' },
+        payload: weight,
+      })
+      expect(other.statusCode).toBe(403)
+      expect(people.get('p2')!.currentTimezone).toBeNull()
+      expect(people.get('p1')!.currentTimezone).toBe('Asia/Tokyo')
     })
   })
 

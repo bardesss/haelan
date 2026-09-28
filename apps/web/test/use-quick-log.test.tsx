@@ -19,7 +19,7 @@ import { glanceBody, glanceLog } from './glanceFixture.js'
 import { flush } from './flush.js'
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam',
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true,
   birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: true, quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }

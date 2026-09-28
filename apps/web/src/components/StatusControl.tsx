@@ -105,7 +105,7 @@ export function StatusControl() {
   // The person's today, not the browser's, for "today" and "yesterday" on the device rows.
   // open is a dependency on purpose: a tab left open overnight re-reads the date when the panel
   // is opened, rather than calling yesterday "today" until a reload.
-  const timezone = session.data?.timezone
+  const timezone = session.data?.effectiveTimezone
   const today = useMemo(() => localToday(timezone), [timezone, open])
 
   // Navigating closes it, for the reason the person menu gives: the rail is not unmounted by a

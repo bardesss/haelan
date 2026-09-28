@@ -42,7 +42,7 @@ function mount(node: ReactNode): void {
 }
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,
@@ -75,7 +75,7 @@ const DEFAULT_PROPS = {
  */
 function stubFetch(opts: {
   baseline: Baseline, hangBaselines?: boolean, excludedDataTypes?: string[],
-  emptyIntraday?: boolean, hangDataTypes?: boolean,
+  emptyIntraday?: boolean, hangDataTypes?: boolean, intradayOffset?: number,
 }): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -102,6 +102,7 @@ function stubFetch(opts: {
           { sourceId: 'watch', utcMs: Date.parse(`${date}T08:00:00Z`), min: 58, mean: 62, max: 70, n: 1, excluded: false },
         ],
         reduction: null,
+        ...(opts.intradayOffset === undefined ? {} : { offsetMinutes: opts.intradayOffset }),
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/data-types')) {
@@ -205,6 +206,34 @@ describe('the Day tab\'s intraday heart rate card', () => {
     restore()
   })
 
+  // A finished day recorded in New York (UTC-4): its 08:00Z reading reads 04:00, the time it was
+  // recorded at, not 10:00 in the reader's zone. Today, still running, stays in the reader's zone.
+  it('reads an earlier day\'s trace at the offset it was recorded under, and today\'s in the effective zone', async () => {
+    const firstCell = async (today: string) => {
+      const restore = stubFetch({ baseline: null, intradayOffset: -240 })
+      try {
+        const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-08-15" to="2026-08-15" today={today} />)
+        mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+        await flush(client, () => container!.innerHTML)
+        return container!.querySelector('table tbody tr td, table tbody tr th')?.textContent
+      } finally { restore() }
+    }
+    expect(await firstCell('2026-08-20')).toBe('04:00')
+    expect(await firstCell('2026-08-15')).toBe('10:00')
+  })
+
+  // 25 October 2026 at home in Amsterdam, recorded at +120 from its midnight: the zone explains it,
+  // so a reading after the clocks went back (08:00Z) reads 09:00 CET, not 10:00 at a fixed +120.
+  it('reads an earlier daylight saving day at home in the zone, not at its first offset', async () => {
+    const restore = stubFetch({ baseline: null, intradayOffset: 120 })
+    try {
+      const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-10-25" to="2026-10-25" today="2026-10-30" />)
+      mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+      await flush(client, () => container!.innerHTML)
+      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('09:00')
+    } finally { restore() }
+  })
+
   // The same cold-load race MetricCard's own gate exists for, in the one card that hand rolls its
   // exclusion check instead of going through it. excludedDataTypes is [] while /data-types is in
   // flight, which reads as "heart rate is not excluded", so an empty day hid this card for that
@@ -255,6 +284,13 @@ describe('mounted on Recovery', () => {
       }
       if (url.includes('/baselines')) return json({ baseline: null })
       if (url.includes('/insights')) return json(insightBody(url))
+      if (url.includes('/intraday')) {
+        return json({
+          points: [{ sourceId: 'watch', utcMs: Date.parse('2026-08-15T08:00:00Z'), min: 58, mean: 62, max: 70, n: 1, excluded: false }],
+          reduction: null, offsetMinutes: -240,
+        })
+      }
+      if (url.includes('/data-types')) return json({ items: [{ id: 'heart-rate', tier: 'intraday', excluded: false }] })
       if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD })
       return json({})
     }) as typeof fetch
@@ -273,5 +309,20 @@ describe('mounted on Recovery', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
     expect(card).toBeDefined()
     restore()
+  })
+
+  // The page hands the card its today, which is what tells an earlier day (read at the offset it
+  // was recorded under, New York's here) from the day still running.
+  it('draws an earlier Day tab in the offset it was recorded under', async () => {
+    window.history.replaceState(null, '', '/recovery?range=day&on=2026-08-15')
+    const restore = stubRecovery()
+    try {
+      const { client, tree } = withQuery(<Recovery />)
+      mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+      await flush(client, () => container!.innerHTML)
+      const card = [...container!.querySelectorAll('.card')]
+        .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
+      expect(card?.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('04:00')
+    } finally { restore() }
   })
 })

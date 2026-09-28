@@ -186,7 +186,7 @@ describe('readDay', () => {
     const day = readDay(ctx())
     expect(day.steps.value).toBeNull()
     expect(day.activeMinutes.value).toBeNull()
-    expect(day.heartRate).toEqual({ points: [], asOfMs: null, staleSources: [] })
+    expect(day.heartRate).toEqual({ points: [], asOfMs: null, offsetMinutes: null, staleSources: [] })
     expect(day.workouts).toEqual([])
   })
 

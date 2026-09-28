@@ -73,6 +73,7 @@ export function Profile() {
     sleepTargetMinutes: session.data.sleepTargetMinutes,
     sleepUseBaseline: session.data.sleepUseBaseline,
     quickLogEnabled: session.data.quickLogEnabled,
+    followPhoneZone: session.data.followPhoneZone,
   }
   const value = draft ?? current
   const edit = (patch: Partial<ProfileEdit>): void => setDraft({ ...value, ...patch })
@@ -94,6 +95,12 @@ export function Profile() {
     || (value.sleepTargetMinutes !== undefined && value.sleepTargetMinutes !== current.sleepTargetMinutes)
     || value.sleepUseBaseline !== current.sleepUseBaseline
     || value.quickLogEnabled !== current.quickLogEnabled
+    || value.followPhoneZone !== current.followPhoneZone
+
+  // Named only while it changes something: a phone zone equal to the home zone is followed
+  // invisibly, and with the switch off nothing is followed at all.
+  const phoneZone = session.data.currentTimezone
+  const followedZone = value.followPhoneZone && phoneZone !== null && phoneZone !== current.timezone ? phoneZone : null
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
@@ -125,6 +132,21 @@ export function Profile() {
           <input className="input" value={value.username} required autoComplete="username"
             onChange={(e) => edit({ username: e.currentTarget.value })} />
           <span className="field-hint">{t('settings.profile.usernameHint')}</span>
+        </label>
+
+        {/* Above the home zone it leaves alone, and without the warning that field carries: this
+            moves only which day "today" is read as, so nothing derived goes stale and nothing
+            rebuilds (PeopleStore.setFollowPhoneZone). */}
+        <label className="field">
+          <span className="check-row">
+            <input type="checkbox" checked={value.followPhoneZone}
+              onChange={(e) => edit({ followPhoneZone: e.currentTarget.checked })} />
+            <span className="label">{t('settings.profile.followPhoneZone')}</span>
+          </span>
+          <span className="field-hint">{t('settings.profile.followPhoneZoneHint')}</span>
+          {followedZone !== null && (
+            <span className="field-hint">{t('settings.profile.followingPhoneZone', { zone: followedZone })}</span>
+          )}
         </label>
 
         <label className="field">

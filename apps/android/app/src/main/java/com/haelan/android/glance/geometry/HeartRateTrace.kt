@@ -4,6 +4,7 @@ import com.haelan.android.glance.IntradayPoint
 import com.haelan.android.glance.WorkoutSession
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 // The Today card's slim heart rate trace, as the web's IntradayHeartRate draws it with `compact`
 // (apps/web/src/charts/IntradayHeartRate.tsx): each source's mean as a line from local midnight to
@@ -94,9 +95,29 @@ data class TraceWindow(val startMs: Long, val endMs: Long?)
  * last reading (null), never at a moment not yet reached. Midnight is the zone's, so a day that
  * loses or gains an hour to daylight saving is 23 or 25 hours wide, as the web's localMidnightMs
  * makes it. An instant to draw from, never a day to ask for.
+ *
+ * A finished day with [offsetMinutes] (the offset its readings were recorded under) is reckoned in
+ * [recordedDayZone] instead, as the web's TodayCard does: a day lived in Amsterdam still runs
+ * midnight to midnight Amsterdam time when the person looks at it from Tokyo, and a daylight saving
+ * day keeps its 23 or 25 hours. Today keeps [zone], where the person is. [zone] is the first zone
+ * tried; [otherZones] are tried after it.
  */
-fun traceWindow(today: String, finished: Boolean, zone: ZoneId): TraceWindow {
+fun traceWindow(today: String, finished: Boolean, zone: ZoneId, offsetMinutes: Int?, otherZones: List<ZoneId> = emptyList()): TraceWindow {
     val day = LocalDate.parse(today)
-    fun midnight(date: LocalDate) = date.atStartOfDay(zone).toInstant().toEpochMilli()
+    val reckonedIn = if (finished) recordedDayZone(day, offsetMinutes, listOf(zone) + otherZones) else zone
+    fun midnight(date: LocalDate) = date.atStartOfDay(reckonedIn).toInstant().toEpochMilli()
     return TraceWindow(midnight(day), if (finished) midnight(day.plusDays(1)) else null)
+}
+
+/**
+ * The zone a finished [day] is reckoned in, given the offset its readings were recorded under and
+ * the zones that might explain it, in order (the web's recordedDayClock). The first whose offset
+ * at the day's own local midnight equals the recorded one is used as a zone, so its bounds follow a
+ * daylight saving change; only when none does is the fixed offset used. With no offset (no readings,
+ * an older server) the first zone.
+ */
+fun recordedDayZone(day: LocalDate, offsetMinutes: Int?, zones: List<ZoneId>): ZoneId {
+    if (offsetMinutes == null) return zones.first()
+    return zones.firstOrNull { day.atStartOfDay(it).offset.totalSeconds == offsetMinutes * 60 }
+        ?: ZoneOffset.ofTotalSeconds(offsetMinutes * 60)
 }

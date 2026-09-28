@@ -74,6 +74,28 @@ class InstanceClientHttpTest {
     }
 
     @Test
+    fun `an ingest carries the phone's zone in its own header`() {
+        InstanceClient.ingest(instance.address, "/api/v1/p/p1/ingest/weight", "{}", "s3cret", java.time.ZoneId.of("Asia/Tokyo")) { }
+        val request = instance.only()
+        assertEquals("POST", request.method)
+        assertEquals("/api/v1/p/p1/ingest/weight", request.path)
+        assertEquals("Asia/Tokyo", request.headers["x-haelan-zone"])
+        assertEquals("haelan_session=s3cret", request.headers["cookie"])
+    }
+
+    @Test
+    fun `an ingest names the phone's own zone when none is given`() {
+        InstanceClient.ingest(instance.address, "/api/v1/p/p1/ingest/weight", "{}", null) { }
+        assertEquals(java.time.ZoneId.systemDefault().id, instance.only().headers["x-haelan-zone"])
+    }
+
+    @Test
+    fun `a plain POST names no zone`() {
+        InstanceClient.post(instance.address, "/api/auth/login", "{}") { }
+        assertEquals(null, instance.only().headers["x-haelan-zone"])
+    }
+
+    @Test
     fun `a POST still sends its method, its JSON and its path`() {
         InstanceClient.post(instance.address, "/api/auth/login", "{\"a\":1}") { }
         val request = instance.only()

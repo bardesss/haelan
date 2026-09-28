@@ -30,12 +30,15 @@ function hypnogramSegments(sleep: GlanceSleep | null): Segment[] {
     .filter((s): s is Segment => s.stage !== null)
 }
 
-// The night's dates as the column's subtitle ("Sat 5 – Sun 6 Sep"), read in the person's zone.
-// formatRange rather than two formatted dates joined by hand: the language decides how a range
-// collapses a shared month, and a night that starts after midnight comes out as one date.
-function nightSpan(sleep: GlanceSleep, language: string, timeZone: string): string {
-  const format = new Intl.DateTimeFormat(language, { weekday: 'short', day: 'numeric', month: 'short', timeZone })
-  return format.formatRange(new Date(sleep.startMs), new Date(sleep.endMs))
+// The night's dates as the column's subtitle ("Sat 5 – Sun 6 Sep"), each end read under the offset
+// it was recorded with rather than the reader's zone: a night slept in Amsterdam keeps its own dates
+// when viewed from Tokyo. Shifted by the offset and formatted as UTC, which names exactly that
+// wall-clock date. formatRange rather than two formatted dates joined by hand: the language decides
+// how a range collapses a shared month, and a night that starts after midnight comes out as one date.
+function nightSpan(sleep: GlanceSleep, language: string): string {
+  const format = new Intl.DateTimeFormat(language, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+  return format.formatRange(
+    new Date(sleep.startMs + sleep.startOffsetMinutes * 60_000), new Date(sleep.endMs + sleep.endOffsetMinutes * 60_000))
 }
 
 /**
@@ -53,8 +56,8 @@ function nightSpan(sleep: GlanceSleep, language: string, timeZone: string): stri
 // `today` is not used for wording here, as the other redesigned cards use it ("today" vs
 // "yesterday"): a night is always named by the date it ended on. It is read for one thing only,
 // the strip's day already shown (the night that ended on it), which a click does not open.
-export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = false }: {
-  sleep: GlanceSleep, span: 8 | 12, today: string, timezone: string,
+export function NightCard({ sleep, span, today, onOpenDay, finished = false }: {
+  sleep: GlanceSleep, span: 8 | 12, today: string,
   /** A past day's page (day navigation): its night is "that night", the one that ended that morning. */
   finished?: boolean
   /** Opens a strip dot's day (day navigation); the night strip's days are named by the date each night ended. */
@@ -86,7 +89,7 @@ export function NightCard({ sleep, span, today, timezone, onOpenDay, finished = 
     { key: 'woke', label: t('glance.sleep.woke'), figure: sleep.waketime },
   ]
   return (
-    <DashCard span={span} title={t(finished ? 'glance.sleep.titleFinished' : 'glance.sleep.title')} subtitle={nightSpan(sleep, language, timezone)}
+    <DashCard span={span} title={t(finished ? 'glance.sleep.titleFinished' : 'glance.sleep.title')} subtitle={nightSpan(sleep, language)}
       link={{ to: `/sleep/night/${sleep.localDate}`, text: t('glance.sleep.link') }}>
       <div className="dash-lead">
         <div>

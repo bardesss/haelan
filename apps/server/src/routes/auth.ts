@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { DEFAULT_SLEEP_TARGET_MINUTES } from '@haelan/core'
+import { DEFAULT_SLEEP_TARGET_MINUTES, effectiveTimezone } from '@haelan/core'
 import { SESSION_COOKIE, setSessionCookie, clearSessionCookie } from '../auth/cookie.ts'
 import { bearerToken } from '../auth/bearer.ts'
 import { errorBody } from '../api/envelope.ts'
@@ -100,8 +100,17 @@ export function registerAuth(app: FastifyInstance): void {
       displayName: person?.displayName ?? account.username,
       username: account.username,
       isAdmin: account.isAdmin,
-      // The browser resolves the person's today from this rather than from its own clock's zone.
+      // The home zone: what Profile edits and Google sync cuts its days at. Not what "today" is
+      // read in any more, which is effectiveTimezone below.
       timezone: person?.timezone ?? 'UTC',
+      // The zone the browser and the phone resolve the person's today in, and format their local
+      // times and dates in, rather than their own clock's zone: the phone's current zone when the
+      // person follows it and it is set, else the home zone (core's effectiveTimezone).
+      effectiveTimezone: person ? effectiveTimezone(person) : 'UTC',
+      // The zone the phone last synced from, null until one has, and whether today follows it.
+      // Both for the Profile card: its switch, and the line naming the zone being followed.
+      currentTimezone: person?.currentTimezone ?? null,
+      followPhoneZone: person?.followPhoneZone ?? true,
       // The two inputs the cardio load model needs and nothing else in the app reads. Both are
       // computed at read time from these, so neither carries the timezone's rebuild machinery.
       birthDate: person?.birthDate ?? null,

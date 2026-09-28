@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import {
-  ConfigError, localDateInZone, localMidnightMs, readDayLog, requireDate, shiftLocalDate, standingOf,
+  ConfigError, effectiveTimezone, localDateInZone, localMidnightMs, readDayLog, requireDate, shiftLocalDate, standingOf,
   judgeCalendarDay, readGlanceCalendarRaw,
 } from '@haelan/core'
 import type {
@@ -175,9 +175,12 @@ export function registerGlanceRoutes(app: FastifyInstance): void {
     const { personId } = request.params
     const nowMs = app.haelan.now()
     const person = app.haelan.stores.people.get(personId)
-    const tz = person?.timezone ?? 'UTC'
+    // Today and a past day's bounds follow the effective zone (the phone's when it leads), so a
+    // traveller's glance turns over at their own midnight. Source names stay on the home zone:
+    // a default name's first-seen date is a fact about the archive, not about where they are now.
+    const tz = person === null ? 'UTC' : effectiveTimezone(person)
     const today = localDateInZone(nowMs, tz)
-    const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId, tz).map((s) => [s.id, s.name]))
+    const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId, person?.timezone).map((s) => [s.id, s.name]))
     const nameOf = (id: string) => names.get(id) ?? id
     const q = personQueryOf(request)
 
@@ -201,6 +204,10 @@ export function registerGlanceRoutes(app: FastifyInstance): void {
       }
     }
 
+    // A past day's end in the effective zone bounds nothing a reader sees as a time: its last
+    // night is the night filed under that day (readLastNight), from east or west of where it was
+    // slept, and its heart-rate trace carries the offset it was recorded under, so a day lived
+    // elsewhere is not shifted into this zone.
     // core's own readGlance already fills in `finished` and `nav` (Glance's own fields); nothing
     // here needs to recompute either, and roundGlance's `...glance` spread carries both through
     // to the wire unchanged.
@@ -222,7 +229,7 @@ export function registerGlanceRoutes(app: FastifyInstance): void {
     const { personId } = request.params
     const nowMs = app.haelan.now()
     const person = app.haelan.stores.people.get(personId)
-    const today = localDateInZone(nowMs, person?.timezone ?? 'UTC')
+    const today = localDateInZone(nowMs, person === null ? 'UTC' : effectiveTimezone(person))
     const month = request.query.month
     if (month === undefined) throw new ConfigError('month is required')
 

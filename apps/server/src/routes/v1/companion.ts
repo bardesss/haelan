@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { COMPANION_SOURCE, ConfigError, DATA_TYPES, RawArchive, supports } from '@haelan/core'
-import { sendHashed } from './shared.ts'
+import { personQueryOf, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -192,9 +192,15 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     // Whether this person also walks the Google path. Cards clamp their range to the
     // history start only without one (step 4 of the phone-history clamp): a mixed person keeps the deep archive.
     const googleConnected = app.haelan.instance.credentials.isConnected(personId)
+    // The history start's own date, read under the offset stored with the row it came from. The
+    // web used to format historyStartMs in the zone the reader is in now, which moves it a day for
+    // a traveller; the row already knows which day it was recorded on. Null when no row starts
+    // there any more, and the web falls back to formatting the instant itself.
+    const historyStartLocalDate = historyStartMs === null ? null : personQueryOf(request).recordedDateOf({ utcMs: historyStartMs })
     return sendHashed(reply, request, {
       items: [...legacyItems, ...perSourceItems],
       historyStartMs,
+      historyStartLocalDate,
       googleConnected,
     })
   })

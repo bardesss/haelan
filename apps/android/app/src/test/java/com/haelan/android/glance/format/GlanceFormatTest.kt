@@ -121,6 +121,15 @@ class GlanceFormatTest {
         assertEquals("Sat, Sep 5 – Sun, Sep 6", GlanceFormat.nightRange(start, end, newYork, en))
     }
 
+    // Bed in New York at 22:00 on the 5th, woken after a flight in Tokyo at 01:00 on the 7th: each
+    // end reads in its own zone, so the wake end is the 7th, not New York's noon on the 6th.
+    @Test
+    fun `a night's two ends read in their own zones`() {
+        val start = ms("2026-09-06T02:00:00Z")
+        val end = ms("2026-09-06T16:00:00Z")
+        assertEquals("Sat, Sep 5 – Mon, Sep 7", GlanceFormat.nightRange(start, end, newYork, en, endZone = ZoneId.of("Asia/Tokyo")))
+    }
+
     @Test
     fun `the greeting turns at five, noon and six`() {
         assertEquals("glance_greeting_evening", GlanceFormat.greetingKey(4))

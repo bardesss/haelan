@@ -139,7 +139,7 @@ function RecordRow({ record, t, language }: {
 }) {
   // The person's today, for sourceLabel's year rule - their zone, as every other surface reads it.
   const session = useSession()
-  const today = localToday(session.data?.timezone)
+  const today = localToday(session.data?.effectiveTimezone)
   return (
     // A data attribute rather than a `record-${metric}` class: a templated class name leaves a
     // bare `record-` that no stylesheet defines, which css-classes.test.ts is right to refuse,

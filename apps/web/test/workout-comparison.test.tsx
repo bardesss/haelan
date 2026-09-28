@@ -86,7 +86,7 @@ afterEach(() => {
 })
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam',
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true,
   birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,

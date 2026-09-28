@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull, ne, or } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { people } from '../db/schema/index.ts'
 import { ConfigError } from '../errors.ts'
@@ -18,8 +18,34 @@ export interface PersonRow {
   sleepUseBaseline: boolean
   quickLogEnabled: boolean
   quickLogPresets: string[] | null
+  /** The zone the phone last synced from, or null. Never a day boundary for anything stored. */
+  currentTimezone: string | null
+  followPhoneZone: boolean
   builtMappingVersion: number | null
   builtDerivationVersion: number | null
+}
+
+/** Whether Intl can format in this zone: the one test every zone this app stores has to pass. */
+export function isKnownTimezone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: timezone })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The zone read-time "today" and display follow: the phone's current zone when the person lets it
+ * lead and it is one Intl knows, else the home zone. Never for derivation, Google sync, the
+ * archive, invites or source aliases, which all stay on `timezone` (see the column comments): a
+ * stored row carries its own offset, and only the reading of "today" moves with the traveller.
+ */
+export function effectiveTimezone(
+  person: Pick<PersonRow, 'timezone' | 'currentTimezone' | 'followPhoneZone'>,
+): string {
+  const current = person.currentTimezone
+  return person.followPhoneZone && current !== null && isKnownTimezone(current) ? current : person.timezone
 }
 
 // A stored list that no longer parses (hand-edited database) reads as never edited rather than
@@ -60,7 +86,7 @@ export class PeopleStore {
    */
   create(
     input: Omit<PersonRow, 'birthDate' | 'sex' | 'sleepTargetMinutes' | 'sleepUseBaseline' | 'quickLogEnabled'
-      | 'quickLogPresets' | 'builtMappingVersion' | 'builtDerivationVersion' | 'companionPath'>
+      | 'quickLogPresets' | 'currentTimezone' | 'followPhoneZone' | 'builtMappingVersion' | 'builtDerivationVersion' | 'companionPath'>
       & { nowMs: number, companionPath?: boolean },
   ): PersonRow {
     this.#db.insert(people).values({
@@ -92,6 +118,10 @@ export class PeopleStore {
       // sleepUseBaseline is above.
       quickLogEnabled: false,
       quickLogPresets: null,
+      // The column defaults, restated as sleepUseBaseline's is: no phone has synced yet, and the
+      // switch starts on.
+      currentTimezone: null,
+      followPhoneZone: true,
       builtMappingVersion: MAPPING_VERSION,
       builtDerivationVersion: DERIVATION_VERSION,
     }
@@ -111,6 +141,8 @@ export class PeopleStore {
         sleepUseBaseline: row.sleepUseBaseline,
         quickLogEnabled: row.quickLogEnabled,
         quickLogPresets: parsePresets(row.quickLogPresets),
+        currentTimezone: row.currentTimezone ?? null,
+        followPhoneZone: row.followPhoneZone,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }
@@ -130,6 +162,8 @@ export class PeopleStore {
         sleepUseBaseline: row.sleepUseBaseline,
         quickLogEnabled: row.quickLogEnabled,
         quickLogPresets: parsePresets(row.quickLogPresets),
+        currentTimezone: row.currentTimezone ?? null,
+        followPhoneZone: row.followPhoneZone,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }))
@@ -271,6 +305,32 @@ export class PeopleStore {
     try { valid = validatePresets(kinds) } catch (error) { throw new ConfigError((error as Error).message) }
     this.#db.update(people).set({ quickLogPresets: JSON.stringify(valid) }).where(eq(people.id, id)).run()
     return valid
+  }
+
+  /**
+   * The zone the person's phone last synced from. Cheap, and deliberately unlike setTimezone: the
+   * derivation stamp is not cleared, because nothing derived reads this column (every stored row
+   * carries its own offset) and neither does Google sync. It moves read-time "today" only.
+   *
+   * Writes only when the zone differs from the stored one, in the statement's own WHERE, so an
+   * ingest repeating the same zone every chunk writes nothing. Answers whether it wrote.
+   */
+  setCurrentTimezone(id: string, timezone: string): boolean {
+    if (typeof timezone !== 'string' || !isKnownTimezone(timezone)) {
+      throw new ConfigError(`unknown timezone ${String(timezone)}`)
+    }
+    const result = this.#db.update(people).set({ currentTimezone: timezone })
+      .where(and(eq(people.id, id), or(isNull(people.currentTimezone), ne(people.currentTimezone, timezone))))
+      .run()
+    return result.changes > 0
+  }
+
+  /** Whether read-time "today" follows the phone's zone. Cheap, like setSleepUseBaseline. */
+  setFollowPhoneZone(id: string, follow: boolean): void {
+    if (typeof follow !== 'boolean') {
+      throw new ConfigError(`whether to follow the phone's zone must be a boolean, got '${follow}'`)
+    }
+    this.#db.update(people).set({ followPhoneZone: follow }).where(eq(people.id, id)).run()
   }
 
   /**

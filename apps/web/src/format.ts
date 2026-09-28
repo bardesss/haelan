@@ -210,6 +210,16 @@ export function formatClock(minutesPastMidnight: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
+/**
+ * An instant's clock time under the offset it was recorded with, as a 24-hour "HH:mm": a workout's
+ * start, a night's bed time, a finished day's heart rate. Anything already recorded keeps the time
+ * it was recorded in, wherever the reader is now; only "today" follows the reader's zone. Truncated
+ * to the minute, as toLocaleTimeString truncates, so it reads the same as a zone-formatted clock.
+ */
+export function formatRecordedClock(utcMs: number, offsetMinutes: number): string {
+  return formatClock(Math.floor((utcMs + offsetMinutes * 60_000) / 60_000))
+}
+
 export type Tone = 'good' | 'bad' | 'neutral'
 export type Delta = { text: string; dir: 'up' | 'down' | 'flat'; tone?: Tone; basis?: string }
 

@@ -125,11 +125,16 @@ data class IntradayPoint(
     val excluded: Boolean,
 )
 
-/** Today's heart rate from local midnight. */
+/**
+ * Today's heart rate from local midnight, or a finished day's whole. [offsetMinutes] is the offset
+ * the day's readings were recorded under (its first reading's, one per day and never per point),
+ * null with no readings or from a server that predates it: a finished day is drawn in it.
+ */
 data class GlanceHeartRate(
     val points: List<IntradayPoint>,
     val asOfMs: Long?,
     val staleSources: List<GlanceStaleSource>,
+    val offsetMinutes: Int? = null,
 )
 
 /**

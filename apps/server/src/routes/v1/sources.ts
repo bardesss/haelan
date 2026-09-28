@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { getSource, readSourceActivity, localDateInZone, ConfigError, DEFAULT_LIST, fallbackOrder } from '@haelan/core'
+import { getSource, readSourceActivity, localDateInZone, effectiveTimezone, ConfigError, DEFAULT_LIST, fallbackOrder } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { sendHashed } from './shared.ts'
 
@@ -34,7 +34,8 @@ export function registerSourceRoutes(app: FastifyInstance): void {
     // Today is the person's own civil date, not the server's: a source is judged against the
     // household's day, which is the same reason every derived row is keyed by a local date.
     const person = app.haelan.stores.people.get(personId)
-    const today = localDateInZone(app.haelan.now(), person?.timezone ?? 'UTC')
+    // The effective zone (the phone's when it leads), as the glance reads today.
+    const today = localDateInZone(app.haelan.now(), person === null ? 'UTC' : effectiveTimezone(person))
     const activity = new Map(
       readSourceActivity(app.haelan.instance.db, personId, { today }).map((a) => [a.sourceId, a]),
     )

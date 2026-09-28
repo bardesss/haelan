@@ -65,11 +65,11 @@ export function usePageControls(): PageControlsState {
   // The person's today, not the browser's. en-CA formats as YYYY-MM-DD, which is the shape every
   // local date in this system already has.
   const today = useMemo(() => {
-    const timezone = session.data?.timezone
+    const timezone = session.data?.effectiveTimezone
     const options: Intl.DateTimeFormatOptions = timezone === undefined ? {} : { timeZone: timezone }
     return new Intl.DateTimeFormat('en-CA', { ...options, year: 'numeric', month: '2-digit', day: '2-digit' })
       .format(new Date())
-  }, [session.data?.timezone])
+  }, [session.data?.effectiveTimezone])
 
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
   // Read on every render rather than held in state, and that is the point rather than an
@@ -89,7 +89,7 @@ export function usePageControls(): PageControlsState {
   // window the reader asked for, and this decides how much of that window the data can honestly
   // answer. Reversing them would clamp a window nobody had chosen yet.
   const history = useHistoryStart()
-  const timezone = session.data?.timezone
+  const timezone = session.data?.effectiveTimezone
   const from = timezone === undefined
     ? tabFrom
     : clampFromToHistory(tabFrom, to, history.data, timezone)

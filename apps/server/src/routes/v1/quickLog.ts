@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import {
-  ConfigError, localDateInZone, localDateOf, quickLogInstant, quickLogPresetsOf, readDayLog,
+  ConfigError, effectiveTimezone, localDateInZone, localDateOf, quickLogInstant, quickLogPresetsOf, readDayLog,
   requireDate, shiftLocalDate,
 } from '@haelan/core'
 import type { PersonRow } from '@haelan/core'
@@ -24,13 +24,14 @@ interface DateRangeQuery { from?: string, to?: string }
  * this is that file's sibling, one door down: the same plugin, the same guard, the same envelope.
  */
 export function registerQuickLogRoutes(app: FastifyInstance): void {
-  // The person's zone and today, as the glance route reads them, so the panel and the glance
-  // cannot disagree about which day it is.
-  function personAndToday(personId: string): { person: PersonRow, nowMs: number, today: string } {
+  // The person's effective zone and today, as the glance route reads them, so the panel and the
+  // glance cannot disagree about which day it is.
+  function personAndToday(personId: string): { person: PersonRow, zone: string, nowMs: number, today: string } {
     const person = app.haelan.stores.people.get(personId)
     if (person === null) throw new ConfigError('no such person')
     const nowMs = app.haelan.now()
-    return { person, nowMs, today: localDateInZone(nowMs, person.timezone) }
+    const zone = effectiveTimezone(person)
+    return { person, zone, nowMs, today: localDateInZone(nowMs, zone) }
   }
 
   // `field` names the caller's own parameter in the 400 (`day` for the POST body, `localDate` for
@@ -62,7 +63,7 @@ export function registerQuickLogRoutes(app: FastifyInstance): void {
     if (kind === '') throw new ConfigError('kind is empty')
     if (kind.length > MAX_PRESET_LENGTH) throw new ConfigError(`kind is longer than ${MAX_PRESET_LENGTH} characters`)
     const day = textField(body.day, 'day')
-    const { person, nowMs, today } = personAndToday(personId)
+    const { zone, nowMs, today } = personAndToday(personId)
     notAfterToday('day', day, today)
 
     // The main night that followed `day` (mapSessions.ts:55: a night is filed under the morning
@@ -72,7 +73,7 @@ export function registerQuickLogRoutes(app: FastifyInstance): void {
     const night = day === today ? null
       : oneNightPerDate(personQueryOf(request).sleepNights({ from: following, to: following }))[0] ?? null
     const at = quickLogInstant({
-      day, today, nowMs, timeZone: person.timezone, nightStartMs: night?.startMs ?? null,
+      day, today, nowMs, timeZone: zone, nightStartMs: night?.startMs ?? null,
     })
     const id = app.haelan.instance.events.add({ personId, kind, ...at })
     // localDate resolved the same way EventStore.listFor resolves every row's own (localDateOf on

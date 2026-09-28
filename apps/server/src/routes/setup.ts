@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
-import { setupStep, CONSENT_PATHS, SCOPES } from '@haelan/core'
+import { setupStep, CONSENT_PATHS, SCOPES, isKnownTimezone } from '@haelan/core'
 import type { ConsentPath } from '@haelan/core'
 import { setSessionCookie } from '../auth/cookie.ts'
 import { candidateFor, loopbackCandidates, redirectUriFor } from '../oauth/redirectUri.ts'
@@ -111,11 +111,5 @@ function portOf(hostHeader: string | undefined): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 4235
 }
 
-export function isKnownTimezone(timezone: string): boolean {
-  try {
-    new Intl.DateTimeFormat('en-CA', { timeZone: timezone })
-    return true
-  } catch {
-    return false
-  }
-}
+// Core's, so the wizard, Profile and the phone's zone header all refuse the same zones.
+export { isKnownTimezone }

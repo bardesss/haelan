@@ -19,6 +19,8 @@ const person = (over: Partial<PersonRow> = {}): PersonRow => ({
   sleepUseBaseline: true,
   quickLogEnabled: false,
   quickLogPresets: null,
+  currentTimezone: null,
+  followPhoneZone: true,
   builtMappingVersion: MAPPING_VERSION,
   builtDerivationVersion: DERIVATION_VERSION,
   ...over,

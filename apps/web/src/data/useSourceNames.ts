@@ -173,7 +173,7 @@ export function useSourceNames(): SourceNames {
   // The person's today, for the year rule in sourceLabel: read in their zone the way the status
   // control and the Settings card read it. A string, so the memo below only rebuilds when the
   // person's day actually changes.
-  const today = localToday(session.data?.timezone)
+  const today = localToday(session.data?.effectiveTimezone)
   // Memoised on the query's own data reference, not rebuilt as a fresh object literal every
   // render: `nameOf` sits in IntradayHeartRate's `build` useCallback deps, which useChart keys its
   // init/dispose effect on, so a fresh function here (even one that reads the same names) disposed

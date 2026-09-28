@@ -46,7 +46,7 @@ export function useGlanceCalendar(month: string | null): {
 } {
   const session = useSession()
   const personId = session.data?.personId
-  const finished = month !== null && month < localToday(session.data?.timezone).slice(0, 7)
+  const finished = month !== null && month < localToday(session.data?.effectiveTimezone).slice(0, 7)
   const query = useQuery({
     queryKey: glanceCalendarKey(personId ?? '', month ?? ''),
     // The same race useSeries and useSourceNames guard: asking before the session resolves would

@@ -52,6 +52,14 @@ export interface IntradayPoint {
 export interface IntradayResult {
   points: IntradayPoint[]
   reduction: Thinned<IntradayPoint>['reduction']
+  /**
+   * The UTC offset, in minutes, the span was recorded under: the offset of its first reading, or
+   * null when there are no readings. One per result, never one per point, so a chart that draws a
+   * finished day in the time it was recorded keeps its clock labels monotonic. A day recorded
+   * under two offsets (a flight, a daylight saving change) takes the one in force at its first
+   * reading, which is the offset its local midnight was reckoned in.
+   */
+  offsetMinutes: number | null
 }
 
 /**
@@ -170,10 +178,10 @@ function readWindow(db: DbOrTx, input: {
   const sourceRef = input.sourceId === undefined ? undefined : keys.sourceRefIfKnown(input.sourceId)
   if (personRef === undefined || metricRef === undefined
     || (input.sourceId !== undefined && sourceRef === undefined)) {
-    return { points: [], reduction: null }
+    return { points: [], reduction: null, offsetMinutes: null }
   }
 
-  const rows = db.select().from(samples).where(and(
+  const kept = db.select().from(samples).where(and(
     eq(samples.personRef, personRef),
     eq(samples.metricRef, metricRef),
     gte(samples.utcMs, windowStart),
@@ -181,10 +189,16 @@ function readWindow(db: DbOrTx, input: {
     sourceRef === undefined ? undefined : eq(samples.sourceRef, sourceRef),
   )).all()
     .filter((row) => input.keep(row))
-    // Back into names for the rest of this function: a point carries the source id a client
-    // charts by and a correction is keyed on, and its own `agg` decides which of min, mean and
-    // max it fills in.
-    .map((row) => keys.sampleText(row))
+  // The first reading's own offset, read before the rows lose it to sampleText below. Only rows
+  // with a value count, the same rows the loop below turns into points, so the offset always
+  // belongs to a reading the chart actually draws.
+  const first = kept.reduce<(typeof kept)[number] | null>(
+    (best, row) => (row.value !== null && (best === null || row.utcMs < best.utcMs) ? row : best), null)
+  const offsetMinutes = first === null ? null : first.tzOffsetMinutes
+  // Back into names for the rest of this function: a point carries the source id a client
+  // charts by and a correction is keyed on, and its own `agg` decides which of min, mean and
+  // max it fills in.
+  const rows = kept.map((row) => keys.sampleText(row))
 
   // Read here rather than taken as a parameter, the same choice readSessions and readSleepNights
   // made: every caller wants the same answer, and one small indexed read (few rows, scoped by
@@ -251,7 +265,7 @@ function readWindow(db: DbOrTx, input: {
   }
 
   const sourceIds = [...bySource.keys()]
-  if (sourceIds.length === 0) return { points: [], reduction: null }
+  if (sourceIds.length === 0) return { points: [], reduction: null, offsetMinutes: null }
 
   const requested = input.points ?? DEFAULT_POINTS
   // Divided across the sources present, so a caller asking for 500 points still gets at most 500
@@ -319,5 +333,6 @@ function readWindow(db: DbOrTx, input: {
     // Aggregate across sources rather than per source: a client asking "was this thinned" wants
     // one answer for the day, and null still means none of the sources needed it.
     reduction: anyThinned ? { method: 'minmax', from: totalFrom, to: totalTo } : null,
+    offsetMinutes,
   }
 }

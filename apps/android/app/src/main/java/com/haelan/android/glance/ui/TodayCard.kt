@@ -100,7 +100,7 @@ internal fun TodayCard(
             }
         }
         if (day.heartRate.points.isNotEmpty()) {
-            val window = traceWindow(today, finished, text.zone)
+            val window = traceWindow(today, finished, text.zone, day.heartRate.offsetMinutes)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 CardLabel(stringResource(if (finished) R.string.glance_today_heart_rate_whole_day else R.string.glance_today_heart_rate_since_midnight))
                 HeartRateTrace(day.heartRate.points, window.startMs, window.endMs, day.workouts, words.traceDescription(day.heartRate, finished))

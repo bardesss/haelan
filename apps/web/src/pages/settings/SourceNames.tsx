@@ -166,7 +166,7 @@ export function SourceNames() {
 
   // The person's today, for the status panel switch's default below: the same derivation the
   // panel itself makes, so the two agree about which day "the last thirty days" ends on.
-  const today = localToday(session.data?.timezone)
+  const today = localToday(session.data?.effectiveTimezone)
 
   return (
     <>

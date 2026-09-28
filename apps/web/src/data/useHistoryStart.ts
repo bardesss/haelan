@@ -12,6 +12,7 @@ import type { HistoryBounds } from '../controls/range.js'
 // cards read only these two fields.
 interface CursorsResponse {
   historyStartMs: number | null
+  historyStartLocalDate?: string | null
   googleConnected: boolean
   items?: { dataTypeId: string, lastWindowEndMs: number | null, lastIngestAtMs: number | null }[]
 }
@@ -47,6 +48,9 @@ export function normalizeHistoryStart(body: CursorsResponse): PhoneHistory {
     .filter((at): at is number => typeof at === 'number')
   return {
     historyStartMs: typeof body.historyStartMs === 'number' ? body.historyStartMs : null,
+    // Only a real date passes: anything else falls back to reading the instant in the zone.
+    historyStartLocalDate: typeof body.historyStartLocalDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.historyStartLocalDate)
+      ? body.historyStartLocalDate : null,
     googleConnected: body.googleConnected === true,
     lastIngestAtMs: ingests.length > 0 ? Math.max(...ingests) : null,
   }

@@ -75,7 +75,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             end = runEnd,
             post = { path, payload ->
                 withContext(Dispatchers.IO) {
-                    InstanceClient.post(engineSession.server, path, payload, engineSession.cookie) { }
+                    InstanceClient.ingest(engineSession.server, path, payload, engineSession.cookie) { }
                 }
             },
             cursorEnds = cursorEnds,

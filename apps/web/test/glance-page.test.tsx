@@ -26,7 +26,7 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
 const TODAY = '2026-09-23'
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480, sleepUseBaseline: true,
  quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',

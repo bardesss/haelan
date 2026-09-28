@@ -236,7 +236,7 @@ describe('IntradayHeartRate tooltip', () => {
 
   function mount(sourceName: string) {
     const session: Session = {
-      personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC',
+      personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', effectiveTimezone: 'UTC', currentTimezone: null, followPhoneZone: true,
       birthDate: null, sex: null,
       sleepTargetMinutes: 480,
       sleepUseBaseline: true,

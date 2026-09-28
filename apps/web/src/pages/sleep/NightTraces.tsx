@@ -79,7 +79,9 @@ function NightTrace({ metric, night, chosenSource }: {
   return (
     <div className="night-trace">
       <Card span={12} label={label} basis={basis}>
-        <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={label} metric={metric} />
+        {/* Read in the offset the night began under, so its clock times are the night's own. */}
+        <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={label} metric={metric}
+          offsetMinutes={night.startOffsetMinutes} />
       </Card>
     </div>
   )

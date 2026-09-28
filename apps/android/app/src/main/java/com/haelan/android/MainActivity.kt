@@ -516,7 +516,7 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     private suspend fun sendReleased(released: List<Pair<ExerciseSessionRecord, ExerciseRoute>>): Boolean {
         if (released.isEmpty()) return true
         val outcome = SyncEngine.uploadReleased(engineSession(), packageName, prefs(), released) { path, payload ->
-            withContext(Dispatchers.IO) { InstanceClient.post(server, path, payload, cookie) { } }
+            withContext(Dispatchers.IO) { InstanceClient.ingest(server, path, payload, cookie) { } }
         }
         if (outcome is InstanceClient.Outcome.Failed) {
             val error = outcome.error
