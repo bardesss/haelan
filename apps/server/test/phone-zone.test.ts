@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { DERIVATION_VERSION, insertSample, peopleNeedingRebuild, samplePoint, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
@@ -130,6 +130,67 @@ describe('read-time today follows the effective zone', () => {
   })
 })
 
+describe('the rest of read-time today follows the effective zone too', () => {
+  it('the calendar accepts the month the phone is already in, and refuses it at home', async () => {
+    const { h, token } = await start()
+    // 22:00 on the 30th at home, already 05:00 on 1 October in Tokyo.
+    h.clock.nowMs = Date.parse('2026-09-30T20:00:00Z')
+    expect((await get(h, token, '/api/v1/p/p1/glance/calendar?month=2026-10')).statusCode).toBe(400)
+    h.app.haelan.stores.people.setCurrentTimezone('p1', 'Asia/Tokyo')
+    expect((await get(h, token, '/api/v1/p/p1/glance/calendar?month=2026-10')).statusCode).toBe(200)
+  })
+
+  // A source that reported every day up to the 12th: fourteen silent days is still reporting at
+  // home (the 26th), fifteen is stale in Tokyo (already the 27th). Only today moves between the two.
+  function seedQuietWatch(h: Harness) {
+    const db = h.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    for (let d = 1; d <= 20; d += 1) {
+      const localDate = new Date(Date.parse('2026-09-12T00:00:00Z') - (20 - d) * 86_400_000).toISOString().slice(0, 10)
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate, metric: 'steps', agg: 'sum', source: 'w1', value: 8000, coverage: 1, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+  }
+  const watchStatus = async (h: Harness, token: string) =>
+    (await get(h, token, '/api/v1/p/p1/sources?activity=1')).json().items.find((s: { id: string }) => s.id === 'w1').status
+  const panelStale = async (h: Harness, token: string) =>
+    (await get(h, token, '/api/status')).json().connections
+      .flatMap((c: { devices: { sourceId: string, stale: boolean }[] }) => c.devices)
+      .find((d: { sourceId: string }) => d.sourceId === 'w1')?.stale
+
+  it('the sources listing judges a quiet source against the effective today', async () => {
+    const { h, token } = await start()
+    seedQuietWatch(h)
+    expect(await watchStatus(h, token)).toBe('reporting')
+    h.app.haelan.stores.people.setCurrentTimezone('p1', 'Asia/Tokyo')
+    expect(await watchStatus(h, token)).toBe('stale')
+  })
+
+  it('the status panel judges it against the effective today', async () => {
+    const { h, token } = await start()
+    seedQuietWatch(h)
+    expect(await panelStale(h, token)).toBe(false)
+    h.app.haelan.stores.people.setCurrentTimezone('p1', 'Asia/Tokyo')
+    expect(await panelStale(h, token)).toBe(true)
+  })
+
+  it('a mood can be set and cleared for the day the phone is already in', async () => {
+    const { h, token } = await start()
+    const mood = (method: 'PUT' | 'DELETE') => h.app.inject({
+      method, url: '/api/v1/p/p1/moods/2026-09-27',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      ...(method === 'PUT' ? { payload: { score: 4 } } : {}),
+    })
+    expect((await mood('PUT')).statusCode).toBe(400)
+    expect((await mood('DELETE')).statusCode).toBe(400)
+    h.app.haelan.stores.people.setCurrentTimezone('p1', 'Asia/Tokyo')
+    expect((await mood('PUT')).statusCode).toBe(200)
+    expect((await mood('DELETE')).statusCode).toBe(200)
+  })
+})
+
 describe('recorded times stay where they were recorded', () => {
   it('a finished day\'s heart rate carries the offset it was recorded under, whatever zone it is viewed from', async () => {
     const { h, token } = await start()
@@ -160,6 +221,38 @@ describe('recorded times stay where they were recorded', () => {
     const body = (await get(h, token, '/api/v1/p/p1/companion/cursors')).json()
     expect(body.historyStartMs).toBe(Date.parse('2026-09-21T02:30:00Z'))
     expect(body.historyStartLocalDate).toBe('2026-09-20')
+  })
+})
+
+describe('recordPhoneZone keeps the upload safe from the header', () => {
+  it('trims the zone before storing it', async () => {
+    const { h, token } = await start()
+    expect((await ingest(h, token, '  Asia/Tokyo  ')).statusCode).toBe(200)
+    expect(h.app.haelan.stores.people.get('p1')!.currentTimezone).toBe('Asia/Tokyo')
+  })
+
+  it('refuses an unknown zone quietly, before the store would have to throw over it', async () => {
+    const { h, token } = await start()
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect((await ingest(h, token, 'Mars/Olympus_Mons')).statusCode).toBe(200)
+      expect(logged).not.toHaveBeenCalled()
+    } finally {
+      logged.mockRestore()
+    }
+  })
+
+  it('still answers 200 when storing the zone fails', async () => {
+    const { h, token } = await start()
+    const store = vi.spyOn(h.app.haelan.stores.people, 'setCurrentTimezone').mockImplementation(() => { throw new Error('disk full') })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect((await ingest(h, token, 'Asia/Tokyo')).statusCode).toBe(200)
+      expect(logged).toHaveBeenCalledOnce()
+    } finally {
+      store.mockRestore()
+      logged.mockRestore()
+    }
   })
 })
 
