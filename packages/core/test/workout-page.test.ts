@@ -340,7 +340,9 @@ describe('readWorkoutPage', () => {
     seedDaily(SUBJECT_DATE, 'active_minutes_vigorous', 'sum', 25)
     const { day } = readWorkoutPage(q(), input('subject'))!
     expect(day.steps).toMatchObject({ metric: 'steps', value: 12_340 })
-    expect(day.activeMinutes).toMatchObject({ metric: 'active_minutes', value: 55 })
+    // Up, the direction of the three levels it sums: 'active_minutes' is no catalogue id, and read
+    // as its own name it would come out neutral and never be judged.
+    expect(day.activeMinutes).toMatchObject({ metric: 'active_minutes', value: 55, direction: 'up' })
     expect(day.otherWorkouts.map((w) => w.id)).toEqual(['commute'])
   })
 })

@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import { ConfigError, judge, metricSpec, PersonQuery, requireDate, standingOf } from '@haelan/core'
+import { ConfigError, FIGURE_METRIC_ALIAS, judge, metricSpec, PersonQuery, requireDate, standingOf } from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
 
@@ -165,12 +165,12 @@ export function roundSeriesResult(metric: string, result: SeriesResult): SeriesR
 
 /**
  * The catalogue metric a figure is rounded as, for the figures whose own metric is not a
- * catalogue id. Active minutes is the three activity levels summed, all minutes metrics sharing
- * one precision, so it rounds as one of them does. The recovery index is absent on purpose: it is
- * already an integer, and roundMetricValue passes a metric the catalogue does not know through
+ * catalogue id: core's FIGURE_METRIC_ALIAS, the same map pageFigureOf judges by, so a figure is
+ * never judged as one metric and rounded as another. The recovery index is absent on purpose: it
+ * is already an integer, and roundMetricValue passes a metric the catalogue does not know through
  * unchanged, so it needs no entry and no second rounding rule.
  */
-export const ROUNDED_AS: Readonly<Record<string, string>> = { active_minutes: 'active_minutes_light' }
+export const ROUNDED_AS: Readonly<Record<string, string>> = FIGURE_METRIC_ALIAS
 
 /** Rounds a band's three numbers to `metric`'s catalogue precision: a figure's own band, each strip day's, and each calendar day's alike. */
 export function roundBand(metric: string, band: GlanceBaseline | null): GlanceBaseline | null {

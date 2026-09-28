@@ -163,6 +163,34 @@ describe('readNightPage', () => {
     expect(page.nav).toEqual({ previous: '2026-09-04', next: '2026-09-08' })
   })
 
+  it('carries the day before\'s active minutes, judged the way up, and the workouts done on it', () => {
+    seedNight(NIGHT, {})
+    seedDaily('2026-09-05', 'active_minutes_light', 'sum', 30)
+    seedDaily('2026-09-05', 'active_minutes_vigorous', 'sum', 25)
+    for (const [id, localDate] of [['evening-run', '2026-09-05'], ['next-morning', NIGHT]] as const) {
+      const startMs = at(localDate, '07:00')
+      test.db.insert(sessions).values({
+        id, personId: 'p1', sourceId: 'watch', kind: 'exercise', externalId: id,
+        startMs, startOffsetMinutes: OFFSET, endMs: startMs + 30 * 60_000, endOffsetMinutes: OFFSET, localDate, rawPayloadId: null,
+        attrs: JSON.stringify({ exerciseType: 'RUNNING' }),
+      }).run()
+    }
+    const { day } = readNightPage(q(), input(NIGHT))!
+    // Up, the direction of the three levels it sums: 'active_minutes' is no catalogue id, and read
+    // as its own name it would come out neutral and never be judged.
+    expect(day.activeMinutes).toMatchObject({ metric: 'active_minutes', value: 55, direction: 'up' })
+    expect(day.workouts.map((w) => w.id)).toEqual(['evening-run'])
+  })
+
+  it('carries the morning\'s recovery index beside the night', () => {
+    seedNight(NIGHT, {})
+    const { recovery } = readNightPage(q(), input(NIGHT))!.morning
+    expect(recovery.index).toMatchObject({ metric: 'recovery_index' })
+    // The morning after the night, so its strip ends on the night's own date, not the day before.
+    expect(recovery.index.strip).toHaveLength(7)
+    expect(recovery.index.strip.at(-1)!.localDate).toBe(NIGHT)
+  })
+
   it('pairs a night begun after midnight with the day before its wake date', () => {
     // Which date a night is filed under is ingest's decision (sessions.local_date); this read only pairs it.
     seedNight(NIGHT, { startLocal: '00:30', endLocal: '07:10' })

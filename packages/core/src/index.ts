@@ -273,7 +273,7 @@ export type {
 } from './query/workoutPage.ts'
 export { WORKOUT_BAND_MIN, WORKOUT_STRIP } from './query/workoutPage.ts'
 export type { PageFigure, Judged } from './query/pageFigure.ts'
-export { judge } from './query/pageFigure.ts'
+export { FIGURE_METRIC_ALIAS, judge } from './query/pageFigure.ts'
 export type { NightTrace, NightTraceStat } from './query/nightTraces.ts'
 export type { ZeroLine } from './api/sleepBalance.ts'
 

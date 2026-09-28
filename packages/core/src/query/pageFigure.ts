@@ -35,8 +35,16 @@ export function usualOf(values: readonly number[], minN: number): GlanceBaseline
   return { center, low: center - spread, high: center + spread, thin: n < minN }
 }
 
+/**
+ * The catalogue metric a figure is described by, for the figures whose own metric is not a
+ * catalogue id. Active minutes is the three activity levels summed, all sharing one precision and
+ * one direction (up), so it reads as one of them does. One map for both the judging here and the
+ * server's rounding, so the precision a figure is judged at and the one it is sent at cannot part.
+ */
+export const FIGURE_METRIC_ALIAS: Readonly<Record<string, string>> = { active_minutes: 'active_minutes_light' }
+
 export function pageFigureOf(figure: GlanceFigure, withStrip: boolean): PageFigure {
-  const spec = METRICS[figure.metric]
+  const spec = METRICS[FIGURE_METRIC_ALIAS[figure.metric] ?? figure.metric]
   const direction = spec?.direction ?? 'neutral'
   return {
     metric: figure.metric, value: figure.value, unit: figure.unit, precision: spec?.precision ?? 0, direction,
