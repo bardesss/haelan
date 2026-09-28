@@ -121,8 +121,11 @@ class GlanceRepository(
     /** Today's glance as last stored, so going back to today draws it without the disk; guarded by [lock]. */
     private var today: GlanceStore.Kept? = null
 
-    /** The number of the latest today read started, and of the newest one kept; guarded by [lock]. */
-    private var todayStarted = 0
+    /**
+     * The call number of the newest today answer kept; guarded by [lock]. A today read is ordered
+     * by its call's number, which [start] takes on the calling thread, so of two reads started
+     * moments apart the later one's answer is kept whichever IO thread gets to the lock first.
+     */
     private var todayKept = 0
 
     /** Set by [close]: nothing is kept after it, in memory or on disk; guarded by [lock]. */
@@ -219,13 +222,14 @@ class GlanceRepository(
         readToday(gen)
     }
 
+    /** Reads today for call [gen], whose number orders its answer against every other today read. */
     private fun readToday(gen: Int) {
-        val (etag, seq) = synchronized(lock) { today?.etag to ++todayStarted }
+        val etag = synchronized(lock) { today?.etag }
         when (val read = reads.today(etag)) {
             is GlanceRead.Fresh -> {
                 val glance = parseOrNull(read.json, "today") ?: return unreachable(gen)
                 val kept = GlanceStore.Kept(glance, read.json, read.etag, clock())
-                keep(kept, seq)
+                keep(kept, gen)
                 emit(gen) {
                     GlanceUiState(
                         shownDay = null, glance = glance, fetchedAtMs = kept.fetchedAtMs,
@@ -238,7 +242,7 @@ class GlanceRepository(
                 // Only sent with an ETag, so there is a kept glance; the store learns the new instant
                 // too, so "Shown from" after a reopen is the last time the instance was reached.
                 val kept = synchronized(lock) { today }?.copy(fetchedAtMs = now)
-                if (kept != null) keep(kept, seq)
+                if (kept != null) keep(kept, gen)
                 // The glance is confirmed current, so whatever an earlier answer said about the
                 // instance (too old, refused) no longer holds: the problem is the glance's own again.
                 emit(gen) {
@@ -306,15 +310,15 @@ class GlanceRepository(
     }
 
     /**
-     * Today's glance, in memory and on disk, from today read number [seq]. Nothing after [close], and
+     * Today's glance, in memory and on disk, from the today read of call [gen]. Nothing after [close], and
      * nothing older than an answer already kept. The disk write is inside the lock so the file's
      * order is memory's order; it is one small file, and it is what makes close-then-delete final.
      * A store that refuses costs only the instant open.
      */
-    private fun keep(kept: GlanceStore.Kept, seq: Int) {
+    private fun keep(kept: GlanceStore.Kept, gen: Int) {
         synchronized(lock) {
-            if (closed || seq < todayKept) return
-            todayKept = seq
+            if (closed || gen < todayKept) return
+            todayKept = gen
             today = kept
             if (!store.save(server, personId, kept.etag, kept.fetchedAtMs, kept.json)) {
                 log("today's glance could not be kept on the device")

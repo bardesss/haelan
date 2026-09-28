@@ -424,6 +424,27 @@ class GlanceRepositoryTest {
     }
 
     @Test
+    fun `of two today reads the later call's answer is kept, whichever thread reaches the instance first`() {
+        val queue = QueueDispatcher()
+        repository.close()
+        repository = repository(queue)
+        // The later call's IO task runs before the earlier one's even starts: on IO that is two
+        // threads, and nothing orders them. The later call is answered v3, the earlier one v2.
+        reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v3\"")
+        reads.todayAnswers += GlanceRead.Fresh(emptyJson, "\"v2\"")
+        repository.refresh()
+        repository.refresh()
+        queue.runLast()
+        queue.runFirst()
+
+        assertEquals("\"v3\"", checkNotNull(store.load(server, "p1")).etag)
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.refresh()
+        queue.runFirst()
+        assertEquals("\"v3\"", reads.etagsSent.last())
+    }
+
+    @Test
     fun `a day that turns out to be today is shown as today`() {
         // nav.next from yesterday can name today; its answer is not finished, as the web reads it.
         reads.answerDay("2026-08-20", GlanceRead.Fresh(todayJson, null))
