@@ -611,12 +611,17 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    selector to query under. */
 .workout-tiles { display: contents; }
 .night-tiles { display: contents; }
-/* NightTraces.tsx wraps each metric's own Card in this class, one wrapper per card rather than one
-   around the group the way .night-tiles is above: the tests count `.night-trace` elements to
-   assert how many of the three metrics rendered a card, and a single group wrapper could not tell
-   that apart from a group of one. `display: contents` for the same reason as .night-tiles: the
-   wrapper must not become a grid item itself, only its `Card` child should. */
-.night-trace { display: contents; }
+/* NightTraces.tsx's rows inside the night card, under the hypnogram (the approved mockup's "The
+   night"): a short label and the night's extreme in a fixed left column, the compact trace beside
+   it. On a phone the column stacks over the chart, so the chart keeps the card's full width. */
+.night-traces { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+.night-trace { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: var(--space-3); align-items: center; }
+.night-trace-head { min-width: 0; }
+.night-trace-chart { min-width: 0; }
+@media (max-width: 620px) {
+  .night-trace { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+}
+.night-traces-basis { margin: 0; font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-tight); }
 
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
    the same card - each is its own Card, this only styles the table each one wraps. */
@@ -746,7 +751,7 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* The dashboard's compact hypnogram: its totals as one faint line under the stage blocks. */
 .hypnogram-totals.is-compact { margin: 0; color: var(--text-faint); }
 
-/* NightStages.tsx's own nap line, beneath the hypnogram and above NightExcludedSessions' own
+/* NightThrough.tsx's nap line, beneath the stages and traces and above NightExcludedSessions' own
    .chart-note - a step up from .hypnogram-totals' caption size, since this is body text stating a
    fact about the night rather than a chart's own small print. */
 .night-naps { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
@@ -760,10 +765,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .night-legend-key[data-stage="light"] { background: var(--chart-stage-light); }
 .night-legend-key[data-stage="rem"] { background: var(--chart-stage-rem); }
 .night-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
-/* NightTraces.tsx's line above each chart on the night page: the night's extreme, then how it sits
-   against the usual, in FigureRow's verdict size. */
-.night-trace-summary { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
-.night-trace-verdict { margin: 0 0 var(--space-1); font-size: var(--font-size-xs); color: var(--text-muted); }
+/* NightTraces.tsx's line under each row's label: the night's extreme and when. */
+.night-trace-summary { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 
 /* NightSessions.tsx's own list, task 7's exclude-per-session card, last in the night page's grid.
    A plain list rather than a table: each row is an id plus one control or one status word, not
@@ -1278,7 +1281,7 @@ button.week-bar-slot { cursor: pointer; }
 .chart-table thead th { position: sticky; top: 0; background: var(--surface-card); color: var(--text-faint); }
 
 /* .grid > * reaches every ordinary grid item, but not a Card sitting one level under a
-   `display: contents` wrapper (.workout-tiles, .night-tiles, .night-trace above): display:
+   `display: contents` wrapper (.workout-tiles, .night-tiles above): display:
    contents changes which boxes become grid items, but a CSS combinator still walks the real DOM,
    where the Card is a child of the wrapper, not of .grid itself - so its own span (3, here) never
    collapsed to 12 below this breakpoint. Latent on WorkoutTiles, whose labels all happened to fit
@@ -1286,16 +1289,14 @@ button.week-bar-slot { cursor: pointer; }
    Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
    375px viewport (measured: 424px scrollWidth in a 375px viewport, and 651px in the 621px band).
 
-   Three wrappers listed, but only one of them ever had a card to collapse. .night-tiles is the
+   Two wrappers listed, and only one of them ever had a card to collapse. .night-tiles is the
    real one, the overflow above. .workout-tiles was latent: same shape, `span={3}` cards, and its
-   labels happened to fit. .night-trace is neither - NightTraces.tsx renders `<Card span={12}>`
-   inside it, already the full width this rule would set - so `.night-trace > *` is a no-op today
-   and is kept only so the list covers every `display: contents` wrapper in the file rather than
-   the subset that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
+   labels happened to fit. Both are listed so the list covers every `display: contents` wrapper in
+   the file rather than the subset that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
    the wrappers out of this stylesheet and fails if one of them is missing from the list below,
    including the fourth nobody has written yet. */
 @media (max-width: 900px) {
-  .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; }
+  .grid > *, .workout-tiles > *, .night-tiles > * { grid-column: span 12 !important; }
   /* Where every card spans the row, a week bar is a finger's target: the bars take the row's full
      width under the figure, seven 44px slots at the narrowest phone. */
   .dash-week-row { grid-template-columns: minmax(0, 1fr); }

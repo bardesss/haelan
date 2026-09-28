@@ -17,8 +17,8 @@ import type { Night } from '../../data/useNights.js'
  *
  * The session id is what is shown, not a formatted time range: it is what the person's own data
  * calls the recording (a sync id from whichever source produced it), and this card's job is to
- * let a reader name the right one to exclude, not to re-derive a clock time NightStages and
- * NightTraces already show for the night as a whole.
+ * let a reader name the right one to exclude, not to re-derive a clock time the night card
+ * (NightThrough.tsx) already shows for the night as a whole.
  *
  * `night.sessionIds` and `night.excludedSessions` are disjoint by construction - readSleepNights
  * (packages/core/src/query/sleepNights.ts) assembles the kept night from one set of rows and

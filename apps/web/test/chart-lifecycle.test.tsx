@@ -184,8 +184,8 @@ function stubWorkoutFetch(): () => void {
   return () => { globalThis.fetch = original }
 }
 
-// A night carrying one staged segment (so NightStages mounts a Hypnogram) and, below, a real
-// heart_rate reading pinned to its own source (so NightTraces mounts one IntradayHeartRate) -
+// A night carrying one staged segment (so the night card mounts a Hypnogram) and a real
+// heart_rate reading pinned to its own source (so its traces mount one IntradayHeartRate) -
 // section 4's own two chart-bearing cards, the night page's equivalent of WORKOUT_SESSION's zone
 // bar and trace above.
 const NIGHT_FIXTURE = {
@@ -461,13 +461,13 @@ describe('the charts across a rerender', () => {
 
   // M8c's own missing guard: the night page carries up to four charts (one Hypnogram plus up to
   // three IntradayHeartRate traces, NightTraces.tsx's own NIGHT_TRACE_METRICS), and this branch
-  // added it without a chart-lifecycle case for any of them. The reviewer traced NightStages' own
-  // `segments` (a useMemo keyed on `night`, itself a stable object once useNights' query settles)
-  // and NightTrace's own `trace.points` (identically memo-free but sourced from a settled,
-  // staleTime: Infinity query) and believes today's page is clean - this is the guard that would
-  // have caught it if it were not, the same shape the three cases above already prove out on
-  // the Dashboard, Recovery and the workout page.
-  it('are not disposed and re-initialised on the night page either, where its strips, NightStages and NightTraces live', async () => {
+  // added it without a chart-lifecycle case for any of them. Since M10a-2 the night card
+  // (NightThrough.tsx) holds both: its `segments` are a useMemo keyed on `night`, and each trace's
+  // usual band a useMemo keyed on its baseline, while `trace.points` comes from a settled,
+  // staleTime: Infinity query. This is the guard that would catch any of them rebuilt per render,
+  // the same shape the three cases above already prove out on the Dashboard, Recovery and the
+  // workout page.
+  it('are not disposed and re-initialised on the night page either, where its strips, stages and traces live', async () => {
     const restore = stubNightFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
@@ -485,7 +485,7 @@ describe('the charts across a rerender', () => {
     // segment) and the heart_rate trace (pinned to the night's own source, which answered real
     // points): seven charts on this fixture, none absent. spo2 and hrv both pin to 'watch', find
     // nothing, and fall back to every other source finding nothing either, so they stay absent the
-    // same way NightTraces' own "renders a card only for the metrics something actually recorded"
+    // same way NightTraces' own "renders a row only for the metrics something actually recorded"
     // test already covers - this fixture does not need all three to exercise the same identity
     // chain a fourth trace would.
     expect(container!.querySelector('.night-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()

@@ -16,30 +16,30 @@ import type { NightTracesFigures } from '../NightTraces.js'
 const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
 
 /**
- * The night itself: its stages across the night, each stage's time and share of it, the naps and
- * excluded sessions beside it, then the heart rate, HRV and blood oxygen traces over the same span,
- * each against its usual range.
+ * The night itself: its stages across the night, each stage's time and share of it, then the heart
+ * rate, HRV and blood oxygen traces over the same span, each against its usual range, then the naps
+ * and excluded sessions. One card, the approved mockup's "The night".
  *
- * The segments are built the way NightStages built them: raw milliseconds from the night's start,
- * rounded once by stageTotals rather than per boundary (NightStages.tsx's own comment has why).
- * The shares are the server's (`stagePercent`), never divided out here; awake has none, since the
+ * The segments are raw milliseconds from the night's start, rounded once by stageTotals rather than
+ * per boundary: rounding each boundary first compounds into minutes of drift against
+ * derive/sleep.ts's own single-rounded figure (Sleep.tsx's comment on the same conversion). The
+ * shares are the server's (`stagePercent`), never divided out here; awake has none, since the
  * server gives the three sleep stages a share of the sleep and awake is not part of it. A stage the
  * server sent no share for reads its minutes alone.
  *
- * The traces sit after this card as cards of their own, full width in the same grid: each already
- * carries its own label, basis line and error state, and nesting three cards inside a fourth would
- * draw a frame inside a frame.
+ * The hypnogram is absent, not an empty chart, on a night with no staged segments, which would read
+ * as a night with no deep, light or REM sleep at all; the card stays for the traces and naps.
  */
 export function NightThrough({ page, chosenSource }: { page: NightPageData, chosenSource: string | null }) {
   const { t, i18n } = useTranslation()
-  const { night, stagePercent, traces } = page
+  const { night, stagePercent, traces, figures: { awake } } = page
 
   const segments = useMemo(() => night.segments
     .map((s) => ({ stage: stageOf(s.stage), startMs: s.startMs - night.startMs, endMs: s.endMs - night.startMs }))
     .filter((s): s is { stage: Stage, startMs: number, endMs: number } => s.stage !== null),
   [night])
 
-  // Keyed by metric id, the spelling NightTraces keys its cards by. Memoised on the payload: each
+  // Keyed by metric id, the spelling NightTraces keys its rows by. Memoised on the payload: each
   // trace's baseline object reaches its chart's band, which rebuilds on a new reference.
   const figures = useMemo<NightTracesFigures>(
     () => ({ heart_rate: traces.heartRate, hrv: traces.hrv, spo2: traces.spo2 }), [traces])
@@ -56,36 +56,41 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
     return { stage, text: `${t(STAGE_LABEL_KEY[stage])} ${figure}` }
   })
 
+  // The awake lane counts AWAKE segments only; the night's awake figure also counts restless time and
+  // the gaps between its pieces (derive/sleep.ts). When the two read differently, the note says why,
+  // so the legend and the figure elsewhere on the page do not simply disagree. A comparison of two
+  // displayed minutes, not a judgement of either.
+  const awakeLane = minutesByStage.get('awake')
+  const awakeDiffers = awakeLane !== undefined && awake.value !== null && Math.round(awake.value) !== awakeLane
+
   const bedMinutes = inWindow(
     localMinutesOf(night.localDate, night.startMs, night.startOffsetMinutes), WIDE_WINDOW)
-  // At the wake-side offset, the one in force when a nap started (NightStages.tsx's own comment).
+  // At the wake-side offset, the one in force when a nap started: a nap shares its date with the
+  // night's wake, not its bedtime (schedule.ts's comment on napInWindow).
   const napTimes = night.naps.map((at) => formatClock(localMinutesOf(night.localDate, at, night.endOffsetMinutes)))
   const label = t('sleep.night.through.label')
 
   return (
-    <>
-      <Card span={12} label={label}>
-        {segments.length > 0 && (
-          <>
-            <Hypnogram segments={segments} startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
-              startClock={bedMinutes} label={label} totals={false} />
-            <ul className="night-legend">
-              {legend.map(({ stage, text }) => (
-                <li key={stage}><span className="night-legend-key" data-stage={stage} aria-hidden="true" />{text}</li>
-              ))}
-            </ul>
-          </>
-        )}
-        {/* An unstaged night still has its naps and its excluded sessions: the card stays, with
-            Hypnogram's absence sentence left out along with the chart (NightStages.tsx's rule). */}
-        <p className="night-naps">
-          {night.naps.length === 0
-            ? t('sleep.night.naps.none')
-            : `${t('sleep.night.naps.list')} ${napTimes.join(', ')}`}
-        </p>
-        <NightExcludedSessions count={night.excludedSessions.length} />
-      </Card>
+    <Card span={12} label={label}>
+      {segments.length > 0 && (
+        <>
+          <Hypnogram segments={segments} startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
+            startClock={bedMinutes} label={label} totals={false} />
+          <ul className="night-legend">
+            {legend.map(({ stage, text }) => (
+              <li key={stage}><span className="night-legend-key" data-stage={stage} aria-hidden="true" />{text}</li>
+            ))}
+          </ul>
+          {awakeDiffers && <p className="hypnogram-totals">{t('charts.hypnogram.awakeNote')}</p>}
+        </>
+      )}
       <NightTraces night={night} chosenSource={chosenSource} traces={figures} />
-    </>
+      <p className="night-naps">
+        {night.naps.length === 0
+          ? t('sleep.night.naps.none')
+          : `${t('sleep.night.naps.list')} ${napTimes.join(', ')}`}
+      </p>
+      <NightExcludedSessions count={night.excludedSessions.length} />
+    </Card>
   )
 }

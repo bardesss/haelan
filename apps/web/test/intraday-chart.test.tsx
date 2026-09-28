@@ -132,6 +132,7 @@ function optionFor(props: {
   endMs?: number
   axis?: 'clock' | 'elapsed'
   usualBand?: { low: number, high: number }
+  compact?: boolean
 }): EChartsOption {
   const session: Session = {
     personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', effectiveTimezone: 'UTC', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
@@ -148,7 +149,7 @@ function optionFor(props: {
       <I18nProvider lng="en">
         <QueryClientProvider client={client}>
           <IntradayHeartRate points={props.points} reduction={null} label="Heart rate"
-            startMs={props.startMs} endMs={props.endMs} axis={props.axis} usualBand={props.usualBand} />
+            startMs={props.startMs} endMs={props.endMs} axis={props.axis} usualBand={props.usualBand} compact={props.compact} />
         </QueryClientProvider>
       </I18nProvider>,
     )
@@ -437,6 +438,14 @@ describe('IntradayHeartRate, bounded to its session', () => {
     expect(y.max({ min: 140, max: 160 })).toBe(160)
     expect(y.min({ min: 54, max: 56 })).toBe(52)
     expect(y.max({ min: 54, max: 56 })).toBe(58)
+  })
+
+  it('stretches the compact y axis to the usual band too', () => {
+    const option = optionFor({ points: ONE, startMs: START, endMs: END, usualBand: { low: 52, high: 58 }, compact: true })
+    const y = option.yAxis as { show: boolean, min: (extent: { min: number }) => number, max: (extent: { max: number }) => number }
+    expect(y.show).toBe(false)
+    expect(y.min({ min: 140 })).toBe(52)
+    expect(y.max({ max: 56 })).toBe(58)
   })
 
   it('leaves the y axis to the readings when there is no usual band', () => {

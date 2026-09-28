@@ -792,9 +792,9 @@
         "list": "Dutjes:"
       },
       "traces": {
-        "heart_rate": "Hartslag tijdens de nacht",
-        "spo2": "Zuurstofsaturatie tijdens de nacht",
-        "hrv": "Hartslagvariabiliteit tijdens de nacht",
+        "heart_rate": "Hartslag",
+        "spo2": "Zuurstof",
+        "hrv": "HRV",
         "metricNames": {
           "heart_rate": "hartslag",
           "spo2": "zuurstofsaturatie",
@@ -802,7 +802,8 @@
         },
         "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}",
         "lowest": "laagste {{value}} om {{time}}",
-        "highest": "hoogste {{value}} om {{time}}"
+        "highest": "hoogste {{value}} om {{time}}",
+        "caption": "band = je gewone bereik · zelfde tijdas als de fasen"
       },
       "sessions": {
         "label": "Sessies in deze nacht",

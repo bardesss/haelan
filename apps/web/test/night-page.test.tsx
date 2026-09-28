@@ -187,6 +187,20 @@ describe('the night page\'s night card', () => {
     expect(card?.querySelector('.night-naps')?.textContent).toBe('No naps recorded on this date.')
   })
 
+  // The fixture's awake figure and its awake lane agree at 25 minutes, so the note stays away.
+  it('says nothing about awake time when the lane and the night\'s figure agree', async () => {
+    const host = await mount(nightPageFixture())
+    expect(host.textContent).not.toContain('Awake counts the awake stages drawn above')
+  })
+
+  it('says why the awake lane reads lower when the night\'s own figure counts more', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, figures: { ...page.figures, awake: { ...page.figures.awake, value: 40 } } })
+    expect(text(host, '.night-legend + .hypnogram-totals')).toBe('Awake counts the awake stages drawn above and nothing '
+      + 'else. The night\'s own awake minutes also count restless time and the gaps between the night\'s separate '
+      + 'pieces, so that figure reads higher.')
+  })
+
   it('leaves a stage\'s share off when the server sent none for it', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, stagePercent: { ...page.stagePercent, rem: null } })

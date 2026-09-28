@@ -792,9 +792,9 @@
         "list": "Naps:"
       },
       "traces": {
-        "heart_rate": "Heart rate through the night",
-        "spo2": "Blood oxygen through the night",
-        "hrv": "Heart rate variability through the night",
+        "heart_rate": "Heart rate",
+        "spo2": "Blood oxygen",
+        "hrv": "HRV",
         "metricNames": {
           "heart_rate": "heart rate",
           "spo2": "blood oxygen",
@@ -802,7 +802,8 @@
         },
         "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}",
         "lowest": "lowest {{value}} at {{time}}",
-        "highest": "highest {{value}} at {{time}}"
+        "highest": "highest {{value}} at {{time}}",
+        "caption": "band = your usual range · same time axis as the stages"
       },
       "sessions": {
         "label": "Sessions in this night",

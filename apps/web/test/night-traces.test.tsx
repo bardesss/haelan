@@ -182,14 +182,14 @@ describe('the overnight traces', () => {
     } finally { restore() }
   })
 
-  it('renders a card only for the metrics something actually recorded', async () => {
+  it('renders a row only for the metrics something actually recorded', async () => {
     const restore = stub({ 'heart_rate|watch': [point('watch')] })
     try {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} />)
       await flush(client, html)
       // spo2 and hrv both pin to `watch`, find nothing, and need a second, unpinned request
       // before either can render as absent (useSourceTrace's own fallback rule) - three concurrent
-      // NightTrace instances means up to three such second-stage requests in flight together, each
+      // traces mean up to three such second-stage requests in flight together, each
       // resolving through react-query's own setTimeout(0)-scheduled notification
       // (notifyManager's default scheduler). Windows' coarse timer granularity (this repo's own
       // measured ~10-14ms per setTimeout, see the flush()/pumpUntil budget comments) can land that
@@ -233,19 +233,19 @@ describe('the overnight traces', () => {
       // basis at all until the fallback has answered - there is no state where this returns on a
       // line that is still going to change.
       await pumpUntil(
-        () => container?.querySelector('.basis') !== null,
+        () => container?.querySelector('.night-traces-basis') !== null,
         'the fallback basis line to render',
       )
-      expect(container?.querySelector('.basis')?.textContent).toBe(expected)
+      expect(container?.querySelector('.night-traces-basis')?.textContent).toBe(expected)
     } finally { restore() }
   })
 
   // NightTraces.tsx's own comment on NIGHT_TRACE_METRICS admits the metric list is written out
-  // twice - the exported constant and the three literal <NightTrace> calls - with nothing at the
+  // twice - the exported constant and the three literal useSourceTrace calls - with nothing at the
   // type level holding the two copies in step. This is what actually catches that drift: adding a
-  // fourth metric to one without the other would either leave a card this test never sees drawn
-  // (NIGHT_TRACE_METRICS grew but the JSX did not) or fail count-mismatched the other way around.
-  it('renders one card per metric in NIGHT_TRACE_METRICS when every one of them recorded something', async () => {
+  // fourth metric to one without the other would either leave a row this test never sees drawn
+  // (NIGHT_TRACE_METRICS grew but the calls did not) or fail count-mismatched the other way around.
+  it('renders one row per metric in NIGHT_TRACE_METRICS when every one of them recorded something', async () => {
     const restore = stub({
       'heart_rate|watch': [point('watch')], 'spo2|watch': [point('watch')], 'hrv|watch': [point('watch')],
     })
@@ -256,9 +256,9 @@ describe('the overnight traces', () => {
     } finally { restore() }
   })
 
-  // M10a-2: the night page hands each trace what the server made of it, and the card says the
+  // M10a-2: the night page hands each trace what the server made of it, and the row says the
   // night's extreme in words, at the night's own clock, above the chart.
-  it('says the night\'s lowest heart rate and when, and how that sits against the usual', async () => {
+  it('says the night\'s lowest heart rate and when', async () => {
     const restore = stub({ 'heart_rate|watch': [point('watch')] })
     try {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
@@ -266,7 +266,6 @@ describe('the overnight traces', () => {
       await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
       // 03:00Z read at the night's +02:00 is 05:00.
       expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('lowest 56 bpm at 05:00')
-      expect(container!.querySelector('.night-trace-verdict')?.textContent).toBe('within your usual 51 bpm – 59 bpm')
     } finally { restore() }
   })
 
@@ -277,6 +276,36 @@ describe('the overnight traces', () => {
       await flush(client, html)
       await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
       expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('highest 62 ms at 01:30')
+    } finally { restore() }
+  })
+
+  // The approved mockup's rows: heart rate, HRV, blood oxygen, each a short label over its summary
+  // beside the chart, and one caption under the three.
+  it('draws the three as rows in the mockup\'s order, under one caption', async () => {
+    const restore = stub({
+      'heart_rate|watch': [point('watch')], 'spo2|watch': [point('watch')], 'hrv|watch': [point('watch')],
+    })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container!.querySelectorAll('.night-trace [role="img"]').length === 3, 'all three rows to draw')
+      expect([...container!.querySelectorAll('.night-trace .label')].map((label) => label.textContent))
+        .toEqual(['Heart rate', 'HRV', 'Blood oxygen'])
+      expect(container!.querySelector('.night-traces > .dash-caption')?.textContent)
+        .toBe('band = your usual range · same time axis as the stages')
+    } finally { restore() }
+  })
+
+  // A row has no basis line, so its chart is described by the row's own label and summary.
+  it('describes each chart by its row\'s label and summary', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace [role="img"]') !== null, 'the heart rate row to draw')
+      const describedBy = container!.querySelector('.night-trace [role="img"]')!.getAttribute('aria-describedby')
+      expect(describedBy).not.toBeNull()
+      expect(document.getElementById(describedBy!)?.textContent).toBe('Heart ratelowest 56 bpm at 05:00')
     } finally { restore() }
   })
 
@@ -308,6 +337,8 @@ describe('the overnight traces', () => {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource="phone" />)
       await flush(client, html)
       expect(container?.querySelectorAll('.night-trace')).toHaveLength(0)
+      // Nothing recorded draws nothing, the caption included.
+      expect(container?.querySelector('.night-traces')).toBeNull()
       expect(requested.some((url) => url.includes('metric=heart_rate') && !url.includes('source='))).toBe(false)
     } finally { restore() }
   })
