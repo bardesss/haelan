@@ -295,6 +295,7 @@
     <string name="log_panel_chips_edit">Bewerken</string>
     <string name="log_panel_edit_remove">{{kind}} verwijderen</string>
     <string name="log_panel_edit_add">Soort toevoegen</string>
+    <string name="log_panel_edit_add_button">Toevoegen</string>
     <string name="log_panel_edit_moved">{{kind}} verplaatst naar plek {{position}}</string>
     <string name="log_panel_edit_done">Klaar</string>
     <string name="log_panel_edit_cancel">Annuleren</string>
@@ -311,6 +312,11 @@
     <string name="annotate_event_kinds_medication">Medicatie</string>
     <string name="annotate_event_kinds_injury">Blessure</string>
     <string name="annotate_event_kinds_caffeine">Cafeïne</string>
+    <string name="annotate_event_kinds_meditation">Meditatie</string>
+    <string name="annotate_event_kinds_sauna">Sauna</string>
+    <string name="annotate_event_kinds_reading">Lezen voor het slapen</string>
+    <string name="annotate_event_kinds_screen_free">Geen schermen \'s avonds</string>
+    <string name="annotate_event_kinds_stretching">Rekken</string>
     <string name="control_row_close">Sluiten</string>
     <string name="log_panel_edit_move_earlier">{{kind}} naar voren verplaatsen</string>
     <string name="log_panel_edit_move_later">{{kind}} naar achteren verplaatsen</string>

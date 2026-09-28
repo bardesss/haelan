@@ -174,7 +174,7 @@ class GlanceParserTest {
         val glance = GlanceParser.parse(fixture("today-quick-log.json"))
         assertEquals(
             DayLog(
-                presets = listOf("illness", "travel", "alcohol", "medication", "injury", "caffeine"),
+                presets = listOf("illness", "travel", "alcohol", "medication", "injury", "caffeine", "meditation", "sauna", "reading", "screen_free", "stretching"),
                 mood = 4,
                 counts = mapOf("caffeine" to 2),
                 note = "Slept with the window open.",
@@ -229,7 +229,7 @@ class GlanceParserTest {
     fun `a day's log lands, a kind no preset names counted under its own spelling`() {
         assertEquals(
             DayLog(
-                presets = listOf("illness", "travel", "alcohol", "medication", "injury", "caffeine"),
+                presets = listOf("illness", "travel", "alcohol", "medication", "injury", "caffeine", "meditation", "sauna", "reading", "screen_free", "stretching"),
                 mood = 2,
                 counts = mapOf("sauna" to 1),
                 note = null,

@@ -320,6 +320,7 @@
     <string name="log_panel_chips_edit">Edit</string>
     <string name="log_panel_edit_remove">Remove {{kind}}</string>
     <string name="log_panel_edit_add">Add a kind</string>
+    <string name="log_panel_edit_add_button">Add</string>
     <string name="log_panel_edit_moved">{{kind}} moved to position {{position}}</string>
     <string name="log_panel_edit_done">Done</string>
     <string name="log_panel_edit_cancel">Cancel</string>
@@ -336,6 +337,11 @@
     <string name="annotate_event_kinds_medication">Medication</string>
     <string name="annotate_event_kinds_injury">Injury</string>
     <string name="annotate_event_kinds_caffeine">Caffeine</string>
+    <string name="annotate_event_kinds_meditation">Meditation</string>
+    <string name="annotate_event_kinds_sauna">Sauna</string>
+    <string name="annotate_event_kinds_reading">Reading before bed</string>
+    <string name="annotate_event_kinds_screen_free">No screens in the evening</string>
+    <string name="annotate_event_kinds_stretching">Stretching</string>
     <string name="control_row_close">Close</string>
     <string name="log_panel_edit_move_earlier">Move {{kind}} earlier</string>
     <string name="log_panel_edit_move_later">Move {{kind}} later</string>

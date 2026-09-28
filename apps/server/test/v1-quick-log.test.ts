@@ -10,7 +10,10 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 // every write below carries both, the same as v1-annotations.test.ts's own ORIGIN.
 const ORIGIN = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 
-const SEED_KINDS = ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine']
+const SEED_KINDS = [
+  'illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine',
+  'meditation', 'sauna', 'reading', 'screen_free', 'stretching',
+]
 
 async function req(
   h: Harness, token: string, method: 'GET' | 'PUT' | 'POST' | 'DELETE', path: string, payload?: object,
@@ -56,7 +59,7 @@ function seedNight(h: Harness, input: {
 const NOW_MS = Date.parse('2026-09-26T13:00:00Z')
 
 describe('GET/PUT /quick-log/presets', () => {
-  it('answers the six seed kinds for a person who never saved', async () => {
+  it('answers the eleven seed kinds for a person who never saved', async () => {
     harness = await withServer(); harness.clock.nowMs = NOW_MS
     const token = await harness.signIn()
     const reply = await get(harness, token, '/quick-log/presets')
