@@ -51,8 +51,9 @@ catching them is a standing part of how the project is built rather than a past 
 ![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
 <sub>Dashboard and Activity above; [Quick logging](assets/screenshots/log-panel.png),
-[Sleep](assets/screenshots/sleep.png) and [Recovery](assets/screenshots/recovery.png) as well. All
-five are the demo data `scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
+[Sleep](assets/screenshots/sleep.png), [Recovery](assets/screenshots/recovery.png) and
+[Phone glance](assets/screenshots/android-glance.png) as well. All six are the demo data
+`scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
 <!-- screenshots:end -->
 
 ## What it does
@@ -135,6 +136,17 @@ stream.
 
 The Android path asks less of the person setting it up, and it gives some things up in exchange, which
 `apps/android/README.md` lists.
+
+### The glance on the phone
+
+The app opens on the same glance as the web dashboard, drawn natively: last night, recovery, today and
+the week, each against your own usual range, with the day arrows and the month calendar to step back
+through any day that has data. It opens at once on the last glance it saw, kept encrypted on the phone,
+and refreshes when you pull, come back to it, finish a sync or pass midnight; when the instance cannot be
+reached it says since when it is showing what it shows. The `+` logs how the day felt, what happened and
+the day's note, the same panel as on the web, and tapping a card opens the page behind it inside the app,
+already signed in. Sync, permissions and signing out sit behind the account icon. The glance needs an
+instance of 2.13.0 or later, and says so on an older one.
 
 ### Workout routes
 
@@ -312,7 +324,8 @@ from a fixed seed, so the data behind the screenshots above regenerates identica
 the log panel, Sleep and Recovery were taken on the week ending 2026-09-06, which is where the
 demo's data ends (the log panel after one tap on Caffeine);
 Activity was taken on August 2026, because a month is where its bar charts thin their date labels
-and a week is not. A fresh boot opens on the current month instead, so you would have to walk back
+and a week is not. The phone glance is the Android app on an emulator against the same seed, at
+midday on 2026-09-06, shown as it opens and scrolled to its end. A fresh boot opens on the current month instead, so you would have to walk back
 to frame the same pictures. The range and the day both live in the URL, which is the quickest way
 back: `?range=week&on=2026-09-06`.
 

@@ -49,6 +49,14 @@ object InstanceError {
         // Checked before the generic IOException below, which an SSL failure also is.
         is SSLException -> R.string.error_certificate
         is JSONException -> R.string.error_not_instance
+        // Not the instance at all: Health Connect refused to read a type this app has no
+        // permission for, which connect-client throws as a SecurityException. Without this it fell
+        // to the sentence below, and a phone missing its permissions said the network broke.
+        // Every SecurityException that reaches here is Health Connect's: the exchanges this maps
+        // (SyncRun's reads and uploads, the sign-in) touch no other permission-guarded API, and
+        // the one permission the HTTP side needs, INTERNET, is granted at install and cannot be
+        // revoked. A cause check would buy nothing: connect-client's wrapper names no stable type.
+        is SecurityException -> R.string.error_permission
         // A reset or a truncated answer is its own sentence: nothing was listening is wrong for
         // a connection that got as far as answering halfway.
         else -> R.string.error_broken

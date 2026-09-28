@@ -1,0 +1,957 @@
+{
+  "today": "2026-08-18",
+  "sleep": {
+    "localDate": "2026-08-18",
+    "sourceId": "watch",
+    "startMs": 1787002800000,
+    "endMs": 1787029800000,
+    "startOffsetMinutes": 120,
+    "endOffsetMinutes": 120,
+    "segments": [],
+    "asleep": {
+      "metric": "sleep_asleep_minutes",
+      "value": 440,
+      "unit": "minutes",
+      "baseline": {
+        "center": 430,
+        "low": 422,
+        "high": 438,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": 1787029800000,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 440,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 430,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 420,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 440,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 430,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 420,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 440,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "above"
+        }
+      ],
+      "standing": "above"
+    },
+    "efficiency": {
+      "metric": "sleep_efficiency",
+      "value": 92,
+      "unit": "percent",
+      "baseline": {
+        "center": 91,
+        "low": 90,
+        "high": 92,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": 1787029800000,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 92,
+          "band": {
+            "center": 91,
+            "low": 90,
+            "high": 92,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 91,
+          "band": {
+            "center": 91,
+            "low": 90,
+            "high": 92,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 90,
+          "band": {
+            "center": 91,
+            "low": 90,
+            "high": 92,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 92,
+          "band": {
+            "center": 91,
+            "low": 90,
+            "high": 92,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 91,
+          "band": {
+            "center": 91,
+            "low": 90,
+            "high": 92,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 90,
+          "band": {
+            "center": 91,
+            "low": 90,
+            "high": 92,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 92,
+          "band": {
+            "center": 91,
+            "low": 90,
+            "high": 92,
+            "thin": false
+          },
+          "standing": "within"
+        }
+      ],
+      "standing": "within"
+    },
+    "bedtime": {
+      "metric": "sleep_bedtime_minutes",
+      "value": -40,
+      "unit": "minutes_from_local_midnight",
+      "baseline": {
+        "center": -45,
+        "low": -56,
+        "high": -34,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": 1787029800000,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": -60,
+          "band": {
+            "center": -45,
+            "low": -56,
+            "high": -34,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": -30,
+          "band": {
+            "center": -45,
+            "low": -57,
+            "high": -34,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": -40,
+          "band": {
+            "center": -45,
+            "low": -56,
+            "high": -34,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": -50,
+          "band": {
+            "center": -45,
+            "low": -56,
+            "high": -34,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": -60,
+          "band": {
+            "center": -45,
+            "low": -56,
+            "high": -34,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": -30,
+          "band": {
+            "center": -45,
+            "low": -57,
+            "high": -34,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": -40,
+          "band": {
+            "center": -45,
+            "low": -56,
+            "high": -34,
+            "thin": false
+          },
+          "standing": "within"
+        }
+      ],
+      "standing": "within"
+    },
+    "waketime": {
+      "metric": "sleep_waketime_minutes",
+      "value": 440,
+      "unit": "minutes_from_local_midnight",
+      "baseline": {
+        "center": 430,
+        "low": 422,
+        "high": 438,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": 1787029800000,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 440,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 430,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 420,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 440,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 430,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 420,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 440,
+          "band": {
+            "center": 430,
+            "low": 422,
+            "high": 438,
+            "thin": false
+          },
+          "standing": "above"
+        }
+      ],
+      "standing": "above"
+    }
+  },
+  "recovery": {
+    "index": {
+      "metric": "recovery_index",
+      "value": 31,
+      "unit": "score",
+      "baseline": null,
+      "asOfDate": "2026-08-18",
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 52,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 45,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 44,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 23,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 75,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 65,
+          "band": null,
+          "standing": null
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 31,
+          "band": null,
+          "standing": null
+        }
+      ],
+      "standing": null
+    },
+    "band": "below",
+    "missing": null,
+    "restingHeartRate": {
+      "metric": "resting_heart_rate",
+      "value": 57,
+      "unit": "bpm",
+      "baseline": {
+        "center": 56,
+        "low": 55,
+        "high": 57,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 57,
+          "band": {
+            "center": 56,
+            "low": 55,
+            "high": 57,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 56,
+          "band": {
+            "center": 56,
+            "low": 55,
+            "high": 57,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 55,
+          "band": {
+            "center": 56,
+            "low": 55,
+            "high": 57,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 57,
+          "band": {
+            "center": 56,
+            "low": 55,
+            "high": 57,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 56,
+          "band": {
+            "center": 56,
+            "low": 55,
+            "high": 57,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 55,
+          "band": {
+            "center": 56,
+            "low": 55,
+            "high": 57,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 57,
+          "band": {
+            "center": 56,
+            "low": 55,
+            "high": 57,
+            "thin": false
+          },
+          "standing": "within"
+        }
+      ],
+      "standing": "within"
+    },
+    "hrv": {
+      "metric": "daily_hrv",
+      "value": 42,
+      "unit": "milliseconds",
+      "baseline": {
+        "center": 42,
+        "low": 41,
+        "high": 43,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 43,
+          "band": {
+            "center": 42,
+            "low": 41,
+            "high": 43,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 42,
+          "band": {
+            "center": 42,
+            "low": 41,
+            "high": 43,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 41,
+          "band": {
+            "center": 42,
+            "low": 41,
+            "high": 43,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 40,
+          "band": {
+            "center": 42,
+            "low": 41,
+            "high": 43,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 44,
+          "band": {
+            "center": 42,
+            "low": 41,
+            "high": 43,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 43,
+          "band": {
+            "center": 42,
+            "low": 41,
+            "high": 43,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 42,
+          "band": {
+            "center": 42,
+            "low": 41,
+            "high": 43,
+            "thin": false
+          },
+          "standing": "within"
+        }
+      ],
+      "standing": "within"
+    },
+    "respiratoryRate": {
+      "metric": "respiratory_rate",
+      "value": 14.4,
+      "unit": "breaths_per_minute",
+      "baseline": {
+        "center": 14.2,
+        "low": 14,
+        "high": 14.4,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 14.4,
+          "band": {
+            "center": 14.2,
+            "low": 14,
+            "high": 14.4,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 14.2,
+          "band": {
+            "center": 14.2,
+            "low": 14,
+            "high": 14.4,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 14,
+          "band": {
+            "center": 14.2,
+            "low": 14,
+            "high": 14.4,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 14.4,
+          "band": {
+            "center": 14.2,
+            "low": 14,
+            "high": 14.4,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 14.2,
+          "band": {
+            "center": 14.2,
+            "low": 14,
+            "high": 14.4,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 14,
+          "band": {
+            "center": 14.2,
+            "low": 14,
+            "high": 14.4,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 14.4,
+          "band": {
+            "center": 14.2,
+            "low": 14,
+            "high": 14.4,
+            "thin": false
+          },
+          "standing": "within"
+        }
+      ],
+      "standing": "within"
+    }
+  },
+  "day": {
+    "steps": {
+      "metric": "steps",
+      "value": 9000,
+      "unit": "count",
+      "baseline": {
+        "center": 9190,
+        "low": 7576,
+        "high": 10803,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": 1787032800000,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 9500,
+          "band": {
+            "center": 9000,
+            "low": 8272,
+            "high": 9728,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 9000,
+          "band": {
+            "center": 9009,
+            "low": 8286,
+            "high": 9733,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 8500,
+          "band": {
+            "center": 9009,
+            "low": 8292,
+            "high": 9726,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 8000,
+          "band": {
+            "center": 9000,
+            "low": 8286,
+            "high": 9714,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 10000,
+          "band": {
+            "center": 8982,
+            "low": 8263,
+            "high": 9702,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 20000,
+          "band": {
+            "center": 9000,
+            "low": 8274,
+            "high": 9726,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 9000,
+          "band": {
+            "center": 9190,
+            "low": 7576,
+            "high": 10803,
+            "thin": false
+          },
+          "standing": "within"
+        }
+      ],
+      "standing": "within"
+    },
+    "stepsPace": null,
+    "activeMinutes": {
+      "metric": "active_minutes",
+      "value": 50,
+      "unit": "minutes",
+      "baseline": {
+        "center": 48,
+        "low": 42,
+        "high": 53,
+        "thin": false
+      },
+      "asOfDate": "2026-08-18",
+      "asOfMs": null,
+      "partial": false,
+      "staleSources": [],
+      "strip": [
+        {
+          "localDate": "2026-08-12",
+          "value": 40,
+          "band": {
+            "center": 48,
+            "low": 42,
+            "high": 53,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-13",
+          "value": 55,
+          "band": {
+            "center": 47,
+            "low": 42,
+            "high": 53,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-14",
+          "value": 50,
+          "band": {
+            "center": 48,
+            "low": 42,
+            "high": 53,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-15",
+          "value": 45,
+          "band": {
+            "center": 48,
+            "low": 42,
+            "high": 53,
+            "thin": false
+          },
+          "standing": "within"
+        },
+        {
+          "localDate": "2026-08-16",
+          "value": 40,
+          "band": {
+            "center": 48,
+            "low": 42,
+            "high": 53,
+            "thin": false
+          },
+          "standing": "below"
+        },
+        {
+          "localDate": "2026-08-17",
+          "value": 55,
+          "band": {
+            "center": 47,
+            "low": 42,
+            "high": 53,
+            "thin": false
+          },
+          "standing": "above"
+        },
+        {
+          "localDate": "2026-08-18",
+          "value": 50,
+          "band": {
+            "center": 48,
+            "low": 42,
+            "high": 53,
+            "thin": false
+          },
+          "standing": "within"
+        }
+      ],
+      "standing": "within"
+    },
+    "heartRate": {
+      "points": [],
+      "asOfMs": null,
+      "staleSources": []
+    },
+    "workouts": []
+  },
+  "week": {
+    "steps": {
+      "perDay": 10571,
+      "days": 7,
+      "total": 74000
+    },
+    "activeMinutes": {
+      "perDay": 48,
+      "days": 7,
+      "total": 335
+    },
+    "asleep": {
+      "perDay": 431,
+      "days": 7,
+      "total": 3020
+    }
+  },
+  "finished": true,
+  "nav": {
+    "previous": "2026-08-17",
+    "next": "2026-08-19"
+  }
+}

@@ -88,16 +88,18 @@ describe('the setup column wears the mark', () => {
   })
 })
 
-// The mark's geometry lives in scripts/render-icons.mjs, and three files write it out again
-// because none of them can read that script at runtime: a React component, a tab icon and a
-// README image. Nothing else pins them together, and a mark that differs between the rail and the
-// tab is the kind of drift nobody reports as a bug.
-describe('one geometry, written out in four places', () => {
+// The mark's geometry lives in scripts/render-icons.mjs, and four files write it out again
+// because none of them can read that script at runtime: a React component, a tab icon, a README
+// image and the Android app's vector drawable (the phone glance's top bar, sign-in and sync
+// screens). Nothing else pins them together, and a mark that differs between the rail and the
+// tab, or between the web and the phone, is the kind of drift nobody reports as a bug.
+describe('one geometry, written out in five places', () => {
   const read = (path: string) => readFileSync(repo(path), 'utf8')
   const sources = {
     'BrandMark.tsx': read('src/components/BrandMark.tsx'),
     'favicon.svg': read('public/favicon.svg'),
     'mark.svg': read('../../assets/brand/mark.svg'),
+    'ic_brand_mark.xml': read('../android/app/src/main/res/drawable/ic_brand_mark.xml'),
   }
 
   it.each(Object.entries(sources))('%s carries the same two paths', async (_name, source) => {

@@ -4,6 +4,14 @@ The companion app: it reads Health Connect on the phone and uploads what it find
 Hælan instance, with no Google Cloud project. Launcher label **Hælan**; `applicationId`
 `com.haelan.android` (plus `.debug` on review builds, so both install side by side).
 
+After sign-in the app opens on the glance, a native copy of the web dashboard drawn from the same
+server payload: last night, recovery, today so far and the week, with arrows and a month calendar
+to step to an earlier day, and a `+` that opens the log sheet when quick logging is switched on for
+the person. The last glance for today is kept on the phone, encrypted, and shown with the time it
+was fetched when the instance cannot be reached. A card's link opens that page of the web app
+inside the app, already signed in, and the account button in the top bar leads to Health
+Connect, the sync and sign-out.
+
 ## Build
 
 A fresh clone is enough: JDK 17 (the JBR inside Android Studio works), the Android SDK, and Node

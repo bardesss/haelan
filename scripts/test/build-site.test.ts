@@ -2,7 +2,45 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { renderPage, releaseStamp } from '../build-site.mjs'
+import { fileURLToPath } from 'node:url'
+import { renderPage, releaseStamp, galleryHtml, lightboxHtml, pngSize } from '../build-site.mjs'
+
+describe('screenshot sizes', () => {
+  const dir = fileURLToPath(new URL('../../assets/screenshots', import.meta.url))
+  const sizes = (html: string) => new Map(
+    [...html.matchAll(/src="screenshots\/([^"]+)"[^>]*width="(\d+)" height="(\d+)"/g)]
+      .map(([, file, width, height]) => [file!, { width: Number(width), height: Number(height) }]),
+  )
+
+  it('reads a PNG header\'s width and height', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'haelan-png-'))
+    try {
+      const head = Buffer.alloc(24)
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(head, 0)
+      head.writeUInt32BE(13, 8)
+      head.write('IHDR', 12, 'latin1')
+      head.writeUInt32BE(1080, 16)
+      head.writeUInt32BE(2400, 20)
+      writeFileSync(join(tmp, 'phone.png'), head)
+      expect(pngSize(join(tmp, 'phone.png'))).toEqual({ width: 1080, height: 2400 })
+      writeFileSync(join(tmp, 'not.png'), 'GIF89a and then some more bytes')
+      expect(() => pngSize(join(tmp, 'not.png'))).toThrow('not a PNG')
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  // The phone composite is portrait; sized as 1440x900 like the rest, it reserved a landscape box.
+  it('gives every gallery and full-size image its own file\'s size, the phone composite included', () => {
+    for (const html of [galleryHtml(dir), lightboxHtml(dir)]) {
+      const found = sizes(html)
+      expect(found.get('android-glance.png')).toEqual(pngSize(join(dir, 'android-glance.png')))
+      for (const [file, size] of found) expect(size).toEqual(pngSize(join(dir, file)))
+    }
+    const phone = pngSize(join(dir, 'android-glance.png'))
+    expect(phone.height).toBeGreaterThan(phone.width)
+  })
+})
 
 describe('renderPage', () => {
   it('substitutes every slot it is given a value for', () => {

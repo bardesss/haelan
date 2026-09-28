@@ -20,3 +20,7 @@ TOOLS.md text eol=lf
 # TOOLS.md above and the same failure: checked out with CRLF it fails for a file nobody edited.
 # Found the hard way, by a rebase re-checking the file out and turning a green branch red.
 apps/web/public/manifest.webmanifest text eol=lf
+
+# The phone glance's parser fixtures are written by apps/server/test/android-glance-fixture.test.ts
+# and compared byte for byte against what the server sends, the same shape and the same failure.
+apps/android/app/src/test/resources/glance/*.json text eol=lf

@@ -2,6 +2,7 @@ package com.haelan.android
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -33,8 +34,19 @@ object SessionStore {
     var insecureFallback = false
         private set
 
+    /**
+     * The one preferences instance for the process. Built once under a lock: two threads asking
+     * first at the same moment (the glance screen opening while the background worker starts) must
+     * not get two instances, because EncryptedSharedPreferences tells only the listeners registered
+     * on the instance that wrote, and the glance hears a finished sync through exactly that
+     * (glance/SyncSignal.kt).
+     */
     fun prefs(context: Context): SharedPreferences {
         cached?.let { return it }
+        return synchronized(this) { cached ?: build(context).also { cached = it } }
+    }
+
+    private fun build(context: Context): SharedPreferences {
         val appCtx = context.applicationContext
         val secure = try {
             val masterKey = MasterKey.Builder(appCtx)
@@ -58,7 +70,6 @@ object SessionStore {
             insecureFallback = true
             appCtx.getSharedPreferences(FILE_PLAIN, Context.MODE_PRIVATE)
         }
-        cached = resolved
         return resolved
     }
 
@@ -102,6 +113,41 @@ object SessionStore {
 
     fun serverAndUsername(prefs: SharedPreferences): Pair<String, String> =
         (prefs.getString(KEY_SERVER, "") ?: "") to (prefs.getString(KEY_USERNAME, "") ?: "")
+
+    /**
+     * The person's timezone as the instance last named it (`/api/auth/me`), kept so the glance reads
+     * its clock times in the person's zone from the first frame of the next open, before the instance
+     * has answered again. Kept beside whose it is: a different person signing in on this phone must
+     * not have their times read in the previous person's zone.
+     */
+    fun saveTimezone(prefs: SharedPreferences, server: String, personId: String, zone: String) {
+        prefs.edit {
+            putString(KEY_TIMEZONE, zone)
+            putString(KEY_TIMEZONE_FOR, timezoneOwner(server, personId))
+        }
+    }
+
+    /** The zone [saveTimezone] kept for this person on this server, or null for anyone else or none. */
+    fun loadTimezone(prefs: SharedPreferences, server: String, personId: String): String? =
+        prefs.getString(KEY_TIMEZONE, null)?.takeIf { prefs.getString(KEY_TIMEZONE_FOR, null) == timezoneOwner(server, personId) }
+
+    private const val KEY_TIMEZONE = "person_timezone"
+    private const val KEY_TIMEZONE_FOR = "person_timezone_for"
+
+    private fun timezoneOwner(server: String, personId: String) = "$personId@$server"
+
+    /**
+     * Whose data the in-app web page last held ([WebData.owner]). Kept apart from the session, which
+     * an expiry or a sign-out clears: the question it answers is who signed in last, asked at the
+     * next sign-in, after both are gone.
+     */
+    fun saveWebOwner(prefs: SharedPreferences, owner: String) {
+        prefs.edit { putString(KEY_WEB_OWNER, owner) }
+    }
+
+    fun loadWebOwner(prefs: SharedPreferences): String? = prefs.getString(KEY_WEB_OWNER, null)
+
+    private const val KEY_WEB_OWNER = "web_owner"
 
     /** Forgets the session, keeps server address and username to prefill login. */
     fun clearSession(prefs: SharedPreferences) {

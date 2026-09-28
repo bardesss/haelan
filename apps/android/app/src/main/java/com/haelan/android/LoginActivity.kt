@@ -32,8 +32,16 @@ class LoginActivity : ComponentActivity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /**
+     * Signed in, by hand or from the saved session: the glance, with the sync screen behind it.
+     * CLEAR_TOP with SINGLE_TOP keeps one glance per task: a glance already in it is brought back
+     * (and anything above it closed) instead of a second one stacking up with its own repository.
+     * A flag at the one place that starts it, rather than launchMode singleTask, which would also
+     * move the glance by task affinity and apply to every future caller without being visible here.
+     */
     private fun startMain(session: SessionStore.Session) {
-        startActivity(Intent(this, MainActivity::class.java).apply {
+        startActivity(Intent(this, GlanceActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(EXTRA_SERVER, session.server)
             putExtra(EXTRA_PERSON_ID, session.personId)
             putExtra(EXTRA_COOKIE, session.cookie)
@@ -95,6 +103,12 @@ class LoginActivity : ComponentActivity() {
                 button.setText(R.string.login_submit)
                 when (result) {
                     is LoginResult.Ok -> {
+                        // Somebody else than last time: the web page's cookies, storage and cache
+                        // were theirs, and go before this person's first card is opened.
+                        if (WebData.changesHands(SessionStore.loadWebOwner(stored), server, result.personId)) {
+                            WebData.clear(this@LoginActivity)
+                        }
+                        SessionStore.saveWebOwner(stored, WebData.owner(server, result.personId))
                         SessionStore.saveSession(stored, server, username, result.personId, result.cookie)
                         startMain(SessionStore.Session(server, result.personId, result.cookie, username))
                     }

@@ -1,0 +1,16 @@
+{
+  "presets": [
+    "illness",
+    "travel",
+    "alcohol",
+    "medication",
+    "injury",
+    "caffeine"
+  ],
+  "mood": 2,
+  "counts": {
+    "sauna": 1
+  },
+  "note": null,
+  "today": "2026-08-20"
+}

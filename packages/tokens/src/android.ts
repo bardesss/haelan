@@ -1,4 +1,5 @@
 import { lookup, resolveSemantic, type SemanticToken, type Theme } from './semantic.js'
+import { resolveChart, type ChartToken } from './chart.js'
 import type { ColorPath } from './primitives.js'
 
 /**
@@ -29,7 +30,30 @@ const FROM_SEMANTIC = {
   surface_selected: 'surface-selected',
   negative: 'negative',
   positive: 'positive',
+  // The gauge band arc's own colour, and the faint label under it: read from the semantic layer
+  // rather than the chart one, because the web reads them from `--border-chosen` and
+  // `--text-faint` too (theme.css emits both from semantic.ts, not chart.ts).
+  border_chosen: 'border-chosen',
+  text_faint: 'text-faint',
 } satisfies Record<string, SemanticToken>
+
+/**
+ * The sleep-stage chart's own colours, plus the series, band and grid tones the later Compose
+ * tasks draw with. Named `stage_*`/`chart_*` rather than the token's own dash-to-underscore
+ * spelling (unlike FROM_SEMANTIC above), because `deep`/`light`/`rem`/`awake` alone would read as
+ * generic app colours in a resource list, and the chart card is the only consumer.
+ */
+const FROM_CHART = {
+  stage_deep: 'stage-deep',
+  stage_light: 'stage-light',
+  stage_rem: 'stage-rem',
+  stage_awake: 'stage-awake',
+  chart_series: 'series',
+  chart_series_alt: 'series-alt',
+  chart_band: 'band-baseline',
+  chart_scale_4: 'scale-4',
+  chart_grid: 'grid',
+} satisfies Record<string, ChartToken>
 
 /**
  * The one colour with no semantic token behind it, and the reason it has none.
@@ -44,19 +68,22 @@ const FROM_PRIMITIVE = {
   warning: { dark: 'amber.500', light: 'amber.700' },
 } satisfies Record<string, Record<Theme, ColorPath>>
 
-export type AndroidColorName = keyof typeof FROM_SEMANTIC | keyof typeof FROM_PRIMITIVE
+export type AndroidColorName = keyof typeof FROM_SEMANTIC | keyof typeof FROM_PRIMITIVE | keyof typeof FROM_CHART
 
 export const ANDROID_COLOR_NAMES: AndroidColorName[] = [
   ...Object.keys(FROM_SEMANTIC),
   ...Object.keys(FROM_PRIMITIVE),
+  ...Object.keys(FROM_CHART),
 ] as AndroidColorName[]
 
 /** Every colour the app reads, resolved for one theme. */
 export function resolveAndroidColors(theme: Theme): Record<AndroidColorName, string> {
   const semantic = resolveSemantic(theme)
+  const chart = resolveChart(theme)
   return Object.fromEntries([
     ...Object.entries(FROM_SEMANTIC).map(([name, token]) => [name, semantic[token]]),
     ...Object.entries(FROM_PRIMITIVE).map(([name, path]) => [name, lookup(path[theme])]),
+    ...Object.entries(FROM_CHART).map(([name, token]) => [name, chart[token]]),
   ]) as Record<AndroidColorName, string>
 }
 
