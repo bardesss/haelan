@@ -105,6 +105,17 @@ class InstanceClientHttpTest {
         assertEquals("haelan_session=s3cret", request.headers["cookie"])
     }
 
+    /**
+     * Named, because on a phone a DELETE without a type is sent as a form, and the instance refuses
+     * a form it cannot parse: found on the emulator, where Undo answered "something went wrong".
+     * The JVM here sends no type at all, so this holds the line that names one.
+     */
+    @Test
+    fun `a DELETE names a type the instance parses, so Android's form default never reaches it`() {
+        InstanceClient.delete(instance.address, "/api/v1/p/p1/events/e1", "s3cret") { }
+        assertEquals("text/plain", instance.only().headers["content-type"])
+    }
+
     @Test
     fun `nothing listening is a failure, not a throw`() {
         val outcome = InstanceClient.get(TestInstance.closedAddress(), "/x") { }

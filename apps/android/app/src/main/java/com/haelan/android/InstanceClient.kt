@@ -152,6 +152,13 @@ object InstanceClient {
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            } else if (method == "DELETE") {
+                // Android's HttpURLConnection gives every DELETE without a type of its own an
+                // `application/x-www-form-urlencoded` one (a JVM's does not, which is why only the
+                // emulator showed it). The instance has no parser for that type, so it refused
+                // every Undo, mood clear and note clear. `text/plain` it parses, and an empty one
+                // reads as nothing.
+                connection.setRequestProperty("Content-Type", "text/plain")
             }
 
             // Once. Everything below reads what this returned rather than asking again.
