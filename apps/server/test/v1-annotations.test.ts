@@ -122,6 +122,24 @@ describe('the note and event routes', () => {
     expect(harness.app.haelan.instance.notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(0)
   })
 
+  // Fastify has no parser for a form body and refuses one before the route runs, with its own 415.
+  // The v1 error handler used to read that as an unknown throw and answer 500 internal_error, which
+  // told a client its request had found a bug in the server rather than that it sent the wrong type.
+  it('answers 415 in the error envelope for a content type it cannot parse, not 500', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await putNote(harness, token, '2026-08-15', 'stays')
+    const removed = await harness.app.inject({
+      method: 'DELETE', url: '/api/v1/p/p1/notes/2026-08-15',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN, 'content-type': 'application/x-www-form-urlencoded' },
+    })
+    expect(removed.statusCode).toBe(415)
+    expect(removed.json()).toEqual({
+      error: { kind: 'config', code: 'unsupported_media_type', message: expect.any(String) },
+    })
+    // Refused before the route ran, so the note is still there.
+    expect(harness.app.haelan.instance.notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(1)
+  })
+
   it('answers 200 removing a date that was never noted, and leaves other days alone', async () => {
     harness = await withServer(); const token = await harness.signIn()
     await putNote(harness, token, '2026-08-16', 'stays')

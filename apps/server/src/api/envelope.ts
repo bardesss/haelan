@@ -70,6 +70,11 @@ function isDatabaseBusy(error: unknown): boolean {
   return typeof code === 'string' && (code.startsWith('SQLITE_BUSY') || code.startsWith('SQLITE_LOCKED'))
 }
 
+/** Whether a throw is Fastify refusing a request's content type: FST_ERR_CTP_INVALID_MEDIA_TYPE, a 415. */
+function isUnsupportedMediaType(error: unknown): error is Error {
+  return error instanceof Error && (error as { code?: unknown }).code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE'
+}
+
 /**
  * Maps whatever a core call threw to a response. ConfigError names the real problem, so its
  * message is the useful thing to show a caller. TransientError means retrying can work, which is
@@ -105,6 +110,15 @@ export function sendCoreError(reply: FastifyReply, error: unknown): FastifyReply
   if (isDatabaseBusy(error)) {
     return reply.code(statusFor('transient'))
       .send(errorBody('transient', 'database_busy', 'the instance is busy writing, so try again shortly'))
+  }
+  // Fastify's own refusal of a body it has no parser for (a form post, say), thrown before the
+  // route runs. It is the caller's mistake, not a bug in us, so it keeps Fastify's 415 rather than
+  // falling to the 500 below. Under 'config', the kind for a request the caller has to change, with
+  // a real code saying which change; no new kind, since a client branching on kind already knows
+  // what 'config' asks of it. The message is Fastify's, which names only the media type the
+  // caller itself sent.
+  if (isUnsupportedMediaType(error)) {
+    return reply.code(415).send(errorBody('config', 'unsupported_media_type', error.message))
   }
   console.error(error)
   return reply.code(statusFor('internal')).send(errorBody('internal', 'internal_error', 'something went wrong'))
