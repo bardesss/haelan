@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -17,10 +16,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,12 +40,16 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.haelan.android.R
 import com.haelan.android.glance.CalendarUiState
 import com.haelan.android.glance.Glance
@@ -179,18 +187,19 @@ fun rememberCardText(zone: ZoneId): CardText {
 }
 
 /**
- * The glance: the web dashboard's phone layout, the cards stacked under a top bar that greets on
- * today and names the date on a finished day. Draws [state] and nothing else; every tap leaves
+ * The glance: the web dashboard's phone layout, the cards stacked under a top bar that carries the
+ * brand, and a day row that greets on today and names the date on a finished day ([dayTitle]).
+ * Draws [state] and nothing else; every tap leaves
  * through a callback, [onOpenDay] for an arrow, a strip dot, a week bar or a calendar day (a local
  * date from the payload) and [onOpenPage] for a card's link or a workout row (the web path it would
  * open, and the card's heading as the opened page's title).
  *
- * A row under the top bar carries the day controls ([DayNavState]): ‹ and ›, the calendar, and
- * Today on a past day. Pulling the page down asks again ([onRefresh]), as Try again does on the unreachable page;
+ * A row under the top bar carries that title and the day controls ([DayNavState]): ‹ and ›, the
+ * calendar, and Today on a past day. Pulling the page down asks again ([onRefresh]), as Try again does on the unreachable page;
  * the pull's spinner shows only for a pull, since the page also revalidates on its own (on resume,
  * after a sync) and the web does not announce those either.
  *
- * A + beside sync opens the log sheet ([onOpenLog]) only when the glance carries `log`, which is
+ * A + beside the account button (the way to sync) opens the log sheet ([onOpenLog]) only when the glance carries `log`, which is
  * the person's quick-logging switch as the server reports it; the sheet itself is [logSheet],
  * drawn while it is open, with [logActions] for everything done in it.
  *
@@ -218,23 +227,18 @@ fun GlanceScreen(
 ) {
     val shownDay = state?.shownDay
     val nav = DayNavState.from(state)
-    val title = if (shownDay == null) text.words.greeting(nowMs) else GlanceFormat.headerDate(shownDay, text.locale, short = true)
+    val title = dayTitle(shownDay, text.words, text.locale, nowMs)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Brand() },
                 actions = {
                     if (showsLogButton(state, nowMs, text.zone)) {
                         IconButton(onClick = onOpenLog) {
                             Icon(painterResource(R.drawable.ic_add), stringResource(R.string.log_panel_open))
                         }
                     }
-                    IconButton(onClick = onOpenSync) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_sync),
-                            contentDescription = stringResource(R.string.glance_sync_open),
-                        )
-                    }
+                    AccountButton(onOpenSync)
                 },
             )
         },
@@ -247,7 +251,7 @@ fun GlanceScreen(
         Column(Modifier.fillMaxSize().padding(padding)) {
             // Outside the scroll and the stepping dim, on every body: always reachable, always at
             // full strength, and the page keeps its shape whether or not there is a day to step to.
-            DayRow(nav, onOpenDay, onToday, onOpenCalendar)
+            DayRow(title, nav, onOpenDay, onToday, onOpenCalendar)
             PullToRefreshBox(
                 isRefreshing = pulled && loading,
                 onRefresh = {
@@ -284,27 +288,89 @@ fun GlanceScreen(
 }
 
 /**
- * ‹, ›, the calendar and, on a past day, Today: the web's DayNav, on its own row under the top bar
- * as the web header has it, since a 360dp bar holding them beside the title and sync left the title
- * a few letters. Disabled rather than hidden where there is nowhere to go, so the row keeps its
- * shape; Today alone comes and goes, at the far end, as on the web. Touch only: the web's arrow keys
- * and T are a keyboard's, and a phone has none.
+ * The day row's title: the greeting on today, the short date ("Sat, Sep 5") on a past day, as the
+ * web's header title is. The greeting is the one thing here the payload does not say: it is the
+ * person's hour at [nowMs], not a fact about their data.
+ */
+internal fun dayTitle(shownDay: String?, words: GlanceWords, locale: Locale, nowMs: Long): String =
+    if (shownDay == null) words.greeting(nowMs) else GlanceFormat.headerDate(shownDay, locale, short = true)
+
+/**
+ * The top bar's start: the mark and the name, the pairing the web shell puts in its top left, so
+ * the glance says whose app it is where the sign-in and sync screens do. One description for the
+ * two, the name (the mark alone says nothing a reader could hear), and no action: it is not a
+ * button. "Hælan" is the brand, the same in every language, so it is app_name rather than copy.
+ */
+@Composable
+private fun Brand() {
+    val name = stringResource(R.string.app_name)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.clearAndSetSemantics { contentDescription = name },
+    ) {
+        Icon(painterResource(R.drawable.ic_brand_mark), contentDescription = null, tint = LocalGlanceColors.current.accent)
+        // A wordmark rather than a title: a step smaller than the day's title below it and heavier,
+        // as the approved header has it, so the two do not read as two headings of one size.
+        Text(
+            name,
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The way to the sync screen, which also holds the account and sign-out: Material's account
+ * symbol, as a phone app's top-right corner reads. A long press names it, since the symbol alone
+ * does not say that sync is behind it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AccountButton(onOpenSync: () -> Unit) {
+    val label = stringResource(R.string.glance_account_open)
+    TooltipBox(
+        // Below: the button sits at the top of the screen, where above has no room.
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onOpenSync) {
+            Icon(painterResource(R.drawable.ic_account), contentDescription = label)
+        }
+    }
+}
+
+/**
+ * The day's title, then ‹, ›, the calendar and, on a past day, Today: the web's header row, its
+ * title beside its DayNav, on its own row under the top bar. The title takes what the controls
+ * leave and ellipsizes, so at 360dp a long date shortens rather than pushing Today off the edge.
+ * The controls are disabled rather than hidden where there is nowhere to go, so the row keeps its
+ * shape; Today alone comes and goes, at the far end, as on the web. Touch only: the web's arrow
+ * keys and T are a keyboard's, and a phone has none.
  */
 @Composable
 private fun DayRow(
+    title: String,
     nav: DayNavState,
     onOpenDay: (String) -> Unit,
     onToday: () -> Unit,
     onOpenCalendar: (selected: String, today: String) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).semantics { heading() },
+        )
         DayButtons(nav, onOpenDay, onOpenCalendar)
-        Spacer(Modifier.weight(1f))
         if (nav.showToday) {
-            TextButton(onClick = onToday) { Text(stringResource(R.string.glance_day_nav_today)) }
+            TextButton(onClick = onToday) { Text(stringResource(R.string.glance_day_nav_today), maxLines = 1) }
         }
     }
 }

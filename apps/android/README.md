@@ -9,8 +9,8 @@ server payload: last night, recovery, today so far and the week, with arrows and
 to step to an earlier day, and a `+` that opens the log sheet when quick logging is switched on for
 the person. The last glance for today is kept on the phone, encrypted, and shown with the time it
 was fetched when the instance cannot be reached. A card's link opens that page of the web app
-inside the app, already signed in, and the sync button in the top bar leads to Health Connect,
-the sync and sign-out.
+inside the app, already signed in, and the account button in the top bar leads to Health
+Connect, the sync and sign-out.
 
 ## Build
 

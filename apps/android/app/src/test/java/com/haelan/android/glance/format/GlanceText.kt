@@ -213,6 +213,8 @@ internal val ENGLISH_TEXT: Map<String, String> = mapOf(
     // The phone's own: the web reorders chips by dragging, so it has no words for these buttons.
     "log_panel_edit_move_earlier" to "Move {{kind}} earlier",
     "log_panel_edit_move_later" to "Move {{kind}} later",
+    // The phone's own too: the web keeps its account in the rail, so no button of its is named.
+    "glance_account_open" to "Sync & account",
 )
 
 internal val DUTCH_TEXT: Map<String, String> = mapOf(
@@ -422,6 +424,7 @@ internal val DUTCH_TEXT: Map<String, String> = mapOf(
     // The phone's own: the web reorders chips by dragging, so it has no words for these buttons.
     "log_panel_edit_move_earlier" to "{{kind}} naar voren verplaatsen",
     "log_panel_edit_move_later" to "{{kind}} naar achteren verplaatsen",
+    "glance_account_open" to "Synchroniseren en account",
 )
 
 /** Strings over one of the maps above, failing loudly on a key the map does not have. */

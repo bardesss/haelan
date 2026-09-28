@@ -219,6 +219,7 @@ internal val GLANCE_STRING_IDS: Map<String, Int> = mapOf(
     "control_row_close" to R.string.control_row_close,
     "log_panel_edit_move_earlier" to R.string.log_panel_edit_move_earlier,
     "log_panel_edit_move_later" to R.string.log_panel_edit_move_later,
+    "glance_account_open" to R.string.glance_account_open,
 )
 
 /**

@@ -120,7 +120,6 @@
     <string name="rationale_continue">Continue</string>
 
     <!-- The glance: the screen after sign-in, a copy of the web dashboard. -->
-    <string name="glance_sync_open">Sync</string>
     <!-- The locale the glance writes its numbers and dates in, as the resources resolved: not
          words, but it must follow the sentences, so each language names its own (glanceLocale). -->
     <string name="glance_locale">en</string>
@@ -339,4 +338,7 @@
     <string name="control_row_close">Close</string>
     <string name="log_panel_edit_move_earlier">Move {{kind}} earlier</string>
     <string name="log_panel_edit_move_later">Move {{kind}} later</string>
+    <!-- The phone's own: the top bar's way to the sync screen, which also holds sign-out. The web
+         has no such button, its account being a page in the rail. -->
+    <string name="glance_account_open">Sync &amp; account</string>
 </resources>

@@ -8,6 +8,10 @@ import com.haelan.android.glance.GlanceUiState.Problem
 import com.haelan.android.glance.GlanceWeek
 import com.haelan.android.glance.GlanceWeekFigure
 import com.haelan.android.glance.figure
+import com.haelan.android.glance.format.DUTCH_TEXT
+import com.haelan.android.glance.format.ENGLISH_TEXT
+import com.haelan.android.glance.format.GlanceWords
+import com.haelan.android.glance.format.MapStrings
 import com.haelan.android.glance.glance
 import com.haelan.android.glance.glanceFixture
 import com.haelan.android.glance.recovery
@@ -16,6 +20,7 @@ import org.junit.Test
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.Locale
 
 /**
  * Which cards the glance shows and in what order: the web's dashboardRows.ts cases, read for a
@@ -161,5 +166,17 @@ class GlanceScreenRulesTest {
         val confirmed = GlanceUiState(shownDay = null, glance = glance().copy(log = log), fetchedAtMs = lateEvening, reachable = true, loading = false, problem = null, confirmed = true)
         assertEquals(true, showsLogButton(confirmed, Instant.parse("2026-08-20T21:59:00Z").toEpochMilli(), zone))
         assertEquals(false, showsLogButton(confirmed, Instant.parse("2026-08-20T22:01:00Z").toEpochMilli(), zone))
+    }
+
+    @Test
+    fun `the day row is titled with the greeting on today and the short date on a past day`() {
+        val zone = ZoneId.of("Europe/Amsterdam")
+        val evening = Instant.parse("2026-09-06T18:30:00Z").toEpochMilli() // 20:30 there
+        val english = GlanceWords(MapStrings(ENGLISH_TEXT), Locale.ENGLISH, zone)
+        val dutch = GlanceWords(MapStrings(DUTCH_TEXT), Locale.forLanguageTag("nl-NL"), zone)
+        assertEquals("Good evening", dayTitle(null, english, Locale.ENGLISH, evening))
+        assertEquals("Sat, Sep 5", dayTitle("2026-09-05", english, Locale.ENGLISH, evening))
+        assertEquals("Goedenavond", dayTitle(null, dutch, Locale.forLanguageTag("nl-NL"), evening))
+        assertEquals("za 5 sep", dayTitle("2026-09-05", dutch, Locale.forLanguageTag("nl-NL"), evening))
     }
 }

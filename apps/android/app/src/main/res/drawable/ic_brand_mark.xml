@@ -1,24 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The brand mark: an H whose crossbar is a heartbeat. The two shapes are those of
-     assets/brand/mark.svg, rewritten here because an Android resource does not read an SVG at runtime,
-     while the colour is not rewritten: it is @color/accent, that is the token, which changes with the theme
-     because values and values-night define it twice.
+<!-- The brand mark: an H whose crossbar is a heartbeat. The two paths are those of
+     assets/brand/mark.svg, written out word for word (pathData reads SVG path syntax), because an
+     Android resource does not read an SVG at runtime; apps/web/test/brand-mark.test.tsx holds this
+     copy to the others, so it cannot drift. The colour is not rewritten: it is @color/accent, that
+     is the token, which changes with the theme because values and values-night define it twice.
      On the web the mark takes currentColor from its containing element; a vector drawable inherits
      no colour, so the equivalent here is the token. A surface that wants it in
-     another tone tints it with app:tint on the ImageView, which overrides this. -->
+     another tone tints it with app:tint on the ImageView (or Icon's tint in Compose), which
+     overrides this. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M5,4L5,20M19,4L19,20"
+        android:pathData="M5 4v16M19 4v16"
         android:strokeColor="@color/accent"
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:pathData="M5,12H8.9L9.8,13.5L11.2,7.3L13,15.9L14,12H19"
+        android:pathData="M5 12h3.9l.9 1.5 1.4-6.2 1.8 8.6 1-3.9H19"
         android:strokeColor="@color/accent"
         android:strokeWidth="2"
         android:strokeLineCap="round"
