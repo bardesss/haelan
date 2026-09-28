@@ -51,6 +51,8 @@ import { readGlance } from './glance.ts'
 import type { Glance } from './glance.ts'
 import { readGlanceCalendar } from './glanceCalendar.ts'
 import type { GlanceCalendar } from './glanceCalendar.ts'
+import { readNightPage } from './nightPage.ts'
+import type { NightPage, NightPageInput } from './nightPage.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -285,6 +287,18 @@ export class PersonQuery {
       day: input.day,
       dayEndMs: input.dayEndMs,
     })
+  }
+
+  /**
+   * The night page (M10a): one night filed under `localDate`, every figure judged against its usual
+   * range, or null when no night is filed there. A night after today cannot have been slept yet, so
+   * asking for one is a malformed question rather than an empty answer.
+   */
+  nightPage(input: NightPageInput): NightPage | null {
+    requireDate('localDate', input.localDate)
+    requireDate('today', input.today)
+    if (input.localDate > input.today) throw new ConfigError(`localDate '${input.localDate}' is after today '${input.today}'`)
+    return readNightPage(this, input)
   }
 
   /**

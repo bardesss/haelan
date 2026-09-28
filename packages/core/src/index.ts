@@ -264,6 +264,14 @@ export type {
 } from './query/glance.ts'
 export { standingOf } from './query/glance.ts'
 
+// M10a: the night page, reachable through PersonQuery.nightPage, and the judged figure shape both
+// detail pages share. `judge` is exported as well, for the HTTP route that serves the page.
+export type { NightPage, NightPageInput } from './query/nightPage.ts'
+export type { PageFigure, Judged } from './query/pageFigure.ts'
+export { judge } from './query/pageFigure.ts'
+export type { NightTrace, NightTraceStat } from './query/nightTraces.ts'
+export type { ZeroLine } from './api/sleepBalance.ts'
+
 // M9c: day navigation. The calendar's verdicts, reachable through PersonQuery.glanceCalendar for
 // full precision; `readGlanceCalendarRaw` and `judgeCalendarDay` are exported too, unlike
 // readGlance above, because the HTTP route rounds the raw values to catalogue precision and

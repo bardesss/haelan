@@ -312,7 +312,7 @@ function lastSampleMs(ctx: GlanceContext, metrics: readonly string[]): number | 
  * means by "active minutes today". The baseline is taken over the summed days rather than built
  * from three baselines, because three spreads do not add.
  */
-function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
+export function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
   const dates = stripDates(ctx.today)
   // Read back to the strip's first day's own window, one read per level, so every strip day's own
   // baseline comes out of memory (baselinesOver); the stale sources still come from the figure's
