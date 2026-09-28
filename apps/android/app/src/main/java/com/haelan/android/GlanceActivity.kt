@@ -64,10 +64,12 @@ class GlanceActivity : ComponentActivity() {
                 val zone by model.zone.collectAsStateWithLifecycle()
                 val calendar by model.calendar.collectAsStateWithLifecycle()
                 val logSheet by model.logSheet.collectAsStateWithLifecycle()
+                // Read so a midnight tick recomposes, and the + goes with the day it logs to.
+                val tick by model.now.collectAsStateWithLifecycle()
                 GlanceScreen(
                     state = state,
                     text = rememberCardText(zone),
-                    nowMs = System.currentTimeMillis(),
+                    nowMs = maxOf(tick, System.currentTimeMillis()),
                     onOpenSync = ::openSync,
                     onOpenDay = model::open,
                     onOpenPage = ::openPage,

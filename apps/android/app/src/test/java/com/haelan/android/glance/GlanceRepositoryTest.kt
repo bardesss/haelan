@@ -255,6 +255,23 @@ class GlanceRepositoryTest {
     }
 
     @Test
+    fun `back to today from a past day opened before midnight drops the confirmation, when no answer comes`() {
+        now = Instant.parse("2026-09-27T21:50:00Z").toEpochMilli() // 23:50 in Amsterdam
+        reads.todayAnswers += GlanceRead.Fresh(glanceFixture("today-quick-log.json"), "\"v1\"")
+        repository.open()
+        reads.answerDay("2026-08-18", GlanceRead.Fresh(pastJson, null))
+        repository.showDay("2026-08-18")
+        assertTrue(state.confirmed)
+
+        now = Instant.parse("2026-09-27T22:10:00Z").toEpochMilli() // 00:10, the next day
+        reads.todayAnswers += GlanceRead.Unreachable(IOException("no route"))
+        repository.showToday()
+        assertNull(state.shownDay)
+        assertFalse(state.confirmed)
+        assertFalse(showsLogButton(state, now, zone))
+    }
+
+    @Test
     fun `a today read starting on a new day in the person's zone drops the confirmation it held`() {
         now = Instant.parse("2026-09-27T21:50:00Z").toEpochMilli() // 23:50 in Amsterdam
         reads.todayAnswers += GlanceRead.Fresh(glanceFixture("today-quick-log.json"), "\"v1\"")

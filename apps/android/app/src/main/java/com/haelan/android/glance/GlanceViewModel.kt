@@ -150,6 +150,16 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
 
     private val resumeRule = ResumeRule()
 
+    private val midnight = MidnightTicker(clock = System::currentTimeMillis, delay = { delay(it) })
+
+    private var midnightWait: Job? = null
+
+    /**
+     * The clock the screen reads the + from: moved at the person's midnight, on a return to the
+     * foreground, and by a tap on a + whose day has ended, so the + goes the moment it stops working.
+     */
+    val now: StateFlow<Long> = midnight.now
+
     init {
         repository.open()
         readZone()
@@ -163,13 +173,21 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
                 glance.log?.let { logSheetModel.glanceArrived(glance.today, it) }
             }
         }
-        // Midnight ends today while the screen may be up with no read due: ask again then, so the
-        // new today's glance arrives, and an open log sheet is retitled by its date (todayConfirmed).
-        // Re-armed after each refresh it fires, and from scratch when the person's zone is read.
-        viewModelScope.launch {
+        armMidnight()
+    }
+
+    /**
+     * Midnight ends today while the screen may be up with no read due: ask again then, so the new
+     * today's glance arrives, and an open log sheet is retitled by its date (todayConfirmed). The
+     * wait follows the wall clock ([MidnightTicker]), from scratch when the person's zone is read,
+     * and is armed again on each return to the foreground, where a midnight slept through fires.
+     */
+    private fun armMidnight() {
+        midnightWait?.cancel()
+        midnightWait = viewModelScope.launch {
             zone.collectLatest { zone ->
-                while (true) {
-                    delay(PersonZone.untilNextMidnight(System.currentTimeMillis(), zone) + MIDNIGHT_MARGIN_MS)
+                midnight.run(zone) {
+                    delay(MIDNIGHT_MARGIN_MS)
                     repository.refresh()
                 }
             }
@@ -182,7 +200,11 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
      */
     fun openLog() {
         val ui = state.value
-        if (!confirmedNow(ui, System.currentTimeMillis(), zone.value)) return
+        if (!confirmedNow(ui, System.currentTimeMillis(), zone.value)) {
+            // The day ended since the + was drawn (within a slice of a sleep): redraw without it.
+            midnight.touch()
+            return
+        }
         val glance = ui.glance ?: return
         logSheetModel.open(glance.today, glance.log ?: return)
     }
@@ -206,6 +228,8 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
 
     /** The screen came back to the foreground; [ResumeRule] says whether that asks again. */
     fun resumed() {
+        midnight.touch()
+        armMidnight()
         if (resumeRule.onResume()) repository.refresh()
     }
 

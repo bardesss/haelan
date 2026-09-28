@@ -90,6 +90,14 @@ class InstanceErrorTest {
      * on a phone, which printed "The instance answered %1$d." for it instead: the wrong
      * sentence, with its placeholder uninterpolated because the screen passed no argument.
      */
+    @Test
+    fun aWrongPasswordOnTheLoginScreenIsWrongCredentials() {
+        assertEquals(
+            R.string.login_failed,
+            InstanceError.forLogin(InstanceClient.InstanceHttpException(401, "invalid username or password")),
+        )
+    }
+
     /**
      * A type whose read permission Health Connect has not granted fails before anything is sent,
      * and connect-client throws it as a SecurityException wrapping the platform's own exception
@@ -104,14 +112,6 @@ class InstanceErrorTest {
         )
 
         assertEquals(R.string.error_permission, InstanceError.forThrowable(refused))
-    }
-
-    @Test
-    fun aWrongPasswordOnTheLoginScreenIsWrongCredentials() {
-        assertEquals(
-            R.string.login_failed,
-            InstanceError.forLogin(InstanceClient.InstanceHttpException(401, "invalid username or password")),
-        )
     }
 
     @Test
