@@ -16,6 +16,34 @@ class WebPagePolicyTest {
     private val server = "http://nas:4235"
 
     @Test
+    fun `the page's sign-out is answered by the app, and nothing else is`() {
+        assertTrue(WebPagePolicy.blocksRequest(server, "http://nas:4235/api/auth/logout"))
+        assertTrue(WebPagePolicy.blocksRequest(server, "http://nas:4235/api/auth/logout/"))
+        assertTrue(WebPagePolicy.blocksRequest(server, "http://nas:4235/api/auth/logout?next=/"))
+        assertTrue(WebPagePolicy.blocksRequest(server, "http://NAS:4235/api/./auth/logout"))
+        assertTrue("an instance under a path", WebPagePolicy.blocksRequest("https://host/nas", "https://host/nas/api/auth/logout"))
+        assertTrue("a container name", WebPagePolicy.blocksRequest("http://haelan_server:4235", "http://haelan_server:4235/api/auth/logout"))
+        assertFalse(WebPagePolicy.blocksRequest(server, "http://nas:4235/api/auth/me"))
+        assertFalse(WebPagePolicy.blocksRequest(server, "http://nas:4235/api/auth/login"))
+        assertFalse(WebPagePolicy.blocksRequest(server, "http://nas:4235/sleep"))
+        // Another origin's route is not the app's session, and the view does not load it anyway.
+        assertFalse(WebPagePolicy.blocksRequest(server, "http://other:4235/api/auth/logout"))
+    }
+
+    @Test
+    fun `the refusal is the instance's error envelope`() {
+        val error = org.json.JSONObject(WebPagePolicy.SIGN_OUT_REFUSAL).getJSONObject("error")
+        assertEquals("forbidden", error.getString("kind"))
+        assertEquals("forbidden", error.getString("code"))
+        assertEquals("Sign out from the app's sync screen.", error.getString("message"))
+    }
+
+    @Test
+    fun `the view names the app after the WebView's own user agent`() {
+        assertEquals("Mozilla/5.0 (Linux) Chrome/140 HaelanAndroid/1.4.0", WebPagePolicy.userAgent("Mozilla/5.0 (Linux) Chrome/140", "1.4.0"))
+    }
+
+    @Test
     fun `a page on the instance stays in the view`() {
         assertEquals(WebPagePolicy.Decision.Stay, WebPagePolicy.decide(server, "http://nas:4235/sleep/night/2026-09-20"))
         assertEquals(WebPagePolicy.Decision.Stay, WebPagePolicy.decide(server, "http://nas:4235/activity?week=1#top"))

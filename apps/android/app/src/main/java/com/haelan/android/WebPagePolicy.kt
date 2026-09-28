@@ -81,6 +81,39 @@ object WebPagePolicy {
         return InstanceClient.cookieHeader(cookie) + "; Path=/; HttpOnly; SameSite=Lax" + if (secure) "; Secure" else ""
     }
 
+    /** The route that ends a session on the instance (apps/server/src/routes/auth.ts). */
+    private const val LOGOUT_PATH = "/api/auth/logout"
+
+    /**
+     * The answer the view is given instead of the instance's to a sign-out: the instance's own error
+     * envelope, so the web app shows it as it would any refusal.
+     */
+    const val SIGN_OUT_REFUSAL =
+        """{"error":{"kind":"forbidden","code":"forbidden","message":"Sign out from the app's sync screen."}}"""
+
+    /**
+     * The view's user agent: the WebView's own with ` HaelanAndroid/<versionName>` after it, which
+     * the web app reads to leave its Sign out out of the page (apps/web's isInAndroidApp).
+     */
+    fun userAgent(base: String, versionName: String): String = "$base HaelanAndroid/$versionName"
+
+    /**
+     * Whether a request the page makes is answered by the app instead of sent: a sign-out on the
+     * instance's own origin. The page shares the app's session, so the web app's Sign out would end
+     * the app's too; the web app hides it inside the app, and this is what holds if something calls
+     * the route anyway. Any method, any query; an instance under a path is matched by the route's
+     * end, since the web app calls it under the path it is served from.
+     */
+    fun blocksRequest(serverOrigin: String, url: String): Boolean {
+        if (decide(serverOrigin, url) != Decision.Stay) return false
+        val path = try {
+            URI(url.trim()).normalize().path
+        } catch (e: URISyntaxException) {
+            return false
+        } ?: return false
+        return path.trimEnd('/').endsWith(LOGOUT_PATH)
+    }
+
     private data class Origin(val scheme: String, val host: String, val port: Int)
 
     private fun originOf(url: String): Origin? {

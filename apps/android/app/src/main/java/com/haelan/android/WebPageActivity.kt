@@ -3,6 +3,7 @@ package com.haelan.android
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +11,7 @@ import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.haelan.android.glance.ui.GlanceTheme
+import java.io.ByteArrayInputStream
 
 /**
  * The web page behind a card or a workout row, inside the app and signed in: the glance copies the
@@ -103,6 +106,9 @@ class WebPageActivity : ComponentActivity() {
             // would draw neither theme. Off is already the default for an app targeting 33 and up;
             // saying so keeps it off whatever a WebView update decides.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) settings.isAlgorithmicDarkeningAllowed = false
+            // Says it is the app, so the web app leaves its own Sign out out of the page: the
+            // session is the app's, and ending it belongs to the sync screen.
+            settings.userAgentString = WebPagePolicy.userAgent(settings.userAgentString, versionName())
             webViewClient = PageClient(server)
         }
         web = view
@@ -170,7 +176,25 @@ class WebPageActivity : ComponentActivity() {
         view.destroy()
     }
 
+    /** This app's version, for the user agent; "0" if the package manager cannot say. */
+    private fun versionName(): String = try {
+        packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
+    } catch (e: PackageManager.NameNotFoundException) {
+        "0"
+    }
+
     private inner class PageClient(private val server: String) : WebViewClient() {
+
+        /**
+         * A sign-out the page sends is answered here with a 403 in the instance's envelope and never
+         * reaches the instance ([WebPagePolicy.blocksRequest]): the web app hides its Sign out in
+         * the app, and this holds whatever calls the route anyway. Every other request goes out.
+         */
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+            if (!WebPagePolicy.blocksRequest(server, request.url.toString())) return null
+            val body = WebPagePolicy.SIGN_OUT_REFUSAL.toByteArray(Charsets.UTF_8)
+            return WebResourceResponse("application/json", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(body))
+        }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
