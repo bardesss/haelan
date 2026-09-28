@@ -29,7 +29,7 @@
   "dependencies": {
     "@node-rs/argon2": "^2.2.1",
     "better-sqlite3": "^13.0.3",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
