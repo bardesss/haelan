@@ -58,6 +58,32 @@ class CardGeometryTest {
         assertEquals(TraceWindow(ms("2026-08-19T15:00:00Z"), null), traceWindow("2026-08-20", finished = false, zone = tokyo, offsetMinutes = 120))
     }
 
+    // The clocks go back in Amsterdam on 25 October 2026 and forward on 29 March: at home, where the
+    // zone explains the recorded offset, the finished day keeps its 25 and 23 hours.
+    @Test
+    fun `a finished daylight saving day at home keeps its 25 or 23 hours`() {
+        val autumn = traceWindow("2026-10-25", finished = true, zone = amsterdam, offsetMinutes = 120)
+        assertEquals(TraceWindow(ms("2026-10-24T22:00:00Z"), ms("2026-10-25T23:00:00Z")), autumn)
+        val spring = traceWindow("2026-03-29", finished = true, zone = amsterdam, offsetMinutes = 60)
+        assertEquals(23 * 3_600_000L, spring.endMs!! - spring.startMs)
+    }
+
+    @Test
+    fun `a recorded day is reckoned in the first zone that explains its offset, else the fixed offset`() {
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        val day = java.time.LocalDate.parse("2026-09-22")
+        assertEquals(amsterdam, recordedDayZone(day, 120, listOf(tokyo, amsterdam)))
+        assertEquals(tokyo, recordedDayZone(day, 540, listOf(tokyo, amsterdam)))
+        assertEquals(java.time.ZoneOffset.ofHours(-4), recordedDayZone(day, -240, listOf(tokyo, amsterdam)))
+        assertEquals(tokyo, recordedDayZone(day, null, listOf(tokyo, amsterdam)))
+        // Through the window too: Amsterdam's 25-hour autumn day seen from Tokyo, with Amsterdam
+        // among the zones, keeps its last hour, which a fixed +120 would clip at 22:00Z.
+        assertEquals(
+            TraceWindow(ms("2026-10-24T22:00:00Z"), ms("2026-10-25T23:00:00Z")),
+            traceWindow("2026-10-25", finished = true, zone = tokyo, offsetMinutes = 120, otherZones = listOf(amsterdam)),
+        )
+    }
+
     @Test
     fun `the three dials fit a 360dp phone's card and keep the web's sizes on a wider one`() {
         val narrow = dialSizes(296f)

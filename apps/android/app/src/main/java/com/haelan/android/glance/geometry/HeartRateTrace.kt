@@ -97,13 +97,27 @@ data class TraceWindow(val startMs: Long, val endMs: Long?)
  * makes it. An instant to draw from, never a day to ask for.
  *
  * A finished day with [offsetMinutes] (the offset its readings were recorded under) is reckoned in
- * that offset instead, as the web's TodayCard does: a day lived in Amsterdam still runs midnight to
- * midnight Amsterdam time when the person looks at it from Tokyo. Today keeps [zone], where the
- * person is.
+ * [recordedDayZone] instead, as the web's TodayCard does: a day lived in Amsterdam still runs
+ * midnight to midnight Amsterdam time when the person looks at it from Tokyo, and a daylight saving
+ * day keeps its 23 or 25 hours. Today keeps [zone], where the person is. [zone] is the first zone
+ * tried; [otherZones] are tried after it.
  */
-fun traceWindow(today: String, finished: Boolean, zone: ZoneId, offsetMinutes: Int?): TraceWindow {
+fun traceWindow(today: String, finished: Boolean, zone: ZoneId, offsetMinutes: Int?, otherZones: List<ZoneId> = emptyList()): TraceWindow {
     val day = LocalDate.parse(today)
-    val reckonedIn = if (finished && offsetMinutes != null) ZoneOffset.ofTotalSeconds(offsetMinutes * 60) else zone
+    val reckonedIn = if (finished) recordedDayZone(day, offsetMinutes, listOf(zone) + otherZones) else zone
     fun midnight(date: LocalDate) = date.atStartOfDay(reckonedIn).toInstant().toEpochMilli()
     return TraceWindow(midnight(day), if (finished) midnight(day.plusDays(1)) else null)
+}
+
+/**
+ * The zone a finished [day] is reckoned in, given the offset its readings were recorded under and
+ * the zones that might explain it, in order (the web's recordedDayClock). The first whose offset
+ * at the day's own local midnight equals the recorded one is used as a zone, so its bounds follow a
+ * daylight saving change; only when none does is the fixed offset used. With no offset (no readings,
+ * an older server) the first zone.
+ */
+fun recordedDayZone(day: LocalDate, offsetMinutes: Int?, zones: List<ZoneId>): ZoneId {
+    if (offsetMinutes == null) return zones.first()
+    return zones.firstOrNull { day.atStartOfDay(it).offset.totalSeconds == offsetMinutes * 60 }
+        ?: ZoneOffset.ofTotalSeconds(offsetMinutes * 60)
 }
