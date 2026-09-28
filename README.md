@@ -137,6 +137,17 @@ stream.
 The Android path asks less of the person setting it up, and it gives some things up in exchange, which
 `apps/android/README.md` lists.
 
+### The glance on the phone
+
+The app opens on the same glance as the web dashboard, drawn natively: last night, recovery, today and
+the week, each against your own usual range, with the day arrows and the month calendar to step back
+through any day that has data. It opens at once on the last glance it saw, kept encrypted on the phone,
+and refreshes when you pull, come back to it, finish a sync or pass midnight; when the instance cannot be
+reached it says since when it is showing what it shows. The `+` logs how the day felt, what happened and
+the day's note, the same panel as on the web, and tapping a card opens the page behind it inside the app,
+already signed in. Sync, permissions and signing out sit behind the account icon. The glance needs an
+instance of 2.13.0 or later, and says so on an older one.
+
 ### Workout routes
 
 The companion app is also the only way a route reaches an instance. Google's Health API returns no
