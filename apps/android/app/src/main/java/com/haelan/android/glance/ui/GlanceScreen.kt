@@ -94,8 +94,12 @@ internal fun cardRows(glance: Glance): List<CardSlot> {
 /**
  * Whether the top bar offers the log sheet's +: only while the glance on screen carries `log`, the
  * server's word that the person turned quick logging on. The phone keeps no switch of its own.
+ *
+ * And only once the instance has confirmed that glance ([GlanceUiState.confirmed]): the stored one
+ * drawn at open may be from last night, and a sheet opened on it would be titled today and log for
+ * yesterday.
  */
-internal fun showsLogButton(state: GlanceUiState?): Boolean = state?.glance?.log != null
+internal fun showsLogButton(state: GlanceUiState?): Boolean = state?.confirmed == true && state.glance?.log != null
 
 /** What goes under the top bar. */
 sealed interface GlanceBody {
@@ -249,7 +253,7 @@ fun GlanceScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
                 Column(Modifier.fillMaxSize()) {
-                    noticeOf(state)?.let { Notice(it, text) }
+                    noticeOf(state)?.let { Notice(it, text, nowMs) }
                     Box(Modifier.fillMaxWidth().weight(1f)) {
                         when (val body = bodyOf(state)) {
                             GlanceBody.Waiting -> Centred { if (loading) CircularProgressIndicator() }
@@ -322,11 +326,14 @@ private fun DayButtons(
     }
 }
 
-/** The notice line under the top bar: the offline time, or what the instance said about itself. */
+/**
+ * The notice line under the top bar: the offline time (and day, when it was not [nowMs]'s), or what
+ * the instance said about itself.
+ */
 @Composable
-private fun Notice(notice: GlanceNotice, text: CardText) {
+private fun Notice(notice: GlanceNotice, text: CardText, nowMs: Long) {
     val line = when (notice) {
-        is GlanceNotice.Offline -> text.words.offlineLine(notice.fetchedAtMs)
+        is GlanceNotice.Offline -> text.words.offlineLine(notice.fetchedAtMs, nowMs)
         GlanceNotice.TooOld -> stringResource(R.string.glance_too_old)
         is GlanceNotice.Refused -> notice.message
     }

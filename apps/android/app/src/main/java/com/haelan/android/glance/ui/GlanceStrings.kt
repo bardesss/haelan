@@ -129,6 +129,7 @@ internal val GLANCE_STRING_IDS: Map<String, Int> = mapOf(
     "glance_empty_title" to R.string.glance_empty_title,
     "glance_empty_detail" to R.string.glance_empty_detail,
     "glance_offline" to R.string.glance_offline,
+    "glance_offline_day" to R.string.glance_offline_day,
     "glance_too_old" to R.string.glance_too_old,
     "shell_error_title" to R.string.shell_error_title,
     "shell_error_detail" to R.string.shell_error_detail,

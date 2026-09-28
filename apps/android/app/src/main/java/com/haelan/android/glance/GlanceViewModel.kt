@@ -145,15 +145,24 @@ class GlanceViewModel(app: Application, session: SessionStore.Session) : Android
         repository.open()
         readZone()
         syncSignal.start()
-        // Each glance that arrives tells the log sheet what the server now holds for its day.
+        // Each glance that arrives tells the log sheet what the server now holds for its day, and a
+        // today glance the instance confirmed tells it which day today is.
         viewModelScope.launch {
-            state.collect { ui -> ui.glance?.let { glance -> glance.log?.let { logSheetModel.glanceArrived(glance.today, it) } } }
+            state.collect { ui ->
+                val glance = ui.glance ?: return@collect
+                if (ui.confirmed && !glance.finished) logSheetModel.todayConfirmed(glance.today)
+                glance.log?.let { logSheetModel.glanceArrived(glance.today, it) }
+            }
         }
     }
 
-    /** The + in the top bar: the log sheet on the day the glance shows, from the glance's own log. */
+    /**
+     * The + in the top bar: the log sheet on the day the glance shows, from the glance's own log.
+     * Only on a glance the instance confirmed, as the + itself (showsLogButton).
+     */
     fun openLog() {
-        val glance = state.value.glance ?: return
+        val ui = state.value
+        val glance = ui.glance?.takeIf { ui.confirmed } ?: return
         logSheetModel.open(glance.today, glance.log ?: return)
     }
 

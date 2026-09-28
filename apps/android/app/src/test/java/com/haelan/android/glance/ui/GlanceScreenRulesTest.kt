@@ -131,11 +131,20 @@ class GlanceScreenRulesTest {
 
     @Test
     fun `the log sheet's + shows only when the glance carries a log`() {
-        fun on(glance: Glance?) = GlanceUiState(shownDay = null, glance = glance, fetchedAtMs = null, reachable = true, loading = false, problem = null)
+        fun on(glance: Glance?) =
+            GlanceUiState(shownDay = null, glance = glance, fetchedAtMs = null, reachable = true, loading = false, problem = null, confirmed = true)
         val log = DayLog(listOf("caffeine"), null, emptyMap(), null, "2026-08-20")
         assertEquals(true, showsLogButton(on(glance().copy(log = log))))
         assertEquals(false, showsLogButton(on(glance())))
         assertEquals(false, showsLogButton(on(null)))
         assertEquals(false, showsLogButton(null))
+    }
+
+    @Test
+    fun `the + waits for the instance to confirm the glance, so a stored one cannot log for yesterday`() {
+        val log = DayLog(listOf("caffeine"), null, emptyMap(), null, "2026-08-20")
+        val stored = GlanceUiState(shownDay = null, glance = glance().copy(log = log), fetchedAtMs = 100L, reachable = true, loading = true, problem = null)
+        assertEquals(false, showsLogButton(stored))
+        assertEquals(true, showsLogButton(stored.copy(loading = false, confirmed = true)))
     }
 }

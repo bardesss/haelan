@@ -35,6 +35,13 @@ data class GlanceUiState(
      * the phone's clock, which could sit on the other side of midnight from the server.
      */
     val today: String? = null,
+    /**
+     * Whether a read in this repository's life has confirmed [glance] with the instance: a 200 or a
+     * 304 for today, a 200 for a finished day. False for the stored glance drawn at open, which may
+     * be last night's: its `today` is only a claim until the instance has answered, and the log
+     * sheet's + waits for this, so a tap is never sent for a day that has already ended.
+     */
+    val confirmed: Boolean = false,
 ) {
     /** What the screen says instead of, or over, the cards. */
     sealed interface Problem {
@@ -120,6 +127,9 @@ class GlanceRepository(
 
     /** Today's glance as last stored, so going back to today draws it without the disk; guarded by [lock]. */
     private var today: GlanceStore.Kept? = null
+
+    /** Whether [today] was confirmed by the instance in this repository's life; guarded by [lock]. */
+    private var todayConfirmed = false
 
     /**
      * The call number of the newest today answer kept; guarded by [lock]. A today read is ordered
@@ -226,9 +236,12 @@ class GlanceRepository(
     }
 
     private fun backToToday(gen: Int) {
-        val kept = synchronized(lock) { today }
+        val (kept, confirmed) = synchronized(lock) { today to todayConfirmed }
         emit(gen) {
-            it.copy(shownDay = null, glance = kept?.glance, fetchedAtMs = kept?.fetchedAtMs, loading = true, problem = problemOf(kept?.glance))
+            it.copy(
+                shownDay = null, glance = kept?.glance, fetchedAtMs = kept?.fetchedAtMs, loading = true,
+                problem = problemOf(kept?.glance), confirmed = confirmed,
+            )
         }
         readToday(gen)
     }
@@ -244,7 +257,7 @@ class GlanceRepository(
                 emit(gen) {
                     GlanceUiState(
                         shownDay = null, glance = glance, fetchedAtMs = kept.fetchedAtMs,
-                        reachable = true, loading = false, problem = problemOf(glance),
+                        reachable = true, loading = false, problem = problemOf(glance), confirmed = true,
                     )
                 }
             }
@@ -259,7 +272,7 @@ class GlanceRepository(
                 emit(gen) {
                     it.copy(
                         fetchedAtMs = kept?.fetchedAtMs ?: it.fetchedAtMs, reachable = true, loading = false,
-                        problem = problemOf(kept?.glance ?: it.glance),
+                        problem = problemOf(kept?.glance ?: it.glance), confirmed = true,
                     )
                 }
             }
@@ -295,7 +308,7 @@ class GlanceRepository(
                 emit(gen) {
                     it.copy(
                         shownDay = shownDayOf(glance), glance = glance, fetchedAtMs = now,
-                        reachable = true, loading = false, problem = problemOf(glance),
+                        reachable = true, loading = false, problem = problemOf(glance), confirmed = true,
                     )
                 }
             }
@@ -331,6 +344,7 @@ class GlanceRepository(
             if (closed || gen < todayKept) return
             todayKept = gen
             today = kept
+            todayConfirmed = true
             if (!store.save(server, personId, kept.etag, kept.fetchedAtMs, kept.json)) {
                 log("today's glance could not be kept on the device")
             }

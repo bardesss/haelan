@@ -404,9 +404,16 @@ class GlanceWords(
 
     /**
      * The line over a glance the instance could not confirm: "Shown from 07:42, not reachable", the
-     * time it was last confirmed, read in the person's zone.
+     * time it was last confirmed, read in the person's zone. Confirmed on another day than [nowMs]'s
+     * it names that day too ("Shown from Sun, Sep 27 23:10"), so last night's glance, which calls
+     * its day today, is plainly not this morning's.
      */
-    fun offlineLine(fetchedAtMs: Long): String = t("glance_offline", "time" to GlanceFormat.clock(fetchedAtMs, zone))
+    fun offlineLine(fetchedAtMs: Long, nowMs: Long): String {
+        val time = GlanceFormat.clock(fetchedAtMs, zone)
+        val fetchedOn = Instant.ofEpochMilli(fetchedAtMs).atZone(zone).toLocalDate()
+        if (fetchedOn == Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()) return t("glance_offline", "time" to time)
+        return t("glance_offline_day", "date" to GlanceFormat.headerDate(fetchedOn.toString(), locale, short = true), "time" to time)
+    }
 
     /**
      * A calendar day as a screen reader hears it: its long date and both verdicts in words, or "no

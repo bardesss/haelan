@@ -115,6 +115,24 @@ class LogSheetModel(
         }
     }
 
+    /**
+     * The instance confirmed [today] as the person's today, in a today glance. Every kept day learns
+     * it, so a day that was today is now a day like any other (titled by its date, › live). A sheet
+     * open on an older today closes rather than go on logging for yesterday under "Log for today":
+     * opened on the stored glance before the refresh landed, or left up across midnight. Closed, not
+     * moved to the new today, since a sheet that changed its day under the reader's finger would be
+     * worse than one that goes; a note typed into it is not sent, as it was written for the day the
+     * sheet said it was, and saving it into the day before would put it where nobody meant it.
+     */
+    fun todayConfirmed(today: String) {
+        synchronized(lock) {
+            val open = shown?.let { days[it] }
+            for (day in days.keys.toList()) days[day] = days.getValue(day).copy(today = today)
+            if (open != null && open.today != today) shown = null
+            publish()
+        }
+    }
+
     override fun step(day: String) {
         synchronized(lock) {
             val current = shown?.let { days[it] } ?: return

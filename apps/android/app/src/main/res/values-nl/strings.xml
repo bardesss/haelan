@@ -221,6 +221,7 @@
     <string name="glance_empty_title">Nog niets te zien</string>
     <string name="glance_empty_detail">Zodra een synchronisatie een nacht of een dag binnenhaalt, verschijnt die hier.</string>
     <string name="glance_offline">Weergegeven van {{time}}, niet bereikbaar</string>
+    <string name="glance_offline_day">Weergegeven van {{date}} {{time}}, niet bereikbaar</string>
     <string name="glance_too_old">Deze server is te oud voor het overzicht; werk hem bij naar 2.13.0 of later</string>
     <string name="shell_error_title">Deze instantie gaf geen antwoord.</string>
     <string name="shell_error_detail">Mogelijk wordt er opnieuw opgestart of is er tijdelijk geen verbinding. Probeer het straks opnieuw.</string>

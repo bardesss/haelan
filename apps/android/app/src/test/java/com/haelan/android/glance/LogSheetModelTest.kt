@@ -67,6 +67,34 @@ class LogSheetModelTest {
     }
 
     @Test
+    fun `a new today confirmed under an open sheet closes it, and its typed note is not sent to the old day`() {
+        // Queued, so the stepped day's read below stays out and the kept state is what shows.
+        val queue = QueueDispatcher()
+        val model = model(queue)
+        model.open(today, glanceLog)
+        model.typeNote("Birthday")
+        model.todayConfirmed("2026-09-28")
+        assertNull(model.state.value)
+        assertEquals(0, queue.tasks.size)
+
+        // The day it was on is yesterday now: titled by its date, with › live, if stepped back to.
+        val tomorrowLog = glanceLog.copy(today = "2026-09-28", counts = emptyMap(), note = null)
+        model.open("2026-09-28", tomorrowLog)
+        model.step(today)
+        assertEquals(false, model.state.value?.isToday)
+        assertEquals("2026-09-28", model.state.value?.nextDay)
+    }
+
+    @Test
+    fun `the same today confirmed again leaves the open sheet alone`() {
+        model.open(today, glanceLog)
+        model.typeNote("Birthday")
+        model.todayConfirmed(today)
+        assertEquals(today, sheet?.day)
+        assertEquals("Birthday", sheet?.noteText)
+    }
+
+    @Test
     fun `dismiss saves the note once, after a blur already saved it`() {
         model.open(today, glanceLog)
         model.typeNote("Birthday")

@@ -348,10 +348,25 @@ class GlanceWordsTest {
     fun `the offline line dates the glance in the person's zone`() {
         // 07:42 in Amsterdam is 05:42 UTC in summer.
         val at = ms("2026-08-20T05:42:00Z")
-        assertEquals("Shown from 07:42, not reachable", english.offlineLine(at))
-        assertEquals("Weergegeven van 07:42, niet bereikbaar", dutch.offlineLine(at))
+        val later = ms("2026-08-20T09:00:00Z")
+        assertEquals("Shown from 07:42, not reachable", english.offlineLine(at, later))
+        assertEquals("Weergegeven van 07:42, niet bereikbaar", dutch.offlineLine(at, later))
         val london = GlanceWords(MapStrings(ENGLISH_TEXT), Locale.ENGLISH, ZoneId.of("Europe/London"))
-        assertEquals("Shown from 06:42, not reachable", london.offlineLine(at))
+        assertEquals("Shown from 06:42, not reachable", london.offlineLine(at, later))
+    }
+
+    @Test
+    fun `a glance confirmed on another day names that day, so last night's is not read as this morning's`() {
+        // 23:10 in Amsterdam on the 19th, read at 07:30 on the 20th.
+        val lastNight = ms("2026-08-19T21:10:00Z")
+        val morning = ms("2026-08-20T05:30:00Z")
+        assertEquals("Shown from Wed, Aug 19 23:10, not reachable", english.offlineLine(lastNight, morning))
+        assertEquals("Weergegeven van wo 19 aug 23:10, niet bereikbaar", dutch.offlineLine(lastNight, morning))
+        // The day is the person's: 22:30 UTC is already the 20th in Amsterdam, still the 19th in London.
+        val halfPastMidnight = ms("2026-08-19T22:30:00Z")
+        assertEquals("Shown from 00:30, not reachable", english.offlineLine(halfPastMidnight, morning))
+        val london = GlanceWords(MapStrings(ENGLISH_TEXT), Locale.ENGLISH, ZoneId.of("Europe/London"))
+        assertEquals("Shown from Wed, Aug 19 23:30, not reachable", london.offlineLine(halfPastMidnight, morning))
     }
 
     @Test

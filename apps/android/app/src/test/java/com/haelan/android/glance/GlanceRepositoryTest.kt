@@ -2,6 +2,7 @@ package com.haelan.android.glance
 
 import com.haelan.android.glance.GlanceClient.GlanceRead
 import com.haelan.android.glance.GlanceUiState.Problem
+import com.haelan.android.glance.ui.showsLogButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -206,6 +207,48 @@ class GlanceRepositoryTest {
         assertFalse(state.loading)
         assertNull(state.glance)
         assertNull("nothing unreadable is kept", storage.bytes)
+    }
+
+    @Test
+    fun `the stored glance is unconfirmed until the instance answers for it, and the + waits`() {
+        store.save(server, "p1", "\"v1\"", 100L, glanceFixture("today-quick-log.json"))
+        var whenAsked: GlanceUiState? = null
+        reads.onToday = { whenAsked = state }
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.open()
+
+        val then = checkNotNull(whenAsked)
+        assertTrue("the stored glance carries a log", then.glance?.log != null)
+        assertFalse(then.confirmed)
+        assertFalse(showsLogButton(then))
+        assertTrue(state.confirmed)
+        assertTrue(showsLogButton(state))
+    }
+
+    @Test
+    fun `a stored glance the instance never answered for stays unconfirmed`() {
+        store.save(server, "p1", "\"v1\"", 100L, glanceFixture("today-quick-log.json"))
+        reads.todayAnswers += GlanceRead.Unreachable(IOException("no route"))
+        repository.open()
+        assertFalse(state.confirmed)
+        assertFalse(showsLogButton(state))
+    }
+
+    @Test
+    fun `a fresh today and a finished day are confirmed, and back to today keeps a confirmed kept glance so`() {
+        reads.todayAnswers += GlanceRead.Fresh(todayJson, "\"v2\"")
+        repository.open()
+        assertTrue(state.confirmed)
+
+        reads.answerDay("2026-08-18", GlanceRead.Fresh(pastJson, null))
+        repository.showDay("2026-08-18")
+        assertTrue(state.confirmed)
+
+        var whenAsked: GlanceUiState? = null
+        reads.onToday = { whenAsked = state }
+        reads.todayAnswers += GlanceRead.NotModified
+        repository.showToday()
+        assertTrue("confirmed earlier in this life", checkNotNull(whenAsked).confirmed)
     }
 
     @Test
