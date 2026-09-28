@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.contracts.ExerciseRouteRequestContract
@@ -21,7 +22,9 @@ import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseRouteResult
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.Lifecycle
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.DynamicColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.progressindicator.LinearProgressIndicator
@@ -171,6 +174,12 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The chrome follows the phone as the glance's does (GlanceTheme): Material You's wallpaper
+        // colours from Android 12, for the bar, the buttons and the switches. Only those read the
+        // theme; the page, the cards and every word are token colours named in the layout, so the
+        // screen keeps the palette it shares with the glance. Before the views are inflated, which
+        // is when a theme overlay is read.
+        DynamicColors.applyToActivityIfAvailable(this)
         super.onCreate(savedInstanceState)
 
         val stored = SessionStore.prefs(this)
@@ -197,8 +206,14 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         // with no session no-ops until the next sign-in enqueues again.
         SyncSchedule.enqueue(this)
 
+        // As the glance and the web page do: the status bar's icons then follow the phone's light or
+        // dark, where the theme alone left them white over the light bar.
+        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
-        findViewById<android.view.View>(R.id.mainRoot).padForSystemBars()
+        findViewById<View>(R.id.topBarFrame).padForSystemBars(bottom = false)
+        findViewById<View>(R.id.mainScroll).padForSystemBars(top = false)
+        // A screen below the glance, as the in-app web page is: back to it, whatever opened this.
+        findViewById<MaterialToolbar>(R.id.topBar).setNavigationOnClickListener { finish() }
         permCheck = findViewById(R.id.permCheck)
         permStatus = findViewById(R.id.permStatus)
         syncButton = findViewById(R.id.buttonSync)
@@ -550,20 +565,23 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
+            // The glance's body type: bodyMedium for the type's name, bodySmall for the two lines
+            // under it. The appearance first, because it carries a colour of its own and the token
+            // colour set after it is the one that has to win.
             val title = TextView(this).apply {
                 text = getString(option.titleRes)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
                 setTextColor(getColor(R.color.text_primary))
-                textSize = 15f
             }
             val subtitle = TextView(this).apply {
                 setText(R.string.src_health_connect)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
                 setTextColor(getColor(R.color.text_muted))
-                textSize = 12f
             }
             val status = TextView(this).apply {
                 setText(R.string.status_never)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
                 setTextColor(getColor(R.color.text_secondary))
-                textSize = 12f
             }
             texts.addView(title)
             texts.addView(subtitle)
