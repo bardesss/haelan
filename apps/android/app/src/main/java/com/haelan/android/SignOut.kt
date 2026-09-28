@@ -1,5 +1,6 @@
 package com.haelan.android
 
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -19,6 +20,11 @@ import kotlin.coroutines.CoroutineContext
  * deleted the store, so the session was never cleared and the glance underneath sat on a closed
  * repository with nothing left to end its spinner. Now nothing waits on the instance, and the whole
  * of it runs under [NonCancellable]: a screen that goes mid-way still ends signed out.
+ *
+ * Forgetting the glances may throw (the store's delete goes through the keystore, which can fail
+ * on its own); that is logged ([log]) and the rest still runs, since a stored glance left behind
+ * is keyed by server and person and never shown to anyone else, while a session left behind would
+ * leave the person signed in after pressing Sign out.
  */
 internal suspend fun signOutInOrder(
     io: CoroutineContext,
@@ -27,8 +33,13 @@ internal suspend fun signOutInOrder(
     clearWebData: () -> Unit,
     sendLogout: () -> Unit,
     goLogin: () -> Unit,
+    log: (String) -> Unit = { Log.w("haelan-signout", it) },
 ) = withContext(NonCancellable) {
-    withContext(io) { forgetGlances() }
+    try {
+        withContext(io) { forgetGlances() }
+    } catch (e: Exception) {
+        log("the glance could not be forgotten at sign-out: $e")
+    }
     clearSession()
     clearWebData()
     sendLogout()

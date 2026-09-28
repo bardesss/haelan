@@ -27,7 +27,20 @@ class SignOutTest {
         clearWebData = { log += "clear web data" },
         sendLogout = { log += "send logout" },
         goLogin = { log += "go to sign-in" },
+        log = { log += "logged: $it" },
     )
+
+    @Test
+    fun `a delete that throws is logged, and the session, the web data and sign-in still follow`() {
+        runBlocking { signOut(forget = { throw IllegalStateException("keystore unavailable") }) }
+        assertEquals(
+            listOf(
+                "logged: the glance could not be forgotten at sign-out: java.lang.IllegalStateException: keystore unavailable",
+                "clear session", "clear web data", "send logout", "go to sign-in",
+            ),
+            log,
+        )
+    }
 
     @Test
     fun `the phone forgets everything before the instance is told, and sign-in comes last`() {
