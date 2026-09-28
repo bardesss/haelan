@@ -29,6 +29,7 @@
     <string name="error_certificate">The phone refused the instance certificate, so nothing was sent. The instance has to be reached over http on the local network, or behind a certificate the phone trusts.</string>
     <string name="error_not_instance">Something answered, and it is not a Hælan instance.</string>
     <string name="error_broken">The connection to the instance broke before it answered.</string>
+    <string name="error_permission">Health Connect has not given Hælan permission to read this. Tap Request permissions above.</string>
     <string name="error_not_your_person">This sign-in cannot send data for that person. Sign in again.</string>
     <string name="error_too_large">The instance refused the request for its size. The sync sends a type in blocks, so this is a point too large to send alone.</string>
     <string name="error_instance">The instance answered %1$d.</string>

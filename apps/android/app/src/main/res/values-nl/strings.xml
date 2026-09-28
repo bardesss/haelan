@@ -23,6 +23,7 @@
     <string name="error_certificate">De telefoon weigerde het certificaat van de instantie, dus er is niets verstuurd. De instantie moet over http op het lokale netwerk worden bereikt, of achter een certificaat dat de telefoon vertrouwt.</string>
     <string name="error_not_instance">Iets gaf antwoord, en het is geen Hælan-instantie.</string>
     <string name="error_broken">De verbinding met de instantie brak af voordat deze antwoordde.</string>
+    <string name="error_permission">Health Connect heeft Hælan geen toestemming gegeven om dit te lezen. Tik hierboven op Toestemmingen vragen.</string>
     <string name="error_not_your_person">Met deze login kunnen geen gegevens voor die persoon worden verstuurd. Log opnieuw in.</string>
     <string name="error_too_large">De instantie weigerde het verzoek vanwege zijn omvang. De sync stuurt een type in blokken, dus dit is een punt dat te groot is om alleen te versturen.</string>
     <string name="error_instance">De instantie antwoordde %1$d.</string>

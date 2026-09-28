@@ -49,6 +49,10 @@ object InstanceError {
         // Checked before the generic IOException below, which an SSL failure also is.
         is SSLException -> R.string.error_certificate
         is JSONException -> R.string.error_not_instance
+        // Not the instance at all: Health Connect refused to read a type this app has no
+        // permission for, which connect-client throws as a SecurityException. Without this it fell
+        // to the sentence below, and a phone missing its permissions said the network broke.
+        is SecurityException -> R.string.error_permission
         // A reset or a truncated answer is its own sentence: nothing was listening is wrong for
         // a connection that got as far as answering halfway.
         else -> R.string.error_broken
