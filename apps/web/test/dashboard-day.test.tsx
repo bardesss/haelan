@@ -43,9 +43,9 @@ const PERSON: Session = {
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
-function withQuery(node: ReactNode): ReactNode {
+function withQuery(node: ReactNode, person: Session = PERSON): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  client.setQueryData(queryKeys.session(), PERSON)
+  client.setQueryData(queryKeys.session(), person)
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
@@ -68,7 +68,24 @@ const TODAY = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit',
 }).format(new Date())
 
+// Home in Pago Pago (UTC-11), phone in Kiritimati (UTC+14): 25 hours apart, so at any instant the
+// two local dates differ, and a today read in the wrong one is always a different day.
+const TRAVELLER: Session = { ...PERSON, timezone: 'Pacific/Pago_Pago', effectiveTimezone: 'Pacific/Kiritimati', currentTimezone: 'Pacific/Kiritimati' }
+const zoneToday = (timeZone: string) => new Intl.DateTimeFormat('en-CA', {
+  timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date())
+
 describe('useDashboardDay', () => {
+  // The phone's today is a real day already, not a future one to clean away: in Kiritimati it is
+  // today, so the parameter naming it is dropped as today, and the day before it is a past day
+  // to open. Read in Pago Pago, both would be future days and both would fall back to today.
+  it('reads today in the effective zone, so the phone\'s yesterday opens as a past day', () => {
+    const yesterday = new Date(Date.parse(`${zoneToday('Pacific/Kiritimati')}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
+    window.history.replaceState(null, '', `/?day=${yesterday}`)
+    mount(withQuery(<Probe />, TRAVELLER))
+    expect(seen!.day).toBe(yesterday)
+  })
+
   it('reads a day out of ?day=', () => {
     window.history.replaceState(null, '', '/?day=2020-01-15')
     mountProbe()
