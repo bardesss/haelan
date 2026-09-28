@@ -17,6 +17,7 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
 import { glanceBody } from './glanceFixture.js'
+import { nightPageFixture } from './fixtures/nightPage.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
@@ -203,6 +204,10 @@ function stubNightFetch(): () => void {
       new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/sleep/nights')) return json({ items: [NIGHT_FIXTURE], cursor: null })
+    // The night page's own read (M10a), carrying the same night so the sections still below the
+    // new ones draw the hypnogram and the trace from it: the shared fixture's every figure and
+    // strip, filed under this case's date.
+    if (url.includes('/night/')) return json({ ...nightPageFixture(), localDate: NIGHT_FIXTURE.localDate, night: NIGHT_FIXTURE })
     if (url.includes('/series')) {
       const body: Record<string, unknown> = {}
       for (const metric of new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')) {
@@ -462,7 +467,7 @@ describe('the charts across a rerender', () => {
   // staleTime: Infinity query) and believes today's page is clean - this is the guard that would
   // have caught it if it were not, the same shape the three cases above already prove out on
   // the Dashboard, Recovery and the workout page.
-  it('are not disposed and re-initialised on the night page either, where NightStages and NightTraces live', async () => {
+  it('are not disposed and re-initialised on the night page either, where its strips, NightStages and NightTraces live', async () => {
     const restore = stubNightFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
@@ -475,13 +480,17 @@ describe('the charts across a rerender', () => {
     await flush(client, () => container!.innerHTML)
 
     const before = chartRoots()
-    // The hypnogram (one staged segment) and the heart_rate trace (pinned to the night's own
-    // source, which answered real points): two charts on this fixture, neither absent. spo2 and
-    // hrv both pin to 'watch', find nothing, and fall back to every other source finding nothing
-    // either, so they stay absent the same way NightTraces' own "renders a card only for the
-    // metrics something actually recorded" test already covers - this fixture does not need all
-    // three to exercise the same identity chain a fourth chart would.
-    expect(before).toHaveLength(2)
+    // The hero's time-asleep strip and the four figures' strips (M10a: each a Sparkline whose
+    // arrays and formatter come out of a memo on the payload), then the hypnogram (one staged
+    // segment) and the heart_rate trace (pinned to the night's own source, which answered real
+    // points): seven charts on this fixture, none absent. spo2 and hrv both pin to 'watch', find
+    // nothing, and fall back to every other source finding nothing either, so they stay absent the
+    // same way NightTraces' own "renders a card only for the metrics something actually recorded"
+    // test already covers - this fixture does not need all three to exercise the same identity
+    // chain a fourth trace would.
+    expect(container!.querySelector('.night-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
+    expect(container!.querySelectorAll('.night-minis [role="img"]')).toHaveLength(4)
+    expect(before).toHaveLength(7)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled

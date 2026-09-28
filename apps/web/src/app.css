@@ -585,6 +585,26 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .night-title { font-size: var(--font-size-xl); margin: 0; }
 .night-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
 
+/* The night page (M10a): the dashboard's measure, the header row the dashboard's own, the arrows
+   and the way back to every night together on its right. */
+.night-page { max-width: 1200px; margin-inline: auto; }
+.night-top { margin-bottom: var(--space-3); }
+.night-hero { justify-content: space-between; }
+.night-hero-value { font-variant-numeric: tabular-nums; }
+.night-minis { display: flex; flex-direction: column; gap: var(--space-2); }
+.night-top-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.night-all { font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; white-space: nowrap; }
+.night-all:hover { text-decoration: underline; }
+.night-hero-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.night-hero-verdict.better { color: var(--positive); }
+.night-hero-verdict.worse { color: var(--negative); }
+/* Four across on a wide screen, two on a phone, the mockup's two layouts. */
+.night-minis-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+@media (max-width: 620px) {
+  .night-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .night-all { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
 /* Not a grid of its own: WorkoutTiles.tsx's own comment says why - the page's `.grid` above is
    already this section's grid, and `display: contents` makes each `Card` child a direct grid item
    of it, exactly as an unwrapped card would be, while still giving this section's own tests a

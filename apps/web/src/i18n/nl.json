@@ -754,6 +754,21 @@
       "when": "{{bed}} tot {{wake}} · {{source}}",
       "missingTitle": "Geen nacht geregistreerd",
       "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd.",
+      "nav": "Nachten",
+      "previous": "Vorige nacht",
+      "next": "Volgende nacht",
+      "allNights": "Alle nachten →",
+      "hero": {
+        "label": "Tijd in slaap",
+        "strip": "deze nacht en de zes ervoor"
+      },
+      "minis": {
+        "efficiency": "Efficiëntie",
+        "deep": "Diepe slaap",
+        "rem": "REM",
+        "bedtime": "Naar bed",
+        "caption": "elk lijntje: deze nacht en de zes ervoor · band = je gebruikelijke bereik"
+      },
       "tiles": {
         "asleep": "Tijd in slaap",
         "inBed": "Tijd in bed",

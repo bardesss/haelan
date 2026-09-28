@@ -754,6 +754,21 @@
       "when": "{{bed}} to {{wake}} · {{source}}",
       "missingTitle": "No night recorded",
       "missingDetail": "This date has no sleep from this source. It may not have synced yet.",
+      "nav": "Nights",
+      "previous": "Previous night",
+      "next": "Next night",
+      "allNights": "All nights →",
+      "hero": {
+        "label": "Time asleep",
+        "strip": "this night and the six before it"
+      },
+      "minis": {
+        "efficiency": "Efficiency",
+        "deep": "Deep sleep",
+        "rem": "REM",
+        "bedtime": "Bedtime",
+        "caption": "each line: this night and the six before it · band = your usual range"
+      },
       "tiles": {
         "asleep": "Time asleep",
         "inBed": "Time in bed",
