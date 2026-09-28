@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/bardesss/haelan/compare/android-v0.6.0...android-v0.7.0) (2026-09-28)
+
+
+### Features
+
+* today follows the phone's time zone ([#394](https://github.com/bardesss/haelan/issues/394)) ([58170a1](https://github.com/bardesss/haelan/commit/58170a18bd4a8791d2c1f45c7533ffc931a38b5f))
+
 ## [0.6.0](https://github.com/bardesss/haelan/compare/android-v0.5.1...android-v0.6.0) (2026-09-28)
 
 
