@@ -8,6 +8,7 @@ import { SetupApp } from './setup/SetupApp.js'
 import { SignIn } from './auth/SignIn.js'
 import { RedeemInvite } from './auth/RedeemInvite.js'
 import { useSession } from './auth/session.js'
+import { isInAndroidApp } from './auth/inAndroidApp.js'
 import { useRoute, matchRoute, routeParams, navigate } from './router.js'
 import { useTranslation } from './i18n/index.js'
 import { ApiError } from './api/client.js'
@@ -25,6 +26,7 @@ export function Shell() {
   // Both components take the same props, so this is a swap rather than a branch: the sign-out
   // closure below and the rail's own error boundary are written once and serve either.
   const Rail = isPhone ? RailDrawer : Sidebar
+  const inAndroidApp = isInAndroidApp()
   const session = useSession()
   const queryClient = useQueryClient()
   const active = ROUTES.find((r) => matchRoute(r.path, route)) ?? ROUTES[0]!
@@ -137,8 +139,13 @@ export function Shell() {
     <div className={isPhone ? 'layout layout-phone' : 'layout'}>
       {/* The rail's own boundary, kept apart from the page's below. A throw here costs the reader
           navigation and sign out, not the page they came for; the two boundaries are separate so
-          neither failure takes both. */}
-      <ErrorBoundary>
+          neither failure takes both.
+
+          Left out entirely inside the Android app. There the page sits under the app's own bar,
+          which already carries the brand, the title and the way back to the glance, so the phone
+          header's hamburger, wordmark and status icon would be a second header over the same
+          page. Navigating elsewhere and syncing are the app's jobs, not this page's. */}
+      {!inAndroidApp && <ErrorBoundary>
         <Rail
           active={active.rail ?? active.path}
           person={session.data.displayName}
@@ -161,7 +168,7 @@ export function Shell() {
             })
           }}
         />
-      </ErrorBoundary>
+      </ErrorBoundary>}
       {/* A backstop for what a card's own boundary cannot catch within a page: the page's own
           layout, its control row, anything above its cards. A reader hitting this one has lost
           the page rather than one card. */}
