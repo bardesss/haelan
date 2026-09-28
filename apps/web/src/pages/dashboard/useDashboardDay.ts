@@ -20,7 +20,7 @@ export function useDashboardDay(): {
 } {
   const route = useRoute()
   const session = useSession()
-  const today = useMemo(() => localToday(session.data?.timezone), [session.data?.timezone])
+  const today = useMemo(() => localToday(session.data?.effectiveTimezone), [session.data?.effectiveTimezone])
 
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
   const raw = readQuery(search).get('day')

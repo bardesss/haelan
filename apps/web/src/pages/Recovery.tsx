@@ -391,7 +391,7 @@ export function Recovery() {
             visible only on the Dashboard now shows here too, at the foot of this page's own grid.
             annotations/excluded are this page's own heart_rate lookup, the same one card() above
             already builds per metric, rather than a second lookup built inside the card. */}
-        <HeartRateCard from={controls.from} to={controls.to} historicalTo={controls.historicalTo}
+        <HeartRateCard from={controls.from} to={controls.to} historicalTo={controls.historicalTo} today={controls.today}
           source={source} tab={controls.tab} rangeDates={rangeDates} period={period}
           annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
           excluded={annotationsFor(overridesByMetricMap, 'heart_rate').excluded}

@@ -151,6 +151,37 @@ export function localMidnightMs(date: string, timeZone: string): number {
   return utcMidnight - zoneOffsetMs(guess, timeZone)
 }
 
+/**
+ * What a recorded day's clock is read in: a real zone, or only when none explains the day, the
+ * fixed offset it was recorded under. Exactly one of the two is set.
+ */
+export type DayClock = { timeZone: string, offsetMinutes: null } | { timeZone: null, offsetMinutes: number }
+
+/**
+ * The clock a finished day is drawn in, given the offset its readings were recorded under
+ * (`offsetMinutes`, one per day) and the zones that might explain it, in order: the effective zone,
+ * then the home zone. The first whose offset at the day's own local midnight equals the recorded
+ * one is used as a zone, so a day that gains or loses an hour to daylight saving keeps its 25 or 23
+ * hours and its labels after the change. Only when no zone explains the day (recorded somewhere the
+ * person neither is nor lives) is the fixed offset used, which is then the best there is. A day with
+ * no offset (no readings, an older server) is read in the first zone.
+ */
+export function recordedDayClock(date: string, offsetMinutes: number | null, zones: readonly (string | null | undefined)[]): DayClock {
+  const known = zones.filter((zone): zone is string => typeof zone === 'string' && zone !== '')
+  if (offsetMinutes === null) return { timeZone: known[0] ?? 'UTC', offsetMinutes: null }
+  for (const zone of known) {
+    if (zoneOffsetMs(localMidnightMs(date, zone), zone) === offsetMinutes * 60_000) return { timeZone: zone, offsetMinutes: null }
+  }
+  return { timeZone: null, offsetMinutes }
+}
+
+/** The instant `date` opens on `clock`: the zone's local midnight, or midnight at the fixed offset. */
+export function dayClockMidnightMs(date: string, clock: DayClock): number {
+  return clock.timeZone !== null
+    ? localMidnightMs(date, clock.timeZone)
+    : Date.parse(`${date}T00:00:00Z`) - clock.offsetMinutes * 60_000
+}
+
 // A moment (asOfMs) as a clock time in the person's own zone, not the browser's: two people
 // looking at the same glance in different zones must read different clock times for the same
 // instant, the way formatClock's own callers already do for a bed or wake time computed server

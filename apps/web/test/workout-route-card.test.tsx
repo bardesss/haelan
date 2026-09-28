@@ -39,7 +39,7 @@ const FAR: RoutePoint = point({ latitude: 52.01 })
 
 const SESSION: Session = {
   personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: false,
-  timezone: 'Europe/Amsterdam', birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: true,
+  timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: true,
  quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }

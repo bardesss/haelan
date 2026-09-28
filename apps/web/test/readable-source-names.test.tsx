@@ -21,7 +21,7 @@ import { localToday } from '../src/controls/range.js'
 // names are the real ones the server keys on, everything else is made up.
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,

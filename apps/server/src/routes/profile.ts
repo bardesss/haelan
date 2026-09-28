@@ -12,6 +12,7 @@ interface ProfileBody {
   sleepTargetMinutes?: unknown
   sleepUseBaseline?: unknown
   quickLogEnabled?: unknown
+  followPhoneZone?: unknown
 }
 interface PasswordBody { currentPassword?: unknown, newPassword?: unknown }
 
@@ -48,6 +49,7 @@ export function registerProfile(app: FastifyInstance): void {
 
       const {
         displayName, username, timezone, birthDate, sex, sleepTargetMinutes, sleepUseBaseline, quickLogEnabled,
+        followPhoneZone,
       } = request.body ?? {}
       // Each field is optional and absent means untouched, so a client can save one control
       // without restating the other two. A present field must still be a string: `undefined` and
@@ -109,6 +111,11 @@ export function registerProfile(app: FastifyInstance): void {
       if (quickLogEnabled !== undefined && typeof quickLogEnabled !== 'boolean') {
         return reply.code(statusFor('config')).send(errorBody('config', 'config', 'quickLogEnabled must be a boolean'))
       }
+      // The same shape again, for the same reason: the write below is gated on the type, so without
+      // this a non-boolean would be silently ignored with a 200.
+      if (followPhoneZone !== undefined && typeof followPhoneZone !== 'boolean') {
+        return reply.code(statusFor('config')).send(errorBody('config', 'config', 'followPhoneZone must be a boolean'))
+      }
       // The zone comparison is against what is stored, not against whether the field was sent.
       // Saving the form unchanged sends all three every time, and a timezone write costs this
       // person every derived row they have until a rebuild replays them (PeopleStore.setTimezone),
@@ -128,6 +135,8 @@ export function registerProfile(app: FastifyInstance): void {
       if (typeof sleepTargetMinutes === 'number') stores().people.setSleepTargetMinutes(person.id, sleepTargetMinutes)
       if (typeof sleepUseBaseline === 'boolean') stores().people.setSleepUseBaseline(person.id, sleepUseBaseline)
       if (typeof quickLogEnabled === 'boolean') stores().people.setQuickLogEnabled(person.id, quickLogEnabled)
+      // Cheap, unlike the zone write below: it moves read-time "today" and clears no stamp.
+      if (typeof followPhoneZone === 'boolean') stores().people.setFollowPhoneZone(person.id, followPhoneZone)
       if (zoneMoved) stores().people.setTimezone(person.id, timezone)
 
       const saved = stores().people.get(person.id)!
@@ -141,6 +150,7 @@ export function registerProfile(app: FastifyInstance): void {
         sleepTargetMinutes: saved.sleepTargetMinutes,
         sleepUseBaseline: saved.sleepUseBaseline,
         quickLogEnabled: saved.quickLogEnabled,
+        followPhoneZone: saved.followPhoneZone,
         // What the caller is owed rather than what happened: nothing rebuilds on this request. The
         // derivation stamp is cleared, which is what the boot rebuild reads, so this says "your
         // history is being re-derived from the archive the next time this instance starts" and the

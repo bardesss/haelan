@@ -32,11 +32,17 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
 // The same stub intraday-chart.test.tsx uses: nothing here reads the drawn option, only whether a
 // control was rendered beside it, so a real instance would be several hundred milliseconds of
 // canvas work per case for no assertion.
+// The click handler useChart binds is kept, so one case below can tap a point and read what the
+// annotate control then names.
+let clickHandler: ((event: unknown) => void) | null = null
 vi.mock('echarts/core', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
     ...actual,
-    init: () => ({ on: vi.fn(), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn() }),
+    init: () => ({
+      on: (name: string, handler: (event: unknown) => void) => { if (name === 'click') clickHandler = handler },
+      setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn(),
+    }),
   }
 })
 
@@ -81,7 +87,7 @@ const SPO2_DAYS = LABELS.map((date) => ({ date, min: 94, mean: 96, max: 98, coun
 const POINTS = [0, 60_000].map((utcMs) => ({ sourceId: 'watch', utcMs, min: 55, mean: 60, max: 65, n: 1, excluded: false }))
 
 const SESSION: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC',
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', effectiveTimezone: 'UTC', currentTimezone: null, followPhoneZone: true,
   birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
@@ -152,6 +158,25 @@ function mount(node: React.ReactNode): void {
 
 const annotateControl = (): HTMLButtonElement | null =>
   container!.querySelector<HTMLButtonElement>('.chart-annotate')
+
+describe('the annotate control names a recorded point at its own offset', () => {
+  // 04:00Z taken in New York (UTC-4) is 00:00 there; the session's zone here is UTC, which would
+  // name it 04:00. The control's name is describe()'s, read at the offset the chart was given.
+  const at = Date.UTC(2026, 8, 23, 4, 0)
+  const tap = () => act(() => { clickHandler!({ componentType: 'series', seriesIndex: 2, dataIndex: 0 }) })
+
+  it('reads the tapped point at offsetMinutes', () => {
+    mount(<IntradayHeartRate points={[{ ...POINTS[0]!, utcMs: at }]} reduction={null} label="Heart rate" offsetMinutes={-240} onPointClick={() => {}} />)
+    tap()
+    expect(annotateControl()!.textContent).toContain('00:00')
+  })
+
+  it('reads it in the zone without one', () => {
+    mount(<IntradayHeartRate points={[{ ...POINTS[0]!, utcMs: at }]} reduction={null} label="Heart rate" onPointClick={() => {}} />)
+    tap()
+    expect(annotateControl()!.textContent).toContain('04:00')
+  })
+})
 
 describe('the annotate control below the breakpoint', () => {
   // The defect this file exists for. Every one of these six declares `onPointClick` optional and

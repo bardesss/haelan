@@ -72,7 +72,7 @@ afterEach(() => {
 })
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,
@@ -143,14 +143,21 @@ beforeEach(() => {
 })
 afterEach(() => { globalThis.fetch = originalFetch })
 
+// Home in Pago Pago (UTC-11), phone in Kiritimati (UTC+14): 25 hours apart, so at any instant the
+// two local dates differ, and a today read in the wrong one is always a different day.
+const TRAVELLER: Session = { ...PERSON, timezone: 'Pacific/Pago_Pago', effectiveTimezone: 'Pacific/Kiritimati', currentTimezone: 'Pacific/Kiritimati' }
+const zoneToday = (timeZone: string) => new Intl.DateTimeFormat('en-CA', {
+  timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date())
+
 const DATA_KEY = queryKeys.resource(PERSON.personId, 'series', { metric: 'steps' })
 
 // Mounted where the shell puts it, inside the rail's foot, so the portal test below can prove the
 // popover is NOT inside the rail - the rail is a scroll container, and anything absolutely placed
 // inside it is clipped at its edge.
-function mount(status: StatusPanel, lng = 'en', railClass = 'rail'): QueryClient {
+function mount(status: StatusPanel, lng = 'en', railClass = 'rail', person: Session = PERSON): QueryClient {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  client.setQueryData(queryKeys.session(), PERSON)
+  client.setQueryData(queryKeys.session(), person)
   client.setQueryData(statusKey(PERSON.personId), status)
   client.setQueryData(DATA_KEY, { points: [] })
   act(() => {
@@ -221,6 +228,16 @@ describe('the status icon', () => {
 })
 
 describe('the popover, on a desktop', () => {
+  // The device rows say today and yesterday by the person's effective today, the phone's zone
+  // when they follow it: a device that reported on the phone's today reads "today".
+  it('words a device\'s day against the effective today, not the home zone\'s', () => {
+    const today = zoneToday('Pacific/Kiritimati')
+    const status = panel({ connections: [phoneConnection({ devices: [{ sourceId: 'hc', name: 'Health Connect', lastReportedDate: today, stale: false, choice: null, metrics: [] }] })] })
+    mount(status, 'en', 'rail', TRAVELLER)
+    press(icon())
+    expect(popover()!.querySelector('.status-device')!.textContent).toContain('today')
+  })
+
   it('opens on a press, with one section per connection and the devices in order', () => {
     mount(panel())
     expect(popover()).toBeNull()

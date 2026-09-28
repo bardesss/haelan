@@ -36,16 +36,16 @@ function mount(node: ReactNode): void {
 // Europe/Amsterdam, UTC+2 in September, the same person page-controls.test.tsx and use-glance's
 // own fixture already use.
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
-function withQuery(node: ReactNode): ReactNode {
+function withQuery(node: ReactNode, person: Session = PERSON): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  client.setQueryData(queryKeys.session(), PERSON)
+  client.setQueryData(queryKeys.session(), person)
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
@@ -68,7 +68,24 @@ const TODAY = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit',
 }).format(new Date())
 
+// Home in Pago Pago (UTC-11), phone in Kiritimati (UTC+14): 25 hours apart, so at any instant the
+// two local dates differ, and a today read in the wrong one is always a different day.
+const TRAVELLER: Session = { ...PERSON, timezone: 'Pacific/Pago_Pago', effectiveTimezone: 'Pacific/Kiritimati', currentTimezone: 'Pacific/Kiritimati' }
+const zoneToday = (timeZone: string) => new Intl.DateTimeFormat('en-CA', {
+  timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date())
+
 describe('useDashboardDay', () => {
+  // The day before Kiritimati's today is a past day there, so it opens. Pago Pago's today is one or
+  // two days behind Kiritimati's, so read in Pago Pago that same day is either today itself or a
+  // future day, and either way the page falls back to today with no day open.
+  it('reads today in the effective zone, so the phone\'s yesterday opens as a past day', () => {
+    const yesterday = new Date(Date.parse(`${zoneToday('Pacific/Kiritimati')}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
+    window.history.replaceState(null, '', `/?day=${yesterday}`)
+    mount(withQuery(<Probe />, TRAVELLER))
+    expect(seen!.day).toBe(yesterday)
+  })
+
   it('reads a day out of ?day=', () => {
     window.history.replaceState(null, '', '/?day=2020-01-15')
     mountProbe()

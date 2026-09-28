@@ -39,7 +39,7 @@ afterEach(() => {
 
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false,
-  timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,
@@ -209,6 +209,17 @@ describe('the workout page', () => {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(html()).toContain('Morning run')
+    } finally { restore() }
+  })
+
+  // A run recorded in New York reads at New York's clock, not at the reader's zone (Amsterdam
+  // here, where 06:00Z would read 08:00): anything already recorded keeps the time it was recorded in.
+  it('prints the workout\'s clock times under the offsets it was recorded with', async () => {
+    const restore = stub({ run1: { ...RUN, startOffsetMinutes: -240, endOffsetMinutes: -240 } })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container!.querySelector('.workout-when')!.textContent).toContain('02:00–02:54')
     } finally { restore() }
   })
 

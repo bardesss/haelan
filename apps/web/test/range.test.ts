@@ -158,9 +158,9 @@ describe('clampFromToHistory', () => {
 
   it('reads a body with nothing numeric in it as no history', () => {
     expect(normalizeHistoryStart({} as never))
-      .toEqual({ historyStartMs: null, googleConnected: false, lastIngestAtMs: null })
-    expect(normalizeHistoryStart({ historyStartMs: 'soon' as never, googleConnected: 0 as never }))
-      .toEqual({ historyStartMs: null, googleConnected: false, lastIngestAtMs: null })
+      .toEqual({ historyStartMs: null, historyStartLocalDate: null, googleConnected: false, lastIngestAtMs: null })
+    expect(normalizeHistoryStart({ historyStartMs: 'soon' as never, historyStartLocalDate: 'soon', googleConnected: 0 as never }))
+      .toEqual({ historyStartMs: null, historyStartLocalDate: null, googleConnected: false, lastIngestAtMs: null })
   })
 
   it('takes the newest ingest across every type, ignoring the types that have none', () => {
@@ -174,13 +174,27 @@ describe('clampFromToHistory', () => {
         { dataTypeId: 'weight', lastWindowEndMs: null, lastIngestAtMs: null },
         { dataTypeId: 'heart-rate', lastWindowEndMs: 9, lastIngestAtMs: 900 },
       ],
-    })).toEqual({ historyStartMs: 1000, googleConnected: false, lastIngestAtMs: 900 })
+    })).toEqual({ historyStartMs: 1000, historyStartLocalDate: null, googleConnected: false, lastIngestAtMs: 900 })
   })
 
   it('reads a body whose items are missing or not a list as no ingest', () => {
     expect(normalizeHistoryStart({ historyStartMs: 1, googleConnected: true }).lastIngestAtMs).toBe(null)
     expect(normalizeHistoryStart({ historyStartMs: 1, googleConnected: true, items: 'none' as never })
       .lastIngestAtMs).toBe(null)
+  })
+
+  it('passes the server’s recorded history start date through', () => {
+    expect(normalizeHistoryStart({ historyStartMs: 1000, historyStartLocalDate: '2026-09-12', googleConnected: false }).historyStartLocalDate)
+      .toBe('2026-09-12')
+  })
+
+  // The start was recorded in New York at 22:30 on the 12th, 02:30Z on the 13th: the server dates
+  // it the 12th by its stored offset, while the instant read in Tokyo, where the person is now,
+  // is already the 13th, a day late.
+  it('starts the range on the server’s recorded date, not on the instant read in the zone the person is in now', () => {
+    const recorded = { historyStartMs: Date.parse('2026-09-13T02:30:00Z'), historyStartLocalDate: '2026-09-12', googleConnected: false }
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', recorded, 'Asia/Tokyo')).toBe('2026-09-12')
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', { ...recorded, historyStartLocalDate: null }, 'Asia/Tokyo')).toBe('2026-09-13')
   })
 
   it('asks the companion cursors for this person as an Android client', () => {

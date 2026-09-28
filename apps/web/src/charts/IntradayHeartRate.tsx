@@ -6,7 +6,7 @@ import { scaleStops } from './tokens.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatMetricValue } from '../format.js'
+import { formatMetricValue, formatRecordedClock } from '../format.js'
 import type { Translate } from '../format.js'
 import type { IntradayPoint, IntradayResult } from '../data/useIntraday.js'
 import { useSession } from '../auth/session.js'
@@ -88,6 +88,21 @@ type Props = {
    * only one). Empty by default, which draws exactly what the chart drew before this existed.
    */
   spans?: readonly { startMs: number, endMs: number }[]
+  /**
+   * The offset, in minutes, the points were recorded under, when they belong to something already
+   * recorded: a finished day (the glance's and the intraday route's `offsetMinutes`), a workout, a
+   * night. Every clock time the chart prints - axis labels, the tooltip, the table, the annotate
+   * control - is then read under it, so a day lived in Amsterdam still reads 00:00 to 24:00 from
+   * Tokyo. One offset for the whole chart, never one per point, so the labels stay in order.
+   * Unset or null, clock times are read in the person's effective zone: today, still running.
+   */
+  offsetMinutes?: number | null
+  /**
+   * The zone clock times are read in when `offsetMinutes` is unset: a finished day a real zone
+   * explains (recordedDayClock), which keeps a daylight saving change's hour. Unset, the person's
+   * effective zone.
+   */
+  timeZone?: string | null
 }
 
 /**
@@ -136,13 +151,11 @@ export function intradayBasis(t: Translate, reduction: IntradayResult['reduction
 /**
  * A point's time of day, rendered in `timeZone` rather than wherever this code happens to run.
  *
- * This answers a different question than the one IntradayPoint's own missing tzOffsetMinutes
- * would: readIntraday (packages/core/src/query/intraday.ts) reads each row's own recording offset
- * server side only to decide which local day a reading belongs to, and does not return it, so there
- * is no way to recover the offset a reading was actually taken under once a point reaches this
- * file. That is not what a reader wants displayed anyway; a reader wants their OWN configured zone
- * (`session.timezone`, `IntradayHeartRate` below), the same zone usePageControls already reads off
- * the session to compute "the person's today, not the browser's" (usePageControls.ts). `timeZone`
+ * Used for the day still running, where a reader wants their OWN zone (`session.effectiveTimezone`:
+ * the phone's zone when the person follows it), the same zone usePageControls reads to compute "the
+ * person's today, not the browser's". Something already recorded is read under the one offset its
+ * caller passes as `offsetMinutes` instead (formatRecordedClock), never a per-point offset, which a
+ * point does not carry: readIntraday returns one offset per day, its first reading's. `timeZone`
  * is always passed in explicitly, never defaulted here, so this function cannot quietly fall back
  * to the runtime's own machine zone the way `Intl.DateTimeFormat` does when the option is omitted:
  * the same reason periodLabel.ts pins `timeZone: 'UTC'` on every one of its own formatters rather
@@ -170,7 +183,7 @@ const COMPACT_HEIGHT = 84
 
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
-  compact = false, startMs, endMs, spans = NO_SPANS,
+  compact = false, startMs, endMs, spans = NO_SPANS, offsetMinutes = null, timeZone,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -180,7 +193,10 @@ export function IntradayHeartRate({
   // a real instant regardless of whether the reader's own zone is known yet, and UTC is a real,
   // statable zone to show it in meanwhile, not a guess the way the runtime's own machine zone would
   // be (timeOfDay's own comment on why that guess is never used here, loaded or not).
-  const timezone = session.data?.timezone ?? 'UTC'
+  const timezone = timeZone ?? session.data?.effectiveTimezone ?? 'UTC'
+  const clock = useCallback((utcMs: number) => offsetMinutes === null
+    ? timeOfDay(utcMs, timezone, i18n.language)
+    : formatRecordedClock(utcMs, offsetMinutes), [offsetMinutes, timezone, i18n.language])
 
   // Read once per render, not per formatMetricValue call: METRICS[metric] is the same lookup
   // formatMetricValue itself does internally for precision, and translating a unit key is not free
@@ -255,7 +271,7 @@ export function IntradayHeartRate({
               const mean = formatMetricValue(point.mean, metric, i18n.language, '')
               const min = formatMetricValue(point.min, metric, i18n.language, '')
               const max = formatMetricValue(point.max, metric, i18n.language, '')
-              return tip`${timeOfDay(point.utcMs, timezone, i18n.language)} ${nameOf(point.sourceId)}`
+              return tip`${clock(point.utcMs)} ${nameOf(point.sourceId)}`
                 + tip`<br/>${t('charts.hrTooltip.mean', { value: mean, unit })}`
                 + tip`<br/>${t('charts.hrTooltip.range', { min, max, unit })}`
             })
@@ -268,7 +284,7 @@ export function IntradayHeartRate({
             ...(startMs !== undefined && { min: startMs }), ...(lastMs !== null && { max: lastMs }) }
         : {
             type: 'time' as const,
-            axisLabel: { ...base.axisLabel, formatter: (value: number) => timeOfDay(value, timezone, i18n.language) },
+            axisLabel: { ...base.axisLabel, formatter: (value: number) => clock(value) },
             axisLine: base.labelledAxis.axisLine,
           },
       yAxis: compact
@@ -337,7 +353,7 @@ export function IntradayHeartRate({
         }]),
       ],
     }
-  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, lastMs, spans])
+  }, [series, pointsBySeriesIndex, clock, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, lastMs, spans])
 
   // Shared by onClick and describe below, so the annotate control acts on precisely the point a
   // click would have opened rather than on a second reading of the same event.
@@ -360,8 +376,8 @@ export function IntradayHeartRate({
   // which sources it drew.
   const describe = useCallback((event: ECElementEvent) => {
     const point = pointAt(event)
-    return point === undefined ? undefined : timeOfDay(point.utcMs, timezone, i18n.language)
-  }, [pointAt, timezone, i18n.language])
+    return point === undefined ? undefined : clock(point.utcMs)
+  }, [pointAt, clock])
 
   // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
   // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
@@ -383,7 +399,7 @@ export function IntradayHeartRate({
         rows: points.map((p) => {
           const absent = t('charts.absence.noReading')
           return [
-            timeOfDay(p.utcMs, timezone, i18n.language),
+            clock(p.utcMs),
             nameOf(p.sourceId),
             formatMetricValue(p.min, metric, i18n.language, absent),
             formatMetricValue(p.mean, metric, i18n.language, absent),

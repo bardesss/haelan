@@ -16,17 +16,24 @@ import java.time.ZoneId
  */
 object PersonZone {
 
-    /** The session route; it answers `timezone` for the browser's today, and the glance reads it too. */
+    /**
+     * The session route; it answers `effectiveTimezone` (the zone the person's today is read in: the
+     * phone's current one when they follow it, else home) and `timezone` (home), and the glance reads
+     * the first it can.
+     */
     const val ME_PATH = "/api/auth/me"
 
     /**
-     * The zone id in a `/api/auth/me` body, or null when the body is not JSON, has no `timezone`, or
-     * names a zone this phone's tz database does not know (a newer server's name, say), since a zone
-     * the phone cannot read is no better than having none.
+     * The zone id in a `/api/auth/me` body: `effectiveTimezone` first, so the glance turns over at
+     * the midnight the instance's own today does, then `timezone` for a server predating it. Null
+     * when the body is not JSON, has neither, or names only zones this phone's tz database does not
+     * know (a newer server's name, say), since a zone the phone cannot read is no better than none.
      */
     fun parseMe(json: String): String? {
-        val raw = runCatching { JSONObject(json) }.getOrNull()?.takeUnless { it.isNull("timezone") }?.optString("timezone")
-        return raw?.takeIf { it.isNotEmpty() && known(it) }
+        val body = runCatching { JSONObject(json) }.getOrNull() ?: return null
+        return listOf("effectiveTimezone", "timezone").firstNotNullOfOrNull { key ->
+            body.takeUnless { it.isNull(key) }?.optString(key)?.takeIf { it.isNotEmpty() && known(it) }
+        }
     }
 
     /** [stored] when it names a zone this phone knows, [fallback] (the phone's own) otherwise. */

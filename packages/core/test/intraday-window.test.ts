@@ -106,7 +106,7 @@ describe('readIntradayWindow', () => {
       personId: 'p1', metric: 'heart_rate',
       startMs: NINE_AM - 10 * MINUTE, endMs: NINE_AM - MINUTE,
     })
-    expect(result).toEqual({ points: [], reduction: null })
+    expect(result).toEqual({ points: [], reduction: null, offsetMinutes: null })
   })
 })
 

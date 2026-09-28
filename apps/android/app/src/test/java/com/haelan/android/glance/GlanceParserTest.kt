@@ -123,6 +123,14 @@ class GlanceParserTest {
         )
         assertEquals(1787213040000L, heartRate.asOfMs)
         assertEquals(emptyList<GlanceStaleSource>(), heartRate.staleSources)
+        // The offset the day's readings were recorded under, as the server wrote it.
+        assertEquals(120, heartRate.offsetMinutes)
+    }
+
+    @Test
+    fun `a heart rate with no offset reads as none, from a server that sends null or predates the field`() {
+        assertNull(GlanceParser.parse(edited("today.json") { it.getJSONObject("day").getJSONObject("heartRate").put("offsetMinutes", JSONObject.NULL) }).day.heartRate.offsetMinutes)
+        assertNull(GlanceParser.parse(edited("today.json") { it.getJSONObject("day").getJSONObject("heartRate").remove("offsetMinutes") }).day.heartRate.offsetMinutes)
     }
 
     @Test

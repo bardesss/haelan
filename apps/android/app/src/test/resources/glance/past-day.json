@@ -928,6 +928,7 @@
     "heartRate": {
       "points": [],
       "asOfMs": null,
+      "offsetMinutes": null,
       "staleSources": []
     },
     "workouts": []

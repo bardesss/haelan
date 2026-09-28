@@ -80,6 +80,16 @@ export const people = sqliteTable('people', {
   // a table so a read never has to seed anything: a write on a GET would wait on the boot
   // rebuild's write lock.
   quickLogPresets: text('quick_log_presets'),
+  // The zone the person's phone was last in, written only by the companion app's ingest (the
+  // X-Haelan-Zone header). Null until a phone has sent one. Unlike `timezone` above this is not a
+  // day boundary for anything stored: every sample, session and event carries its own offset, and
+  // neither derivation nor Google sync reads this column, so a write clears no stamp. It only moves
+  // read-time "today" and display, through effectiveTimezone (store/people.ts).
+  currentTimezone: text('current_timezone'),
+  // Whether read-time "today" follows the phone's zone above. On by default: a traveller who never
+  // opens Settings still gets their jet lag recorded on the day they are living. Off pins every
+  // read to the home zone. Nothing derived reads it, so a write clears no stamp.
+  followPhoneZone: integer('follow_phone_zone', { mode: 'boolean' }).notNull().default(true),
   // What this person's tiers 2 and 3 were built with. Per person rather than instance wide,
   // because that is what makes an interrupted rebuild resumable: a person carrying the current
   // numbers is already done. Null on a database whose data predates M2e, which is the case the

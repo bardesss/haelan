@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { COMPANION_SOURCE, composeStatus, localDateInZone, readSourceActivity } from '@haelan/core'
+import { COMPANION_SOURCE, composeStatus, effectiveTimezone, localDateInZone, readSourceActivity } from '@haelan/core'
 import { errorBody } from '../api/envelope.ts'
 
 /**
@@ -27,7 +27,8 @@ export function registerStatus(app: FastifyInstance): void {
     const { instance, stores, runner } = app.haelan
     const nowMs = app.haelan.now()
     const person = stores.people.get(personId)
-    const today = localDateInZone(nowMs, person?.timezone ?? 'UTC')
+    // The effective zone, as the glance reads today; source names below stay on the home zone.
+    const today = localDateInZone(nowMs, person === null ? 'UTC' : effectiveTimezone(person))
 
     const credentials = stores.credentials
     const google = credentials.isCredentialsUnreadable(personId) ? 'credentials_unreadable' as const

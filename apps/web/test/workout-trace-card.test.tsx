@@ -53,7 +53,7 @@ vi.mock('echarts/core', async (importOriginal) => {
 
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false,
-  timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,
@@ -155,6 +155,18 @@ function mount(node: React.ReactElement): { client: QueryClient, html: () => str
 const stillLoading = () => container?.querySelector('.empty') !== null
 
 describe('the workout trace card', () => {
+  // The run was recorded in New York (UTC-4): its 06:10Z reading reads 02:10, the clock its header
+  // prints, not 08:10 in the reader's zone.
+  it('reads the trace at the offset the workout started under', async () => {
+    const restore = stub({ watch: [point('watch')] })
+    try {
+      const session = { ...SESSION, startOffsetMinutes: -240, endOffsetMinutes: -240 }
+      mount(<WorkoutTrace session={session} detail={workoutDetail({})} chosenSource={null} />)
+      await pumpUntil(() => container?.querySelector('table tbody tr') !== null, 'the trace table to render')
+      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('02:10')
+    } finally { restore() }
+  })
+
   it('renders no card at all when nobody recorded anything, rather than an empty chart', async () => {
     const restore = stub({ watch: [], '': [] })
     try {

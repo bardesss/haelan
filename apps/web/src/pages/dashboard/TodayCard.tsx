@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { IntradayHeartRate } from '../../charts/IntradayHeartRate.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import type { GlanceDay } from '../../data/useGlance.js'
 import { DashCard, Described, stripBands, useOpensDay } from './cardShared.js'
-import { dayStanding, formatFigure, formatLongDate, formatTimeOfDay, localMidnightMs, nextDayOf, paceKey, usualLine } from './glanceText.js'
+import { dayClockMidnightMs, dayStanding, formatFigure, formatLongDate, formatTimeOfDay, nextDayOf, paceKey, recordedDayClock, usualLine } from './glanceText.js'
+import type { DayClock } from './glanceText.js'
 import { TodayWorkouts } from './TodayWorkouts.js'
 
 /**
@@ -25,8 +26,10 @@ import { TodayWorkouts } from './TodayWorkouts.js'
  * your usual day · usual 6,800 – 10,400"), and the heart rate trace across the whole day, 00:00 to
  * the next midnight, rather than to its last reading.
  */
-export function TodayCard({ day, span, today, timezone, finished = false, onOpenDay }: {
+export function TodayCard({ day, span, today, timezone, homeTimezone, finished = false, onOpenDay }: {
   day: GlanceDay, span: 8 | 12, today: string, timezone: string, finished?: boolean
+  /** The person's home zone, the second zone a finished day's recorded offset may be explained by. */
+  homeTimezone?: string
   /** Opens a strip dot's day (M9c). */
   onOpenDay?: (day: string) => void
 }) {
@@ -45,9 +48,19 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
     low: formatFigure({ ...day.steps, value: band.low }, language) ?? '',
     high: formatFigure({ ...day.steps, value: band.high }, language) ?? '',
   }, [band, language])
+  // A finished day is drawn in the time it was recorded in, so a day lived in Amsterdam still runs
+  // 00:00 to 24:00 Amsterdam time when viewed from Tokyo: in the effective or home zone when either
+  // explains its recorded offset (recordedDayClock, which keeps a daylight saving day's 23 or 25
+  // hours), and at the fixed offset only when neither does. The day still running keeps the
+  // effective zone, which is where "today" is.
+  const recordedOffset = finished ? day.heartRate.offsetMinutes ?? null : null
+  const clock = useMemo((): DayClock => finished
+    ? recordedDayClock(today, recordedOffset, [timezone, homeTimezone])
+    : { timeZone: timezone, offsetMinutes: null }, [finished, today, recordedOffset, timezone, homeTimezone])
+  const midnightOf = useCallback((date: string) => dayClockMidnightMs(date, clock), [clock])
   // Memoised for the same reason: both reach IntradayHeartRate's own `build` dependencies.
-  const midnight = useMemo(() => localMidnightMs(today, timezone), [today, timezone])
-  const endMs = useMemo(() => finished ? localMidnightMs(nextDayOf(today), timezone) : undefined, [finished, today, timezone])
+  const midnight = useMemo(() => midnightOf(today), [midnightOf, today])
+  const endMs = useMemo(() => finished ? midnightOf(nextDayOf(today)) : undefined, [finished, midnightOf, today])
   const workoutSpans = useMemo(() => day.workouts.map((w) => ({ startMs: w.startMs, endMs: w.endMs })), [day.workouts])
   // Never a pace on a finished day, whatever the payload carries: a day that is over has no "so
   // far" to be ahead or behind in.
@@ -119,7 +132,8 @@ export function TodayCard({ day, span, today, timezone, finished = false, onOpen
               : t('glance.asOf.today')}>
             <IntradayHeartRate points={day.heartRate.points} reduction={null}
               label={t(finished ? 'glance.today.heartRateChartThatDay' : 'glance.today.heartRateChart')}
-              compact startMs={midnight} endMs={endMs} spans={workoutSpans} />
+              compact startMs={midnight} endMs={endMs} spans={workoutSpans}
+              offsetMinutes={clock.offsetMinutes} timeZone={clock.timeZone} />
           </Described>
         </div>
       )}

@@ -34,7 +34,7 @@ afterEach(() => {
 
 const SESSION: Session = {
   personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: true,
-  timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,
@@ -99,7 +99,8 @@ function click(el: Element): void {
  * changed meaning when it landed.
  */
 const FIELDS = {
-  displayName: 0, username: 1, timezone: 2, birthDate: 3, sleepTarget: 4, sleepUseBaseline: 5, quickLogEnabled: 6,
+  displayName: 0, username: 1, followPhoneZone: 2, timezone: 3, birthDate: 4, sleepTarget: 5, sleepUseBaseline: 6,
+  quickLogEnabled: 7,
 } as const
 
 const fields = (): HTMLInputElement[] => [...container!.querySelectorAll('input')] as HTMLInputElement[]
@@ -138,7 +139,7 @@ describe('the profile section', () => {
     // The switch is a checkbox, so its "value" is the constant 'on' rather than anything the
     // session holds; the stored position is asserted on `checked` in the switch's own cases
     // below, not here.
-    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', '480', 'on', 'on', '', ''])
+    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'on', 'Europe/Amsterdam', '', '480', 'on', 'on', '', ''])
     expect(sexSelect().value).toBe('')
   })
 
@@ -149,7 +150,7 @@ describe('the profile section', () => {
     mountSection()
     expect(container!.innerHTML).not.toMatch(/\bsettings\.[a-zA-Z][a-zA-Z.]*\b/)
     expect([...container!.querySelectorAll('.field .label')].map((n) => n.textContent))
-      .toEqual(['Name', 'Username', 'Time zone', 'Birthday', 'Sex', 'Sleep target', 'Follow my baseline', 'Quick logging', 'Current password', 'New password'])
+      .toEqual(['Name', 'Username', "Follow my phone's time zone", 'Time zone', 'Birthday', 'Sex', 'Sleep target', 'Follow my baseline', 'Quick logging', 'Current password', 'New password'])
   })
 
   // The sentence that justifies asking for either field in the first place - not decoration, the
@@ -586,6 +587,71 @@ describe('the quick logging switch', () => {
     api.restore()
 
     expect(query.state.isInvalidated).toBe(true)
+  })
+})
+
+/**
+ * Whether today follows the phone's zone. On by default, cheap (no rebuild, so no warning), and the
+ * one line under it names the zone being followed only while that changes anything: a phone zone
+ * is set, it differs from home, and the switch is on.
+ */
+describe('the follow-my-phone switch', () => {
+  it('shows the stored position, on by default and off when opted out', () => {
+    mountSection()
+    expect(fields()[FIELDS.followPhoneZone]!.checked).toBe(true)
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    mountSection({ followPhoneZone: false })
+    expect(fields()[FIELDS.followPhoneZone]!.checked).toBe(false)
+  })
+
+  it('names the phone zone it follows, while it differs from home and the switch is on', () => {
+    mountSection({ currentTimezone: 'Asia/Tokyo', effectiveTimezone: 'Asia/Tokyo' })
+    expect(container!.textContent).toContain('Now following Asia/Tokyo from your phone.')
+    // Unchecking it takes the line away before saving: the switch is what the line describes.
+    click(fields()[FIELDS.followPhoneZone]!)
+    expect(container!.textContent).not.toContain('Now following')
+  })
+
+  it('says nothing when no phone has sent a zone, or when the phone is at home', () => {
+    mountSection()
+    expect(container!.textContent).not.toContain('Now following')
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    mountSection({ currentTimezone: 'Europe/Amsterdam' })
+    expect(container!.textContent).not.toContain('Now following')
+  })
+
+  it('says it in Dutch too', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), { ...SESSION, currentTimezone: 'Asia/Tokyo', effectiveTimezone: 'Asia/Tokyo' })
+    act(() => {
+      root?.render(
+        <QueryClientProvider client={client}>
+          <I18nProvider lng="nl"><Profile /></I18nProvider>
+        </QueryClientProvider>,
+      )
+    })
+    expect(container!.textContent).toContain('Volg de tijdzone van mijn telefoon')
+    expect(container!.textContent).toContain('Volgt nu Asia/Tokyo van je telefoon.')
+  })
+
+  it('saves a flipped switch with no rebuild warning', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: null, sex: null, sleepTargetMinutes: 480, sleepUseBaseline: true,
+      quickLogEnabled: true, followPhoneZone: false, rebuildPending: false,
+    }))
+    const client = mountSection()
+
+    click(fields()[FIELDS.followPhoneZone]!)
+    expect(container!.querySelector('.profile-warning')).toBeNull()
+    expect(saveButton().disabled).toBe(false)
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests[0]).toMatchObject({ method: 'PUT', url: '/api/profile', body: { followPhoneZone: false } })
   })
 })
 

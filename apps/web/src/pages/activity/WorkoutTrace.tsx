@@ -74,6 +74,8 @@ export function WorkoutTrace({ session, detail, chosenSource }: {
         reduction={trace.reduction}
         label={t('activity.workout.trace.label')}
         eventMarks={marks}
+        // Read in the offset the workout started under, the same clock its header prints.
+        offsetMinutes={session.startOffsetMinutes}
       />
     </Card>
   )

@@ -67,7 +67,7 @@ function mockInviteApi(info: { displayName: string, timezone: string } | null): 
       }
       return json(200, {
         personId: redeemed.personId, displayName: info.displayName,
-        username: redeemed.username, isAdmin: false, timezone: info.timezone,
+        username: redeemed.username, isAdmin: false, timezone: info.timezone, effectiveTimezone: info.timezone, currentTimezone: null, followPhoneZone: true,
       })
     }
     return notFound()

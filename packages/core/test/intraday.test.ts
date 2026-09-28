@@ -243,3 +243,32 @@ describe('readIntraday', () => {
     expect(out.reduction).toEqual({ method: 'minmax', from: 10, to: 4 })
   })
 })
+
+describe('readIntraday, the offset a day was recorded under', () => {
+  it('answers the offset of its readings, one per day', () => {
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 62 })
+    insert({ utcMs: NINE_AM + 60_000, agg: 'mean', value: 64 })
+    expect(readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE }).offsetMinutes).toBe(OFFSET)
+  })
+
+  it('takes the first reading\'s offset on a day recorded under two, whatever order the rows were written in', () => {
+    // A flight east in the afternoon: the evening reading is stored at +540, the morning one at
+    // +120, and the later one is written first so row order cannot stand in for time order.
+    insert({ utcMs: NINE_AM + 5 * 3_600_000, agg: 'mean', value: 70, tzOffsetMinutes: 540 })
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 62 })
+    expect(readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE }).offsetMinutes).toBe(OFFSET)
+  })
+
+  it('passes over a gap row, taking the offset of the first reading the chart draws', () => {
+    insertSample(test.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: NINE_AM - 3_600_000,
+      tzOffsetMinutes: 60, agg: 'mean', value: null,
+    })
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 62 })
+    expect(readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE }).offsetMinutes).toBe(OFFSET)
+  })
+
+  it('is null on a day with no readings', () => {
+    expect(readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE }).offsetMinutes).toBeNull()
+  })
+})

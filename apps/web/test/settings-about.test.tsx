@@ -28,7 +28,7 @@ import type { RouteBasemapStatus } from '../src/data/useRouteBasemap.js'
  * for keeping them somewhere findable, which Settings is. It never argued for the rail.
  */
 const MEMBER: Session = {
-  personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,

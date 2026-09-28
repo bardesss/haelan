@@ -21,7 +21,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { sourceNamesKey } from '../src/data/useSourceNames.js'
 import type { IntradayPoint } from '../src/data/useIntraday.js'
-import { localMidnightMs } from '../src/pages/dashboard/glanceText.js'
+import { dayClockMidnightMs, localMidnightMs, recordedDayClock } from '../src/pages/dashboard/glanceText.js'
 
 // Every token its own value, so a colour in the option names the token it came from.
 const SERIES = '#000001'
@@ -60,7 +60,7 @@ afterEach(() => {
 })
 
 const SESSION: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480, sleepUseBaseline: true,
  quickLogEnabled: true,
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
@@ -237,6 +237,83 @@ describe('IntradayHeartRate, compact', () => {
 
   it('draws no visible control, and keeps the table for assistive tech', () => {
     expectTableForAssistiveTechOnly(compact(), 2)
+  })
+})
+
+// Something already recorded reads at the offset it was recorded under: 04:00Z taken in New York
+// (UTC-4) is 00:00 there, where the reader's zone (Amsterdam, UTC+2) would call it 06:00. One offset
+// for the whole chart, so the axis labels, the tooltip and the table all agree.
+describe('IntradayHeartRate, recorded offset', () => {
+  const at = (utcMs: number, mean: number): IntradayPoint => ({ sourceId: 'watch', utcMs, min: mean - 5, mean, max: mean + 5, n: 1, excluded: false })
+  const POINTS = [at(Date.UTC(2026, 8, 23, 4, 0), 58), at(Date.UTC(2026, 8, 23, 9, 38), 71)]
+  type Option = {
+    xAxis: { axisLabel: { formatter: (value: number) => string } }
+    tooltip: { formatter: (params: unknown) => string }
+  }
+
+  it('reads the axis, the tooltip and the table at the offset it is given', () => {
+    const host = mount(<IntradayHeartRate points={POINTS} reduction={null} label="Heart rate" offsetMinutes={-240} />)
+    const option = lastOption as Option
+    expect(option.xAxis.axisLabel.formatter(POINTS[0]!.utcMs)).toBe('00:00')
+    expect(option.tooltip.formatter([{ seriesIndex: 2, dataIndex: 1 }])).toContain('05:38')
+    const cells = [...host.querySelectorAll('table tbody tr')].map((row) => row.querySelector('td, th')?.textContent)
+    expect(cells).toEqual(['00:00', '05:38'])
+  })
+
+  // A finished day a real zone explains (recordedDayClock) is read in that zone, not the session's.
+  it('reads them in the timeZone it is given, over the effective zone', () => {
+    const host = mount(<IntradayHeartRate points={POINTS} reduction={null} label="Heart rate" timeZone="America/New_York" />)
+    const cells = [...host.querySelectorAll('table tbody tr')].map((row) => row.querySelector('td, th')?.textContent)
+    expect(cells).toEqual(['00:00', '05:38'])
+  })
+
+  it('reads them in the effective zone without one', () => {
+    const host = mount(<IntradayHeartRate points={POINTS} reduction={null} label="Heart rate" />)
+    const option = lastOption as Option
+    expect(option.xAxis.axisLabel.formatter(POINTS[0]!.utcMs)).toBe('06:00')
+    const cells = [...host.querySelectorAll('table tbody tr')].map((row) => row.querySelector('td, th')?.textContent)
+    expect(cells).toEqual(['06:00', '11:38'])
+  })
+})
+
+// A finished day is read in a real zone whenever one explains its recorded offset at the day's
+// own midnight, the effective zone first and home second, and at the fixed offset only when
+// neither does.
+describe('recordedDayClock', () => {
+  const hours = (date: string, next: string, clock: ReturnType<typeof recordedDayClock>) =>
+    (dayClockMidnightMs(next, clock) - dayClockMidnightMs(date, clock)) / 3_600_000
+
+  it('reads an autumn daylight saving day at home in the zone, 25 hours long', () => {
+    const clock = recordedDayClock('2026-10-25', 120, ['Europe/Amsterdam', 'Europe/Amsterdam'])
+    expect(clock).toEqual({ timeZone: 'Europe/Amsterdam', offsetMinutes: null })
+    expect(hours('2026-10-25', '2026-10-26', clock)).toBe(25)
+  })
+
+  it('reads a spring daylight saving day at home in the zone, 23 hours long', () => {
+    const clock = recordedDayClock('2026-03-29', 60, ['Europe/Amsterdam', 'Europe/Amsterdam'])
+    expect(clock).toEqual({ timeZone: 'Europe/Amsterdam', offsetMinutes: null })
+    expect(hours('2026-03-29', '2026-03-30', clock)).toBe(23)
+  })
+
+  it('reads an Amsterdam day viewed from Tokyo in the home zone', () => {
+    expect(recordedDayClock('2026-09-22', 120, ['Asia/Tokyo', 'Europe/Amsterdam']))
+      .toEqual({ timeZone: 'Europe/Amsterdam', offsetMinutes: null })
+  })
+
+  it('prefers the effective zone when it explains the day', () => {
+    expect(recordedDayClock('2026-09-22', 540, ['Asia/Tokyo', 'Europe/Amsterdam']))
+      .toEqual({ timeZone: 'Asia/Tokyo', offsetMinutes: null })
+  })
+
+  it('falls back to the fixed offset for a day recorded where neither zone explains it', () => {
+    const clock = recordedDayClock('2026-09-22', -240, ['Asia/Tokyo', 'Europe/Amsterdam'])
+    expect(clock).toEqual({ timeZone: null, offsetMinutes: -240 })
+    expect(dayClockMidnightMs('2026-09-22', clock)).toBe(Date.UTC(2026, 8, 22, 4, 0))
+  })
+
+  it('reads a day with no recorded offset in the first zone', () => {
+    expect(recordedDayClock('2026-09-22', null, [undefined, 'Europe/Amsterdam']))
+      .toEqual({ timeZone: 'Europe/Amsterdam', offsetMinutes: null })
   })
 })
 

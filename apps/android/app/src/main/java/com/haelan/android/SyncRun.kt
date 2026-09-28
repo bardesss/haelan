@@ -132,7 +132,7 @@ object SyncRun {
                 // The whole exchange stays off the main thread: even reading the status line
                 // counts as network I/O down here and throws on the UI thread.
                 withContext(Dispatchers.IO) {
-                    InstanceClient.post(session.server, path, payload, session.cookie) { }
+                    InstanceClient.ingest(session.server, path, payload, session.cookie) { }
                 }
             },
             report = report,
