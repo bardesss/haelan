@@ -18,6 +18,7 @@ import com.haelan.android.glance.recovery
 import com.haelan.android.glance.sleep
 import com.haelan.android.glance.stripDay
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.Instant
@@ -132,6 +133,8 @@ class GlanceWordsTest {
     fun `no day verdict on a thin usual or an unjudged day`() {
         assertNull(english.dayStandingLine(figure("steps", 12000.0, baseline(1.0, 2.0, thin = true), GlanceStanding.ABOVE)))
         assertNull(english.dayStandingLine(figure("steps", 12000.0, steps, standing = null)))
+        // A verdict with no value to have judged is not worded either.
+        assertNull(english.dayStandingLine(figure("steps", null, steps, GlanceStanding.ABOVE)))
     }
 
     private fun pace(standing: PaceStanding?) =
@@ -167,6 +170,9 @@ class GlanceWordsTest {
         val unjudged = day(steps = stepsToday, stepsPace = pace(null))
         assertEquals(TodayLine.Usual("so far; your usual day 8,600"), english.todayLine(unjudged, finished = false))
         assertNull(english.todayLine(day(steps = figure("steps", 10.0)), finished = false))
+        // A finished day with no day verdict never falls back to a pace: the day is over.
+        val unjudgedOver = day(steps = stepsToday.copy(partial = false, standing = null), stepsPace = pace(PaceStanding.AHEAD))
+        assertFalse(english.todayLine(unjudgedOver, finished = true) is TodayLine.Pace)
     }
 
     @Test
@@ -266,6 +272,8 @@ class GlanceWordsTest {
         assertEquals("die dag", dutch.recoverySubtitle(today, "2026-08-20", finished = true))
         assertEquals("the day before", english.recoverySubtitle(yesterday, "2026-08-20", finished = true))
         assertNull(english.recoverySubtitle(recovery(figure("recovery_index", null)), "2026-08-20", finished = false))
+        // An index older than yesterday names no day at all rather than a wrong one.
+        assertNull(english.recoverySubtitle(recovery(figure("recovery_index", 62.0, asOfDate = "2026-08-17")), "2026-08-20", finished = false))
     }
 
     @Test
