@@ -76,7 +76,7 @@ export function Dashboard() {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const session = useSession()
-  const timezone = session.data?.timezone ?? 'UTC'
+  const timezone = session.data?.effectiveTimezone ?? 'UTC'
   const { day: urlDay, setDay } = useDashboardDay()
   const { glance, nearest, isPending, isPlaceholderData, isError, error, refetch } = useGlance(urlDay)
 

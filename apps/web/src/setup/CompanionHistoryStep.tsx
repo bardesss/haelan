@@ -14,7 +14,7 @@ export function CompanionHistoryStep() {
   const { t } = useTranslation()
   const session = useSession()
   const history = useHistoryStart()
-  const timezone = session.data?.timezone
+  const timezone = session.data?.effectiveTimezone
   const startMs = history.data?.historyStartMs ?? null
   const date = startMs !== null && timezone !== undefined
     ? historyStartLocalDate(startMs, timezone)

@@ -22,6 +22,7 @@ export interface SavedProfile {
   sleepTargetMinutes: number
   sleepUseBaseline: boolean
   quickLogEnabled: boolean
+  followPhoneZone: boolean
   rebuildPending: boolean
 }
 
@@ -44,6 +45,8 @@ export interface ProfileEdit {
   sleepUseBaseline: boolean
   // Same shape as sleepUseBaseline, and for the same reason: a checkbox, never mid-edit.
   quickLogEnabled: boolean
+  // Whether today follows the phone's zone. A checkbox too; cheap on the server (no rebuild).
+  followPhoneZone: boolean
 }
 
 /**

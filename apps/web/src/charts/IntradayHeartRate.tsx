@@ -141,7 +141,7 @@ export function intradayBasis(t: Translate, reduction: IntradayResult['reduction
  * server side only to decide which local day a reading belongs to, and does not return it, so there
  * is no way to recover the offset a reading was actually taken under once a point reaches this
  * file. That is not what a reader wants displayed anyway; a reader wants their OWN configured zone
- * (`session.timezone`, `IntradayHeartRate` below), the same zone usePageControls already reads off
+ * (`session.effectiveTimezone`, `IntradayHeartRate` below: the phone's zone when the person follows it), the same zone usePageControls already reads off
  * the session to compute "the person's today, not the browser's" (usePageControls.ts). `timeZone`
  * is always passed in explicitly, never defaulted here, so this function cannot quietly fall back
  * to the runtime's own machine zone the way `Intl.DateTimeFormat` does when the option is omitted:
@@ -180,7 +180,7 @@ export function IntradayHeartRate({
   // a real instant regardless of whether the reader's own zone is known yet, and UTC is a real,
   // statable zone to show it in meanwhile, not a guess the way the runtime's own machine zone would
   // be (timeOfDay's own comment on why that guess is never used here, loaded or not).
-  const timezone = session.data?.timezone ?? 'UTC'
+  const timezone = session.data?.effectiveTimezone ?? 'UTC'
 
   // Read once per render, not per formatMetricValue call: METRICS[metric] is the same lookup
   // formatMetricValue itself does internally for precision, and translating a unit key is not free

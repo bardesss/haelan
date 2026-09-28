@@ -68,7 +68,7 @@ export function WorkoutDetail() {
   const route = useRoute()
   const sessionId = routeParams(WORKOUT_ROUTE, route)?.sessionId
   const session = useSession()
-  const timezone = session.data?.timezone ?? 'UTC'
+  const timezone = session.data?.effectiveTimezone ?? 'UTC'
   const query = useWorkoutSession(sessionId)
   const { sources } = useSourceNames()
   const [annotating, setAnnotating] = useState(false)

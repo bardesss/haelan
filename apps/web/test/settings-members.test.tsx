@@ -32,7 +32,7 @@ afterEach(() => {
 })
 
 const ADMIN: Session = {
-  personId: 'admin-1', displayName: 'Admin', username: 'admin', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'admin-1', displayName: 'Admin', username: 'admin', isAdmin: true, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,

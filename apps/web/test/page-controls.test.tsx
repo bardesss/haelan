@@ -45,7 +45,7 @@ function mount(node: ReactNode): void {
 }
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
   quickLogEnabled: true,
@@ -145,11 +145,14 @@ describe('usePageControls', () => {
   // so this pins one instant and mounts twice, once per fixture fourteen hours apart, and checks
   // both the specific dates and that they differ. The fallback reads the same machine zone both
   // times, so it would make the two mounts agree everywhere, not just on some machines.
+  //
+  // The zone varied is effectiveTimezone, with the home zone left as it is: today follows the
+  // phone's zone when the person does, so a hook still reading `timezone` agrees with itself too.
   it("resolves an absent 'on' to the person's today, not the machine's", () => {
     vi.setSystemTime(new Date('2026-08-15T23:30:00Z'))
     window.history.replaceState(null, '', '/dashboard')
 
-    mountProbe({ ...PERSON, timezone: 'Pacific/Kiritimati' })
+    mountProbe({ ...PERSON, effectiveTimezone: 'Pacific/Kiritimati' })
     const kiritimati = seen!.anchor
 
     // A fresh root for the second fixture, not a re-render into the first one: swapping the
@@ -160,7 +163,7 @@ describe('usePageControls', () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
-    mountProbe({ ...PERSON, timezone: 'Pacific/Honolulu' })
+    mountProbe({ ...PERSON, effectiveTimezone: 'Pacific/Honolulu' })
     const honolulu = seen!.anchor
 
     expect(kiritimati).toBe('2026-08-16')

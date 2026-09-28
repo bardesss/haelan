@@ -95,7 +95,7 @@ function optionForPoints(
   metric?: string,
 ): EChartsOption {
   const session: Session = {
-    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', birthDate: null, sex: null,
+    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', effectiveTimezone: 'UTC', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
     sleepTargetMinutes: 480,
     sleepUseBaseline: true,
     quickLogEnabled: true,
@@ -195,7 +195,7 @@ describe('intradayBasis', () => {
 
 describe('IntradayHeartRate time of day', () => {
   const SESSION: Session = {
-    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
     sleepTargetMinutes: 480,
     sleepUseBaseline: true,
     quickLogEnabled: true,

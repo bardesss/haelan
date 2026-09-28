@@ -81,7 +81,7 @@ const SPO2_DAYS = LABELS.map((date) => ({ date, min: 94, mean: 96, max: 98, coun
 const POINTS = [0, 60_000].map((utcMs) => ({ sourceId: 'watch', utcMs, min: 55, mean: 60, max: 65, n: 1, excluded: false }))
 
 const SESSION: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC',
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', effectiveTimezone: 'UTC', currentTimezone: null, followPhoneZone: true,
   birthDate: null, sex: null,
   sleepTargetMinutes: 480,
   sleepUseBaseline: true,
