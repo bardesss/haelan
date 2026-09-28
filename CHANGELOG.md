@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.15.1](https://github.com/bardesss/haelan/compare/v2.15.0...v2.15.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* adding a chip works, and five positive default chips ([#397](https://github.com/bardesss/haelan/issues/397)) ([4f84035](https://github.com/bardesss/haelan/commit/4f84035d4e82c58be3cda82fbca27e9c2aac912d))
+
 ## [2.15.0](https://github.com/bardesss/haelan/compare/v2.14.0...v2.15.0) (2026-09-28)
 
 
