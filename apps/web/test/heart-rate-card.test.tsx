@@ -222,6 +222,18 @@ describe('the Day tab\'s intraday heart rate card', () => {
     expect(await firstCell('2026-08-15')).toBe('10:00')
   })
 
+  // 25 October 2026 at home in Amsterdam, recorded at +120 from its midnight: the zone explains it,
+  // so a reading after the clocks went back (08:00Z) reads 09:00 CET, not 10:00 at a fixed +120.
+  it('reads an earlier daylight saving day at home in the zone, not at its first offset', async () => {
+    const restore = stubFetch({ baseline: null, intradayOffset: 120 })
+    try {
+      const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-10-25" to="2026-10-25" today="2026-10-30" />)
+      mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+      await flush(client, () => container!.innerHTML)
+      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('09:00')
+    } finally { restore() }
+  })
+
   // The same cold-load race MetricCard's own gate exists for, in the one card that hand rolls its
   // exclusion check instead of going through it. excludedDataTypes is [] while /data-types is in
   // flight, which reads as "heart rate is not excluded", so an empty day hid this card for that

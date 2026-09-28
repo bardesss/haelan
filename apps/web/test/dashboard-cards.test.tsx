@@ -550,13 +550,38 @@ describe('TodayCard on a finished day', () => {
 
   // A day lived in Amsterdam (UTC+2) and viewed from Tokyo: the trace still runs from Amsterdam's
   // midnight to the next, and its clock times are read at +120, because the day is already recorded.
-  it('draws a finished day in the offset it was recorded under, whatever zone it is viewed from', () => {
+  it('draws a finished day in the zone it was recorded in, whatever zone it is viewed from', () => {
     const base = finishedDay()
     const day = { ...base, heartRate: { ...base.heartRate, offsetMinutes: 120 } }
-    renderToday({ day, today: '2026-09-22', timezone: 'Asia/Tokyo', finished: true })
+    renderToday({ day, today: '2026-09-22', timezone: 'Asia/Tokyo', homeTimezone: 'Europe/Amsterdam', finished: true })
+    expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 8, 21, 22, 0))
+    expect(heartRateProps?.endMs).toBe(Date.UTC(2026, 8, 22, 22, 0))
+    // The home zone explains the recorded offset, so the day is read in it, not at a fixed +120.
+    expect(heartRateProps?.timeZone).toBe('Europe/Amsterdam')
+    expect(heartRateProps?.offsetMinutes).toBeNull()
+  })
+
+  // Neither the effective zone (Tokyo) nor home (New York) was at +120 that day: the fixed offset
+  // is all there is to read the day in.
+  it('falls back to the fixed offset when neither zone explains the day', () => {
+    const base = finishedDay()
+    const day = { ...base, heartRate: { ...base.heartRate, offsetMinutes: 120 } }
+    renderToday({ day, today: '2026-09-22', timezone: 'Asia/Tokyo', homeTimezone: 'America/New_York', finished: true })
     expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 8, 21, 22, 0))
     expect(heartRateProps?.endMs).toBe(Date.UTC(2026, 8, 22, 22, 0))
     expect(heartRateProps?.offsetMinutes).toBe(120)
+    expect(heartRateProps?.timeZone).toBeNull()
+  })
+
+  // The clocks go back in Amsterdam on 25 October 2026: at home that day is 25 hours, 00:00 CEST
+  // (22:00Z the day before) to 00:00 CET (23:00Z), and a fixed +120 window would clip its last hour.
+  it('keeps a finished daylight saving day at home its 25 hours', () => {
+    const base = finishedDay()
+    const day = { ...base, heartRate: { ...base.heartRate, offsetMinutes: 120 } }
+    renderToday({ day, today: '2026-10-25', timezone: 'Europe/Amsterdam', homeTimezone: 'Europe/Amsterdam', finished: true })
+    expect(heartRateProps?.startMs).toBe(Date.UTC(2026, 9, 24, 22, 0))
+    expect(heartRateProps?.endMs).toBe(Date.UTC(2026, 9, 25, 23, 0))
+    expect(heartRateProps?.timeZone).toBe('Europe/Amsterdam')
   })
 
   // Today is where the person is: the day still running starts at the effective zone's midnight

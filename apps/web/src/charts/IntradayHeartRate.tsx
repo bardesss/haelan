@@ -97,6 +97,12 @@ type Props = {
    * Unset or null, clock times are read in the person's effective zone: today, still running.
    */
   offsetMinutes?: number | null
+  /**
+   * The zone clock times are read in when `offsetMinutes` is unset: a finished day a real zone
+   * explains (recordedDayClock), which keeps a daylight saving change's hour. Unset, the person's
+   * effective zone.
+   */
+  timeZone?: string | null
 }
 
 /**
@@ -177,7 +183,7 @@ const COMPACT_HEIGHT = 84
 
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
-  compact = false, startMs, endMs, spans = NO_SPANS, offsetMinutes = null,
+  compact = false, startMs, endMs, spans = NO_SPANS, offsetMinutes = null, timeZone,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -187,7 +193,7 @@ export function IntradayHeartRate({
   // a real instant regardless of whether the reader's own zone is known yet, and UTC is a real,
   // statable zone to show it in meanwhile, not a guess the way the runtime's own machine zone would
   // be (timeOfDay's own comment on why that guess is never used here, loaded or not).
-  const timezone = session.data?.effectiveTimezone ?? 'UTC'
+  const timezone = timeZone ?? session.data?.effectiveTimezone ?? 'UTC'
   const clock = useCallback((utcMs: number) => offsetMinutes === null
     ? timeOfDay(utcMs, timezone, i18n.language)
     : formatRecordedClock(utcMs, offsetMinutes), [offsetMinutes, timezone, i18n.language])

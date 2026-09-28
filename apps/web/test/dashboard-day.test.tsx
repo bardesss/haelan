@@ -76,9 +76,9 @@ const zoneToday = (timeZone: string) => new Intl.DateTimeFormat('en-CA', {
 }).format(new Date())
 
 describe('useDashboardDay', () => {
-  // The phone's today is a real day already, not a future one to clean away: in Kiritimati it is
-  // today, so the parameter naming it is dropped as today, and the day before it is a past day
-  // to open. Read in Pago Pago, both would be future days and both would fall back to today.
+  // The day before Kiritimati's today is a past day there, so it opens. Pago Pago's today is one or
+  // two days behind Kiritimati's, so read in Pago Pago that same day is either today itself or a
+  // future day, and either way the page falls back to today with no day open.
   it('reads today in the effective zone, so the phone\'s yesterday opens as a past day', () => {
     const yesterday = new Date(Date.parse(`${zoneToday('Pacific/Kiritimati')}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
     window.history.replaceState(null, '', `/?day=${yesterday}`)

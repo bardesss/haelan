@@ -14,6 +14,8 @@ import { useDataTypes } from '../../data/useDataTypes.js'
 import { dataTypeForMetric } from '@haelan/core/metric-data-type'
 import { useTranslation } from '../../i18n/index.js'
 import { wornOn } from '../../data/emptyState.js'
+import { useSession } from '../../auth/session.js'
+import { recordedDayClock } from '../dashboard/glanceText.js'
 
 // One array for every prop and every fallback that is deliberately empty. A fresh [] on every
 // render gives the chart's `build` callback a new identity, which useChart reads as "rebuild", so
@@ -59,6 +61,7 @@ export function HeartRateCard({
   today?: string
 }) {
   const { t } = useTranslation()
+  const session = useSession()
   const range = { from, to, source }
   const meanSeries = useSeries(['heart_rate'], range, 'mean')
   const minHrSeries = useSeries(['heart_rate'], range, 'min')
@@ -214,7 +217,12 @@ export function HeartRateCard({
           ) : (
             <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
               label={t('recovery.heartRateRange.intradayChartLabel', { date: from })}
-              offsetMinutes={today !== undefined && from < today ? intraday.data.offsetMinutes ?? null : null}
+              {...(today !== undefined && from < today
+                // An earlier day in the time it was recorded in: the effective or home zone when
+                // either explains its offset, else the fixed offset (recordedDayClock).
+                ? recordedDayClock(from, intraday.data.offsetMinutes ?? null,
+                  [session.data?.effectiveTimezone, session.data?.timezone])
+                : {})}
               onPointClick={onSampleClick} />
           )}
       </Card>
