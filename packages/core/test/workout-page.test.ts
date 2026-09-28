@@ -185,6 +185,31 @@ describe('readWorkoutPage', () => {
     })
   })
 
+  it('names the Records best, even when it was run after this workout', () => {
+    seedRun('subject', '2026-08-01', { splits: [{ distance: 1000, seconds: 310 }] })
+    seedRun('later', '2026-09-01', { splits: [{ distance: 1000, seconds: 280 }] })
+    expect(readWorkoutPage(q(), input('subject'))!.best.fastestKmSeconds).toEqual({ value: 280, sessionId: 'later', localDate: '2026-09-01' })
+  })
+
+  it('never names a zero-second kilometre or a zero distance as a best', () => {
+    seedRun('broken', '2026-06-01', { distance: 0, splits: [{ distance: 1000, seconds: 0 }] })
+    // No distance on the subject, so a zero would be the only distance there is to name.
+    seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 310 }] })
+    const { best } = readWorkoutPage(q(), input('subject'))!
+    expect(best.fastestKmSeconds).toEqual({ value: 310, sessionId: 'subject', localDate: SUBJECT_DATE })
+    expect(best.furthestMeters).toBeNull()
+  })
+
+  it('still reads a workout whose type is outside the known list, compared against nothing', () => {
+    seedWorkout('odd', '2026-09-01', 'UNDERWATER_CHESS', { moving: 1200 })
+    seedWorkout('subject', SUBJECT_DATE, 'UNDERWATER_CHESS', { moving: 1500 })
+    const page = readWorkoutPage(q(), input('subject'))!
+    expect(page.exerciseType).toBe('UNDERWATER_CHESS')
+    expect(page.comparison).toMatchObject({ of: 0, reason: 'too-few' })
+    expect(page.previous).toBeNull()
+    expect(page.figures.movingTime).toMatchObject({ value: 1500, baseline: null })
+  })
+
   it('leaves out a figure the workout does not have', () => {
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     expect(readWorkoutPage(q(), input('subject'))!.figures.cadence).toBeUndefined()
@@ -263,6 +288,16 @@ describe('readWorkoutPage', () => {
     expect(readWorkoutPage(q(), input('plain'))!.hero).toBe('elapsed')
   })
 
+  it('leads with pace on a walk and a hike, and with speed on any cycling type', () => {
+    const speed = { averageSpeedMillimetersPerSecond: 5000 }
+    seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 600, metrics: speed })
+    seedWorkout('hike', '2026-09-05', 'HIKING', { pace: 700, metrics: speed })
+    seedWorkout('hand', '2026-09-06', 'HAND_CYCLING', { pace: 200, metrics: speed })
+    expect(readWorkoutPage(q(), input('walk'))!.hero).toBe('pace')
+    expect(readWorkoutPage(q(), input('hike'))!.hero).toBe('pace')
+    expect(readWorkoutPage(q(), input('hand'))!.hero).toBe('speed')
+  })
+
   it('carries the comparison against the same window', () => {
     seedRuns(7, { pace: 330 })
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
@@ -280,6 +315,14 @@ describe('readWorkoutPage', () => {
     expect(page.nav).toEqual({ previous: 'before', next: 'after' })
     expect(page.after.night).toMatchObject({ localDate: '2026-09-05', asleep: { value: 431 }, deep: { value: 77 } })
     expect(page.after.restingHeartRate).toMatchObject({ metric: 'resting_heart_rate', value: 49 })
+  })
+
+  it('orders two workouts started at the same instant by id', () => {
+    // Zero-length rides: a session with no duration never merges into another (sessionOverlap.ts),
+    // so three rows at one instant stay three workouts rather than one merged event.
+    seedRun('b-subject', SUBJECT_DATE, {})
+    seedRide('a-ride', SUBJECT_DATE, {}, { minutes: 0 }); seedRide('c-ride', SUBJECT_DATE, {}, { minutes: 0 })
+    expect(readWorkoutPage(q(), input('b-subject'))!.nav).toEqual({ previous: 'a-ride', next: 'c-ride' })
   })
 
   it('has no night after a workout done today', () => {

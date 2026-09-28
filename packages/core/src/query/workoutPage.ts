@@ -14,7 +14,7 @@ import type { WorkoutDetail, WorkoutSummary } from '../api/workoutSummary.ts'
 import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
 import { compareWorkout, sameTypeWindow } from '../api/workoutComparison.ts'
 import type { WorkoutComparison } from '../api/workoutComparison.ts'
-import { sessionRecordsOf } from '../api/sessionRecords.ts'
+import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
 import type { SessionRecordKind } from '../api/sessionRecords.ts'
 
 // Five, not the night page's sixty: a person runs a few times a week, and five same-type sessions
@@ -126,12 +126,12 @@ function highestHeartRate(q: PersonQuery, session: WorkoutSession): number | nul
   return values.length === 0 ? null : Math.max(...values)
 }
 
-// Answers: every session of this type up to the subject's date. A type outside EXERCISE_TYPES is
+// Answers: every session of this type up to a date. A type outside EXERCISE_TYPES is
 // one the query refuses to filter on, and a type nothing else shares compares against nothing.
-function sameTypeSessions(q: PersonQuery, session: WorkoutSession, exerciseType: string | null): WorkoutSession[] {
+function sameTypeSessions(q: PersonQuery, exerciseType: string | null, to: string): WorkoutSession[] {
   if (exerciseType === null) return []
   try {
-    return q.sessions({ kind: 'exercise', from: '1970-01-01', to: session.localDate, type: exerciseType })
+    return q.sessions({ kind: 'exercise', from: '1970-01-01', to, type: exerciseType })
   } catch (error) {
     if (error instanceof ConfigError) return []
     throw error
@@ -186,18 +186,10 @@ function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession
   return { sessionId: latest.id, localDate: latest.localDate, values }
 }
 
-// Answers: this type's fastest kilometre, furthest and longest session, the Records page's own rule.
-function bestOf(candidates: readonly WorkoutSession[]): WorkoutPage['best'] {
-  const records = sessionRecordsOf(candidates.filter((s) => !s.excluded).map((s) => {
-    const summary = workoutSummary(s.attrs)
-    return {
-      sessionId: s.id, localDate: s.localDate, exerciseType: summary.exerciseType, durationMs: s.endMs - s.startMs,
-      distanceMm: summary.distanceMeters === null ? null : summary.distanceMeters * 1000,
-      kilometreSeconds: workoutDetail(s.attrs).autoSplits
-        .filter((split) => split.splitType === 'DISTANCE' && split.distanceMeters === 1000 && split.activeDurationSeconds !== null)
-        .map((split) => split.activeDurationSeconds!),
-    }
-  }))
+// Answers: this type's fastest kilometre, furthest and longest session, the Records page's own
+// rule and parsing, over every session of the type up to today rather than up to this workout.
+function bestOf(everSameType: readonly WorkoutSession[]): WorkoutPage['best'] {
+  const records = sessionRecordsOf(everSameType.filter((s) => !s.excluded).map(sessionForRecords))
   const ref = (kind: SessionRecordKind, scale: number): RecordRef | null => {
     const record = records.find((r) => r.kind === kind)
     return record === undefined ? null : { value: record.value / scale, sessionId: record.sessionId, localDate: record.localDate }
@@ -255,7 +247,7 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     highestHr: highestHeartRate(q, session),
   })
   const exerciseType = subject.summary.exerciseType
-  const candidates = sameTypeSessions(q, session, exerciseType)
+  const candidates = sameTypeSessions(q, exerciseType, session.localDate)
   const window = sameTypeWindow(session, candidates).map((s) => readingOf(s))
   const figures = figuresOf(subject, window)
 
@@ -269,7 +261,8 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     figures,
     comparison: compareWorkout(session, candidates),
     previous: previousOf(session, candidates),
-    best: bestOf(candidates),
+    // The Records best, so it may be a session done after this one.
+    best: bestOf(input.today > session.localDate ? sameTypeSessions(q, exerciseType, input.today) : candidates),
     day: dayOf(q, session, input),
     after: afterOf(q, session, input),
   }
