@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url'
  * comfortably inside the spec's under-40 MB bracket, so the demo keeps the full 365 day span
  * rather than trimming intraday to 90 days or cutting the seed to 180.
  *
- * Re-measured 2026-09-23 at 400 days, which is now the default: 748 files, 10 446 037 bytes
+ * Re-measured 2026-09-23 at 400 days, then made the default: 748 files, 10 446 037 bytes
  * (10.0 MB). The span grew past a year so the year-over-year comparison has a year earlier to draw:
  * at exactly 365 days ending 6 September, no month on screen had any data twelve months before it,
  * and every tile answered "nothing recorded a year earlier". 400 reaches back to early August of
@@ -42,6 +42,18 @@ import { fileURLToPath } from 'node:url'
  * link to. The ceiling below was set from the 2026-09-23 figure and is left there: this run sits
  * at 63% of it.
  *
+ * Re-measured 2026-09-29 with the night and workout pages: 14 756 966 bytes at 400 days, 94% of the
+ * ceiling. Two changes brought it back down. The default span is now 371 days, which starts the
+ * seed on 1 September of the year before: the year-over-year comparison on the default Month view
+ * needs exactly that September, and the extra month 400 carried only fed a previous-year view that
+ * still has data from September on. That alone saved about 0.3 MB (14 480 458 bytes at 371 days),
+ * since most of the capture is fixed windows that do not grow with the span. The rest came from
+ * demo/capture/compact.ts, which drops the per-point fields of /series no page reads (its own
+ * comment lists them). The same run widened the sweep to the phone source Activity's longer
+ * ranges offer and to the year-over-year comparison on every range, both of which used to answer
+ * "no recorded response". At 371 days: 957 files, 9 686 369 bytes (9.2 MB), 62% of the ceiling
+ * below, which is left where it was.
+ *
  * MAX_CAPTURE_BYTES is roughly 1.5x the 2026-09-23 measurement (10 446 037 * 1.5 = 15 669 055.5, rounded
  * up): a ceiling that catches a runaway (a route that starts recording every source separately,
  * say, or a metric catalogue that grows sharply), not one that trips on the ordinary growth a new
@@ -50,7 +62,7 @@ import { fileURLToPath } from 'node:url'
 const MAX_CAPTURE_BYTES = 15_669_056
 
 /** The span the published demo seeds when no day count is given. See the measurement above. */
-const DEFAULT_DAYS = 400
+const DEFAULT_DAYS = 371
 
 /**
  * Writes one JSON file per recorded response into `outDir`, plus a manifest mapping each response's

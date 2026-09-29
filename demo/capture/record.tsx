@@ -32,6 +32,7 @@ import { DEMO_CLOCK_MS } from '../../apps/web/src/demo/instant.js'
 import { flush } from '../../apps/web/test/flush.js'
 import { startCaptureServer } from './server.js'
 import { sliceToFirstDay, unreachableDays, unreachableWorkouts } from './slice.js'
+import { compactRecorded } from './compact.js'
 import type { CaptureServer } from './server.js'
 import { writeCapture } from '../../scripts/capture-demo.mjs'
 import type { WorkoutSession } from '../../apps/web/src/data/useSessions.js'
@@ -53,7 +54,7 @@ const dataDir = process.env.HAELAN_DEMO_DATA_DIR
 const outDir = process.env.HAELAN_DEMO_OUT_DIR
 const reportFile = process.env.HAELAN_DEMO_REPORT_FILE
 // capture-demo.mjs always sets this; the fallback matches its DEFAULT_DAYS for a direct run.
-const seededDays = Number(process.env.HAELAN_DEMO_DAYS ?? '400')
+const seededDays = Number(process.env.HAELAN_DEMO_DAYS ?? '371')
 if (dataDir === undefined || outDir === undefined || reportFile === undefined) {
   throw new Error(
     'record.tsx needs HAELAN_DEMO_DATA_DIR, HAELAN_DEMO_OUT_DIR and HAELAN_DEMO_REPORT_FILE - run '
@@ -232,13 +233,17 @@ describe('the capture sweep', () => {
       }
     }
 
-    // The year-over-year comparison on the default Month view, so a demo visitor who switches it
-    // on sees it work. Month only: the capture already sits near MAX_CAPTURE_BYTES, and every other
-    // range doubled would cross it. Elsewhere the comparison's reads miss the manifest, which
-    // data/lastYear.ts answers by drawing nothing rather than claiming an empty year.
+    // The year-over-year comparison, on every range whose control row offers it (ControlRow's
+    // canCompare: every range but Day). It used to be the Month view only, because the capture sat
+    // near MAX_CAPTURE_BYTES and doubling every other range would have crossed it; compact.ts made
+    // the room, and the other ranges' toggles had been answering "no recorded response" underneath
+    // data/lastYear.ts drawing nothing.
     for (const route of ROUTES) {
       if (route.path.includes(':') || !usesPageControls(route.path) || route.path === '/notes') continue
-      await mount(`${route.path}?range=month&on=${DEMO_DATE}&compare=year`)
+      for (const range of RANGE_KEYS) {
+        if (range === 'day') continue
+        await mount(`${route.path}?range=${range}&on=${DEMO_DATE}&compare=year`)
+      }
     }
 
     const wideFrom = addDays(DEMO_DATE, -(seededDays - 1))
@@ -265,10 +270,17 @@ describe('the capture sweep', () => {
       .toBeGreaterThan(0)
 
     // Ruling B, dimension 1: every source option a picker actually offers, not only the default
-    // (ALL_SOURCES itself is already covered by the grid above).
+    // (ALL_SOURCES itself is already covered by the grid above). The heart rate mix alone is not
+    // that: Activity's longer ranges also offer the phone, which only step counts name, and a demo
+    // visitor who picked it met "no recorded response". So each page and range is remounted (its
+    // reads are already cached) and the options its own source picker renders are read back too.
     for (const path of SOURCE_ROUTES) {
       for (const range of RANGE_KEYS) {
-        for (const source of discoveredSources) {
+        await mount(`${path}?range=${range}&on=${DEMO_DATE}`, { expectGrowth: false })
+        const offered = [...container.querySelectorAll<HTMLOptionElement>('.controls-end select option')]
+          .map((option) => option.value)
+          .filter((value) => value !== ALL_SOURCES)
+        for (const source of new Set([...discoveredSources, ...offered])) {
           await mount(`${path}?range=${range}&on=${DEMO_DATE}&source=${source}`)
         }
       }
@@ -420,6 +432,9 @@ describe('the capture sweep', () => {
     act(() => { root.unmount() })
     container.remove()
 
+    // Last, after every check above has read the bodies as the server sent them (compact.ts's own
+    // comment says which fields go and why no page misses them).
+    compactRecorded(server.recorded)
     const report = writeCapture(outDir, server.recorded)
     // A synchronous file write, not a marked console line - see this file's own header comment
     // and capture-demo.mjs's own comment on reportFile for the stdout race a line could lose.
