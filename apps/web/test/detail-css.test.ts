@@ -13,7 +13,7 @@ interface Rule { selectors: string[], body: string, at: number, media: string | 
 /** Every rule in the file, in order, with the media query it sits in (null at the top level). */
 function rules(): Rule[] {
   const out: Rule[] = []
-  const stack: (string | null)[] = []
+  const stack: string[] = []
   let start = 0
   for (let i = 0; i < css.length; i += 1) {
     if (css[i] === '{') {
@@ -23,7 +23,7 @@ function rules(): Rule[] {
         const close = css.indexOf('}', i)
         out.push({
           selectors: prelude.split(',').map((s) => s.trim()), body: css.slice(i + 1, close), at: i,
-          media: stack.findLast((m) => m !== null) ?? null,
+          media: stack.at(-1) ?? null,
         })
         i = close
       }
