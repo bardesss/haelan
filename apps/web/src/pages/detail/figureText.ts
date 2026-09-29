@@ -1,8 +1,8 @@
-import type { PageFigure } from '../../../data/useNightPage.js'
-import { formatClock, formatDuration, formatNumber, formatSignedNumber } from '../../../format.js'
-import type { Translate } from '../../../format.js'
-import { stripBands } from '../../dashboard/cardShared.js'
-import type { PointStanding } from '../../../charts/base.js'
+import type { PageFigure } from '../../data/useNightPage.js'
+import { formatClock, formatDuration, formatNumber, formatSignedNumber } from '../../format.js'
+import type { Translate } from '../../format.js'
+import { stripBands } from '../dashboard/cardShared.js'
+import type { PointStanding } from '../../charts/base.js'
 
 // Figures measured in minutes that are only ever a few of them: "12 min" reads as what it is,
 // where "0h 12m" puts an empty hour in front of it. Time asleep, the stages, time in bed and time
@@ -10,6 +10,20 @@ import type { PointStanding } from '../../../charts/base.js'
 const SHORT_SPANS: ReadonlySet<string> = new Set([
   'active_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability',
 ])
+
+// A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading
+// zero on the minutes, an hour digit only once there is one to show. workoutPage.ts's `pace`
+// (seconds per kilometre) and its true durations (`movingTime`, `elapsed`) share this shape; the
+// sub-second figures that also carry the 'seconds' unit (`groundContact`) are not rendered through
+// this page yet, and would need a different rule when they are.
+function formatElapsed(totalSeconds: number): string {
+  const total = Math.round(totalSeconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  const clock = `${minutes}:${String(seconds).padStart(2, '0')}`
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` : clock
+}
 
 /**
  * A figure's own value, or any other number measured in the same unit (its baseline's low, high or
@@ -40,6 +54,23 @@ export function formatFigureValue(
     case 'breaths_per_minute': return `${formatNumber(value, figure.precision, language, absent)} ${t('recovery.units.breathsPerMinuteShort')}`
     case 'celsius': return `${formatNumber(value, figure.precision, language, absent)} ${t('charts.units.celsius')}`
     case 'count': return formatNumber(value, figure.precision, language, absent)
+    // The workout page's own units (workoutPage.ts's FIGURES table).
+    case 'seconds_per_km': return `${formatElapsed(value)} ${t('activity.units.paceSuffix')}`
+    // Stored as metres per second; shown as km/h, a converted unit whose precision is this
+    // function's own rather than the figure's stored-unit precision (format.ts's own comment on
+    // formatMetricValue explains why a converted value cannot go through the catalogue precision).
+    case 'meters_per_second': return `${formatNumber(value * 3.6, 1, language, absent)} ${t('activity.units.kmh')}`
+    // Kilometres once the distance clears four digits of metres, at two decimals - also a
+    // converted unit, so also its own fixed precision rather than the figure's stored-unit one.
+    case 'meters': return value >= 1000
+      ? `${formatNumber(value / 1000, 2, language, absent)} ${t('activity.units.km')}`
+      : `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.meters')}`
+    case 'seconds': return formatElapsed(value)
+    case 'trimp': return formatNumber(value, figure.precision, language, absent)
+    case 'kcal': return `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.kcalShort')}`
+    case 'steps_per_minute': return `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.perMin')}`
+    case 'ratio': return `${formatNumber(value, figure.precision, language, absent)} ${t('charts.units.percent')}`
+    case 'ml_per_kg_min': return formatNumber(value, figure.precision, language, absent)
     default: return formatNumber(value, figure.precision, language, absent)
   }
 }

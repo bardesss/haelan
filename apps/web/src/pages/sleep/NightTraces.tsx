@@ -9,7 +9,7 @@ import { useSourceNames } from '../../data/useSourceNames.js'
 import type { Night } from '../../data/useNights.js'
 import type { NightTrace as NightTraceFigures } from '../../data/useNightPage.js'
 import { formatRecordedClock } from '../../format.js'
-import { formatFigureValue } from './night/figureText.js'
+import { formatFigureValue } from '../detail/figureText.js'
 
 /**
  * The three metrics the night page charts across the night's own window, in the approved mockup's

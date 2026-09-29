@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatFigureValue, verdictLine, stripOf } from '../src/pages/sleep/night/figureText.js'
+import { formatFigureValue, verdictLine, stripOf } from '../src/pages/detail/figureText.js'
 import type { PageFigure } from '../src/data/useNightPage.js'
 import type { Translate } from '../src/format.js'
 import { initI18n } from '../src/i18n/index.js'
@@ -60,6 +60,63 @@ describe('formatFigureValue', () => {
 
   it('formats null as the absent string', () => {
     expect(formatFigureValue(figure({ unit: 'minutes', precision: 0 }), null, 'en', t)).toBe('—')
+  })
+})
+
+describe('formatFigureValue: workout units', () => {
+  it('formats seconds_per_km as a pace with the /km suffix', () => {
+    expect(formatFigureValue(figure({ unit: 'seconds_per_km', precision: 0 }), 324, 'en', t)).toBe('5:24 /km')
+    expect(formatFigureValue(figure({ unit: 'seconds_per_km', precision: 0 }), 324, 'nl', tNl)).toBe('5:24 /km')
+  })
+
+  it('formats meters_per_second as km/h at one decimal', () => {
+    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'en', t)).toBe('12.3 km/h')
+    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'nl', tNl)).toBe('12,3 km/h')
+  })
+
+  it('formats meters under 1000 as whole meters', () => {
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 420, 'en', t)).toBe('420 m')
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 420, 'nl', tNl)).toBe('420 m')
+  })
+
+  it('formats meters at or above 1000 as kilometers at two decimals', () => {
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'en', t)).toBe('5.20 km')
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'nl', tNl)).toBe('5,20 km')
+  })
+
+  it('formats seconds under an hour as an elapsed mm:ss', () => {
+    expect(formatFigureValue(figure({ unit: 'seconds', precision: 0 }), 1684, 'en', t)).toBe('28:04')
+    expect(formatFigureValue(figure({ unit: 'seconds', precision: 0 }), 1684, 'nl', tNl)).toBe('28:04')
+  })
+
+  it('formats seconds at or above an hour as an elapsed h:mm:ss', () => {
+    expect(formatFigureValue(figure({ unit: 'seconds', precision: 0 }), 3904, 'en', t)).toBe('1:05:04')
+    expect(formatFigureValue(figure({ unit: 'seconds', precision: 0 }), 3904, 'nl', tNl)).toBe('1:05:04')
+  })
+
+  it('formats trimp as a plain number', () => {
+    expect(formatFigureValue(figure({ unit: 'trimp', precision: 0 }), 86, 'en', t)).toBe('86')
+    expect(formatFigureValue(figure({ unit: 'trimp', precision: 0 }), 86, 'nl', tNl)).toBe('86')
+  })
+
+  it('formats kcal with the kcal suffix', () => {
+    expect(formatFigureValue(figure({ unit: 'kcal', precision: 0 }), 412, 'en', t)).toBe('412 kcal')
+    expect(formatFigureValue(figure({ unit: 'kcal', precision: 0 }), 412, 'nl', tNl)).toBe('412 kcal')
+  })
+
+  it('formats steps_per_minute with the /min suffix', () => {
+    expect(formatFigureValue(figure({ unit: 'steps_per_minute', precision: 0 }), 172, 'en', t)).toBe('172 /min')
+    expect(formatFigureValue(figure({ unit: 'steps_per_minute', precision: 0 }), 172, 'nl', tNl)).toBe('172 /min')
+  })
+
+  it('formats ratio as a percent at the figure precision', () => {
+    expect(formatFigureValue(figure({ unit: 'ratio', precision: 1 }), 8.2, 'en', t)).toBe('8.2 %')
+    expect(formatFigureValue(figure({ unit: 'ratio', precision: 1 }), 8.2, 'nl', tNl)).toBe('8,2 %')
+  })
+
+  it('formats ml_per_kg_min as a plain number', () => {
+    expect(formatFigureValue(figure({ unit: 'ml_per_kg_min', precision: 0 }), 52, 'en', t)).toBe('52')
+    expect(formatFigureValue(figure({ unit: 'ml_per_kg_min', precision: 0 }), 52, 'nl', tNl)).toBe('52')
   })
 })
 

@@ -8,7 +8,7 @@ import { formatLocalDate, formatSignedNumber } from '../../../format.js'
 import type { Translate } from '../../../format.js'
 import { usualLine } from '../../dashboard/glanceText.js'
 import type { NightPageData, PageFigure } from '../../../data/useNightPage.js'
-import { deviationVerdictLine, formatFigureValue, stripOf, verdictLine } from './figureText.js'
+import { deviationVerdictLine, formatFigureValue, stripOf, verdictLine } from '../../detail/figureText.js'
 
 // Which readings draw a trend (a strip) rather than today's reading alone against its band (a
 // bar): the spec's and the mockup's own split, resting heart rate, HRV and skin temperature get the

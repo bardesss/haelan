@@ -332,7 +332,9 @@
       "ms": "ms",
       "cm": "cm",
       "percent": "%",
-      "trimp": "TRIMP"
+      "trimp": "TRIMP",
+      "kmh": "km/h",
+      "perMin": "/min"
     },
     "insights": {
       "steps": "Steps, this period against the last"

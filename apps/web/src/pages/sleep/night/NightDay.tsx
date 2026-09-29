@@ -11,7 +11,7 @@ import { exerciseTypeLabel } from '../../../data/exerciseTypeLabel.js'
 import { MoodFace } from '../../../components/logPanel/MoodFaces.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureValue, verdictLine } from './figureText.js'
+import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
 
 /** `WORKOUT_ROUTE`'s own `:sessionId` filled in, the same spelling NightRow.tsx's `nightPath`
  *  keeps for `NIGHT_ROUTE`: one function, not a literal path typed again at the one call site

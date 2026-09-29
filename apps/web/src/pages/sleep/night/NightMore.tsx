@@ -3,7 +3,7 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { FigureRow } from '../../../components/FigureRow.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureValue, verdictLine } from './figureText.js'
+import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
 
 // The mockup's own seven figures, in its own order, each drawn plainly against its band. Naps
 // (figures.napCount, with figures.napMinutes as its value once there was one) is appended after

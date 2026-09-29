@@ -4,7 +4,7 @@ import { Card } from '../../../components/Card.js'
 import { Sparkline } from '../../../charts/Sparkline.js'
 import { Described } from '../../dashboard/cardShared.js'
 import type { PageFigure } from '../../../data/useNightPage.js'
-import { formatFigureValue, stripOf, verdictLine } from './figureText.js'
+import { formatFigureValue, stripOf, verdictLine } from '../../detail/figureText.js'
 
 /**
  * The night's lead: time asleep in display type, where it sits against the usual in words, and
