@@ -10,7 +10,13 @@ import { formatClock, formatDuration, formatNumber } from '../../../format.js'
 import { localMinutesOf, inWindow, WIDE_WINDOW } from '../../../charts/schedule.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
 import { NightTraces } from '../NightTraces.js'
+import { FigureRow, FigureRows } from '../../../components/FigureRow.js'
+import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
 import type { NightTracesFigures } from '../NightTraces.js'
+
+// When the first deep and REM sleep began, and how many REM episodes there were: the server's
+// stageTiming, in this order.
+const TIMING = ['firstDeep', 'firstRem', 'cycles'] as const
 
 // The legend's reading order, deep to awake, the order Hypnogram's own totals row reads in.
 const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
@@ -32,12 +38,18 @@ const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
  * when the server found no trace readings either (every trace's `stat` empty). The legend doubles
  * as the hypnogram's accessible description: it is the chart's content in words.
  *
+ * Under the legend, when the first deep and REM sleep began and how many cycles the night held,
+ * three across, each against its own usual. A row the server sent no value for is left out, and the
+ * block with it when all three are: a night recorded without deep and REM stages (a classic night)
+ * has no timing at all.
+ *
  * The excluded-sessions notice that used to close this card moved to NightAbout.tsx (M10a-2 task 7),
  * next to the session list it explains; this card no longer reads `night.excludedSessions` at all.
  */
 export function NightThrough({ page, chosenSource }: { page: NightPageData, chosenSource: string | null }) {
   const { t, i18n } = useTranslation()
-  const { night, stagePercent, traces, figures: { awake } } = page
+  const { night, stagePercent, traces, stageTiming, figures: { awake } } = page
+  const language = i18n.language
   const legendId = useId()
 
   const segments = useMemo(() => night.segments
@@ -49,6 +61,16 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
   // trace's baseline object reaches its chart's band, which rebuilds on a new reference.
   const figures = useMemo<NightTracesFigures>(
     () => ({ heart_rate: traces.heartRate, hrv: traces.hrv, spo2: traces.spo2 }), [traces])
+
+  const timing = useMemo(() => TIMING.flatMap((key) => {
+    const figure = stageTiming[key]
+    if (figure.value === null) return []
+    return [{
+      key, label: t(`sleep.night.through.${key}`), figure,
+      value: formatFigureValue(figure, figure.value, language, t),
+      verdict: verdictLine(figure, language, t) ?? t('glance.usual.none'),
+    }]
+  }), [stageTiming, language, t])
 
   const minutesByStage = new Map(stageTotals(segments).map((total) => [total.stage, total.minutes]))
   const legend = LEGEND.filter((stage) => minutesByStage.has(stage)).map((stage) => {
@@ -89,6 +111,14 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
               <li key={stage}><span className="detail-legend-key" data-stage={stage} aria-hidden="true" />{text}</li>
             ))}
           </ul>
+          {timing.length > 0 && (
+            <FigureRows max={3}>
+              {timing.map(({ key, label: rowLabel, value, verdict, figure }) => (
+                <FigureRow key={key} label={rowLabel} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
+                  band={figure.baseline} mark={figure.value} />
+              ))}
+            </FigureRows>
+          )}
           {awakeDiffers && <p className="hypnogram-totals">{t('charts.hypnogram.awakeNote')}</p>}
         </>
       )}

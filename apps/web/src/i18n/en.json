@@ -871,7 +871,10 @@
       },
       "through": {
         "label": "The night",
-        "share": "{{duration}} · {{percent}} %"
+        "share": "{{duration}} · {{percent}} %",
+        "firstDeep": "Time to deep sleep",
+        "firstRem": "Time to REM",
+        "cycles": "Sleep cycles"
       },
       "traces": {
         "heart_rate": "Heart rate",
@@ -906,6 +909,7 @@
         "label": "The morning after",
         "labelDated": "Recovery on {{date}}",
         "restingHeartRate": "Resting heart rate",
+        "heartRateDip": "Dip below resting heart rate",
         "hrv": "HRV",
         "hrvChart": "HRV this morning",
         "breathing": "Breathing in sleep",
@@ -919,7 +923,9 @@
           "respiratoryRate": "breathing",
           "sleep": "sleep",
           "bedtime": "bedtime"
-        }
+        },
+        "summary": "{{outside}} of {{of}} outside your usual range",
+        "summaryAll": "all {{of}} within your usual range"
       },
       "day": {
         "label": "That day",

@@ -14,8 +14,11 @@ import { deviationVerdictLine, formatFigureValue, stripOf, verdictLine } from '.
 // bar): the spec's and the mockup's own split, resting heart rate, HRV and skin temperature get the
 // former, breathing and oxygen the latter, not "whichever figure happens to carry a strip on the
 // wire".
+// The heart-rate dip follows resting heart rate, the reading it is measured from, and draws a bar:
+// the server sends it no strip.
 const ROWS = [
   { key: 'restingHeartRate', withStrip: true },
+  { key: 'heartRateDip', withStrip: false },
   { key: 'hrv', withStrip: true },
   { key: 'breathing', withStrip: false },
   { key: 'spo2', withStrip: false },
@@ -63,6 +66,10 @@ function madeOf(missing: readonly string[] | null, t: Translate): string | null 
  * Under the ring: the band in words, the index's own usual (the glance's usualLine, the same words
  * the dashboard's recovery card uses), and what the index is made of.
  *
+ * The card opens with the server's count of how many of the morning's judged figures sat outside
+ * their usual (`morningSummary`), a verdict line without a tone, since the count judges nothing
+ * better or worse; left out when nothing was judged, since "0 of 0" says nothing.
+ *
  * Absent entirely when the morning has nothing at all - no score and no reading - the same
  * closing-up every other section of this page does when it has nothing to draw (NightHero's own
  * comment on why).
@@ -70,13 +77,13 @@ function madeOf(missing: readonly string[] | null, t: Translate): string | null 
 export function NightMorning({ page }: { page: NightPageData }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const { morning, localDate } = page
+  const { morning, localDate, morningSummary } = page
   const { recovery } = morning
 
   const rows = useMemo(() => {
     const figuresByKey: Record<(typeof ROWS)[number]['key'], PageFigure> = {
       restingHeartRate: morning.restingHeartRate, hrv: morning.hrv, breathing: morning.breathing,
-      spo2: morning.spo2, skinTemperature: morning.skinTemperature,
+      spo2: morning.spo2, skinTemperature: morning.skinTemperature, heartRateDip: morning.heartRateDip,
     }
     return ROWS.flatMap(({ key, withStrip }) => {
       const figure = figuresByKey[key]
@@ -121,6 +128,13 @@ export function NightMorning({ page }: { page: NightPageData }) {
 
   return (
     <Card span={12} label={label}>
+      {morningSummary.of > 0 && (
+        <p className="detail-verdict">
+          {morningSummary.outside === 0
+            ? t('sleep.night.morning.summaryAll', { of: morningSummary.of })
+            : t('sleep.night.morning.summary', { outside: morningSummary.outside, of: morningSummary.of })}
+        </p>
+      )}
       <div className="night-grp">
         <div className="dash-dial">
           <ScoreRing value={score} size={150} emptyText={t('glance.recovery.notScored')} label={ringLabel} />

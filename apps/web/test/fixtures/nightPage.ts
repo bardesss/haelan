@@ -140,6 +140,14 @@ export function nightPageFixture(): NightPageData {
         usualLowest: band(93.5, 92, 95), usualMean: band(96, 95.2, 96.8),
       }),
     },
+    // From the segments above: deep began 52 minutes in, REM 175, and there was one REM episode.
+    stageTiming: {
+      firstDeep: figure({ metric: 'sleep_first_deep_minutes', unit: 'minutes', direction: 'neutral', value: 52, baseline: band(45, 25, 65) }),
+      firstRem: figure({ metric: 'sleep_first_rem_minutes', unit: 'minutes', direction: 'neutral', value: 175, baseline: band(95, 70, 120) }),
+      cycles: figure({ metric: 'sleep_cycles', unit: 'count', direction: 'neutral', value: 1, baseline: band(3, 2, 4) }),
+    },
+    // The morning's six judged figures below: skin temperature above its usual, the dip below it.
+    morningSummary: { outside: 2, of: 6 },
     morning: {
       recovery: {
         index: glanceFigure({ metric: 'recovery_index', unit: 'score', value: 68 }),
@@ -155,6 +163,8 @@ export function nightPageFixture(): NightPageData {
       spo2: figure({ metric: 'daily_spo2', unit: 'percent', precision: 1, direction: 'up', value: 95.4, baseline: band(95.8, 94.5, 97), strip: [95.9, 96.1, 95.7, 96.0, 95.5, 95.8, 95.4] }),
       skinTemperature: figure({ metric: 'sleep_temperature', unit: 'celsius', precision: 1, direction: 'neutral', value: 33.6, baseline: band(33, 32.7, 33.3), strip: [33.0, 32.9, 33.1, 33.0, 33.2, 33.4, 33.6] }),
       skinTemperatureDeviation: 0.6,
+      // Resting 54 less the heart-rate trace's lowest 56: the heart rate never fell below resting.
+      heartRateDip: figure({ metric: 'sleep_heart_rate_dip', unit: 'bpm', direction: 'up', value: -2, baseline: band(8, 4, 12) }),
     },
     day: {
       localDate: NIGHT_PREVIOUS,
