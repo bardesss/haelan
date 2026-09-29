@@ -5,7 +5,7 @@ import { formatLongDate } from '../../dashboard/glanceText.js'
 import { TodayWorkouts } from '../../dashboard/TodayWorkouts.js'
 import { DayLogBlock, SideCard, hasDayLog } from '../../detail/DayLogBlock.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureValue, verdictLine } from './figureText.js'
+import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
 
 /**
  * The day before the night (M10a-2 task 7, the mockup's "Die dag"): how it felt, what was tapped

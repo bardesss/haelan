@@ -36,7 +36,11 @@ export interface GlanceStripDay {
   /** That day's own usual, which `standing` judges it against; null where the day has none. */
   band: GlanceBaseline | null
   standing: GlanceStanding | null
+  /** `standing` read through the metric's direction, by the server: the tone the day's dot takes (verdictTone). */
+  judged: GlanceJudged
 }
+
+export type GlanceJudged = 'better' | 'worse' | null
 
 export interface GlanceFigure {
   metric: string
@@ -49,6 +53,8 @@ export interface GlanceFigure {
   staleSources: GlanceStaleSource[]
   strip: GlanceStripDay[]
   standing: GlanceStanding | null
+  /** Whether the figure's standing is better or worse, by its metric's direction; null within, unjudged or neutral. */
+  judged: GlanceJudged
 }
 
 export interface GlanceNightSegment {

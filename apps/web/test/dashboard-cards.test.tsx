@@ -22,12 +22,20 @@ import type { IntradayHeartRate } from '../src/charts/IntradayHeartRate.js'
 // this file's other cases render to static markup with no DOM at all, and this is the one test that
 // needs to see a prop rather than a rendered string.
 let sparklineProps: ComponentProps<typeof Sparkline> | null = null
-vi.mock('../src/charts/Sparkline.js', () => ({
-  Sparkline: (props: ComponentProps<typeof Sparkline>) => {
-    sparklineProps = props
-    return null
-  },
-}))
+// The id the strip is described by (BasisContext, which ChartFigure points aria-describedby at),
+// read off the context the spy renders in.
+let sparklineDescribedBy: string | undefined
+vi.mock('../src/charts/Sparkline.js', async () => {
+  const { useContext } = await import('react')
+  const { BasisContext } = await import('../src/components/basis.js')
+  return {
+    Sparkline: (props: ComponentProps<typeof Sparkline>) => {
+      sparklineProps = props
+      sparklineDescribedBy = useContext(BasisContext)
+      return null
+    },
+  }
+})
 
 // The heart rate trace's props, read the way sparklineProps are for the strips: its x axis bounds live
 // in the echarts option, which static markup never builds. A pass-through rather than a stub, so the
@@ -109,10 +117,36 @@ describe('NightCard', () => {
   })
 
   it('says a secondary figure outside its usual in words as well as colour', () => {
-    const sleep = sleepFixture({ bedtime: { metric: 'sleep_bedtime_minutes', value: 14, standing: 'above' } })
+    const sleep = sleepFixture({ bedtime: { metric: 'sleep_bedtime_minutes', value: 14, standing: 'above', judged: null } })
     const html = renderNight({ sleep })
     expect(html).toMatch(/class="dash-mini-value is-out"[^>]*>00:14</)
-    expect(html).toContain('later than usual')
+    // The night page's words for a clock time, its range dropped (F12).
+    expect(html).toContain('<span class="dash-mini-note is-out"> later than your usual</span>')
+  })
+
+  // F6: a mini takes the tone its verdict takes (verdictTone), so an efficiency the server judged
+  // better is green, not the warning colour every "above" used to get.
+  it('colours a secondary figure by the server\'s judgement, better green and worse red', () => {
+    const better = renderNight({ sleep: sleepFixture({ efficiency: { value: 97, standing: 'above', judged: 'better' } }) })
+    expect(better).toMatch(/class="dash-mini-value better"[^>]*>97\u00a0%</)
+    expect(better).toContain('<span class="dash-mini-note better"> above your usual</span>')
+    const worse = renderNight({ sleep: sleepFixture({ efficiency: { value: 80, standing: 'below', judged: 'worse' } }) })
+    expect(worse).toMatch(/class="dash-mini-value worse"/)
+    expect(worse).toContain('<span class="dash-mini-note worse"> below your usual</span>')
+  })
+
+  // F9: the night's own verdict is printed when it is outside its usual, in its tone, and the strip
+  // is then described by that printed line rather than by a hidden copy.
+  it('prints the night\'s verdict when it is outside its usual, and describes the strip by it', () => {
+    const html = renderNight({ sleep: sleepFixture({ asleep: { value: 300, standing: 'below', judged: 'worse' } }) })
+    const id = /<p id="([^"]+)" class="detail-verdict worse">below your usual 6h 05m – 7h 20m<\/p>/.exec(html)?.[1]
+    expect(id).toBeDefined()
+    expect(sparklineDescribedBy).toBe(id)
+    expect(html).not.toMatch(/<p class="sr-only" id="[^"]+">below your usual/)
+  })
+
+  it('prints no verdict for a night within its usual', () => {
+    expect(renderNight()).not.toContain('detail-verdict')
   })
 
   // A night slept in Honolulu (UTC-10), 22:00 to 06:00 local: its own dates are the 22nd and the
@@ -222,6 +256,16 @@ describe('NightCard', () => {
     expect(sparklineProps?.pointStandings).toEqual([null, null, 'above', null, null, null, null])
   })
 
+  // F8: each dot's tone is its night's verdict, so the strip hands the server's judgement too.
+  it('hands the strip each night\'s judgement, for its dot\'s tone', () => {
+    const base = sleepFixture()
+    const sleep = sleepFixture({
+      asleep: { strip: base.asleep.strip.map((d, i) => ({ ...d, standing: i === 2 ? 'above' as const : null, judged: i === 2 ? 'better' as const : null })) },
+    })
+    renderNight({ sleep })
+    expect(sparklineProps?.pointJudged).toEqual([null, null, 'better', null, null, null, null])
+  })
+
   // Each night is judged against its own day's usual, so the strip's band steps night by night.
   it('hands the strip each night\'s own band, the thin and missing ones as gaps', () => {
     const base = sleepFixture()
@@ -267,7 +311,7 @@ describe('RecoveryCard', () => {
     const html = renderRecovery()
     expect(html.indexOf('usual-gauge')).toBeLessThan(html.indexOf('score-ring'))
     expect(html.lastIndexOf('usual-gauge')).toBeGreaterThan(html.indexOf('score-ring'))
-    expect(html).toMatch(/aria-label="Resting HR 62 bpm, above your usual/)
+    expect(html).toMatch(/aria-label="Resting heart rate 62 bpm, above your usual/)
   })
 
   it('unscored: an empty ring, the reason once, and the gauges labelled yesterday', () => {
@@ -407,7 +451,7 @@ describe('TodayCard', () => {
   it('says behind in plain words, exactly, at the last reading\'s time', () => {
     const day = dayFixture({ stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: Date.UTC(2026, 8, 23, 11, 52), standing: 'behind' } })
     const html = renderToday({ day, timezone: 'Europe/Amsterdam' })
-    expect(html).toContain('<p class="dash-pace"><span class="dash-pace-word">Behind your usual pace</span> · usual by 13:52 is 5,900</p>')
+    expect(html).toMatch(/<p id="[^"]+" class="dash-pace"><span class="dash-pace-word">Behind your usual pace<\/span> · usual by 13:52 is 5,900<\/p>/)
   })
 
   // T2: steps and active minutes side by side on one line, each a label over its figure, then the
@@ -417,8 +461,9 @@ describe('TodayCard', () => {
       '<div class="dash-today-figures">'
       + '<div><span class="label">Steps</span><div class="dash-headline-sm">4,820</div></div>'
       + '<div><span class="label">Active minutes</span><div class="dash-headline-sm">18 <span class="glance-unit">min</span></div></div>'
-      + '</div><p class="dash-pace">',
+      + '</div><p id=',
     )
+    expect(renderToday()).toMatch(/<\/div><p id="[^"]+" class="dash-pace">/)
   })
 
   it('labels the heart rate trace from midnight to now, and draws it compact', () => {
@@ -446,6 +491,23 @@ describe('TodayCard', () => {
     expect(sparklineProps?.bandLabels).toEqual({ low: '8,000', high: '9,500' })
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual([null, 'below', null, null, null, null, null])
+  })
+
+  it('hands the steps strip each day\'s judgement, for its dot\'s tone', () => {
+    const base = dayFixture()
+    const day = dayFixture({ steps: { strip: base.steps.strip.map((d, i) => ({ ...d, standing: i === 1 ? 'below' as const : null, judged: i === 1 ? 'worse' as const : null })) } })
+    renderToday({ day })
+    expect(sparklineProps?.pointJudged).toEqual([null, 'worse', null, null, null, null, null])
+  })
+
+  // F12: the strip is described by the line printed above it, by id, never by a second hidden
+  // sentence that could say it differently.
+  it('describes the steps strip by the line it prints, and prints no hidden copy', () => {
+    const html = renderToday({ day: dayFixture({ stepsPace: null }) })
+    const id = /<p id="([^"]+)" class="dash-pace">so far; your usual day/.exec(html)?.[1]
+    expect(id).toBeDefined()
+    expect(sparklineDescribedBy).toBe(id)
+    expect(html).not.toMatch(/<p class="sr-only" id="[^"]+">so far/)
   })
 
   it('hands the steps strip each day\'s own band, the band its dot was judged against', () => {
@@ -494,7 +556,7 @@ describe('TodayCard on a finished day', () => {
   // Tuesday the 22nd, over: 9,840 steps against a whole usual day of 6,800 - 10,400.
   function finishedDay(over: { steps?: Partial<GlanceFigure> } = {}): GlanceDay {
     return dayFixture({
-      steps: { value: 9840, partial: false, standing: 'above', baseline: { center: 8600, low: 6800, high: 10400, thin: false }, ...over.steps },
+      steps: { value: 9840, partial: false, standing: 'above', judged: 'better', baseline: { center: 8600, low: 6800, high: 10400, thin: false }, ...over.steps },
       stepsPace: null,
     })
   }
@@ -507,36 +569,38 @@ describe('TodayCard on a finished day', () => {
     expect(renderFinished()).toContain('<h2 class="dash-card-title"><strong>That day</strong> <span>Tuesday, September 22</span></h2>')
   })
 
+  // F12: the words every figure's verdict uses (usualLine), in the tone of the server's judgement
+  // (F6): more steps than usual is better, so green.
   it('gives the whole day\'s verdict with the usual range, and no pace', () => {
     const html = renderFinished()
-    expect(html).toContain('<p class="dash-pace is-ahead"><span class="dash-pace-word">Above your usual day</span> · usual 6,800 – 10,400</p>')
-    expect(html.match(/<p class="dash-pace/g)).toHaveLength(1)
+    expect(html).toMatch(/<p id="[^"]+" class="dash-pace better">above your usual 6,800 – 10,400<\/p>/)
+    expect(html.match(/class="dash-pace/g)).toHaveLength(1)
     expect(html).not.toContain('usual by')
     expect(html).not.toContain('so far')
   })
 
   it('words a below and a within verdict too, in plain text', () => {
-    const below = renderFinished(finishedDay({ steps: { value: 5000, standing: 'below' } }))
-    expect(below).toContain('<p class="dash-pace"><span class="dash-pace-word">Below your usual day</span> · usual 6,800 – 10,400</p>')
-    const within = renderFinished(finishedDay({ steps: { value: 8000, standing: 'within' } }))
-    expect(within).toContain('<p class="dash-pace"><span class="dash-pace-word">Within your usual day</span> · usual 6,800 – 10,400</p>')
+    const below = renderFinished(finishedDay({ steps: { value: 5000, standing: 'below', judged: 'worse' } }))
+    expect(below).toMatch(/<p id="[^"]+" class="dash-pace worse">below your usual 6,800 – 10,400<\/p>/)
+    const within = renderFinished(finishedDay({ steps: { value: 8000, standing: 'within', judged: null } }))
+    expect(within).toMatch(/<p id="[^"]+" class="dash-pace">within your usual 6,800 – 10,400<\/p>/)
   })
 
   it('says a thin baseline is not a usual yet, rather than a verdict', () => {
-    const html = renderFinished(finishedDay({ steps: { standing: null, baseline: { center: 8600, low: 6800, high: 10400, thin: true } } }))
-    expect(html).toContain('<p class="dash-pace">not enough history for a usual yet</p>')
+    const html = renderFinished(finishedDay({ steps: { standing: null, judged: null, baseline: { center: 8600, low: 6800, high: 10400, thin: true } } }))
+    expect(html).toMatch(/<p id="[^"]+" class="dash-pace">not enough history for a usual yet<\/p>/)
   })
 
   it('never words a pace on a finished day, even handed one', () => {
     const day = { ...finishedDay(), stepsPace: { center: 5900, low: 5000, high: 6800, thin: false, value: 5900, atMs: 0, standing: 'ahead' as const } }
     const html = renderFinished(day)
     expect(html).not.toContain('Ahead of your usual pace')
-    expect(html).toContain('Above your usual day')
+    expect(html).toContain('above your usual 6,800 – 10,400')
     // With no verdict to lead with (a thin baseline), the pace must still not speak.
-    const thin = { ...finishedDay({ steps: { standing: null, baseline: { center: 8600, low: 6800, high: 10400, thin: true } } }), stepsPace: day.stepsPace }
+    const thin = { ...finishedDay({ steps: { standing: null, judged: null, baseline: { center: 8600, low: 6800, high: 10400, thin: true } } }), stepsPace: day.stepsPace }
     const thinHtml = renderFinished(thin)
     expect(thinHtml).not.toContain('Ahead of your usual pace')
-    expect(thinHtml).toContain('<p class="dash-pace">not enough history for a usual yet</p>')
+    expect(thinHtml).toMatch(/<p id="[^"]+" class="dash-pace">not enough history for a usual yet<\/p>/)
   })
 
   it('labels the heart rate trace 00:00 to 24:00 and runs it from midnight to the next midnight', () => {
@@ -611,7 +675,7 @@ describe('TodayCard on a finished day', () => {
     const day = finishedDay()
     const html = renderFinished({ ...day, activeMinutes: { ...day.activeMinutes, value: null } })
     expect(html).toMatch(/<div class="dash-headline-sm">No reading <span class="glance-unit">/)
-    expect(html).toContain('<p class="dash-caption">the 7 days up to that day</p>')
+    expect(html).toMatch(/<p id="[^"]+" class="dash-caption">the 7 days up to that day<\/p>/)
     expect(sparklineProps?.label).toBe('Steps, the 7 days up to that day')
     expect(html).not.toMatch(/last 7|No reading yet/)
   })
@@ -639,7 +703,7 @@ describe('WeekCard', () => {
   it('labels the sleep row\'s bars as including last night, distinct from the steps row\'s days label', () => {
     const g = { ...glanceBody(), week: { steps: { perDay: 8000, days: 6, total: 48000 }, activeMinutes: null, asleep: { perDay: 393, days: 7, total: 2751 } } }
     const html = renderWeek({ glance: g })
-    expect(html).toContain('aria-label="Asleep, last 7 nights; the average includes last night"')
+    expect(html).toContain('aria-label="Time asleep, last 7 nights; the average includes last night"')
     expect(html).toContain('aria-label="Steps, last 7 days; the average counts finished days only, today not counted"')
   })
 
@@ -695,7 +759,7 @@ describe('WeekCard', () => {
   it("names a finished day's sleep average as including that night, not last night", () => {
     const g = { ...glanceBody(), finished: true, week: { steps: null, activeMinutes: null, asleep: { perDay: 393, days: 7, total: 2751 } } }
     const html = renderWeek({ glance: g })
-    expect(html).toContain('aria-label="Asleep, the 7 nights up to that day; the average includes that night"')
+    expect(html).toContain('aria-label="Time asleep, the 7 nights up to that day; the average includes that night"')
     expect(html).not.toContain('last night')
   })
 

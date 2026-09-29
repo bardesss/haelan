@@ -27,7 +27,7 @@ describe('the night page\'s hero strip', () => {
   it('labels the usual band\'s edges, as the dashboard\'s strip does', () => {
     render()
     expect(sparklineProps?.baseline).toEqual({ center: 387, low: 306, high: 468, thin: false })
-    expect(sparklineProps?.bandLabels).toEqual({ low: '5h 06m', high: '7h 48m' })
+    expect(sparklineProps?.bandLabels).toEqual({ low: '5h\u00a006m', high: '7h\u00a048m' })
   })
 
   it('opens a clicked night on its own page, and not the night already shown', () => {
@@ -36,7 +36,9 @@ describe('the night page\'s hero strip', () => {
     sparklineProps!.onPointClick!('2026-09-03')
     expect(open.mock.calls).toEqual([['2026-09-03']])
     expect(sparklineProps!.opensDay?.current).toBe(NIGHT_DATE)
-    expect(sparklineProps!.opensDay?.tail).toBe('Open this day')
+    // Worded for what a dot opens: a night, not a day (the dashboard's strips open a day).
+    expect(sparklineProps!.opensDay?.tail).toBe('Open this night')
+    expect(sparklineProps!.opensDay?.idle).toBe('Tap a night to open it')
   })
 
   it('is a plain strip with nowhere to open a night', () => {
@@ -48,7 +50,7 @@ describe('the night page\'s hero strip', () => {
   // Described by the verdict it prints beside the strip, not by a hidden second copy of it.
   it('says its verdict once', () => {
     const html = render()
-    expect(html.split('within your usual 5h 06m – 7h 48m')).toHaveLength(2)
+    expect(html.split('within your usual 5h\u00a006m – 7h\u00a048m')).toHaveLength(2)
     expect(html).not.toContain('sr-only')
   })
 })

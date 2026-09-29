@@ -8,32 +8,25 @@ import { useId } from 'react'
 import { gaugeFraction, gaugeScale } from '../pages/dashboard/UsualGauge.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { BasisContext } from './basis.js'
-import type { PointStanding } from '../charts/base.js'
+import { verdictTone } from '../charts/base.js'
+import type { PointJudged, PointStanding } from '../charts/base.js'
+
+// verdictTone lives in charts/base.ts, since a strip's dots take the same tone; re-exported here,
+// where every detail page has always imported it from.
+export { verdictTone }
 
 export interface FigureRowStrip {
   values: (number | null)[], labels: string[], bands?: readonly ({ low: number, high: number } | null)[]
   metric: string, unit: string, formatValue: (value: number | null, absent: string) => string
-  // Where the server said each day stood, so a day outside its usual takes the warning colour.
+  // Where the server said each day stood and how it judged it, so each dot takes its day's verdict tone.
   pointStandings?: readonly PointStanding[]
+  pointJudged?: readonly PointJudged[]
   // The chart's accessible name when the row's own label is not enough to tell it from another
   // chart on the same page (two called "HRV", say); the row's label otherwise.
   label?: string
 }
 
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`
-
-/**
- * The colour a figure's verdict takes, the dashboard's rule: a judged figure keeps its judgement
- * (better, worse), and a figure the server judged neither way - a neutral one, like a bedtime -
- * that still sits outside its usual takes the dashboard's "outside usual" mark (`is-out`, the
- * night card's own class for a bedtime or wake time off its usual), so "outside your usual" never
- * reads in the same grey as "within". Null inside the usual, or with nothing to stand against.
- */
-export function verdictTone(judged: 'better' | 'worse' | null, standing: 'within' | 'above' | 'below' | null | undefined):
-  'better' | 'worse' | 'is-out' | null {
-  if (judged !== null) return judged
-  return standing === 'above' || standing === 'below' ? 'is-out' : null
-}
 
 /**
  * `standing` is where the server said the figure sits against its usual; it only colours a figure
@@ -60,7 +53,7 @@ export function FigureRow({ label, value, verdict, judged, standing, band, mark,
       {strip !== undefined ? (
         <BasisContext.Provider value={verdictId}>
           <Sparkline values={strip.values} labels={strip.labels} label={strip.label ?? label} unit={strip.unit} metric={strip.metric}
-            formatValue={strip.formatValue} bands={strip.bands} pointStandings={strip.pointStandings} height={30} dots tableToggle={false} />
+            formatValue={strip.formatValue} bands={strip.bands} pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} height={30} dots tableToggle={false} />
         </BasisContext.Provider>
       ) : scale !== null && band !== null && (
         <div className="figure-row-bar" aria-hidden="true">

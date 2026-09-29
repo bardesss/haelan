@@ -215,7 +215,7 @@ describe('the glance Dashboard', () => {
       expect(night.querySelector('a.card-link')?.getAttribute('href')).toBe('/sleep/night/2026-09-23')
       expect(night.querySelector('[role="img"][aria-label^="Sleep stages through the night of"]')).not.toBeNull()
       // The Bed pair reads the stored bedtime, -50 minutes from the wake date's midnight.
-      const bed = [...night.querySelectorAll('.dash-mini')].find((d) => d.querySelector('.dash-mini-label')?.textContent === 'Bed')
+      const bed = [...night.querySelectorAll('.dash-mini')].find((d) => d.querySelector('.dash-mini-label')?.textContent === 'Bedtime')
       expect(bed?.querySelector('.dash-mini-value')?.textContent).toBe('23:10')
       // The night spans two dates, and the subtitle names both.
       expect(night.querySelector('.dash-card-title span')?.textContent).toMatch(/22.*23/)
@@ -379,7 +379,7 @@ describe('the glance Dashboard', () => {
       expect(recovery.querySelector('.dash-recovery-words')?.textContent).toBe('Not enough readings to score yet.')
       expect(recovery.querySelector('.glance-note')).toBeNull()
       expect(recovery.textContent).not.toContain('No reading yet')
-      expect([...recovery.querySelectorAll('.dash-dial > .label')].map((l) => l.textContent)).toEqual(['Resting HR', 'Score', 'HRV'])
+      expect([...recovery.querySelectorAll('.dash-dial > .label')].map((l) => l.textContent)).toEqual(['Resting heart rate', 'Score', 'HRV'])
       expect(recovery.querySelectorAll('.usual-gauge')).toHaveLength(2)
     } finally { restore() }
   })
@@ -528,7 +528,7 @@ describe('the glance Dashboard', () => {
       expect(night.querySelector('.dash-card-title')?.textContent).toBe('Die nacht di 22 – wo 23 sep')
       const day = cardTitled('Die dag')!
       expect(day.querySelector('.dash-card-title')?.textContent).toBe('Die dag dinsdag 22 september')
-      expect(day.querySelector('.dash-pace')?.textContent).toBe('Meer dan op een gewone dag · normaal 8.000 – 9.500')
+      expect(day.querySelector('.dash-pace')?.textContent).toBe('boven je gebruikelijke bereik 8.000 – 9.500')
       expect(day.querySelector('.dash-caption')?.textContent).toBe('de 7 dagen tot en met die dag')
       expect(night.querySelector('.dash-caption')?.textContent).toBe('de 7 nachten tot en met die dag')
       expect(cardTitled('Die week')!.querySelector('.dash-card-title')?.textContent).toBe('Die week de 7 dagen tot en met die dag')

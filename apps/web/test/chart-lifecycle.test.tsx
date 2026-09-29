@@ -499,7 +499,7 @@ describe('the charts across a rerender', () => {
     expect(container!.querySelectorAll('.detail-minis [role="img"]')).toHaveLength(4)
     expect(container!.querySelector('[role="img"][aria-label="Sleep schedule"]')).not.toBeNull()
     expect(container!.querySelector('[role="img"][aria-label="Sleep balance"]')).not.toBeNull()
-    expect(container!.querySelector('.night-grp [role="img"][aria-label="Resting HR"]')).not.toBeNull()
+    expect(container!.querySelector('.night-grp [role="img"][aria-label="Resting heart rate"]')).not.toBeNull()
     expect(container!.querySelector('.night-grp [role="img"][aria-label="HRV this morning"]')).not.toBeNull()
     expect(container!.querySelector('.night-grp [role="img"][aria-label="Skin temperature"]')).not.toBeNull()
     expect(before).toHaveLength(13)

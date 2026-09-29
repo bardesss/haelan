@@ -6,14 +6,15 @@ import { verdictTone } from '../../../components/FigureRow.js'
 import { Sparkline } from '../../../charts/Sparkline.js'
 import { useOpensDay } from '../../dashboard/cardShared.js'
 import type { PageFigure } from '../../../data/useNightPage.js'
-import { formatFigureValue, stripOf, verdictLine } from './figureText.js'
+import { formatFigureValue, stripOf, verdictLine } from '../../detail/figureText.js'
 
 /**
  * The night's lead: time asleep in display type, where it sits against the usual in words, and
  * the strip of this night and the six before it with each night's usual shaded behind it, the
  * same lead the dashboard's night card draws. The verdict is the server's (verdictLine only words
  * it); a thin usual says so rather than claiming one. Like the dashboard's strip, the band's edges
- * are labelled and a dot opens its own night (useOpensDay, the dashboard's words for it).
+ * are labelled and a dot opens its own night (useOpensDay, worded for a night), and each dot takes the tone of its
+ * night's verdict (the server's judged, as the words beside it do).
  *
  * Nothing at all when the night has no time asleep, so the grid closes up rather than holding a
  * card that says nothing. The strip, its arrays and its formatter are memoised on the figure: a
@@ -31,7 +32,7 @@ export function NightHero({ asleep, localDate, onOpenNight }: {
   const verdictId = useId()
   const captionId = useId()
   const strip = useMemo(() => stripOf(asleep), [asleep])
-  const opens = useOpensDay(localDate, onOpenNight)
+  const opens = useOpensDay(localDate, onOpenNight, 'night')
   const formatValue = useMemo(
     () => (value: number | null, absent: string) => (value === null ? absent : formatFigureValue(asleep, value, language, t)),
     [asleep, language, t],
@@ -64,7 +65,7 @@ export function NightHero({ asleep, localDate, onOpenNight }: {
             <BasisContext.Provider value={verdict !== null ? verdictId : captionId}>
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={asleep.metric}
                 formatValue={formatValue} baseline={band} bands={strip.bands} bandLabels={bandLabels}
-                pointStandings={strip.pointStandings} height={64} dots tableToggle={false} {...opens} />
+                pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} height={64} dots tableToggle={false} {...opens} />
             </BasisContext.Provider>
             <p id={captionId} className="dash-caption">{t('sleep.night.hero.strip')}</p>
           </div>

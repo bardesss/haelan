@@ -8,7 +8,7 @@ import { inWindow, withinSchedule, WIDE_WINDOW } from '../../../charts/schedule.
 import { formatDuration, formatNumber, formatSignedDuration } from '../../../format.js'
 import type { GlanceBaseline } from '../../../data/useGlance.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureValue } from './figureText.js'
+import { formatFigureValue } from '../../detail/figureText.js'
 import { verdictTone } from '../../../components/FigureRow.js'
 
 /**

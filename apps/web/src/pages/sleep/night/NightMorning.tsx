@@ -8,7 +8,7 @@ import { formatLocalDate, formatSignedNumber } from '../../../format.js'
 import type { Translate } from '../../../format.js'
 import { usualLine } from '../../dashboard/glanceText.js'
 import type { NightPageData, PageFigure } from '../../../data/useNightPage.js'
-import { deviationVerdictLine, formatFigureValue, stripOf, verdictLine } from './figureText.js'
+import { deviationVerdictLine, formatFigureValue, stripOf, verdictLine } from '../../detail/figureText.js'
 
 // Which readings draw a trend (a strip) rather than today's reading alone against its band (a
 // bar): the spec's and the mockup's own split, resting heart rate, HRV and skin temperature get the
@@ -87,7 +87,7 @@ export function NightMorning({ page }: { page: NightPageData }) {
       // as "— °C".
       const deviation = key === 'skinTemperature' ? morning.skinTemperatureDeviation : null
       const value = deviation !== null
-        ? `${formatSignedNumber(deviation, figure.precision, language, t('common.absent'))} ${t('charts.units.celsius')}`
+        ? `${formatSignedNumber(deviation, figure.precision, language, t('common.absent'))} ${t('charts.units.celsius')}`
         : formatFigureValue(figure, figure.value, language, t)
       // A row with no usual at all (rather than a thin one, which verdictLine already words) still
       // needs something in its hidden strip description: an empty string there reads as no

@@ -28,8 +28,9 @@ const SERIES = '#000001'
 const PRIMARY = '#000002'
 const NEGATIVE = '#000003'
 const SURFACE = '#000004'
+const POSITIVE = '#000005'
 const OWN: Record<string, string> = {
-  '--chart-series': SERIES, '--text-primary': PRIMARY, '--negative': NEGATIVE, '--surface-card': SURFACE,
+  '--chart-series': SERIES, '--text-primary': PRIMARY, '--negative': NEGATIVE, '--surface-card': SURFACE, '--positive': POSITIVE,
 }
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, OWN[variable] ?? '#000000')
 
@@ -124,6 +125,18 @@ describe('Sparkline dots', () => {
     const series = dotOption({ standings: [null, null, null, null, null, null, null] })
     const colours = series.data.map((d) => (d === null ? null : (d as { itemStyle: { color: string } }).itemStyle.color))
     expect(colours).toEqual([SERIES, SERIES, SERIES, SERIES, null, SERIES, PRIMARY])
+  })
+
+  // The dot takes the tone its day's verdict line takes (verdictTone): a judged day its judgement,
+  // green for better and red for worse, and an unjudged day outside its usual (a neutral metric)
+  // the warning colour. Before, the standing alone coloured it, so a better day sat red beside
+  // green words.
+  it('colours a judged day by its judgement, and an unjudged day outside its usual as out', () => {
+    mount(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
+      baseline={{ low: 100, high: 160 }} dots pointStandings={standings}
+      pointJudged={[null, null, 'better', 'worse', null, null, null]} tableToggle={false} />)
+    const colours = seriesOf(lastOption).at(-1)!.data.map((d) => (d === null ? null : (d as { itemStyle: { color: string } }).itemStyle.color))
+    expect(colours).toEqual([SERIES, SERIES, POSITIVE, NEGATIVE, null, SERIES, PRIMARY])
   })
 
   it('an outside verdict on the latest day wins over its highlight', () => {

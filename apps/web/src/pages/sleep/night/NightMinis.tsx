@@ -4,7 +4,7 @@ import { Card } from '../../../components/Card.js'
 import { FigureRow } from '../../../components/FigureRow.js'
 import type { FigureRowStrip } from '../../../components/FigureRow.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureValue, stripOf, verdictLine } from './figureText.js'
+import { formatFigureValue, stripOf, verdictLine } from '../../detail/figureText.js'
 
 // The four figures under the hero, in the mockup's order.
 const MINIS = ['efficiency', 'deep', 'rem', 'bedtime'] as const

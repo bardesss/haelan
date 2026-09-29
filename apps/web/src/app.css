@@ -1095,7 +1095,10 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .dash-mini { display: inline-flex; align-items: baseline; gap: var(--space-1); }
 .dash-mini-label { color: var(--text-faint); }
 .dash-mini-value { font-size: var(--font-size-md); font-weight: var(--weight-semibold); }
-.dash-mini-value.is-out, .dash-mini-note { color: var(--negative); }
+/* A mini and its note take the tone of the server's verdict (verdictTone): better green, worse or
+   outside a neutral usual red. */
+.dash-mini-value.better, .dash-mini-note.better { color: var(--positive); }
+.dash-mini-value.worse, .dash-mini-value.is-out, .dash-mini-note.worse, .dash-mini-note.is-out { color: var(--negative); }
 .dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 
 /* TodayCard.tsx: the two headline figures side by side on one line, and the pace line under them. */
@@ -1104,6 +1107,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .dash-pace { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
 .dash-pace-word { font-weight: var(--weight-medium); }
 .dash-pace.is-ahead .dash-pace-word { color: var(--positive); }
+/* A finished day's verdict line, in the tone of its judgement (TodayCard). */
+.dash-pace.better { color: var(--positive); }
+.dash-pace.worse, .dash-pace.is-out { color: var(--negative); }
 .glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
 .glance-asof { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 .glance-note { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
