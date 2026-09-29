@@ -309,3 +309,4 @@ export {
 export type { PeriodSeries, CatalogueFigureInput } from './query/periodRead.ts'
 export { readSpan, readPeriodSeries, catalogueFigure } from './query/periodRead.ts'
 export type { SleepPeriod, SleepPeriodInput, SleepListRow, SleepSchedule, ScheduleSide } from './query/sleepPeriod.ts'
+export type { ActivityPeriod, ActivityPeriodInput, WorkoutListRow, TypeTotal, Vo2Trend } from './query/activityPeriod.ts'

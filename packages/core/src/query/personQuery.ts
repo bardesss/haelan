@@ -57,7 +57,10 @@ import { readWorkoutPage } from './workoutPage.ts'
 import type { WorkoutPage } from './workoutPage.ts'
 import { readSleepPeriod } from './sleepPeriod.ts'
 import type { SleepPeriod, SleepPeriodInput } from './sleepPeriod.ts'
+import { readActivityPeriod } from './activityPeriod.ts'
+import type { ActivityPeriod, ActivityPeriodInput } from './activityPeriod.ts'
 import { periodBounds, PERIOD_RANGES } from './periodBounds.ts'
+import type { PeriodRange } from './periodBounds.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -299,14 +302,27 @@ export class PersonQuery {
    * to show, so asking for one is refused rather than answered empty.
    */
   sleepPeriod(input: SleepPeriodInput): SleepPeriod {
+    this.#requirePeriod(input)
+    return readSleepPeriod(this, input)
+  }
+
+  /**
+   * The Activity overview (M10b): a week, month, three months or year of days and workouts around
+   * `anchor`, refused on the same grounds as `sleepPeriod`.
+   */
+  activityPeriod(input: ActivityPeriodInput): ActivityPeriod {
+    this.#requirePeriod(input)
+    return readActivityPeriod(this, input)
+  }
+
+  #requirePeriod(input: { range: PeriodRange, anchor: string, today: string, source?: string }): void {
     if (!PERIOD_RANGES.includes(input.range)) throw new ConfigError(`range must be one of ${PERIOD_RANGES.join(', ')}, got '${input.range}'`)
     requireDate('anchor', input.anchor)
     requireDate('today', input.today)
-    // A device id only: the nights and their sessions are read per device, and have no merge to name.
+    // A device id only: nights and workouts are read per device, and the page's merge is the absent source.
     requireSource(this.#db, this.#personId, input.source, [])
     const { from } = periodBounds(input.range, input.anchor)
     if (from > input.today) throw new ConfigError(`the ${input.range} of '${input.anchor}' starts after today '${input.today}'`)
-    return readSleepPeriod(this, input)
   }
 
   /**

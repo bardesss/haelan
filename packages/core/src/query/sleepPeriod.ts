@@ -10,11 +10,11 @@ import type { Baseline } from './baseline.ts'
 import type { SleepSummary } from '../api/sleepSummary.ts'
 import { readRecoveryInput } from './recoveryInput.ts'
 import { summaryOf } from './nightPage.ts'
-import { daysIn, periodBounds, stepPeriod, yearEarlierDate } from './periodBounds.ts'
-import type { DateSpan, PeriodRange } from './periodBounds.ts'
-import { changeOf, highOf, periodFigureOf } from './periodFigure.ts'
+import { periodBounds } from './periodBounds.ts'
+import type { PeriodRange } from './periodBounds.ts'
+import { highOf, periodFigureOf } from './periodFigure.ts'
 import type { PeriodChange, PeriodFigure, PeriodHeader, PeriodHigh, PeriodStripPoint } from './periodFigure.ts'
-import { bandsOver, catalogueRead, readSpan } from './periodRead.ts'
+import { bandsOver, catalogueRead, orNull, periodChanges, periodHeader, readSpan, shown } from './periodRead.ts'
 
 export interface SleepPeriodInput {
   range: PeriodRange, anchor: string, today: string, source?: string
@@ -53,10 +53,6 @@ export interface SleepPeriod {
   nights: SleepListRow[]
 }
 
-/** A section without data hides; the server decides it, so the page never draws an empty figure. */
-const shown = (figure: PeriodFigure) => figure.days > 0
-const orNull = (figure: PeriodFigure) => (shown(figure) ? figure : null)
-
 const SIDE_MIN_NIGHTS = 2
 
 // Answers: the mean bedtime and wake time of the nights ending on the given mornings, null below two nights.
@@ -90,7 +86,6 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
   const base = { range, anchor, bounds, span, lastDay, source }
   const read = (metric: string, agg: string) => catalogueRead(q, { ...base, metric, agg })
   const figure = (metric: string, agg: string) => read(metric, agg).figure
-  const soFar: DateSpan = { from: bounds.from, to: lastDay }
 
   // Figures over values computed here rather than read, each banded in memory as `baselines` would.
   const derived = (
@@ -156,18 +151,11 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
     good: p.judged === 'better',
   }))
 
-  const previousBounds = periodBounds(range, stepPeriod(range, anchor, -1))
-  const yearEarlierBounds = { from: yearEarlierDate(bounds.from), to: yearEarlierDate(bounds.to) }
-
   return {
-    period: {
-      range, from: bounds.from, to: bounds.to, today: input.today,
-      periodDays: daysIn(bounds), daysSoFar: daysIn(soFar), partial: lastDay < bounds.to,
-    },
+    period: periodHeader(range, bounds, input.today, lastDay),
     hero,
     high: highOf(hero.daily),
-    previous: changeOf(asleep.series.values, previousBounds, hero.value, lastDay, 1),
-    yearEarlier: changeOf(asleep.series.values, yearEarlierBounds, hero.value, lastDay, 1),
+    ...periodChanges(asleep.series.values, range, anchor, bounds, hero.value, lastDay),
     figures: [figure('sleep_efficiency', 'last'), deep, rem, bedtime].filter(shown),
     stages: { deep: orNull(deep), light: orNull(light), rem: orNull(rem), awake: orNull(awake), shares },
     schedule: {

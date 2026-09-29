@@ -7,10 +7,10 @@ import { coverageIsMeaningful } from './coverageSignal.ts'
 import { INSIGHT_MIN_COVERAGE } from './insights.ts'
 import { FIGURE_METRIC_ALIAS } from './glance.ts'
 import type { FigureDirection } from './glance.ts'
-import { datesIn, earlierBlocks, periodBounds, yearEarlierDate } from './periodBounds.ts'
+import { datesIn, daysIn, earlierBlocks, periodBounds, stepPeriod, yearEarlierDate } from './periodBounds.ts'
 import type { DateSpan, PeriodRange } from './periodBounds.ts'
-import { periodFigureOf } from './periodFigure.ts'
-import type { PeriodFigure } from './periodFigure.ts'
+import { changeOf, periodFigureOf } from './periodFigure.ts'
+import type { PeriodChange, PeriodFigure, PeriodHeader } from './periodFigure.ts'
 
 /**
  * The reads behind a period figure: one series per metric over the widest span any of the figure's
@@ -79,4 +79,28 @@ export function catalogueRead(q: PersonQuery, o: CatalogueFigureInput): { figure
 
 export function catalogueFigure(q: PersonQuery, o: CatalogueFigureInput): PeriodFigure {
   return catalogueRead(q, o).figure
+}
+
+/** A section without data hides; the server decides it, so the page never draws an empty figure. */
+export const shown = (figure: PeriodFigure): boolean => figure.days > 0
+export const orNull = (figure: PeriodFigure): PeriodFigure | null => (shown(figure) ? figure : null)
+
+/** The period itself: its days, how many of them are finished (to `lastDay`), and whether it still runs. */
+export function periodHeader(range: PeriodRange, bounds: DateSpan, today: string, lastDay: string): PeriodHeader {
+  return {
+    range, from: bounds.from, to: bounds.to, today,
+    periodDays: daysIn(bounds), daysSoFar: daysIn({ from: bounds.from, to: lastDay }), partial: lastDay < bounds.to,
+  }
+}
+
+/** The hero against the calendar period before and the same period a year earlier, from values already read. */
+export function periodChanges(
+  values: ReadonlyMap<string, number>, range: PeriodRange, anchor: string, bounds: DateSpan, current: number | null, lastDay: string,
+): { previous: PeriodChange, yearEarlier: PeriodChange } {
+  const previousBounds = periodBounds(range, stepPeriod(range, anchor, -1))
+  const yearEarlierBounds = { from: yearEarlierDate(bounds.from), to: yearEarlierDate(bounds.to) }
+  return {
+    previous: changeOf(values, previousBounds, current, lastDay, 1),
+    yearEarlier: changeOf(values, yearEarlierBounds, current, lastDay, 1),
+  }
 }
