@@ -173,7 +173,7 @@ export const ROUTE_CHUNK_SESSIONS = 100
 /** What a route reduces to for comparing against other workouts: never a point, only its signature and efforts. */
 export interface RouteSummary { signature: RouteSignature | null, efforts: Record<EffortKey, number | null> }
 
-const NO_EFFORTS: Record<EffortKey, number | null> = { km: null, mile: null, fiveK: null }
+const NO_EFFORTS: Readonly<Record<EffortKey, number | null>> = Object.freeze({ km: null, mile: null, fiveK: null })
 
 /**
  * Many workouts' routes reduced to a signature and, when `efforts` is asked for, the fastest

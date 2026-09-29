@@ -54,7 +54,7 @@ function seedRun(h: Harness, input: {
   /** One-kilometre automatic splits, each its active seconds. */
   splitSeconds?: number[]
   /** A type other than RUNNING, and any further metricsSummary fields, as the provider stores them. */
-  exerciseType?: string, metrics?: Record<string, unknown>
+  exerciseType?: string, metrics?: Record<string, unknown>, activeDuration?: string
 }): void {
   const startMs = at(input.localDate, '07:00')
   const splits = input.splitSeconds?.map((seconds) => ({
@@ -69,7 +69,7 @@ function seedRun(h: Harness, input: {
       type: null, mainSleep: null, stagesStatus: null, summary: null, shortAwakenings: null,
       splitSummaries: null, exerciseEvents: null, displayName: null, notes: null, routeConsentRequired: null,
       exerciseMetadata: { hasGps: false }, exerciseType: input.exerciseType ?? 'RUNNING',
-      metricsSummary: { averagePaceSecondsPerMeter: input.pace / 1000, ...input.metrics }, splits, activeDuration: null,
+      metricsSummary: { averagePaceSecondsPerMeter: input.pace / 1000, ...input.metrics }, splits, activeDuration: input.activeDuration ?? null,
     }),
   }).run()
 }
@@ -361,6 +361,42 @@ describe('GET /workout/:sessionId', () => {
     const { through } = (await get(harness, token, '/workout/subject')).json()
     expect(through.pace.points.map((p: { value: number }) => p.value)).toEqual([333, 333, 333])
     expect(through.cadence.points.map((p: { value: number }) => p.value)).toEqual([171, 171, 171, 171, 171])
+  })
+
+  // Three runs over one straight 6 km course at 3 m/s: the fastest kilometre is 333.33 s, the mile
+  // 536.4, the 5 km 1666.67, and the two moving times are fractional; every one is sent whole.
+  it('sends the same-route time, the previous time and the efforts in whole seconds', async () => {
+    const h = await withServer()
+    harness = h
+    h.clock.nowMs = NOW_MS
+    const token = await h.signIn()
+    seedSource(h, 'watch')
+    const db = h.app.haelan.instance.db
+    const metresPerDegree = (6_371_000 * Math.PI) / 180
+    const routed = (id: string, localDate: string, activeDuration: string) => {
+      seedRun(h, { id, sourceId: 'watch', localDate, pace: 300, activeDuration })
+      const startMs = at(localDate, '07:00')
+      db.insert(schema.sessionRoutes).values(Array.from({ length: 21 }, (_, i) => ({
+        id: `${id}-${i}`, sessionId: id, ordinal: i, atMs: startMs + i * 100_000,
+        latitude: 52 + (i * 300) / metresPerDegree, longitude: 5,
+        altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+      }))).run()
+    }
+    routed('earlier', '2026-09-01', '1800.6s')
+    routed('subject', '2026-09-04', '1700.4s')
+    const body = (await get(h, token, '/workout/subject')).json()
+    expect(body.sameRoute.previous.seconds).toBe(1801)
+    expect(body.sameRoute.time.value).toBe(1700)
+    expect(body.sameRoute.time.strip.map((p: { value: number }) => p.value)).toEqual([1801, 1700])
+    expect(body.sameRoute.time.baseline.center).toBe(1801)
+    expect(body.efforts.km.seconds).toBe(333)
+    expect(body.efforts.mile.seconds).toBe(536)
+    expect(body.efforts.fiveK.seconds).toBe(1667)
+    for (const key of ['km', 'mile', 'fiveK']) {
+      expect(Number.isInteger(body.efforts[key].best.value)).toBe(true)
+    }
+    // The route the times come from stays on the server.
+    expect(JSON.stringify(body)).not.toMatch(/latitude|longitude/)
   })
 
   // An alternate's id is an old link to a workout another source also recorded; the page answers

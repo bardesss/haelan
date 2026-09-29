@@ -114,6 +114,15 @@ function roundMinuteSeries(series: MinuteSeries | null): MinuteSeries | null {
   return series === null ? null : { ...series, points: series.points.map((p) => ({ ...p, value: Number(p.value.toFixed(0)) })) }
 }
 
+/** One fastest effort in whole seconds, its Records best as `best.fastestKmSeconds` is sent. */
+function roundEffort(effort: NonNullable<WorkoutPage['efforts']>['km']): NonNullable<WorkoutPage['efforts']>['km'] {
+  return effort === null ? null : {
+    ...effort,
+    seconds: Number(effort.seconds.toFixed(0)),
+    best: effort.best === null ? null : { ...effort.best, value: Number(effort.best.value.toFixed(0)) },
+  }
+}
+
 /**
  * The workout page at the wire's precision, by the same rule as the night page. `previous` and
  * `best` carry pace in seconds, distance in metres, heart rate in bpm, load in TRIMP and a
@@ -129,7 +138,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
   }
   const whole = (value: number) => Number(value.toFixed(0))
   const ref = (r: WorkoutPage['best']['fastestKmSeconds']) => (r === null ? null : { ...r, value: whole(r.value) })
-  const { previous, after, before, heartRateRecovery, through, splitTrend, zoneBounds } = page
+  const { previous, after, before, heartRateRecovery, through, splitTrend, zoneBounds, sameRoute, efforts } = page
   return {
     ...page,
     figures,
@@ -156,6 +165,15 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     },
     heartRateRecovery: heartRateRecovery === null ? null : {
       oneMinute: roundPageFigure(heartRateRecovery.oneMinute), twoMinutes: roundPageFigure(heartRateRecovery.twoMinutes),
+    },
+    // The course time as a figure, the previous time and every effort in whole seconds, as pace is.
+    sameRoute: sameRoute === null ? null : {
+      ...sameRoute,
+      time: roundWorkoutFigure(sameRoute.time),
+      previous: sameRoute.previous === null ? null : { ...sameRoute.previous, seconds: whole(sameRoute.previous.seconds) },
+    },
+    efforts: efforts === null ? null : {
+      km: roundEffort(efforts.km), mile: roundEffort(efforts.mile), fiveK: roundEffort(efforts.fiveK),
     },
     through: { pace: roundMinuteSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
     // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.
