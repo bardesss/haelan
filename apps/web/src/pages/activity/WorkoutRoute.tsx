@@ -26,6 +26,25 @@ export function basemapAllowed(status: { data?: { enabled: boolean }, isFetching
 const VIEW_DIMENSION = 320
 const PADDING = 16
 const POINT_RADIUS = 3
+// A stable empty list for a caller with no kilometres, so the basemap effect below is not re-run
+// on every render by a fresh `[]`.
+const NO_KMS: readonly number[] = Object.freeze([])
+
+/** A marker on the route: the start, or the end of a numbered kilometre. */
+export interface RouteMarker { label: string | null, point: RoutePoint }
+
+/**
+ * Where the route's markers sit: a dot at its first point, and the point recorded nearest in time
+ * to the end of each whole kilometre (the automatic splits' own ends, `kmEndsMs`), numbered from
+ * 1. Nearest in time rather than by distance along the line, since the splits carry a time and
+ * the route's own distances are the phone's, not the watch's.
+ */
+export function routeMarkers(route: readonly RoutePoint[], kmEndsMs: readonly number[]): RouteMarker[] {
+  if (route.length === 0) return []
+  const nearest = (atMs: number): RoutePoint => route.reduce((best, point) =>
+    (Math.abs(point.atMs - atMs) < Math.abs(best.atMs - atMs) ? point : best))
+  return [{ label: null, point: route[0]! }, ...kmEndsMs.map((atMs, i) => ({ label: String(i + 1), point: nearest(atMs) }))]
+}
 
 interface Projected { x: number, y: number }
 
@@ -86,7 +105,7 @@ export function projectRoute(
  *
  * Nothing for an empty route.
  */
-export function RouteDrawing({ route }: { route: readonly RoutePoint[] }) {
+export function RouteDrawing({ route, kmEndsMs = NO_KMS }: { route: readonly RoutePoint[], kmEndsMs?: readonly number[] }) {
   const { t } = useTranslation()
   const recorded = route
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
@@ -106,13 +125,15 @@ export function RouteDrawing({ route }: { route: readonly RoutePoint[] }) {
     // see the module comment above for why a static import anywhere else would defeat the setting
     // this effect exists to respect. mountBasemap owns the rest: the library through loadMapLibre,
     // the style in the page's own tokens, and restyling it when the theme changes.
-    return mountBasemap(mapContainerRef.current, recorded)
-  }, [basemapEnabled, recorded])
+    return mountBasemap(mapContainerRef.current, recorded, {}, routeMarkers(recorded, kmEndsMs))
+  }, [basemapEnabled, recorded, kmEndsMs])
 
   if (recorded.length === 0) return null
 
   const { points, viewWidth, viewHeight } = projectRoute(recorded)
   const linePoints = points.map((point) => `${point.x},${point.y}`).join(' ')
+  // Projected with the route, so each marker lands on the line it was taken from.
+  const markers = routeMarkers(recorded, kmEndsMs).map((marker) => ({ ...marker, at: points[recorded.indexOf(marker.point)]! }))
 
   // The one sentence a screen reader gets for the drawing below: what the layout check (this
   // app's only browser-level layout coverage) cannot see at all, since it never opens this page's
@@ -132,6 +153,14 @@ export function RouteDrawing({ route }: { route: readonly RoutePoint[] }) {
       {points.length === 1
         ? <circle className="workout-route-point" cx={points[0]!.x} cy={points[0]!.y} r={POINT_RADIUS} />
         : <polyline className="workout-route-trace" points={linePoints} />}
+      {points.length > 1 && markers.map(({ label, at }, i) => label === null
+        ? <circle key={i} className="workout-route-start" cx={at.x} cy={at.y} r={POINT_RADIUS + 1} />
+        : (
+          <g key={i} className="workout-route-km">
+            <circle cx={at.x} cy={at.y} r={POINT_RADIUS + 5} />
+            <text x={at.x} y={at.y} textAnchor="middle" dominantBaseline="central">{label}</text>
+          </g>
+        ))}
     </svg>
   )
 }

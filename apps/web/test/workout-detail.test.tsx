@@ -510,6 +510,14 @@ describe('the workout page\'s route and kilometres', () => {
   // asserted this against WorkoutRoute directly before Task 5 of M10a-3 retired that card: the
   // count is still real behaviour of this card, now built by WorkoutMap.tsx from the session's own
   // route length rather than by the component this used to test.
+  it('marks the start and numbers each whole kilometre on the route', async () => {
+    const host = await mount(workoutPageFixture(), fullSession())
+    const svg = host.querySelector('.workout-route-svg')!
+    expect(svg.querySelectorAll('.workout-route-start')).toHaveLength(1)
+    // Five whole kilometres; the last 200 m gets no number.
+    expect([...svg.querySelectorAll('.workout-route-km text')].map((label) => label.textContent)).toEqual(['1', '2', '3', '4', '5'])
+  })
+
   it('states how many points the phone recorded as the route half\'s own basis', async () => {
     const host = await mount(workoutPageFixture(), fullSession())
     const card = host.querySelector('.workout-map')!.closest('.card')!

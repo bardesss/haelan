@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { Card } from '../../../components/Card.js'
@@ -120,6 +121,13 @@ export function WorkoutMap({ session, page }: { session: WorkoutSessionDetail, p
   const splits = session.autoSplits ?? []
   const hasRoute = route.length > 0
   const hasSplits = splits.length >= 2
+  // The end of each whole kilometre, numbered on the route; the last part-kilometre gets none.
+  // Memoised on the session's own array, since the drawing's basemap effect keys on it.
+  const kmEndsMs = useMemo(
+    () => (session.autoSplits ?? []).flatMap((split) =>
+      (split.distanceMeters !== null && split.distanceMeters >= 999 && split.endMs !== null ? [split.endMs] : [])),
+    [session.autoSplits],
+  )
   if (!hasRoute && !hasSplits) return null
 
   const profile = hasRoute ? elevationProfile(route, PROFILE_WIDTH, PROFILE_HEIGHT) : null
@@ -134,7 +142,7 @@ export function WorkoutMap({ session, page }: { session: WorkoutSessionDetail, p
         {hasRoute && (
           <div className="workout-map-route">
             <span className="label">{t('activity.workout.route.label')}</span>
-            <RouteDrawing route={route} />
+            <RouteDrawing route={route} kmEndsMs={kmEndsMs} />
             {profile !== null && (
               <div className="workout-elevation">
                 <div className="workout-elevation-head">

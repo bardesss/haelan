@@ -832,6 +832,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-route-svg { display: block; width: 100%; height: auto; max-height: 320px; }
 .workout-route-trace { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .workout-route-point { fill: var(--accent); }
+.workout-route-start { fill: var(--accent); stroke: var(--surface-card); stroke-width: 1.5; }
+.workout-route-km circle { fill: var(--accent); stroke: var(--surface-card); stroke-width: 1.5; }
+.workout-route-km text { fill: var(--surface-card); font-size: var(--font-size-micro); font-weight: var(--weight-semibold); }
 
 /* The basemap MapLibre draws into when the route-basemap setting (About.tsx) is on, in place of
    the svg trace above. A fixed height rather than `height: auto`: there is no viewBox to size this
