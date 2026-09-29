@@ -581,6 +581,11 @@ describe('readWorkoutPage: through the workout', () => {
     expect(cadence!.points.every((p) => p.value === 170)).toBe(true)
     expect(readWorkoutPage(q(), input('hourly'))!.through.cadence).toBeNull()
   })
+
+  it('reads no cadence for a workout longer than the window read allows, rather than refusing the page', () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 }, { minutes: 49 * 60 })
+    expect(readWorkoutPage(q(), input('subject'))!.through.cadence).toBeNull()
+  })
 })
 
 describe('PersonQuery.workoutPage', () => {
