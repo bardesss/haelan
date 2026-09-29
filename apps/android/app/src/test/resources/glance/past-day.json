@@ -32,7 +32,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         },
         {
           "localDate": "2026-08-13",
@@ -43,7 +44,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -54,7 +56,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": "worse"
         },
         {
           "localDate": "2026-08-15",
@@ -65,7 +68,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         },
         {
           "localDate": "2026-08-16",
@@ -76,7 +80,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
@@ -87,7 +92,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": "worse"
         },
         {
           "localDate": "2026-08-18",
@@ -98,10 +104,12 @@
             "high": 438,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         }
       ],
-      "standing": "above"
+      "standing": "above",
+      "judged": "better"
     },
     "efficiency": {
       "metric": "sleep_efficiency",
@@ -127,7 +135,8 @@
             "high": 92,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
@@ -138,7 +147,8 @@
             "high": 92,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -149,7 +159,8 @@
             "high": 92,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -160,7 +171,8 @@
             "high": 92,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
@@ -171,7 +183,8 @@
             "high": 92,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
@@ -182,7 +195,8 @@
             "high": 92,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
@@ -193,10 +207,12 @@
             "high": 92,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         }
       ],
-      "standing": "within"
+      "standing": "within",
+      "judged": null
     },
     "bedtime": {
       "metric": "sleep_bedtime_minutes",
@@ -222,7 +238,8 @@
             "high": -34,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
@@ -233,7 +250,8 @@
             "high": -34,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -244,7 +262,8 @@
             "high": -34,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -255,7 +274,8 @@
             "high": -34,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
@@ -266,7 +286,8 @@
             "high": -34,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
@@ -277,7 +298,8 @@
             "high": -34,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
@@ -288,10 +310,12 @@
             "high": -34,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         }
       ],
-      "standing": "within"
+      "standing": "within",
+      "judged": null
     },
     "waketime": {
       "metric": "sleep_waketime_minutes",
@@ -317,7 +341,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
@@ -328,7 +353,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -339,7 +365,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -350,7 +377,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
@@ -361,7 +389,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
@@ -372,7 +401,8 @@
             "high": 438,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
@@ -383,10 +413,12 @@
             "high": 438,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": null
         }
       ],
-      "standing": "above"
+      "standing": "above",
+      "judged": null
     }
   },
   "recovery": {
@@ -404,46 +436,54 @@
           "localDate": "2026-08-12",
           "value": 52,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
           "value": 45,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
           "value": 44,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
           "value": 23,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
           "value": 75,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
           "value": 65,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
           "value": 31,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         }
       ],
-      "standing": null
+      "standing": null,
+      "judged": null
     },
     "band": "below",
     "missing": null,
@@ -471,7 +511,8 @@
             "high": 57,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
@@ -482,7 +523,8 @@
             "high": 57,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -493,7 +535,8 @@
             "high": 57,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -504,7 +547,8 @@
             "high": 57,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
@@ -515,7 +559,8 @@
             "high": 57,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
@@ -526,7 +571,8 @@
             "high": 57,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
@@ -537,10 +583,12 @@
             "high": 57,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         }
       ],
-      "standing": "within"
+      "standing": "within",
+      "judged": null
     },
     "hrv": {
       "metric": "daily_hrv",
@@ -566,7 +614,8 @@
             "high": 43,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
@@ -577,7 +626,8 @@
             "high": 43,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -588,7 +638,8 @@
             "high": 43,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -599,7 +650,8 @@
             "high": 43,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": "worse"
         },
         {
           "localDate": "2026-08-16",
@@ -610,7 +662,8 @@
             "high": 43,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         },
         {
           "localDate": "2026-08-17",
@@ -621,7 +674,8 @@
             "high": 43,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
@@ -632,10 +686,12 @@
             "high": 43,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         }
       ],
-      "standing": "within"
+      "standing": "within",
+      "judged": null
     },
     "respiratoryRate": {
       "metric": "respiratory_rate",
@@ -661,7 +717,8 @@
             "high": 14.4,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
@@ -672,7 +729,8 @@
             "high": 14.4,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -683,7 +741,8 @@
             "high": 14.4,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -694,7 +753,8 @@
             "high": 14.4,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
@@ -705,7 +765,8 @@
             "high": 14.4,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
@@ -716,7 +777,8 @@
             "high": 14.4,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
@@ -727,10 +789,12 @@
             "high": 14.4,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         }
       ],
-      "standing": "within"
+      "standing": "within",
+      "judged": null
     }
   },
   "day": {
@@ -758,7 +822,8 @@
             "high": 9728,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-13",
@@ -769,7 +834,8 @@
             "high": 9733,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
@@ -780,7 +846,8 @@
             "high": 9726,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -791,7 +858,8 @@
             "high": 9714,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": "worse"
         },
         {
           "localDate": "2026-08-16",
@@ -802,7 +870,8 @@
             "high": 9702,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         },
         {
           "localDate": "2026-08-17",
@@ -813,7 +882,8 @@
             "high": 9726,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         },
         {
           "localDate": "2026-08-18",
@@ -824,10 +894,12 @@
             "high": 10803,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         }
       ],
-      "standing": "within"
+      "standing": "within",
+      "judged": null
     },
     "stepsPace": null,
     "activeMinutes": {
@@ -854,7 +926,8 @@
             "high": 53,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": "worse"
         },
         {
           "localDate": "2026-08-13",
@@ -865,7 +938,8 @@
             "high": 53,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         },
         {
           "localDate": "2026-08-14",
@@ -876,7 +950,8 @@
             "high": 53,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
@@ -887,7 +962,8 @@
             "high": 53,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
@@ -898,7 +974,8 @@
             "high": 53,
             "thin": false
           },
-          "standing": "below"
+          "standing": "below",
+          "judged": "worse"
         },
         {
           "localDate": "2026-08-17",
@@ -909,7 +986,8 @@
             "high": 53,
             "thin": false
           },
-          "standing": "above"
+          "standing": "above",
+          "judged": "better"
         },
         {
           "localDate": "2026-08-18",
@@ -920,10 +998,12 @@
             "high": 53,
             "thin": false
           },
-          "standing": "within"
+          "standing": "within",
+          "judged": null
         }
       ],
-      "standing": "within"
+      "standing": "within",
+      "judged": null
     },
     "heartRate": {
       "points": [],

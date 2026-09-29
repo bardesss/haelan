@@ -385,6 +385,27 @@ describe('a strip whose dots open their day', () => {
     act(() => { clickHandler!({ componentType: 'series', dataIndex: 2 }) })
     expect(open.mock.calls).toEqual([['2026-08-10']])
   })
+
+  // The workout hero's strip: two sessions can share a day, so a dot is its own point's id rather
+  // than its date, and the one already shown is an id too, leaving its same-day sibling openable.
+  it('with point ids, opens each point by its id, even two on one day', () => {
+    const open = vi.fn()
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={values} labels={['2026-08-10', '2026-08-12', '2026-08-12']} metric="steps" unit="Steps" label="steps" dots
+            formatValue={(v, absent) => (v === null ? absent : String(v))} pointIds={['a', 'b', 'c']}
+            onPointClick={open} opensDay={{ ...OPENS, current: 'c' }} />
+        </I18nProvider>,
+      )
+    })
+    act(() => { clickHandler!({ componentType: 'series', dataIndex: 0 }) })
+    act(() => { clickHandler!({ componentType: 'series', dataIndex: 1 }) })
+    act(() => { clickHandler!({ componentType: 'series', dataIndex: 2 }) })
+    expect(open.mock.calls).toEqual([['a'], ['b']])
+    expect(tooltip(1)).toBe('2026-08-12<br/>Steps: 8600<br/>Open this day')
+    expect(tooltip(2)).toBe('2026-08-12<br/>Steps: 9400')
+  })
 })
 
 // The dashboard's strips judge every dot against its own day's usual (GlanceStripDay.band), so the

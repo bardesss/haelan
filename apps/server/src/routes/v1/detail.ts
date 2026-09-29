@@ -100,7 +100,9 @@ function roundNightPage(page: NightPage): NightPage {
  * The workout page at the wire's precision, by the same rule as the night page. `previous` and
  * `best` carry pace in seconds, distance in metres, heart rate in bpm, load in TRIMP and a
  * duration in milliseconds: every one of them a whole number on the page's own figures
- * (workoutPage.ts's FIGURES, all precision 0), so each is sent whole.
+ * (workoutPage.ts's FIGURES, all precision 0), so each is sent whole. The previous ride's speed is
+ * the exception, sent at the speed figure's own precision, since a whole metre per second is
+ * 3.6 km/h.
  */
 function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
   const figures: WorkoutPage['figures'] = {}
@@ -109,13 +111,15 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
   }
   const whole = (value: number) => Number(value.toFixed(0))
   const ref = (r: WorkoutPage['best']['fastestKmSeconds']) => (r === null ? null : { ...r, value: whole(r.value) })
-  const { previous, after } = page
+  const { previous, after, splitTrend, zoneBounds } = page
   return {
     ...page,
     figures,
     previous: previous === null ? null : {
       ...previous,
-      values: Object.fromEntries(Object.entries(previous.values).map(([key, value]) => [key, whole(value)])),
+      values: Object.fromEntries(Object.entries(previous.values).map(([key, value]) => [
+        key, key === 'speed' ? Number(value.toFixed(figures.speed?.precision ?? 2)) : whole(value),
+      ])),
     },
     best: {
       fastestKmSeconds: ref(page.best.fastestKmSeconds),
@@ -128,6 +132,12 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
         ...after.night, asleep: roundPageFigure(after.night.asleep), deep: roundPageFigure(after.night.deep),
       },
       restingHeartRate: after.restingHeartRate === null ? null : roundPageFigure(after.restingHeartRate),
+    },
+    // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.
+    splitTrend: splitTrend === null ? null : { secondHalfFasterBySecondsPerKm: whole(splitTrend.secondHalfFasterBySecondsPerKm) },
+    zoneBounds: zoneBounds === null ? null : {
+      moderateMin: whole(zoneBounds.moderateMin), vigorousMin: whole(zoneBounds.vigorousMin),
+      peakMin: whole(zoneBounds.peakMin), max: whole(zoneBounds.max),
     },
   }
 }

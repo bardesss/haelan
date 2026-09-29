@@ -1,14 +1,16 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { daily, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, sessions, sourcePriority, sources } from '../src/db/schema/index.ts'
 import { seedOverride } from '../src/testing/fixtures.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { MIN_RUN_DAYS } from '../src/api/runs.ts'
 import { readAllTime } from '../src/query/allTime.ts'
 
 let test: TestDatabase
+let sessionsInserted = 0
 beforeEach(() => {
+  sessionsInserted = 0
   test = createTestDatabase()
   seedPerson(test.db, 'p1')
   test.db.insert(sources).values({
@@ -43,7 +45,11 @@ const insertSession = (o: {
   kind: 'exercise' | 'sleep', localDate: string, id: string,
   minutes?: number, attrs?: Record<string, unknown>,
 }) => {
-  const startMs = Date.parse(`${o.localDate}T08:00:00Z`)
+  // Each session six hours after the last, longer than any fixture here lasts, so sixty sessions
+  // filed under one date are sixty workouts rather than one event recorded sixty times: workouts
+  // are counted merged, and sessions sharing an interval merge into one.
+  const startMs = Date.parse(`${o.localDate}T08:00:00Z`) + sessionsInserted * 6 * 3_600_000
+  sessionsInserted += 1
   test.db.insert(sessions).values({
     id: o.id, personId: 'p1', sourceId: 'watch', kind: o.kind, externalId: o.id,
     startMs, startOffsetMinutes: 0, endMs: startMs + (o.minutes ?? 60) * 60_000,
@@ -278,5 +284,108 @@ describe('readAllTime', () => {
 
     expect(readAllTime(test.db, 'p1').records.find((r) => r.metric === 'steps'))
       .toMatchObject({ value: 9000 })
+  })
+})
+
+describe('readAllTime session records over merged workouts', () => {
+  // One run, recorded twice: once by the watch through Google, once by the phone through Health
+  // Connect, the phone's copy a minute longer and 200m further. The workout page reads the merged
+  // workout and names the watch's copy; the Records page has to name the same copy, with the
+  // value the merged workout carries, or the two pages disagree about what the person's best was.
+  const START = Date.parse('2026-09-20T07:00:00Z')
+  const MINUTE = 60_000
+
+  beforeEach(() => {
+    for (const id of ['fitbit', 'phone']) {
+      test.db.insert(sources).values({
+        id, personId: 'p1', externalId: id, displayName: id, kind: 'app', createdAtMs: 0,
+      }).run()
+    }
+    test.db.insert(sourcePriority).values([
+      { personId: 'p1', metric: 'exercise', sourceId: 'fitbit', rank: 0 },
+      { personId: 'p1', metric: 'exercise', sourceId: 'phone', rank: 1 },
+    ]).run()
+  })
+
+  const insertCopy = (o: {
+    id: string, sourceId: string, minutes: number, attrs: Record<string, unknown>, day?: number,
+  }) => {
+    const startMs = START + (o.day ?? 0) * 86_400_000
+    test.db.insert(sessions).values({
+      id: o.id, personId: 'p1', sourceId: o.sourceId, kind: 'exercise', externalId: o.id,
+      startMs, startOffsetMinutes: 0, endMs: startMs + o.minutes * MINUTE, endOffsetMinutes: 0,
+      localDate: new Date(startMs).toISOString().slice(0, 10), attrs: JSON.stringify(o.attrs), rawPayloadId: null,
+    }).run()
+  }
+  const exclude = (id: string) => seedOverride(test.db, {
+    personId: 'p1', scope: 'session', action: 'exclude', targetKey: JSON.stringify({ session: id }), reason: 'test',
+  })
+
+  const insertRunTwice = () => {
+    insertCopy({
+      id: 'fitbit-run', sourceId: 'fitbit', minutes: 30,
+      attrs: { exerciseType: 'RUNNING', metricsSummary: { distanceMillimeters: 5_000_000 } },
+    })
+    insertCopy({
+      id: 'phone-run', sourceId: 'phone', minutes: 31,
+      attrs: { exerciseType: 'RUNNING', metricsSummary: { distanceMillimeters: 5_200_000 } },
+    })
+  }
+
+  it('counts a run recorded twice once, naming the merged primary with its value', () => {
+    insertRunTwice()
+
+    const { sessionRecords } = readAllTime(test.db, 'p1')
+    expect(sessionRecords.find((r) => r.kind === 'furthest'))
+      .toMatchObject({ sessionId: 'fitbit-run', value: 5_000_000 })
+    expect(sessionRecords.find((r) => r.kind === 'longest'))
+      .toMatchObject({ sessionId: 'fitbit-run', value: 30 * MINUTE })
+  })
+
+  it('reads a field the primary lacks from the copy the merge fills it from', () => {
+    insertCopy({ id: 'fitbit-run', sourceId: 'fitbit', minutes: 30, attrs: { exerciseType: 'RUNNING', metricsSummary: null } })
+    insertCopy({
+      id: 'phone-run', sourceId: 'phone', minutes: 31,
+      attrs: { exerciseType: 'RUNNING', metricsSummary: { distanceMillimeters: 5_200_000 } },
+    })
+
+    expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'furthest'))
+      .toMatchObject({ sessionId: 'fitbit-run', value: 5_200_000 })
+  })
+
+  it('names the kept copy when the primary was excluded, as the workout page does', () => {
+    insertRunTwice()
+    exclude('fitbit-run')
+
+    expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'furthest'))
+      .toMatchObject({ sessionId: 'phone-run', value: 5_200_000 })
+  })
+
+  it('keeps the primary and its own value when only the alternate was excluded', () => {
+    insertRunTwice()
+    exclude('phone-run')
+
+    expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'furthest'))
+      .toMatchObject({ sessionId: 'fitbit-run', value: 5_000_000 })
+  })
+
+  it('counts a run recorded on two devices once toward a workout milestone', () => {
+    // Fifty runs, each recorded by the watch and the phone: fifty workouts, not a hundred rows.
+    // Counted raw, the 50th workout would land on the 25th run and a 100th would appear.
+    for (let day = 0; day < 50; day += 1) {
+      insertCopy({ id: `fitbit-${day}`, sourceId: 'fitbit', minutes: 30, attrs: {}, day })
+      insertCopy({ id: `phone-${day}`, sourceId: 'phone', minutes: 31, attrs: {}, day })
+    }
+
+    const counts = readAllTime(test.db, 'p1').milestones.filter((m) => m.kind === 'count')
+    expect(counts).toEqual([{ kind: 'count', metric: 'exercise', count: 50, localDate: '2026-11-08' }])
+  })
+
+  it('holds no record for an event every copy of which was excluded', () => {
+    insertRunTwice()
+    exclude('fitbit-run')
+    exclude('phone-run')
+
+    expect(readAllTime(test.db, 'p1').sessionRecords).toEqual([])
   })
 })

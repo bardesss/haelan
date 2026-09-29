@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import {
   formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset,
-  formatNumber, formatMetricValue, formatLocalDate, formatSignedDuration,
+  formatNumber, formatMetricValue, formatLocalDate, formatSignedDuration, formatSignedNumber,
 } from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
@@ -40,10 +40,12 @@ describe('formatDuration', () => {
 })
 
 describe('formatSignedDuration', () => {
-  it('drops the hours under an hour, in both directions', () => {
-    expect(formatSignedDuration(-7, '', 'en')).toBe('-7m')
-    expect(formatSignedDuration(23, '', 'en')).toBe('23m')
-    expect(formatSignedDuration(-22.5, '', 'en')).toBe('-23m')
+  // One duration format across the app (formatDuration's): the night's balance printed "+2m" beside
+  // a "0h 25m" awake time on the same page.
+  it('keeps the empty hour under an hour, as formatDuration does, in both directions', () => {
+    expect(formatSignedDuration(-7, '', 'en')).toBe('-0h 07m')
+    expect(formatSignedDuration(23, '', 'en')).toBe('0h 23m')
+    expect(formatSignedDuration(-22.5, '', 'en')).toBe('-0h 23m')
   })
 
   it('keeps hours and padded minutes from an hour up, with one leading minus', () => {
@@ -53,17 +55,34 @@ describe('formatSignedDuration', () => {
   })
 
   it('carries no sign on a value that rounds to no minutes at all', () => {
-    expect(formatSignedDuration(-0.4, '', 'en')).toBe('0m')
-    expect(formatSignedDuration(0, '', 'en')).toBe('0m')
+    expect(formatSignedDuration(-0.4, '', 'en')).toBe('0h 00m')
+    expect(formatSignedDuration(0, '', 'en')).toBe('0h 00m')
   })
 
   it('writes the hour as "u" in Dutch', () => {
     expect(formatSignedDuration(-67, '', 'nl')).toBe('-1u 07m')
-    expect(formatSignedDuration(-7, '', 'nl')).toBe('-7m')
+    expect(formatSignedDuration(-7, '', 'nl')).toBe('-0u 07m')
   })
 
   it('answers the absent text for null', () => {
     expect(formatSignedDuration(null, '-', 'en')).toBe('-')
+  })
+})
+
+describe('formatSignedNumber', () => {
+  it('signs a positive or negative deviation and leaves a zero one bare', () => {
+    expect(formatSignedNumber(0.6, 1, 'en', '—')).toBe('+0.6')
+    expect(formatSignedNumber(-0.4, 1, 'en', '—')).toBe('-0.4')
+    expect(formatSignedNumber(0, 1, 'en', '—')).toBe('0.0')
+  })
+
+  it('carries no sign on a value that rounds to zero at the given precision', () => {
+    expect(formatSignedNumber(0.04, 1, 'en', '—')).toBe('0.0')
+    expect(formatSignedNumber(-0.04, 1, 'en', '—')).toBe('0.0')
+  })
+
+  it('answers the absent text for null', () => {
+    expect(formatSignedNumber(null, 1, 'en', '—')).toBe('—')
   })
 })
 

@@ -44,7 +44,9 @@ export function ChartFigure({ label, table, host, style, tap, tableToggle = true
   const tableId = useId()
 
   return (
-    <figure style={{ margin: 0 }}>
+    // The margin reset is a class (.chart-figure), not an inline style: inline, it beat the detail
+    // pages' card-label gap and a chart card's label sat flush on its chart.
+    <figure className="chart-figure">
       <div ref={host} role="img" aria-label={label} aria-describedby={describedBy} style={style} />
       {/*
         The table below is rendered, and in the accessibility tree, whether this control has been

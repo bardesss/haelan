@@ -15,6 +15,8 @@ import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { Night } from '../src/data/useNights.js'
 import { NightTraces, NIGHT_TRACE_METRICS } from '../src/pages/sleep/NightTraces.js'
+import type { NightTracesFigures } from '../src/pages/sleep/NightTraces.js'
+import { nightPageFixture } from './fixtures/nightPage.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush, pumpUntil } from './flush.js'
 
@@ -80,6 +82,31 @@ const NIGHT: Night = {
 const point = (sourceId: string) => ({
   sourceId, utcMs: Date.UTC(2026, 7, 2, 23, 0), min: 48, mean: 52, max: 58, n: 1, excluded: false,
 })
+
+/**
+ * The page's three traces (the shared night page fixture's figures), with their extremes moved
+ * into this file's night: heart rate's lowest at 03:00Z, HRV's highest at 23:30Z.
+ */
+function traces(): NightTracesFigures {
+  const { heartRate, hrv, spo2 } = nightPageFixture().traces
+  return {
+    heart_rate: { ...heartRate, stat: { ...heartRate.stat, lowest: { value: 56, atMs: Date.UTC(2026, 7, 3, 3, 0) } } },
+    hrv: { ...hrv, stat: { ...hrv.stat, highest: { value: 62, atMs: Date.UTC(2026, 7, 2, 23, 30) } } },
+    spo2,
+  }
+}
+
+/** The option the first chart that drew was last handed. */
+function drawnOption(): { series: { markArea?: { data: unknown[] } }[] } {
+  return charts.find((c) => c.setOption.mock.calls.length > 0)!.setOption.mock.calls.at(-1)![0] as {
+    series: { markArea?: { data: unknown[] } }[]
+  }
+}
+
+/** The usual band's shading, the one markArea spanning the y axis rather than the x. */
+function usualBandOf(option: { series: { markArea?: { data: unknown[] } }[] }): unknown[] | undefined {
+  return option.series.find((s) => JSON.stringify(s.markArea?.data ?? []).includes('yAxis'))?.markArea?.data
+}
 
 /** Keyed by `<metric>|<source>`, where an absent `source` parameter is the empty string. */
 function stub(answers: Record<string, unknown[]>): () => void {
@@ -155,14 +182,14 @@ describe('the overnight traces', () => {
     } finally { restore() }
   })
 
-  it('renders a card only for the metrics something actually recorded', async () => {
+  it('renders a row only for the metrics something actually recorded', async () => {
     const restore = stub({ 'heart_rate|watch': [point('watch')] })
     try {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} />)
       await flush(client, html)
       // spo2 and hrv both pin to `watch`, find nothing, and need a second, unpinned request
       // before either can render as absent (useSourceTrace's own fallback rule) - three concurrent
-      // NightTrace instances means up to three such second-stage requests in flight together, each
+      // traces mean up to three such second-stage requests in flight together, each
       // resolving through react-query's own setTimeout(0)-scheduled notification
       // (notifyManager's default scheduler). Windows' coarse timer granularity (this repo's own
       // measured ~10-14ms per setTimeout, see the flush()/pumpUntil budget comments) can land that
@@ -206,19 +233,19 @@ describe('the overnight traces', () => {
       // basis at all until the fallback has answered - there is no state where this returns on a
       // line that is still going to change.
       await pumpUntil(
-        () => container?.querySelector('.basis') !== null,
+        () => container?.querySelector('.night-traces-basis') !== null,
         'the fallback basis line to render',
       )
-      expect(container?.querySelector('.basis')?.textContent).toBe(expected)
+      expect(container?.querySelector('.night-traces-basis')?.textContent).toBe(expected)
     } finally { restore() }
   })
 
   // NightTraces.tsx's own comment on NIGHT_TRACE_METRICS admits the metric list is written out
-  // twice - the exported constant and the three literal <NightTrace> calls - with nothing at the
+  // twice - the exported constant and the three literal useSourceTrace calls - with nothing at the
   // type level holding the two copies in step. This is what actually catches that drift: adding a
-  // fourth metric to one without the other would either leave a card this test never sees drawn
-  // (NIGHT_TRACE_METRICS grew but the JSX did not) or fail count-mismatched the other way around.
-  it('renders one card per metric in NIGHT_TRACE_METRICS when every one of them recorded something', async () => {
+  // fourth metric to one without the other would either leave a row this test never sees drawn
+  // (NIGHT_TRACE_METRICS grew but the calls did not) or fail count-mismatched the other way around.
+  it('renders one row per metric in NIGHT_TRACE_METRICS when every one of them recorded something', async () => {
     const restore = stub({
       'heart_rate|watch': [point('watch')], 'spo2|watch': [point('watch')], 'hrv|watch': [point('watch')],
     })
@@ -229,12 +256,114 @@ describe('the overnight traces', () => {
     } finally { restore() }
   })
 
+  // M10a-2: the night page hands each trace what the server made of it, and the row says the
+  // night's extreme in words, at the night's own clock, above the chart.
+  it('says the night\'s lowest heart rate and when', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
+      // 03:00Z read at the night's +02:00 is 05:00.
+      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('lowest 56\u00a0bpm at 05:00')
+    } finally { restore() }
+  })
+
+  it('says the night\'s highest HRV rather than its lowest', async () => {
+    const restore = stub({ 'hrv|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
+      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('highest 62\u00a0ms at 01:30')
+    } finally { restore() }
+  })
+
+  // The approved mockup's rows: heart rate, HRV, blood oxygen, each a short label over its summary
+  // beside the chart, and one caption under the three.
+  it('draws the three as rows in the mockup\'s order, under one caption', async () => {
+    const restore = stub({
+      'heart_rate|watch': [point('watch')], 'spo2|watch': [point('watch')], 'hrv|watch': [point('watch')],
+    })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container!.querySelectorAll('.night-trace [role="img"]').length === 3, 'all three rows to draw')
+      expect([...container!.querySelectorAll('.night-trace .label')].map((label) => label.textContent))
+        .toEqual(['Heart rate', 'HRV', 'Blood oxygen'])
+      expect(container!.querySelector('.night-traces > .dash-caption')?.textContent)
+        .toBe('band = your usual range · same time axis as the stages')
+    } finally { restore() }
+  })
+
+  // A row has no basis line, so its chart is described by the row's own label and summary.
+  it('describes each chart by its row\'s label and summary', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace [role="img"]') !== null, 'the heart rate row to draw')
+      const describedBy = container!.querySelector('.night-trace [role="img"]')!.getAttribute('aria-describedby')
+      expect(describedBy).not.toBeNull()
+      expect(document.getElementById(describedBy!)?.textContent).toBe('Heart ratelowest 56\u00a0bpm at 05:00')
+    } finally { restore() }
+  })
+
+  it('shades the usual range of the night\'s mean behind the trace', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => charts.some((c) => c.setOption.mock.calls.length > 0), 'the heart rate chart to draw')
+      expect(usualBandOf(drawnOption())).toEqual([[{ yAxis: 56 }, { yAxis: 64 }]])
+    } finally { restore() }
+  })
+
+  it('shades nothing when the usual range of the mean is thin', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const thin = traces()
+      thin.heart_rate = { ...thin.heart_rate!, meanFigure: { ...thin.heart_rate!.meanFigure, baseline: { center: 60, low: 56, high: 64, thin: true } } }
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={thin} />)
+      await flush(client, html)
+      await pumpUntil(() => charts.some((c) => c.setOption.mock.calls.length > 0), 'the heart rate chart to draw')
+      expect(usualBandOf(drawnOption())).toBeUndefined()
+    } finally { restore() }
+  })
+
+  // The caption explains the band; with no band drawn on any row there is nothing for it to explain.
+  it('leaves the caption off when no row draws a usual band', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const thin = traces()
+      thin.heart_rate = { ...thin.heart_rate!, meanFigure: { ...thin.heart_rate!.meanFigure, baseline: { center: 60, low: 56, high: 64, thin: true } } }
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={thin} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace [role="img"]') !== null, 'the heart rate row to draw')
+      expect(container!.querySelector('.night-traces > .dash-caption')).toBeNull()
+    } finally { restore() }
+  })
+
+  // The morning card draws an HRV chart of its own, so this one is named for when it was measured.
+  it('names the HRV chart for the night, keeping the short label on its row', async () => {
+    const restore = stub({ 'hrv|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace [role="img"]') !== null, 'the HRV row to draw')
+      expect(container!.querySelector('.night-trace [role="img"]')?.getAttribute('aria-label')).toBe('HRV through the night')
+      expect(container!.querySelector('.night-trace .label')?.textContent).toBe('HRV')
+    } finally { restore() }
+  })
+
   it('never falls back from a source the reader named', async () => {
     const restore = stub({ 'heart_rate|phone': [], 'heart_rate|': [point('watch')] })
     try {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource="phone" />)
       await flush(client, html)
       expect(container?.querySelectorAll('.night-trace')).toHaveLength(0)
+      // Nothing recorded draws nothing, the caption included.
+      expect(container?.querySelector('.night-traces')).toBeNull()
       expect(requested.some((url) => url.includes('metric=heart_rate') && !url.includes('source='))).toBe(false)
     } finally { restore() }
   })

@@ -4,7 +4,7 @@ import { dayMetricTarget, sampleTarget, sessionTarget } from '@haelan/core/targe
 import { useTranslation } from '../i18n/index.js'
 import { useWriteEvent, useWriteNote, useWriteOverride } from '../data/useAnnotations.js'
 import { usePresets } from '../data/useQuickLog.js'
-import { SEED_KINDS } from '../data/eventKinds.js'
+import { SEED_KINDS, kindLabel } from '../data/eventKinds.js'
 
 /**
  * What a clicked point (or, for `session`, a whole workout) hands the panel, tagged by where it
@@ -256,7 +256,7 @@ export function AnnotatePanel({ target, onClose }: {
                 <datalist id={`${titleId}-kinds`}>
                   {(presets.data?.kinds ?? SEED_KINDS).map((preset) => (
                     <option key={preset} value={preset}
-                      label={SEED_KINDS.includes(preset) ? t(`annotate.event.kinds.${preset}`) : preset} />
+                      label={kindLabel(t, preset)} />
                   ))}
                 </datalist>
               </label>

@@ -48,7 +48,8 @@ describe('basemapStyle', () => {
     expect(style.glyphs).toBe('https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf')
     expect(OPENFREEMAP_GLYPHS).toBe(style.glyphs)
     expect(style.sprite).toBeUndefined()
-    expect(Object.keys(style.sources).sort()).toEqual(['openfreemap', 'workout-route'])
+    // The route's markers are local GeoJSON too, fetched from nowhere.
+    expect(Object.keys(style.sources).sort()).toEqual(['openfreemap', 'workout-route', 'workout-route-markers'])
   })
 
   it('credits OpenFreeMap, OpenMapTiles and OpenStreetMap, linked, as OpenFreeMap asks', () => {
@@ -65,6 +66,16 @@ describe('basemapStyle', () => {
     for (const l of layers(basemapStyle([NEAR, FAR], COLORS))) {
       if (l.source === 'openfreemap') expect(schema, `${l.id} reads ${l['source-layer']}`).toContain(l['source-layer'])
     }
+  })
+
+  it('carries the start and the numbered kilometres as points, drawn over the route line', () => {
+    const style = basemapStyle([NEAR, FAR], COLORS, [{ label: null, point: NEAR }, { label: '1', point: FAR }])
+    const data = (style.sources['workout-route-markers'] as { data: { features: { properties: { label: string }, geometry: { coordinates: number[] } }[] } }).data
+    expect(data.features.map((f) => f.properties.label)).toEqual(['', '1'])
+    expect(data.features[1]!.geometry.coordinates).toEqual([FAR.longitude, FAR.latitude])
+    const ids = layers(style).map((l) => l.id)
+    expect(ids.indexOf('workout-route-markers')).toBeGreaterThan(ids.indexOf('workout-route-line'))
+    expect(ids).toContain('workout-route-km-labels')
   })
 
   it('paints every base feature in the token it was handed', () => {
@@ -93,14 +104,14 @@ describe('basemapStyle', () => {
 
   // The route rides in the style itself. Added from a 'load' handler it waited on every tile in
   // view, and a slow tile left the household looking at bare streets.
-  it('carries the route in the style, drawn last, above every base layer, in the accent', () => {
+  it('carries the route in the style, drawn above every base layer with its markers on top, in the accent', () => {
     const style = basemapStyle([NEAR, FAR], COLORS)
     const route = style.sources['workout-route'] as { type: string, data: { geometry: { coordinates: number[][] } } }
     expect(route.type).toBe('geojson')
     expect(route.data.geometry.coordinates).toEqual([[5, 52], [5, 52.01]])
     expect(layers(style).map((l) => l.id)).toEqual([
       'land', 'landcover', 'park', 'water', 'waterway', 'building', 'road-minor', 'road-major',
-      'road-label', 'place-label', 'workout-route-line',
+      'road-label', 'place-label', 'workout-route-line', 'workout-route-markers', 'workout-route-km-labels',
     ])
     const line = layer(style, 'workout-route-line')
     expect(line.source).toBe('workout-route')
@@ -219,7 +230,8 @@ describe('mountBasemap', () => {
     expect(restyled, 'switching data-theme did not restyle the map').toBeDefined()
     expect(layer(restyled!, 'water').paint).toMatchObject({ 'fill-color': resolveMap('light').water })
     expect(layer(restyled!, 'land').paint).toMatchObject({ 'background-color': resolveMap('light').land })
-    expect(layers(restyled!).at(-1)?.id, 'the route line has to stay on top after a theme switch').toBe('workout-route-line')
+    expect(layers(restyled!).slice(-3).map((l) => l.id), 'the route and its markers have to stay on top after a theme switch')
+      .toEqual(['workout-route-line', 'workout-route-markers', 'workout-route-km-labels'])
     expect(layer(restyled!, 'workout-route-line').paint).toMatchObject({ 'line-color': resolveSemantic('light').accent })
     expect((restyled!.sources['workout-route'] as { data: unknown }).data).toEqual(routeGeoJSON([NEAR, FAR]))
     unmount()

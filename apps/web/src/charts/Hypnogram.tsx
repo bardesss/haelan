@@ -136,7 +136,10 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
           const hours = clockHours(shift, shift + spanMinutes)
           return { type: 'value' as const, min: shift, max: shift + spanMinutes,
             axisTick: { customValues: hours },
-            axisLabel: { ...base.axisLabel, customValues: hours, formatter: (v: number) => formatClock(v) },
+            // hideOverlap: at a phone's width the hours ran into each other ("00:0001:00"); echarts
+            // then drops each label that would overlap the one before it, at whatever width the chart
+            // is drawn, so the labels thin with the width and the ticks still mark every hour.
+            axisLabel: { ...base.axisLabel, customValues: hours, hideOverlap: true, formatter: (v: number) => formatClock(v) },
             splitLine: base.splitLine }
         })()
     // Compact: the same axes, hidden. They still carry the extent the blocks are placed against;
@@ -155,7 +158,9 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
         },
       },
       xAxis: shownX,
-      yAxis: { type: 'category' as const, data: [...LANES].reverse(),
+      // The lanes by their catalogue names, not the stage ids: the ids are English words, so an
+      // untranslated axis passed unnoticed on every English page and read "awake" on a Dutch one.
+      yAxis: { type: 'category' as const, data: [...LANES].reverse().map((stage) => t(STAGE_LABEL_KEY[stage])),
         axisLabel: base.axisLabel, ...base.hiddenAxis, ...(compact && { show: false }) },
       series: [{
         type: 'custom' as const,
@@ -203,6 +208,11 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
     .filter((stage) => minutesByStage.has(stage))
     .map((stage) => `${t(STAGE_LABEL_KEY[stage])} ${formatDuration(minutesByStage.get(stage)!, language)}`)
   const totalsRow = stageFigures.join(ANNOTATION_JOIN)
+  // The compact line is read at a phone's width, where "Awake 0h 25m" wrapped inside its own
+  // duration: each duration's two halves are joined by a no-break space, the stage names still break.
+  const compactFigures = STAGE_ORDER
+    .filter((stage) => minutesByStage.has(stage))
+    .map((stage) => `${t(STAGE_LABEL_KEY[stage])} ${formatDuration(minutesByStage.get(stage)!, language).replace(' ', '\u00a0')}`)
   // Said out loud, only on a night that actually has an awake total to be read the wrong way.
   //
   // The awake entry above is the one figure in this row that a metric card on the same page can
@@ -238,7 +248,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
         // The same stageTotals as the full row above it would print, only joined as a list: the
         // figures cannot drift apart between the dashboard and the Sleep page.
         <p className="hypnogram-totals is-compact">
-          {totals.length === 0 ? t('charts.absence.notStaged') : stageFigures.join(COMPACT_JOIN)}
+          {totals.length === 0 ? t('charts.absence.notStaged') : compactFigures.join(COMPACT_JOIN)}
         </p>
       ) : showTotals ? (
         <p className="hypnogram-totals">

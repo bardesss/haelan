@@ -96,11 +96,13 @@ export function sessionsPath(
  * wants the request at all is not a fact about which window to fetch, and folding it into `query`
  * would put it in the cache key and cycle the entry every time it flipped.
  *
- * Its one caller so far is useWorkoutComparison, which has no window to ask for until the
- * workout under comparison has itself resolved: without this half of the guard, an unresolved
- * session there computes an empty `{ from: '', to: '' }` range and this hook would fire that as a
- * real request the moment personId alone was ready, `?kind=exercise&from=&to=`, rather than
- * waiting on the caller's own fact to also be true.
+ * No caller passes it today - the workout comparison this was built for now reads `page.comparison`
+ * off the server instead (Task 5 of M10a-3 retired the client-side useWorkoutComparison hook this
+ * guard existed for, along with the rest of the old workout page). Left in place on the same
+ * reasoning `enabled` gets everywhere else in this file: a future caller with no window to ask for
+ * until some other fact resolves - the exact shape useWorkoutComparison was - would otherwise fire
+ * an empty `{ from: '', to: '' }` range as a real request, `?kind=exercise&from=&to=`, the moment
+ * personId alone was ready.
  */
 export function useSessions(
   query: { kind: 'exercise' | 'sleep', from: string, to: string, source: string },

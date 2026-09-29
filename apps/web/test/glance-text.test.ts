@@ -24,7 +24,7 @@ function realT(language: string): Translate {
 function figure(over: Partial<GlanceFigure> = {}): GlanceFigure {
   return {
     metric: 'steps', value: 8000, unit: 'count', baseline: null,
-    asOfDate: '2026-09-23', asOfMs: null, partial: false, staleSources: [], strip: [], standing: null,
+    asOfDate: '2026-09-23', asOfMs: null, partial: false, staleSources: [], strip: [], standing: null, judged: null,
     ...over,
   }
 }
@@ -154,7 +154,7 @@ describe('glanceText with real translations', () => {
       'not enough history for a usual yet', 'so far; your usual day 8,700'],
     ['nl', 'binnen je gebruikelijke bereik 8.000 – 9.000', 'boven je gebruikelijke bereik 8.000 – 9.000',
       'onder je gebruikelijke bereik 8.000 – 9.000',
-      'nog te weinig geschiedenis voor een gebruikelijke waarde', 'tot nu toe; op een gewone dag 8.700'],
+      'nog te weinig geschiedenis voor een gebruikelijke waarde', 'tot nu toe; je gebruikelijke dag 8.700'],
   ] as const)('reads within / above / below / thin / partial in %s', (language, within, above, below, thin, partial) => {
     const t = realT(language)
     expect(usualLine(figure({ value: 8500, baseline, standing: 'within' }), t, language)).toBe(within)

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { stripBands } from '../src/pages/dashboard/cardShared.js'
 import type { GlanceStripDay } from '../src/data/useGlance.js'
 
-const day = (localDate: string, band: GlanceStripDay['band']): GlanceStripDay => ({ localDate, value: 1, band, standing: null })
+const day = (localDate: string, band: GlanceStripDay['band']): GlanceStripDay => ({ localDate, value: 1, band, standing: null, judged: null })
 
 describe('stripBands', () => {
   it('hands each day its own low and high, and null for a day with no band or only a thin one', () => {

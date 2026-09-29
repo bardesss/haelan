@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import { Card } from '../../components/Card.js'
 import { AnnotatePanel } from '../../components/AnnotatePanel.js'
 import type { Night } from '../../data/useNights.js'
+import { useSourceNames } from '../../data/useSourceNames.js'
+import { formatRecordedClock } from '../../format.js'
 
 /**
  * Every one of this date's sleep sessions this source produced - both the ones the night below
@@ -15,10 +16,11 @@ import type { Night } from '../../data/useNights.js'
  * exclude is a session, the thing the recording actually is, and the panel this opens
  * (`scope: 'session'`, M8b) writes against exactly that.
  *
- * The session id is what is shown, not a formatted time range: it is what the person's own data
- * calls the recording (a sync id from whichever source produced it), and this card's job is to
- * let a reader name the right one to exclude, not to re-derive a clock time NightStages and
- * NightTraces already show for the night as a whole.
+ * Each row is named the way the workout page names a workout: the source that recorded it and its
+ * own clock times ("Pixel Watch · 00:08–07:09"), read in the wall clock it was recorded in
+ * (formatRecordedClock). The sync id it used to show is what the data calls the recording, but no
+ * reader recognises one, and two recordings of one night are told apart by when they ran. The
+ * button's words are the workout page's (`common.annotate`), one wording for one action.
  *
  * `night.sessionIds` and `night.excludedSessions` are disjoint by construction - readSleepNights
  * (packages/core/src/query/sleepNights.ts) assembles the kept night from one set of rows and
@@ -32,24 +34,40 @@ import type { Night } from '../../data/useNights.js'
  * One `openSessionId` rather than a boolean, unlike WorkoutDetail's own `annotating`: this card
  * lists several sessions, so which one a click named has to be state, not just whether the panel
  * is open at all.
+ *
+ * Renders no card of its own (M10a-2 task 7): NightDetail.tsx's "About this night" fold
+ * (NightAbout.tsx) supplies the one Card the sessions list and the excluded-sessions notice both
+ * sit inside now, this component's own frame having moved there with it.
  */
 export function NightSessions({ night }: { night: Night }): ReactNode {
   const { t } = useTranslation()
+  const { nameOf } = useSourceNames()
   const [openSessionId, setOpenSessionId] = useState<string | null>(null)
+  const source = nameOf(night.sourceId)
+  const spans = new Map((night.sessionSpans ?? []).map((span) => [span.id, span]))
+  // A session with no span (a response from before the field existed) still gets its source.
+  const labelOf = (sessionId: string): string => {
+    const span = spans.get(sessionId)
+    return span === undefined ? source : t('sleep.night.sessions.recording', {
+      source,
+      start: formatRecordedClock(span.startMs, span.startOffsetMinutes),
+      end: formatRecordedClock(span.endMs, span.endOffsetMinutes),
+    })
+  }
 
   return (
-    <Card span={12} label={t('sleep.night.sessions.label')} basis={t('sleep.night.sessions.basis')}>
+    <>
       <ul className="night-sessions">
         {[...night.sessionIds, ...night.excludedSessions].map((sessionId) => {
           const excluded = night.excludedSessions.includes(sessionId)
           return (
             <li key={sessionId} className="night-session">
-              <span className="night-session-id">{sessionId}</span>
+              <span className="night-session-label">{labelOf(sessionId)}</span>
               {excluded
                 ? <span className="night-session-excluded">{t('sleep.night.sessions.excluded')}</span>
                 : (
                   <button type="button" className="button" onClick={() => setOpenSessionId(sessionId)}>
-                    {t('sleep.night.sessions.exclude')}
+                    {t('common.annotate')}
                   </button>
                 )}
             </li>
@@ -62,6 +80,6 @@ export function NightSessions({ night }: { night: Night }): ReactNode {
           onClose={() => setOpenSessionId(null)}
         />
       )}
-    </Card>
+    </>
   )
 }

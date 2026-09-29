@@ -193,9 +193,10 @@ export function formatDuration(minutes: number, language: string): string {
  * halves independently: -7 comes out "-1h -7m", not the single leading minus a duration reads as.
  * Negating before the call and reapplying the sign after gives one leading minus.
  *
- * Under an hour it drops the hours altogether: "-7m", not "-0h 07m". A delta is usually minutes,
- * and "0h" read as a figure in its own right on a comparison card and on the sleep balance line
- * ("-0h 23m a night"). A value that rounds to no minutes at all carries no sign.
+ * Under an hour it keeps the empty hour ("-0h 07m"), formatDuration's own shape: it used to drop
+ * it ("-7m"), and the night page then printed a balance of "+2m" beside an awake time of "0h 25m",
+ * two formats for one unit. One format everywhere (the M10a joint review's F23). A value that
+ * rounds to no minutes at all carries no sign.
  *
  * Takes `absent` second, after the value, the order `InsightCard`'s own `(value, absent) => string`
  * `formatValue` prop uses; `language` comes last, so a caller binds it in a one-line arrow. First extracted here after the identical
@@ -207,7 +208,26 @@ export function formatSignedDuration(value: number | null, absent: string, langu
   if (value === null) return absent
   const minutes = Math.round(Math.abs(value))
   const sign = value < 0 && minutes > 0 ? '-' : ''
-  return minutes < 60 ? `${sign}${minutes}m` : `${sign}${formatDuration(minutes, language)}`
+  return `${sign}${formatDuration(minutes, language)}`
+}
+
+/**
+ * A number that can be either side of zero, signed the way a deviation reads: "+0.6", "-0.4", and
+ * a value that rounds to nothing at the given precision carrying no sign at all ("0.0", never
+ * "-0.0" or "+0.0"). formatNumber itself never signs a positive value - every other caller in this
+ * app hands it a plain magnitude - so this exists beside it for the one figure on the night page
+ * that reads better as a deviation from its usual than as the raw reading (skin temperature; see
+ * NightMorning.tsx's own comment on why).
+ *
+ * Rounds before deciding the sign, the same guard formatSignedDuration already keeps for the same
+ * reason: deciding from the unrounded value would print "-0.0" for an input like -0.04 that rounds
+ * away to nothing at the display precision.
+ */
+export function formatSignedNumber(value: number | null, precision: number, language: string, absent: string): string {
+  if (value === null) return absent
+  const rounded = Number(Math.abs(value).toFixed(precision))
+  const sign = rounded === 0 ? '' : value < 0 ? '-' : '+'
+  return `${sign}${rounded.toLocaleString(language, { minimumFractionDigits: precision, maximumFractionDigits: precision })}`
 }
 
 // Wrapped into the day before splitting, and wrapped in the direction that survives a negative.

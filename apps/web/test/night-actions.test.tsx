@@ -48,6 +48,11 @@ const NIGHT: Night = {
   localDate: '2026-08-03', sourceId: 'watch', sessionIds: ['s1', 's2'],
   startMs: Date.UTC(2026, 7, 2, 21, 15), endMs: Date.UTC(2026, 7, 3, 5, 2),
   startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [], segments: [], excludedSessions: ['s3'],
+  sessionSpans: [
+    { id: 's1', startMs: Date.UTC(2026, 7, 2, 21, 15), endMs: Date.UTC(2026, 7, 3, 1, 0), startOffsetMinutes: 120, endOffsetMinutes: 120 },
+    { id: 's2', startMs: Date.UTC(2026, 7, 3, 1, 10), endMs: Date.UTC(2026, 7, 3, 5, 2), startOffsetMinutes: 120, endOffsetMinutes: 120 },
+    { id: 's3', startMs: Date.UTC(2026, 7, 3, 5, 10), endMs: Date.UTC(2026, 7, 3, 5, 40), startOffsetMinutes: 120, endOffsetMinutes: 120 },
+  ],
 }
 
 // The native setter, not the tracked React one: assigning .value directly goes through React's
@@ -90,6 +95,17 @@ describe('the night\'s sessions', () => {
   it('renders a row for every session the night carries, kept or excluded alike', () => {
     mount(NIGHT)
     expect(container?.querySelectorAll('.night-session')).toHaveLength(3)
+  })
+
+  // A row names its recording the way the workout page names a workout, by who recorded it and
+  // its own clock times, never by the sync id no reader recognises; the button reads as the
+  // workout's does.
+  it('labels each recording by its source and its own clock times, in the wall clock it was recorded in', () => {
+    mount(NIGHT)
+    const labels = [...(container?.querySelectorAll('.night-session-label') ?? [])].map((el) => el.textContent)
+    expect(labels).toEqual(['watch · 23:15–03:00', 'watch · 03:10–07:02', 'watch · 07:10–07:40'])
+    expect(container?.textContent).not.toContain('s1')
+    expect(container?.querySelector('.night-session button')?.textContent).toBe('Exclude or add a note')
   })
 
   it('offers one control per session the night was assembled from', () => {
