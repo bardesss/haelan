@@ -135,7 +135,10 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
           const hours = clockHours(shift, shift + spanMinutes)
           return { type: 'value' as const, min: shift, max: shift + spanMinutes,
             axisTick: { customValues: hours },
-            axisLabel: { ...base.axisLabel, customValues: hours, formatter: (v: number) => formatClock(v) },
+            // hideOverlap: at a phone's width the hours ran into each other ("00:0001:00"); echarts
+            // then drops each label that would overlap the one before it, at whatever width the chart
+            // is drawn, so the labels thin with the width and the ticks still mark every hour.
+            axisLabel: { ...base.axisLabel, customValues: hours, hideOverlap: true, formatter: (v: number) => formatClock(v) },
             splitLine: base.splitLine }
         })()
     // Compact: the same axes, hidden. They still carry the extent the blocks are placed against;
