@@ -595,6 +595,19 @@ describe('the Sleep page', () => {
     restore()
   })
 
+  // Every tile's duration through formatDuration with the page's language: Dutch writes the hour as
+  // "u" ("7u 00m"). Whole tile values, so a leftover English "7h 00m" cannot hide in a substring.
+  it('writes every duration tile\'s hour as "u" in Dutch', async () => {
+    const restore = stubSleep([])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const values = [...container!.querySelectorAll('.value')].map((v) => v.textContent ?? '')
+    expect(values).toContain('7u 00m')
+    expect(values.filter((v) => /\dh \d\dm/.test(v))).toEqual([])
+    restore()
+  })
+
   // Every other test in this file stubs sleep_nap_count at 420, so only sleep.napCount.basis_other
   // ever renders and the singular half the brief asked for (basis_one, {{count}} nap rather than
   // naps) has never actually been exercised. Confirming it is reachable is the point, not merely

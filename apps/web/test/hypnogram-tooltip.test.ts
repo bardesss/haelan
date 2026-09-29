@@ -27,16 +27,20 @@ describe('the hypnogram tooltip', () => {
   // The same four values the accessible table's own row carries for this segment - from, to,
   // stage, duration - so a reader hovering and a reader reading the table are told one thing.
   it('names the span, the stage and the duration of the hovered segment', () => {
-    expect(hypnogramTooltip(segments, 1, t)).toBe('0h 34m to 1h 11m<br/>Deep: 0h 37m')
+    expect(hypnogramTooltip(segments, 1, t, 'en')).toBe('0h 34m to 1h 11m<br/>Deep: 0h 37m')
+  })
+
+  it('writes every duration\'s hour as "u" in Dutch', () => {
+    expect(hypnogramTooltip(segments, 1, t, 'nl')).toBe('0u 34m to 1u 11m<br/>Deep: 0u 37m')
   })
 
   it('renders nothing for an index that is not a segment', () => {
-    expect(hypnogramTooltip(segments, 99, t)).toBe('')
-    expect(hypnogramTooltip(segments, undefined, t)).toBe('')
+    expect(hypnogramTooltip(segments, 99, t, 'en')).toBe('')
+    expect(hypnogramTooltip(segments, undefined, t, 'en')).toBe('')
   })
 
   it('routes every word through t(), not a hardcoded literal', () => {
     const shoutingT: Translate = (key, options) => t(key, options).toUpperCase()
-    expect(hypnogramTooltip(segments, 0, shoutingT)).toBe('0H 00M TO 0H 34M<br/>LIGHT: 0H 34M')
+    expect(hypnogramTooltip(segments, 0, shoutingT, 'en')).toBe('0H 00M TO 0H 34M<br/>LIGHT: 0H 34M')
   })
 })

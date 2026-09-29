@@ -20,10 +20,17 @@ class GlanceFormatTest {
 
     @Test
     fun `a duration is hours and two-digit minutes, rounded once`() {
-        assertEquals("6h 36m", GlanceFormat.duration(396.0))
-        assertEquals("7h 07m", GlanceFormat.duration(427.4))
-        assertEquals("0h 01m", GlanceFormat.duration(0.5))
-        assertEquals("0h 00m", GlanceFormat.duration(0.0))
+        assertEquals("6h 36m", GlanceFormat.duration(396.0, en))
+        assertEquals("7h 07m", GlanceFormat.duration(427.4, en))
+        assertEquals("0h 01m", GlanceFormat.duration(0.5, en))
+        assertEquals("0h 00m", GlanceFormat.duration(0.0, en))
+    }
+
+    @Test
+    fun `a duration's hour is u in Dutch, for uur, as the web writes it`() {
+        assertEquals("6u 36m", GlanceFormat.duration(396.0, nl))
+        assertEquals("6u 36m", GlanceFormat.duration(396.0, Locale.forLanguageTag("nl-BE")))
+        assertEquals("0u 01m", GlanceFormat.duration(0.5, nl))
     }
 
     @Test

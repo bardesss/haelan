@@ -55,7 +55,7 @@ export function WeekCard({ glance, span, onOpenDay }: {
       values: glance.day.activeMinutes.strip.map((d) => d.value),
       dates: glance.day.activeMinutes.strip.map((d) => d.localDate),
       format: (value: number) => `${Math.round(value)} ${t('activity.units.min')}`,
-      value: formatDuration(glance.week.activeMinutes.total),
+      value: formatDuration(glance.week.activeMinutes.total, language),
       per: t('glance.week.perDay', { value: `${Math.round(glance.week.activeMinutes.perDay)} ${t('activity.units.min')}` }),
       labelKey: daysLabel,
     })
@@ -65,8 +65,8 @@ export function WeekCard({ glance, span, onOpenDay }: {
       key: 'asleep', tone: 'sleep', withTotal: false,
       values: glance.sleep.asleep.strip.map((d) => d.value),
       dates: glance.sleep.asleep.strip.map((d) => d.localDate),
-      format: (value: number) => formatDuration(value),
-      value: formatDuration(glance.week.asleep.perDay),
+      format: (value: number) => formatDuration(value, language),
+      value: formatDuration(glance.week.asleep.perDay, language),
       // Unlike steps and active minutes (the server's weekOf drops today, which WeekBars still
       // highlights as the strip's last bar), the sleep strip ends on last night and weekOfFinished
       // already counts it - so this row's aria-label says the opposite of the other two rows'.

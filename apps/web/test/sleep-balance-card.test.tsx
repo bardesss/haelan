@@ -244,8 +244,8 @@ describe('the sleep balance card', () => {
 
   // Rendered, not merely present in nl.json. The locale guard compares key sets and never reads a
   // string, so a Dutch basis line that dropped the per-night clause or named a placeholder that
-  // does not exist would ship with every English case in this file green. formatSignedDuration
-  // carries no locale of its own, so the figure itself reads the same in both.
+  // does not exist would ship with every English case in this file green. The figures follow the
+  // language too: Dutch writes the hour as "u" (for "uur"), so the target reads "8u 00m".
   it('states the per-night figure in Dutch too', async () => {
     window.history.replaceState(null, '', WEEK_URL)
     const restore = stubBalance([])
@@ -254,7 +254,8 @@ describe('the sleep balance card', () => {
     restore()
 
     expect(balanceCard('Slaapbalans')!.querySelector('.basis')!.textContent)
-      .toBe('6 van 7 nachten, -0h 23m per nacht, tegen je doel van 8h 00m')
+      .toBe('6 van 7 nachten, -0u 23m per nacht, tegen je doel van 8u 00m')
+    expect(balanceCard('Slaapbalans')!.querySelector('.value')!.textContent).toBe('-2u 15m')
   })
 
   // Absent is never a zero. A night with no reading draws no bar and counts toward neither the

@@ -114,7 +114,7 @@ const EMPTY_NAPS: number[] = Object.freeze([]) as never[]
  * Activity.tsx already carry their own copies of datesBetween under.
  */
 function baselineNote(
-  t: Translate, minutes: number, query: UseQueryResult<{ baseline: Baseline | null }>, on: string,
+  t: Translate, minutes: number, query: UseQueryResult<{ baseline: Baseline | null }>, on: string, language: string,
 ): string {
   if (query.isError) return t('sleep.baselineNote.unknown')
   // Same ordering, and the same reason, as Recovery.tsx's own baselineNote: pending has to be
@@ -125,9 +125,9 @@ function baselineNote(
   if (raw.thin) return t('sleep.baselineNote.thin', { on })
   const low = raw.center - raw.spread
   const high = raw.center + raw.spread
-  if (minutes < low) return t('sleep.baselineNote.below', { low: formatDuration(low), high: formatDuration(high) })
-  if (minutes > high) return t('sleep.baselineNote.above', { low: formatDuration(low), high: formatDuration(high) })
-  return t('sleep.baselineNote.within', { low: formatDuration(low), high: formatDuration(high) })
+  if (minutes < low) return t('sleep.baselineNote.below', { low: formatDuration(low, language), high: formatDuration(high, language) })
+  if (minutes > high) return t('sleep.baselineNote.above', { low: formatDuration(low, language), high: formatDuration(high, language) })
+  return t('sleep.baselineNote.within', { low: formatDuration(low, language), high: formatDuration(high, language) })
 }
 
 export function Sleep() {
@@ -352,10 +352,10 @@ export function Sleep() {
   const lastYearSummary = (metric: string, earlier: SeriesPoint[]): string => {
     const readings = values(earlier)
     if (metric === 'sleep_nap_count') return formatMetricValue(sum(readings), metric, i18n.language, '')
-    if (metric === 'sleep_nap_minutes') return formatDuration(sum(readings))
+    if (metric === 'sleep_nap_minutes') return formatDuration(sum(readings), i18n.language)
     if (metric === 'sleep_efficiency') return formatMetricValue(mean(readings), metric, i18n.language, '')
     if (metric === 'sleep_bedtime_minutes' || metric === 'sleep_waketime_minutes') return formatClock(mean(readings))
-    return formatDuration(mean(readings))
+    return formatDuration(mean(readings), i18n.language)
   }
 
   const tile = (    metric: string, span: number, label: string, basisKey: string, chartLabelKey: string,
@@ -498,7 +498,7 @@ export function Sleep() {
   // historicalTo, not controls.to: this is the date asleepBaseline was actually anchored on above,
   // and the note has to name the date the band was really computed against, the same invariant
   // Dashboard.tsx's own hrBaseline comment states.
-  const asleepNote = baselineNote(t, asleepMean, asleepBaseline, controls.historicalTo)
+  const asleepNote = baselineNote(t, asleepMean, asleepBaseline, controls.historicalTo, i18n.language)
 
   const efficiencyMean = mean(values(metricGroups.pointsOf('sleep_efficiency')))
   const bedtimeMean = mean(values(metricGroups.pointsOf('sleep_bedtime_minutes')))
@@ -592,11 +592,11 @@ export function Sleep() {
           query={metricGroups.queryFor('sleep_asleep_minutes')} points={balancePoints}
           basisKey={balanceZeroLine.source === 'baseline' ? 'sleep.balance.basisBaseline' : 'sleep.balance.basisTarget'}
           basisWornKey={balanceZeroLine.source === 'baseline' ? 'sleep.balance.basisBaseline' : 'sleep.balance.basisTarget'}
-          basisValues={{ total: rangeDates.length, target: formatDuration(balanceZeroLine.minutes),
-            on: controls.historicalTo, perNight: formatSignedDuration(balancePerNight, '') }}
+          basisValues={{ total: rangeDates.length, target: formatDuration(balanceZeroLine.minutes, i18n.language),
+            on: controls.historicalTo, perNight: formatSignedDuration(balancePerNight, '', i18n.language) }}
           oneDayRange={controls.tab === 'day'}>
           {(basis, oneDayRange) => (
-            <StatTile label={t('sleep.balance.label')} value={formatSignedDuration(balanceTotal, '')} basis={basis}>
+            <StatTile label={t('sleep.balance.label')} value={formatSignedDuration(balanceTotal, '', i18n.language)} basis={basis}>
               {oneDayRange ? <ChartNote /> : (
                 <BalanceBars values={balance.values} labels={balance.labels}
                   label={t('sleep.balance.chartLabel', { period })}
@@ -625,27 +625,27 @@ export function Sleep() {
         </Card>
 
         {tile('sleep_asleep_minutes', 4, t('sleep.asleepMinutes.label'), 'sleep.asleepMinutes.basis',
-          'sleep.asleepMinutes.chartLabel', formatDuration(asleepMean), 'sleep.units.minutes', undefined,
+          'sleep.asleepMinutes.chartLabel', formatDuration(asleepMean, i18n.language), 'sleep.units.minutes', undefined,
           'higher-is-better', { note: asleepNote }, asleepBand)}
         {tile('sleep_efficiency', 4, t('sleep.efficiency.label'), 'sleep.efficiency.basis',
           'sleep.efficiency.chartLabel', formatMetricValue(efficiencyMean, 'sleep_efficiency', i18n.language, ''),
           'sleep.units.percent', t('sleep.units.percentShort'), 'higher-is-better')}
         {tile('sleep_in_bed_minutes', 4, t('sleep.inBedMinutes.label'), 'sleep.inBedMinutes.basis',
-          'sleep.inBedMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_in_bed_minutes')))),
+          'sleep.inBedMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_in_bed_minutes'))), i18n.language),
           'sleep.units.minutes', undefined, 'neutral')}
 
         {tile('sleep_deep_minutes', 4, t('sleep.stage.deep'), 'sleep.deepMinutes.basis',
-          'sleep.deepMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_deep_minutes')))),
+          'sleep.deepMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_deep_minutes'))), i18n.language),
           'sleep.units.minutes', undefined, 'higher-is-better')}
         {tile('sleep_light_minutes', 4, t('sleep.stage.light'), 'sleep.lightMinutes.basis',
-          'sleep.lightMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_light_minutes')))),
+          'sleep.lightMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_light_minutes'))), i18n.language),
           'sleep.units.minutes', undefined, 'neutral')}
         {tile('sleep_rem_minutes', 4, t('sleep.stage.rem'), 'sleep.remMinutes.basis',
-          'sleep.remMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_rem_minutes')))),
+          'sleep.remMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_rem_minutes'))), i18n.language),
           'sleep.units.minutes', undefined, 'higher-is-better')}
 
         {tile('sleep_awake_minutes', 4, t('sleep.stage.awake'), 'sleep.awakeMinutes.basis',
-          'sleep.awakeMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_awake_minutes')))),
+          'sleep.awakeMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_awake_minutes'))), i18n.language),
           'sleep.units.minutes', undefined, 'lower-is-better')}
         {tile('sleep_bedtime_minutes', 4, t('sleep.bedtimeMinutes.label'), 'sleep.bedtimeMinutes.basis',
           'sleep.bedtimeMinutes.chartLabel', formatClock(bedtimeMean), 'sleep.units.minutesFromMidnight', undefined,
@@ -658,7 +658,7 @@ export function Sleep() {
           'sleep.napCount.chartLabel', formatMetricValue(napCountTotal, 'sleep_nap_count', i18n.language, ''),
           'sleep.units.naps', t('sleep.units.napsShort'), 'neutral', { count: napCountTotal })}
         {tile('sleep_nap_minutes', 4, t('sleep.napMinutes.label'), 'sleep.napMinutes.basis',
-          'sleep.napMinutes.chartLabel', formatDuration(napMinutesTotal), 'sleep.units.minutes', undefined,
+          'sleep.napMinutes.chartLabel', formatDuration(napMinutesTotal, i18n.language), 'sleep.units.minutes', undefined,
           'neutral')}
 
         {/* label is its own catalogue string, not sleep.asleepMinutes.label ("Time asleep")
@@ -670,7 +670,7 @@ export function Sleep() {
             keeps a negative delta (a period where mean sleep fell) from printing two minus signs,
             shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
-          label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} polarity="higher-is-better" />
+          label={t('sleep.insights.asleepMinutes')} formatValue={(value, absent) => formatSignedDuration(value, absent, i18n.language)} polarity="higher-is-better" />
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

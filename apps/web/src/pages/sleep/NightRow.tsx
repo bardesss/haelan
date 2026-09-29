@@ -41,7 +41,7 @@ export function NightRow({ night }: { night: Night }) {
                 key had no guarantee it had heard that heading. The date is in the row now, so the
                 guarantee is structural and a second copy would read it out twice. */}
             <span className="night-row-date">{formatSessionDateHeading(night.localDate, language)}</span>
-            <span className="night-row-duration">{formatDuration(minutes)}</span>
+            <span className="night-row-duration">{formatDuration(minutes, language)}</span>
             <span className="night-row-source">{nameOf(night.sourceId)}</span>
           </span>
           <span className="night-row-clock">

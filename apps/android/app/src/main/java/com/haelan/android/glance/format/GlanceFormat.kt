@@ -55,10 +55,14 @@ fun interface Strings {
  */
 object GlanceFormat {
 
-    /** Minutes as "6h 36m", the minutes always two digits: the web's formatDuration. */
-    fun duration(minutes: Double): String {
+    /**
+     * Minutes as "6h 36m", the minutes always two digits: the web's formatDuration. Dutch writes the
+     * hour as "u" (for "uur"), "6u 36m", as the web's hourUnit does; minutes are "m" in both.
+     */
+    fun duration(minutes: Double, locale: Locale): String {
         val total = Math.round(minutes)
-        return "${Math.floorDiv(total, 60L)}h ${Math.floorMod(total, 60L).toString().padStart(2, '0')}m"
+        val hour = if (locale.language == "nl") "u" else "h"
+        return "${Math.floorDiv(total, 60L)}$hour ${Math.floorMod(total, 60L).toString().padStart(2, '0')}m"
     }
 
     /**
@@ -325,7 +329,7 @@ class GlanceWords(
      * formatValue, and its reason for being one function).
      */
     fun value(value: Double, metric: String): String = when (metric) {
-        "sleep_asleep_minutes" -> GlanceFormat.duration(value)
+        "sleep_asleep_minutes" -> GlanceFormat.duration(value, locale)
         "sleep_bedtime_minutes", "sleep_waketime_minutes" -> GlanceFormat.clock(value)
         "active_minutes", "recovery_index" -> value.roundToLong().toString()
         else -> GlanceFormat.number(value, locale, PRECISION[metric] ?: 0)
@@ -543,7 +547,7 @@ class GlanceWords(
     fun stageTotalsLine(totals: List<StageTotal>): String {
         if (totals.isEmpty()) return t("charts_absence_not_staged")
         return totals.joinToString(" · ") {
-            "${t("sleep_stage_${it.stage.name.lowercase()}")} ${GlanceFormat.duration(it.minutes.toDouble())}"
+            "${t("sleep_stage_${it.stage.name.lowercase()}")} ${GlanceFormat.duration(it.minutes.toDouble(), locale)}"
         }
     }
 
@@ -576,7 +580,7 @@ class GlanceWords(
         glance.week.activeMinutes?.let {
             val per = t("glance_week_per_day", "value" to "${it.perDay.roundToLong()} $minutes")
             rows += row(
-                WeekRowKind.ACTIVE, "active", GlanceFormat.duration(it.total), t("glance_week_total_per", "per" to per),
+                WeekRowKind.ACTIVE, "active", GlanceFormat.duration(it.total, locale), t("glance_week_total_per", "per" to per),
                 daysLabel, glance.day.activeMinutes,
             )
         }
@@ -584,7 +588,7 @@ class GlanceWords(
         val sleep = glance.sleep
         if (asleep != null && sleep != null) {
             rows += row(
-                WeekRowKind.ASLEEP, "asleep", GlanceFormat.duration(asleep.perDay), t("glance_week_per_night"),
+                WeekRowKind.ASLEEP, "asleep", GlanceFormat.duration(asleep.perDay, locale), t("glance_week_per_night"),
                 if (glance.finished) "glance_week_bars_label_nights_finished" else "glance_week_bars_label_nights",
                 sleep.asleep,
             )
@@ -596,7 +600,7 @@ class GlanceWords(
     fun weekBarValue(kind: WeekRowKind, value: Double): String = when (kind) {
         WeekRowKind.STEPS -> GlanceFormat.number(value, locale)
         WeekRowKind.ACTIVE -> "${value.roundToLong()} ${t("activity_units_min")}"
-        WeekRowKind.ASLEEP -> GlanceFormat.duration(value)
+        WeekRowKind.ASLEEP -> GlanceFormat.duration(value, locale)
     }
 
     /**

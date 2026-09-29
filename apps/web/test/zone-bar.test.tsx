@@ -12,6 +12,7 @@ import type { EChartsOption } from 'echarts'
 import { ZoneBar, SESSION_ZONE_KEYS, ZONE_TOKENS } from '../src/charts/ZoneBar.js'
 import type { ZoneRow } from '../src/charts/ZoneBar.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
+import { I18nProvider } from '../src/i18n/index.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
 // this, the same reason chart-marks.test.tsx and chart-lifecycle.test.tsx set them.
@@ -158,5 +159,14 @@ describe('ZoneBar', () => {
     const option = chartStubs.at(-1)!.setOption.mock.calls[0]![0] as { xAxis: { axisLabel?: { show?: boolean } }, yAxis: { axisLabel?: { show?: boolean } } }
     expect(option.xAxis.axisLabel?.show).toBe(false)
     expect(option.yAxis.axisLabel?.show).toBe(false)
+  })
+
+  // A zone is a short span, so its cell keeps "min" in Dutch too: no hour unit to translate.
+  it('keeps the duration cell\'s short-span "min" in Dutch', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider lng="nl"><ZoneBar rows={[row('light', 70)]} label="Tijd in hartslagzones" /></I18nProvider>,
+    )
+    const cells = [...html.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]!)
+    expect(cells).toEqual(['70\u00a0min'])
   })
 })

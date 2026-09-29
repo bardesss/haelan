@@ -47,6 +47,7 @@ class GlanceWordsTest {
         assertEquals("1,827", english.figure(figure("steps", 1827.0)))
         assertEquals("1.827", dutch.figure(figure("steps", 1827.0)))
         assertEquals("6h 36m", english.figure(figure("sleep_asleep_minutes", 396.0)))
+        assertEquals("6u 36m", dutch.figure(figure("sleep_asleep_minutes", 396.0)))
         assertEquals("23:40", english.figure(figure("sleep_bedtime_minutes", -20.0)))
         assertEquals("46", english.figure(figure("active_minutes", 45.6)))
         assertEquals("14.2", english.figure(figure("respiratory_rate", 14.2)))
@@ -308,7 +309,7 @@ class GlanceWordsTest {
     fun `the hypnogram's totals line, or the not-staged sentence`() {
         val totals = listOf(StageTotal(HypnoStage.DEEP, 100), StageTotal(HypnoStage.LIGHT, 230))
         assertEquals("Deep 1h 40m · Light 3h 50m", english.stageTotalsLine(totals))
-        assertEquals("Diep 1h 40m · Licht 3h 50m", dutch.stageTotalsLine(totals))
+        assertEquals("Diep 1u 40m · Licht 3u 50m", dutch.stageTotalsLine(totals))
         assertEquals("This night was not staged, so there is nothing to total.", english.stageTotalsLine(emptyList()))
         assertEquals("Deze nacht is niet in fasen ingedeeld, dus is er niets te tellen.", dutch.stageTotalsLine(emptyList()))
     }
@@ -346,7 +347,9 @@ class GlanceWordsTest {
         val rows = dutch.weekLines(weekGlance.copy(finished = true))
         assertEquals(listOf("Stappen", "57.432", "· 8.205 per dag"), rows[0].let { listOf(it.label, it.value, it.per) })
         assertEquals("Stappen, de 7 dagen tot en met die dag; het gemiddelde telt elke getoonde dag mee", rows[0].barsLabel)
+        assertEquals("4u 05m", rows[1].value)
         assertEquals("· 35 min per dag", rows[1].per)
+        assertEquals("6u 52m", rows[2].value)
         assertEquals("per nacht", rows[2].per)
         assertEquals("Slaaptijd, de 7 nachten tot en met die dag; die nacht telt mee in het gemiddelde", rows[2].barsLabel)
     }
@@ -363,6 +366,7 @@ class GlanceWordsTest {
         assertEquals("9.840", dutch.weekBarValue(WeekRowKind.STEPS, 9840.0))
         assertEquals("42 min", english.weekBarValue(WeekRowKind.ACTIVE, 41.6))
         assertEquals("7h 00m", english.weekBarValue(WeekRowKind.ASLEEP, 420.0))
+        assertEquals("7u 00m", dutch.weekBarValue(WeekRowKind.ASLEEP, 420.0))
     }
 
     @Test
