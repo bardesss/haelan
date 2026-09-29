@@ -194,6 +194,16 @@ const stepCurve = (hour: number): number => Math.max(0, Math.sin(((hour - 6) / 1
 // the same reason; this used to be the one that was not.
 const SEED_EXERCISE_TYPES = ['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL'] as const
 
+// The order the workout days take their type in, round and round. A pick over the five types gave
+// a run one workout in five, too few for the demo's workout page to find a usual range for a run
+// (WORKOUT_BAND_MIN wants five earlier sessions of the type in 90 days), so nearly every figure on
+// it read "not enough history". Four runs and two walks in every nine workouts give a run nine or
+// more runs before it in any 90 days, a full ten-point strip, and a walk five or more; every type
+// still shows up in any 27 days.
+const WORKOUT_SCHEDULE: readonly (typeof SEED_EXERCISE_TYPES)[number][] = [
+  'RUNNING', 'WALKING', 'RUNNING', 'BIKING', 'RUNNING', 'WALKING', 'RUNNING', 'WEIGHTLIFTING', 'SWIMMING_POOL',
+]
+
 function requireExerciseTypes(): readonly string[] {
   for (const type of SEED_EXERCISE_TYPES) {
     if (!EXERCISE_TYPES.includes(type)) {
@@ -369,7 +379,7 @@ function workoutReadingFor(wr: () => number, o: {
     const startMs = Math.min(o.startMs + range(wr, 0.3, 0.65) * elapsedMs, o.endMs - FINISH_MARGIN_MS - ms - 60_000)
     return { startMs, ms }
   })() : null
-  const activeSeconds = Math.round((elapsedMs - (pause?.ms ?? 0)) / 1000)
+  const activeSeconds = Math.floor((elapsedMs - (pause?.ms ?? 0)) / 1000)
   const inPause = (atMs: number): boolean => pause !== null && atMs >= pause.startMs && atMs < pause.startMs + pause.ms
   // Moving time to wall clock: past the pause, the clock ran on while the workout did not.
   const wallOf = (active: number): number => {
@@ -846,7 +856,12 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       const hour = pick(rand, [7, 12, 18])
       const startMs = dayStart + hour * HOUR_MS
       const endMs = startMs + range(rand, 25, 55) * 60_000
-      return { hour, startMs, endMs, exerciseType: pick(rand, exerciseTypes) }
+      // The old pick is still drawn, and thrown away, so every value after it in the day's stream
+      // stays what it was; the type is WORKOUT_SCHEDULE's. `drawnRun` remembers the one later draw
+      // that depended on the pick (peakMinutes below).
+      const drawnRun = pick(rand, exerciseTypes) === 'RUNNING'
+      const exerciseType = WORKOUT_SCHEDULE[((i - 1) / 3) % WORKOUT_SCHEDULE.length]!
+      return { hour, startMs, endMs, exerciseType, drawnRun }
     })() : null
 
     // Moved ahead of the heart-rate curve below, which reads this same trend for its overnight
@@ -921,7 +936,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         // A moving workout, not a stroll: a run or a lift raises the pulse well past the
         // ambient daytime peak, which is what makes "84 bpm on a 51-minute run" a contradiction
         // in the first place.
-        ? range(rand, 128, 168)
+        // The workout's first minute, though, is before any of that: the reading sits most of the
+        // way back towards resting, so the trace warms up from it instead of starting at its
+        // highest. Scaled from the same draw, which keeps the day's stream as it was.
+        ? restingHrBpm + (range(rand, 128, 168) - restingHrBpm) * 0.3
         : overnight
           // A few beats below the day's own resting figure rather than an unrelated absolute
           // band - see the comment above restingHrBpm's update for why the two must agree.
@@ -1005,8 +1023,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     // A running workout is the one type here that plausibly pushes a heart rate into the top
     // zone; the others (a lift, a swim, a walk) stay out of it, the same distinction the field map
     // found no more than one zone active in a single interval to begin with.
-    const peakMinutes = workout && workout.exerciseType === 'RUNNING'
-      ? Math.round(workoutMinutesToday * range(rand, 0.05, 0.15)) : 0
+    // Its share is drawn from `rand` on exactly the days the old pick chose a run, so the first
+    // stream is unchanged, and from the workout's own stream on any other day.
+    const peakShare = workout === null ? 0 : range(workout.drawnRun ? rand : workoutRand, 0.05, 0.15)
+    const peakMinutes = workout && workout.exerciseType === 'RUNNING' ? Math.round(workoutMinutesToday * peakShare) : 0
     const minutesByZone: Readonly<Record<string, number>> = {
       FAT_BURN: soFar(fatBurnMinutes), CARDIO: ifWorkoutKept(cardioMinutes), PEAK: ifWorkoutKept(peakMinutes),
     }

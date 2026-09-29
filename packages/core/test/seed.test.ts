@@ -166,8 +166,12 @@ describe('seedArchive', () => {
       // include this run's own last day - a day 3 span here never does. That is ordinary
       // sparseness, not the stamping bug, and asserting it away would make this test's pass
       // depend on `days` and the workout schedule lining up rather than on civilDateOf being
-      // correct.
-      const EXCLUDED_SPARSE_METRICS = new Set(['workout_count', 'workout_minutes'])
+      // correct. The three active_minutes_*_peak overlaps are sparse the same way: a day has them
+      // only when a run put minutes into the peak zone, and the run on this span's middle day
+      // (WORKOUT_SCHEDULE opens with one) is not on its last.
+      const EXCLUDED_SPARSE_METRICS = new Set([
+        'workout_count', 'workout_minutes', 'active_minutes_light_peak', 'active_minutes_moderate_peak', 'active_minutes_vigorous_peak',
+      ])
       const newestByMetric = new Map<string, string>()
       for (const row of allRows) {
         if (EXCLUDED_SPARSE_METRICS.has(row.metric)) continue
@@ -282,6 +286,44 @@ describe('seedArchive', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  // The demo writes each routed run twice, Google's copy and the phone's, which the app merges on
+  // read. Merged into one session, the run's page finds an earlier run as its previous one rather
+  // than its own second copy, and it has enough runs before it for a usual range. A real rebuild of
+  // three months of every data type, so it gets longer than the default timeout.
+  it('merges the routed demo run into one session whose previous run is an earlier one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-routed-run-'))
+    const instance = openHaelan(dir)
+    try {
+      seedPerson(instance.db, 'p1')
+      const endMs = localMidnightMs('2026-09-07')
+      seedArchive({ archive: instance.archive, personId: 'p1', days: 95, endMs, demoRoute: true })
+      const report = runRebuild({
+        db: instance.db, archive: instance.archive, peopleStore: new PeopleStore(instance.db),
+        priority: instance.sourcePriority, overrides: instance.overrides, settings: instance.settings, nowMs: endMs,
+      })
+      expect(report.failures).toEqual([])
+      const q = new PersonQuery(instance.db, 'p1')
+      const runs = q.sessions({ kind: 'exercise', from: '2026-01-01', to: '2026-09-07', type: 'RUNNING' })
+      const last = runs.at(-1)!
+      expect(runs.filter((run) => run.startMs === last.startMs)).toHaveLength(1)
+      const page = q.workoutPage({ sessionId: last.id, today: '2026-09-07', nowMs: endMs })!
+      expect(page.previous).not.toBeNull()
+      expect(page.previous!.sessionId).not.toBe(last.id)
+      // Nine runs before it in 90 days, and five walks before the last walk: a real usual range
+      // for both, and a full strip for a run.
+      const within90 = (list: typeof runs, subject: (typeof runs)[number]) =>
+        list.filter((s) => s.startMs < subject.startMs && s.startMs >= subject.startMs - 90 * 86_400_000).length
+      expect(within90(runs, last)).toBeGreaterThanOrEqual(9)
+      const walks = q.sessions({ kind: 'exercise', from: '2026-01-01', to: '2026-09-07', type: 'WALKING' })
+      expect(within90(walks, walks.at(-1)!)).toBeGreaterThanOrEqual(5)
+      expect(page.figures.pace!.baseline?.thin).toBe(false)
+      expect(page.figures.pace!.strip.every((point) => point.value !== null)).toBe(true)
+    } finally {
+      instance.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }, 90_000)
 
   // The same promise at the level of the payloads, over a span long enough to meet every type and
   // the occasional paused run, so the shapes can be checked for agreeing with themselves.

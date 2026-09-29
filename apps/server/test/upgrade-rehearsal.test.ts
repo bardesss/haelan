@@ -544,7 +544,7 @@ describe('the upgrade path', () => {
       // minutes: seed.ts's own peakMinutes is nonzero only on a workout day whose exerciseType is
       // RUNNING (activeZoneMinutesPoint's PEAK zone), never on a rest day or a non-running
       // workout. Of this span's five scheduled workout days (i % 3 === 1, over SEED_DAYS=14: days
-      // 1, 4, 7, 10, 13), the deterministic mulberry32 stream picks RUNNING for exactly one of
+      // 1, 4, 7, 10, 13), the deterministic mulberry32 stream picked RUNNING for exactly one of (three since WORKOUT_SCHEDULE, see the 1368 note below)
       // them - confirmed by running this fixture and reading the real row counts back, the same
       // way every other magnitude in this file is measured rather than hand-derived. Both a
       // per-source row (deriveDay's bandSources: the seed's active-minutes and
@@ -563,17 +563,23 @@ describe('the upgrade path', () => {
       // 10200 samples and 1356 daily rows since the seeded workouts gained what the workout page
       // shows: heart rate every minute of every workout, and the provider's four heart rate zone
       // ceilings every day. A third PRNG stream again, so again nothing pinned below moved.
+      //
+      // 1368 daily rows since the workout days take their type from seed.ts's WORKOUT_SCHEDULE
+      // rather than a pick: this span's five workouts are now run, walk, run, ride, run, three
+      // runs where the pick gave one. Each run day adds the three peak-overlap metrics above as a
+      // source row and a merged row: 3 x 2 x 2 more days = 12. The day's own draws are unchanged
+      // (the old pick is still drawn), so no sample count moved.
       expect({
         samples: countOf(db, 'samples'),
         daily: countOf(db, 'daily'),
         sessions: countOf(db, 'sessions'),
         observations: countOf(db, 'observations'),
-      }).toEqual({ samples: 10200, daily: 1356, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 10200, daily: 1368, sessions: 19, observations: 14 })
       // The report an operator reads has to say what the tables say.
       expect({
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
-      }).toEqual({ samples: 10200, dailyRows: 1356, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 10200, dailyRows: 1368, sessions: 19, observations: 14 })
 
       // Broken down per metric, so a regression that lost 300 steps samples while a mapper
       // started emitting 300 spurious weight rows - invisible to the bare total above, which
@@ -702,15 +708,15 @@ describe('the upgrade path', () => {
           active_zone_minutes_peak: 2 * SEED_DAYS,
           // The overlap family (activityBands.ts): overlapMinutes now requires a *positive*
           // reading on both sides of the same clock instant, so a day resolves an overlap only
-          // when it genuinely had peak minutes - one day out of SEED_DAYS, per the arithmetic
-          // above the samples/daily/sessions/observations assertion. One provider row (the seed's
-          // single FITBIT/DERIVED source for this family) plus one merged row on top, for that one
-          // day: 2, not 2 * SEED_DAYS. All three levels share the count because light is always
-          // positive, and moderate/vigorous are positive on every workout day, so all three agree
-          // with peak on the one day peak was itself positive.
-          active_minutes_light_peak: 2,
-          active_minutes_moderate_peak: 2,
-          active_minutes_vigorous_peak: 2,
+          // when it genuinely had peak minutes - the three run days out of SEED_DAYS that
+          // WORKOUT_SCHEDULE gives this span (see the 1368 note above the totals). One provider row
+          // (the seed's single FITBIT/DERIVED source for this family) plus one merged row on top,
+          // for each run day: 6, not 2 * SEED_DAYS. All three levels share the count because light
+          // is always positive, and moderate/vigorous are positive on every workout day, so all
+          // three agree with peak on the days peak was itself positive.
+          active_minutes_light_peak: 6,
+          active_minutes_moderate_peak: 6,
+          active_minutes_vigorous_peak: 6,
           // floors and total_calories are dailyRollUp types: one `provider` row a day and no
           // `merged` row on top, since there is no per-source data under either for a merge to
           // choose between (mapRollups.ts's own comment, and Activity.tsx's REQUESTS comment).
