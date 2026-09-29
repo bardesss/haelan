@@ -136,6 +136,23 @@ export function formatFigureRange(
 }
 
 /**
+ * The bedtime variability as a sentence, the night page's and the Sleep page's one wording for it
+ * ("Bedtime varied ±34 min this month · your usual ±20 – 40 min"): the figure's value, then its
+ * usual in formatFigureRange's form where there is a real one to name (not thin, not missing). The
+ * caller names its two keys, the plain sentence and the one with the usual, and any words they add
+ * (`params`, a period the sentence names).
+ */
+export function variedLine(
+  figure: Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'>, usual: { low: number, high: number, thin: boolean } | null,
+  keys: { plain: string, usual: string }, language: string, t: Translate, params: Record<string, string> = {},
+): string {
+  const value = formatFigureValue(figure, figure.value, language, t)
+  if (usual === null || usual.thin) return t(keys.plain, { ...params, value })
+  const { low, high } = formatFigureRange(figure, usual.low, usual.high, language, t)
+  return t(keys.usual, { ...params, value, low, high })
+}
+
+/**
  * How a figure compares with its own usual, worded the way the glance's `usualLine` already words a
  * GlanceFigure (pages/dashboard/glanceText.ts) - this is that same rule over a PageFigure, whose
  * `standing` alone (rather than a `partial` flag of its own) carries the fact a glance figure keeps

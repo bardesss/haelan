@@ -7,7 +7,7 @@ import { BalanceBars } from '../../../charts/BalanceBars.js'
 import { placedUsualBand, withinSchedule, WIDE_WINDOW } from '../../../charts/schedule.js'
 import { formatDuration, formatSignedDuration } from '../../../format.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureRange, formatFigureValue } from '../../detail/figureText.js'
+import { variedLine } from '../../detail/figureText.js'
 import { verdictTone } from '../../../components/FigureRow.js'
 
 /**
@@ -65,15 +65,10 @@ export function NightWeek({ page }: { page: NightPageData }) {
   // week · usually ±20–35 min": the usual half only when there is a real one to name.
   const variability = figures.bedtimeVariability
   const variabilityTone = verdictTone(variability.judged, variability.standing)
-  const variabilityValue = formatFigureValue(variability, variability.value, language, t)
-  const variabilityBand = variability.baseline !== null && !variability.baseline.thin ? variability.baseline : null
-  // The usual in the one range format every page prints (formatFigureRange): spaced dash, the unit
-  // once after the high.
-  const variabilityRange = variabilityBand === null ? null
-    : formatFigureRange(variability, variabilityBand.low, variabilityBand.high, language, t)
-  const variabilityLine = variabilityRange === null
-    ? t('sleep.night.week.variability', { value: variabilityValue })
-    : t('sleep.night.week.variabilityUsual', { value: variabilityValue, low: variabilityRange.low, high: variabilityRange.high })
+  // The usual in the one range format every page prints (formatFigureRange, through variedLine):
+  // spaced dash, the unit once after the high.
+  const variabilityLine = variedLine(variability, variability.baseline,
+    { plain: 'sleep.night.week.variability', usual: 'sleep.night.week.variabilityUsual' }, language, t)
 
   const zeroLineValue = formatDuration(balance.zeroLine.minutes, language)
   const target = balance.zeroLine.source === 'target'
