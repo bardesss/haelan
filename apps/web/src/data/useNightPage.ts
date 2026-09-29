@@ -63,8 +63,11 @@ export interface NightPageData {
   stagePercent: { deep: number | null, light: number | null, rem: number | null }
   balance: { zeroLine: NightZeroLine, nights: { localDate: string, difference: number | null }[], total: number }
   traces: { heartRate: NightTrace, hrv: NightTrace, spo2: NightTrace }
-  /** How long after falling asleep the first deep and REM sleep began, and how many REM episodes; null on a classic night. */
-  stageTiming: { firstDeep: PageFigure, firstRem: PageFigure, cycles: PageFigure }
+  /**
+   * How long after falling asleep the first deep and REM sleep began, and how many REM episodes;
+   * with the instants the first deep and REM segment began. Null on a classic night.
+   */
+  stageTiming: { firstDeep: PageFigure, firstRem: PageFigure, cycles: PageFigure, firstDeepAtMs: number | null, firstRemAtMs: number | null }
   /** Of the morning's judged figures, how many sat outside their usual (the server's count). */
   morningSummary: MorningSummary
   morning: {
@@ -75,7 +78,7 @@ export interface NightPageData {
     spo2: PageFigure
     skinTemperature: PageFigure
     skinTemperatureDeviation: number | null
-    /** Resting heart rate minus the night's lowest: how far the heart rate fell while asleep. */
+    /** How far the heart rate fell below the morning's resting rate while asleep, in percent of the resting rate. */
     heartRateDip: PageFigure
   }
   day: { localDate: string, steps: PageFigure, activeMinutes: PageFigure, workouts: WorkoutSession[] }

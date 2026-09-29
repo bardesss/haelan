@@ -269,6 +269,41 @@ describe('the overnight traces', () => {
     } finally { restore() }
   })
 
+  // The night page's heart-rate dip, already worded, as a second line under the lowest.
+  it('says how far the heart rate dipped below resting, under its lowest', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} heartRateDip={'13 %'} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
+      expect([...container!.querySelectorAll('.night-trace-summary')].map((p) => p.textContent))
+        .toEqual(['lowest 56 bpm at 05:00', '13 % below your resting heart rate'])
+    } finally { restore() }
+  })
+
+  it('says the dip on the heart-rate row only, and nothing without one', async () => {
+    const restore = stub({
+      'heart_rate|watch': [point('watch')], 'spo2|watch': [point('watch')], 'hrv|watch': [point('watch')],
+    })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} heartRateDip={'13 %'} />)
+      await flush(client, html)
+      await pumpUntil(() => container!.querySelectorAll('.night-trace [role="img"]').length === 3, 'all three rows to draw')
+      const rows = [...container!.querySelectorAll('.night-trace')]
+      expect(rows.map((row) => row.querySelectorAll('.night-trace-summary').length)).toEqual([2, 1, 1])
+    } finally { restore() }
+  })
+
+  it('says no dip when the night page has none', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} heartRateDip={null} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
+      expect(container!.querySelectorAll('.night-trace-summary')).toHaveLength(1)
+    } finally { restore() }
+  })
+
   it('says the night\'s highest HRV rather than its lowest', async () => {
     const restore = stub({ 'hrv|watch': [point('watch')] })
     try {

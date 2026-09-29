@@ -64,7 +64,7 @@ const PERSON: Session = {
 type NightAnswer = { status: number, body: unknown }
 const NO_SUCH_NIGHT: NightAnswer = { status: 404, body: { error: { code: 'not_found', reason: 'no_such_night', message: 'no night' } } }
 
-function stubFetch(night: NightAnswer = NO_SUCH_NIGHT): void {
+function stubFetch(night: NightAnswer = NO_SUCH_NIGHT, heartRate: unknown[] = []): void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -72,15 +72,15 @@ function stubFetch(night: NightAnswer = NO_SUCH_NIGHT): void {
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/night/')) return json(night.body, night.status)
-    if (url.includes('/intraday/window')) return json({ points: [], reduction: null })
+    if (url.includes('/intraday/window')) return json({ points: url.includes('metric=heart_rate') ? heartRate : [], reduction: null })
     if (url.includes('/sources')) return json({ items: [] })
     return json({ items: [], cursor: null })
   }) as typeof fetch
   restoreFetch = () => { globalThis.fetch = original }
 }
 
-async function mount(page: NightPageData | null, lng: 'en' | 'nl' = 'en', night?: NightAnswer): Promise<HTMLDivElement> {
-  stubFetch(night)
+async function mount(page: NightPageData | null, lng: 'en' | 'nl' = 'en', night?: NightAnswer, heartRate?: unknown[]): Promise<HTMLDivElement> {
+  stubFetch(night, heartRate)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(sourceNamesKey('p1'), { items: [] })
@@ -481,12 +481,13 @@ describe('the night page\'s morning after', () => {
     ])
     expect(rows).toEqual([
       ['Resting heart rate', '54\u00a0bpm', 'within your usual 51 – 57\u00a0bpm'],
-      ['Dip below resting heart rate', '-2\u00a0bpm', 'below your usual 4 – 12\u00a0bpm'],
       ['HRV', '49\u00a0ms', 'within your usual 42 – 60\u00a0ms'],
       ['Breathing in sleep', '14.2\u00a0breaths/min', 'within your usual 13.0 – 15.5\u00a0breaths/min'],
       ['Oxygen (SpO2)', '95.4\u00a0%', 'within your usual 94.5 – 97.0\u00a0%'],
       // A deviation, so its usual is worded as one too: the band's edges less its centre.
       ['Skin temperature', '+0.6\u00a0°C', 'above your usual ±0.3\u00a0°C'],
+      // Last, the mockup's place for it.
+      ['Sleeping heart-rate dip', '13\u00a0%', 'within your usual 9 – 16\u00a0%'],
     ])
     // Resting HR, HRV and skin temperature are the rows with a trend (a strip); breathing and
     // oxygen draw a bar instead, the spec's and the mockup's own split.
@@ -496,7 +497,7 @@ describe('the night page\'s morning after', () => {
     expect(card.querySelectorAll('[role="img"][aria-label="Skin temperature"]')).toHaveLength(1)
     // The dip draws a bar too: it has no strip.
     expect(card.querySelectorAll('.figure-row-bar')).toHaveLength(3)
-    expect(card.querySelectorAll('[role="img"][aria-label="Dip below resting heart rate"]')).toHaveLength(0)
+    expect(card.querySelectorAll('[role="img"][aria-label="Sleeping heart-rate dip"]')).toHaveLength(0)
   })
 
   it('lays the readings out three across', async () => {
@@ -520,7 +521,7 @@ describe('the night page\'s morning after', () => {
     const page = nightPageFixture()
     const skin = { ...page.morning.skinTemperature, baseline: { center: 33, low: 32.8, high: 33.3, thin: false } }
     const host = await mount({ ...page, morning: { ...page.morning, skinTemperature: skin } })
-    const row = [...host.querySelectorAll('.night-grp .figure-row')].at(-1)!
+    const row = [...host.querySelectorAll('.night-grp .figure-row')].at(-2)!
     expect(text(row, '.figure-row-verdict')).toBe('above your usual -0.2 – +0.3\u00a0°C')
   })
 
@@ -528,7 +529,7 @@ describe('the night page\'s morning after', () => {
     const page = nightPageFixture()
     const skin = { ...page.morning.skinTemperature, baseline: { center: 33, low: 32.7, high: 33.3, thin: true }, standing: null, judged: null }
     const host = await mount({ ...page, morning: { ...page.morning, skinTemperature: skin, skinTemperatureDeviation: null } })
-    const row = [...host.querySelectorAll('.night-grp .figure-row')].at(-1)!
+    const row = [...host.querySelectorAll('.night-grp .figure-row')].at(-2)!
     expect(text(row, '.figure-row-value')).toBe('33.6\u00a0°C')
     expect(text(row, '.figure-row-verdict')).toBe('not enough history for a usual yet')
     expect(row.textContent).not.toContain('— °C')
@@ -565,7 +566,7 @@ describe('the night page\'s morning after', () => {
     const host = await mount({ ...page, morning: { ...page.morning, breathing: { ...page.morning.breathing, value: null } } })
     const card = host.querySelector('.night-grp')?.closest('.card')!
     const labels = [...card.querySelectorAll('.figure-row-label')].map((el) => el.textContent)
-    expect(labels).toEqual(['Resting heart rate', 'Dip below resting heart rate', 'HRV', 'Oxygen (SpO2)', 'Skin temperature'])
+    expect(labels).toEqual(['Resting heart rate', 'HRV', 'Oxygen (SpO2)', 'Skin temperature', 'Sleeping heart-rate dip'])
   })
 
   it('hides the whole card when the morning has nothing at all', async () => {
@@ -593,29 +594,83 @@ describe('the night page\'s morning summary and heart-rate dip', () => {
   // The summary is the card's first line under its label, a verdict line without a tone.
   const summary = (host: ParentNode) => morningCard(host)?.querySelector('.label ~ .detail-verdict')
   const none = <F extends { value: number | null }>(f: F) => ({ ...f, value: null, standing: null, judged: null })
+  const dipRow = (host: ParentNode) => [...morningCard(host)!.querySelectorAll('.figure-row')].at(-1)!
+  /** The fixture with HRV above its usual (higher is better) and breathing below it (neutral). */
+  function twoOutside(): NightPageData {
+    const page = nightPageFixture()
+    return {
+      ...page,
+      morningSummary: { outside: 3, of: 6 },
+      morning: {
+        ...page.morning,
+        hrv: { ...page.morning.hrv, value: 61, standing: 'above', judged: 'better' },
+        breathing: { ...page.morning.breathing, value: 12.1, standing: 'below', judged: null },
+      },
+    }
+  }
 
-  it('opens the card with how many of the morning\'s figures sat outside their usual', async () => {
+  it('opens the card with how many of the morning\'s figures sat outside their usual, naming each', async () => {
     const host = await mount(nightPageFixture())
     const line = summary(host)
-    expect(line?.textContent).toBe('2 of 6 outside your usual range')
+    expect(line?.textContent).toBe('Overnight 1 of 6 outside your usual range: skin temperature higher · heart rate, HRV, heart-rate dip, oxygen and breathing within')
+    // The line takes no tone; only the outside name does, in the figure's own (neutral: is-out).
     expect(line?.className).toBe('detail-verdict')
+    expect([...line!.querySelectorAll('.night-summary-name')].map((el) => [el.textContent, el.className]))
+      .toEqual([['skin temperature higher', 'night-summary-name is-out']])
     // Before the ring and the rows.
     expect(line?.nextElementSibling?.classList.contains('night-grp')).toBe(true)
   })
 
   it('words the summary in Dutch', async () => {
     const host = await mount(nightPageFixture(), 'nl')
-    expect(summary(host)?.textContent).toBe('2 van 6 buiten je gebruikelijke bereik')
+    expect(summary(host)?.textContent).toBe('\'s Nachts 1 van 6 buiten je gebruikelijke bereik: huidtemperatuur hoger · hartslag, HRV, hartslagdaling, zuurstof en ademhaling binnen')
+  })
+
+  it('names every outside figure with its direction and tone, in the mockup\'s order', async () => {
+    const host = await mount(twoOutside())
+    expect(summary(host)?.textContent).toBe('Overnight 3 of 6 outside your usual range: HRV higher, breathing lower and skin temperature higher · heart rate, heart-rate dip and oxygen within')
+    expect([...summary(host)!.querySelectorAll('.night-summary-name')].map((el) => [el.textContent, el.className])).toEqual([
+      ['HRV higher', 'night-summary-name better'],
+      ['breathing lower', 'night-summary-name is-out'],
+      ['skin temperature higher', 'night-summary-name is-out'],
+    ])
+  })
+
+  it('names them in Dutch, "hoger" and "lager"', async () => {
+    const host = await mount(twoOutside(), 'nl')
+    expect(summary(host)?.textContent).toBe('\'s Nachts 3 van 6 buiten je gebruikelijke bereik: HRV hoger, ademhaling lager en huidtemperatuur hoger · hartslag, hartslagdaling en zuurstof binnen')
+  })
+
+  it('leaves a figure the server did not judge out of both lists', async () => {
+    const page = nightPageFixture()
+    const spo2 = { ...page.morning.spo2, standing: null, judged: null }
+    const host = await mount({ ...page, morningSummary: { outside: 1, of: 5 }, morning: { ...page.morning, spo2 } })
+    expect(summary(host)?.textContent).toBe('Overnight 1 of 5 outside your usual range: skin temperature higher · heart rate, HRV, heart-rate dip and breathing within')
+  })
+
+  it('drops the within half when every judged figure was outside', async () => {
+    const page = nightPageFixture()
+    const unjudged = { standing: null, judged: null }
+    const host = await mount({
+      ...page,
+      morningSummary: { outside: 1, of: 1 },
+      morning: {
+        ...page.morning, restingHeartRate: { ...page.morning.restingHeartRate, ...unjudged }, hrv: { ...page.morning.hrv, ...unjudged },
+        breathing: { ...page.morning.breathing, ...unjudged }, spo2: { ...page.morning.spo2, ...unjudged },
+        heartRateDip: { ...page.morning.heartRateDip, ...unjudged },
+      },
+    })
+    expect(summary(host)?.textContent).toBe('Overnight 1 of 1 outside your usual range: skin temperature higher')
   })
 
   it('says all of them were within when none was outside', async () => {
     const host = await mount({ ...nightPageFixture(), morningSummary: { outside: 0, of: 5 } })
-    expect(summary(host)?.textContent).toBe('all 5 within your usual range')
+    expect(summary(host)?.textContent).toBe('Overnight all 5 within your usual range')
   })
 
   it('says all of them were within in Dutch too', async () => {
     const host = await mount({ ...nightPageFixture(), morningSummary: { outside: 0, of: 5 } }, 'nl')
-    expect(summary(host)?.textContent).toBe('alle 5 binnen je gebruikelijke bereik')
+    expect(summary(host)?.textContent).toBe('\'s Nachts alle 5 binnen je gebruikelijke bereik')
   })
 
   it('leaves the summary out when nothing on the morning was judged', async () => {
@@ -625,32 +680,69 @@ describe('the night page\'s morning summary and heart-rate dip', () => {
     expect(morningCard(host)?.textContent).not.toContain('usual range')
   })
 
-  it('reads the dip in Dutch after the resting heart rate', async () => {
-    const host = await mount(nightPageFixture(), 'nl')
-    const labels = [...morningCard(host)!.querySelectorAll('.figure-row-label')].map((el) => el.textContent)
-    expect(labels.slice(0, 2)).toEqual(['Rusthartslag', 'Daling onder je rusthartslag'])
+  it('reads the dip as a percent, last, with the two readings it is taken from', async () => {
+    const row = dipRow(await mount(nightPageFixture()))
+    expect(text(row, '.figure-row-label')).toBe('Sleeping heart-rate dip')
+    expect(text(row, '.figure-row-value')).toBe('13 %')
+    expect(text(row, '.figure-row-note')).toBe('lowest 47 bpm against resting heart rate 54 bpm')
+    // A note judges nothing, so it never takes the verdict's tone.
+    expect(row.querySelector('.figure-row-note')?.className).toBe('figure-row-note')
   })
 
-  it('reads a dip as whole beats per minute', async () => {
+  it('reads the dip in Dutch', async () => {
+    const row = dipRow(await mount(nightPageFixture(), 'nl'))
+    expect(text(row, '.figure-row-label')).toBe('Hartslagdaling in slaap')
+    expect(text(row, '.figure-row-note')).toBe('laagste 47 bpm tegenover rusthartslag 54 bpm')
+  })
+
+  it('leaves the dip\'s note out when the night has no lowest heart rate', async () => {
     const page = nightPageFixture()
-    const heartRateDip = { ...page.morning.heartRateDip, value: 12, standing: 'within' as const, judged: null }
-    const host = await mount({ ...page, morning: { ...page.morning, heartRateDip } })
-    const row = morningCard(host)!.querySelectorAll('.figure-row')[1]!
-    expect(text(row, '.figure-row-value')).toBe('12\u00a0bpm')
-    expect(text(row, '.figure-row-verdict')).toBe('within your usual 4 – 12\u00a0bpm')
+    const heartRate = { ...page.traces.heartRate, stat: { ...page.traces.heartRate.stat, lowest: null } }
+    const row = dipRow(await mount({ ...page, traces: { ...page.traces, heartRate } }))
+    expect(text(row, '.figure-row-label')).toBe('Sleeping heart-rate dip')
+    expect(row.querySelector('.figure-row-note')).toBeNull()
+  })
+
+  it('leaves the dip\'s note out without a resting heart rate', async () => {
+    const page = nightPageFixture()
+    const row = dipRow(await mount({ ...page, morning: { ...page.morning, restingHeartRate: none(page.morning.restingHeartRate) } }))
+    expect(text(row, '.figure-row-label')).toBe('Sleeping heart-rate dip')
+    expect(row.querySelector('.figure-row-note')).toBeNull()
+  })
+
+  it('says the dip under the heart-rate trace\'s lowest too', async () => {
+    const reading = { sourceId: 'watch', utcMs: Date.UTC(2026, 8, 6, 1, 0), min: 47, mean: 52, max: 58, n: 1, excluded: false }
+    const host = await mount(nightPageFixture(), 'nl', undefined, [reading])
+    await pumpUntil(() => host.querySelector('.night-trace-summary') !== null, 'the heart-rate row to draw')
+    expect([...host.querySelectorAll('.night-trace-summary')].map((el) => el.textContent))
+      .toEqual(['laagste 47\u00a0bpm om 05:00', '13\u00a0% onder je rusthartslag'])
+  })
+
+  it('says no dip under the heart-rate trace when the night has none', async () => {
+    const page = nightPageFixture()
+    const reading = { sourceId: 'watch', utcMs: Date.UTC(2026, 8, 6, 1, 0), min: 47, mean: 52, max: 58, n: 1, excluded: false }
+    const host = await mount({ ...page, morning: { ...page.morning, heartRateDip: none(page.morning.heartRateDip) } }, 'en', undefined, [reading])
+    await pumpUntil(() => host.querySelector('.night-trace-summary') !== null, 'the heart-rate row to draw')
+    expect(host.querySelectorAll('.night-trace-summary')).toHaveLength(1)
+  })
+
+  it('gives no other morning row a note', async () => {
+    const host = await mount(nightPageFixture())
+    expect(morningCard(host)!.querySelectorAll('.figure-row-note')).toHaveLength(1)
   })
 
   it('colours the dip by the server\'s judgement', async () => {
-    // The fixture's dip sits below its usual, and higher is better: worse.
-    const row = morningCard(await mount(nightPageFixture()))!.querySelectorAll('.figure-row')[1]!
-    expect(text(row, '.figure-row-label')).toBe('Dip below resting heart rate')
+    const page = nightPageFixture()
+    const heartRateDip = { ...page.morning.heartRateDip, value: 7, standing: 'below' as const, judged: 'worse' as const }
+    const row = dipRow(await mount({ ...page, morning: { ...page.morning, heartRateDip } }))
+    expect(text(row, '.figure-row-label')).toBe('Sleeping heart-rate dip')
     expect(row.querySelector('.figure-row-verdict')?.className).toBe('figure-row-verdict worse')
   })
 
   it('leaves the dip out when the night has none', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, morning: { ...page.morning, heartRateDip: none(page.morning.heartRateDip) } })
-    expect(morningCard(host)?.textContent).not.toContain('Dip below resting heart rate')
+    expect(morningCard(host)?.textContent).not.toContain('Sleeping heart-rate dip')
     expect(morningCard(host)?.querySelectorAll('.figure-row')).toHaveLength(5)
   })
 
@@ -665,7 +757,7 @@ describe('the night page\'s morning summary and heart-rate dip', () => {
         spo2: none(page.morning.spo2), skinTemperature: none(page.morning.skinTemperature), skinTemperatureDeviation: null,
       },
     })
-    expect([...morningCard(host)!.querySelectorAll('.figure-row-label')].map((el) => el.textContent)).toEqual(['Dip below resting heart rate'])
+    expect([...morningCard(host)!.querySelectorAll('.figure-row-label')].map((el) => el.textContent)).toEqual(['Sleeping heart-rate dip'])
   })
 })
 
@@ -675,14 +767,19 @@ describe('the night page\'s stage timing', () => {
   const timing = (host: ParentNode) => [...(block(host)?.querySelectorAll('.figure-row') ?? [])].map((row) => [
     text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '', text(row, '.figure-row-verdict') ?? '',
   ])
+  const notes = (host: ParentNode) => [...(block(host)?.querySelectorAll('.figure-row-note') ?? [])].map((el) => el.textContent)
   const none = <F extends { value: number | null }>(f: F) => ({ ...f, value: null, standing: null, judged: null })
 
   it('reads when deep and REM sleep began and how many cycles there were, under the legend', async () => {
     const host = await mount(nightPageFixture())
     expect(timing(host)).toEqual([
-      ['Time to deep sleep', '52\u00a0min', 'within your usual 25 – 65\u00a0min'],
-      ['Time to REM', '2h\u00a055m', 'above your usual 1h\u00a010m – 2h\u00a000m'],
+      ['First deep sleep', '52\u00a0min', 'within your usual 25 – 65\u00a0min'],
+      ['First REM', '2h\u00a055m', 'above your usual 1h\u00a010m – 2h\u00a000m'],
       ['Sleep cycles', '1', 'below your usual 2 – 4'],
+    ])
+    // Under each, when it began at the night's own clock, and what one cycle is.
+    expect(notes(host)).toEqual([
+      'after falling asleep, at 01:00', 'after falling asleep, at 03:03', 'one cycle: light, deep and REM, about 90 min',
     ])
     // Three across, inside the night card. All three are neutral, so never better or worse: a row
     // outside its usual only takes the outside-usual colour (verdictTone).
@@ -695,8 +792,17 @@ describe('the night page\'s stage timing', () => {
   it('words the timing in Dutch', async () => {
     const host = await mount(nightPageFixture(), 'nl')
     expect(timing(host).map(([label, value]) => [label, value])).toEqual([
-      ['Tijd tot diepe slaap', '52\u00a0min'], ['Tijd tot REM', '2u\u00a055m'], ['Slaapcycli', '1'],
+      ['Eerste diepe slaap', '52\u00a0min'], ['Eerste REM', '2u\u00a055m'], ['Slaapcycli', '1'],
     ])
+    expect(notes(host)).toEqual([
+      'na het inslapen, om 01:00', 'na het inslapen, om 03:03', 'een cyclus: licht, diep en REM, ongeveer 90 min',
+    ])
+  })
+
+  it('leaves a first row\'s clock out when the server sent no instant for it', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, stageTiming: { ...page.stageTiming, firstRemAtMs: null } })
+    expect(notes(host)).toEqual(['after falling asleep, at 01:00', 'one cycle: light, deep and REM, about 90 min'])
   })
 
   it('says there is no usual yet for a timing row with none', async () => {
@@ -709,16 +815,16 @@ describe('the night page\'s stage timing', () => {
   it('leaves out a timing row the night has none for, and only that one', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, stageTiming: { ...page.stageTiming, firstRem: none(page.stageTiming.firstRem) } })
-    expect(timing(host).map(([label]) => label)).toEqual(['Time to deep sleep', 'Sleep cycles'])
+    expect(timing(host).map(([label]) => label)).toEqual(['First deep sleep', 'Sleep cycles'])
   })
 
   it('leaves the whole block out on a classic night, which has no timing', async () => {
     const page = nightPageFixture()
     const { firstDeep, firstRem, cycles } = page.stageTiming
-    const host = await mount({ ...page, stageTiming: { firstDeep: none(firstDeep), firstRem: none(firstRem), cycles: none(cycles) } })
+    const host = await mount({ ...page, stageTiming: { firstDeep: none(firstDeep), firstRem: none(firstRem), cycles: none(cycles), firstDeepAtMs: null, firstRemAtMs: null } })
     expect(host.querySelector('.detail-legend')).not.toBeNull()
     expect(host.querySelector('.detail-legend ~ .detail-rows')).toBeNull()
-    expect(host.textContent).not.toContain('Time to deep sleep')
+    expect(host.textContent).not.toContain('First deep sleep')
   })
 })
 
