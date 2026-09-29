@@ -7,6 +7,7 @@ import { priorityFrom } from '../src/derive/priority.ts'
 import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { enrichAttrs, mergeWorkouts } from '../src/query/mergedWorkouts.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
+import { readRoutesFor } from '../src/query/workoutDerived.ts'
 import type { WorkoutSession } from '../src/query/sessions.ts'
 
 /**
@@ -313,7 +314,7 @@ describe('PersonQuery workouts, merged', () => {
     insert({ id: 'bare', sourceId: 'google', attrs: GOOGLE_RUN, startMs: nextDay + 120 * MINUTE, endMs: nextDay + 150 * MINUTE, localDate: '2026-09-21' })
 
     const workouts = q().sessions({ kind: 'exercise', from: '2026-09-20', to: '2026-09-21' })
-    const routes = q().workoutRoutes({ sessions: workouts })
+    const routes = readRoutesFor(t.db, workouts)
     expect([...routes.keys()].sort()).toEqual(['google-2', 'google-run'])
     expect(routes.get('google-run')!.map((p) => [p.atMs, p.latitude])).toEqual([[START, 52.1], [START + MINUTE, 52.101]])
     expect(routes.get('google-2')!.map((p) => p.latitude)).toEqual([53.1, 53.101])

@@ -34,10 +34,10 @@ import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { mergedWorkoutFor, mergeRuleFor, readMergedWorkouts } from './mergedWorkouts.ts'
-import { readRoutesFor, readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute, readWorkoutZoneBounds } from './workoutDerived.ts'
+import { readRouteSummaries, readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute, readWorkoutZoneBounds } from './workoutDerived.ts'
 import type { CardioLoad, ZoneBounds } from '../api/cardioLoad.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
-import type { RoutePoint } from './workoutDerived.ts'
+import type { RoutePoint, RouteSummary } from './workoutDerived.ts'
 import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
 import { readChanges } from './changes.ts'
@@ -808,16 +808,17 @@ export class PersonQuery {
   }
 
   /**
-   * Many workouts' routes in one read, keyed by session id, with workoutRoute's rule for a merged
-   * workout (readRoutesFor). For the workout page's same-route match and its fastest-effort bests,
-   * which want a route for every workout of a type and must not read them one at a time.
+   * Many workouts' routes reduced to signatures and, when asked, fastest efforts, keyed by session
+   * id, read in bounded chunks (readRouteSummaries), with workoutRoute's rule for a merged workout.
+   * For the workout page's same-route match and its fastest-effort bests, which compare against
+   * every workout of a type and must neither read them one at a time nor hold them all at once.
    *
    * The sessions must be ones this query answered (sessions, sessionById): `session_routes` is
    * keyed on the session id alone, so the person scope is the read that produced them, the same
-   * footing readWorkoutRoute stands on. Server-side only; the points never reach a payload.
+   * footing readWorkoutRoute stands on. Server-side only; a signature never reaches a payload.
    */
-  workoutRoutes(input: { sessions: readonly WorkoutSession[] }): Map<string, RoutePoint[]> {
-    return readRoutesFor(this.#db, input.sessions)
+  workoutRouteSummaries(input: { sessions: readonly WorkoutSession[], efforts: boolean }): Map<string, RouteSummary> {
+    return readRouteSummaries(this.#db, input.sessions, { efforts: input.efforts })
   }
 
   /**

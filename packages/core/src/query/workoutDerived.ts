@@ -9,6 +9,10 @@ import { fillSplitHeartRate } from '../api/splitHeartRate.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
 import { readSessionHeartRateMinutes } from './sessionHeartRate.ts'
 import type { WorkoutSession } from './sessions.ts'
+import { routeSignature } from '../api/routeMatch.ts'
+import type { RouteSignature } from '../api/routeMatch.ts'
+import { fastestEfforts } from '../api/fastestEfforts.ts'
+import type { EffortKey } from '../api/fastestEfforts.ts'
 
 
 /**
@@ -161,6 +165,35 @@ export function readRoutesFor(db: DbOrTx, sessions: readonly WorkoutSession[]): 
     if (owner !== undefined) routes.set(session.id, byMember.get(owner)!)
   }
   return routes
+}
+
+/** Routes are read this many sessions to a query, so a 1 Hz phone route history is never all in memory at once. */
+export const ROUTE_CHUNK_SESSIONS = 100
+
+/** What a route reduces to for comparing against other workouts: never a point, only its signature and efforts. */
+export interface RouteSummary { signature: RouteSignature | null, efforts: Record<EffortKey, number | null> }
+
+const NO_EFFORTS: Record<EffortKey, number | null> = { km: null, mile: null, fiveK: null }
+
+/**
+ * Many workouts' routes reduced to a signature and, when `efforts` is asked for, the fastest
+ * efforts, keyed by session id; a session with no route has no entry. Read through readRoutesFor
+ * ROUTE_CHUNK_SESSIONS sessions at a time, each chunk reduced and its points let go before the
+ * next is read, so memory and the IN list stay bounded however long the history. The Records page
+ * and the workout page's comparisons both read through here; only a workout's own page ever holds
+ * one full route.
+ *
+ * `efforts` is the caller's GPS_EFFORT_TYPE decision (sessionRecords.ts): the page asks for it
+ * for a run's history, Records for its runs, and nobody computes efforts off a ride.
+ */
+export function readRouteSummaries(db: DbOrTx, sessions: readonly WorkoutSession[], options: { efforts: boolean }): Map<string, RouteSummary> {
+  const summaries = new Map<string, RouteSummary>()
+  for (let from = 0; from < sessions.length; from += ROUTE_CHUNK_SESSIONS) {
+    for (const [sessionId, route] of readRoutesFor(db, sessions.slice(from, from + ROUTE_CHUNK_SESSIONS))) {
+      summaries.set(sessionId, { signature: routeSignature(route), efforts: options.efforts ? fastestEfforts(route) : NO_EFFORTS })
+    }
+  }
+  return summaries
 }
 
 /**

@@ -12,7 +12,7 @@ import type { DbOrTx } from '../db/open.ts'
 import { mergeRuleFor, mergeWorkouts } from './mergedWorkouts.ts'
 import { readSessions } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
-import { readRoutesFor } from './workoutDerived.ts'
+import { readRouteSummaries } from './workoutDerived.ts'
 
 /**
  * Everything the all-time page shows, in one read.
@@ -303,27 +303,19 @@ function keptWorkouts(db: DbOrTx, personId: string): WorkoutSession[] {
   return mergeWorkouts(raw, mergeRuleFor(db, personId)).filter((workout) => !workout.excluded)
 }
 
-/** Routes are read this many sessions to a query, so a 1 Hz phone route history is never all in memory at once. */
-export const ROUTE_CHUNK_SESSIONS = 100
-
 /**
- * Every workout in the shape sessionRecordsOf reads, in the same order. Only a run's route yields
- * efforts (GPS_EFFORT_TYPE), so only runs have their routes read: RUNNING sessions in chunks of
- * ROUTE_CHUNK_SESSIONS, each chunk's efforts computed and its points let go before the next read.
+ * Every workout in the shape sessionRecordsOf reads, in the same order, each parsed once. Only a
+ * run's route yields efforts (GPS_EFFORT_TYPE), so only runs have their routes read, in chunks,
+ * through readRouteSummaries.
  */
 function sessionsForRecords(db: DbOrTx, workouts: readonly WorkoutSession[]): SessionForRecords[] {
   const parsed = workouts.map((workout) => sessionForRecords(workout))
   const runs = workouts.filter((_, i) => parsed[i]!.exerciseType === GPS_EFFORT_TYPE)
-  const withRoute = new Map<string, SessionForRecords>()
-  for (let from = 0; from < runs.length; from += ROUTE_CHUNK_SESSIONS) {
-    const chunk = runs.slice(from, from + ROUTE_CHUNK_SESSIONS)
-    const routes = readRoutesFor(db, chunk)
-    for (const run of chunk) {
-      const route = routes.get(run.id)
-      if (route !== undefined) withRoute.set(run.id, sessionForRecords(run, route))
-    }
-  }
-  return parsed.map((session) => withRoute.get(session.sessionId) ?? session)
+  const summaries = readRouteSummaries(db, runs, { efforts: true })
+  return parsed.map((session) => {
+    const summary = summaries.get(session.sessionId)
+    return summary === undefined ? session : { ...session, efforts: summary.efforts }
+  })
 }
 
 /**

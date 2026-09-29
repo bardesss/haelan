@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createTestDatabase, seedPerson, insertSample, seedOverride } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources, sessions, sessionRoutes, sessionSegments } from '../src/db/schema/index.ts'
@@ -630,7 +630,8 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
 
   it('judges the time against the earlier times on the same route, with a strip and the previous one', () => {
     seedRouteRuns(11)
-    // Another route, one run the other way, an excluded run, and one after: none of them count.
+    // Another route, an excluded run, and one after: none of them count. The loop test below runs
+    // the same course the other way.
     seedRun('elsewhere', '2026-09-01', { moving: 900 }, { hhmm: '18:00' })
     seedRoute('elsewhere', '2026-09-01', { heading: 'east', hhmm: '18:00' })
     seedRun('dropped', '2026-09-02', { moving: 900 }, { excluded: true })
@@ -661,14 +662,88 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     expect(sameRoute!.time.strip.map((p) => p.sessionId)).toEqual(['route-0', 'route-1', 'route-2', 'route-3', 'subject'])
   })
 
-  it('reads the elapsed time for a workout that recorded no moving time', () => {
+  it('reads everyone\'s elapsed time for a workout that recorded no moving time', () => {
+    seedRun('timed', '2026-08-30', { moving: 900 }, { minutes: 22 })
+    seedRoute('timed', '2026-08-30')
     seedRun('before', '2026-09-01', {}, { minutes: 20 })
     seedRoute('before', '2026-09-01')
     seedRun('subject', SUBJECT_DATE, {}, { minutes: 25 })
     seedRoute('subject', SUBJECT_DATE)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
-    expect(sameRoute!.time.value).toBe(25 * 60)
+    expect(sameRoute!.time).toMatchObject({ key: 'elapsed', metric: 'elapsed', value: 25 * 60 })
+    // The earlier run's clock time, not the moving time it also recorded.
+    expect(sameRoute!.time.strip.map((p) => [p.sessionId, p.value])).toEqual([['timed', 22 * 60], ['before', 20 * 60], ['subject', 25 * 60]])
     expect(sameRoute!.previous!.seconds).toBe(20 * 60)
+  })
+
+  it('sets a moving time only against earlier moving times on the route', () => {
+    seedRun('timed', '2026-08-30', { moving: 600 }, { minutes: 30 })
+    seedRoute('timed', '2026-08-30')
+    seedRun('clock-only', '2026-09-01', {}, { minutes: 12 })
+    seedRoute('clock-only', '2026-09-01')
+    seedRun('subject', SUBJECT_DATE, { moving: 540 })
+    seedRoute('subject', SUBJECT_DATE)
+    const { sameRoute } = readWorkoutPage(q(), input('subject'))!
+    expect(sameRoute!.time).toMatchObject({ key: 'movingTime', metric: 'movingTime', value: 540 })
+    expect(sameRoute!.count).toBe(1)
+    expect(sameRoute!.time.strip.map((p) => p.sessionId)).toEqual(['timed', 'subject'])
+    expect(sameRoute!.previous).toMatchObject({ sessionId: 'timed', seconds: 600 })
+  })
+
+  it('leaves out the same loop run the other way', () => {
+    // A 500 m square run anticlockwise, or clockwise when reversed: the same start, end and length,
+    // only the direction differs.
+    const seedLoop = (sessionId: string, localDate: string, reversed: boolean) => {
+      const startMs = at(localDate, '07:00')
+      const corners: [number, number][] = [[0, 0], [500, 0], [500, 500], [0, 500], [0, 0]]
+      const path: [number, number][] = []
+      for (let leg = 0; leg < 4; leg += 1) {
+        const [x0, y0] = corners[leg]!
+        const [x1, y1] = corners[leg + 1]!
+        for (let i = 0; i < 50; i += 1) path.push([x0 + ((x1 - x0) * i) / 50, y0 + ((y1 - y0) * i) / 50])
+      }
+      path.push([0, 0])
+      if (reversed) path.reverse()
+      test.db.insert(sessionRoutes).values(path.map(([east, north], i) => ({
+        id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
+        latitude: 52 + north / metresPerDegree, longitude: 5 + east / lonMetres,
+        altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+      }))).run()
+    }
+    seedRun('same-way', '2026-08-30', { moving: 600 })
+    seedLoop('same-way', '2026-08-30', false)
+    seedRun('other-way', '2026-09-01', { moving: 580 })
+    seedLoop('other-way', '2026-09-01', true)
+    seedRun('subject', SUBJECT_DATE, { moving: 540 })
+    seedLoop('subject', SUBJECT_DATE, false)
+    const { sameRoute } = readWorkoutPage(q(), input('subject'))!
+    expect(sameRoute!.count).toBe(1)
+    expect(sameRoute!.previous).toMatchObject({ sessionId: 'same-way' })
+  })
+
+  it('reads the earlier routes a hundred workouts to a query, and only this one in full', () => {
+    const countRouteReads = () => {
+      const prepare = vi.spyOn(test.db.$client, 'prepare')
+      readWorkoutPage(q(), input('subject'))
+      const count = prepare.mock.calls.filter(([source]) => String(source).includes('"session_routes"')).length
+      prepare.mockRestore()
+      return count
+    }
+    const seedEarlier = (from: number, to: number) => {
+      for (let i = from; i < to; i += 1) {
+        const localDate = shiftLocalDate(SUBJECT_DATE, -(i + 1))
+        seedRun(`early-${i}`, localDate, { moving: 600 })
+        seedRoute(`early-${i}`, localDate, { fixes: 1 })
+      }
+    }
+    seedRun('subject', SUBJECT_DATE, { moving: 540 })
+    seedRoute('subject', SUBJECT_DATE, { fixes: 1 })
+    // The subject's own route, then two chunks of a hundred; the subject is never one of them.
+    seedEarlier(0, 200)
+    expect(countRouteReads()).toBe(3)
+    // 250 earlier routed runs: the subject's route and three chunks.
+    seedEarlier(200, 250)
+    expect(countRouteReads()).toBe(4)
   })
 
   it('has no route card without a route, or with no earlier run on it', () => {
@@ -706,6 +781,10 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('run', SUBJECT_DATE, {}, { hhmm: '18:00' })
     seedRoute('run', SUBJECT_DATE, { fixes: 200, hhmm: '18:00' })
     expect(readWorkoutPage(q(), input('ride'))!.efforts).toBeNull()
+    // Nor does an earlier routed ride's GPS kilometre become the rides' best.
+    seedRide('earlier-ride', '2026-09-01', {})
+    seedRoute('earlier-ride', '2026-09-01', { speed: 8, fixes: 200 })
+    expect(readWorkoutPage(q(), input('ride'))!.best.fastestKmSeconds).toBeNull()
     expect(readWorkoutPage(q(), input('run'))!.efforts!.fiveK).toMatchObject({ isBest: true })
   })
 
