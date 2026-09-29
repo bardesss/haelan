@@ -1,4 +1,3 @@
-import { shiftLocalDate } from '../derive/localDay.ts'
 import type { Baseline } from './baseline.ts'
 import { INSIGHT_MIN_DAY_FRACTION } from './insights.ts'
 import { judge, standingOf, toGlanceBaseline } from './glance.ts'
@@ -69,11 +68,6 @@ function scaledBand(band: GlanceBaseline | null, scale: number): GlanceBaseline 
   return band === null ? null : { center: band.center * scale, low: band.low * scale, high: band.high * scale, thin: band.thin }
 }
 
-function mondayOf(date: string): string {
-  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay()
-  return shiftLocalDate(date, -(weekday === 0 ? 6 : weekday - 1))
-}
-
 /** The mean of the values in a span up to lastDay; a mean only when 70% of those dates carry one. */
 export function blockMean(values: ReadonlyMap<string, number>, span: DateSpan, lastDay: string): { mean: number | null, days: number } {
   const to = earlier(span.to, lastDay)
@@ -137,10 +131,12 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
 
   let standing: GlanceStanding | null = null
   let reason: PeriodReason
-  if (running && days < PERIOD_MIN_DAYS) reason = 'too-few-days'
+  // No data at all is named as such, even while the period runs; too few days is for a start with something in it.
+  if (days === 0) reason = 'no-data'
+  else if (running && days < PERIOD_MIN_DAYS) reason = 'too-few-days'
   else {
     standing = standingOf(value, usual, false)
-    reason = days === 0 ? 'no-data' : usual === null || usual.thin ? 'thin-usual' : null
+    reason = usual === null || usual.thin ? 'thin-usual' : null
   }
 
   const point = (span: DateSpan, v: number | null, band: GlanceBaseline | null, n: number): PeriodStripPoint => {
@@ -159,8 +155,7 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
     weekly = dates.length === 0 ? [] : weeksIn({ from: bounds.from, to: end }).map((week) => {
       const { mean, days: n } = blockMean(values, week, lastDay)
       // The full Monday-Sunday week holding the point, so earlierBlocks gives the twelve weeks before it.
-      const monday = mondayOf(week.from)
-      const own = periodUsual(values, 'week', { from: monday, to: shiftLocalDate(monday, 6) }, scale)
+      const own = periodUsual(values, 'week', periodBounds('week', week.from), scale)
       const band: GlanceBaseline | null = own === null ? null : { center: own.center, low: own.low, high: own.high, thin: own.thin }
       return point(week, mean === null ? null : mean * scale, band, n)
     })

@@ -81,8 +81,24 @@ describe('periodFigureOf', () => {
   })
   it('names the reason for no data and for a thin usual', () => {
     expect(periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values: history, dailyBands: bands }).reason).toBe('no-data')
+    const none = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values: history, dailyBands: bands })
+    expect(none.total).toBeNull()
+    expect(none.standing).toBeNull()
     const values = fill('2026-09-01', '2026-09-30', () => 9000)
     expect(periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands }).reason).toBe('thin-usual')
+  })
+  it('a thin but present usual is named thin-usual, not left without a reason', () => {
+    // Seven earlier months: a usual exists, but one below the minimum of eight.
+    const values = fill('2026-02-01', '2026-09-30', () => 9000)
+    const f = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands })
+    expect(f.usual!.thin).toBe(true)
+    expect(f.standing).toBeNull()
+    expect(f.reason).toBe('thin-usual')
+  })
+  it('a running period with no days is no-data, not too-few-days', () => {
+    const f = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-02', values: history, dailyBands: bands })
+    expect(f.days).toBe(0)
+    expect(f.reason).toBe('no-data')
   })
   it('a non-additive figure has no total', () => {
     const values = new Map(history); values.set('2026-09-01', 9000)
@@ -106,6 +122,25 @@ describe('periodFigureOf', () => {
     expect(spike.value).toBe(20000)
     expect(spike.standing).toBe('above')
     expect(f.daily.every((d) => d.band === null && d.standing === null)).toBe(true)
+  })
+  it('judges a clipped first week against the twelve full Monday weeks before its Monday', () => {
+    // 2026-07-01 is a Wednesday. A rising ramp makes a band drawn from Wednesday-start weeks differ
+    // from one drawn from the twelve Monday weeks ending 2026-06-28.
+    const ramp = (d: string) => 1000 + (Date.parse(`${d}T00:00:00Z`) - Date.parse('2025-01-01T00:00:00Z')) / 86_400_000
+    const values = fill('2025-01-01', '2026-09-30', ramp)
+    const f = periodFigureOf({ ...base, range: '3months', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: new Map() })
+    const first = f.weekly![0]!
+    expect(first.from).toBe('2026-07-01')
+    const monday = datesIn({ from: '2026-04-06', to: '2026-06-28' })
+    expect(first.band!.center).toBeCloseTo(monday.reduce((s, d) => s + ramp(d), 0) / monday.length)
+    expect(first.band!.thin).toBe(false)
+  })
+  it('scales weekly values and bands by seven for a per-week figure', () => {
+    const values = fill('2025-01-01', '2026-09-30', () => 30)
+    const f = periodFigureOf({ ...base, metric: 'active_minutes', per: 'week', range: '3months', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: new Map() })
+    const w = f.weekly![1]!
+    expect(w.value).toBeCloseTo(210)
+    expect(w.band!.center).toBeCloseTo(210)
   })
 })
 
