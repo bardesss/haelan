@@ -293,6 +293,76 @@ describe('GET /workout/:sessionId', () => {
     expect(body.zoneBounds).toEqual({ moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 })
   })
 
+  // Five earlier runs that each fell 20.3 bpm make a usual of exactly 20.3 (no spread), and core
+  // calls the subject's 20.4 above it, a better recovery. On the wire both are 20, so the page
+  // must say within and claim no verdict, or it shows "20, better than your usual 20".
+  it('sends heart-rate recovery rounded, re-judged on the rounded numbers', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    const seedAfter = (localDate: string, bpms: readonly number[]) => bpms.forEach((bpm, i) => {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(harness!.app.haelan.instance.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
+      }
+    })
+    for (let i = 0; i < 5; i += 1) {
+      const localDate = shiftLocalDate('2026-09-04', -3 * (5 - i))
+      seedRun(harness, { id: `run-${i}`, sourceId: 'watch', localDate, pace: 310 })
+      seedAfter(localDate, [160, 150, 139.7, 128.2])
+    }
+    seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 300 })
+    seedAfter('2026-09-04', [160, 150, 139.6, 120.4])
+    const { heartRateRecovery } = (await get(harness, token, '/workout/subject')).json()
+    expect(heartRateRecovery.oneMinute).toMatchObject({ value: 20, baseline: { center: 20, low: 20, high: 20 }, standing: 'within', judged: null })
+    expect(heartRateRecovery.twoMinutes).toMatchObject({ value: 40, baseline: { center: 32 }, standing: 'above', judged: 'better' })
+  })
+
+  // The night before, its morning's recovery and resting heart rate, each at its own precision.
+  it("sends the morning before rounded, the recovery by the glance's rule", async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 300 })
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = shiftLocalDate('2026-09-04', -i)
+      seedDaily(harness, localDate, 'daily_hrv', 'last', 40.37 + (i % 5))
+      seedDaily(harness, localDate, 'resting_heart_rate', 'last', 55.4 + (i % 3))
+      seedDaily(harness, localDate, 'sleep_bedtime_minutes', 'last', -30)
+      if (i > 0) seedDaily(harness, localDate, 'sleep_asleep_minutes', 'sum', 420)
+    }
+    seedNight(harness, '2026-09-04', 410.4)
+    const { before } = (await get(harness, token, '/workout/subject')).json()
+    expect(before.night.asleep.value).toBe(410)
+    expect(before.restingHeartRate.value).toBe(55)
+    expect(before.recovery.restingHeartRate.value).toBe(55)
+    expect(Number.isInteger(before.recovery.index.value)).toBe(true)
+  })
+
+  // 30 m every 10 s is 333.3 s/km, sent as 333; two rows a minute of 85.3 steps are 170.6, sent as 171.
+  it('sends pace in whole seconds per km and cadence in whole steps per minute', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 300 })
+    const startMs = at('2026-09-04', '07:00')
+    const db = harness.app.haelan.instance.db
+    const metresPerDegree = (6_371_000 * Math.PI) / 180
+    db.insert(schema.sessionRoutes).values(Array.from({ length: 19 }, (_, i) => ({
+      id: `subject-${i}`, sessionId: 'subject', ordinal: i, atMs: startMs + i * 10_000,
+      latitude: 52 + (i * 30) / metresPerDegree, longitude: 5,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+    for (let i = 0; i < 10; i += 1) {
+      insertSample(db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: startMs + i * 30_000, tzOffsetMinutes: OFFSET, value: 85.3 })
+    }
+    const { through } = (await get(harness, token, '/workout/subject')).json()
+    expect(through.pace.points.map((p: { value: number }) => p.value)).toEqual([333, 333, 333])
+    expect(through.cadence.points.map((p: { value: number }) => p.value)).toEqual([171, 171, 171, 171, 171])
+  })
+
   // An alternate's id is an old link to a workout another source also recorded; the page answers
   // as the merged workout, the same one the list names, rather than 404ing on it.
   it('answers an alternate id with the merged workout it belongs to', async () => {

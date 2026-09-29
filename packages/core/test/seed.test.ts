@@ -281,6 +281,12 @@ describe('seedArchive', () => {
       const minutes = Math.floor((run!.endMs - run!.startMs) / 60_000)
       const points = q.intradayWindow({ metric: 'heart_rate', startMs: run!.startMs, endMs: run!.endMs, points: 100_000 }).points
       expect(points.length).toBeGreaterThanOrEqual(minutes - 1)
+      // And a reading each of the three minutes after it, falling, for the heart-rate recovery.
+      const endMinute = Math.floor(run!.endMs / 60_000) * 60_000
+      const after = q.intradayWindow({ metric: 'heart_rate', startMs: endMinute + 60_000, endMs: endMinute + 4 * 60_000, points: 100_000 }).points
+      expect(after.map((p) => p.utcMs)).toEqual([1, 2, 3].map((k) => endMinute + k * 60_000))
+      expect(page.heartRateRecovery!.oneMinute.value).toBeGreaterThan(0)
+      expect(page.heartRateRecovery!.twoMinutes.value).toBeGreaterThan(page.heartRateRecovery!.oneMinute.value!)
     } finally {
       instance.close()
       rmSync(dir, { recursive: true, force: true })
@@ -319,6 +325,10 @@ describe('seedArchive', () => {
       expect(within90(walks, walks.at(-1)!)).toBeGreaterThanOrEqual(5)
       expect(page.figures.pace!.baseline?.thin).toBe(false)
       expect(page.figures.pace!.strip.every((point) => point.value !== null)).toBe(true)
+      // Every run recovers at its own rate, so the recovery's usual has a spread to judge against.
+      const recoveryUsual = page.heartRateRecovery!.oneMinute.baseline!
+      expect(recoveryUsual.thin).toBe(false)
+      expect(recoveryUsual.high - recoveryUsual.low).toBeGreaterThan(2)
     } finally {
       instance.close()
       rmSync(dir, { recursive: true, force: true })
