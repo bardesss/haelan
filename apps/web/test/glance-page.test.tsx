@@ -279,7 +279,9 @@ describe('the glance Dashboard', () => {
     }
     const { restore } = await mountPage(nothing)
     try {
-      expect(container!.querySelectorAll('.card')).toHaveLength(0)
+      // Said once, in one full-width card under the header, the night page's shape for every state.
+      expect(container!.querySelectorAll('.dashboard > .grid > .card[data-span="12"] .empty')).toHaveLength(1)
+      expect(container!.querySelectorAll('.card')).toHaveLength(1)
       expect(container!.querySelector('h1')?.textContent).toBe('Good morning')
       expect(container!.querySelector('.empty')?.textContent)
         .toBe('Nothing here yetOnce a sync brings in a night or a day, it shows up here.')
@@ -554,14 +556,15 @@ describe('the glance Dashboard', () => {
       })
       expect(container!.querySelector('h1')?.textContent).toBe('Good morning')
       expect(container!.querySelector('.empty')?.textContent).toBe('Loading')
-      expect(container!.querySelectorAll('.card')).toHaveLength(0)
+      expect(container!.querySelectorAll('.dashboard > .grid > .card[data-span="12"] .empty')).toHaveLength(1)
     } finally { globalThis.fetch = original }
   })
 
   it('shows the error state, under the greeting, with a retry that asks again', async () => {
     const { seen, client, restore } = await mountPage(glanceBody(), { status: 500 })
     try {
-      expect(container!.querySelectorAll('.card')).toHaveLength(0)
+      expect(container!.querySelectorAll('.card')).toHaveLength(1)
+      expect(container!.querySelector('.dashboard > .grid > .card[data-span="12"] button')?.textContent).toBe('Try again')
       expect(container!.querySelector('h1')?.textContent).toBe('Good morning')
       const retry = container!.querySelector('button')
       expect(retry?.textContent).toBe('Try again')
