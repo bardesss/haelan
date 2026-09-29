@@ -255,7 +255,7 @@ describe('NightCard', () => {
       ],
     }
     const totals = /<p class="hypnogram-totals is-compact">([^<]*)<\/p>/.exec(renderNight({ sleep }, 'nl'))
-    expect(totals?.[1]).toBe('Diep 1u 40m · Licht 1u 00m')
+    expect(totals?.[1]).toBe('Diep 1u\u00a040m · Licht 1u\u00a000m')
   })
 
   it('draws no visible show-numbers control, and keeps each chart\'s table for assistive tech', () => {

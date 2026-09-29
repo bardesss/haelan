@@ -161,11 +161,12 @@ describe('ZoneBar', () => {
     expect(option.yAxis.axisLabel?.show).toBe(false)
   })
 
-  it('writes the duration cell\'s hour as "u" in Dutch', () => {
+  // A zone is a short span, so its cell keeps "min" in Dutch too: no hour unit to translate.
+  it('keeps the duration cell\'s short-span "min" in Dutch', () => {
     const html = renderToStaticMarkup(
       <I18nProvider lng="nl"><ZoneBar rows={[row('light', 70)]} label="Tijd in hartslagzones" /></I18nProvider>,
     )
     const cells = [...html.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]!)
-    expect(cells).toEqual(['1u 10m'])
+    expect(cells).toEqual(['70\u00a0min'])
   })
 })

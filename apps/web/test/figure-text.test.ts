@@ -190,7 +190,7 @@ describe('verdictLine', () => {
 
   it('says within in Dutch too', () => {
     expect(verdictLine(figure({ unit: 'minutes', value: 400, baseline, standing: 'within' }), 'nl', tNl))
-      .toBe('binnen je gebruikelijke bereik 6h\u00a020m – 7h\u00a000m')
+      .toBe('binnen je gebruikelijke bereik 6u\u00a020m – 7u\u00a000m')
   })
 })
 
