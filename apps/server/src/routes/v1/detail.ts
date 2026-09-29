@@ -67,6 +67,9 @@ function roundNightPage(page: NightPage): NightPage {
       firstDeep: roundPageFigure(page.stageTiming.firstDeep),
       firstRem: roundPageFigure(page.stageTiming.firstRem),
       cycles: roundPageFigure(page.stageTiming.cycles),
+      // Instants, sent as they are, like the night's own start and end.
+      firstDeepAtMs: page.stageTiming.firstDeepAtMs,
+      firstRemAtMs: page.stageTiming.firstRemAtMs,
     },
     // Judged again on the rounded figures: a dip that rounds onto its band edge is within.
     morningSummary: morningSummaryOfMorning(morning),

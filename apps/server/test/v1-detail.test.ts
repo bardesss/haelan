@@ -156,9 +156,10 @@ describe('GET /night/:localDate', () => {
     expect(body.morning.skinTemperatureDeviation).toBe(0.5)
   })
 
-  // Twenty nights whose heart rate falls 10.6 below a resting rate of 54.6, and a night that falls
-  // 10.8 below 54.8. Core judges the dip above its band; on the wire both are 11, so it must read
-  // within, and the summary must count it as judged but not as outside.
+  // Twenty nights whose heart rate falls to 44 under a resting rate of 50, a dip of 12 %, and a
+  // night that falls to 44 under 50.17, a dip of 12.3 %. Core judges it above its flat band of 12;
+  // on the wire it is 12, so it must read within, and the summary must count it as judged but not
+  // as outside.
   it('re-judges the heart-rate dip on the wire, and the morning summary with it', async () => {
     harness = await withServer()
     harness.clock.nowMs = NOW_MS
@@ -171,20 +172,21 @@ describe('GET /night/:localDate', () => {
       const date = shiftLocalDate(NIGHT, -i)
       seedNight(harness, date, 400)
       lowest(date)
-      seedDaily(harness, date, 'resting_heart_rate', 'last', 54.6)
+      seedDaily(harness, date, 'resting_heart_rate', 'last', 50)
     }
     seedNight(harness, NIGHT, 400)
     lowest(NIGHT)
-    seedDaily(harness, NIGHT, 'resting_heart_rate', 'last', 54.8)
+    seedDaily(harness, NIGHT, 'resting_heart_rate', 'last', 50.17)
 
     const body = (await get(harness, token, `/night/${NIGHT}`)).json()
-    expect(body.morning.heartRateDip).toMatchObject({ value: 11, standing: 'within', judged: null })
-    expect(body.morning.heartRateDip.baseline).toMatchObject({ center: 11, low: 11, high: 11 })
+    expect(body.morning.heartRateDip).toMatchObject({ unit: 'percent', value: 12, standing: 'within', judged: null })
+    expect(body.morning.heartRateDip.baseline).toMatchObject({ center: 12, low: 12, high: 12 })
     // Twenty nights are too few for a usual resting rate, so the dip is the one judged figure.
     expect(body.morningSummary).toEqual({ outside: 0, of: 1 })
   })
 
-  // First deep sleep 52.6 minutes after onset is sent as 53, like every other whole-number figure.
+  // First deep sleep 52.6 minutes after onset is sent as 53, like every other whole-number figure;
+  // the instant it began is sent as it is.
   it('sends the stage timing rounded', async () => {
     harness = await withServer()
     harness.clock.nowMs = NOW_MS
@@ -198,7 +200,9 @@ describe('GET /night/:localDate', () => {
 
     const { stageTiming } = (await get(harness, token, `/night/${NIGHT}`)).json()
     expect(stageTiming.firstDeep.value).toBe(53)
+    expect(stageTiming.firstDeepAtMs).toBe(start + 52.6 * 60_000)
     expect(stageTiming.firstRem.value).toBeNull()
+    expect(stageTiming.firstRemAtMs).toBeNull()
     expect(stageTiming.cycles.value).toBeNull()
   })
 
