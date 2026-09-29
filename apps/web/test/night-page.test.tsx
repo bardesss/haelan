@@ -424,7 +424,7 @@ describe('the night page\'s week', () => {
   it('signs a week ahead of its target with a plus', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, balance: { ...page.balance, total: 26 } })
-    expect(text(host, '.night-week-total')).toBe('+26m')
+    expect(text(host, '.night-week-total')).toBe('+0h 26m')
   })
 
   it('words the balance in Dutch against the target', async () => {
