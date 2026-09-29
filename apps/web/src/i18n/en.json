@@ -161,8 +161,9 @@
     }
   },
   "common": {
-    "bedLabel": "Bed {{time}}",
-    "bedTimeNotRecorded": "Bed time not recorded",
+    "bedLabel": "Bedtime {{time}}",
+    "bedTimeNotRecorded": "Bedtime not recorded",
+    "annotate": "Exclude or add a note",
     "to": "to",
     "loading": "Loading",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
@@ -446,7 +447,6 @@
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "alsoRecordedBy": "Also recorded by {{sources}}",
-      "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
       "gpsDrawn": "A GPS route was recorded for this workout, drawn below.",
       "gpsConsentRequired": "A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Open Haelan on the phone and tap Release routes to hand it over.",
@@ -559,8 +559,8 @@
       "stage": "Stage",
       "duration": "Duration",
       "night": "Night",
-      "toBed": "To bed",
-      "woke": "Woke",
+      "toBed": "Bedtime",
+      "woke": "Wake time",
       "naps": "Naps",
       "time": "Time",
       "source": "Source",
@@ -575,10 +575,6 @@
       "fri": "Fri",
       "sat": "Sat",
       "sun": "Sun"
-    },
-    "standing": {
-      "above": "above your usual",
-      "below": "below your usual"
     },
     "absence": {
       "notWorn": "not worn",
@@ -817,14 +813,14 @@
         "hrvChart": "HRV through the night"
       },
       "sessions": {
-        "exclude": "Exclude or add a note",
-        "excluded": "Excluded"
+        "excluded": "Excluded",
+        "recording": "{{source}} · {{start}}–{{end}}"
       },
       "week": {
         "schedule": "Sleep schedule",
         "balance": "Sleep balance",
         "variability": "Bedtime varied ±{{value}} this week",
-        "variabilityUsual": "Bedtime varied ±{{value}} this week · your usual ±{{low}}–{{high}}",
+        "variabilityUsual": "Bedtime varied ±{{value}} this week · your usual ±{{low}} – {{high}}",
         "balanceAgainstTarget": "against your target of {{target}}",
         "balanceAgainstBaseline": "against your usual {{usual}}",
         "barsTarget": "each bar: that night against your target",
@@ -1045,12 +1041,12 @@
     "previousDay": "Previous day",
     "nextDay": "Next day",
     "mood": {
-      "label": "How do you feel?",
       "1": "Bad",
       "2": "Poor",
       "3": "Okay",
       "4": "Good",
-      "5": "Great"
+      "5": "Great",
+      "label": "How do you feel?"
     },
     "chips": {
       "label": "What happened?",
@@ -1570,6 +1566,10 @@
       "clockShort": {
         "above": "later than your usual",
         "below": "earlier than your usual"
+      },
+      "paceShort": {
+        "above": "slower than your usual",
+        "below": "faster than your usual"
       }
     },
     "asOf": {
@@ -1594,10 +1594,12 @@
       "efficiency": "Efficiency",
       "bed": "Bedtime",
       "woke": "Wake time",
-      "strip": "Time asleep, last 7 nights",
-      "stripFinished": "Time asleep, the 7 nights up to that day",
-      "caption": "last 7 nights",
-      "captionFinished": "the 7 nights up to that day",
+      "strip": "Time asleep, last night and the six before it",
+      "stripFinished": "Time asleep, that night and the six before it",
+      "caption": "last night and the six before it",
+      "captionFinished": "that night and the six before it",
+      "stages": "the night that ended {{date}}",
+      "stagesChart": "Sleep stages through the night that ended {{date}}",
       "link": "View this night",
       "titleFinished": "That night"
     },

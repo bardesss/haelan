@@ -116,22 +116,23 @@ describe('NightCard', () => {
     expect(html).toContain('href="/sleep/night/2026-09-23"')
   })
 
-  it('says a secondary figure outside its usual in words as well as colour', () => {
+  // One rule on every page (PATTERNS.md): the verdict words take the tone, the value stays plain.
+  it('says a secondary figure outside its usual in words as well as colour, the value itself plain', () => {
     const sleep = sleepFixture({ bedtime: { metric: 'sleep_bedtime_minutes', value: 14, standing: 'above', judged: null } })
     const html = renderNight({ sleep })
-    expect(html).toMatch(/class="dash-mini-value is-out"[^>]*>00:14</)
+    expect(html).toContain('<b class="dash-mini-value">00:14</b>')
     // The night page's words for a clock time, its range dropped (F12).
     expect(html).toContain('<span class="dash-mini-note is-out"> later than your usual</span>')
   })
 
-  // F6: a mini takes the tone its verdict takes (verdictTone), so an efficiency the server judged
-  // better is green, not the warning colour every "above" used to get.
-  it('colours a secondary figure by the server\'s judgement, better green and worse red', () => {
+  // F6: a mini's note takes the tone its verdict takes (verdictTone), so an efficiency the server
+  // judged better is green, not the warning colour every "above" used to get.
+  it('colours a secondary figure\'s note by the server\'s judgement, better green and worse red', () => {
     const better = renderNight({ sleep: sleepFixture({ efficiency: { value: 97, standing: 'above', judged: 'better' } }) })
-    expect(better).toMatch(/class="dash-mini-value better"[^>]*>97\u00a0%</)
+    expect(better).toContain('<b class="dash-mini-value">97\u00a0%</b>')
     expect(better).toContain('<span class="dash-mini-note better"> above your usual</span>')
     const worse = renderNight({ sleep: sleepFixture({ efficiency: { value: 80, standing: 'below', judged: 'worse' } }) })
-    expect(worse).toMatch(/class="dash-mini-value worse"/)
+    expect(worse).not.toContain('dash-mini-value worse')
     expect(worse).toContain('<span class="dash-mini-note worse"> below your usual</span>')
   })
 
@@ -176,9 +177,23 @@ describe('NightCard', () => {
   it('words a missing figure and the strip as over on a finished day', () => {
     const html = renderNight({ finished: true, sleep: sleepFixture({ efficiency: { value: null } }) })
     expect(html).toContain('<b class="dash-mini-value">No reading</b>')
-    expect(html).toContain('<p class="dash-caption">the 7 nights up to that day</p>')
-    expect(sparklineProps?.label).toBe('Time asleep, the 7 nights up to that day')
-    expect(html).not.toMatch(/last 7|No reading yet/)
+    expect(html).toContain('<p class="dash-caption">that night and the six before it</p>')
+    expect(sparklineProps?.label).toBe('Time asleep, that night and the six before it')
+    expect(html).not.toMatch(/last night|No reading yet/)
+  })
+
+  // One wording for one strip: the night page captions it "this night and the six before it".
+  it('captions today\'s strip in the night page\'s words', () => {
+    expect(renderNight()).toContain('<p class="dash-caption">last night and the six before it</p>')
+  })
+
+  // The hypnogram's description names the night by the day it ended, in words, on any day: "most
+  // recent night, 2026-09-23" was wrong on a past day and read an ISO date aloud.
+  it('describes the hypnogram by the night\'s own date in words, never an ISO date', () => {
+    const html = renderNight({ finished: true })
+    expect(html).toMatch(/<p class="sr-only" id="[^"]+">the night that ended Wednesday, September 23<\/p>/)
+    expect(html).toContain('aria-label="Sleep stages through the night that ended Wednesday, September 23"')
+    expect(html).not.toContain('most recent night')
   })
 
   it('keeps the usual sentence for a screen reader on the strip', () => {
@@ -454,16 +469,15 @@ describe('TodayCard', () => {
     expect(html).toMatch(/<p id="[^"]+" class="dash-pace"><span class="dash-pace-word">Behind your usual pace<\/span> · usual by 13:52 is 5,900<\/p>/)
   })
 
-  // T2: steps and active minutes side by side on one line, each a label over its figure, then the
-  // pace line directly under them.
-  it('puts steps and active minutes in one row, the pace line under it', () => {
-    expect(renderToday()).toContain(
+  // T2: steps and active minutes side by side on one line, each a label over its figure. The pace
+  // line is about steps, so it sits under the steps figure, not under both.
+  it('puts steps and active minutes in one row, the pace line under the steps it judges', () => {
+    expect(renderToday()).toMatch(new RegExp(
       '<div class="dash-today-figures">'
-      + '<div><span class="label">Steps</span><div class="dash-headline-sm">4,820</div></div>'
+      + '<div><span class="label">Steps</span><div class="dash-headline-sm">4,820</div><p id="[^"]+" class="dash-pace">[^<]*</p></div>'
       + '<div><span class="label">Active minutes</span><div class="dash-headline-sm">18 <span class="glance-unit">min</span></div></div>'
-      + '</div><p id=',
-    )
-    expect(renderToday()).toMatch(/<\/div><p id="[^"]+" class="dash-pace">/)
+      + '</div>',
+    ))
   })
 
   it('labels the heart rate trace from midnight to now, and draws it compact', () => {
@@ -579,11 +593,14 @@ describe('TodayCard on a finished day', () => {
     expect(html).not.toContain('so far')
   })
 
-  it('words a below and a within verdict too, in plain text', () => {
+  // The dashboard's rule: a verdict is printed only when the figure is outside its usual. A day
+  // within it prints nothing, and the strip is described by the within sentence out of sight.
+  it('words a below verdict, and prints nothing for a day within its usual', () => {
     const below = renderFinished(finishedDay({ steps: { value: 5000, standing: 'below', judged: 'worse' } }))
     expect(below).toMatch(/<p id="[^"]+" class="dash-pace worse">below your usual 6,800 – 10,400<\/p>/)
     const within = renderFinished(finishedDay({ steps: { value: 8000, standing: 'within', judged: null } }))
-    expect(within).toMatch(/<p id="[^"]+" class="dash-pace">within your usual 6,800 – 10,400<\/p>/)
+    expect(within).not.toContain('dash-pace')
+    expect(within).toMatch(/<p class="sr-only" id="[^"]+">within your usual 6,800 – 10,400<\/p>/)
   })
 
   it('says a thin baseline is not a usual yet, rather than a verdict', () => {

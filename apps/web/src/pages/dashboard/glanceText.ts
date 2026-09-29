@@ -1,6 +1,8 @@
 import type { GlanceFigure, GlanceStepsPace } from '../../data/useGlance.js'
 import type { Translate } from '../../format.js'
 import { formatDuration, formatClock, formatMetricValue } from '../../format.js'
+import { METRICS } from '@haelan/core/metrics'
+import { standingShort } from '../../charts/base.js'
 
 // Which of the four printable shapes a figure's number takes. Not read by formatFigure or
 // usualLine as an argument - both take the figure itself and look the metric up. Module-private:
@@ -74,13 +76,12 @@ export function usualLine(figure: GlanceFigure, t: Translate, language: string):
  * A figure's verdict with its range dropped, for a figure printed inline beside others (the night
  * card's efficiency, bedtime and wake time): usualLine's own words up to the range ("above your
  * usual", "boven je gebruikelijke bereik"), a clock time's later or earlier as the night page words
- * it. Null inside the usual, or with no verdict at all, since the dashboard keeps "within" out of
- * sight.
+ * it. standingShort's words, the ones a strip's accessible table prints, so the two cannot disagree.
+ * Null inside the usual, or with no verdict at all, since the dashboard keeps "within" out of sight.
  */
 export function usualShort(figure: GlanceFigure, t: Translate): string | null {
-  if (figure.value === null || (figure.standing !== 'above' && figure.standing !== 'below')) return null
-  const clock = figureKind(figure.metric) === 'clock'
-  return t(`glance.usual.${clock ? 'clockShort' : 'short'}.${figure.standing}`)
+  if (figure.value === null) return null
+  return standingShort(figure.standing, METRICS[figure.metric]?.unit, t) || null
 }
 
 // The day before `today` (a YYYY-MM-DD local date), computed by stepping the UTC calendar date

@@ -168,6 +168,18 @@ describe('Sparkline dots', () => {
     expect(rows[5]).toBe('')
   })
 
+  // The table's words are the verdict line's: a clock time is later or earlier than its usual, a
+  // pace slower or faster, never above or below (standingShort, the one helper both read).
+  it('words a clock time\'s verdict later or earlier, and a pace\'s slower or faster', () => {
+    const noteRows = (host: HTMLElement) => [...host.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td')].at(-1)?.textContent)
+    const clock = mount(<Sparkline values={values} labels={labels} label="bed" unit="bed" metric="sleep_bedtime_minutes"
+      dots pointStandings={standings} tableToggle={false} />)
+    expect(noteRows(clock).slice(2, 4)).toEqual(['later than your usual', 'earlier than your usual'])
+    const pace = mount(<Sparkline values={values} labels={labels} label="pace" unit="pace" metric="steps" standingUnit="seconds_per_km"
+      dots pointStandings={standings} tableToggle={false} />)
+    expect(noteRows(pace).slice(2, 4)).toEqual(['slower than your usual', 'faster than your usual'])
+  })
+
   it('says nothing about a verdict when dots are off, even if the caller still passed one', () => {
     const host = mount(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
       dots={false} pointStandings={standings} tableToggle={false} />)

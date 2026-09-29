@@ -8,6 +8,7 @@ import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatLocalDate, formatMetricValue } from '../format.js'
+import { METRICS } from '@haelan/core/metrics'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
 
@@ -100,7 +101,13 @@ export type { PointJudged, PointStanding } from './base.js'
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
   onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, opensDay, bands,
+  standingUnit,
 }: {
+  // The unit code the values are in, which picks the words a day's verdict takes in the table
+  // (standingShort: a clock time later or earlier, a pace slower or faster). Defaults to the
+  // catalogue's unit for `metric`; a figure that is not in the catalogue (a workout's pace) names
+  // its own.
+  standingUnit?: string
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
   // comment says why a points array straight off /series is not enough. A day with no position on
@@ -476,7 +483,8 @@ export function Sparkline({
           // dayTableRows (base.ts): shared with DailyBars' own accessible table, which needs
           // neither the trend column nor the episodic filter, so both default off there.
           rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend,
-            lastYear: comparing ? lastYear : undefined, standings: dots ? pointStandings : undefined }),
+            lastYear: comparing ? lastYear : undefined, standings: dots ? pointStandings : undefined,
+            standingUnit: standingUnit ?? METRICS[metric]?.unit }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can
