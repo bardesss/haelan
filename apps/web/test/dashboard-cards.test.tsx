@@ -224,7 +224,7 @@ describe('NightCard', () => {
       ],
     }
     const html = renderNight({ sleep })
-    expect(html).toContain('<p class="hypnogram-totals is-compact">Deep 1h 40m · Light 1h 00m · REM 0h 47m · Awake 0h 07m</p>')
+    expect(html).toContain('<p class="hypnogram-totals is-compact">Deep 1h\u00a040m · Light 1h\u00a000m · REM 0h\u00a047m · Awake 0h\u00a007m</p>')
     expect(html).not.toContain('class="hypnogram-totals"')
     expect(html).not.toContain('Awake counts the awake stages')
   })

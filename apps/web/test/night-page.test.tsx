@@ -268,7 +268,7 @@ describe('the night page\'s night card', () => {
     expect(card?.querySelector('[role="img"][aria-label="The night"]')).not.toBeNull()
     // Deep, light and REM carry the server's share of the night; awake is its minutes alone.
     expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual([
-      'Deep 1h 04m · 16 %', 'Light 3h 29m · 53 %', 'REM 2h 03m · 31 %', 'Awake 0h 25m',
+      'Deep 1h\u00a004m · 16 %', 'Light 3h\u00a029m · 53 %', 'REM 2h\u00a003m · 31 %', 'Awake 0h\u00a025m',
     ])
     // Naps are the More card's to say, not this one's.
     expect(card?.querySelector('.night-naps')).toBeNull()
@@ -279,7 +279,7 @@ describe('the night page\'s night card', () => {
     const host = await mount(nightPageFixture())
     const chart = host.querySelector('[role="img"][aria-label="The night"]')!
     const describedBy = chart.getAttribute('aria-describedby')
-    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Deep 1h 04m · 16 %Light 3h 29m · 53 %REM 2h 03m · 31 %Awake 0h 25m')
+    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Deep 1h\u00a004m · 16 %Light 3h\u00a029m · 53 %REM 2h\u00a003m · 31 %Awake 0h\u00a025m')
   })
 
   // The fixture's awake figure and its awake lane agree at 25 minutes, so the note stays away.
@@ -299,7 +299,7 @@ describe('the night page\'s night card', () => {
   it('leaves a stage\'s share off when the server sent none for it', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, stagePercent: { ...page.stagePercent, rem: null } })
-    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h 03m')
+    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h\u00a003m')
   })
 
   // A device that recorded a span but no stages leaves nothing for a hypnogram to draw, and an
@@ -328,7 +328,7 @@ describe('the night page\'s night card', () => {
         ],
       },
     })
-    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual(['Deep 1h 00m · 16 %'])
+    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual(['Deep 1h\u00a000m · 16 %'])
   })
 })
 

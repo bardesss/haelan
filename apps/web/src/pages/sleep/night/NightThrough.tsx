@@ -52,7 +52,8 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
 
   const minutesByStage = new Map(stageTotals(segments).map((total) => [total.stage, total.minutes]))
   const legend = LEGEND.filter((stage) => minutesByStage.has(stage)).map((stage) => {
-    const duration = formatDuration(minutesByStage.get(stage)!)
+    // A value never wraps inside itself (figureText's rule): the duration's halves stay together.
+    const duration = formatDuration(minutesByStage.get(stage)!).replace(' ', '\u00a0')
     const percent = stage === 'awake' ? null : stagePercent[stage]
     // The stage's name joined in plain JS, the value half through the catalogue: the same split
     // Hypnogram's own totals row uses for a stage label beside its duration.
