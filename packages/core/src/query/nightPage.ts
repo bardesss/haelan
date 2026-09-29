@@ -132,11 +132,11 @@ function heartRateDip(
     .points.map((p) => [p.localDate, p.value]))
   const earlier = historyStats.flatMap((stat, i) => {
     const r = restingOn.get(history[i]!.localDate)
-    return r === undefined || stat.lowest === null ? [] : [dipPercent(r, stat.lowest.value)]
+    return r === undefined || r <= 0 || stat.lowest === null ? [] : [dipPercent(r, stat.lowest.value)]
   })
   return figureFromValues({
     metric: 'sleep_heart_rate_dip', unit: 'percent', precision: 0, direction: 'up', minN: BASELINE_MIN_DAYS,
-    value: resting === null || lowest === null ? null : dipPercent(resting, lowest), history: earlier,
+    value: resting === null || resting <= 0 || lowest === null ? null : dipPercent(resting, lowest), history: earlier,
   })
 }
 

@@ -19,6 +19,7 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
 import { navigate } from '../src/router.js'
 import { PHONE_MEDIA_QUERY } from '../src/ui/breakpoint.js'
+import { morningSummaryOfMorning } from '@haelan/core'
 import { pumpUntil } from './flush.js'
 import { NIGHT_DATE, NIGHT_NEXT, NIGHT_PREVIOUS, nightPageFixture, withBlankFigures } from './fixtures/nightPage.js'
 
@@ -621,6 +622,32 @@ describe('the night page\'s morning summary and heart-rate dip', () => {
     expect(line?.nextElementSibling?.classList.contains('night-grp')).toBe(true)
   })
 
+  // The tie between core's counted list and the sentence's named one: the numbers core sends are
+  // the names the sentence gives, split into the coloured and the plain.
+  async function expectCounted(page: NightPageData) {
+    const counted = morningSummaryOfMorning(page.morning)
+    const line = summary(await mount({ ...page, morningSummary: counted }))!
+    const outsideNames = line.querySelectorAll('.night-summary-name').length
+    const withinHalf = line.textContent!.split(' · ')[1] ?? ''
+    const withinNames = withinHalf.replace(/^.*?: ?/, '').replace(/ within$/, '').split(/, | and /).filter(Boolean).length
+    expect(outsideNames).toBe(counted.outside)
+    expect(outsideNames + withinNames).toBe(counted.of)
+  }
+
+  it('names as many figures as core counted, the outside ones coloured', () => expectCounted(nightPageFixture()))
+
+  it('names as many figures as core counted with three outside', () => expectCounted(twoOutside()))
+
+  it('joins two outside names with "and", and in Dutch "en"', async () => {
+    const page = twoOutside()
+    const hrv = { ...page.morning.hrv, standing: 'within' as const, judged: null }
+    const mutated = { ...page, morning: { ...page.morning, hrv } }
+    const host = await mount({ ...mutated, morningSummary: morningSummaryOfMorning(mutated.morning) })
+    expect(summary(host)?.textContent).toContain(': breathing lower and skin temperature higher · ')
+    const nl = await mount({ ...mutated, morningSummary: morningSummaryOfMorning(mutated.morning) }, 'nl')
+    expect(summary(nl)?.textContent).toContain(': ademhaling lager en huidtemperatuur hoger · ')
+  })
+
   it('words the summary in Dutch', async () => {
     const host = await mount(nightPageFixture(), 'nl')
     expect(summary(host)?.textContent).toBe('\'s Nachts 1 van 6 buiten je gebruikelijke bereik: huidtemperatuur hoger · hartslag, HRV, hartslagdaling, zuurstof en ademhaling binnen')
@@ -716,6 +743,17 @@ describe('the night page\'s morning summary and heart-rate dip', () => {
     await pumpUntil(() => host.querySelector('.night-trace-summary') !== null, 'the heart-rate row to draw')
     expect([...host.querySelectorAll('.night-trace-summary')].map((el) => el.textContent))
       .toEqual(['laagste 47\u00a0bpm om 05:00', '13\u00a0% onder je rusthartslag'])
+  })
+
+  it('says no dip under the heart-rate trace when the lowest sat at or above the resting rate', async () => {
+    const page = nightPageFixture()
+    const reading = { sourceId: 'watch', utcMs: Date.UTC(2026, 8, 6, 1, 0), min: 47, mean: 52, max: 58, n: 1, excluded: false }
+    for (const value of [0, -4]) {
+      const heartRateDip = { ...page.morning.heartRateDip, value }
+      const host = await mount({ ...page, morning: { ...page.morning, heartRateDip } }, 'en', undefined, [reading])
+      await pumpUntil(() => host.querySelector('.night-trace-summary') !== null, 'the heart-rate row to draw')
+      expect(host.querySelectorAll('.night-trace-summary')).toHaveLength(1)
+    }
   })
 
   it('says no dip under the heart-rate trace when the night has none', async () => {

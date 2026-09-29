@@ -198,12 +198,37 @@ describe('GET /night/:localDate', () => {
       id: 'deep-1', sessionId: `night-${NIGHT}`, stage: 'DEEP', startMs: start + 52.6 * 60_000, endMs: start + 100 * 60_000,
     }).run()
 
+    // First REM 172.6 minutes in. Fourteen nights before it give the first REM and the cycle count
+    // each a baseline, whose centres (a mean of counts, a mean of minutes) are fractional.
+    harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+      id: 'rem-1', sessionId: `night-${NIGHT}`, stage: 'REM', startMs: start + 172.6 * 60_000, endMs: start + 200 * 60_000,
+    }).run()
+    for (let i = 1; i <= 14; i += 1) {
+      const date = shiftLocalDate(NIGHT, -i)
+      seedNight(harness, date, 400)
+      const night = at(shiftLocalDate(date, -1), '23:00')
+      const episodes = i % 3 === 0 ? 2 : 1
+      harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+        id: `deep-${date}`, sessionId: `night-${date}`, stage: 'DEEP', startMs: night + (30 + i * 0.4) * 60_000, endMs: night + 60 * 60_000,
+      }).run()
+      for (let e = 0; e < episodes; e += 1) {
+        harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+          id: `rem-${date}-${e}`, sessionId: `night-${date}`, stage: 'REM',
+          startMs: night + (100 + e * 120 + i * 0.4) * 60_000, endMs: night + (110 + e * 120 + i * 0.4) * 60_000,
+        }).run()
+      }
+    }
+
     const { stageTiming } = (await get(harness, token, `/night/${NIGHT}`)).json()
     expect(stageTiming.firstDeep.value).toBe(53)
     expect(stageTiming.firstDeepAtMs).toBe(start + 52.6 * 60_000)
-    expect(stageTiming.firstRem.value).toBeNull()
-    expect(stageTiming.firstRemAtMs).toBeNull()
-    expect(stageTiming.cycles.value).toBeNull()
+    expect(stageTiming.firstRem.value).toBe(173)
+    expect(stageTiming.firstRemAtMs).toBe(start + 172.6 * 60_000)
+    expect(stageTiming.cycles.value).toBe(1)
+    for (const key of ['firstDeep', 'firstRem', 'cycles']) {
+      expect(stageTiming[key].baseline, key).not.toBeNull()
+      expect(Number.isInteger(stageTiming[key].baseline.center), `${key} centre`).toBe(true)
+    }
   })
 
   // Each strip day is judged against its own day's band, and re-judged on the wire as the headline

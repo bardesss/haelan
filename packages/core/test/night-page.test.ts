@@ -320,12 +320,12 @@ describe('readNightPage', () => {
       personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '03:00'), tzOffsetMinutes: OFFSET, value: bpm,
     })
     /** Twenty nights before NIGHT, each resting at 54 or 56 by turns and lowest at 44: dips of 10/54 and 12/56. */
-    function seedHistory() {
+    function seedHistory(zeroRestingOn = 0) {
       for (let i = 1; i <= 20; i += 1) {
         const date = shiftLocalDate(NIGHT, -i)
         seedNight(date, {})
         hr(date, 44)
-        seedDaily(date, 'resting_heart_rate', 'last', i % 2 === 0 ? 54 : 56)
+        seedDaily(date, 'resting_heart_rate', 'last', i === zeroRestingOn ? 0 : i % 2 === 0 ? 54 : 56)
       }
     }
 
@@ -347,6 +347,23 @@ describe('readNightPage', () => {
       seedNight(NIGHT, {})
       hr(NIGHT, 40)
       expect(readNightPage(q(), input(NIGHT))!.morning.heartRateDip).toMatchObject({ value: null, standing: null })
+    })
+
+    it('is null for a resting heart rate of zero', () => {
+      seedNight(NIGHT, {})
+      hr(NIGHT, 40)
+      seedDaily(NIGHT, 'resting_heart_rate', 'last', 0)
+      expect(readNightPage(q(), input(NIGHT))!.morning.heartRateDip).toMatchObject({ value: null, standing: null })
+    })
+
+    it('leaves a night whose resting heart rate was zero out of the history', () => {
+      seedHistory(1)
+      seedNight(NIGHT, {})
+      hr(NIGHT, 40)
+      seedDaily(NIGHT, 'resting_heart_rate', 'last', 60)
+      const dip = readNightPage(q(), input(NIGHT))!.morning.heartRateDip
+      // Nights 2..20 remain: ten of the 54s and nine of the 56s.
+      expect(dip.baseline!.center).toBeCloseTo((10 * (1000 / 54) + 9 * (1200 / 56)) / 19)
     })
 
     it('is null when the only resting heart rate was recorded the day before', () => {

@@ -80,7 +80,8 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
     }]
   }), [stageTiming, night.startOffsetMinutes, language, t])
 
-  const dipText = heartRateDip.value === null ? null : formatFigureValue(heartRateDip, heartRateDip.value, language, t)
+  // Under the trace only while the night's lowest sat below the resting rate: "below" would contradict a dip of 0 or less.
+  const dipText = heartRateDip.value === null || heartRateDip.value <= 0 ? null : formatFigureValue(heartRateDip, heartRateDip.value, language, t)
 
   const minutesByStage = new Map(stageTotals(segments).map((total) => [total.stage, total.minutes]))
   const legend = LEGEND.filter((stage) => minutesByStage.has(stage)).map((stage) => {

@@ -64,7 +64,8 @@ export function nightTraceStat(q: PersonQuery, metric: string, night: Pick<Night
 /**
  * Each history night's stat, in the history's order, or none while NIGHT_TRACE_BANDS is off. A
  * caller that needs the same stats for a figure of its own (the night page's heart-rate dip) reads
- * them here once and hands them to nightTrace, so no night's window is read twice.
+ * them here once and hands them to nightTrace, so no night's window is read twice. The dip has no
+ * history, and so is never judged, while the switch is off.
  */
 export function nightTraceHistory(q: PersonQuery, metric: string, history: readonly Night[]): NightTraceStat[] {
   return NIGHT_TRACE_BANDS ? history.map((n) => nightTraceStat(q, metric, n)) : []

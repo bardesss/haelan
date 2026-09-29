@@ -1,3 +1,4 @@
+import { morningSummaryOfMorning } from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding } from '../../src/data/useGlance.js'
 import type { NightPageData, NightTrace, PageFigure } from '../../src/data/useNightPage.js'
 
@@ -82,6 +83,12 @@ const ASLEEP_STRIP = [372, 414, 351, 402, 330, 441, 396]
 const ZERO_LINE = 450
 
 export function nightPageFixture(): NightPageData {
+  const page = nightPageBase()
+  // Counted by core's own list of what counts, so a figure added there is counted here too.
+  return { ...page, morningSummary: morningSummaryOfMorning(page.morning) }
+}
+
+function nightPageBase(): NightPageData {
   const differences = ASLEEP_STRIP.map((minutes) => minutes - ZERO_LINE)
   return {
     localDate: NIGHT_DATE,

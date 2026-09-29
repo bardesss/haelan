@@ -36,15 +36,15 @@ function listText(words: readonly string[], t: Translate): string {
 }
 
 /**
- * Parts joined as a list ("a, b and c"), in the catalogue's own "{{rest}} and {{last}}" split at its
- * two placeholders, so a part can be a coloured node rather than only a string.
+ * Parts joined as a list ("a, b and c"), by the language's own conjunction rules, so a part can be a
+ * coloured node rather than only a string. English is spelled as en-GB, which leaves out the
+ * serial comma the catalogue's "{{rest}} and {{last}}" does too.
  */
-function listOf(parts: readonly ReactNode[], t: Translate): ReactNode[] {
-  if (parts.length < 2) return [...parts]
-  const MARK = '\u0000'
-  const [before = '', between = '', after = ''] = t('sleep.night.morning.and', { rest: MARK, last: MARK }).split(MARK)
-  const rest = parts.slice(0, -1).flatMap((part, i) => (i === 0 ? [part] : [', ', part]))
-  return [before, ...rest, between, parts.at(-1), after].map((part, i) => <Fragment key={i}>{part}</Fragment>)
+function listOf(parts: readonly ReactNode[], language: string): ReactNode[] {
+  const format = new Intl.ListFormat(language === 'en' ? 'en-GB' : language, { type: 'conjunction' })
+  return format.formatToParts(parts.map((_, i) => String(i))).map((part, i) => (
+    <Fragment key={i}>{part.type === 'element' ? parts[Number(part.value)] : part.value}</Fragment>
+  ))
 }
 
 // What the recovery index is made of, in its own words: core's four inputs (hrv, restingHeartRate,
@@ -179,7 +179,7 @@ export function NightMorning({ page }: { page: NightPageData }) {
             : (
               <>
                 {t('sleep.night.morning.summary', { outside: morningSummary.outside, of: morningSummary.of })}
-                {' '}{listOf(summary.outside, t)}
+                {' '}{listOf(summary.outside, language)}
                 {summary.within.length > 0 && (
                   <>{' · '}{t('sleep.night.morning.summaryWithin', { names: listText(summary.within, t) })}</>
                 )}
