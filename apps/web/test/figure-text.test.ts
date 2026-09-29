@@ -65,23 +65,23 @@ describe('formatFigureValue', () => {
 
 describe('formatFigureValue: workout units', () => {
   it('formats seconds_per_km as a pace with the /km suffix', () => {
-    expect(formatFigureValue(figure({ unit: 'seconds_per_km', precision: 0 }), 324, 'en', t)).toBe('5:24 /km')
-    expect(formatFigureValue(figure({ unit: 'seconds_per_km', precision: 0 }), 324, 'nl', tNl)).toBe('5:24 /km')
+    expect(formatFigureValue(figure({ unit: 'seconds_per_km', precision: 0 }), 324, 'en', t)).toBe('5:24\u00a0/km')
+    expect(formatFigureValue(figure({ unit: 'seconds_per_km', precision: 0 }), 324, 'nl', tNl)).toBe('5:24\u00a0/km')
   })
 
   it('formats meters_per_second as km/h at one decimal', () => {
-    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'en', t)).toBe('12.3 km/h')
-    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'nl', tNl)).toBe('12,3 km/h')
+    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'en', t)).toBe('12.3\u00a0km/h')
+    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'nl', tNl)).toBe('12,3\u00a0km/h')
   })
 
   it('formats meters under 1000 as whole meters', () => {
-    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 420, 'en', t)).toBe('420 m')
-    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 420, 'nl', tNl)).toBe('420 m')
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 420, 'en', t)).toBe('420\u00a0m')
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 420, 'nl', tNl)).toBe('420\u00a0m')
   })
 
   it('formats meters at or above 1000 as kilometers at two decimals', () => {
-    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'en', t)).toBe('5.20 km')
-    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'nl', tNl)).toBe('5,20 km')
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'en', t)).toBe('5.20\u00a0km')
+    expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'nl', tNl)).toBe('5,20\u00a0km')
   })
 
   it('formats seconds under an hour as an elapsed mm:ss', () => {
@@ -100,18 +100,18 @@ describe('formatFigureValue: workout units', () => {
   })
 
   it('formats kcal with the kcal suffix', () => {
-    expect(formatFigureValue(figure({ unit: 'kcal', precision: 0 }), 412, 'en', t)).toBe('412 kcal')
-    expect(formatFigureValue(figure({ unit: 'kcal', precision: 0 }), 412, 'nl', tNl)).toBe('412 kcal')
+    expect(formatFigureValue(figure({ unit: 'kcal', precision: 0 }), 412, 'en', t)).toBe('412\u00a0kcal')
+    expect(formatFigureValue(figure({ unit: 'kcal', precision: 0 }), 412, 'nl', tNl)).toBe('412\u00a0kcal')
   })
 
   it('formats steps_per_minute with the /min suffix', () => {
-    expect(formatFigureValue(figure({ unit: 'steps_per_minute', precision: 0 }), 172, 'en', t)).toBe('172 /min')
-    expect(formatFigureValue(figure({ unit: 'steps_per_minute', precision: 0 }), 172, 'nl', tNl)).toBe('172 /min')
+    expect(formatFigureValue(figure({ unit: 'steps_per_minute', precision: 0 }), 172, 'en', t)).toBe('172\u00a0/min')
+    expect(formatFigureValue(figure({ unit: 'steps_per_minute', precision: 0 }), 172, 'nl', tNl)).toBe('172\u00a0/min')
   })
 
   it('formats ratio as a percent at the figure precision', () => {
-    expect(formatFigureValue(figure({ unit: 'ratio', precision: 1 }), 8.2, 'en', t)).toBe('8.2 %')
-    expect(formatFigureValue(figure({ unit: 'ratio', precision: 1 }), 8.2, 'nl', tNl)).toBe('8,2 %')
+    expect(formatFigureValue(figure({ unit: 'ratio', precision: 1 }), 8.2, 'en', t)).toBe('8.2\u00a0%')
+    expect(formatFigureValue(figure({ unit: 'ratio', precision: 1 }), 8.2, 'nl', tNl)).toBe('8,2\u00a0%')
   })
 
   it('formats ml_per_kg_min as a plain number', () => {
@@ -219,9 +219,9 @@ describe('a usual that is a single value', () => {
 // a no-break space, so a narrow card breaks between words of the sentence, never inside a figure.
 describe('a value kept on one line', () => {
   it('joins a duration\'s hours and minutes, and a number and its unit, with no-break spaces', () => {
-    expect(formatFigureValue(figure({ unit: 'minutes' }), 92, 'en', t)).toBe('1h 32m')
-    expect(formatFigureValue(figure({ unit: 'bpm' }), 58, 'en', t)).toBe('58 bpm')
-    expect(formatFigureValue(figure({ unit: 'breaths_per_minute', precision: 1 }), 14.5, 'en', t)).toBe('14.5 breaths/min')
+    expect(formatFigureValue(figure({ unit: 'minutes' }), 92, 'en', t)).toBe('1h\u00a032m')
+    expect(formatFigureValue(figure({ unit: 'bpm' }), 58, 'en', t)).toBe('58\u00a0bpm')
+    expect(formatFigureValue(figure({ unit: 'breaths_per_minute', precision: 1 }), 14.5, 'en', t)).toBe('14.5\u00a0breaths/min')
   })
 })
 
@@ -231,15 +231,15 @@ describe('a range prints its unit once', () => {
   it('drops the unit from the low end when both ends share it', () => {
     const baseline = { center: 62, low: 60, high: 65, thin: false }
     expect(verdictLine(figure({ unit: 'bpm', value: 70, baseline, standing: 'above' }), 'en', t))
-      .toBe('above your usual 60 – 65 bpm')
+      .toBe('above your usual 60 – 65\u00a0bpm')
     expect(verdictLine(figure({ unit: 'percent', value: 90, baseline: { center: 93, low: 91, high: 95, thin: false }, standing: 'below' }), 'nl', tNl))
-      .toBe('onder je gebruikelijke bereik 91 – 95 %')
+      .toBe('onder je gebruikelijke bereik 91 – 95\u00a0%')
   })
 
   it('keeps both ends of a duration whole', () => {
     const baseline = { center: 400, low: 380, high: 420, thin: false }
     expect(verdictLine(figure({ unit: 'minutes', value: 400, baseline, standing: 'within' }), 'en', t))
-      .toBe('within your usual 6h 20m – 7h 00m')
+      .toBe('within your usual 6h\u00a020m – 7h\u00a000m')
   })
 })
 

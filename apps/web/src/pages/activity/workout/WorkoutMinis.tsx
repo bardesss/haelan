@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
-import { FigureRow } from '../../../components/FigureRow.js'
+import { FigureRow, FigureRows } from '../../../components/FigureRow.js'
 import type { FigureRowStrip } from '../../../components/FigureRow.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/figureText.js'
@@ -17,7 +17,7 @@ const MINIS = ['distance', 'movingTime', 'averageHeartRate', 'cardioLoad'] as co
  * A figure the workout has no reading for is left out (the payload has no entry for it at all),
  * and so is the one the hero already leads with: a strength session's moving time is its hero, and
  * the same figure twice in a row says nothing new. With none left the card goes too, so the grid
- * closes up. The rows are memoised on the payload, since each strip's arrays and formatter reach
+ * closes up; with fewer than four, each takes its share of the card (FigureRows). The rows are memoised on the payload, since each strip's arrays and formatter reach
  * the chart it draws, and a fresh one every render would rebuild it.
  */
 export function WorkoutMinis({ page }: { page: WorkoutPageData }) {
@@ -43,13 +43,13 @@ export function WorkoutMinis({ page }: { page: WorkoutPageData }) {
 
   return (
     <Card span={12}>
-      <div className="workout-minis">
-        <div className="workout-minis-rows">
+      <div className="detail-minis">
+        <FigureRows>
           {rows.map(({ key, label, value, verdict, figure, strip }) => (
-            <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged}
+            <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
               band={figure.baseline} mark={figure.value} strip={strip} />
           ))}
-        </div>
+        </FigureRows>
         <p className="dash-caption">{t('activity.workout.page.minisCaption')}</p>
       </div>
     </Card>

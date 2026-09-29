@@ -447,7 +447,7 @@
       "alsoRecordedBy": "Also recorded by {{sources}}",
       "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
-      "gpsDrawn": "A GPS route was recorded for this workout, drawn below.",
+      "gpsDrawn": "A GPS route was recorded for this workout, drawn on the map above.",
       "gpsConsentRequired": "A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Open Haelan on the phone and tap Release routes to hand it over.",
       "missingTitle": "No such workout",
       "missingDetail": "This link names a workout that is not in your data.",
@@ -479,9 +479,10 @@
       },
       "page": {
         "nav": "Workouts",
+        "untitled": "Workout",
         "previous": "Previous workout",
         "next": "Next workout",
-        "allWorkouts": "All workouts →",
+        "allWorkouts": "All workouts",
         "seconds": "s",
         "figures": {
           "pace": "Pace",
@@ -507,12 +508,14 @@
         },
         "heroStrip": "this workout and the nine of this type before it",
         "heroStripInverse": "this workout and the nine of this type before it · higher = faster",
+        "openWorkout": "Open this workout",
+        "openWorkoutIdle": "Tap a workout to open it",
         "minisCaption": "each line: this workout and the nine of this type before it · band = your usual range",
         "previousFaster": "{{difference}} faster than the previous one, {{date}}",
         "previousSlower": "{{difference}} slower than the previous one, {{date}}",
         "previousSame": "As fast as the previous one, {{date}}",
         "previousOnly": "The previous one: {{date}}",
-        "view": "view →",
+        "view": "View the previous one",
         "secondsPerKm": "{{value}} s/km",
         "bestFastestKm": "Your best: fastest kilometre {{value}} ({{month}})",
         "bestLongest": "Your best: longest {{value}} ({{month}})",
@@ -566,24 +569,24 @@
         },
         "day": {
           "label": "That day",
-          "steps": "Steps that day",
+          "caption": "{{date}}, the day of this workout",
+          "steps": "Steps",
           "activeMinutes": "Active minutes",
-          "otherWorkouts": "Other workouts",
-          "none": "none",
-          "onlyThis": "only this one"
+          "workouts": "Workouts"
         },
         "after": {
           "label": "Afterwards",
           "caption": "the night after this workout and the morning after it",
           "asleep": "Time asleep",
           "deep": "Deep sleep",
-          "restingHeartRate": "Resting heart rate after",
-          "night": "view the night →"
+          "restingHeartRate": "Resting heart rate",
+          "night": "View the night"
         },
         "about": {
           "label": "About this workout",
           "recordedBy": "Recorded by {{source}}",
           "merged": "Recorded by {{source}}, merged with {{others}}",
+          "named": "named “{{name}}”",
           "excluded": "excluded",
           "action": "exclude or add a note",
           "details": "Details"

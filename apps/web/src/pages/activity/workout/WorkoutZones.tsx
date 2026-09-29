@@ -66,11 +66,11 @@ export function WorkoutZones({ detail, page }: { detail: WorkoutDetail, page: Wo
         )}
         <div className="workout-zones-bar">
           <ZoneBar rows={rows} label={label} distinct />
-          <ul className="workout-zones-legend">
+          <ul className="detail-legend">
             {rows.map((row) => (
               <li key={row.zone}>
-                <span className="workout-zones-key" data-zone={row.zone} aria-hidden="true" />
-                {row.label} {formatNumber(row.minutes, 0, language, '')} {t('activity.units.min')}
+                <span className="detail-legend-key" data-zone={row.zone} aria-hidden="true" />
+                {row.label} {formatNumber(row.minutes, 0, language, '')}{'\u00a0'}{t('activity.units.min')}
               </li>
             ))}
           </ul>

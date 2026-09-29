@@ -447,7 +447,7 @@
       "alsoRecordedBy": "Ook geregistreerd door {{sources}}",
       "annotate": "Uitsluiten of een notitie toevoegen",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
-      "gpsDrawn": "Er is een GPS-route opgenomen voor deze training, hieronder getekend.",
+      "gpsDrawn": "Er is een GPS-route opgenomen voor deze training, getekend op de kaart hierboven.",
       "gpsConsentRequired": "Er is een GPS-route opgenomen voor deze training, maar Health Connect houdt die achter, dus er is geen kaart. Open Haelan op de telefoon en tik op Routes vrijgeven om die alsnog door te sturen.",
       "missingTitle": "Geen training gevonden",
       "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat.",
@@ -479,9 +479,10 @@
       },
       "page": {
         "nav": "Trainingen",
+        "untitled": "Training",
         "previous": "Vorige training",
         "next": "Volgende training",
-        "allWorkouts": "Alle trainingen →",
+        "allWorkouts": "Alle trainingen",
         "seconds": "s",
         "figures": {
           "pace": "Tempo",
@@ -507,12 +508,14 @@
         },
         "heroStrip": "deze training en de negen van dit type ervoor",
         "heroStripInverse": "deze training en de negen van dit type ervoor · hoger = sneller",
-        "minisCaption": "elk lijntje: deze training en de negen van dit type ervoor · band = je gewone bereik",
+        "openWorkout": "Open deze training",
+        "openWorkoutIdle": "Tik op een training om hem te openen",
+        "minisCaption": "elk lijntje: deze training en de negen van dit type ervoor · band = je gebruikelijke bereik",
         "previousFaster": "{{difference}} sneller dan de vorige, {{date}}",
         "previousSlower": "{{difference}} langzamer dan de vorige, {{date}}",
         "previousSame": "Even snel als de vorige, {{date}}",
         "previousOnly": "De vorige: {{date}}",
-        "view": "bekijk →",
+        "view": "Bekijk de vorige",
         "secondsPerKm": "{{value}} s/km",
         "bestFastestKm": "Je beste: snelste kilometer {{value}} ({{month}})",
         "bestLongest": "Je beste: langste {{value}} ({{month}})",
@@ -520,11 +523,11 @@
           "label": "Vergeleken met",
           "this": "Deze training",
           "previous": "Vorige · {{date}}",
-          "usual": "Gewoonlijk",
+          "usual": "Gebruikelijk",
           "best": "Je beste",
           "bestValue": "{{value}} · {{month}}",
           "caption": "Alleen dit type · je beste uit Records",
-          "tableCaption": "Deze training naast de vorige van dit type, het gewoonlijke bereik en je beste",
+          "tableCaption": "Deze training naast de vorige van dit type, het gebruikelijke bereik en je beste",
           "measure": "Meting"
         },
         "map": {
@@ -566,24 +569,24 @@
         },
         "day": {
           "label": "Die dag",
-          "steps": "Stappen die dag",
+          "caption": "{{date}}, de dag van deze training",
+          "steps": "Stappen",
           "activeMinutes": "Actieve minuten",
-          "otherWorkouts": "Andere trainingen",
-          "none": "geen",
-          "onlyThis": "alleen deze"
+          "workouts": "Trainingen"
         },
         "after": {
           "label": "Daarna",
           "caption": "de nacht na deze training en de ochtend erna",
           "asleep": "Tijd in slaap",
           "deep": "Diepe slaap",
-          "restingHeartRate": "Rusthartslag erna",
-          "night": "bekijk de nacht →"
+          "restingHeartRate": "Rusthartslag",
+          "night": "Bekijk de nacht"
         },
         "about": {
           "label": "Over deze training",
           "recordedBy": "Opgenomen door {{source}}",
           "merged": "Opgenomen door {{source}}, samengevoegd met {{others}}",
+          "named": "genaamd “{{name}}”",
           "excluded": "uitgesloten",
           "action": "uitsluiten of een notitie toevoegen",
           "details": "Details"

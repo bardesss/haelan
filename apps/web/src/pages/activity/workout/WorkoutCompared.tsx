@@ -3,12 +3,15 @@ import { Card } from '../../../components/Card.js'
 import { Link } from '../../../router.js'
 import { formatShortDate } from '../../../format.js'
 import type { WorkoutFigure, WorkoutPageData, RecordRef } from '../../../data/useWorkoutPage.js'
-import { formatFigureDifference, formatFigureValue } from '../../detail/figureText.js'
+import { formatFigureDifference, formatFigureRange, formatFigureValue } from '../../detail/figureText.js'
 import { bestMonth, workoutPath } from './workoutText.js'
 
 // The table's rows, in the mockup's order: the four measures the previous workout's values cover.
+// The first follows the hero: a ride leads with its speed, so its table does too (previousOf sends
+// the previous ride's speed for exactly this row).
 const ROWS = ['pace', 'distance', 'averageHeartRate', 'cardioLoad'] as const
-type Row = typeof ROWS[number]
+type Row = typeof ROWS[number] | 'speed'
+const rowsFor = (hero: string): readonly Row[] => (hero === 'speed' ? ['speed', ...ROWS.slice(1)] : ROWS)
 
 // The Records best each row can name: the fastest kilometre as a pace, the furthest as a distance.
 // Records keeps no best heart rate or load, which would not be a best if it did.
@@ -22,15 +25,16 @@ function bestOf(page: WorkoutPageData, key: Row): RecordRef | null {
  * "Compared with": this workout beside the previous one of its type, the usual range for the type
  * and the Records best, for pace, distance, average heart rate and cardio load. A row the workout
  * has no reading for is left out; the previous column goes when there is no previous one, the
- * usual column when no row has a real usual, the best column when no row has a best (and on a
- * phone, where the mockup drops it). With nothing to set beside this workout's own values - a
+ * usual column when no row has a real usual, the best column when no row has a best. On a phone
+ * the best and the usual columns both go (the hero and the rows above already say the usual), so
+ * the table fits its card rather than scrolling sideways out of sight. With nothing to set beside this workout's own values - a
  * first session of a type, say - the card goes too.
  */
 export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const absent = t('common.absent')
-  const rows = ROWS.flatMap((key) => {
+  const rows = rowsFor(page.hero).flatMap((key) => {
     const figure = page.figures[key]
     return figure === undefined || figure.value === null ? [] : [{ key, figure, value: figure.value }]
   })
@@ -38,9 +42,9 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
   const usualOf = (figure: WorkoutFigure) => {
     const { baseline } = figure
     if (baseline === null || baseline.thin) return null
-    const low = formatFigureValue(figure, baseline.low, language, t)
-    const high = formatFigureValue(figure, baseline.high, language, t)
-    return low === high ? low : `${low} – ${high}`
+    // The unit once, after the second number (formatFigureRange), as every other usual on the page.
+    const { low, high } = formatFigureRange(figure, baseline.low, baseline.high, language, t)
+    return formatFigureValue(figure, baseline.low, language, t) === high ? high : `${low} – ${high}`
   }
   const withUsual = rows.some(({ figure }) => usualOf(figure) !== null)
   const withBest = rows.some(({ key }) => bestOf(page, key) !== null)
@@ -57,12 +61,12 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
               <th scope="col">{t('activity.workout.page.compared.this')}</th>
               {previous !== null && (
                 <th scope="col">
-                  <Link to={workoutPath(previous.sessionId)}>
+                  <Link to={workoutPath(previous.sessionId)} className="card-link">
                     {t('activity.workout.page.compared.previous', { date: formatShortDate(previous.localDate, page.localDate, language) })}
                   </Link>
                 </th>
               )}
-              {withUsual && <th scope="col">{t('activity.workout.page.compared.usual')}</th>}
+              {withUsual && <th scope="col" className="workout-compared-usual">{t('activity.workout.page.compared.usual')}</th>}
               {withBest && <th scope="col" className="workout-compared-best">{t('activity.workout.page.compared.best')}</th>}
             </tr>
           </thead>
@@ -87,7 +91,7 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
                       )}
                     </td>
                   )}
-                  {withUsual && <td>{usualOf(figure) ?? absent}</td>}
+                  {withUsual && <td className="workout-compared-usual">{usualOf(figure) ?? absent}</td>}
                   {withBest && (
                     <td className="workout-compared-best">
                       {best === null ? absent : t('activity.workout.page.compared.bestValue', {

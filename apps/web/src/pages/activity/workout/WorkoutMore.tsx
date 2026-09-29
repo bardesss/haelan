@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import { Card } from '../../../components/Card.js'
+import { FigureRows } from '../../../components/FigureRow.js'
 import { formatNumber } from '../../../format.js'
 import type { WorkoutFigureKey, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
@@ -53,7 +54,7 @@ export function WorkoutMore({ page, detail, endMs }: {
 
   return (
     <Card span={12} label={t('activity.workout.page.more.label')}>
-      <div className="workout-more-rows">
+      <FigureRows>
         {present.map((key) => {
           const elapsed = key === 'elapsed' && elapsedParts.length > 0
           const verdict = elapsed ? elapsedParts.join(' · ') : key === 'swimLengths' ? poolVerdict : undefined
@@ -62,7 +63,7 @@ export function WorkoutMore({ page, detail, endMs }: {
               verdict={verdict} bare={elapsed} withStrip={key === 'vo2max'} />
           )
         })}
-      </div>
+      </FigureRows>
     </Card>
   )
 }

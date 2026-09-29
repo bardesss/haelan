@@ -553,10 +553,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    are what wanted the limit; the card was only ever where it was easiest to put it. */
 .list-measured { max-width: 46rem; }
 
-/* The workout page's excluded badge and "also recorded by"/gps sentences moved into the About fold
-   (WorkoutAbout.tsx, M10a-3) when the old header (WorkoutHeader.tsx) was retired in Task 5 of
-   M10a-3; `.workout-when` stayed a shared class, now carried by WorkoutTop.tsx's own heading. */
-.workout-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
+/* The workout page's excluded badge and "also recorded by"/gps sentences, in the About fold
+   (WorkoutAbout.tsx, M10a-3). */
 .workout-excluded { color: var(--text-muted); font-size: var(--font-size-sm); margin: 0; }
 /* .basis.workout-gps, not .workout-gps alone: the element carries both classes
    (WorkoutAbout.tsx's own comment says why), and a single-class rule here sits at equal
@@ -577,33 +575,18 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-actions { display: flex; justify-content: flex-end; }
 
 /* --- The workout detail page (M10a-3), WorkoutDetail.tsx and its sections under
-   pages/activity/workout/: the night page's measure, header row and lead, for a workout. --- */
-.workout-page { max-width: 1200px; margin-inline: auto; }
-.workout-top { margin-bottom: var(--space-3); }
-.workout-heading { display: flex; flex-direction: column; gap: var(--space-1); }
-.workout-heading .dash-title { margin: 0; }
-.workout-name { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
-/* The workout's own note, in the reader's own words: quoted, and a shade lighter than the when line. */
-.workout-note { margin: 0; font-size: var(--font-size-sm); color: var(--text-primary); }
-.workout-top-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
-.workout-all { font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; white-space: nowrap; }
-.workout-all:hover { text-decoration: underline; }
-.workout-hero { justify-content: space-between; }
-.workout-hero-value { font-variant-numeric: tabular-nums; }
-.workout-hero-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
-.workout-hero-verdict.better { color: var(--positive); }
-.workout-hero-verdict.worse { color: var(--negative); }
-/* The ranking, the previous workout and the best under the verdict: one quiet line each. */
+   pages/activity/workout/: only what the workout draws that no other page does. The shell, the
+   header, the hero, the rows, the side cards, the legend and the About fold are the shared
+   detail-* set further down (PATTERNS.md). --- */
+/* The ranking, the previous workout and the best under the hero's verdict: one quiet line each. */
 .workout-hero-line { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .workout-hero-rank, .workout-hero-previous, .workout-hero-best { font-variant-numeric: tabular-nums; }
-.workout-hero-previous a { color: var(--accent-soft); }
-.workout-minis { display: flex; flex-direction: column; gap: var(--space-2); }
-.workout-minis-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 /* The compared-with table: .override-table's rows, with this workout's own column the bold one
    and each difference beside its reading in the plain colour unless the figure has a direction. */
 .workout-compared td { font-variant-numeric: tabular-nums; }
 .workout-compared-this { font-weight: var(--weight-bold); }
-.workout-compared thead a { color: inherit; }
+/* The previous workout's column head is a way to it: a .card-link, set on the head's own line. */
+.workout-compared thead .card-link { margin: 0; }
 .workout-diff { color: var(--text-muted); }
 /* WorkoutMap.tsx: the route with its height profile, two thirds, beside the kilometres, one third;
    either alone takes the whole card. */
@@ -628,42 +611,24 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-through-head, .workout-through-chart { min-width: 0; }
 .workout-through-summary { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .workout-through-note { margin: var(--space-2) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-tight); }
-/* WorkoutZones.tsx: the verdict on the left, the bar and its legend on the right. */
+/* WorkoutZones.tsx: the verdict on the left, the bar and its legend (a .detail-legend) on the right. */
 .workout-zones { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
 .workout-zones-verdict { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .workout-zones-verdict strong { color: var(--text-primary); }
 .workout-zones-bar { min-width: 0; }
-.workout-zones-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); list-style: none; margin: var(--space-1) 0 0; padding: 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
-.workout-zones-legend li { display: inline-flex; align-items: center; gap: var(--space-1); }
-.workout-zones-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-.workout-zones-key[data-zone="light"] { background: var(--chart-stage-rem); }
-.workout-zones-key[data-zone="moderate"] { background: var(--chart-stage-light); }
-.workout-zones-key[data-zone="vigorous"] { background: var(--chart-stage-awake); }
-.workout-zones-key[data-zone="peak"] { background: var(--negative); }
-/* WorkoutForm, WorkoutDay and WorkoutAfter: a line saying what the card holds on the left, its
-   rows three across on the right (the mockup's "Loopvorm", "Die dag", "Daarna"); WorkoutMore's rows
-   four across the whole card, as the minis. */
-.workout-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
-.workout-side-caption { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
-.workout-side-rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
-.workout-more-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
-.workout-after-cell { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.workout-after-night { font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; }
-.workout-after-night:hover { text-decoration: underline; }
-/* WorkoutAbout.tsx's fold: NightAbout's line and summary, and the lines the header used to carry. */
-.workout-about-line { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
-.workout-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
-.workout-about[open] summary { margin-bottom: var(--space-2); }
+/* Each zone's key in its own zone colour, the colours the bar and the trace's bands draw it in. */
+.detail-legend-key[data-zone="light"] { background: var(--chart-zone-light); }
+.detail-legend-key[data-zone="moderate"] { background: var(--chart-zone-moderate); }
+.detail-legend-key[data-zone="vigorous"] { background: var(--chart-zone-vigorous); }
+.detail-legend-key[data-zone="peak"] { background: var(--chart-zone-peak); }
+/* WorkoutAbout.tsx's fold body (the fold itself is the shared .detail-about): the lines the old
+   header carried, and the one button. */
 .workout-about-body { display: flex; flex-direction: column; gap: var(--space-2); }
 .workout-about-body .workout-actions { justify-content: flex-start; }
 @media (max-width: 620px) {
-  .workout-compared-best { display: none; }
-  /* Small text, a finger still needs 44px: the fold's toggle stays a list item for its triangle
-     (.night-about summary's own reason), the night link a flex box. */
-  .workout-about summary { display: list-item; min-height: 44px; align-content: center; }
-  .workout-after-night { min-height: 44px; display: inline-flex; align-items: center; }
-  .workout-all { min-height: 44px; display: inline-flex; align-items: center; }
-  .workout-hero-previous a, .workout-compared thead a { display: inline-flex; min-height: 44px; align-items: center; }
+  /* The best and the usual columns go on a phone, so the table fits its card instead of scrolling
+     sideways; the hero and the rows above it already say the usual. */
+  .workout-compared-best, .workout-compared-usual { display: none; }
   .workout-map[data-both="true"], .workout-zones { grid-template-columns: minmax(0, 1fr); }
   .workout-through { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 }
@@ -1447,12 +1412,6 @@ button.week-bar-slot { cursor: pointer; }
   .detail-rows[data-columns], .detail-side-rows[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-  /* The workout page's rows, for the same reason: at a 621px window the minis' four columns came
-     out 78px and the side cards' three 76px, and an uppercase label ("Cardiobelasting", "Rusthartslag
-     erna") ran past its cell and the page 2px past the viewport. Stacked and two across here, as
-     they already were on a phone. */
-  .workout-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-  .workout-side-rows, .workout-more-rows, .workout-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean

@@ -15,7 +15,8 @@ import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/fig
  *
  * `verdict` replaces the usual's words where the row says something else under its value (elapsed
  * time's moving time and pauses); `bare` then drops the bar too, since a bar beside words that are
- * not about the usual would read as their picture. The strip is memoised on the figure: its arrays
+ * not about the usual would read as their picture, and neither `judged` nor `standing` colours
+ * those words. The strip is memoised on the figure: its arrays
  * and formatter reach the chart, and fresh ones every render would rebuild it.
  */
 export function WorkoutFigureRow({ figure, label, withStrip = false, verdict, bare = false }: {
@@ -39,7 +40,7 @@ export function WorkoutFigureRow({ figure, label, withStrip = false, verdict, ba
   return (
     <FigureRow label={label} value={formatFigureValue(figure, figure.value, language, t)}
       verdict={verdict ?? verdictLine(figure, language, t) ?? t('glance.usual.none')}
-      judged={verdict === undefined ? figure.judged : null}
+      judged={verdict === undefined ? figure.judged : null} standing={verdict === undefined ? figure.standing : null}
       band={bare ? null : figure.baseline} mark={figure.value} strip={strip} />
   )
 }

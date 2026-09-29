@@ -122,12 +122,12 @@ describe('ZoneBar', () => {
   // blue, blue, amber and red, from the zone tokens the trace's bands use (ZONE_TOKENS), still by
   // each zone's own identity rather than its row's position.
   it('draws each zone in its own zone token when asked for distinct colours', () => {
-    const restore = overrideVars({ '--chart-stage-rem': '#0000a1', '--chart-stage-light': '#0000a2', '--chart-stage-awake': '#0000a3', '--negative': '#0000a4' })
+    const restore = overrideVars({ '--chart-zone-light': '#0000a1', '--chart-zone-moderate': '#0000a2', '--chart-zone-vigorous': '#0000a3', '--chart-zone-peak': '#0000a4' })
     try {
       act(() => { root!.render(<ZoneBar rows={[row('light', 4), row('vigorous', 12), row('peak', 3)]} label="Zones" distinct />) })
       const option = chartStubs.at(-1)!.setOption.mock.calls[0]![0] as EChartsOption
       expect((option.series as { itemStyle: { color: string } }[]).map((s) => s.itemStyle.color)).toEqual(['#0000a1', '#0000a3', '#0000a4'])
-      expect(ZONE_TOKENS).toEqual({ light: 'stageRem', moderate: 'stageLight', vigorous: 'stageAwake', peak: 'negative' })
+      expect(ZONE_TOKENS).toEqual({ light: 'zoneLight', moderate: 'zoneModerate', vigorous: 'zoneVigorous', peak: 'zonePeak' })
     } finally { restore() }
   })
 
@@ -143,10 +143,20 @@ describe('ZoneBar', () => {
     const headers = [...html.matchAll(/<th scope="col">([^<]*)<\/th>/g)].map((m) => m[1]!)
     expect(headers).toEqual(['activity.workout.zones.column', 'activity.workout.zones.duration'])
     expect(headers).not.toContain('activity.units.minutes')
-    // 70 minutes prints as "1h 10m", never a bare "70". The zone name is the row's own header
-    // cell (ChartFigure.tsx renders column 0 as `<th scope="row">`), duration the one `<td>`.
+    // A zone is minutes, the short-span rule the legend beside it follows ("2 min", never
+    // "0h 02m"), with its unit, never a bare "70". The zone name is the row's own header cell
+    // (ChartFigure.tsx renders column 0 as `<th scope="row">`), duration the one `<td>`.
     expect(html).toContain('<th scope="row">light</th>')
     const cells = [...html.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]!)
-    expect(cells).toEqual(['1h 10m'])
+    expect(cells).toEqual(['70\u00a0activity.units.min'])
+  })
+
+  // One bar needs no scale under it, and its axis's last two ticks ("30" and "31") collided; the
+  // card's own label names it, so the category label repeated it inside the chart.
+  it('draws no axis labels on either axis', () => {
+    act(() => { root!.render(<ZoneBar rows={[row('light', 4), row('peak', 27)]} label="Zones" distinct />) })
+    const option = chartStubs.at(-1)!.setOption.mock.calls[0]![0] as { xAxis: { axisLabel?: { show?: boolean } }, yAxis: { axisLabel?: { show?: boolean } } }
+    expect(option.xAxis.axisLabel?.show).toBe(false)
+    expect(option.yAxis.axisLabel?.show).toBe(false)
   })
 })

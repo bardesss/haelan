@@ -226,13 +226,14 @@ export function stripOf(figure: PageFigure): {
 
 /**
  * A workout figure's strip (this session and up to nine of its type before it), in the shape
- * stripOf hands a sparkline, labelled by each session's date. Unlike a night's strip, the points
- * carry no band or standing of their own (workoutPage.ts's WorkoutStripPoint): there is one usual,
- * the figure's own, shaded behind every point when it is real and behind none when it is thin,
- * and no point is coloured, since the server judged only this session.
+ * stripOf hands a sparkline, labelled by each session's date. Unlike a night's strip there is one
+ * usual, the figure's own, shaded behind every point when it is real and behind none when it is
+ * thin; each point carries the server's standing and judgement against it (workoutPage.ts's
+ * WorkoutStripPoint), so its dot takes its verdict's tone as a night's does.
  */
 export function workoutStripOf(figure: WorkoutFigure): {
-  values: (number | null)[], labels: string[], bands: { low: number, high: number }[] | undefined
+  values: (number | null)[], labels: string[], pointStandings: PointStanding[], pointJudged: PointJudged[]
+  bands: { low: number, high: number }[] | undefined
 } | null {
   if (!joins(figure.strip)) return null
   const { baseline } = figure
@@ -240,6 +241,8 @@ export function workoutStripOf(figure: WorkoutFigure): {
   return {
     values: figure.strip.map((point) => point.value),
     labels: figure.strip.map((point) => point.localDate),
+    pointStandings: figure.strip.map((point) => point.standing),
+    pointJudged: figure.strip.map((point) => point.judged),
     bands: band === null ? undefined : figure.strip.map(() => band),
   }
 }
@@ -247,7 +250,7 @@ export function workoutStripOf(figure: WorkoutFigure): {
 /**
  * How far this figure's value lies from another reading of it (the previous workout's), signed,
  * in the figure's own terms but without its unit: a pace in seconds ("-12 s", the one difference
- * that needs its unit to read at all), a distance in kilometres at the precision it is printed at
+ * that needs its unit to read at all), a speed in km/h, a distance in kilometres at the precision it is printed at
  * once the value is in kilometres, anything else at its own precision. A difference that rounds
  * to nothing carries no sign (formatSignedNumber's rule).
  */
@@ -257,6 +260,8 @@ export function formatFigureDifference(
   const absent = t('common.absent')
   switch (figure.unit) {
     case 'seconds_per_km': return `${formatSignedNumber(difference, 0, language, absent)} ${t('activity.workout.page.seconds')}`
+    // A speed is printed in km/h at one decimal (formatFigureValue), so its difference is too.
+    case 'meters_per_second': return formatSignedNumber(difference * 3.6, 1, language, absent)
     case 'meters': return figure.value !== null && figure.value >= 1000
       ? formatSignedNumber(difference / 1000, 2, language, absent)
       : formatSignedNumber(difference, figure.precision, language, absent)

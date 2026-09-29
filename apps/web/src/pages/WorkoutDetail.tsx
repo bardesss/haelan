@@ -9,7 +9,7 @@ import { useSourceNames } from '../data/useSourceNames.js'
 import { ApiError } from '../api/client.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
-import { WorkoutTop } from './activity/workout/WorkoutTop.js'
+import { WorkoutTop, useOpenWorkout } from './activity/workout/WorkoutTop.js'
 import { WorkoutHero } from './activity/workout/WorkoutHero.js'
 import { WorkoutMinis } from './activity/workout/WorkoutMinis.js'
 import { WorkoutCompared } from './activity/workout/WorkoutCompared.js'
@@ -41,9 +41,9 @@ import { EmptyState } from '../components/EmptyState.js'
  *
  * A 404 from either is a real answer rather than an error - the id in the URL names no workout of
  * this person's, which the server answers identically for somebody else's id (M8a's own comment on
- * why it is never a 403) - so it reads as an empty state, not a retry. All three states render
- * inside `<div className="grid"><Card span={12}>...</Card></div>`, since Shell renders straight into
- * `.main`, which carries no card background of its own.
+ * why it is never a 403) - so it reads as an empty state, not a retry. Every state keeps the header
+ * (WorkoutTop without a payload: a generic title, the arrows disabled, the way back live) and draws
+ * its message in `<div className="grid"><Card span={12}>...</Card></div>`, as the night page does.
  *
  * The annotate button lives in the About fold at the foot of the page (WorkoutAbout); the panel it
  * opens is rendered here, over the whole page. The target is the session itself, named by the
@@ -58,6 +58,7 @@ export function WorkoutDetail() {
   const pageQuery = useWorkoutPage(sessionId)
   const { sources } = useSourceNames()
   const [annotating, setAnnotating] = useState(false)
+  const openWorkout = useOpenWorkout()
 
   // Memoised on query.data itself, not rebuilt by hand on every read: WorkoutThrough's own pauses
   // and WorkoutZones' own `rows` derive from this object, and useChart keys each chart's own
@@ -77,12 +78,15 @@ export function WorkoutDetail() {
     // and the page stayed on this error after a retry that had worked.
     const retry = () => { for (const q of [query, pageQuery]) if (q.isError) void q.refetch() }
     return (
-      <div className="grid">
-        <Card span={12}>
-          {notFound
-            ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
-            : <ErrorState onRetry={retry} error={failed.error} />}
-        </Card>
+      <div className="detail-page">
+        <WorkoutTop />
+        <div className="grid">
+          <Card span={12}>
+            {notFound
+              ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
+              : <ErrorState onRetry={retry} error={failed.error} />}
+          </Card>
+        </div>
       </div>
     )
   }
@@ -90,8 +94,11 @@ export function WorkoutDetail() {
   // spelling it out lets TypeScript narrow `detail` for the rest of the function without a `!`.
   if (query.isPending || pageQuery.isPending || detail === null) {
     return (
-      <div className="grid">
-        <Card span={12}><Loading /></Card>
+      <div className="detail-page">
+        <WorkoutTop />
+        <div className="grid">
+          <Card span={12}><Loading /></Card>
+        </div>
       </div>
     )
   }
@@ -109,10 +116,10 @@ export function WorkoutDetail() {
   const page = pageQuery.data
 
   return (
-    <div className="workout-page">
-      <WorkoutTop page={page} session={query.data} detail={detail} />
+    <div className="detail-page">
+      <WorkoutTop page={page} session={query.data} />
       <div className="grid">
-        <WorkoutHero page={page} />
+        <WorkoutHero page={page} onOpenWorkout={openWorkout} />
         <WorkoutMinis page={page} />
         <WorkoutCompared page={page} />
         <WorkoutMap session={query.data} page={page} />
@@ -120,9 +127,9 @@ export function WorkoutDetail() {
         <WorkoutZones detail={detail} page={page} />
         <WorkoutForm page={page} />
         <WorkoutMore page={page} detail={detail} endMs={query.data.endMs} />
-        <WorkoutDay page={page} />
+        <WorkoutDay page={page} note={detail.notes} />
         <WorkoutAfter page={page} />
-        <WorkoutAbout session={query.data} detail={detail} onAnnotate={() => setAnnotating(true)} />
+        <WorkoutAbout session={query.data} detail={detail} exerciseType={page.exerciseType} onAnnotate={() => setAnnotating(true)} />
       </div>
       {annotating && (
         <AnnotatePanel

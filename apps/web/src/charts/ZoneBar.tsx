@@ -6,7 +6,7 @@ import { scaleStops } from './tokens.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatDuration } from '../format.js'
+import { formatNumber } from '../format.js'
 
 /**
  * The four session zones, light to peak, in the fixed order colours are assigned from.
@@ -25,12 +25,12 @@ export const SESSION_ZONE_KEYS = ['light', 'moderate', 'vigorous', 'peak'] as co
 
 /**
  * The four zones in four distinct colours, for the workout page (M10a-3): the approved mockup's
- * light blue, blue, amber and red, taken from tokens that already exist rather than four new ones.
+ * light blue, blue, amber and red, each its own chart role (packages/tokens chart.ts's zone-*).
  * Still ordered light to dark to warm, so the eye reads a scale. Shared with the trace's zone bands
  * (WorkoutThrough.tsx), so a zone is the same colour on the bar and behind the line.
  */
 export const ZONE_TOKENS: Record<(typeof SESSION_ZONE_KEYS)[number], keyof ChartTokens> = {
-  light: 'stageRem', moderate: 'stageLight', vigorous: 'stageAwake', peak: 'negative',
+  light: 'zoneLight', moderate: 'zoneModerate', vigorous: 'zoneVigorous', peak: 'zonePeak',
 }
 
 export interface ZoneRow { zone: (typeof SESSION_ZONE_KEYS)[number], label: string, minutes: number }
@@ -53,7 +53,13 @@ export function ZoneBar({ rows, label, distinct = false }: {
   /** Four distinct zone colours (ZONE_TOKENS) instead of the ramp; the workout page's zones card. */
   distinct?: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  // Minutes by the short-span rule the zones legend follows ("2 min"), never a duration's "0h 02m":
+  // a zone is only ever a few minutes, and the legend and this table print the same figure.
+  const minutes = useCallback(
+    (value: number) => `${formatNumber(value, 0, i18n.language, '')}\u00a0${t('activity.units.min')}`,
+    [i18n.language, t],
+  )
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -65,11 +71,13 @@ export function ZoneBar({ rows, label, distinct = false }: {
         trigger: 'item' as const,
         formatter: (params: unknown) => {
           const p = params as { seriesName?: string, value?: number }
-          return `${p.seriesName ?? ''}: ${formatDuration(Number(p.value ?? 0))}`
+          return `${p.seriesName ?? ''}: ${minutes(Number(p.value ?? 0))}`
         },
       },
-      xAxis: { type: 'value' as const, ...base.hiddenAxis, max: rows.reduce((a, r) => a + r.minutes, 0) || 1 },
-      yAxis: { type: 'category' as const, data: [label], ...base.hiddenAxis },
+      // No labels on either axis: one bar needs no scale (its last two ticks collided, "30" over
+      // "31"), and the category's one label repeated the card's own inside the chart.
+      xAxis: { type: 'value' as const, ...base.hiddenAxis, axisLabel: { show: false }, splitLine: { show: false }, max: rows.reduce((a, r) => a + r.minutes, 0) || 1 },
+      yAxis: { type: 'category' as const, data: [label], ...base.hiddenAxis, axisLabel: { show: false } },
       // Indexed by the zone's own fixed position, not by the row's position in `rows`: a session
       // that skipped a zone still draws its remaining zones in their own true colours rather than
       // sliding them into the gap. Final review finding.
@@ -83,7 +91,7 @@ export function ZoneBar({ rows, label, distinct = false }: {
         },
       })),
     }
-  }, [rows, label, distinct])
+  }, [rows, label, distinct, minutes])
 
   const { host, style } = useChart(build, HEIGHT)
 
@@ -93,12 +101,10 @@ export function ZoneBar({ rows, label, distinct = false }: {
       host={host}
       style={style}
       table={{
-        // "Duration", not "Minutes": the cell below is formatDuration's own "Xh XXm", not a bare
-        // minute count, and the header has to say what the cell actually prints. Final review
-        // finding - activity.units.minutes ("Minutes") is a StatTile unit elsewhere in this app and
-        // was reused here without noticing it no longer matched the cell.
+        // "Duration", not "Minutes": each cell carries its own unit ("2 min"), and a header of
+        // "Minutes" over it would say the unit twice (activity.units.minutes is a StatTile unit).
         columns: [t('activity.workout.zones.column'), t('activity.workout.zones.duration')],
-        rows: rows.map((row) => [row.label, formatDuration(row.minutes)]),
+        rows: rows.map((row) => [row.label, minutes(row.minutes)]),
       }}
     />
   )

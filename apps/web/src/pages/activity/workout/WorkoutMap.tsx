@@ -137,12 +137,15 @@ export function WorkoutMap({ session, page }: { session: WorkoutSessionDetail, p
     : undefined
 
   return (
-    <Card span={12} basis={basis}>
+    // The basis under the map it describes, as a caption: as the card's basis it printed above the
+    // ROUTE label, the one card on the page whose first line was not its label.
+    <Card span={12}>
       <div className="workout-map" data-both={hasRoute && hasSplits}>
         {hasRoute && (
           <div className="workout-map-route">
             <span className="label">{t('activity.workout.route.label')}</span>
             <RouteDrawing route={route} kmEndsMs={kmEndsMs} />
+            {basis !== undefined && <p className="dash-caption">{basis}</p>}
             {profile !== null && (
               <div className="workout-elevation">
                 <div className="workout-elevation-head">

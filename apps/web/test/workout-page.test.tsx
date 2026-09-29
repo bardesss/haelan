@@ -223,7 +223,7 @@ describe('the workout page', () => {
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
-      expect(container!.querySelector('.workout-when')!.textContent).toContain('02:00–02:54')
+      expect(container!.querySelector('.dash-header .dash-date')!.textContent).toContain('02:00–02:54')
     } finally { restore() }
   })
 
@@ -338,7 +338,7 @@ describe('the workout page', () => {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(container?.querySelector('.workout-gps')?.textContent).toBe(
-        'A GPS route was recorded for this workout, drawn below.',
+        'A GPS route was recorded for this workout, drawn on the map above.',
       )
     } finally { restore() }
   })
@@ -379,14 +379,14 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 
-  it('says the route is drawn below for a companion session that carried points, and drops the unreadable sentence', async () => {
+  it('says the route is drawn on the map above for a companion session that carried points, and drops the unreadable sentence', async () => {
     window.history.replaceState(null, '', '/activity/phone')
     const restore = stub({ phone: { ...PHONE, route: [ROUTE_POINT] } as WorkoutSession })
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(container?.querySelector('.workout-gps')?.textContent).toBe(
-        'A GPS route was recorded for this workout, drawn below.',
+        'A GPS route was recorded for this workout, drawn on the map above.',
       )
     } finally { restore() }
   })
@@ -500,7 +500,7 @@ describe('the splits card', () => {
       expect(container?.querySelector('.workout-km')).toBeNull()
       expect(html()).toContain('Morning run')
       // The page's last card, so everything above it rendered too.
-      expect(container?.querySelector('.workout-about')).not.toBeNull()
+      expect(container?.querySelector('.detail-about')).not.toBeNull()
     } finally { restore() }
   })
 })
