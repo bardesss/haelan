@@ -604,9 +604,7 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-compared td { font-variant-numeric: tabular-nums; }
 .workout-compared-this { font-weight: var(--weight-bold); }
 .workout-compared thead a { color: inherit; }
-.workout-diff { margin-left: var(--space-1); color: var(--text-muted); }
-.workout-diff.better { color: var(--positive); }
-.workout-diff.worse { color: var(--negative); }
+.workout-diff { color: var(--text-muted); }
 /* WorkoutMap.tsx: the route with its height profile, two thirds, beside the kilometres, one third;
    either alone takes the whole card. */
 .workout-map { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }

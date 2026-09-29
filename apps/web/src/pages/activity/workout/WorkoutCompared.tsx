@@ -19,16 +19,6 @@ function bestOf(page: WorkoutPageData, key: Row): RecordRef | null {
 }
 
 /**
- * The previous workout's reading beside this one's: better or worse only where the figure has a
- * direction the server sent (pace: less is better), from the sign of the difference and nothing
- * else. More distance, heart rate or load is neither, so those differences stay the plain colour.
- */
-function diffClass(figure: WorkoutFigure, difference: number): string {
-  if (figure.direction === 'neutral' || Math.round(difference) === 0) return 'workout-diff'
-  return (difference > 0) === (figure.direction === 'up') ? 'workout-diff better' : 'workout-diff worse'
-}
-
-/**
  * "Compared with": this workout beside the previous one of its type, the usual range for the type
  * and the Records best, for pace, distance, average heart rate and cardio load. A row the workout
  * has no reading for is left out; the previous column goes when there is no previous one, the
@@ -60,9 +50,10 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
     <Card span={12} label={t('activity.workout.page.compared.label')}>
       <div className="table-scroll">
         <table className="override-table workout-compared">
+          <caption className="sr-only">{t('activity.workout.page.compared.tableCaption')}</caption>
           <thead>
             <tr>
-              <th scope="col" />
+              <th scope="col"><span className="sr-only">{t('activity.workout.page.compared.measure')}</span></th>
               <th scope="col">{t('activity.workout.page.compared.this')}</th>
               {previous !== null && (
                 <th scope="col">
@@ -87,8 +78,11 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
                     <td>
                       {before === undefined ? absent : (
                         <>
-                          {formatFigureValue(figure, before, language, t)}
-                          <span className={diffClass(figure, value - before)}>{formatFigureDifference(figure, value - before, language, t)}</span>
+                          {/* A real space, so a screen reader says "5:36 /km -12 s", not one run-on word. One
+                              run faster or slower than the last says nothing about a trend, so the
+                              difference is never coloured better or worse. */}
+                          {formatFigureValue(figure, before, language, t)}{' '}
+                          <span className="workout-diff">{formatFigureDifference(figure, value - before, language, t)}</span>
                         </>
                       )}
                     </td>

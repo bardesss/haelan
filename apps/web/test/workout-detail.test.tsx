@@ -268,23 +268,27 @@ describe('the workout page\'s compared-with table', () => {
   it('sets this workout beside the previous one, the usual and the best, row by row', async () => {
     const host = await mount(workoutPageFixture())
     expect([...host.querySelectorAll('.workout-compared thead th')].map((th) => th.textContent)).toEqual([
-      '', 'This workout', 'Previous · Sep 1', 'Usual', 'Your best',
+      'Measure', 'This workout', 'Previous · Sep 1', 'Usual', 'Your best',
     ])
+    // The corner cell is named for a screen reader, and the table says what it holds.
+    expect(host.querySelector('.workout-compared thead th .sr-only')?.textContent).toBe('Measure')
+    expect(host.querySelector('.workout-compared caption.sr-only')?.textContent).toBe('This workout beside the previous one of its type, the usual range and your best')
     expect(compared(host)).toEqual([
-      ['Pace', '5:24 /km', '5:36 /km-12 s', '5:22 /km – 5:36 /km', '4:50 /km · June'],
-      ['Distance', '5.20 km', '5.00 km+0.20', '4.60 km – 5.60 km', '10.40 km · May'],
-      ['Avg heart rate', '157 bpm', '153 bpm+4', '150 bpm – 158 bpm', '—'],
-      ['Cardio load', '71', '62+9', '55 – 70', '—'],
+      ['Pace', '5:24 /km', '5:36 /km -12 s', '5:22 /km – 5:36 /km', '4:50 /km · June'],
+      ['Distance', '5.20 km', '5.00 km +0.20', '4.60 km – 5.60 km', '10.40 km · May'],
+      ['Avg heart rate', '157 bpm', '153 bpm +4', '150 bpm – 158 bpm', '—'],
+      ['Cardio load', '71', '62 +9', '55 – 70', '—'],
     ])
     expect(host.querySelector('.workout-compared thead a')?.getAttribute('href')).toBe(`/activity/${PREVIOUS_ID}`)
   })
 
-  it('colours a difference only where the figure has a better direction', async () => {
+  it('leaves every difference from the previous one the plain colour', async () => {
     const host = await mount(workoutPageFixture())
     const diffs = [...host.querySelectorAll('.workout-compared .workout-diff')].map((span) => span.className)
-    // Faster pace is better (direction down, and 12 s less); more distance, heart rate or load is
-    // neither, so those stay the plain colour.
-    expect(diffs).toEqual(['workout-diff better', 'workout-diff', 'workout-diff', 'workout-diff'])
+    // One faster run says nothing about a trend, so no difference is judged better or worse.
+    expect(diffs).toEqual(['workout-diff', 'workout-diff', 'workout-diff', 'workout-diff'])
+    const css = readFileSync('apps/web/src/app.css', 'utf8')
+    expect(css).not.toMatch(/\.workout-diff\.(better|worse)/)
   })
 
   it('drops the best column on a phone', async () => {
@@ -301,7 +305,7 @@ describe('the workout page\'s compared-with table', () => {
     const host = await mount({ ...page, figures: rest, previous: null })
     expect(compared(host).map((row) => row[0])).toEqual(['Distance', 'Avg heart rate', 'Cardio load'])
     expect([...host.querySelectorAll('.workout-compared thead th')].map((th) => th.textContent)).toEqual([
-      '', 'This workout', 'Usual', 'Your best',
+      'Measure', 'This workout', 'Usual', 'Your best',
     ])
   })
 

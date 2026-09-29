@@ -522,7 +522,9 @@
           "usual": "Gewoonlijk",
           "best": "Je beste",
           "bestValue": "{{value}} · {{month}}",
-          "caption": "Alleen dit type · je beste uit Records"
+          "caption": "Alleen dit type · je beste uit Records",
+          "tableCaption": "Deze training naast de vorige van dit type, het gewoonlijke bereik en je beste",
+          "measure": "Meting"
         },
         "map": {
           "kilometres": "Kilometers",

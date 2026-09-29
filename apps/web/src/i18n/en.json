@@ -522,7 +522,9 @@
           "usual": "Usual",
           "best": "Your best",
           "bestValue": "{{value}} · {{month}}",
-          "caption": "This type only · your best from Records"
+          "caption": "This type only · your best from Records",
+          "tableCaption": "This workout beside the previous one of its type, the usual range and your best",
+          "measure": "Measure"
         },
         "map": {
           "kilometres": "Kilometres",
