@@ -3,8 +3,8 @@ import type { DbOrTx } from '../db/open.ts'
 import { daily, people, sessionRoutes } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { workoutDetail } from '../api/workoutSummary.ts'
-import { edwardsLoadFromSeconds, banisterLoad, coefficientFor, ageAt } from '../api/cardioLoad.ts'
-import type { CardioLoad } from '../api/cardioLoad.ts'
+import { edwardsLoadFromSeconds, banisterLoad, coefficientFor, ageAt, zoneBoundsOf } from '../api/cardioLoad.ts'
+import type { CardioLoad, ZoneBounds } from '../api/cardioLoad.ts'
 import { fillSplitHeartRate } from '../api/splitHeartRate.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
 import { readSessionHeartRateMinutes } from './sessionHeartRate.ts'
@@ -140,6 +140,23 @@ export function readWorkoutRoute(db: DbOrTx, input: {
     .orderBy(asc(sessionRoutes.ordinal)).all()
   const owner = order.find((id) => rows.some((row) => row.sessionId === id))
   return rows.filter((row) => row.sessionId === owner).map(({ sessionId: _, ...point }) => point)
+}
+
+/**
+ * A workout's heart rate zones, from the provider's ceilings for the session's own day: the rows
+ * readBanister takes its maximum from, read the same way (dailyValue), so the zone bands and the
+ * load never describe two different days or two different sources. Null for a night, and for a
+ * day without all four ceilings (zoneBoundsOf's own rule).
+ */
+export function readWorkoutZoneBounds(db: DbOrTx, input: {
+  personId: string
+  session: WorkoutSession
+}): ZoneBounds | null {
+  if (input.session.kind !== 'exercise') return null
+  const ceiling = (zone: string) => dailyValue(db, input.personId, input.session.localDate, `heart_rate_zone_${zone}_max_bpm`)
+  return zoneBoundsOf({
+    light: ceiling('light'), moderate: ceiling('moderate'), vigorous: ceiling('vigorous'), peak: ceiling('peak'),
+  })
 }
 
 function readBanister(db: DbOrTx, input: { personId: string, session: WorkoutSession }) {

@@ -47,10 +47,11 @@
 // workout raises both curves for its own hour, a resting figure sits near the night it is
 // resting from, and a bad night is actually short.
 //
-// Deterministic by construction: a mulberry32 PRNG seeded once, consumed in a fixed order, and
-// nothing here ever reaches for Math.random. The same seed produces the same bytes today and a
-// year from now, which is the property both this unit's rehearsal and the next unit's
-// screenshots depend on.
+// Deterministic by construction: mulberry32 streams seeded once from the one seed (the day's
+// shared stream, and one each for the night page's and the workout page's readings), each
+// consumed in a fixed order, and nothing here ever reaches for Math.random. The same seed
+// produces the same bytes today and a year from now, which is the property both this unit's
+// rehearsal and the next unit's screenshots depend on.
 //
 // Floors and total-calories are the two exceptions to every `put` call above: the catalogue gives
 // them no `list` filter at all - `filterMember` is null, and `dailyRollUp` is the only action that
@@ -193,6 +194,16 @@ const stepCurve = (hour: number): number => Math.max(0, Math.sin(((hour - 6) / 1
 // the same reason; this used to be the one that was not.
 const SEED_EXERCISE_TYPES = ['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL'] as const
 
+// The order the workout days take their type in, round and round. A pick over the five types gave
+// a run one workout in five, too few for the demo's workout page to find a usual range for a run
+// (WORKOUT_BAND_MIN wants five earlier sessions of the type in 90 days), so nearly every figure on
+// it read "not enough history". Four runs and two walks in every nine workouts give a run nine or
+// more runs before it in any 90 days, a full ten-point strip, and a walk five or more; every type
+// still shows up in any 27 days.
+const WORKOUT_SCHEDULE: readonly (typeof SEED_EXERCISE_TYPES)[number][] = [
+  'RUNNING', 'WALKING', 'RUNNING', 'BIKING', 'RUNNING', 'WALKING', 'RUNNING', 'WEIGHTLIFTING', 'SWIMMING_POOL',
+]
+
 function requireExerciseTypes(): readonly string[] {
   for (const type of SEED_EXERCISE_TYPES) {
     if (!EXERCISE_TYPES.includes(type)) {
@@ -248,6 +259,8 @@ function stagesFor(rand: () => number, startMs: number, endMs: number, restless:
 function exercisePoint(o: {
   name: string, startTime: string, endTime: string, utcOffset?: string, exerciseType: string,
   route?: ReadonlyArray<Record<string, unknown>>,
+  /** The provider's own fields beside the interval (metricsSummary, splits, events...). */
+  detail?: Readonly<Record<string, unknown>>,
 }): Record<string, unknown> {
   const offset = o.utcOffset ?? '0s'
   // A route rides on a companion dataSource, never a Fitbit one. The Google Health API has no
@@ -265,33 +278,287 @@ function exercisePoint(o: {
     exercise: {
       interval: { startTime: o.startTime, startUtcOffset: offset, endTime: o.endTime, endUtcOffset: offset },
       exerciseType: o.exerciseType,
+      ...o.detail,
       ...(o.route ? { route: o.route } : {}),
     },
   }
 }
 
-// The demo's one synthetic route (Task 8), opted into only by scripts/seed-demo.mjs via
-// SeedArchiveInput's `demoRoute` below - never by default, which is what
-// packages/core/test/seed.test.ts's "seeds no workout route" pins. A perfect circle, not a
-// captured trace: real GPS never closes on itself to the metre, so this shape could not be
-// mistaken for a walk anyone actually took. Centred on latitude zero, longitude zero - open ocean
-// off the coast of west Africa, nowhere near this household's Amsterdam offset and not a
-// neighbourhood a stranger could place - and built from trigonometry alone, with no draw from
-// `rand`: the shared PRNG sequence the ribbon and every other figure in this file are pinned
-// against has to land on the same bytes with or without this feature on.
-const ROUTE_POINT_COUNT = 40
-const ROUTE_RADIUS_DEGREES = 0.01 // roughly 1.1km across: long enough to read as a route on the card, small enough to stay a circle rather than a smear
+// Seeds the workout page's own stream (see workoutRand in seedArchive), for the same reason as
+// NIGHT_STREAM below: the workouts' figures, their minute-by-minute heart rate and the day's zone
+// ceilings are added without moving a single draw on `rand`.
+const WORKOUT_STREAM = 0x776f726b
 
-function syntheticRoute(startMs: number, endMs: number): Array<Record<string, unknown>> {
-  return Array.from({ length: ROUTE_POINT_COUNT }, (_, i) => {
-    const t = i / (ROUTE_POINT_COUNT - 1)
-    const angle = t * 2 * Math.PI
+// How many of the most recent runs carry a route, when the caller asked for routes at all. Bounded
+// by the demo capture's size ceiling (scripts/capture-demo.mjs's MAX_CAPTURE_BYTES): a route costs
+// the capture some 30 KB for each routed run whose page the demo mounts, measured 2026-09-29.
+const ROUTED_RUNS = 3
+// A GPS fix every ten seconds of moving time: dense enough that the kilometre marks and the
+// height profile read smoothly, coarse enough to stay inside that ceiling.
+const ROUTE_STEP_SECONDS = 10
+const METERS_PER_DEGREE = 111_320
+
+// The provider's four zone ceilings for a day, and where this file counts light as beginning: the
+// provider sends no floor for light (catalogue.ts's daily-heart-rate-zones comment), but a minute
+// at a standing heart rate is in no zone, so something has to draw that line. Karvonen fractions
+// of the heart rate reserve, so the ceilings move a little with the day's own resting figure.
+interface ZoneCeilings { lightFloor: number, light: number, moderate: number, vigorous: number, peak: number }
+
+function zoneCeilingsFor(restingBpm: number, maxBpm: number): ZoneCeilings {
+  const at = (share: number): number => Math.round(restingBpm + share * (maxBpm - restingBpm))
+  return { lightFloor: at(0.3), light: at(0.5), moderate: at(0.7), vigorous: at(0.85), peak: Math.round(maxBpm) }
+}
+
+// daily-heart-rate-zones carries its four zones as an array inside one point (catalogue.ts's
+// subDimension), each bound an int64 sent as a string, so it is its own builder rather than a
+// dailyPoint. Each zone's floor is the zone below's ceiling, the way the provider sends them.
+function heartRateZonesPoint(o: { date: { year: number, month: number, day: number }, ceilings: ZoneCeilings }): Record<string, unknown> {
+  const { lightFloor, light, moderate, vigorous, peak } = o.ceilings
+  const zone = (heartRateZoneType: string, min: number, max: number) =>
+    ({ heartRateZoneType, minBeatsPerMinute: String(min), maxBeatsPerMinute: String(max) })
+  return {
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    dailyHeartRateZones: {
+      date: o.date,
+      heartRateZones: [
+        zone('LIGHT', lightFloor, light), zone('MODERATE', light, moderate),
+        zone('VIGOROUS', moderate, vigorous), zone('PEAK', vigorous, peak),
+      ],
+    },
+  }
+}
+
+// Per type: how hard it works the heart, as a share of the heart rate reserve, and how much energy
+// a minute of it burns. Invented bands that keep a walk below a ride below a run, nothing more.
+const WORKOUT_PROFILES: Readonly<Record<string, { effort: [number, number], kcalPerMinute: [number, number] }>> = {
+  RUNNING: { effort: [0.6, 0.78], kcalPerMinute: [10.5, 13] },
+  BIKING: { effort: [0.55, 0.72], kcalPerMinute: [8, 10.5] },
+  WALKING: { effort: [0.3, 0.45], kcalPerMinute: [4.5, 6] },
+  SWIMMING_POOL: { effort: [0.55, 0.7], kcalPerMinute: [8, 10] },
+  WEIGHTLIFTING: { effort: [0.35, 0.5], kcalPerMinute: [5, 7] },
+}
+
+const POOL_LENGTH_MILLIMETERS = 25_000
+const FINISH_MARGIN_MS = 2 * 60_000
+
+interface WorkoutReading {
+  /** The exercise payload's own fields beside interval and exerciseType. */
+  detail: Record<string, unknown>
+  /** One reading a minute through the workout, the start's own minute left to the hourly curve. */
+  heartRate: Array<{ atMs: number, bpm: number }>
+  /** Moving seconds against metres covered, one entry per split boundary, for a route to follow. */
+  progress: Array<{ activeSeconds: number, meters: number }>
+  pause: { startMs: number, ms: number } | null
+  activeSeconds: number
+  elevationMeters: number
+}
+
+/**
+ * Everything the provider says about one workout, shaped after probe/findings/field-map.md's
+ * exercise payload and agreeing with itself the way a real one does: distance is moving time over
+ * pace, the splits add up to both, the zone durations are counted off the same minute-by-minute
+ * heart rate this file writes for the workout, and the average is that heart rate's own mean.
+ *
+ * `startBpm` is the hourly day curve's reading at the workout's first minute, which this workout
+ * does not rewrite (it is drawn from `rand`); the trace warms up from it rather than jumping away.
+ */
+function workoutReadingFor(wr: () => number, o: {
+  exerciseType: string, startMs: number, endMs: number, offset: string, startBpm: number,
+  restingBpm: number, maxBpm: number, ceilings: ZoneCeilings, runIndex: number, vo2Base: number,
+}): WorkoutReading {
+  const profile = WORKOUT_PROFILES[o.exerciseType]!
+  const elapsedMs = o.endMs - o.startMs
+  const isRun = o.exerciseType === 'RUNNING'
+  const onFoot = isRun || o.exerciseType === 'WALKING'
+
+  // A run now and then stops mid-way (a crossing, a shoelace) for one to three minutes, never
+  // near the end, where the finish sequence's own PAUSE already sits.
+  const pause = isRun && wr() < 0.3 ? (() => {
+    const ms = range(wr, 60, 180) * 1000
+    // Clamped as well as drawn early, so the resume is always clear of the finish window.
+    const startMs = Math.min(o.startMs + range(wr, 0.3, 0.65) * elapsedMs, o.endMs - FINISH_MARGIN_MS - ms - 60_000)
+    return { startMs, ms }
+  })() : null
+  const activeSeconds = Math.floor((elapsedMs - (pause?.ms ?? 0)) / 1000)
+  const inPause = (atMs: number): boolean => pause !== null && atMs >= pause.startMs && atMs < pause.startMs + pause.ms
+  // Moving time to wall clock: past the pause, the clock ran on while the workout did not.
+  const wallOf = (active: number): number => {
+    const atMs = o.startMs + active * 1000
+    return pause !== null && atMs > pause.startMs ? atMs + pause.ms : atMs
+  }
+
+  // Heart rate warms up from the hourly reading over five minutes towards the workout's effort,
+  // drifts up a little as it goes, sags through a pause, and swings with a lift's sets.
+  const reserve = o.maxBpm - o.restingBpm
+  const target = o.restingBpm + range(wr, ...profile.effort) * reserve
+  const heartRate: WorkoutReading['heartRate'] = []
+  const minutes = Math.ceil(elapsedMs / 60_000)
+  for (let m = 1; m < minutes; m++) {
+    const atMs = o.startMs + m * 60_000
+    const warm = Math.min(1, m / 5)
+    const drift = 0.05 * reserve * (m / minutes)
+    const sag = inPause(atMs) ? range(wr, 14, 22) : 0
+    const sets = o.exerciseType === 'WEIGHTLIFTING' ? 9 * Math.sin(m * 1.3) : 0
+    const bpm = o.startBpm + (target - o.startBpm) * warm + drift - sag + sets + range(wr, -3, 3)
+    heartRate.push({ atMs, bpm: Math.round(Math.min(o.maxBpm, bpm)) })
+  }
+  // The minutes a watch counts: the first one at the hourly reading, and none while paused.
+  const counted = [o.startBpm, ...heartRate.filter((r) => !inPause(r.atMs)).map((r) => r.bpm)]
+  const averageBpm = Math.round(counted.reduce((sum, bpm) => sum + bpm, 0) / counted.length)
+  const caloriesKcal = Math.round(range(wr, ...profile.kcalPerMinute) * elapsedMs / 60_000)
+
+  const events = [
+    { at: o.startMs, type: 'START' },
+    ...(pause ? [{ at: pause.startMs, type: 'PAUSE' }, { at: pause.startMs + pause.ms, type: 'START' }] : []),
+    // The finish sequence a real watch writes: PAUSE and STOP at the same instant.
+    { at: o.endMs, type: 'PAUSE' }, { at: o.endMs, type: 'STOP' },
+  ].map((e) => ({ eventTime: new Date(e.at).toISOString(), eventUtcOffset: o.offset, exerciseEventType: e.type }))
+  const common = {
+    activeDuration: `${activeSeconds}s`,
+    exerciseEvents: events,
+  }
+
+  // A lift is calories and heart rate and nothing else, which is all a wrist can say about one.
+  if (o.exerciseType === 'WEIGHTLIFTING') {
     return {
-      time: new Date(startMs + t * (endMs - startMs)).toISOString(),
-      latitude: Number((ROUTE_RADIUS_DEGREES * Math.sin(angle)).toFixed(6)),
-      longitude: Number((ROUTE_RADIUS_DEGREES * Math.cos(angle)).toFixed(6)),
+      detail: {
+        ...common,
+        exerciseMetadata: { hasGps: false },
+        metricsSummary: { caloriesKcal, averageHeartRateBeatsPerMinute: String(averageBpm) },
+      },
+      heartRate, progress: [], pause, activeSeconds, elevationMeters: 0,
+    }
+  }
+
+  // Zone durations off the same minutes, scaled so they never add up to more than the moving time.
+  const zoneCounts = { lightTime: 0, moderateTime: 0, vigorousTime: 0, peakTime: 0 }
+  for (const bpm of counted) {
+    const c = o.ceilings
+    if (bpm >= c.vigorous) zoneCounts.peakTime++
+    else if (bpm >= c.moderate) zoneCounts.vigorousTime++
+    else if (bpm >= c.light) zoneCounts.moderateTime++
+    else if (bpm >= c.lightFloor) zoneCounts.lightTime++
+  }
+  const secondsPerCount = activeSeconds / counted.length
+  const zoneSeconds = Object.fromEntries(Object.entries(zoneCounts).map(([k, n]) => [k, Math.floor(n * secondsPerCount)]))
+  const heartRateZoneDurations = Object.fromEntries(Object.entries(zoneSeconds).map(([k, s]) => [k, `${s}s`]))
+  const activeZoneMinutes = Math.round((zoneSeconds.moderateTime! + 2 * (zoneSeconds.vigorousTime! + zoneSeconds.peakTime!)) / 60)
+  const zoneFigures = {
+    caloriesKcal, averageHeartRateBeatsPerMinute: String(averageBpm),
+    activeZoneMinutes: String(activeZoneMinutes), heartRateZoneDurations,
+  }
+
+  if (o.exerciseType === 'SWIMMING_POOL') {
+    const lengths = Math.floor(activeSeconds / range(wr, 36, 48))
+    return {
+      detail: {
+        ...common,
+        exerciseMetadata: { hasGps: false, poolLengthMillimeters: POOL_LENGTH_MILLIMETERS },
+        metricsSummary: { ...zoneFigures, distanceMillimeters: lengths * POOL_LENGTH_MILLIMETERS, totalSwimLengths: lengths },
+      },
+      heartRate, progress: [], pause, activeSeconds, elevationMeters: 0,
+    }
+  }
+
+  // Runs get a little quicker over the span; a ride's pace is its speed turned over.
+  const paceSecondsPerKm = isRun ? range(wr, 305, 360) - Math.min(20, o.runIndex * 0.25)
+    : onFoot ? range(wr, 600, 720)
+      : 3600 / range(wr, 22, 28)
+  const distanceMillimeters = Math.round((activeSeconds / paceSecondsPerKm) * 1_000_000)
+  const elevationMeters = onFoot ? range(wr, 12, 80) : range(wr, 80, 320)
+  const metricsSummary: Record<string, unknown> = {
+    ...zoneFigures,
+    distanceMillimeters,
+    averagePaceSecondsPerMeter: Number((activeSeconds / (distanceMillimeters / 1000)).toFixed(4)),
+    averageSpeedMillimetersPerSecond: Number((distanceMillimeters / activeSeconds).toFixed(1)),
+    elevationGainMillimeters: Math.round(elevationMeters * 1000),
+  }
+  const detail: Record<string, unknown> = { ...common, exerciseMetadata: { hasGps: true }, metricsSummary }
+  if (!onFoot) {
+    return { detail, heartRate, progress: [], pause, activeSeconds, elevationMeters }
+  }
+
+  const steps = Math.round((isRun ? range(wr, 160, 176) : range(wr, 106, 120)) * activeSeconds / 60)
+  metricsSummary.steps = String(steps)
+
+  // Automatic kilometre splits and the short one a workout ends on. Each kilometre's pace wobbles
+  // a couple of percent around a trend across the run, negative (the second half faster) more
+  // often than not, then the lot is scaled so the splits add up to the moving time exactly.
+  const lengths: number[] = []
+  for (let left = distanceMillimeters; left > 0; left -= 1_000_000) lengths.push(Math.min(1_000_000, left))
+  const trend = range(wr, -0.06, 0.03)
+  const middle = (lengths.length - 1) / 2
+  const weights = lengths.map((mm, k) =>
+    mm * (1 + trend * (lengths.length > 1 ? (k - middle) / (lengths.length - 1) : 0) + range(wr, -0.025, 0.025)))
+  const weightSum = weights.reduce((a, b) => a + b, 0)
+  const durations = weights.map((w) => Math.round(activeSeconds * (w / weightSum)))
+  durations[durations.length - 1] = activeSeconds - durations.slice(0, -1).reduce((a, b) => a + b, 0)
+  const progress: WorkoutReading['progress'] = [{ activeSeconds: 0, meters: 0 }]
+  detail.splits = lengths.map((mm, k) => {
+    const from = progress.at(-1)!
+    const to = { activeSeconds: from.activeSeconds + durations[k]!, meters: from.meters + mm / 1000 }
+    progress.push(to)
+    const endMs = k === lengths.length - 1 ? o.endMs : wallOf(to.activeSeconds)
+    return {
+      startTime: new Date(wallOf(from.activeSeconds)).toISOString(), startUtcOffset: o.offset,
+      endTime: new Date(endMs).toISOString(), endUtcOffset: o.offset,
+      splitType: 'DISTANCE',
+      activeDuration: `${durations[k]}s`,
+      metricsSummary: { distanceMillimeters: mm, averagePaceSecondsPerMeter: Number((durations[k]! / (mm / 1000)).toFixed(4)) },
     }
   })
+
+  if (isRun) {
+    const cadence = steps / (activeSeconds / 60)
+    const strideMillimeters = Math.round(distanceMillimeters / steps)
+    const oscillationMillimeters = Math.round(range(wr, 78, 96))
+    metricsSummary.mobilityMetrics = {
+      avgCadenceStepsPerMinute: Number(cadence.toFixed(1)),
+      avgStrideLengthMillimeters: String(strideMillimeters),
+      avgGroundContactTimeDuration: `${range(wr, 0.225, 0.265).toFixed(3)}s`,
+      avgVerticalOscillationMillimeters: String(oscillationMillimeters),
+      avgVerticalRatio: Number(((oscillationMillimeters / strideMillimeters) * 100).toFixed(1)),
+    }
+    // Rising slowly across the span, the way a regular runner's estimate does.
+    metricsSummary.runVo2Max = Number((o.vo2Base + o.runIndex * 0.05 + range(wr, -0.4, 0.4)).toFixed(1))
+  }
+  return { detail, heartRate, progress, pause, activeSeconds, elevationMeters }
+}
+
+// A demo route, opted into only by scripts/seed-demo.mjs via SeedArchiveInput's `demoRoute` below -
+// never by default, which is what packages/core/test/seed.test.ts's "seeds no workout route" pins.
+// A perfect circle as long as the run, not a captured trace: real GPS never closes on itself to the
+// metre, so this shape could not be mistaken for a run anyone actually took. Centred on latitude
+// zero, longitude zero - open ocean off the coast of west Africa, nowhere near this household's
+// Amsterdam offset and not a neighbourhood a stranger could place. Built from the run's own splits
+// and trigonometry, with no draw from any stream, so a fix sits where the splits say the runner
+// was: the page's kilometre marks land on the split boundaries. One hill, as high as the run's
+// elevation gain, so the height profile and the figure agree.
+function syntheticRoute(o: {
+  startMs: number, pause: WorkoutReading['pause'], activeSeconds: number,
+  progress: WorkoutReading['progress'], elevationMeters: number,
+}): Array<Record<string, unknown>> {
+  const total = o.progress.at(-1)!.meters
+  const radiusDegrees = total / (2 * Math.PI) / METERS_PER_DEGREE
+  const metersAt = (active: number): number => {
+    const k = o.progress.findIndex((p) => p.activeSeconds >= active)
+    if (k <= 0) return 0
+    const a = o.progress[k - 1]!
+    const b = o.progress[k]!
+    return a.meters + (b.meters - a.meters) * ((active - a.activeSeconds) / (b.activeSeconds - a.activeSeconds))
+  }
+  const route: Array<Record<string, unknown>> = []
+  for (let active = 0; ; active = Math.min(o.activeSeconds, active + ROUTE_STEP_SECONDS)) {
+    const angle = (2 * Math.PI * metersAt(active)) / total
+    const atMs = o.startMs + active * 1000
+    route.push({
+      time: new Date(o.pause !== null && atMs > o.pause.startMs ? atMs + o.pause.ms : atMs).toISOString(),
+      latitude: Number((radiusDegrees * Math.sin(angle)).toFixed(6)),
+      longitude: Number((radiusDegrees * Math.cos(angle)).toFixed(6)),
+      altitudeMetres: Number((2 + o.elevationMeters * Math.sin(angle / 2) ** 2).toFixed(1)),
+    })
+    if (active === o.activeSeconds) return route
+  }
 }
 
 // moods carries an array leaf (moods[]), which samplePoint's value: string | number cannot hold,
@@ -378,10 +645,11 @@ export interface SeedArchiveInput {
   endMs: number
   seed?: number
   /**
-   * Task 8, opt-in and false by default: attaches syntheticRoute (above) to the most recent
-   * workout in the span. Off by default so every other caller of this generator - including
-   * packages/core/test/seed.test.ts's own "seeds no workout route" - keeps proving what Task 7
-   * proved, that a real route cannot reach the demo through the ordinary capture path.
+   * Task 8, opt-in and false by default: gives the last ROUTED_RUNS runs in the span a
+   * syntheticRoute (above), each on a companion copy of the run. Off by default so every other
+   * caller of this generator - including packages/core/test/seed.test.ts's own "seeds no workout
+   * route" - keeps proving what Task 7 proved, that a real route cannot reach the demo through the
+   * ordinary capture path.
    * scripts/seed-demo.mjs is the one caller that turns this on, because the demo is the one place
    * a fabricated route belongs on purpose.
    */
@@ -446,6 +714,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const DAILY_SPO2 = requireType('daily-oxygen-saturation')
   const SLEEP_TEMPERATURE = requireType('daily-sleep-temperature-derivations')
   const SLEEP_BREATHING = requireType('respiratory-rate-sleep-summary')
+  const HEART_RATE_ZONES = requireType('daily-heart-rate-zones')
 
   const rand = mulberry32(input.seed ?? DEFAULT_SEED)
   // The night page's readings (the provider's sleep summary, the night's five-minute heart rate,
@@ -455,6 +724,12 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   // readings without moving one that was already there. Still one fixed seed, so still the same
   // bytes on every run.
   const nightRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ NIGHT_STREAM)
+  // The workout page's readings (every figure the provider files on a workout, its heart rate a
+  // minute at a time, the day's zone ceilings) draw from a third stream, for the same reason.
+  const workoutRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ WORKOUT_STREAM)
+  // One person, so one heart rate ceiling and one fitness level for the whole span.
+  const maxBpm = range(workoutRand, 182, 194)
+  const vo2Base = range(workoutRand, 42, 46)
   let payloads = 0
 
   const until = input.lastDayUntilMs
@@ -555,14 +830,11 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const floorsWindows: RollupWindow[] = []
   const totalCaloriesWindows: RollupWindow[] = []
 
-  // The most recent workout day in the span, found by the same i % 3 === 1 schedule the day loop
-  // below decides a workout on - not a draw from `rand`, so finding it ahead of the loop costs
-  // nothing from the shared PRNG sequence. Task 8's demoRoute (if the caller asked for it) lands
-  // here: the most recent workout is the first one a stranger opening Activity actually sees.
-  let lastWorkoutDay = -1
-  for (let k = 0; k < input.days; k++) {
-    if (k % 3 === 1) lastWorkoutDay = k
-  }
+  // Every kept run, in order, so the routes (if the caller asked for them) can go on the last few
+  // once the loop has seen them all; runIndex is how far into the span a run is, which is what
+  // its pace and VO2max improve with.
+  let runIndex = 0
+  const keptRuns: Array<{ name: string, startMs: number, endMs: number, offset: string, reading: WorkoutReading }> = []
 
   for (let i = 0; i < input.days; i++) {
     const dayStart = input.endMs - (input.days - i) * DAY_MS
@@ -584,7 +856,12 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       const hour = pick(rand, [7, 12, 18])
       const startMs = dayStart + hour * HOUR_MS
       const endMs = startMs + range(rand, 25, 55) * 60_000
-      return { hour, startMs, endMs, exerciseType: pick(rand, exerciseTypes) }
+      // The old pick is still drawn, and thrown away, so every value after it in the day's stream
+      // stays what it was; the type is WORKOUT_SCHEDULE's. `drawnRun` remembers the one later draw
+      // that depended on the pick (peakMinutes below).
+      const drawnRun = pick(rand, exerciseTypes) === 'RUNNING'
+      const exerciseType = WORKOUT_SCHEDULE[((i - 1) / 3) % WORKOUT_SCHEDULE.length]!
+      return { hour, startMs, endMs, exerciseType, drawnRun }
     })() : null
 
     // Moved ahead of the heart-rate curve below, which reads this same trend for its overnight
@@ -650,6 +927,8 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     })
     put(ACTIVE_ENERGY_BURNED, dayStart, dayEnd, hourlyDone(activeEnergyPoints))
 
+    // The workout's first minute is the hourly reading below, which its own trace warms up from.
+    let workoutStartBpm = 0
     const hrPoints = Array.from({ length: 24 }, (_, h) => {
       const atMs = dayStart + h * HOUR_MS
       const overnight = h < 6 || h >= 23
@@ -657,12 +936,16 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         // A moving workout, not a stroll: a run or a lift raises the pulse well past the
         // ambient daytime peak, which is what makes "84 bpm on a 51-minute run" a contradiction
         // in the first place.
-        ? range(rand, 128, 168)
+        // The workout's first minute, though, is before any of that: the reading sits most of the
+        // way back towards resting, so the trace warms up from it instead of starting at its
+        // highest. Scaled from the same draw, which keeps the day's stream as it was.
+        ? restingHrBpm + (range(rand, 128, 168) - restingHrBpm) * 0.3
         : overnight
           // A few beats below the day's own resting figure rather than an unrelated absolute
           // band - see the comment above restingHrBpm's update for why the two must agree.
           ? range(rand, restingHrBpm - 6, restingHrBpm - 1)
           : 60 + stepCurve(h) * range(rand, 15, 25)
+      if (workout && workout.hour === h) workoutStartBpm = Math.round(bpm)
       return samplePoint({
         payloadKey: HEART_RATE.payloadKey, valuePath: HEART_RATE.valuePath, value: String(Math.round(bpm)),
         physicalTime: new Date(atMs).toISOString(), utcOffset: amsterdamOffset(atMs),
@@ -688,6 +971,11 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       payloadKey: DAILY_RESTING_HR.payloadKey, valuePath: DAILY_RESTING_HR.valuePath,
       value: String(Math.round(restingHrToday)), date: civilDate,
     })])
+
+    // The day's heart rate zone ceilings, filed once a day like resting heart rate, and read off the
+    // same trend rather than drawn: a workout's zone bands and zone durations both use these.
+    const ceilings = zoneCeilingsFor(restingHrBpm, maxBpm)
+    put(HEART_RATE_ZONES, dayStart, dayEnd, [heartRateZonesPoint({ date: civilDate, ceilings })])
 
     const hrvToday = Math.max(15, hrvBaselineMs + range(rand, -18, 18))
     put(DAILY_HRV, dayStart, dayEnd, [dailyPoint({
@@ -735,8 +1023,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     // A running workout is the one type here that plausibly pushes a heart rate into the top
     // zone; the others (a lift, a swim, a walk) stay out of it, the same distinction the field map
     // found no more than one zone active in a single interval to begin with.
-    const peakMinutes = workout && workout.exerciseType === 'RUNNING'
-      ? Math.round(workoutMinutesToday * range(rand, 0.05, 0.15)) : 0
+    // Its share is drawn from `rand` on exactly the days the old pick chose a run, so the first
+    // stream is unchanged, and from the workout's own stream on any other day.
+    const peakShare = workout === null ? 0 : range(workout.drawnRun ? rand : workoutRand, 0.05, 0.15)
+    const peakMinutes = workout && workout.exerciseType === 'RUNNING' ? Math.round(workoutMinutesToday * peakShare) : 0
     const minutesByZone: Readonly<Record<string, number>> = {
       FAT_BURN: soFar(fatBurnMinutes), CARDIO: ifWorkoutKept(cardioMinutes), PEAK: ifWorkoutKept(peakMinutes),
     }
@@ -787,8 +1077,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       physicalTime: new Date(atMs).toISOString(), utcOffset: amsterdamOffset(atMs),
     })
     // The exact hours are left to the hourly day curve, which already has a heart-rate sample there,
-    // so no minute ever holds two.
-    nightPut(HEART_RATE, nightSamples.filter((r) => r.atMs % HOUR_MS !== 0)
+    // so no minute ever holds two. So are a morning workout's minutes, when one starts before the
+    // night's own end: the workout's readings (below) are the ones a moving body gives.
+    const duringWorkout = (atMs: number): boolean => workout !== null && atMs >= workout.startMs && atMs <= workout.endMs
+    nightPut(HEART_RATE, nightSamples.filter((r) => r.atMs % HOUR_MS !== 0 && !duringWorkout(r.atMs))
       .map((r) => nightSample(HEART_RATE, r.atMs, String(r.heartRate))))
     nightPut(HRV, nightSamples.map((r) => nightSample(HRV, r.atMs, r.hrv)))
     nightPut(SPO2, nightSamples.map((r) => nightSample(SPO2, r.atMs, r.spo2)))
@@ -811,21 +1103,57 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       value: Number((temperatureBaselineCelsius + range(nightRand, -0.4, 0.4) + warmth).toFixed(2)), date: civilDate,
     })])
 
-    if (workout && workoutKept) {
-      put(EXERCISE, dayStart, dayEnd, [exercisePoint({
-        name: `users/me/dataTypes/exercise/dataPoints/seed-${i}`,
-        startTime: new Date(workout.startMs).toISOString(),
-        endTime: new Date(workout.endMs).toISOString(),
-        utcOffset: amsterdamOffset(workout.startMs),
-        exerciseType: workout.exerciseType,
-        route: input.demoRoute && i === lastWorkoutDay ? syntheticRoute(workout.startMs, workout.endMs) : undefined,
-      })])
+    if (workout) {
+      // Drawn whether or not lastDayUntilMs keeps the workout, so the stream never depends on it.
+      const offset = amsterdamOffset(workout.startMs)
+      const reading = workoutReadingFor(workoutRand, {
+        exerciseType: workout.exerciseType, startMs: workout.startMs, endMs: workout.endMs, offset,
+        startBpm: workoutStartBpm, restingBpm: restingHrBpm, maxBpm, ceilings, runIndex, vo2Base,
+      })
+      if (workout.exerciseType === 'RUNNING') runIndex++
+      if (workoutKept) {
+        const name = `users/me/dataTypes/exercise/dataPoints/seed-${i}`
+        put(EXERCISE, dayStart, dayEnd, [exercisePoint({
+          name,
+          startTime: new Date(workout.startMs).toISOString(),
+          endTime: new Date(workout.endMs).toISOString(),
+          utcOffset: offset,
+          exerciseType: workout.exerciseType,
+          detail: reading.detail,
+        })])
+        // Fetched over the workout's own span, like a night's readings over the night's, so it is
+        // not read as a re-fetch of the day's hourly curve.
+        put(HEART_RATE, workout.startMs, workout.endMs, reading.heartRate.map((r) => samplePoint({
+          payloadKey: HEART_RATE.payloadKey, valuePath: HEART_RATE.valuePath, value: String(r.bpm),
+          physicalTime: new Date(r.atMs).toISOString(), utcOffset: amsterdamOffset(r.atMs),
+        })))
+        if (workout.exerciseType === 'RUNNING') {
+          keptRuns.push({ name, startMs: workout.startMs, endMs: workout.endMs, offset, reading })
+        }
+      }
     }
 
     const moodPoints = [moodPoint({
       atMs: dayStart + 20 * HOUR_MS, utcOffset: amsterdamOffset(dayStart + 20 * HOUR_MS), moods: [pick(rand, MOOD_LABELS)],
     })]
     put(MOODS, dayStart, dayEnd, sampleDone(dayStart + 20 * HOUR_MS) ? moodPoints : [])
+  }
+
+  // A route never rides on Google's copy of a run (exercisePoint's own comment): it reaches a real
+  // archive as the phone's copy of the same workout, which the app merges with Google's on read.
+  // So each routed run is a second, companion point over the run's own span, carrying the interval,
+  // the type and the route and nothing the companion sync does not send.
+  if (input.demoRoute) {
+    for (const run of keptRuns.slice(-ROUTED_RUNS)) {
+      put(EXERCISE, run.startMs, run.endMs, [exercisePoint({
+        name: `${run.name}-phone`,
+        startTime: new Date(run.startMs).toISOString(),
+        endTime: new Date(run.endMs).toISOString(),
+        utcOffset: run.offset,
+        exerciseType: 'RUNNING',
+        route: syntheticRoute({ startMs: run.startMs, ...run.reading }),
+      })])
+    }
   }
 
   putRollups(TOTAL_CALORIES, totalCaloriesWindows)

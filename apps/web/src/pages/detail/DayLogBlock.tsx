@@ -16,11 +16,15 @@ export function hasDayLog(log: DayLog): boolean {
  * word, a chip for each kind tapped that day (with its count once there is more than one), and the
  * day's note. One component for the night page's day before and the workout page's day of, so the
  * two cannot drift into two spellings of the same log. Nothing at all when the log is empty
- * (hasDayLog), so a caller need not guard it.
+ * (hasDayLog) and there is no `note`, so a caller need not guard it.
+ *
+ * `note` is a note written on something else that day, quoted the way the day's own note is: the
+ * workout page's workout note, which belongs with the day's words rather than in the header.
  */
-export function DayLogBlock({ log }: { log: DayLog }): ReactNode {
+export function DayLogBlock({ log, note = null }: { log: DayLog, note?: string | null }): ReactNode {
   const { t } = useTranslation()
-  if (!hasDayLog(log)) return null
+  const extra = note === null || note.trim() === '' ? null : note.trim()
+  if (!hasDayLog(log) && extra === null) return null
   const chips = Object.entries(log.counts).filter(([, count]) => count > 0)
   return (
     <div className="day-log">
@@ -40,6 +44,7 @@ export function DayLogBlock({ log }: { log: DayLog }): ReactNode {
         </ul>
       )}
       {log.note !== null && <p className="day-log-note">{t('sleep.night.day.note', { note: log.note })}</p>}
+      {extra !== null && <p className="day-log-note">{t('sleep.night.day.note', { note: extra })}</p>}
     </div>
   )
 }
