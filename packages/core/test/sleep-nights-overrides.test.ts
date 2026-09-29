@@ -67,6 +67,23 @@ describe('readSleepNights and overrides', () => {
     expect(night!.excludedSessions).toEqual(['sleep-2'])
   })
 
+  // The night page labels each recording by its own clock times, so every session it lists, kept
+  // or excluded, carries its span; the excluded one's span is its own, not the night's.
+  it('gives every kept and excluded session its own span', () => {
+    insertSession({ id: 'sleep-1', startMs: BEDTIME, endMs: BEDTIME + 4 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'sleep-2', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 8 * H, localDate: '2026-08-22' })
+    overrides.put({
+      personId: 'p1', scope: 'session', targetKey: sessionTarget('sleep-2'),
+      action: 'exclude', reason: 'strap came loose', nowMs: 1_000,
+    })
+
+    const [night] = read()
+    expect(night!.sessionSpans).toEqual([
+      { id: 'sleep-1', startMs: BEDTIME, endMs: BEDTIME + 4 * H, startOffsetMinutes: 120, endOffsetMinutes: 120 },
+      { id: 'sleep-2', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 8 * H, startOffsetMinutes: 120, endOffsetMinutes: 120 },
+    ])
+  })
+
   it('reports an empty list when nothing was excluded', () => {
     insertSession({ id: 'sleep-1', startMs: BEDTIME, endMs: BEDTIME + 4 * H, localDate: '2026-08-22' })
     insertSession({ id: 'sleep-2', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 8 * H, localDate: '2026-08-22' })
