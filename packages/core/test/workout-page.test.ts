@@ -4,7 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources, sessions, sessionRoutes, sessionSegments } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { shiftLocalDate } from '../src/derive/localDay.ts'
-import { sessionTarget } from '../src/derive/targetKey.ts'
+import { sampleTarget, sessionTarget } from '../src/derive/targetKey.ts'
 import { PeopleStore } from '../src/store/people.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { readWorkoutPage, splitTrendOf } from '../src/query/workoutPage.ts'
@@ -480,6 +480,20 @@ describe('readWorkoutPage: heart-rate recovery', () => {
     expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery!.oneMinute).toMatchObject({ value: 25, standing: null, baseline: { thin: true } })
   })
 
+  it('reads the minutes around the minute the run ended in, when it ended part way through one', () => {
+    // Ended at 07:30:30: 07:29 is the last full minute, 07:31 and 07:32 the minutes one and two after.
+    seedRun('subject', SUBJECT_DATE, { pace: 300 }, { minutes: 30.5 })
+    seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery).toMatchObject({ oneMinute: { value: 25 }, twoMinutes: { value: 42 } })
+  })
+
+  it('leaves out an excluded minute, and reads the other one without it', () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
+    seedOverride(test.db, { personId: 'p1', scope: 'sample', targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: at(SUBJECT_DATE, '07:31') }) })
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery).toMatchObject({ oneMinute: { value: null }, twoMinutes: { value: 42 } })
+  })
+
   it('is null with no heart rate after the end, even with heart rate during the run', () => {
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     seedHeartRate(END - 30 * 60_000, Array(30).fill(150))
@@ -547,17 +561,23 @@ describe('readWorkoutPage: through the workout', () => {
   })
 
   it("draws cadence from the workout's own device's minute steps, and nothing from hourly ones", () => {
+    test.db.insert(sources).values({ id: 'phone', personId: 'p1', externalId: 'phone', displayName: 'Phone', kind: 'device', createdAtMs: 0 }).run()
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     seedRun('hourly', '2026-09-05', { pace: 300 }, { minutes: 180 })
     const startMs = at(SUBJECT_DATE, '07:00')
-    for (let i = 0; i < 30; i += 1) {
-      insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET, value: 170 })
+    // Two half-minute rows a minute, added into the minute's 170; the phone's own count is not the watch's.
+    for (let i = 0; i < 60; i += 1) {
+      insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: startMs + i * 30_000, tzOffsetMinutes: OFFSET, value: 85 })
+      insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: startMs + i * 30_000, tzOffsetMinutes: OFFSET, value: 40 })
     }
+    // An excluded row takes its minute out rather than leaving half of it.
+    seedOverride(test.db, { personId: 'p1', scope: 'sample', targetKey: sampleTarget({ source: 'watch', metric: 'steps', utcMs: startMs + 20 * 30_000 }) })
     for (let i = 0; i < 3; i += 1) {
       insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: at('2026-09-05', '07:00') + i * 3_600_000, tzOffsetMinutes: OFFSET, value: 9000 })
     }
     const { cadence } = readWorkoutPage(q(), input('subject'))!.through
-    expect(cadence!.points).toHaveLength(30)
+    expect(cadence!.points).toHaveLength(29)
+    expect(cadence!.points.map((p) => p.elapsedSeconds)).not.toContain(600)
     expect(cadence!.points.every((p) => p.value === 170)).toBe(true)
     expect(readWorkoutPage(q(), input('hourly'))!.through.cadence).toBeNull()
   })
