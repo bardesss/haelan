@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Sparkline } from '../src/charts/Sparkline.js'
 import { WorkoutHero } from '../src/pages/activity/workout/WorkoutHero.js'
-import { PREVIOUS_DATE, PREVIOUS_ID, WORKOUT_DATE, workoutPageFixture } from './fixtures/workoutPage.js'
+import { PREVIOUS_DATE, PREVIOUS_ID, WORKOUT_DATE, WORKOUT_ID, workoutPageFixture } from './fixtures/workoutPage.js'
 
 // The strip's props, read the way night-hero.test.tsx reads the night's: echarts never mounts
 // under static rendering, and what the hero hands the chart is the whole question. The workout's
@@ -43,12 +43,33 @@ describe('the workout page\'s hero strip', () => {
   it('opens a clicked session on its own page, and not the one already shown', () => {
     const open = vi.fn()
     render(open)
-    sparklineProps!.onPointClick!(PREVIOUS_DATE)
+    const previousIndex = sparklineProps!.labels.indexOf(PREVIOUS_DATE)
+    sparklineProps!.onPointClick!(sparklineProps!.pointIds![previousIndex]!)
     expect(open.mock.calls).toEqual([[PREVIOUS_ID]])
-    expect(sparklineProps!.opensDay?.current).toBe(WORKOUT_DATE)
+    expect(sparklineProps!.opensDay?.current).toBe(WORKOUT_ID)
     // Worded for what a dot opens: a workout, not a day.
     expect(sparklineProps!.opensDay?.tail).toBe('Open this workout')
     expect(sparklineProps!.opensDay?.idle).toBe('Tap a workout to open it')
+  })
+
+  // Two runs on one day share a date, so a dot that opened by date could only ever reach one of
+  // them. Each dot carries its own session's id, and the one already shown is the id, not the day.
+  it('opens each of two same-day workouts, and a same-day sibling of the one shown', () => {
+    const page = workoutPageFixture()
+    const pace = page.figures.pace!
+    const strip = pace.strip!.map((p, i) => (i === 7 || i === 8 ? { ...p, localDate: '2026-09-02' } : i === 6 ? { ...p, localDate: WORKOUT_DATE } : p))
+    const open = vi.fn()
+    renderToStaticMarkup(
+      <I18nProvider lng="en"><WorkoutHero page={{ ...page, figures: { ...page.figures, pace: { ...pace, strip } } }} onOpenWorkout={open} /></I18nProvider>,
+    )
+    const ids = sparklineProps!.pointIds!
+    expect(ids).toEqual(strip.map((p) => p.sessionId))
+    expect(sparklineProps!.opensDay?.current).toBe(page.sessionId)
+    sparklineProps!.onPointClick!(ids[7]!)
+    sparklineProps!.onPointClick!(ids[8]!)
+    sparklineProps!.onPointClick!(ids[6]!)
+    expect(open.mock.calls).toEqual([[strip[7]!.sessionId], [strip[8]!.sessionId], [strip[6]!.sessionId]])
+    expect(new Set([strip[7]!.sessionId, strip[8]!.sessionId, strip[6]!.sessionId]).size).toBe(3)
   })
 
   it('is a plain strip with nowhere to open a workout', () => {

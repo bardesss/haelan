@@ -232,7 +232,7 @@ export function stripOf(figure: PageFigure): {
  * WorkoutStripPoint), so its dot takes its verdict's tone as a night's does.
  */
 export function workoutStripOf(figure: WorkoutFigure): {
-  values: (number | null)[], labels: string[], pointStandings: PointStanding[], pointJudged: PointJudged[]
+  values: (number | null)[], labels: string[], ids: string[], pointStandings: PointStanding[], pointJudged: PointJudged[]
   bands: { low: number, high: number }[] | undefined
 } | null {
   if (!joins(figure.strip)) return null
@@ -241,6 +241,8 @@ export function workoutStripOf(figure: WorkoutFigure): {
   return {
     values: figure.strip.map((point) => point.value),
     labels: figure.strip.map((point) => point.localDate),
+    // Each point's session, which is what its dot opens: two sessions can share a date.
+    ids: figure.strip.map((point) => point.sessionId),
     pointStandings: figure.strip.map((point) => point.standing),
     pointJudged: figure.strip.map((point) => point.judged),
     bands: band === null ? undefined : figure.strip.map(() => band),

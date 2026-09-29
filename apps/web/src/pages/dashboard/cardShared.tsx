@@ -75,7 +75,8 @@ export function stripBands(strip: readonly GlanceStripDay[]): ({ low: number, hi
  *
  * `opens` names what a dot opens, for the words: a day (the dashboard's strips), a night (the
  * night page's strip, whose dots open a night's own page, "Tap a night to open it") or a workout
- * (the workout page's strip, whose dots open that session's page).
+ * (the workout page's strip, whose dots open that session's page; there `current` and what
+ * `onOpenDay` receives are session ids, Sparkline's pointIds, since two sessions can share a day).
  */
 const OPENS_WORDS = {
   day: { tail: 'glance.openDay', idle: 'glance.openDayIdle' },

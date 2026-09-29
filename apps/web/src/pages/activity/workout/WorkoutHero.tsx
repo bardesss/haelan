@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { BasisContext } from '../../../components/basis.js'
@@ -96,13 +96,11 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   const bandLabels = useMemo(() => band === undefined || hero === undefined ? undefined : {
     low: formatFigureValue(hero, band.low, language, t), high: formatFigureValue(hero, band.high, language, t),
   }, [hero, band, language, t])
-  // A dot names its session's date (the strip's labels); the session it opens is the latest one of
-  // this type on that date, never this one, which is already open (useOpensDay's `current`).
-  const openDate = useCallback((date: string) => {
-    const point = hero?.strip.filter((p) => p.localDate === date && p.sessionId !== page.sessionId).at(-1)
-    if (point !== undefined) onOpenWorkout?.(point.sessionId)
-  }, [hero, page.sessionId, onOpenWorkout])
-  const opens = useOpensDay(page.localDate, onOpenWorkout === undefined ? undefined : openDate, 'workout')
+  // A dot names its session's date (the strip's labels) but opens its own session (the strip's
+  // ids, Sparkline's pointIds): two sessions of a type can share a day, and by date only one of
+  // them could be reached. The one already open is this session, not this day (useOpensDay's
+  // `current`), so a same-day sibling still opens.
+  const opens = useOpensDay(page.sessionId, onOpenWorkout, 'workout')
   if (hero === undefined || hero.value === null) return null
   const label = t(`activity.workout.page.figures.${hero.key}`)
   const verdict = verdictLine(hero, language, t)
@@ -142,7 +140,7 @@ export function WorkoutHero({ page, onOpenWorkout }: {
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={hero.metric}
                 formatValue={formatValue} baseline={band} bands={strip.bands} bandLabels={bandLabels}
                 pointStandings={strip.pointStandings} pointJudged={strip.pointJudged}
-                height={64} dots tableToggle={false} inverse={inverse} {...opens} />
+                height={64} dots tableToggle={false} inverse={inverse} pointIds={strip.ids} {...opens} />
             </BasisContext.Provider>
             <p id={captionId} className="dash-caption">{caption}</p>
           </div>

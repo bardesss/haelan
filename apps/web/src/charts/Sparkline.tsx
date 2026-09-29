@@ -99,7 +99,7 @@ export type { PointJudged, PointStanding } from './base.js'
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
-  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, opensDay, bands,
+  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, opensDay, bands, pointIds,
   inverse = false,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
@@ -222,6 +222,11 @@ export function Sparkline({
   // is still what `bandLabels` label (the day shown, the last step), and still widens the y axis.
   // Undefined, every caller but the dashboard's day strips, draws `baseline` exactly as before.
   bands?: readonly ({ low: number, high: number } | null)[]
+  // One id per entry of `values`, for a strip whose points are not days: the workout hero's, where
+  // two sessions can share a date. A click then hands `onPointClick` the point's id rather than its
+  // date, and `opensDay.current` names the point shown by its id, so a same-day sibling stays
+  // openable. The labels stay dates, for the tooltip and the table. Undefined keeps dates.
+  pointIds?: readonly string[]
 }) {
   const { t, i18n } = useTranslation()
 
@@ -262,11 +267,13 @@ export function Sparkline({
   // option was set, so reading the ref at that moment hands it the current values anyway.
   const tooltipRef = useRef<DayTooltipInput | null>(null)
   const opensRef = useRef(opensDay)
+  const pointIdsRef = useRef(pointIds)
   useLayoutEffect(() => {
     tooltipRef.current = {
       values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t, lastYear: comparing ? lastYear : undefined,
     }
     opensRef.current = opensDay
+    pointIdsRef.current = pointIds
   })
 
   // The last day with a value, which is the dot drawn large: "latest" is the newest reading on the
@@ -319,7 +326,9 @@ export function Sparkline({
         // A day's own readout only, never a mark's (whose dataIndex counts into the marks), and
         // only a day with a value: the day is what a click on this point would open.
         const opens = opensRef.current
-        const date = event.componentType === 'series' && event.dataIndex !== undefined ? current.labels[event.dataIndex] : undefined
+        const ids = pointIdsRef.current
+        const date = event.componentType === 'series' && event.dataIndex !== undefined
+          ? (ids === undefined ? current.labels : ids)[event.dataIndex] : undefined
         const openable = opens !== undefined && html !== '' && date !== undefined && date !== opens.current
           && current.values[event.dataIndex!] != null
         // Joined, not templated: `html` is already escaped markup, which `tip` would escape again.
@@ -446,18 +455,24 @@ export function Sparkline({
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current
+  // What a click hands on: the day, or with `pointIds` the point's own id (only a dot has one, so
+  // a mark's click opens nothing there).
+  const pointOf = useCallback((event: ECElementEvent) => (pointIds === undefined
+    ? dayPointDate(labels, marks, event)
+    : event.componentType === 'series' ? pointIds[event.dataIndex] : undefined), [labels, marks, pointIds])
   const onClick = useCallback((event: ECElementEvent) => {
-    const date = dayPointDate(labels, marks, event)
-    if (date !== undefined && date !== current) onPointClick?.(date)
-  }, [labels, marks, onPointClick, current])
+    const point = pointOf(event)
+    if (point !== undefined && point !== current) onPointClick?.(point)
+  }, [pointOf, onPointClick, current])
 
   // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
   // point a click would have opened. This chart draws no axis labels at all, so the formatted date
   // is the only place the tapped day is ever written down outside the tooltip.
   const describe = useCallback((event: ECElementEvent) => {
+    const point = pointOf(event)
     const date = dayPointDate(labels, marks, event)
-    return date === undefined || date === current ? undefined : formatLocalDate(date, i18n.language)
-  }, [labels, marks, i18n.language, current])
+    return point === undefined || point === current || date === undefined ? undefined : formatLocalDate(date, i18n.language)
+  }, [pointOf, labels, marks, i18n.language, current])
 
   // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
   // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
