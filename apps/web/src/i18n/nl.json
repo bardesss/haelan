@@ -506,6 +506,7 @@
           "swimLengths": "Baantjes"
         },
         "heroStrip": "deze training en de negen van dit type ervoor",
+        "heroStripInverse": "deze training en de negen van dit type ervoor · hoger = sneller",
         "minisCaption": "elk lijntje: deze training en de negen van dit type ervoor · band = je gewone bereik",
         "previousFaster": "{{difference}} sneller dan de vorige, {{date}}",
         "previousSlower": "{{difference}} langzamer dan de vorige, {{date}}",

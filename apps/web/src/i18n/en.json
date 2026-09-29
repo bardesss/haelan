@@ -506,6 +506,7 @@
           "swimLengths": "Lengths"
         },
         "heroStrip": "this workout and the nine of this type before it",
+        "heroStripInverse": "this workout and the nine of this type before it · higher = faster",
         "minisCaption": "each line: this workout and the nine of this type before it · band = your usual range",
         "previousFaster": "{{difference}} faster than the previous one, {{date}}",
         "previousSlower": "{{difference}} slower than the previous one, {{date}}",

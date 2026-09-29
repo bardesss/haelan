@@ -99,6 +99,7 @@ export type { PointStanding } from './base.js'
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
   onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, opensDay, bands,
+  inverse = false,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
@@ -198,6 +199,9 @@ export function Sparkline({
   // own already knows what the client cannot (a thin band, a day still running). Ignored without
   // `dots`; a missing entry is no verdict.
   pointStandings?: readonly PointStanding[]
+  // Draws the y axis upside down, for a figure where less is better (a pace): the workout hero's
+  // strip then puts a faster run higher, as a speed strip would. Its caption has to say so.
+  inverse?: boolean
   // The dashboard's strips (M9c), where a click on a dot opens that day rather than annotating it.
   // `current` is the day already on screen: it opens nothing, so a click on it does nothing, a tap
   // on a phone does not select it, and its tooltip does not offer it. Every other day with a value
@@ -324,7 +328,7 @@ export function Sparkline({
     // the band's top) got silently clipped along with its edge label. With a baseline to draw,
     // widen the fitted extent to include both band edges (echarts calls min/max with the extent it
     // would otherwise have picked); with no baseline, `scale: true` alone behaves exactly as before.
-    yAxis: { type: 'value' as const, show: false, scale: true,
+    yAxis: { type: 'value' as const, show: false, scale: true, inverse,
       ...(baseline && {
         min: (extent: { min: number }) => Math.min(extent.min, baseline.low),
         max: (extent: { max: number }) => Math.max(extent.max, baseline.high),
@@ -434,7 +438,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest, bands])
+  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest, bands, inverse])
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current

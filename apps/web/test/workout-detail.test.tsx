@@ -193,8 +193,26 @@ describe('the workout page\'s hero', () => {
     expect(text(host, '.workout-hero-value')).toBe('5:24 /km')
     expect(text(host, '.workout-hero-verdict')).toBe('within your usual 5:22 /km – 5:36 /km')
     expect(text(host, '.workout-hero-rank')).toBe('Faster than 17 of your last 20 of this type')
-    expect(text(host, '.workout-hero .dash-caption')).toBe('this workout and the nine of this type before it')
+    expect(text(host, '.workout-hero .dash-caption')).toBe('this workout and the nine of this type before it · higher = faster')
     expect(host.querySelector('.workout-hero [role="img"][aria-label="Pace"]')).not.toBeNull()
+  })
+
+  it('turns a pace strip upside down, so a faster run sits higher, and leaves a speed strip the right way up', async () => {
+    const yInverse = (h: ParentNode) => {
+      const option = echarts.getInstanceByDom(h.querySelector<HTMLDivElement>('.workout-hero [role="img"]')!)?.getOption() as { yAxis: { inverse?: boolean }[] }
+      return option.yAxis[0]!.inverse === true
+    }
+    const paceHost = await mount(workoutPageFixture())
+    expect(yInverse(paceHost)).toBe(true)
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const page = workoutPageFixture()
+    const speed = { ...page.figures.pace!, key: 'speed' as const, metric: 'speed', unit: 'meters_per_second', precision: 1, direction: 'up' as const,
+      value: 3.1, baseline: null, standing: null, judged: null,
+      strip: page.figures.pace!.strip.map((point) => ({ ...point, value: point.value === null ? null : 1000 / point.value })) }
+    const speedHost = await mount({ ...page, hero: 'speed', figures: { ...page.figures, speed } })
+    expect(yInverse(speedHost)).toBe(false)
+    expect(text(speedHost, '.workout-hero .dash-caption')).toBe('this workout and the nine of this type before it')
   })
 
   it('says how it compares with the previous one of this type, and links to it', async () => {

@@ -83,7 +83,10 @@ export function WorkoutHero({ page }: { page: WorkoutPageData }) {
     : null
   const previous = previousLine(page, hero, language, t)
   const best = bestLine(page, hero, language, t)
-  const caption = t('activity.workout.page.heroStrip')
+  // A pace strip is drawn upside down so a faster run sits higher; the caption says so, since a
+  // reader of any other strip on the page takes higher to mean more.
+  const inverse = hero.direction === 'down'
+  const caption = t(inverse ? 'activity.workout.page.heroStripInverse' : 'activity.workout.page.heroStrip')
 
   return (
     <Card span={12} label={label}>
@@ -105,7 +108,7 @@ export function WorkoutHero({ page }: { page: WorkoutPageData }) {
           <div className="dash-lead-strip">
             <Described text={verdict ?? caption} hidden>
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={hero.metric}
-                formatValue={formatValue} bands={strip.bands} height={64} dots tableToggle={false} />
+                formatValue={formatValue} bands={strip.bands} height={64} dots tableToggle={false} inverse={inverse} />
             </Described>
             <p className="dash-caption">{caption}</p>
           </div>
