@@ -32,6 +32,7 @@ import { DEMO_CLOCK_MS } from '../../apps/web/src/demo/instant.js'
 import { flush } from '../../apps/web/test/flush.js'
 import { startCaptureServer } from './server.js'
 import { sliceToFirstDay, unreachableDays, unreachableWorkouts } from './slice.js'
+import { compactRecorded } from './compact.js'
 import type { CaptureServer } from './server.js'
 import { writeCapture } from '../../scripts/capture-demo.mjs'
 import type { WorkoutSession } from '../../apps/web/src/data/useSessions.js'
@@ -53,7 +54,7 @@ const dataDir = process.env.HAELAN_DEMO_DATA_DIR
 const outDir = process.env.HAELAN_DEMO_OUT_DIR
 const reportFile = process.env.HAELAN_DEMO_REPORT_FILE
 // capture-demo.mjs always sets this; the fallback matches its DEFAULT_DAYS for a direct run.
-const seededDays = Number(process.env.HAELAN_DEMO_DAYS ?? '400')
+const seededDays = Number(process.env.HAELAN_DEMO_DAYS ?? '371')
 if (dataDir === undefined || outDir === undefined || reportFile === undefined) {
   throw new Error(
     'record.tsx needs HAELAN_DEMO_DATA_DIR, HAELAN_DEMO_OUT_DIR and HAELAN_DEMO_REPORT_FILE - run '
@@ -233,8 +234,8 @@ describe('the capture sweep', () => {
     }
 
     // The year-over-year comparison on the default Month view, so a demo visitor who switches it
-    // on sees it work. Month only: the capture already sits near MAX_CAPTURE_BYTES, and every other
-    // range doubled would cross it. Elsewhere the comparison's reads miss the manifest, which
+    // on sees it work. Month only: when this was added the capture sat near MAX_CAPTURE_BYTES, and
+    // doubling every other range would have crossed it. Elsewhere the comparison's reads miss the manifest, which
     // data/lastYear.ts answers by drawing nothing rather than claiming an empty year.
     for (const route of ROUTES) {
       if (route.path.includes(':') || !usesPageControls(route.path) || route.path === '/notes') continue
@@ -420,6 +421,9 @@ describe('the capture sweep', () => {
     act(() => { root.unmount() })
     container.remove()
 
+    // Last, after every check above has read the bodies as the server sent them (compact.ts's own
+    // comment says which fields go and why no page misses them).
+    compactRecorded(server.recorded)
     const report = writeCapture(outDir, server.recorded)
     // A synchronous file write, not a marked console line - see this file's own header comment
     // and capture-demo.mjs's own comment on reportFile for the stdout race a line could lose.
