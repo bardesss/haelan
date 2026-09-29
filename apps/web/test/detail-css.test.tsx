@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { GRID_STACK_WIDTH } from '../src/ui/breakpoint.js'
+import { I18nProvider } from '../src/i18n/index.js'
+import { ChartFigure } from '../src/charts/ChartFigure.js'
 
 // Comments stripped first, grid-collapse.test.ts's reason: the stylesheet's prose names the very
 // selectors these checks look for.
@@ -70,6 +73,20 @@ describe('the detail pages\' stylesheet', () => {
   it('leaves a figure row label\'s type to .label', () => {
     const own = all.filter((r) => r.selectors.includes('.figure-row-label')).map((r) => r.body).join(';')
     expect(own).not.toMatch(/letter-spacing|text-transform|font-size|color/)
+  })
+
+  // A chart card's label sat flush on its chart (the night's "De nacht" and "Slaapschema") while
+  // every other card had the label gap: ChartFigure zeroed the figure's margin inline, and an
+  // inline style beats the one card-label rule. The reset lives in a class the rule outweighs.
+  it('leaves a chart figure\'s margin to a class the card-label rule outweighs', () => {
+    const figure = renderToStaticMarkup(
+      <I18nProvider lng="en"><ChartFigure label="Night" table={{ columns: [], rows: [] }} host={{ current: null }} style={{}} /></I18nProvider>,
+    ).match(/<figure[^>]*>/)?.[0]
+    expect(figure).not.toMatch(/style=/)
+    expect(figure).toMatch(/class="chart-figure"/)
+    expect(all.find((r) => r.media === null && r.selectors.includes('.chart-figure'))?.body).toMatch(/margin:\s*0/)
+    expect(all.find((r) => r.media === null && r.selectors.includes('.detail-page .card > .label + :not(.basis)'))?.body)
+      .toMatch(/margin-top:\s*var\(--space-3\)/)
   })
 
   // The header's controls are one height whatever sits beside them: a detail page's row holds
