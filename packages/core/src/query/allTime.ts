@@ -3,12 +3,15 @@ import { eddingtonOf } from '../api/eddington.ts'
 import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
 import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
-import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
+import type { SessionRecord } from '../api/sessionRecords.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
 import type { NamedSource } from '../store/sourceAliases.ts'
 import type { DefaultName } from '../api/sourceNames.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
 import type { DbOrTx } from '../db/open.ts'
+import { mergeRuleFor, mergeWorkouts } from './mergedWorkouts.ts'
+import { readSessions } from './sessions.ts'
+import type { WorkoutSession } from './sessions.ts'
 
 /**
  * Everything the all-time page shows, in one read.
@@ -217,14 +220,19 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
     days: stepDays.length,
   }
 
-  const excludedSessions = excludedSessionIds(db, personId)
+  // Read once and shared: the session records and the workout counts both mean one workout per
+  // event, and reading it twice would pay the whole-history merge twice.
+  const workouts = keptWorkouts(db, personId)
 
   return {
     span: { from: span.from ?? '', to: span.to ?? '', days: span.days ?? 0 },
     records,
-    sessionRecords: sessionRecordsOf(sessionsForRecords(db, personId, excludedSessions)),
+    sessionRecords: sessionRecordsOf(workouts.map(sessionForRecords)),
     eddington,
-    milestones: milestonesOf(db, personId, records, stepDays, excludedSessions),
+    milestones: milestonesOf(records, stepDays, {
+      exercise: workouts.map((workout) => workout.localDate),
+      sleep: keptNightDates(db, personId),
+    }),
   }
 }
 
@@ -272,39 +280,52 @@ function soleSourceOn(
  * that is the request to design against, and it is not this.
  */
 
-/** Session-scope exclusions, read once and shared by the milestones and the session records. */
-function excludedSessionIds(db: DbOrTx, personId: string): Set<string> {
-  return new Set(
+/**
+ * Every merged workout this person kept, oldest first: what the session records and the workout
+ * counts both read. `sessionForRecords` does the parsing for the records.
+ *
+ * Merged, not raw rows, so a run the watch and the phone both recorded is one workout rather
+ * than two. Read raw, the phone's copy of a run - often a minute longer or a few hundred metres
+ * further - could hold a record the workout page, which reads merged workouts, never shows, under
+ * an id that page answers as an alternate; and the same run counted twice toward a 50th workout.
+ * The merge is mergeWorkouts with the person's own rule, the one PersonQuery.sessions and the
+ * workout page's best read through, over the whole history.
+ *
+ * Exclusion is the merge's: a merged workout is excluded only when every copy was, because a kept
+ * copy always outranks an excluded one. Excluding the watch's copy therefore leaves the phone's
+ * standing as the workout, as it already did when this read raw rows. The one difference from the
+ * raw read is enrichment: an excluded copy can still fill a field the kept primary stored null,
+ * exactly as it does on the workout page, which is the figure a record has to agree with.
+ */
+function keptWorkouts(db: DbOrTx, personId: string): WorkoutSession[] {
+  const raw = readSessions(db, { personId, kind: 'exercise', from: '0000-01-01', to: '9999-12-31' })
+  return mergeWorkouts(raw, mergeRuleFor(db, personId)).filter((workout) => !workout.excluded)
+}
+
+/**
+ * The local date of every sleep session this person kept, oldest first, for the night counts.
+ *
+ * Raw rows less the excluded, as before: a night has its own merge (sleepMerge.ts) and nothing
+ * here has asked for it yet.
+ */
+function keptNightDates(db: DbOrTx, personId: string): string[] {
+  const excluded = new Set(
     db.all<{ targetKey: string }>(sql`
       SELECT target_key AS targetKey FROM overrides
        WHERE person_id = ${personId} AND scope = 'session' AND action = 'exclude'`)
       .map((row) => parseSessionTarget(row.targetKey)),
   )
-}
-
-/** Exercise sessions in the shape `sessionRecordsOf` needs; see `sessionForRecords` for the parsing. */
-function sessionsForRecords(
-  db: DbOrTx, personId: string, excluded: ReadonlySet<string>,
-): SessionForRecords[] {
-  const rows = db.all<{ id: string, localDate: string, startMs: number, endMs: number, attrs: string }>(sql`
-    SELECT id, local_date AS localDate, start_ms AS startMs, end_ms AS endMs, attrs
-      FROM sessions
-     WHERE person_id = ${personId} AND kind = 'exercise'
+  return db.all<{ id: string, localDate: string }>(sql`
+    SELECT id, local_date AS localDate FROM sessions
+     WHERE person_id = ${personId} AND kind = 'sleep'
      ORDER BY start_ms`)
-
-  const out: SessionForRecords[] = []
-  for (const row of rows) {
-    if (excluded.has(row.id)) continue
-    let attrs: unknown = {}
-    try { attrs = JSON.parse(row.attrs) } catch { attrs = {} }
-    out.push(sessionForRecords({ ...row, attrs }))
-  }
-  return out
+    .filter((row) => !excluded.has(row.id))
+    .map((row) => row.localDate)
 }
 
 function milestonesOf(
-  db: DbOrTx, personId: string, records: readonly MetricRecord[], stepDays: readonly DayRow[],
-  excludedSessions: ReadonlySet<string>,
+  records: readonly MetricRecord[], stepDays: readonly DayRow[],
+  datesByKind: Record<keyof typeof COUNT_EVERY, readonly string[]>,
 ): Milestone[] {
   const milestones: Milestone[] = []
 
@@ -317,20 +338,17 @@ function milestonesOf(
   }
 
   // 2. Round numbers reached, per session kind and never across them.
-  for (const [kind, every] of Object.entries(COUNT_EVERY)) {
-    const dates = db.all<{ id: string, localDate: string }>(sql`
-      SELECT id, local_date AS localDate FROM sessions
-       WHERE person_id = ${personId} AND kind = ${kind}
-       ORDER BY start_ms`)
-      .filter((row) => !excludedSessions.has(row.id))
+  for (const kind of ['exercise', 'sleep'] as const) {
+    const every = COUNT_EVERY[kind]
+    const dates = datesByKind[kind]
     for (let at = every; at <= dates.length; at += every) {
-      milestones.push({ kind: 'count', metric: kind, count: at, localDate: dates[at - 1]!.localDate })
+      milestones.push({ kind: 'count', metric: kind, count: at, localDate: dates[at - 1]! })
     }
     // 3. The first of each kind. Labelled "first recorded" by the page, never "first": both fall
     // on the day syncing started, so they say when the mirror began rather than anything about
     // the person.
     if (dates.length > 0) {
-      milestones.push({ kind: 'first', metric: kind, localDate: dates[0]!.localDate })
+      milestones.push({ kind: 'first', metric: kind, localDate: dates[0]! })
     }
   }
 
