@@ -109,7 +109,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
   }
   const whole = (value: number) => Number(value.toFixed(0))
   const ref = (r: WorkoutPage['best']['fastestKmSeconds']) => (r === null ? null : { ...r, value: whole(r.value) })
-  const { previous, after } = page
+  const { previous, after, splitTrend, zoneBounds } = page
   return {
     ...page,
     figures,
@@ -128,6 +128,12 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
         ...after.night, asleep: roundPageFigure(after.night.asleep), deep: roundPageFigure(after.night.deep),
       },
       restingHeartRate: after.restingHeartRate === null ? null : roundPageFigure(after.restingHeartRate),
+    },
+    // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.
+    splitTrend: splitTrend === null ? null : { secondHalfFasterBySecondsPerKm: whole(splitTrend.secondHalfFasterBySecondsPerKm) },
+    zoneBounds: zoneBounds === null ? null : {
+      moderateMin: whole(zoneBounds.moderateMin), vigorousMin: whole(zoneBounds.vigorousMin),
+      peakMin: whole(zoneBounds.peakMin), max: whole(zoneBounds.max),
     },
   }
 }

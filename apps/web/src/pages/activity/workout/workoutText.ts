@@ -19,3 +19,56 @@ export function bestMonth(date: string, workoutDate: string, language: string): 
     month: 'long', timeZone: 'UTC', ...(otherYear ? { year: 'numeric' } : {}),
   })
 }
+
+// The events that stop the clock, and the ones that start it again. A STOP ends a pause too: a
+// workout paused and then finished was paused until it finished.
+const PAUSE_STARTS: ReadonlySet<string> = new Set(['PAUSE', 'AUTO_PAUSE'])
+const PAUSE_ENDS: ReadonlySet<string> = new Set(['START', 'RESUME', 'AUTO_RESUME', 'STOP'])
+
+/**
+ * A workout's pauses from its events: each PAUSE up to the next event that starts the clock again
+ * or stops the workout, as a span the trace shades. A pause with no such event after it has only
+ * one end the archive supplies, so it stays a mark at its instant rather than a span whose right
+ * edge this page would be making up (IntradayHeartRate's own comment on `eventMarks`).
+ */
+export function pausesOf(events: readonly { atMs: number | null, kind: string | null }[]): {
+  spans: { startMs: number, endMs: number }[]
+  marks: { atMs: number }[]
+} {
+  const timed = events
+    .filter((e): e is { atMs: number, kind: string } => e.atMs !== null && e.kind !== null)
+    .sort((a, b) => a.atMs - b.atMs)
+  const spans: { startMs: number, endMs: number }[] = []
+  let open: number | null = null
+  for (const event of timed) {
+    if (PAUSE_STARTS.has(event.kind)) open ??= event.atMs
+    else if (PAUSE_ENDS.has(event.kind) && open !== null) {
+      if (event.atMs > open) spans.push({ startMs: open, endMs: event.atMs })
+      open = null
+    }
+  }
+  return { spans, marks: open === null ? [] : [{ atMs: open }] }
+}
+
+/**
+ * The height profile of a route as an SVG polyline's points in a `width` x `height` box: time
+ * along, altitude up, the lowest point on the floor. Null below two points with an altitude, when
+ * there is no profile to draw; a flat route draws a flat line through the middle.
+ */
+export function elevationProfile(
+  route: readonly { atMs: number, altitudeMetres: number | null }[],
+  width: number,
+  height: number,
+): string | null {
+  const points = route.filter((p): p is { atMs: number, altitudeMetres: number } => p.altitudeMetres !== null)
+  if (points.length < 2) return null
+  const t0 = points[0]!.atMs
+  const span = points.at(-1)!.atMs - t0
+  const low = Math.min(...points.map((p) => p.altitudeMetres))
+  const rise = Math.max(...points.map((p) => p.altitudeMetres)) - low
+  return points.map((p, i) => {
+    const x = span > 0 ? ((p.atMs - t0) / span) * width : (i / (points.length - 1)) * width
+    const y = rise > 0 ? height - ((p.altitudeMetres - low) / rise) * height : height / 2
+    return `${Number(x.toFixed(1))},${Number(y.toFixed(1))}`
+  }).join(' ')
+}

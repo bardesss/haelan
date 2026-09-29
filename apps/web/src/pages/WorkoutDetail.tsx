@@ -13,11 +13,10 @@ import { WorkoutTop } from './activity/workout/WorkoutTop.js'
 import { WorkoutHero } from './activity/workout/WorkoutHero.js'
 import { WorkoutMinis } from './activity/workout/WorkoutMinis.js'
 import { WorkoutCompared } from './activity/workout/WorkoutCompared.js'
+import { WorkoutMap } from './activity/workout/WorkoutMap.js'
+import { WorkoutThrough } from './activity/workout/WorkoutThrough.js'
+import { WorkoutZones } from './activity/workout/WorkoutZones.js'
 import { WorkoutTiles } from './activity/WorkoutTiles.js'
-import { WorkoutZones } from './activity/WorkoutZones.js'
-import { WorkoutTrace } from './activity/WorkoutTrace.js'
-import { WorkoutRoute } from './activity/WorkoutRoute.js'
-import { WorkoutSplits } from './activity/WorkoutSplits.js'
 import { WorkoutDynamics } from './activity/WorkoutDynamics.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -56,7 +55,7 @@ export function WorkoutDetail() {
   const { sources } = useSourceNames()
   const [annotating, setAnnotating] = useState(false)
 
-  // Memoised on query.data itself, not rebuilt by hand on every read: WorkoutTrace's own `marks`
+  // Memoised on query.data itself, not rebuilt by hand on every read: WorkoutThrough's own pauses
   // and WorkoutZones' own `rows` derive from this object, and useChart keys each chart's own
   // init/dispose effect on values built from them, so a `detail` that changed reference on every
   // render disposed and reinitialised both of this page's charts on every commit (M8b's final
@@ -114,12 +113,11 @@ export function WorkoutDetail() {
         <WorkoutHero page={page} />
         <WorkoutMinis page={page} />
         <WorkoutCompared page={page} />
+        <WorkoutMap session={query.data} page={page} />
+        <WorkoutThrough session={query.data} detail={detail} page={page} chosenSource={chosenSource} />
+        <WorkoutZones detail={detail} page={page} />
         {/* The pre-M10a sections, below the new ones until their redesigned replacements land. */}
-        <WorkoutRoute route={query.data.route} />
         <WorkoutTiles session={query.data} detail={detail} cardioLoad={query.data.cardioLoad} />
-        <WorkoutZones detail={detail} />
-        <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
-        <WorkoutSplits autoSplits={query.data.autoSplits} laps={query.data.laps} />
         <WorkoutDynamics detail={detail} />
       </div>
       {annotating && (

@@ -12,7 +12,7 @@ import type { IntradayPoint, IntradayResult } from '../data/useIntraday.js'
 import { useSession } from '../auth/session.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { METRICS } from '@haelan/core/metrics'
-import { formatElapsed } from './elapsed.js'
+import { elapsedInterval, formatElapsed } from './elapsed.js'
 
 // This component's name predates M8c: it was heart-rate-only until the night page reused it for
 // spo2 and hrv (NightTraces.tsx), the same three - and only three - metrics
@@ -29,6 +29,40 @@ const UNIT_LABEL_KEYS: Record<string, string> = {
   bpm: 'charts.units.bpm',
   percent: 'charts.units.percent',
   milliseconds: 'charts.units.milliseconds',
+}
+
+/** One zone band: its bpm edges, its name, and the chart token it is shaded in. */
+export interface ZoneBand { low: number | null, high: number, label: string, token: keyof ChartTokens }
+
+// Air above and below the readings on a zoned plot, and the step its edges are rounded out to.
+const ZONE_AXIS_PAD = 5
+const ZONE_AXIS_STEP = 10
+
+/**
+ * The y axis a zoned trace is drawn on, and the bands cut to it. The axis is fitted to the
+ * readings (and a usual band, when there is one), rounded out to whole tens, rather than stretched
+ * to every zone: a run that never left the vigorous zone would otherwise spend half its height on
+ * an empty light zone. Null without a reading, when there is nothing to fit.
+ */
+export function fitZoneBands(
+  points: readonly IntradayPoint[],
+  bands: readonly ZoneBand[],
+  usualBand?: { low: number, high: number },
+): { min: number, max: number, bands: { low: number, high: number, label: string, token: keyof ChartTokens }[] } | null {
+  const values = points.flatMap((p) => [p.min, p.mean, p.max].filter((v): v is number => v !== null))
+  if (usualBand !== undefined) values.push(usualBand.low, usualBand.high)
+  if (values.length === 0) return null
+  const min = Math.floor((Math.min(...values) - ZONE_AXIS_PAD) / ZONE_AXIS_STEP) * ZONE_AXIS_STEP
+  const max = Math.ceil((Math.max(...values) + ZONE_AXIS_PAD) / ZONE_AXIS_STEP) * ZONE_AXIS_STEP
+  return {
+    min,
+    max,
+    bands: bands.flatMap((band) => {
+      const low = Math.max(band.low ?? min, min)
+      const high = Math.min(band.high, max)
+      return high > low ? [{ ...band, low, high }] : []
+    }),
+  }
 }
 
 type Props = {
@@ -56,7 +90,8 @@ type Props = {
    * the archive supplies one end of a pause and never the other: 44 PAUSE events across 197
    * measured sessions and zero RESUME, zero AUTO_PAUSE, zero AUTO_RESUME. An interval needs two
    * ends, so a band's right-hand edge would be one this project made up. A tick makes no claim
-   * about when the person started again.
+   * about when the person started again. Since M10a-3 the workout page shades a pause that a later
+   * START or STOP closes (`spans`, workoutText.ts's pausesOf) and marks only the one nothing closes.
    *
    * No `label` field: the markLine below draws with `label: { show: false }` (ECharts never
    * renders one) and carries no `name` per entry either, so a caller-supplied label would be
@@ -111,6 +146,15 @@ type Props = {
    * only one). Empty by default, which draws exactly what the chart drew before this existed.
    */
   spans?: readonly { startMs: number, endMs: number }[]
+  /**
+   * Heart rate zones as labelled y bands behind the line, full mode only: a workout's four, from
+   * the provider's own ceilings (WorkoutThrough.tsx). `low: null` is a zone open below, the light
+   * zone, whose floor the provider never states; it runs to the bottom of the plot. With bands the
+   * y axis is fitted to the readings and each band is cut to it (fitZoneBands), so a zone the
+   * readings never come near is not drawn and no label sits on a band that runs off the plot.
+   * Memoise it, for the same reason as `usualBand`.
+   */
+  zoneBands?: readonly ZoneBand[]
   /**
    * The offset, in minutes, the points were recorded under, when they belong to something already
    * recorded: a finished day (the glance's and the intraday route's `offsetMinutes`), a workout, a
@@ -207,7 +251,7 @@ const COMPACT_HEIGHT = 84
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
   compact = false, startMs, endMs, spans = NO_SPANS, offsetMinutes = null, timeZone,
-  axis = 'clock', usualBand,
+  axis = 'clock', usualBand, zoneBands,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -279,8 +323,23 @@ export function IntradayHeartRate({
   const lastReadingMs = useMemo(() => points.reduce<number | null>((last, p) => (last === null || p.utcMs > last ? p.utcMs : last), null), [points])
   const lastMs = endMs ?? lastReadingMs
 
+  // Full mode on an elapsed axis draws on a value axis over time into the session, not on a time
+  // axis: a time axis puts its ticks on clock boundaries, so a run started at 18:02 read 3:00,
+  // 8:00, 13:00 (M10a-1's final review). Every x the chart places - readings, pause marks, pause
+  // shading, the excluded marker - goes through `x`, so they all sit on the one axis. The tooltip,
+  // the table and the annotate control still read each point's own instant through `tick`.
+  const elapsedFrom = !compact && axis === 'elapsed' && startMs !== undefined ? startMs : null
+  const x = useCallback((utcMs: number) => (elapsedFrom === null ? utcMs : utcMs - elapsedFrom), [elapsedFrom])
+
+  const zoned = useMemo(
+    () => (compact || zoneBands === undefined || zoneBands.length === 0 ? null : fitZoneBands(points, zoneBands, usualBand)),
+    [compact, zoneBands, points, usualBand],
+  )
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
+    const elapsedSpan = elapsedFrom === null || lastMs === null ? null : lastMs - elapsedFrom
+    const interval = elapsedSpan === null ? null : elapsedInterval(elapsedSpan)
     // series and seriesAlt first, since one or two sources is the ordinary case this chart was
     // written for; the sequential scale behind them is a fallback for a third device or more,
     // not a colour scheme chosen for its own sake.
@@ -314,7 +373,22 @@ export function IntradayHeartRate({
       xAxis: compact
         ? { type: 'time' as const, show: false,
             ...(startMs !== undefined && { min: startMs }), ...(lastMs !== null && { max: lastMs }) }
-        : {
+        : elapsedFrom !== null
+          ? {
+              // Time into the session, from 0:00 to its end, ticked every whole `interval`. The end
+              // is labelled only when it is itself a whole step, so 34:00 never crowds 30:00.
+              type: 'value' as const,
+              min: 0,
+              ...(endMs !== undefined && { max: endMs - elapsedFrom }),
+              ...(interval !== null && { interval }),
+              axisLabel: {
+                ...base.axisLabel,
+                formatter: (value: number) => formatElapsed(value),
+                showMaxLabel: interval !== null && elapsedSpan !== null && elapsedSpan % interval === 0,
+              },
+              axisLine: base.labelledAxis.axisLine,
+            }
+          : {
             type: 'time' as const,
             // Bounds the axis to the session or night itself, not just whatever `points` happen to
             // cover: a single reading ten minutes into a 34 minute session used to draw an axis
@@ -335,10 +409,12 @@ export function IntradayHeartRate({
         ...(compact
           ? { type: 'value' as const, scale: true, show: false }
           : { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel }),
-        ...(usualBand !== undefined && {
+        ...(usualBand !== undefined && zoned === null && {
           min: (extent: { min: number }) => Math.min(extent.min, usualBand.low),
           max: (extent: { max: number }) => Math.max(extent.max, usualBand.high),
         }),
+        // Zoned: fixed bounds, the ones the bands were cut to (fitZoneBands), usual band included.
+        ...(zoned !== null && { min: zoned.min, max: zoned.max }),
       },
       series: [...series.flatMap(({ sourceId, points: ownPoints }, index) => {
         const color = colors[index % colors.length]!
@@ -347,17 +423,17 @@ export function IntradayHeartRate({
         // being drawn on top of each other, and two sources can share a label.
         return [
           { name: `${label} min`, type: 'line' as const,
-            data: ownPoints.map((p) => [p.utcMs, p.min]),
+            data: ownPoints.map((p) => [x(p.utcMs), p.min]),
             showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 },
             stack: `range-${sourceId}`, areaStyle: { opacity: 0 } },
           { name: `${label} range`, type: 'line' as const,
-            data: ownPoints.map((p) => [p.utcMs, p.max !== null && p.min !== null ? p.max - p.min : null]),
+            data: ownPoints.map((p) => [x(p.utcMs), p.max !== null && p.min !== null ? p.max - p.min : null]),
             showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 },
             // Compact draws the line alone: the band stays in the series (the lookups above count
             // three per source) but paints nothing, and its min and max stay in the table.
             stack: `range-${sourceId}`, areaStyle: { color: tokens.stageLight, opacity: compact ? 0 : OPACITY.rangeBand } },
           { name: label, type: 'line' as const,
-            data: ownPoints.map((p) => [p.utcMs, p.mean]),
+            data: ownPoints.map((p) => [x(p.utcMs), p.mean]),
             showSymbol: false, connectNulls: false, lineStyle: { width: compact ? STROKE.sparkline : STROKE.series, color },
             // Same marker Sparkline and HeartRateRange draw over an excluded value (SYMBOL.excluded,
             // tokens.excluded): unlike their day scoped exclusion, a sample scoped one does not
@@ -367,7 +443,7 @@ export function IntradayHeartRate({
             // dayMarks moves a day with no value left.
             markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
               data: ownPoints.filter((p) => p.excluded).map((p) => ({
-                name: 'excluded', coord: [p.utcMs, p.mean ?? p.max ?? p.min ?? 0],
+                name: 'excluded', coord: [x(p.utcMs), p.mean ?? p.max ?? p.min ?? 0],
               })) } },
         ]
       }),
@@ -383,7 +459,7 @@ export function IntradayHeartRate({
             silent: true,
             label: { show: false },
             lineStyle: { color: tokens.axis, type: 'dashed' as const },
-            data: eventMarks.map((mark) => ({ xAxis: mark.atMs })),
+            data: eventMarks.map((mark) => ({ xAxis: x(mark.atMs) })),
           },
         }]),
         // Last for the same reason as the events series above. A markArea per span, unbounded on
@@ -398,7 +474,7 @@ export function IntradayHeartRate({
           markArea: {
             silent: true,
             itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
-            data: spans.map((span) => [{ xAxis: span.startMs }, { xAxis: span.endMs }] as [{ xAxis: number }, { xAxis: number }]),
+            data: spans.map((span) => [{ xAxis: x(span.startMs) }, { xAxis: x(span.endMs) }] as [{ xAxis: number }, { xAxis: number }]),
           },
         }]),
         // Last of all, for the same series-index-stability reason as the events and spans series
@@ -417,9 +493,26 @@ export function IntradayHeartRate({
             data: [[{ yAxis: usualBand.low }, { yAxis: usualBand.high }] as [{ yAxis: number }, { yAxis: number }]],
           },
         }]),
+        // The zones, appended after everything for the same index-stability reason, and at the
+        // same z as the usual band: context behind the reading. Each band in its own zone token,
+        // faint, with its name at its left edge in the muted text colour.
+        ...(zoned === null || zoned.bands.length === 0 ? [] : [{
+          id: 'zones',
+          type: 'line' as const,
+          z: 0,
+          data: [],
+          markArea: {
+            silent: true,
+            label: { show: true, position: 'insideLeft' as const, color: tokens.muted, fontSize: base.axisLabel.fontSize },
+            data: zoned.bands.map((band) => [
+              { name: band.label, yAxis: band.low, itemStyle: { color: tokens[band.token], opacity: OPACITY.zoneBand } },
+              { yAxis: band.high },
+            ] as [{ name: string, yAxis: number, itemStyle: { color: string, opacity: number } }, { yAxis: number }]),
+          },
+        }]),
       ],
     }
-  }, [series, pointsBySeriesIndex, tick, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, endMs, lastMs, spans, axis, usualBand])
+  }, [series, pointsBySeriesIndex, tick, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, endMs, lastMs, spans, axis, usualBand, zoned, elapsedFrom, x])
 
   // Shared by onClick and describe below, so the annotate control acts on precisely the point a
   // click would have opened rather than on a second reading of the same event.

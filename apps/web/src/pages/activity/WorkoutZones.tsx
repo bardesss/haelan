@@ -1,46 +1,15 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import type { HeartRateZoneDurations, WorkoutDetail } from '@haelan/core/workout-summary'
+import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import { Card } from '../../components/Card.js'
 import { ZoneBar, SESSION_ZONE_KEYS } from '../../charts/ZoneBar.js'
-import type { ZoneRow } from '../../charts/ZoneBar.js'
-import type { Translate } from '../../format.js'
-
-const SECONDS_PER_MINUTE = 60
+import { zoneRows } from './workout/WorkoutZones.js'
 
 // Re-exported so existing and future imports of the session zone vocabulary keep reading from this
-// file, which is where what the zones ARE (and are not) is explained, immediately below. The array
-// itself now lives in charts/ZoneBar.js, which is the one place that needs it at runtime for a
-// zone's own colour (that file's own comment on why); importing it back here rather than the
-// reverse direction avoids a cycle, since this file already imports ZoneBar the component.
-export { SESSION_ZONE_KEYS }
-
-/**
- * A session's own four zones, and they are NOT the intraday active-zone-minutes three.
- *
- * A session carries lightTime, moderateTime, vigorousTime and peakTime (decoded here as
- * lightSeconds/moderateSeconds/vigorousSeconds/peakSeconds by workoutDetail). The intraday
- * `active-zone-minutes` data type this app ingests is keyed FAT_BURN, CARDIO and PEAK, from the v4
- * heartRateZone enum: a different set, from a different source, with its own translation keys under
- * `activity.activeZoneMinutesFatBurn`/`Cardio`/`Peak`. Neither is mapped onto the other, here or
- * anywhere. This project has already shipped enum drift that discarded real data; conflating these
- * two is the same mistake waiting to happen. (SESSION_ZONE_KEYS itself: see charts/ZoneBar.js.)
- */
-
-const SECONDS_FIELD: Record<(typeof SESSION_ZONE_KEYS)[number], keyof HeartRateZoneDurations> = {
-  light: 'lightSeconds', moderate: 'moderateSeconds', vigorous: 'vigorousSeconds', peak: 'peakSeconds',
-}
-
-/** A row per zone the session actually recorded, in light-to-peak order. A zone recorded as zero
- *  keeps its row (the device says the person spent no time there); a zone the session never
- *  recorded has none - presence is `!== null`, never truthiness, so a recorded zero survives. */
-export function zoneRows(zones: HeartRateZoneDurations, t: Translate): ZoneRow[] {
-  return SESSION_ZONE_KEYS.flatMap((zone) => {
-    const seconds = zones[SECONDS_FIELD[zone]]
-    if (seconds === null) return []
-    return [{ zone, label: t(`activity.workout.zones.${zone}`), minutes: Math.round(seconds / SECONDS_PER_MINUTE) }]
-  })
-}
+// file. The array itself lives in charts/ZoneBar.js, which needs it at runtime for a zone's own
+// colour; zoneRows and what the four zones are (and are not) now live beside the workout page's
+// new zones card, workout/WorkoutZones.tsx, until this old card is retired.
+export { SESSION_ZONE_KEYS, zoneRows }
 
 export function WorkoutZones({ detail }: { detail: WorkoutDetail }) {
   const { t } = useTranslation()

@@ -11,8 +11,9 @@ import type { FigureDirection, PageFigure } from './pageFigure.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
-import type { WorkoutDetail, WorkoutSummary } from '../api/workoutSummary.ts'
+import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
 import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
+import type { ZoneBounds } from '../api/cardioLoad.ts'
 import { compareWorkout, sameTypeWindow } from '../api/workoutComparison.ts'
 import type { WorkoutComparison } from '../api/workoutComparison.ts'
 import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
@@ -45,6 +46,11 @@ export interface WorkoutPage {
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
+  /** Seconds per km the second half of the automatic splits was faster than the first (negative:
+   *  slower); null below two usable splits. */
+  splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
+  /** Where the heart rate zones above light begin, for the bands behind the trace. */
+  zoneBounds: ZoneBounds | null
 }
 
 export interface WorkoutPageInput { sessionId: string, today: string, nowMs: number, nameOf: (id: string) => string }
@@ -240,6 +246,22 @@ function afterOf(q: PersonQuery, subject: WorkoutSession, input: WorkoutPageInpu
   }
 }
 
+/**
+ * Answers: how much faster the second half of the splits went than the first, in s/km. Halves by
+ * count, the middle split left out of an odd one; each half's pace weighted by distance, so the
+ * short last split a run usually ends on counts for its fifth of a kilometre and not for a whole
+ * one. A split with no pace or no distance says nothing about either half and is skipped.
+ */
+export function splitTrendOf(splits: readonly WorkoutSplit[]): WorkoutPage['splitTrend'] {
+  const usable = splits.flatMap((s) => (s.paceSecondsPerKm === null || s.distanceMeters === null || s.distanceMeters <= 0
+    ? [] : [{ pace: s.paceSecondsPerKm, km: s.distanceMeters / 1000 }]))
+  if (usable.length < 2) return null
+  const half = Math.floor(usable.length / 2)
+  const paceOf = (part: typeof usable) =>
+    part.reduce((sum, s) => sum + s.pace * s.km, 0) / part.reduce((sum, s) => sum + s.km, 0)
+  return { secondHalfFasterBySecondsPerKm: paceOf(usable.slice(0, half)) - paceOf(usable.slice(usable.length - half)) }
+}
+
 export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): WorkoutPage | null {
   const session = q.sessionById({ sessionId: input.sessionId })
   if (session === null || session.kind !== 'exercise') return null
@@ -270,5 +292,7 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     best: bestOf(everSameType),
     day: dayOf(q, session, input),
     after: afterOf(q, session, input),
+    splitTrend: splitTrendOf(subject.detail.autoSplits),
+    zoneBounds: q.workoutZoneBounds({ sessionId: session.id }),
   }
 }

@@ -23,6 +23,16 @@ import { formatDuration } from '../format.js'
  */
 export const SESSION_ZONE_KEYS = ['light', 'moderate', 'vigorous', 'peak'] as const
 
+/**
+ * The four zones in four distinct colours, for the workout page (M10a-3): the approved mockup's
+ * light blue, blue, amber and red, taken from tokens that already exist rather than four new ones.
+ * Still ordered light to dark to warm, so the eye reads a scale. Shared with the trace's zone bands
+ * (WorkoutThrough.tsx), so a zone is the same colour on the bar and behind the line.
+ */
+export const ZONE_TOKENS: Record<(typeof SESSION_ZONE_KEYS)[number], keyof ChartTokens> = {
+  light: 'stageRem', moderate: 'stageLight', vigorous: 'stageAwake', peak: 'negative',
+}
+
 export interface ZoneRow { zone: (typeof SESSION_ZONE_KEYS)[number], label: string, minutes: number }
 
 const HEIGHT = 48
@@ -37,7 +47,12 @@ const HEIGHT = 48
  * scale-1..5), so "lightest first" would only describe the light theme - the drawn order matching
  * the read order is the constant, not any one colour being at either end.
  */
-export function ZoneBar({ rows, label }: { rows: readonly ZoneRow[], label: string }) {
+export function ZoneBar({ rows, label, distinct = false }: {
+  rows: readonly ZoneRow[]
+  label: string
+  /** Four distinct zone colours (ZONE_TOKENS) instead of the ramp; the workout page's zones card. */
+  distinct?: boolean
+}) {
   const { t } = useTranslation()
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
@@ -63,10 +78,12 @@ export function ZoneBar({ rows, label }: { rows: readonly ZoneRow[], label: stri
         type: 'bar' as const,
         stack: 'zones',
         data: [row.minutes],
-        itemStyle: { color: stops[SESSION_ZONE_KEYS.indexOf(row.zone) % stops.length]! },
+        itemStyle: {
+          color: distinct ? tokens[ZONE_TOKENS[row.zone]] : stops[SESSION_ZONE_KEYS.indexOf(row.zone) % stops.length]!,
+        },
       })),
     }
-  }, [rows, label])
+  }, [rows, label, distinct])
 
   const { host, style } = useChart(build, HEIGHT)
 

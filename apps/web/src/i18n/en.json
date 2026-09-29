@@ -568,6 +568,32 @@
           "best": "Your best",
           "bestValue": "{{value}} · {{month}}",
           "caption": "This type only · your best from Records"
+        },
+        "map": {
+          "kilometres": "Kilometres",
+          "km": "km",
+          "paceBar": "Pace against the other kilometres",
+          "elevation": "Elevation",
+          "elevationDescription": "The height along the route",
+          "negative": "Negative split",
+          "positive": "Positive split",
+          "even": "Even split",
+          "faster": "second half {{value}} s/km faster",
+          "slower": "second half {{value}} s/km slower",
+          "same": "both halves at the same pace"
+        },
+        "through": {
+          "label": "Through the workout",
+          "basis": "on the workout's own clock, 0:00 to {{end}}",
+          "pauses_one": "one pause of {{duration}}",
+          "pauses_other": "{{count}} pauses, {{duration}} in all",
+          "heartRate": "Heart rate",
+          "highest": "highest {{value}} at {{time}}",
+          "highestOnly": "highest {{value}}"
+        },
+        "zones": {
+          "label": "Heart-rate zones",
+          "hard": "{{value}} hard or peak"
         }
       }
     },

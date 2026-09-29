@@ -262,8 +262,9 @@ describe('the workout trace card', () => {
       }
       // One source (watch) draws three series (min, range, mean); the events series is appended
       // after them, at index 3.
+      // Ten minutes in: the elapsed axis is a value axis over time into the session (M10a-3).
       const events = option.series[3]!
-      expect(events.markLine?.data).toEqual([{ xAxis: Date.UTC(2026, 7, 3, 6, 10) }])
+      expect(events.markLine?.data).toEqual([{ xAxis: Date.UTC(2026, 7, 3, 6, 10) - SESSION.startMs }])
     } finally { restore() }
   })
 })

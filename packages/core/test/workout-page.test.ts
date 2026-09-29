@@ -291,6 +291,50 @@ describe('readWorkoutPage', () => {
     expect(page.figures.banister).toMatchObject({ value: banister, unit: 'trimp', baseline: null, standing: null })
   })
 
+  it('says how much faster the second half of the kilometres went than the first, distance-weighted', () => {
+    // First half 330 and 320 s/km; second half 300 over a full kilometre and 280 over a fifth of
+    // one. By distance the second half is (300 + 56) / 1.2 = 296.67 s/km, 28.33 faster than 325;
+    // a plain mean of the four paces would say 35.
+    seedRun('subject', SUBJECT_DATE, { splits: [
+      { distance: 1000, seconds: 330 }, { distance: 1000, seconds: 320 },
+      { distance: 1000, seconds: 300 }, { distance: 200, seconds: 56 },
+    ] })
+    expect(readWorkoutPage(q(), input('subject'))!.splitTrend!.secondHalfFasterBySecondsPerKm).toBeCloseTo(28.333, 2)
+  })
+
+  it('leaves the middle kilometre out of an odd count, and reads a slower second half as negative', () => {
+    seedRun('subject', SUBJECT_DATE, { splits: [
+      { distance: 1000, seconds: 300 }, { distance: 1000, seconds: 999 }, { distance: 1000, seconds: 310 },
+    ] })
+    expect(readWorkoutPage(q(), input('subject'))!.splitTrend).toEqual({ secondHalfFasterBySecondsPerKm: -10 })
+  })
+
+  it('claims no split trend with fewer than two kilometres', () => {
+    seedRun('one', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 300 }] })
+    seedRun('none', SUBJECT_DATE, { pace: 300 }, { hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('one'))!.splitTrend).toBeNull()
+    expect(readWorkoutPage(q(), input('none'))!.splitTrend).toBeNull()
+  })
+
+  it("draws the zones from the provider's ceilings for the day, the ones the Banister load's maximum is read from", () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_light_max_bpm', 'last', 113)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_moderate_max_bpm', 'last', 137)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_vigorous_max_bpm', 'last', 162)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_peak_max_bpm', 'last', 187)
+    expect(readWorkoutPage(q(), input('subject'))!.zoneBounds).toEqual({ moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 })
+  })
+
+  it('draws no zones when a ceiling is missing or the ceilings are out of order, rather than inventing one', () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_light_max_bpm', 'last', 113)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_moderate_max_bpm', 'last', 137)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_peak_max_bpm', 'last', 187)
+    expect(readWorkoutPage(q(), input('subject'))!.zoneBounds).toBeNull()
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_vigorous_max_bpm', 'last', 130)
+    expect(readWorkoutPage(q(), input('subject'))!.zoneBounds).toBeNull()
+  })
+
   it('leads with speed for a ride, with moving time for a strength session, and with elapsed time when that is all there is', () => {
     seedRide('ride', SUBJECT_DATE, { pace: 120, metrics: { averageSpeedMillimetersPerSecond: 8000 } })
     seedWorkout('lift', '2026-09-05', 'STRENGTH_TRAINING', { moving: 2400 })

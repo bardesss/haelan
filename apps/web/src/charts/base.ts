@@ -15,6 +15,9 @@ export const STROKE = {
 export const OPACITY = {
   rangeBand: 0.22,
   baselineBand: 0.5,
+  // A heart rate zone behind a workout's trace: four full-strength zone colours, so fainter than a
+  // usual band, or the line would be lost on the peak zone's red.
+  zoneBand: 0.18,
 } as const
 
 export const SYMBOL = {

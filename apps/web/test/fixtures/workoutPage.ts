@@ -119,6 +119,9 @@ export function workoutPageFixture(): WorkoutPageData {
       },
       restingHeartRate: dayFigure('resting_heart_rate', 'bpm', 'down', 55, band(54, 51, 57)),
     },
+    // The mockup's negative split, and the provider's zone ceilings for the day.
+    splitTrend: { secondHalfFasterBySecondsPerKm: 22 },
+    zoneBounds: { moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 },
     log: {
       presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'],
       mood: 5,
@@ -151,6 +154,7 @@ export function strengthPageFixture(): WorkoutPageData {
     comparison: { exerciseType: 'WEIGHTLIFTING', of: 0, reason: 'too-few', pace: null, heartRate: null, distance: null, cardioLoad: null },
     previous: null,
     best: { fastestKmSeconds: null, furthestMeters: null, longestMs: null },
+    splitTrend: null,
   }
 }
 
@@ -168,6 +172,24 @@ export function workoutSessionFixture(): WorkoutSessionDetail {
     cardioLoad: null, autoSplits: [], laps: [], route: [],
   }
 }
+
+/** The mockup's six automatic splits, 5:32 to a last 0.2 km at 4:51, the last heart rate filled
+ *  from the trace, as `/sessions/:id` sends them (splitHeartRate.ts's FilledSplit). */
+export const SPLITS_FIXTURE: WorkoutSessionDetail['autoSplits'] = [
+  [1000, 332, 146], [1000, 324, 152], [1000, 326, 156], [1000, 315, 163], [1000, 302, 171], [200, 291, 176],
+].map(([distance, pace, bpm], i) => ({
+  startMs: START + i * 330_000, endMs: START + (i + 1) * 330_000, splitType: 'DISTANCE',
+  activeDurationSeconds: (pace! * distance!) / 1000, distanceMeters: distance!, paceSecondsPerKm: pace!,
+  averageHeartRateBpm: bpm!, averageHeartRateBpmSource: i === 5 ? 'trace' as const : 'provider' as const,
+}))
+
+/** A small loop with a climb in the middle: four fixes, three of them with an altitude. */
+export const ROUTE_FIXTURE: WorkoutSessionDetail['route'] = [
+  { atMs: START, latitude: 52.1, longitude: 4.3, altitudeMetres: 2, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+  { atMs: START + 600_000, latitude: 52.11, longitude: 4.31, altitudeMetres: 22, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+  { atMs: START + 1_200_000, latitude: 52.1, longitude: 4.32, altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+  { atMs: START + 1_800_000, latitude: 52.1, longitude: 4.3, altitudeMetres: 4, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+]
 
 /** The strength session's own `/sessions/:id` answer. */
 export function strengthSessionFixture(): WorkoutSessionDetail {

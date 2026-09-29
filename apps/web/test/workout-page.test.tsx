@@ -638,15 +638,17 @@ describe('the route card', () => {
 // objects, not WorkoutSessionDetail), and this app has no error boundary, so an unguarded
 // `.length` read on `undefined` blanked the whole page rather than only leaving the splits card
 // off it. These two cases pin both directions of the fix.
+// Since M10a-3 the splits are the route card's kilometre table (WorkoutMap.tsx), drawn from two
+// splits up, since one kilometre compares with nothing.
 describe('the splits card', () => {
   it('renders a splits table when the session response carries filled splits', async () => {
-    const loaded = { ...RUN, autoSplits: [SPLIT], laps: [] }
+    const loaded = { ...RUN, autoSplits: [SPLIT, SPLIT], laps: [] }
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
-      expect(container?.querySelector('.workout-splits')).not.toBeNull()
-      expect(html()).toContain('Automatic splits')
+      expect(container?.querySelector('.workout-km')).not.toBeNull()
+      expect(html()).toContain('Kilometres')
     } finally { restore() }
   })
 
@@ -658,7 +660,7 @@ describe('the splits card', () => {
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
-      expect(container?.querySelector('.workout-splits')).toBeNull()
+      expect(container?.querySelector('.workout-km')).toBeNull()
       expect(html()).toContain('Morning run')
       expect(container?.querySelector('.workout-tiles')).not.toBeNull()
     } finally { restore() }
@@ -709,13 +711,14 @@ describe('the workout page\'s own ?source= parameter', () => {
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
-      // Absent entirely would be the old, wrong behaviour (WorkoutTrace.tsx's own rule for nobody
-      // recorded anything); present with the fallback's own basis line, naming the pinned device
-      // that answered empty, is what an unrecognised source id must read as instead.
+      // Absent entirely would be the old, wrong behaviour (the trace's own rule for nobody
+      // recorded anything); present with the fallback's own line, naming the pinned device that
+      // answered empty, is what an unrecognised source id must read as instead. Since M10a-3 the
+      // trace is WorkoutThrough.tsx's, and the fallback is said under the chart.
       const cards = [...(container?.querySelectorAll('.card') ?? [])]
-      const traceCard = cards.find((c) => c.querySelector('.label')?.textContent === 'Heart rate through this workout')
+      const traceCard = cards.find((c) => c.querySelector('.label')?.textContent === 'Through the workout')
       expect(traceCard, 'the trace card was absent').not.toBeUndefined()
-      expect(traceCard?.querySelector('.basis')?.textContent).toBe(
+      expect(traceCard?.querySelector('.workout-through-note')?.textContent).toBe(
         'Pixel Watch 4 recorded no heart rate in this window, so this is every other device instead; '
         + 'this 1 point is the reading',
       )

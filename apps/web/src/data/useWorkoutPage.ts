@@ -59,6 +59,12 @@ export interface WorkoutPageData {
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
+  /** Whole seconds per km the second half of the automatic splits was faster than the first,
+   *  negative when slower; null below two usable splits (workoutPage.ts's splitTrendOf). */
+  splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
+  /** Where each heart rate zone above light begins, in whole bpm, from the provider's ceilings for
+   *  the day (cardioLoad.ts's ZoneBounds); light has no floor to send. */
+  zoneBounds: { moderateMin: number, vigorousMin: number, peakMin: number, max: number } | null
   /** The quick log for the day this workout was done on (routes/v1/detail.ts: the workout's own localDate). */
   log: DayLog
 }

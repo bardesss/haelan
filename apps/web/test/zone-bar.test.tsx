@@ -9,7 +9,7 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import type { EChartsOption } from 'echarts'
-import { ZoneBar, SESSION_ZONE_KEYS } from '../src/charts/ZoneBar.js'
+import { ZoneBar, SESSION_ZONE_KEYS, ZONE_TOKENS } from '../src/charts/ZoneBar.js'
 import type { ZoneRow } from '../src/charts/ZoneBar.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 
@@ -99,6 +99,22 @@ describe('ZoneBar', () => {
   it('still draws every zone in its own stop, in order, when a session recorded all four', () => {
     const colors = colorsFor([row('light', 1), row('moderate', 2), row('vigorous', 3), row('peak', 4)])
     expect(colors).toEqual([STOPS[0], STOPS[1], STOPS[2], STOPS[3]])
+  })
+
+  // M10a-3: the workout page's zones card draws four distinct colours, the approved mockup's light
+  // blue, blue, amber and red, from the zone tokens the trace's bands use (ZONE_TOKENS), still by
+  // each zone's own identity rather than its row's position.
+  it('draws each zone in its own zone token when asked for distinct colours', () => {
+    const vars = { '--chart-stage-rem': '#0000a1', '--chart-stage-light': '#0000a2', '--chart-stage-awake': '#0000a3', '--negative': '#0000a4' }
+    for (const [variable, value] of Object.entries(vars)) document.documentElement.style.setProperty(variable, value)
+    try {
+      act(() => { root!.render(<ZoneBar rows={[row('light', 4), row('vigorous', 12), row('peak', 3)]} label="Zones" distinct />) })
+      const option = chartStubs.at(-1)!.setOption.mock.calls[0]![0] as EChartsOption
+      expect((option.series as { itemStyle: { color: string } }[]).map((s) => s.itemStyle.color)).toEqual(['#0000a1', '#0000a3', '#0000a4'])
+      expect(ZONE_TOKENS).toEqual({ light: 'stageRem', moderate: 'stageLight', vigorous: 'stageAwake', peak: 'negative' })
+    } finally {
+      for (const variable of Object.keys(vars)) document.documentElement.style.setProperty(variable, '#000000')
+    }
   })
 
   // Final review finding: the accessible table's second column was headed "Minutes" while its own

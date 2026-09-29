@@ -615,11 +615,48 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-diff { margin-left: var(--space-1); color: var(--text-muted); }
 .workout-diff.better { color: var(--positive); }
 .workout-diff.worse { color: var(--negative); }
+/* WorkoutMap.tsx: the route with its height profile, two thirds, beside the kilometres, one third;
+   either alone takes the whole card. */
+.workout-map { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.workout-map[data-both="true"] { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.workout-map-route, .workout-map-km { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.workout-km { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.workout-km th { text-align: left; color: var(--text-muted); font-weight: var(--weight-medium); padding: var(--space-1) 0; }
+.workout-km tbody th { color: var(--text-secondary); }
+.workout-km td, .workout-km tbody th { padding: var(--space-1) var(--space-1) var(--space-1) 0; border-top: 1px solid var(--border-subtle); }
+.workout-km-bar-cell { width: 45%; }
+.workout-km-bar { display: block; height: 4px; border-radius: 2px; background: var(--border-subtle); }
+.workout-km-bar-fill { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+.workout-split-trend { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.workout-elevation { display: flex; flex-direction: column; gap: var(--space-1); }
+.workout-elevation-head { display: flex; align-items: baseline; gap: var(--space-2); }
+.workout-elevation-gain { font-size: var(--font-size-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.workout-elevation-svg { display: block; width: 100%; height: 40px; }
+.workout-elevation-line { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+/* WorkoutThrough.tsx: the heart rate row, the night traces' label-beside-chart layout. */
+.workout-through { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: var(--space-3); align-items: center; }
+.workout-through-head, .workout-through-chart { min-width: 0; }
+.workout-through-summary { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.workout-through-note { margin: var(--space-2) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-tight); }
+/* WorkoutZones.tsx: the verdict on the left, the bar and its legend on the right. */
+.workout-zones { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
+.workout-zones-verdict { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.workout-zones-verdict strong { color: var(--text-primary); }
+.workout-zones-bar { min-width: 0; }
+.workout-zones-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); list-style: none; margin: var(--space-1) 0 0; padding: 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.workout-zones-legend li { display: inline-flex; align-items: center; gap: var(--space-1); }
+.workout-zones-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.workout-zones-key[data-zone="light"] { background: var(--chart-stage-rem); }
+.workout-zones-key[data-zone="moderate"] { background: var(--chart-stage-light); }
+.workout-zones-key[data-zone="vigorous"] { background: var(--chart-stage-awake); }
+.workout-zones-key[data-zone="peak"] { background: var(--negative); }
 @media (max-width: 620px) {
   .workout-compared-best { display: none; }
   .workout-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .workout-all { min-height: 44px; display: inline-flex; align-items: center; }
   .workout-hero-previous a, .workout-compared thead a { display: inline-flex; min-height: 44px; align-items: center; }
+  .workout-map[data-both="true"], .workout-zones { grid-template-columns: minmax(0, 1fr); }
+  .workout-through { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 }
 
 /* --- The night detail page (M10a-2), NightDetail.tsx and its sections: the dashboard's measure,

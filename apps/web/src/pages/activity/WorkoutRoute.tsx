@@ -97,8 +97,27 @@ export function projectRoute(
  */
 export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefined }) {
   const { t, i18n } = useTranslation()
-  const language = i18n.language
   const recorded = route ?? []
+  if (recorded.length === 0) return null
+  const n = (value: number, precision: number) => formatNumber(value, precision, i18n.language, '')
+  return (
+    <Card span={12} label={t('activity.workout.route.label')}
+      basis={t('activity.workout.route.basis', { count: n(recorded.length, 0) })}>
+      <RouteDrawing route={recorded} />
+    </Card>
+  )
+}
+
+/**
+ * The drawing itself, without a card: a MapLibre basemap under the trace when the instance allows
+ * one, the bare SVG trace otherwise. WorkoutRoute above puts it in a card of its own; the workout
+ * page's route and kilometres card (workout/WorkoutMap.tsx, M10a-3) sets it beside the kilometre
+ * table. Everything WorkoutRoute's comment says about the basemap setting lives here, unchanged.
+ * Nothing for an empty route.
+ */
+export function RouteDrawing({ route }: { route: readonly RoutePoint[] }) {
+  const { t } = useTranslation()
+  const recorded = route
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   // Undefined while the query is in flight, which reads as false below - the same "say nothing
   // rather than guess" the off-by-default setting itself argues for: a card that assumed the
@@ -121,7 +140,6 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
 
   if (recorded.length === 0) return null
 
-  const n = (value: number, precision: number) => formatNumber(value, precision, language, '')
   const { points, viewWidth, viewHeight } = projectRoute(recorded)
   const linePoints = points.map((point) => `${point.x},${point.y}`).join(' ')
 
@@ -132,22 +150,17 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
   // the line itself, and how it looks on a real screen, are not covered anywhere in this suite.
   const description = t('activity.workout.route.description')
 
-  return (
-    <Card span={12} label={t('activity.workout.route.label')}
-      basis={t('activity.workout.route.basis', { count: n(recorded.length, 0) })}>
-      {basemapEnabled ? (
-        // The map itself is built imperatively by the effect above, onto this element once
-        // MapLibre resolves - nothing here names a tile URL or a source, so the off branch below
-        // renders no trace of either.
-        <div className="workout-route-map" ref={mapContainerRef} role="img" aria-label={description} />
-      ) : (
-        <svg className="workout-route-svg" viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-          role="img" aria-label={description}>
-          {points.length === 1
-            ? <circle className="workout-route-point" cx={points[0]!.x} cy={points[0]!.y} r={POINT_RADIUS} />
-            : <polyline className="workout-route-trace" points={linePoints} />}
-        </svg>
-      )}
-    </Card>
+  return basemapEnabled ? (
+    // The map itself is built imperatively by the effect above, onto this element once MapLibre
+    // resolves - nothing here names a tile URL or a source, so the off branch below renders no
+    // trace of either.
+    <div className="workout-route-map" ref={mapContainerRef} role="img" aria-label={description} />
+  ) : (
+    <svg className="workout-route-svg" viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+      role="img" aria-label={description}>
+      {points.length === 1
+        ? <circle className="workout-route-point" cx={points[0]!.x} cy={points[0]!.y} r={POINT_RADIUS} />
+        : <polyline className="workout-route-trace" points={linePoints} />}
+    </svg>
   )
 }

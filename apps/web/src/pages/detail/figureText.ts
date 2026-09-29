@@ -7,9 +7,11 @@ import type { PointStanding } from '../../charts/base.js'
 
 // Figures measured in minutes that are only ever a few of them: "12 min" reads as what it is,
 // where "0h 12m" puts an empty hour in front of it. Time asleep, the stages, time in bed and time
-// awake stay durations, since those do run to hours.
+// awake stay durations, since those do run to hours. A workout's minutes in the hard zones
+// (workoutPage.ts's `hardZoneMinutes`) is the same kind: "15 min hard or peak".
 const SHORT_SPANS: ReadonlySet<string> = new Set([
   'active_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability',
+  'hardZoneMinutes',
 ])
 
 // A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading

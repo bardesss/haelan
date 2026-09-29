@@ -568,6 +568,32 @@
           "best": "Je beste",
           "bestValue": "{{value}} · {{month}}",
           "caption": "Alleen dit type · je beste uit Records"
+        },
+        "map": {
+          "kilometres": "Kilometers",
+          "km": "km",
+          "paceBar": "Tempo naast de andere kilometers",
+          "elevation": "Hoogte",
+          "elevationDescription": "De hoogte langs de route",
+          "negative": "Negatieve split",
+          "positive": "Positieve split",
+          "even": "Gelijke split",
+          "faster": "tweede helft {{value}} s/km sneller",
+          "slower": "tweede helft {{value}} s/km langzamer",
+          "same": "beide helften even snel"
+        },
+        "through": {
+          "label": "Door de training",
+          "basis": "op de tijd van de training zelf, 0:00 tot {{end}}",
+          "pauses_one": "één pauze van {{duration}}",
+          "pauses_other": "{{count}} pauzes, samen {{duration}}",
+          "heartRate": "Hartslag",
+          "highest": "hoogste {{value}} om {{time}}",
+          "highestOnly": "hoogste {{value}}"
+        },
+        "zones": {
+          "label": "Hartslagzones",
+          "hard": "{{value}} zwaar of piek"
         }
       }
     },
