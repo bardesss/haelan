@@ -1,10 +1,10 @@
 import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodWindow } from '../../data/periodTypes.js'
-import { formatShortDate, formatSignedDuration } from '../../format.js'
+import { formatShortDate, formatSignedDuration, formatSignedNumber } from '../../format.js'
 import type { Translate } from '../../format.js'
 import { directionWords } from '../../charts/base.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
 import { stripBands } from '../dashboard/cardShared.js'
-import { formatFigureDifference, formatFigureValue, isShortSpan, verdictLine } from './figureText.js'
+import { deviationVerdictLine, formatFigureDifference, formatFigureValue, isShortSpan, verdictLine } from './figureText.js'
 
 // The words of an overview page (Sleep, Activity) over the /period read: PATTERNS.md's "Overview
 // pages" section, beside this file. The server has already judged every figure, counted its days and
@@ -155,4 +155,22 @@ export function periodValueLine(figure: PeriodFigure, language: string, t: Trans
   const value = formatFigureValue(figure, figure.value, language, t)
   if (figure.total === null || !PERIOD_TOTAL_METRICS.includes(figure.metric)) return { value, under: null }
   return { value: formatFigureValue(figure, figure.total, language, t), under: t('period.value.perDay', { value }) }
+}
+
+/**
+ * Skin temperature on an overview page, worded as the night page words it (NightMorning): the
+ * period's average as a signed deviation from its usual's centre ("+0.3 °C"), and the usual as a
+ * deviation too (deviationVerdictLine), then the window. Null without a usual worth deviating from
+ * (none, or thin), or where the server gave a reason not to judge: the figure then reads as its
+ * reading, through periodValueLine and periodVerdictLine, never as "— °C".
+ */
+export function periodDeviationLine(figure: PeriodFigure, language: string, t: Translate): { value: string, verdict: string } | null {
+  const { usual } = figure
+  if (figure.value === null || figure.reason !== null || usual === null || usual.thin) return null
+  const deviation = formatSignedNumber(figure.value - usual.center, figure.precision, language, t('common.absent'))
+  const verdict = deviationVerdictLine({ ...figure, baseline: usual, strip: null }, language, t)
+  return {
+    value: `${deviation}${NBSP}${t('charts.units.celsius')}`,
+    verdict: verdict === null ? windowPhrase(usual.window, t) : verdict + SEPARATOR + windowPhrase(usual.window, t),
+  }
 }

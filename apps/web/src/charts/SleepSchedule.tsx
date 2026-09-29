@@ -22,9 +22,10 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
   label: string
   showNaps?: boolean
   // Usual bed and wake ranges shaded across the whole chart, already placed in the same frame as
-  // the nights' own bed and wake (the caller's job, as placing the nights is). Left out by the
-  // Sleep page; the night page passes its bedtime and wake time usuals, and none when either is
-  // thin, the rule every usual band on that page keeps. Memoise it: it reaches the chart build.
+  // the nights' own bed and wake (the caller's job, as placing the nights is; placedUsualBand in
+  // schedule.ts does it for both callers). The night page passes its bedtime and wake time usuals,
+  // the Sleep page its latest night's, and neither one that is thin, the rule every usual band
+  // keeps. Memoise it: it reaches the chart build.
   usualBands?: readonly { low: number, high: number }[]
   // Named axisWindow, not window: a plain `window` parameter shadows the DOM global, which this
   // file does not use today but a future edit here easily might reach for without noticing the
@@ -35,7 +36,7 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
   // afternoon nap had to span 36 hours, and a 36 hour axis prints noon and midnight twice each,
   // which read as a clock that had lost its place. Fitted, an ordinary range spans well under a
   // day and no label repeats. The caller still places its nights in whatever frame it likes
-  // (Sleep.tsx uses WIDE_WINDOW, so nothing is refused); this only chooses how much of that frame
+  // (both use WIDE_WINDOW, so nothing is refused); this only chooses how much of that frame
   // to draw.
   axisWindow?: { min: number, max: number }
 }) {

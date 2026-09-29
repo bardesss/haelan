@@ -25,8 +25,9 @@ const STACK_ID = 'bands'
 /** One band of a stacked day: `key` identifies it for a caller (a metric id, typically); `name` is
  *  its accessible label (the legend, the table column header, the tooltip line); `values` is dense
  *  over `labels` the same way DailyBars' own `values` prop is -- one entry per calendar day, null
- *  where nothing was reported. */
-export interface BandSeries { key: string, name: string, values: (number | null)[] }
+ *  where nothing was reported. `token` colours the band where it has a colour of its own (a sleep
+ *  stage); without one the bands take the scale's stops in order. */
+export interface BandSeries { key: string, name: string, values: (number | null)[], token?: keyof ChartTokens }
 
 // A negative band is not a reading: it is the visible signature of the consuming page's own
 // subtraction going wrong (an activity-band value computed as one running total minus the bands
@@ -150,7 +151,7 @@ export function StackedDailyBars({
         stack: STACK_ID,
         name: band.name,
         data: band.values,
-        itemStyle: { color: stops[index % stops.length] },
+        itemStyle: { color: band.token !== undefined ? tokens[band.token] : stops[index % stops.length] },
       })),
     }
   }, [clamped, labels, axisUnit, metric, i18n.language, marks, t])

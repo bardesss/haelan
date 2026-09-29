@@ -11,7 +11,10 @@ import { useTranslation } from '../../i18n/index.js'
  * The page owns `expanded`, since the list's card takes its own full-width row when it opens and
  * the card beside it widens with it.
  */
-export function ExpandableList<T>({ items, keyOf, render, groupOf, groupLabel, expanded, onToggle, visible = 7 }: {
+/** How many items a list shows before "Show all"; a page sizing the list's card by it reads this. */
+export const LIST_VISIBLE = 7
+
+export function ExpandableList<T>({ items, keyOf, render, groupOf, groupLabel, expanded, onToggle, visible = LIST_VISIBLE }: {
   items: T[]
   keyOf: (item: T) => string
   render: (item: T) => ReactNode

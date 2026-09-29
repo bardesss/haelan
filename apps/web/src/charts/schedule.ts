@@ -168,6 +168,26 @@ export function inWindow(minutes: number, window: { min: number, max: number }):
 }
 
 /**
+ * A usual bed or wake range placed in the schedule's frame: shifted by the whole day `anchorRaw`
+ * would be shifted by (inWindow's rule), then kept its own width, so a range straddling midnight
+ * stays one span. Null for a thin or absent usual, which draws no band (FigureRow's rule for a bar).
+ *
+ * A wake range is anchored on the usual bedtime rather than on itself: a wake time is placed as its
+ * night's bed plus the night's length (withinSchedule), so it moves by whatever day its bedtime
+ * moved by, and a wake range shifted on its own terms would land a day away from the bars it
+ * describes. 1440 stands in with no usual bedtime to anchor on, the shift every night that ended
+ * this morning takes anyway (napInWindow's same fallback). Shared by the night page's week and the
+ * Sleep page's schedule.
+ */
+export function placedUsualBand(
+  baseline: { low: number, high: number, thin: boolean } | null, anchorRaw: number | null,
+): { low: number, high: number } | null {
+  if (baseline === null || baseline.thin) return null
+  const shift = anchorRaw === null ? 1440 : inWindow(anchorRaw, WIDE_WINDOW) - anchorRaw
+  return { low: baseline.low + shift, high: baseline.high + shift }
+}
+
+/**
  * Where a nap taken on a row's own local date lands on that row's axis.
  *
  * inWindow is the wrong tool for it, and the difference is a whole day. A bed or wake reading is
