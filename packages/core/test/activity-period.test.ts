@@ -146,6 +146,11 @@ describe('readActivityPeriod', () => {
     const page = readActivityPeriod(q(), input(AUGUST))
     const active = page.figures.find((f) => f.metric === 'active_minutes')!
     expect(active).toMatchObject({ per: 'week', unit: 'minutes', value: 210, total: 30 * 31, days: 31 })
+    // A day's point is that day's own minutes, not seven times them.
+    expect(active.daily[0]!.value).toBe(30)
+    // Banded in memory from the summed days, as `baselines` would: 30 every day sits within its own band.
+    expect(active.daily[0]!.band).toMatchObject({ center: 30 })
+    expect(active.daily[0]!.standing).toBe('within')
     expect(page.figures.map((f) => f.metric)).toEqual(['active_minutes', 'distance', 'floors'])
     expect(page.intensity.light?.value).toBe(20)
     expect(page.intensity.vigorous?.value).toBe(0)

@@ -3,7 +3,7 @@ import { INSIGHT_MIN_DAY_FRACTION } from './insights.ts'
 import { judge, standingOf, toGlanceBaseline } from './glance.ts'
 import type { FigureDirection, GlanceBaseline, GlanceStanding, Judged } from './glance.ts'
 import { usualOf } from './pageFigure.ts'
-import { datesIn, earlierBlocks, periodBounds, weeksIn } from './periodBounds.ts'
+import { datesIn, earlierBlocks, minDate, periodBounds, weeksIn } from './periodBounds.ts'
 import type { DateSpan, PeriodRange } from './periodBounds.ts'
 
 /**
@@ -62,15 +62,9 @@ export interface PeriodFigureInput {
   additive: boolean
 }
 
-const earlier = (a: string, b: string) => (a < b ? a : b)
-
-function scaledBand(band: GlanceBaseline | null, scale: number): GlanceBaseline | null {
-  return band === null ? null : { center: band.center * scale, low: band.low * scale, high: band.high * scale, thin: band.thin }
-}
-
 /** The mean of the values in a span up to lastDay; a mean only when 70% of those dates carry one. */
 export function blockMean(values: ReadonlyMap<string, number>, span: DateSpan, lastDay: string): { mean: number | null, days: number } {
-  const to = earlier(span.to, lastDay)
+  const to = minDate(span.to, lastDay)
   if (to < span.from) return { mean: null, days: 0 }
   const dates = datesIn({ from: span.from, to })
   const present = dates.flatMap((d) => { const v = values.get(d); return v === undefined ? [] : [v] })
@@ -124,7 +118,7 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
   const per = input.per ?? 'day'
   const scale = per === 'week' ? 7 : 1
   const bounds = periodBounds(range, input.anchor)
-  const end = earlier(bounds.to, lastDay)
+  const end = minDate(bounds.to, lastDay)
   const running = end < bounds.to
   const dates = end < bounds.from ? [] : datesIn({ from: bounds.from, to: end })
 
@@ -149,10 +143,11 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
     return { from: span.from, to: span.to, value: v, band, standing: st, judged: judge(st, direction), days: n }
   }
 
+  // A day point is that day's own value against that day's own band, never scaled: a per-week
+  // figure's day dot reading seven times its minutes would misstate the day.
   const daily = dates.map((date) => {
     const v = values.get(date)
-    const band = scaledBand(toGlanceBaseline(input.dailyBands.get(date) ?? null), scale)
-    return point({ from: date, to: date }, v === undefined ? null : v * scale, band, v === undefined ? 0 : 1)
+    return point({ from: date, to: date }, v ?? null, toGlanceBaseline(input.dailyBands.get(date) ?? null), v === undefined ? 0 : 1)
   })
 
   let weekly: PeriodStripPoint[] | null = null

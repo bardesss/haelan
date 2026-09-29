@@ -1,7 +1,7 @@
 // The Sleep overview (M10b): a week, month, three months or year of nights, every figure judged
 // against periods of its own length. Computed on read from existing rows, one read per metric.
 import type { PersonQuery } from './personQuery.ts'
-import type { GlanceStanding, Judged } from './glance.ts'
+import type { FigureDirection, GlanceStanding, Judged } from './glance.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { recoveryIndexSeries, sleepWeekSeries } from '../api/recoveryIndex.ts'
 import { balanceOf, balanceZeroLine } from '../api/sleepBalance.ts'
@@ -10,11 +10,11 @@ import type { Baseline } from './baseline.ts'
 import type { SleepSummary } from '../api/sleepSummary.ts'
 import { readRecoveryInput } from './recoveryInput.ts'
 import { summaryOf } from './nightPage.ts'
-import { periodBounds } from './periodBounds.ts'
+import { minDate, periodBounds } from './periodBounds.ts'
 import type { PeriodRange } from './periodBounds.ts'
-import { highOf, periodFigureOf } from './periodFigure.ts'
+import { highOf } from './periodFigure.ts'
 import type { PeriodChange, PeriodFigure, PeriodHeader, PeriodHigh, PeriodStripPoint } from './periodFigure.ts'
-import { bandsOver, catalogueRead, orNull, periodChanges, periodHeader, readSpan, shown } from './periodRead.ts'
+import { catalogueRead, orNull, periodChanges, periodHeader, readSpan, shown, valuesFigure } from './periodRead.ts'
 
 export interface SleepPeriodInput {
   range: PeriodRange, anchor: string, today: string, source?: string
@@ -26,7 +26,7 @@ export interface SleepListRow {
   standing: GlanceStanding | null, judged: Judged, good: boolean
 }
 export interface ScheduleSide { bedtimeMinutes: number, waketimeMinutes: number, nights: number }
-export interface SleepSchedule { weekday: ScheduleSide | null, weekend: ScheduleSide | null }
+export interface ScheduleSides { weekday: ScheduleSide | null, weekend: ScheduleSide | null }
 export interface SleepPeriod {
   period: PeriodHeader
   /** Time asleep, per night. */
@@ -43,7 +43,7 @@ export interface SleepPeriod {
     deep: PeriodFigure | null, light: PeriodFigure | null, rem: PeriodFigure | null, awake: PeriodFigure | null
     shares: { deep: number, light: number, rem: number, awake: number } | null
   }
-  schedule: { bedtime: PeriodFigure | null, waketime: PeriodFigure | null, variability: PeriodFigure | null, sides: SleepSchedule }
+  schedule: { bedtime: PeriodFigure | null, waketime: PeriodFigure | null, variability: PeriodFigure | null, sides: ScheduleSides }
   balance: { zeroLine: ZeroLine, values: (number | null)[], total: number } | null
   /** Recovery index, resting heart rate, HRV, breathing, SpO2, skin temperature, those with days. */
   mornings: PeriodFigure[]
@@ -64,7 +64,7 @@ function sideOf(nights: readonly { bed: number, wake: number }[]): ScheduleSide 
 
 // Answers: weekday against weekend nights. A night is filed under the morning it ended (metrics.ts),
 // so Saturday and Sunday mornings are the weekend: the nights of Friday and Saturday.
-function sidesOf(bedtime: readonly PeriodStripPoint[], waketime: readonly PeriodStripPoint[]): SleepSchedule {
+function sidesOf(bedtime: readonly PeriodStripPoint[], waketime: readonly PeriodStripPoint[]): ScheduleSides {
   const wakeBy = new Map(waketime.map((p) => [p.from, p.value]))
   const weekday: { bed: number, wake: number }[] = []
   const weekend: { bed: number, wake: number }[] = []
@@ -81,7 +81,7 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
   const { range, anchor, source } = input
   const bounds = periodBounds(range, anchor)
   // A night is finished once it has a date, so today's night counts.
-  const lastDay = input.today < bounds.to ? input.today : bounds.to
+  const lastDay = minDate(input.today, bounds.to)
   const span = readSpan(range, bounds)
   const base = { range, anchor, bounds, span, lastDay, source }
   const read = (metric: string, agg: string) => catalogueRead(q, { ...base, metric, agg })
@@ -89,9 +89,9 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
 
   // Figures over values computed here rather than read, each banded in memory as `baselines` would.
   const derived = (
-    metric: string, o: { unit: string, precision: number, direction: 'up' | 'down' | 'neutral' }, values: Map<string, number>,
-    dailyBands: ReadonlyMap<string, Baseline | null> = bandsOver(values, bounds, lastDay),
-  ) => periodFigureOf({ metric, ...o, range, anchor, lastDay, values, dailyBands, additive: false })
+    metric: string, o: { unit: string, precision: number, direction: FigureDirection }, values: Map<string, number>,
+    dailyBands?: ReadonlyMap<string, Baseline | null>,
+  ) => valuesFigure({ metric, ...o, range, anchor, bounds, lastDay, values, dailyBands, additive: false })
 
   const asleep = read('sleep_asleep_minutes', 'sum')
   const hero = asleep.figure

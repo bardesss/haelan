@@ -104,14 +104,20 @@ describe('periodFigureOf', () => {
     const values = new Map(history); values.set('2026-09-01', 9000)
     expect(periodFigureOf({ ...base, additive: false, range: 'month', anchor: '2026-09-15', lastDay: '2026-10-01', values, dailyBands: bands }).total).toBeNull()
   })
-  it('per week multiplies value, usual and points by seven, but not the total', () => {
+  it('per week multiplies value and usual by seven, but not the total', () => {
     const values = fill('2025-09-01', '2026-09-30', () => 30)
     const f = periodFigureOf({ ...base, metric: 'active_minutes', per: 'week', range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands })
     expect(f.value).toBeCloseTo(210)
     expect(f.usual!.center).toBeCloseTo(210)
-    expect(f.daily[0]!.value).toBeCloseTo(210)
-    expect(f.daily[0]!.band!.center).toBeCloseTo(8500 * 7)
     expect(f.total).toBe(30 * 30)
+  })
+  it('per week leaves each daily point unscaled, against the band of that day', () => {
+    const values = fill('2025-09-01', '2026-09-30', () => 30)
+    const dayBands = new Map(datesIn({ from: '2026-09-01', to: '2026-09-30' }).map((d) => [d, band(25, 4)] as const))
+    const f = periodFigureOf({ ...base, metric: 'active_minutes', per: 'week', range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: dayBands })
+    expect(f.daily[0]!.value).toBe(30)
+    expect(f.daily[0]!.band).toMatchObject({ center: 25, low: 21, high: 29 })
+    expect(f.daily[0]!.standing).toBe('above')
   })
   it('draws weekly points on 3months, each against its own twelve weeks', () => {
     const values = fill('2025-01-01', '2026-09-30', (d) => (d >= '2026-09-07' && d <= '2026-09-13' ? 20000 : 9000 + (Number(d.slice(8)) % 3) * 100))

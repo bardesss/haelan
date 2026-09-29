@@ -105,6 +105,9 @@ export function weeksIn(span: DateSpan): DateSpan[] {
   return weeks
 }
 
+/** The earlier of two YYYY-MM-DD dates, which compare as strings. */
+export const minDate = (a: string, b: string): string => (a < b ? a : b)
+
 /** The same calendar date a year earlier; a leap day falls to 28 February. */
 export function yearEarlierDate(date: string): string {
   const { year, month, day } = partsOf(date)

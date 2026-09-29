@@ -7,7 +7,7 @@ import { coverageIsMeaningful } from './coverageSignal.ts'
 import { INSIGHT_MIN_COVERAGE } from './insights.ts'
 import { FIGURE_METRIC_ALIAS } from './glance.ts'
 import type { FigureDirection } from './glance.ts'
-import { datesIn, daysIn, earlierBlocks, periodBounds, stepPeriod, yearEarlierDate } from './periodBounds.ts'
+import { datesIn, daysIn, earlierBlocks, minDate, periodBounds, stepPeriod, yearEarlierDate } from './periodBounds.ts'
 import type { DateSpan, PeriodRange } from './periodBounds.ts'
 import { changeOf, periodFigureOf } from './periodFigure.ts'
 import type { PeriodChange, PeriodFigure, PeriodHeader } from './periodFigure.ts'
@@ -20,8 +20,6 @@ import type { PeriodChange, PeriodFigure, PeriodHeader } from './periodFigure.ts
  */
 export interface PeriodSeries { values: Map<string, number>, bands: Map<string, Baseline | null> }
 
-const earliest = (dates: readonly string[]) => dates.reduce((a, b) => (b < a ? b : a))
-const earlier = (a: string, b: string) => (a < b ? a : b)
 
 /**
  * The widest span a period's figures read: the earlier blocks it is judged against, the twelve
@@ -31,26 +29,26 @@ const earlier = (a: string, b: string) => (a < b ? a : b)
 export function readSpan(range: PeriodRange, bounds: DateSpan): DateSpan {
   const firstWeek = periodBounds('week', shiftLocalDate(bounds.from, -7 * 12)).from
   return {
-    from: earliest([
+    from: [
       earlierBlocks(range, bounds).blocks[0]!.from,
       firstWeek,
       baselineWindow(bounds.from).from,
       yearEarlierDate(bounds.from),
-    ]),
+    ].reduce(minDate),
     to: bounds.to,
   }
 }
 
 /** Every day's band for the period's days so far, from values already in hand; what `baselines` computes, without its read. */
 export function bandsOver(values: ReadonlyMap<string, number>, bounds: DateSpan, lastDay: string): Map<string, Baseline | null> {
-  const end = earlier(bounds.to, lastDay)
+  const end = minDate(bounds.to, lastDay)
   return end < bounds.from ? new Map() : baselinesOver(values, datesIn({ from: bounds.from, to: end }))
 }
 
 export function readPeriodSeries(
   q: PersonQuery, o: { metric: string, agg: string, span: DateSpan, bounds: DateSpan, lastDay: string, source?: string },
 ): PeriodSeries {
-  const { points } = q.series({ metric: o.metric, agg: o.agg, from: o.span.from, to: earlier(o.bounds.to, o.lastDay), source: o.source })
+  const { points } = q.series({ metric: o.metric, agg: o.agg, from: o.span.from, to: minDate(o.bounds.to, o.lastDay), source: o.source })
   // The same coverage rule `baselines` applies: a barely observed day is an undercount, not a reading.
   const judgeCoverage = coverageIsMeaningful(o.metric)
   const values = new Map(points
@@ -77,8 +75,18 @@ export function catalogueRead(q: PersonQuery, o: CatalogueFigureInput): { figure
   return { figure, series }
 }
 
-export function catalogueFigure(q: PersonQuery, o: CatalogueFigureInput): PeriodFigure {
-  return catalogueRead(q, o).figure
+export interface ValuesFigureInput {
+  metric: string, unit: string, precision: number, direction: FigureDirection
+  range: PeriodRange, anchor: string, bounds: DateSpan, lastDay: string
+  values: ReadonlyMap<string, number>, per?: 'day' | 'week', additive: boolean
+  /** Every day's band; by default banded in memory from `values`, as `baselines` would. */
+  dailyBands?: ReadonlyMap<string, Baseline | null>
+}
+
+/** A figure over values computed from reads already made rather than read itself. */
+export function valuesFigure(o: ValuesFigureInput): PeriodFigure {
+  const { bounds, dailyBands, ...rest } = o
+  return periodFigureOf({ ...rest, dailyBands: dailyBands ?? bandsOver(o.values, bounds, o.lastDay) })
 }
 
 /** A section without data hides; the server decides it, so the page never draws an empty figure. */

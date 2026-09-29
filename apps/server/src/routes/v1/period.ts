@@ -52,7 +52,6 @@ function roundChange(change: PeriodChange, hero: PeriodFigure): PeriodChange {
   return { ...change, value, delta }
 }
 
-
 /**
  * The Sleep overview at the wire's precision. Every figure goes through roundPeriodFigure; the
  * numbers taken from the hero (the longest night, the changes, the balance and the nights list)

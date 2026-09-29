@@ -10,11 +10,11 @@ import type { WorkoutSession } from './sessions.ts'
 import { ACTIVE_MINUTE_METRICS, FIGURE_METRIC_ALIAS, standingOf } from './glance.ts'
 import type { FigureDirection, GlanceStanding } from './glance.ts'
 import { usualOf } from './pageFigure.ts'
-import { daysIn, earlierBlocks, periodBounds } from './periodBounds.ts'
+import { daysIn, earlierBlocks, minDate, periodBounds } from './periodBounds.ts'
 import type { DateSpan, PeriodRange } from './periodBounds.ts'
-import { blockMean, highOf, PERIOD_MIN_PERIODS, periodFigureOf, windowOf } from './periodFigure.ts'
+import { blockMean, highOf, PERIOD_MIN_PERIODS, windowOf } from './periodFigure.ts'
 import type { PeriodChange, PeriodFigure, PeriodHeader, PeriodHigh, PeriodUsual } from './periodFigure.ts'
-import { bandsOver, catalogueRead, orNull, periodChanges, periodHeader, readSpan, shown } from './periodRead.ts'
+import { catalogueRead, orNull, periodChanges, periodHeader, readSpan, shown, valuesFigure } from './periodRead.ts'
 
 export interface ActivityPeriodInput { range: PeriodRange, anchor: string, today: string, source?: string }
 export interface WorkoutListRow {
@@ -148,7 +148,7 @@ export function readActivityPeriod(q: PersonQuery, input: ActivityPeriodInput): 
   const bounds = periodBounds(range, anchor)
   // Today is still running: no figure is judged on a partial day, as the glance's rule goes.
   const yesterday = shiftLocalDate(today, -1)
-  const lastDay = yesterday < bounds.to ? yesterday : bounds.to
+  const lastDay = minDate(yesterday, bounds.to)
   const span = readSpan(range, bounds)
   const base = { range, anchor, bounds, span, lastDay, source }
   const read = (metric: string) => catalogueRead(q, { ...base, metric, agg: 'sum' })
@@ -156,7 +156,7 @@ export function readActivityPeriod(q: PersonQuery, input: ActivityPeriodInput): 
 
   // Figures over per-day sums of series already read, banded in memory as `baselines` would.
   const sumFigure = (metric: string, o: { unit: string, precision: number, direction: FigureDirection, per?: 'day' | 'week' }, values: Map<string, number>) =>
-    periodFigureOf({ metric, ...o, range, anchor, lastDay, values, dailyBands: bandsOver(values, bounds, lastDay), additive: true })
+    valuesFigure({ metric, ...o, range, anchor, bounds, lastDay, values, additive: true })
 
   const steps = read('steps')
   const hero = steps.figure
@@ -171,7 +171,7 @@ export function readActivityPeriod(q: PersonQuery, input: ActivityPeriodInput): 
   const period = periodHeader(range, bounds, today, lastDay)
 
   // Today's workouts are listed, though no figure counts today.
-  const listTo = today < bounds.to ? today : bounds.to
+  const listTo = minDate(today, bounds.to)
   const workouts = q.sessions({ kind: 'exercise', from: bounds.from, to: listTo, sourceId: source })
     .map(rowOf).sort((a, b) => b.startMs - a.startMs)
   const counted = workouts.filter((w) => !w.excluded)

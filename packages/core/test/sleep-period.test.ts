@@ -215,6 +215,10 @@ describe('readSleepPeriod', () => {
     expect(page.balance!.values[0]).toBeCloseTo(asleepOf('2026-08-01') - center, 9)
     expect(page.schedule.variability?.metric).toBe('sleep_bedtime_variability')
     expect(page.schedule.variability!.days).toBe(31)
+    // Any seven mornings hold five weekday bedtimes (-60) and two weekend ones (0): a sample spread
+    // of sqrt(6000/7) minutes on every day, so the period's value is that spread too.
+    expect(page.schedule.variability!.daily[0]!.value).toBeCloseTo(Math.sqrt(6000 / 7), 9)
+    expect(page.schedule.variability!.value).toBeCloseTo(Math.sqrt(6000 / 7), 9)
   })
 
   it('reads the provider summary figures from the main sleep, and names the night by its source', () => {
