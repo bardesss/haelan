@@ -294,6 +294,31 @@ describe('PersonQuery workouts, merged', () => {
     expect(route!.map((p) => [p.atMs, p.latitude])).toEqual([[START, 52.1], [START + MINUTE, 52.101]])
   })
 
+  it('reads many routes at once, keyed by the merged id, the first member with a route winning', () => {
+    const route = (sessionId: string, latitude: number) => t.db.insert(sessionRoutes).values([0, 1].map((ordinal) => ({
+      id: `${sessionId}-${ordinal}`, sessionId, ordinal, atMs: START + ordinal * MINUTE,
+      latitude: latitude + ordinal / 1000, longitude: 4.3, altitudeMetres: null,
+      horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+    const nextDay = START + 24 * 60 * MINUTE
+    // A merged run whose route is on the alternate; a merged run with a route on both copies; a
+    // run with no route at all.
+    insert({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_RUN })
+    insert({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_RUN })
+    route('phone-run', 52.1)
+    insert({ id: 'google-2', sourceId: 'google', attrs: GOOGLE_RUN, startMs: nextDay, endMs: nextDay + 30 * MINUTE, localDate: '2026-09-21' })
+    insert({ id: 'phone-2', sourceId: 'phone', attrs: PHONE_RUN, startMs: nextDay, endMs: nextDay + 30 * MINUTE, localDate: '2026-09-21' })
+    route('google-2', 53.1)
+    route('phone-2', 54.1)
+    insert({ id: 'bare', sourceId: 'google', attrs: GOOGLE_RUN, startMs: nextDay + 120 * MINUTE, endMs: nextDay + 150 * MINUTE, localDate: '2026-09-21' })
+
+    const workouts = q().sessions({ kind: 'exercise', from: '2026-09-20', to: '2026-09-21' })
+    const routes = q().workoutRoutes({ sessions: workouts })
+    expect([...routes.keys()].sort()).toEqual(['google-2', 'google-run'])
+    expect(routes.get('google-run')!.map((p) => [p.atMs, p.latitude])).toEqual([[START, 52.1], [START + MINUTE, 52.101]])
+    expect(routes.get('google-2')!.map((p) => p.latitude)).toEqual([53.1, 53.101])
+  })
+
   it('leaves sleep as every source\'s rows, which the nightly merge already handles', () => {
     for (const [id, sourceId] of [['n1', 'google'], ['n2', 'phone']] as const) {
       t.db.insert(sessions).values({

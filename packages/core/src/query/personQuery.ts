@@ -34,7 +34,7 @@ import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { mergedWorkoutFor, mergeRuleFor, readMergedWorkouts } from './mergedWorkouts.ts'
-import { readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute, readWorkoutZoneBounds } from './workoutDerived.ts'
+import { readRoutesFor, readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute, readWorkoutZoneBounds } from './workoutDerived.ts'
 import type { CardioLoad, ZoneBounds } from '../api/cardioLoad.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
 import type { RoutePoint } from './workoutDerived.ts'
@@ -805,6 +805,19 @@ export class PersonQuery {
     const session = this.sessionById(input)
     if (session === null) return null
     return readWorkoutRoute(this.#db, { session })
+  }
+
+  /**
+   * Many workouts' routes in one read, keyed by session id, with workoutRoute's rule for a merged
+   * workout (readRoutesFor). For the workout page's same-route match and its fastest-effort bests,
+   * which want a route for every workout of a type and must not read them one at a time.
+   *
+   * The sessions must be ones this query answered (sessions, sessionById): `session_routes` is
+   * keyed on the session id alone, so the person scope is the read that produced them, the same
+   * footing readWorkoutRoute stands on. Server-side only; the points never reach a payload.
+   */
+  workoutRoutes(input: { sessions: readonly WorkoutSession[] }): Map<string, RoutePoint[]> {
+    return readRoutesFor(this.#db, input.sessions)
   }
 
   /**

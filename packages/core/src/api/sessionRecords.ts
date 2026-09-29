@@ -11,6 +11,9 @@
  * reader parses each session through `sessionForRecords` below and drops excluded sessions before
  * calling this; see `query/allTime.ts` and `query/workoutPage.ts`.
  */
+import { fastestEfforts } from './fastestEfforts.ts'
+import type { EffortKey } from './fastestEfforts.ts'
+import type { RoutePoint } from '../query/workoutDerived.ts'
 
 export interface SessionForRecords {
   sessionId: string
@@ -29,21 +32,23 @@ export interface SessionForRecords {
    * every split a running session produced.
    */
   kilometreSeconds: number[]
+  /** Fastest seconds over each distance anywhere inside the route (fastestEfforts); nulls when no route. */
+  efforts: Record<EffortKey, number | null>
 }
 
-export type SessionRecordKind = 'longest' | 'furthest' | 'fastest-km'
+export type SessionRecordKind = 'longest' | 'furthest' | 'fastest-km' | 'fastest-mile' | 'fastest-5k'
 
 export interface SessionRecord {
   kind: SessionRecordKind
   sessionId: string
   localDate: string
   exerciseType: string | null
-  /** Milliseconds for `longest`, millimetres for `furthest`, seconds for `fastest-km`. */
+  /** Milliseconds for `longest`, millimetres for `furthest`, seconds for each `fastest-*`. */
   value: number
 }
 
 /**
- * The three session records, omitting any the sessions cannot support.
+ * The session records, omitting any the sessions cannot support.
  *
  * Omitted rather than reported as zero or null: a household that only lifts has a longest
  * session and no distance at all, and a card reading "furthest: none" is worse than no card.
@@ -77,10 +82,16 @@ export function sessionRecordsOf(sessions: readonly SessionForRecords[]): Sessio
 
   best('longest', (s) => s.durationMs, (a, b) => a > b)
   best('furthest', (s) => s.distanceMm, (a, b) => a > b)
-  // Lower is better here, and it is the only one of the three that is.
-  best('fastest-km', (s) => (s.kilometreSeconds.length === 0
-    ? null
-    : Math.min(...s.kilometreSeconds)), (a, b) => a < b)
+  // Lower is better for the fastest ones, and only for them. A kilometre is the quicker of the
+  // splits and the GPS: the splits only ever time each kilometre from the start, while the GPS
+  // finds the fastest one wherever it began, so neither alone is the fastest the session ran.
+  const fewer = (a: number, b: number) => a < b
+  best('fastest-km', (s) => {
+    const candidates = [...s.kilometreSeconds, ...(s.efforts.km === null ? [] : [s.efforts.km])]
+    return candidates.length === 0 ? null : Math.min(...candidates)
+  }, fewer)
+  best('fastest-mile', (s) => s.efforts.mile, fewer)
+  best('fastest-5k', (s) => s.efforts.fiveK, fewer)
 
   return records
 }
@@ -96,7 +107,7 @@ export function sessionRecordsOf(sessions: readonly SessionForRecords[]): Sessio
  */
 export function sessionForRecords(session: {
   id: string, localDate: string, startMs: number, endMs: number, attrs: unknown
-}): SessionForRecords {
+}, route?: readonly RoutePoint[]): SessionForRecords {
   const attrs = typeof session.attrs === 'object' && session.attrs !== null && !Array.isArray(session.attrs)
     ? session.attrs as Record<string, unknown>
     : {}
@@ -126,5 +137,6 @@ export function sessionForRecords(session: {
     durationMs: session.endMs - session.startMs,
     distanceMm: distance,
     kilometreSeconds,
+    efforts: route === undefined ? { km: null, mile: null, fiveK: null } : fastestEfforts(route),
   }
 }

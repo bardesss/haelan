@@ -603,6 +603,109 @@ describe('readWorkoutPage: through the workout', () => {
   })
 })
 
+describe('readWorkoutPage: this route and fastest efforts', () => {
+  const metresPerDegree = (6_371_000 * Math.PI) / 180
+  const lonMetres = metresPerDegree * Math.cos((52 * Math.PI) / 180)
+
+  /** A route from the session's start, a fix every 10 s at `speed` m/s for `fixes` fixes, heading `north` or `east`. */
+  function seedRoute(sessionId: string, localDate: string, o: { speed?: number, fixes?: number, heading?: 'north' | 'east', hhmm?: string } = {}) {
+    const startMs = at(localDate, o.hhmm ?? '07:00')
+    const step = (o.speed ?? 3) * 10
+    test.db.insert(sessionRoutes).values(Array.from({ length: (o.fixes ?? 70) + 1 }, (_, i) => ({
+      id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
+      latitude: 52 + (o.heading === 'east' ? 0 : (i * step) / metresPerDegree),
+      longitude: 5 + (o.heading === 'east' ? (i * step) / lonMetres : 0),
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+  }
+
+  /** `n` runs on the same 2.1 km route, every third day before SUBJECT_DATE, moving time alternating 600 +/- 10 s. */
+  function seedRouteRuns(n: number) {
+    for (let i = 0; i < n; i += 1) {
+      const localDate = shiftLocalDate(SUBJECT_DATE, -3 * (n - i))
+      seedRun(`route-${i}`, localDate, { moving: 600 + (i % 2 === 0 ? 10 : -10) })
+      seedRoute(`route-${i}`, localDate)
+    }
+  }
+
+  it('judges the time against the earlier times on the same route, with a strip and the previous one', () => {
+    seedRouteRuns(11)
+    // Another route, one run the other way, an excluded run, and one after: none of them count.
+    seedRun('elsewhere', '2026-09-01', { moving: 900 }, { hhmm: '18:00' })
+    seedRoute('elsewhere', '2026-09-01', { heading: 'east', hhmm: '18:00' })
+    seedRun('dropped', '2026-09-02', { moving: 900 }, { excluded: true })
+    seedRoute('dropped', '2026-09-02')
+    seedRun('later', '2026-09-06', { moving: 900 })
+    seedRoute('later', '2026-09-06')
+    seedRun('subject', SUBJECT_DATE, { moving: 540 })
+    seedRoute('subject', SUBJECT_DATE)
+    const { sameRoute } = readWorkoutPage(q(), input('subject'))!
+    expect(sameRoute!.count).toBe(11)
+    expect(sameRoute!.time).toMatchObject({ value: 540, unit: 'seconds', direction: 'down', standing: 'below', judged: 'better' })
+    expect(sameRoute!.time.baseline!.thin).toBe(false)
+    expect(sameRoute!.time.baseline!.center).toBeCloseTo(600 + 10 / 11)
+    expect(sameRoute!.time.strip.map((p) => p.sessionId))
+      .toEqual(['route-2', 'route-3', 'route-4', 'route-5', 'route-6', 'route-7', 'route-8', 'route-9', 'route-10', 'subject'])
+    expect(sameRoute!.time.strip.at(-1)).toMatchObject({ value: 540, standing: 'below', judged: 'better' })
+    expect(sameRoute!.previous).toEqual({ sessionId: 'route-10', localDate: shiftLocalDate(SUBJECT_DATE, -3), seconds: 610 })
+  })
+
+  it('claims no standing on four earlier times on the route, and still draws them', () => {
+    seedRouteRuns(4)
+    seedRun('subject', SUBJECT_DATE, { moving: 540 })
+    seedRoute('subject', SUBJECT_DATE)
+    const { sameRoute } = readWorkoutPage(q(), input('subject'))!
+    expect(sameRoute!.count).toBe(4)
+    expect(sameRoute!.time.baseline!.thin).toBe(true)
+    expect(sameRoute!.time.standing).toBeNull()
+    expect(sameRoute!.time.strip.map((p) => p.sessionId)).toEqual(['route-0', 'route-1', 'route-2', 'route-3', 'subject'])
+  })
+
+  it('reads the elapsed time for a workout that recorded no moving time', () => {
+    seedRun('before', '2026-09-01', {}, { minutes: 20 })
+    seedRoute('before', '2026-09-01')
+    seedRun('subject', SUBJECT_DATE, {}, { minutes: 25 })
+    seedRoute('subject', SUBJECT_DATE)
+    const { sameRoute } = readWorkoutPage(q(), input('subject'))!
+    expect(sameRoute!.time.value).toBe(25 * 60)
+    expect(sameRoute!.previous!.seconds).toBe(20 * 60)
+  })
+
+  it('has no route card without a route, or with no earlier run on it', () => {
+    seedRouteRuns(5)
+    seedRun('bare', SUBJECT_DATE, { moving: 540 })
+    expect(readWorkoutPage(q(), input('bare'))!.sameRoute).toBeNull()
+    seedRun('new-route', SUBJECT_DATE, { moving: 540 }, { hhmm: '18:00' })
+    seedRoute('new-route', SUBJECT_DATE, { heading: 'east', hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('new-route'))!.sameRoute).toBeNull()
+  })
+
+  it('sets each fastest effort against the best of the type, and says when this workout holds it', () => {
+    // An earlier 1.2 km at 4 m/s holds the kilometre; only the subject's 6 km covers a mile and 5 km.
+    seedRun('quick', '2026-09-01', {})
+    seedRoute('quick', '2026-09-01', { speed: 4, fixes: 30 })
+    seedRun('subject', SUBJECT_DATE, {})
+    seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
+    const page = readWorkoutPage(q(), input('subject'))!
+    expect(page.efforts!.km!.seconds).toBeCloseTo(1000 / 3, 1)
+    expect(page.efforts!.km!.isBest).toBe(false)
+    expect(page.efforts!.km!.best).toMatchObject({ sessionId: 'quick', localDate: '2026-09-01' })
+    expect(page.efforts!.km!.best!.value).toBeCloseTo(250, 6)
+    expect(page.efforts!.mile).toMatchObject({ isBest: true, best: { sessionId: 'subject' } })
+    expect(page.efforts!.fiveK).toMatchObject({ isBest: true, best: { sessionId: 'subject' } })
+    // The Records best reads the GPS kilometre too, so the two cannot disagree.
+    expect(page.best.fastestKmSeconds).toMatchObject({ sessionId: 'quick' })
+    expect(readWorkoutPage(q(), input('quick'))!.efforts).toMatchObject({ km: { isBest: true }, mile: null, fiveK: null })
+    // Nothing in the page carries a coordinate.
+    expect(JSON.stringify(page)).not.toMatch(/latitude|longitude/)
+  })
+
+  it('has no efforts without a route', () => {
+    seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 300 }] })
+    expect(readWorkoutPage(q(), input('subject'))!.efforts).toBeNull()
+  })
+})
+
 describe('PersonQuery.workoutPage', () => {
   it('refuses an empty session id and a malformed today, and names no person by default', () => {
     seedRun('subject', SUBJECT_DATE, {})

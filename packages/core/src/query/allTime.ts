@@ -12,6 +12,7 @@ import type { DbOrTx } from '../db/open.ts'
 import { mergeRuleFor, mergeWorkouts } from './mergedWorkouts.ts'
 import { readSessions } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
+import { readRoutesFor } from './workoutDerived.ts'
 
 /**
  * Everything the all-time page shows, in one read.
@@ -223,11 +224,13 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
   // Read once and shared: the session records and the workout counts both mean one workout per
   // event, and reading it twice would pay the whole-history merge twice.
   const workouts = keptWorkouts(db, personId)
+  // Every kept workout's route in one read, for the fastest efforts among the session records.
+  const routes = readRoutesFor(db, workouts)
 
   return {
     span: { from: span.from ?? '', to: span.to ?? '', days: span.days ?? 0 },
     records,
-    sessionRecords: sessionRecordsOf(workouts.map(sessionForRecords)),
+    sessionRecords: sessionRecordsOf(workouts.map((workout) => sessionForRecords(workout, routes.get(workout.id)))),
     eddington,
     milestones: milestonesOf(records, stepDays, {
       exercise: workouts.map((workout) => workout.localDate),

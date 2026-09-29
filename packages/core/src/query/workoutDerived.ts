@@ -119,15 +119,28 @@ export interface RoutePoint {
 export function readWorkoutRoute(db: DbOrTx, input: {
   session: WorkoutSession
 }): RoutePoint[] {
-  if (input.session.kind !== 'exercise') return []
   // A merged workout's route is its first member's that has one, in the same best-first order its
   // attrs were filled in (mergedWorkouts.ts): Google never sends a route, so a run the priority
   // list credits to Google still draws the track the phone recorded for it. Whole routes, never
   // points from two members interleaved, for the reason a split list is never merged either.
-  //
-  // One read for every member rather than one per member, grouped here: a workout has two or three
-  // copies at most, but a query per candidate is the shape drizzle-prepares-per-run warned about.
-  const order = [input.session.id, ...input.session.alternateIds]
+  // readRoutesFor applies that rule, with one read for every member.
+  return readRoutesFor(db, [input.session]).get(input.session.id) ?? []
+}
+
+/**
+ * Many workouts' routes in one query, keyed by the (merged) session id each was asked under:
+ * readWorkoutRoute's rule for every session at once, so a merged workout takes its first member's
+ * route that has one, whole. A session with no route, and a sleep session, has no entry.
+ *
+ * One query over every member id rather than one per workout, for the reason readWorkoutRoute
+ * already reads its members together: the Records page and the workout page's same-route match
+ * each want every route of a person's history, and a query per workout there is hundreds.
+ */
+export function readRoutesFor(db: DbOrTx, sessions: readonly WorkoutSession[]): Map<string, RoutePoint[]> {
+  const routes = new Map<string, RoutePoint[]>()
+  const exercise = sessions.filter((session) => session.kind === 'exercise')
+  const ids = [...new Set(exercise.flatMap((session) => [session.id, ...session.alternateIds]))]
+  const byMember = new Map<string, RoutePoint[]>()
   const rows = db.select({
     sessionId: sessionRoutes.sessionId,
     atMs: sessionRoutes.atMs,
@@ -136,10 +149,18 @@ export function readWorkoutRoute(db: DbOrTx, input: {
     altitudeMetres: sessionRoutes.altitudeMetres,
     horizontalAccuracyMetres: sessionRoutes.horizontalAccuracyMetres,
     verticalAccuracyMetres: sessionRoutes.verticalAccuracyMetres,
-  }).from(sessionRoutes).where(inArray(sessionRoutes.sessionId, order))
+  }).from(sessionRoutes).where(inArray(sessionRoutes.sessionId, ids))
     .orderBy(asc(sessionRoutes.ordinal)).all()
-  const owner = order.find((id) => rows.some((row) => row.sessionId === id))
-  return rows.filter((row) => row.sessionId === owner).map(({ sessionId: _, ...point }) => point)
+  for (const { sessionId, ...point } of rows) {
+    const points = byMember.get(sessionId)
+    if (points === undefined) byMember.set(sessionId, [point])
+    else points.push(point)
+  }
+  for (const session of exercise) {
+    const owner = [session.id, ...session.alternateIds].find((id) => byMember.has(id))
+    if (owner !== undefined) routes.set(session.id, byMember.get(owner)!)
+  }
+  return routes
 }
 
 /**

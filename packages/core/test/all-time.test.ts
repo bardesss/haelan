@@ -1,7 +1,7 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { daily, sessions, sourcePriority, sources } from '../src/db/schema/index.ts'
+import { daily, sessionRoutes, sessions, sourcePriority, sources } from '../src/db/schema/index.ts'
 import { seedOverride } from '../src/testing/fixtures.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { MIN_RUN_DAYS } from '../src/api/runs.ts'
@@ -208,6 +208,35 @@ describe('readAllTime', () => {
 
     expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'longest'))
       .toMatchObject({ sessionId: 'kept' })
+  })
+
+  it('reads every route in one query, and takes the fastest efforts off them', () => {
+    const metresPerDegree = (6_371_000 * Math.PI) / 180
+    // Due north, a fix every 10 s at `speed` m/s for `fixes` fixes, from the session's own start.
+    const seedRoute = (sessionId: string, speed: number, fixes: number) => {
+      const startMs = test.db.select().from(sessions).all().find((row) => row.id === sessionId)!.startMs
+      test.db.insert(sessionRoutes).values(Array.from({ length: fixes + 1 }, (_, i) => ({
+        id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
+        latitude: 52 + (i * speed * 10) / metresPerDegree, longitude: 5,
+        altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+      }))).run()
+    }
+    insertSession({ kind: 'exercise', id: 'long-run', localDate: '2026-03-01', attrs: { exerciseType: 'RUNNING' } })
+    insertSession({ kind: 'exercise', id: 'quick-km', localDate: '2026-04-01', attrs: { exerciseType: 'RUNNING' } })
+    insertSession({ kind: 'exercise', id: 'no-route', localDate: '2026-05-01', attrs: { exerciseType: 'RUNNING' } })
+    seedRoute('long-run', 3, 200)
+    seedRoute('quick-km', 4, 30)
+
+    const prepare = vi.spyOn(test.db.$client, 'prepare')
+    const { sessionRecords } = readAllTime(test.db, 'p1')
+    const routeReads = prepare.mock.calls.filter(([source]) => String(source).includes('"session_routes"'))
+    prepare.mockRestore()
+
+    expect(routeReads).toHaveLength(1)
+    expect(sessionRecords.find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'quick-km' })
+    expect(sessionRecords.find((r) => r.kind === 'fastest-km')!.value).toBeCloseTo(250, 6)
+    expect(sessionRecords.find((r) => r.kind === 'fastest-mile')).toMatchObject({ sessionId: 'long-run' })
+    expect(sessionRecords.find((r) => r.kind === 'fastest-5k')!.value).toBeCloseTo(5000 / 3, 1)
   })
 
   it('names the source that set a daily record', () => {
