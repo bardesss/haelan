@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson, insertSample, seedOverride } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { daily, sources, sessions, sessionSegments } from '../src/db/schema/index.ts'
+import { daily, sources, sessions, sessionRoutes, sessionSegments } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { shiftLocalDate } from '../src/derive/localDay.ts'
 import { sessionTarget } from '../src/derive/targetKey.ts'
@@ -443,6 +443,123 @@ describe('readWorkoutPage', () => {
     // as its own name it would come out neutral and never be judged.
     expect(day.activeMinutes).toMatchObject({ metric: 'active_minutes', value: 55, direction: 'up' })
     expect(day.otherWorkouts.map((w) => w.id)).toEqual(['commute'])
+  })
+})
+
+describe('readWorkoutPage: heart-rate recovery', () => {
+  const END = at(SUBJECT_DATE, '07:30')
+  /** Heart rate for a run ending at 07:30: its last minute, the minute of the end, and the two after. */
+  const seedRecovery = (localDate: string, bpms: readonly number[], sourceId = 'watch') => bpms.forEach((bpm, i) => {
+    for (const agg of ['min', 'mean', 'max'] as const) {
+      insertSample(test.db, { personId: 'p1', sourceId, metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
+    }
+  })
+
+  it('reads how far heart rate fell one and two minutes after the end, judged against the earlier runs', () => {
+    seedRuns(10, { pace: 330 })
+    // Each earlier run fell 18 or 22 in the first minute and 30 or 34 in two.
+    for (let i = 0; i < 10; i += 1) {
+      const d = i % 2 === 0 ? 2 : -2
+      seedRecovery(shiftLocalDate(SUBJECT_DATE, -3 * (10 - i)), [160, 150, 140 + d, 128 + d])
+    }
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
+    const { heartRateRecovery } = readWorkoutPage(q(), input('subject'))!
+    expect(heartRateRecovery!.oneMinute).toMatchObject({
+      value: 25, unit: 'bpm', precision: 0, direction: 'up', standing: 'above', judged: 'better',
+      baseline: { center: 20, thin: false },
+    })
+    expect(heartRateRecovery!.twoMinutes).toMatchObject({ value: 42, standing: 'above', baseline: { center: 32, thin: false } })
+  })
+
+  it('claims no standing on fewer than five earlier runs with heart rate after them', () => {
+    seedRuns(10, { pace: 330 })
+    for (let i = 0; i < 4; i += 1) seedRecovery(shiftLocalDate(SUBJECT_DATE, -3 * (10 - i)), [160, 150, 140, 128])
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery!.oneMinute).toMatchObject({ value: 25, standing: null, baseline: { thin: true } })
+  })
+
+  it('is null with no heart rate after the end, even with heart rate during the run', () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedHeartRate(END - 30 * 60_000, Array(30).fill(150))
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery).toBeNull()
+  })
+
+  it("reads the workout's own device first, and another only when it recorded nothing", () => {
+    test.db.insert(sources).values({ id: 'strap', personId: 'p1', externalId: 'strap', displayName: 'Strap', kind: 'device', createdAtMs: 0 }).run()
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRecovery(SUBJECT_DATE, [150, 140, 100, 90], 'strap')
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery!.oneMinute.value).toBe(50)
+    seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery!.oneMinute.value).toBe(25)
+  })
+})
+
+describe('readWorkoutPage: the morning before', () => {
+  /** Sixty days of the recovery index's inputs up to and including `to`, enough for it to score. */
+  function seedRecoveryInputs(to: string) {
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = shiftLocalDate(to, -i)
+      seedDaily(localDate, 'daily_hrv', 'last', 40 + (i % 5))
+      seedDaily(localDate, 'resting_heart_rate', 'last', 55 + (i % 3))
+      seedDaily(localDate, 'sleep_bedtime_minutes', 'last', -30)
+      if (localDate !== to) seedDaily(localDate, 'sleep_asleep_minutes', 'sum', 420)
+    }
+  }
+
+  it("pairs the workout with the night ending on its date and that morning's recovery", () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRecoveryInputs(SUBJECT_DATE)
+    seedNight(SUBJECT_DATE, { asleep: 410, deep: 70 })
+    const { before } = readWorkoutPage(q(), input('subject'))!
+    expect(before.night).toMatchObject({ localDate: SUBJECT_DATE, asleep: { value: 410 }, deep: { value: 70 } })
+    expect(before.recovery!.index.value).not.toBeNull()
+    expect(before.recovery!.index.asOfDate).toBe(SUBJECT_DATE)
+    // Judged like the night page's, a higher resting heart rate worse, with its strip.
+    expect(before.restingHeartRate).toMatchObject({ metric: 'resting_heart_rate', value: 55, direction: 'down' })
+    expect(before.restingHeartRate!.strip).toHaveLength(7)
+  })
+
+  it('has nothing before a workout on a date without a night or morning readings', () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedNight(shiftLocalDate(SUBJECT_DATE, 1), {})
+    seedDaily(shiftLocalDate(SUBJECT_DATE, 1), 'resting_heart_rate', 'last', 50)
+    expect(readWorkoutPage(q(), input('subject'))!.before).toEqual({ night: null, recovery: null, restingHeartRate: null })
+  })
+})
+
+describe('readWorkoutPage: through the workout', () => {
+  it("draws pace from the route's own timestamps, and nothing without a route", () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRun('bare', SUBJECT_DATE, { pace: 300 }, { hhmm: '18:00' })
+    const startMs = at(SUBJECT_DATE, '07:00')
+    const metresPerDegree = (6_371_000 * Math.PI) / 180
+    test.db.insert(sessionRoutes).values(Array.from({ length: 19 }, (_, i) => ({
+      id: `subject-${i}`, sessionId: 'subject', ordinal: i, atMs: startMs + i * 10_000,
+      latitude: 52 + (i * 30) / metresPerDegree, longitude: 5,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+    const { pace } = readWorkoutPage(q(), input('subject'))!.through
+    expect(pace!.points.map((p) => p.elapsedSeconds)).toEqual([0, 60, 120])
+    expect(pace!.points[0]!.value).toBeCloseTo(1000 / 3, 1)
+    expect(readWorkoutPage(q(), input('bare'))!.through.pace).toBeNull()
+  })
+
+  it("draws cadence from the workout's own device's minute steps, and nothing from hourly ones", () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRun('hourly', '2026-09-05', { pace: 300 }, { minutes: 180 })
+    const startMs = at(SUBJECT_DATE, '07:00')
+    for (let i = 0; i < 30; i += 1) {
+      insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET, value: 170 })
+    }
+    for (let i = 0; i < 3; i += 1) {
+      insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: at('2026-09-05', '07:00') + i * 3_600_000, tzOffsetMinutes: OFFSET, value: 9000 })
+    }
+    const { cadence } = readWorkoutPage(q(), input('subject'))!.through
+    expect(cadence!.points).toHaveLength(30)
+    expect(cadence!.points.every((p) => p.value === 170)).toBe(true)
+    expect(readWorkoutPage(q(), input('hourly'))!.through.cadence).toBeNull()
   })
 })
 

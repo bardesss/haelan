@@ -1,0 +1,97 @@
+// The workout page's minute series beside its heart rate trace (M10b): pace from the GPS route's
+// own timestamps, cadence from the steps rows. Pure functions over rows the page has already read,
+// on the same elapsed axis the trace is drawn on, so the three rows line up minute for minute.
+
+export interface MinuteSeries { unit: string, points: { elapsedSeconds: number, value: number }[] }
+
+const MINUTE_MS = 60_000
+const EARTH_RADIUS_METRES = 6_371_000
+/** Less than this in a full minute is standing still or GPS drift, not a pace worth drawing. */
+const PACE_GAP_METRES = 50
+/** Steps rows spaced further apart than this each cover several minutes, and no per-minute cadence can be read off them. */
+const CADENCE_MAX_SPACING_MS = 60_000
+
+// Answers: the great-circle distance between two fixes, in metres.
+function haversineMetres(a: { latitude: number, longitude: number }, b: { latitude: number, longitude: number }): number {
+  const rad = Math.PI / 180
+  const dLat = (b.latitude - a.latitude) * rad
+  const dLon = (b.longitude - a.longitude) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * rad) * Math.cos(b.latitude * rad) * Math.sin(dLon / 2) ** 2
+  return 2 * EARTH_RADIUS_METRES * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+// Answers: each minute's value as the mean of itself and whichever of its two neighbours have one,
+// oldest first. A gap stays a gap; it is only left out of its neighbours' means.
+function smoothed(byMinute: ReadonlyMap<number, number>, unit: string): MinuteSeries | null {
+  const minutes = [...byMinute.keys()].sort((a, b) => a - b)
+  if (minutes.length === 0) return null
+  return {
+    unit,
+    points: minutes.map((m) => {
+      const around = [m - 1, m, m + 1].flatMap((n) => { const v = byMinute.get(n); return v === undefined ? [] : [v] })
+      return { elapsedSeconds: m * 60, value: around.reduce((sum, v) => sum + v, 0) / around.length }
+    }),
+  }
+}
+
+/**
+ * Pace in seconds per km per elapsed minute from timed route points: distance by haversine between
+ * fixes, a minute's pace = 60 / km covered in that minute, smoothed by a 3-minute centred mean;
+ * minutes under 50 m are gaps. Null with fewer than 2 fixes.
+ *
+ * A stretch between two fixes is spread evenly over the time between them, so one that crosses a
+ * minute boundary counts in both minutes for its share. A minute the fixes only partly span (the
+ * last one, or one side of a dropout) is read over the seconds they do span, the 50 m scaled to
+ * match, rather than as a whole minute that went slowly. Null too when no minute qualifies.
+ */
+export function paceSeries(route: readonly { atMs: number, latitude: number, longitude: number }[], startMs: number): MinuteSeries | null {
+  if (route.length < 2) return null
+  const fixes = [...route].sort((a, b) => a.atMs - b.atMs)
+  const metres = new Map<number, number>()
+  const covered = new Map<number, number>()
+  for (let i = 1; i < fixes.length; i += 1) {
+    const a = fixes[i - 1]!
+    const b = fixes[i]!
+    const span = b.atMs - a.atMs
+    if (span <= 0) continue
+    const distance = haversineMetres(a, b)
+    let from = Math.max(a.atMs, startMs)
+    while (from < b.atMs) {
+      const minute = Math.floor((from - startMs) / MINUTE_MS)
+      const to = Math.min(b.atMs, startMs + (minute + 1) * MINUTE_MS)
+      metres.set(minute, (metres.get(minute) ?? 0) + distance * ((to - from) / span))
+      covered.set(minute, (covered.get(minute) ?? 0) + (to - from) / 1000)
+      from = to
+    }
+  }
+  const pace = new Map<number, number>()
+  for (const [minute, seconds] of covered) {
+    const m = metres.get(minute) ?? 0
+    if (m < PACE_GAP_METRES * (seconds / 60)) continue
+    pace.set(minute, seconds / (m / 1000))
+  }
+  return smoothed(pace, 'seconds_per_km')
+}
+
+/**
+ * Steps per minute from raw step rows inside the workout, only when their median spacing is ≤ 60 s;
+ * smoothed by a 3-minute centred mean. Null otherwise.
+ *
+ * Steps are stored as provider intervals keyed by their start, the end dropped at mapping, so a row
+ * is a minute's steps only when the rows come a minute apart or closer. Rows longer than that are
+ * refused outright rather than spread: where the interval ended is not stored.
+ */
+export function cadenceSeries(rows: readonly { utcMs: number, value: number }[], startMs: number, endMs: number): MinuteSeries | null {
+  const inside = rows.filter((r) => r.utcMs >= startMs && r.utcMs < endMs).sort((a, b) => a.utcMs - b.utcMs)
+  if (inside.length < 2) return null
+  const spacings = inside.slice(1).map((r, i) => r.utcMs - inside[i]!.utcMs).sort((a, b) => a - b)
+  const mid = Math.floor(spacings.length / 2)
+  const median = spacings.length % 2 === 1 ? spacings[mid]! : (spacings[mid - 1]! + spacings[mid]!) / 2
+  if (median > CADENCE_MAX_SPACING_MS) return null
+  const steps = new Map<number, number>()
+  for (const r of inside) {
+    const minute = Math.floor((r.utcMs - startMs) / MINUTE_MS)
+    steps.set(minute, (steps.get(minute) ?? 0) + r.value)
+  }
+  return smoothed(steps, 'steps_per_minute')
+}
