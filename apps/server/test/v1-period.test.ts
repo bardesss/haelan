@@ -19,8 +19,12 @@ async function get(h: Harness, token: string, path: string, extraHeaders: Record
 }
 
 function seedDaily(h: Harness, localDate: string, metric: string, value: number): void {
+  seedDailyAgg(h, localDate, metric, 'sum', value)
+}
+
+function seedDailyAgg(h: Harness, localDate: string, metric: string, agg: string, value: number): void {
   h.app.haelan.instance.db.insert(schema.daily).values({
-    personId: 'p1', localDate, metric, agg: 'sum', source: 'merged', value, coverage: 1, sourceMix: null,
+    personId: 'p1', localDate, metric, agg, source: 'merged', value, coverage: 1, sourceMix: null,
     derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
   }).run()
 }
@@ -134,6 +138,65 @@ describe('GET /sleep/period and /activity/period', () => {
     people.setSleepTargetMinutes('p1', 450)
     expect((await get(h, token, `/sleep/period?range=week&anchor=${WEEK}`)).json().balance.zeroLine).toEqual({ minutes: 450, source: 'target' })
   })
+})
+
+// Every figure in a section, however deep, found the way trimForWire finds them.
+interface WireFigure { daily: unknown[], weekly: unknown[] | null, counts: Record<string, number> }
+function figuresIn(value: unknown): WireFigure[] {
+  if (typeof value !== 'object' || value === null) return []
+  if ('daily' in value && 'counts' in value) return [value as unknown as WireFigure]
+  return Object.values(value).flatMap(figuresIn)
+}
+
+function sections(body: Record<string, unknown>) {
+  const { hero, more, ...rest } = body
+  return { hero: hero as { daily: unknown[] }, more: figuresIn(more), others: figuresIn(rest) }
+}
+
+describe('the wire trims the strips the page never draws', () => {
+  // Ten days in 2025, so every section shows; the year and quarter asked for are finished ones.
+  function seedYear(h: Harness): void {
+    for (let i = 0; i < 10; i += 1) {
+      const d = shiftLocalDate('2025-03-01', i)
+      for (const metric of ['sleep_asleep_minutes', 'sleep_deep_minutes', 'sleep_light_minutes', 'sleep_in_bed_minutes', 'steps', 'distance', 'active_minutes_light', 'total_calories']) {
+        seedDaily(h, d, metric, 100 + i)
+      }
+      for (const metric of ['sleep_bedtime_minutes', 'sleep_waketime_minutes', 'resting_heart_rate']) seedDailyAgg(h, d, metric, 'last', 60 + i)
+    }
+  }
+
+  for (const path of ['/sleep/period', '/activity/period']) {
+    for (const range of ['year', '3months'] as const) {
+      it(`${path} ${range}: the hero keeps its days, the rest keep only weeks, and more keeps neither`, async () => {
+        const { h, token } = await started()
+        seedYear(h)
+        const body = (await get(h, token, `${path}?range=${range}&anchor=2025-03-05`)).json()
+        const { hero, more, others } = sections(body)
+        expect(hero.daily.length).toBeGreaterThan(range === 'year' ? 300 : 80)
+        expect(others.length).toBeGreaterThan(1)
+        for (const f of others) {
+          expect(f.daily).toHaveLength(0)
+          expect(f.weekly).not.toBeNull()
+        }
+        expect(more.length).toBeGreaterThan(0)
+        for (const f of more) expect([f.daily.length, f.weekly]).toEqual([0, null])
+        // Counts were taken before the trim, from the days no longer sent.
+        expect(others.some((f) => Object.values(f.counts).some((n) => n > 0))).toBe(true)
+      })
+    }
+
+    it(`${path} month: the other figures keep their days, more still keeps none`, async () => {
+      const { h, token } = await started()
+      seedYear(h)
+      const body = (await get(h, token, `${path}?range=month&anchor=2025-03-05`)).json()
+      const { hero, more, others } = sections(body)
+      expect(hero.daily.length).toBe(31)
+      expect(others.length).toBeGreaterThan(1)
+      for (const f of others) expect(f.daily).toHaveLength(31)
+      expect(more.length).toBeGreaterThan(0)
+      for (const f of more) expect([f.daily.length, f.weekly]).toEqual([0, null])
+    })
+  }
 })
 
 // The rounding itself, on synthetic figures, so each rule is pinned by the number it changes.

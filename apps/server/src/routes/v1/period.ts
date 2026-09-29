@@ -168,6 +168,39 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
   }
 }
 
+const isFigure = (value: unknown): value is PeriodFigure =>
+  typeof value === 'object' && value !== null && 'daily' in value && 'counts' in value && 'precision' in value
+
+/** Applies `trim` to every figure inside `value`, however deep (a section of figures, an array of them), leaving everything else alone. */
+function trimFigures(value: unknown, trim: (f: PeriodFigure) => PeriodFigure): unknown {
+  if (isFigure(value)) return trim(value)
+  if (Array.isArray(value)) return value.map((v) => trimFigures(v, trim))
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, trimFigures(v, trim)]))
+  }
+  return value
+}
+
+/**
+ * Drops the strips the page never draws, after rounding and recounting, so the body stays near
+ * 150 kB at a month and 250 kB at a year rather than the megabyte a year of daily points in every
+ * figure came to on the demo (M10b Task 6). A `more` figure is drawn as a bar and its counts, on
+ * every range, so it sends no strip at all. On three months and a year every other figure is drawn
+ * by its weeks, so it keeps `weekly` and sends no days. The hero keeps its days on every range:
+ * the balance, the steps heatmap and the tap panel all read them. `counts` were taken from the
+ * rounded days before this runs, so they still describe the days a figure no longer sends.
+ */
+export function trimForWire<P extends SleepPeriod | ActivityPeriod>(payload: P, range: PeriodRange): P {
+  const byWeek = range === '3months' || range === 'year'
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(payload)) {
+    if (key === 'hero') out[key] = value
+    else if (key === 'more') out[key] = trimFigures(value, (f) => ({ ...f, daily: [], weekly: null }))
+    else out[key] = byWeek ? trimFigures(value, (f) => ({ ...f, daily: [] })) : value
+  }
+  return out as P
+}
+
 /**
  * The range, anchor and source every period read takes. Only their presence is checked here: core's
  * sleepPeriod and activityPeriod refuse an unknown range (`day` included), a malformed anchor and a
@@ -195,12 +228,13 @@ export function registerPeriodRoutes(app: FastifyInstance): void {
       range, anchor, today, source,
       sleepTargetMinutes: person.sleepTargetMinutes, sleepUseBaseline: person.sleepUseBaseline,
     })
-    return sendHashed(reply, request, roundSleepPeriod(period))
+    return sendHashed(reply, request, trimForWire(roundSleepPeriod(period), range))
   })
 
   app.get<{ Params: PersonParams, Querystring: PeriodQuery }>('/p/:personId/activity/period', async (request, reply) => {
     const { today } = personAndToday(app, personIdOf(request))
     const { range, anchor, source } = periodQuery(request.query)
-    return sendHashed(reply, request, roundActivityPeriod(personQueryOf(request).activityPeriod({ range, anchor, today, source })))
+    const period = personQueryOf(request).activityPeriod({ range, anchor, today, source })
+    return sendHashed(reply, request, trimForWire(roundActivityPeriod(period), range))
   })
 }
