@@ -559,21 +559,25 @@ describe('the upgrade path', () => {
       // five-minute heart rate, HRV and SpO2 through every night, plus the night's temperature,
       // breathing rate and the morning's SpO2. They draw from a PRNG stream of their own, so none
       // of the magnitudes pinned below moved; the breakdowns below name every added row.
+      //
+      // 10200 samples and 1356 daily rows since the seeded workouts gained what the workout page
+      // shows: heart rate every minute of every workout, and the provider's four heart rate zone
+      // ceilings every day. A third PRNG stream again, so again nothing pinned below moved.
       expect({
         samples: countOf(db, 'samples'),
         daily: countOf(db, 'daily'),
         sessions: countOf(db, 'sessions'),
         observations: countOf(db, 'observations'),
-      }).toEqual({ samples: 9220, daily: 1244, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 10200, daily: 1356, sessions: 19, observations: 14 })
       // The report an operator reads has to say what the tables say.
       expect({
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
-      }).toEqual({ samples: 9220, dailyRows: 1244, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 10200, dailyRows: 1356, sessions: 19, observations: 14 })
 
       // Broken down per metric, so a regression that lost 300 steps samples while a mapper
       // started emitting 300 spurious weight rows - invisible to the bare total above, which
-      // would still read 9220 - names what moved. Six of the ten are one raw sample a day, exact
+      // would still read 10200 - names what moved. Six of the ten are one raw sample a day, exact
       // against SEED_DAYS; heart_rate is downsampled to the minute, so its one reading an hour
       // becomes four rows (mean, min, max, count); steps, distance and active_energy have no
       // downsampling and report every one of their twenty-four hourly points; distance tracks the
@@ -590,10 +594,20 @@ describe('the upgrade path', () => {
       // night's temperature, its breathing rate and the morning's SpO2 are one reading a day.
       const NIGHT_READINGS = 1179
       const NIGHT_HOUR_MARKS = 97
+      // The workout page's readings (seed.ts's workoutReadingFor): heart rate once a minute through
+      // each of the five workouts, less its first minute, which is the hourly curve's exact hour.
+      // Measured, since each workout's length is its own draw, and four rows each as above. None of
+      // this span's workouts starts before its night ends, so no night reading gave way to one. The
+      // zone ceilings are one reading per zone a day.
+      const WORKOUT_MINUTES = 231
       expect(countsByKey(db, 'select m.name as key, count(*) as n from samples s'
         + ' join metrics m on m.ref = s.metric_ref group by m.name')).toEqual({
         steps: 24 * SEED_DAYS,
-        heart_rate: 4 * 24 * SEED_DAYS + 4 * (NIGHT_READINGS - NIGHT_HOUR_MARKS),
+        heart_rate: 4 * 24 * SEED_DAYS + 4 * (NIGHT_READINGS - NIGHT_HOUR_MARKS) + 4 * WORKOUT_MINUTES,
+        heart_rate_zone_light_max_bpm: SEED_DAYS,
+        heart_rate_zone_moderate_max_bpm: SEED_DAYS,
+        heart_rate_zone_vigorous_max_bpm: SEED_DAYS,
+        heart_rate_zone_peak_max_bpm: SEED_DAYS,
         hrv: NIGHT_READINGS,
         spo2: NIGHT_READINGS,
         daily_spo2: SEED_DAYS,
@@ -650,6 +664,12 @@ describe('the upgrade path', () => {
           hrv: 4 * 2 * (SEED_DAYS + 1),
           spo2: 4 * 2 * (SEED_DAYS + 1),
           daily_spo2: 2 * SEED_DAYS,
+          // The zone ceilings: a source row and a merged row a day each. The workouts' minute
+          // readings add no heart_rate row: every one falls on a date that already had some.
+          heart_rate_zone_light_max_bpm: 2 * SEED_DAYS,
+          heart_rate_zone_moderate_max_bpm: 2 * SEED_DAYS,
+          heart_rate_zone_vigorous_max_bpm: 2 * SEED_DAYS,
+          heart_rate_zone_peak_max_bpm: 2 * SEED_DAYS,
           sleep_temperature: 2 * SEED_DAYS,
           sleep_respiratory_rate: 2 * SEED_DAYS,
           respiratory_rate: 2 * SEED_DAYS,
@@ -779,13 +799,15 @@ describe('the upgrade path', () => {
       // three daily recovery metrics (resting heart rate, HRV, respiratory rate), distance and
       // active energy burned, and the six active-minutes/active-zone-minutes sub-dimension
       // metrics, and the night page's intraday HRV and SpO2, its temperature, its breathing rate
-      // and the morning's SpO2 - as samples; sleep and exercise as sessions; moods as observations. floors and
+      // and the morning's SpO2, and the workout page's four heart rate zone ceilings - as samples; sleep and exercise as sessions; moods as observations. floors and
       // total_calories are not here: they are dailyRollUp types and land only in `daily`.
       expect(namesOf(db, 'select distinct m.name as name from samples s'
         + ' join metrics m on m.ref = s.metric_ref')).toEqual([
         'active_energy', 'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
         'active_zone_minutes_cardio', 'active_zone_minutes_fat_burn', 'active_zone_minutes_peak',
-        'daily_hrv', 'daily_spo2', 'distance', 'heart_rate', 'hrv', 'respiratory_rate', 'resting_heart_rate',
+        'daily_hrv', 'daily_spo2', 'distance', 'heart_rate', 'heart_rate_zone_light_max_bpm',
+        'heart_rate_zone_moderate_max_bpm', 'heart_rate_zone_peak_max_bpm', 'heart_rate_zone_vigorous_max_bpm',
+        'hrv', 'respiratory_rate', 'resting_heart_rate',
         'sleep_respiratory_rate', 'sleep_temperature', 'spo2', 'steps', 'weight',
       ])
       expect(namesOf(db, 'select distinct kind as name from sessions'))
@@ -851,7 +873,7 @@ describe('the upgrade path', () => {
       // empty database that also happens not to hold the marker.
       expect(restored.overrides.get(PERSON, overrideId)?.targetKey).toBe(targetKey)
       expect(restored.events.listFor(PERSON, '2026-01-01', '2026-12-31')).toHaveLength(1)
-      expect(countOf(restored.db, 'samples')).toBe(9220)
+      expect(countOf(restored.db, 'samples')).toBe(10200)
       // 175, not the prior round's 117: 8 list calls a day plus one exercise call every third day
       // was 117 over SEED_DAYS=14 (14*8+5). Four more list calls a day - distance,
       // active-energy-burned, active-minutes, active-zone-minutes - add 4*14=56, and floors and
@@ -860,8 +882,9 @@ describe('the upgrade path', () => {
       // total-calories' 14-day cap (both close on one chunk), so +2, not +14 apiece. The night
       // page's readings add six more a day, 6*14=84: four list calls over each night's own span
       // (heart rate, HRV, SpO2, the night's breathing rate) and two over its day (the morning's
-      // SpO2 and the night's temperature).
-      expect(countOf(restored.db, 'raw_payloads')).toBe(259)
+      // SpO2 and the night's temperature). The workout page's readings add nineteen, 14+5=19: the
+      // zone ceilings' list call every day, and one heart rate call over each workout's own span.
+      expect(countOf(restored.db, 'raw_payloads')).toBe(278)
       closeRestored()
     } finally {
       for (const close of [...openHandles]) close()
