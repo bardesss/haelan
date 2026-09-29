@@ -871,7 +871,12 @@
       },
       "through": {
         "label": "De nacht",
-        "share": "{{duration}} · {{percent}} %"
+        "share": "{{duration}} · {{percent}} %",
+        "firstDeep": "Eerste diepe slaap",
+        "firstRem": "Eerste REM",
+        "cycles": "Slaapcycli",
+        "afterOnset": "na het inslapen, om {{clock}}",
+        "cycleNote": "een cyclus: licht, diep en REM, ongeveer 90 min"
       },
       "traces": {
         "heart_rate": "Hartslag",
@@ -886,7 +891,8 @@
         "lowest": "laagste {{value}} om {{time}}",
         "highest": "hoogste {{value}} om {{time}}",
         "caption": "band = je gebruikelijke bereik · zelfde tijdas als de fasen",
-        "hrvChart": "HRV in de nacht"
+        "hrvChart": "HRV in de nacht",
+        "dipBelow": "{{dip}} onder je rusthartslag"
       },
       "sessions": {
         "excluded": "Uitgesloten",
@@ -906,6 +912,7 @@
         "label": "De ochtend erna",
         "labelDated": "Herstel op {{date}}",
         "restingHeartRate": "Rusthartslag",
+        "heartRateDip": "Hartslagdaling in slaap",
         "hrv": "HRV",
         "hrvChart": "HRV vanochtend",
         "breathing": "Ademhaling in slaap",
@@ -919,6 +926,23 @@
           "respiratoryRate": "ademhaling",
           "sleep": "slaap",
           "bedtime": "bedtijd"
+        },
+        "summary": "'s Nachts {{outside}} van {{of}} buiten je gebruikelijke bereik:",
+        "summaryAll": "'s Nachts alle {{of}} binnen je gebruikelijke bereik",
+        "dipNote": "laagste {{lowest}} tegenover rusthartslag {{resting}}",
+        "summaryOutside": "{{name}} {{direction}}",
+        "summaryWithin": "{{names}} binnen",
+        "direction": {
+          "above": "hoger",
+          "below": "lager"
+        },
+        "names": {
+          "restingHeartRate": "hartslag",
+          "hrv": "HRV",
+          "heartRateDip": "hartslagdaling",
+          "spo2": "zuurstof",
+          "breathing": "ademhaling",
+          "skinTemperature": "huidtemperatuur"
         }
       },
       "day": {

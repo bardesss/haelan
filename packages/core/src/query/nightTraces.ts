@@ -61,9 +61,21 @@ export function nightTraceStat(q: PersonQuery, metric: string, night: Pick<Night
   return { lowest, highest, mean: n === 0 ? null : sum / n }
 }
 
-export function nightTrace(q: PersonQuery, metric: string, night: Night, history: readonly Night[]): NightTrace {
+/**
+ * Each history night's stat, in the history's order, or none while NIGHT_TRACE_BANDS is off. A
+ * caller that needs the same stats for a figure of its own (the night page's heart-rate dip) reads
+ * them here once and hands them to nightTrace, so no night's window is read twice. The dip has no
+ * history, and so is never judged, while the switch is off.
+ */
+export function nightTraceHistory(q: PersonQuery, metric: string, history: readonly Night[]): NightTraceStat[] {
+  return NIGHT_TRACE_BANDS ? history.map((n) => nightTraceStat(q, metric, n)) : []
+}
+
+export function nightTrace(
+  q: PersonQuery, metric: string, night: Night, history: readonly Night[],
+  earlier: readonly NightTraceStat[] = nightTraceHistory(q, metric, history),
+): NightTrace {
   const stat = nightTraceStat(q, metric, night)
-  const earlier = NIGHT_TRACE_BANDS ? history.map((n) => nightTraceStat(q, metric, n)) : []
   const spec = METRICS[metric]
   // The trace metric's own catalogue entry says which way is better: a lower night-time heart rate,
   // a higher HRV and SpO2.

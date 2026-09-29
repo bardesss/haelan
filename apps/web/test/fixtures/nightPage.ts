@@ -1,3 +1,4 @@
+import { morningSummaryOfMorning } from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding } from '../../src/data/useGlance.js'
 import type { NightPageData, NightTrace, PageFigure } from '../../src/data/useNightPage.js'
 
@@ -82,6 +83,12 @@ const ASLEEP_STRIP = [372, 414, 351, 402, 330, 441, 396]
 const ZERO_LINE = 450
 
 export function nightPageFixture(): NightPageData {
+  const page = nightPageBase()
+  // Counted by core's own list of what counts, so a figure added there is counted here too.
+  return { ...page, morningSummary: morningSummaryOfMorning(page.morning) }
+}
+
+function nightPageBase(): NightPageData {
   const differences = ASLEEP_STRIP.map((minutes) => minutes - ZERO_LINE)
   return {
     localDate: NIGHT_DATE,
@@ -128,8 +135,8 @@ export function nightPageFixture(): NightPageData {
     },
     traces: {
       heartRate: trace('heart_rate', 'bpm', 0, 'down', {
-        lowest: { value: 56, atMs: at(292) }, highest: { value: 71, atMs: at(300) }, mean: 60,
-        usualLowest: band(55, 51, 59), usualMean: band(60, 56, 64),
+        lowest: { value: 47, atMs: at(292) }, highest: { value: 71, atMs: at(300) }, mean: 60,
+        usualLowest: band(48, 44, 52), usualMean: band(60, 56, 64),
       }),
       hrv: trace('hrv', 'milliseconds', 0, 'up', {
         lowest: { value: 31, atMs: at(400) }, highest: { value: 62, atMs: at(142) }, mean: 47,
@@ -140,6 +147,16 @@ export function nightPageFixture(): NightPageData {
         usualLowest: band(93.5, 92, 95), usualMean: band(96, 95.2, 96.8),
       }),
     },
+    // From the segments above: deep began 52 minutes in (01:00), REM 175 (03:03), and there was one REM episode.
+    stageTiming: {
+      firstDeepAtMs: at(52),
+      firstRemAtMs: at(175),
+      firstDeep: figure({ metric: 'sleep_first_deep_minutes', unit: 'minutes', direction: 'neutral', value: 52, baseline: band(45, 25, 65) }),
+      firstRem: figure({ metric: 'sleep_first_rem_minutes', unit: 'minutes', direction: 'neutral', value: 175, baseline: band(95, 70, 120) }),
+      cycles: figure({ metric: 'sleep_cycles', unit: 'count', direction: 'neutral', value: 1, baseline: band(3, 2, 4) }),
+    },
+    // The morning's six judged figures below: skin temperature above its usual, the rest within.
+    morningSummary: { outside: 1, of: 6 },
     morning: {
       recovery: {
         index: glanceFigure({ metric: 'recovery_index', unit: 'score', value: 68 }),
@@ -155,6 +172,8 @@ export function nightPageFixture(): NightPageData {
       spo2: figure({ metric: 'daily_spo2', unit: 'percent', precision: 1, direction: 'up', value: 95.4, baseline: band(95.8, 94.5, 97), strip: [95.9, 96.1, 95.7, 96.0, 95.5, 95.8, 95.4] }),
       skinTemperature: figure({ metric: 'sleep_temperature', unit: 'celsius', precision: 1, direction: 'neutral', value: 33.6, baseline: band(33, 32.7, 33.3), strip: [33.0, 32.9, 33.1, 33.0, 33.2, 33.4, 33.6] }),
       skinTemperatureDeviation: 0.6,
+      // The heart-rate trace's lowest 47 against resting 54: (54 - 47) / 54, 13 % as sent.
+      heartRateDip: figure({ metric: 'sleep_heart_rate_dip', unit: 'percent', direction: 'up', value: 13, baseline: band(12, 9, 16) }),
     },
     day: {
       localDate: NIGHT_PREVIOUS,
