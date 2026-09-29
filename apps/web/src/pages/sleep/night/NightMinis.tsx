@@ -33,7 +33,7 @@ export function NightMinis({ figures }: { figures: NightPageData['figures'] }) {
     return [{
       key, label, strip, figure,
       value: formatFigureValue(figure, figure.value, language, t),
-      verdict: verdictLine(figure, language, t) ?? '',
+      verdict: verdictLine(figure, language, t) ?? t('glance.usual.none'),
     }]
   }), [figures, language, t])
   if (rows.length === 0) return null

@@ -20,7 +20,6 @@ export function NightHero({ asleep }: { asleep: PageFigure }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const strip = useMemo(() => stripOf(asleep), [asleep])
-  const standings = useMemo(() => asleep.strip?.map((day) => day.standing), [asleep])
   const formatValue = useMemo(
     () => (value: number | null, absent: string) => (value === null ? absent : formatFigureValue(asleep, value, language, t)),
     [asleep, language, t],
@@ -28,7 +27,6 @@ export function NightHero({ asleep }: { asleep: PageFigure }) {
   if (asleep.value === null) return null
   const verdict = verdictLine(asleep, language, t)
   const label = t('sleep.night.hero.label')
-  const drawn = strip !== null && strip.values.filter((v) => v !== null).length > 1
 
   return (
     <Card span={12} label={label}>
@@ -39,11 +37,11 @@ export function NightHero({ asleep }: { asleep: PageFigure }) {
             <p className={asleep.judged === null ? 'night-hero-verdict' : `night-hero-verdict ${asleep.judged}`}>{verdict}</p>
           )}
         </div>
-        {drawn && (
+        {strip !== null && (
           <div className="dash-lead-strip">
             <Described text={verdict ?? t('sleep.night.hero.strip')} hidden>
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={asleep.metric}
-                formatValue={formatValue} bands={strip.bands} pointStandings={standings} height={64} dots tableToggle={false} />
+                formatValue={formatValue} bands={strip.bands} pointStandings={strip.pointStandings} height={64} dots tableToggle={false} />
             </Described>
             <p className="dash-caption">{t('sleep.night.hero.strip')}</p>
           </div>

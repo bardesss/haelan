@@ -29,6 +29,18 @@ export type NightTracesFigures = Partial<Record<TraceMetric, NightTraceFigures>>
 type Trace = ReturnType<typeof useSourceTrace>
 
 /**
+ * The usual range of the night's mean, the band shaded behind a trace; none on a thin baseline,
+ * which would draw three nights' worth of history as confidently as sixty.
+ */
+function usualBandOf(figures: NightTraceFigures | undefined): { low: number, high: number } | undefined {
+  const baseline = figures?.meanFigure.baseline ?? null
+  return baseline !== null && !baseline.thin ? { low: baseline.low, high: baseline.high } : undefined
+}
+
+/** A row with nothing recorded draws nothing (NightTraceRow's own rule). */
+const drawsNothing = (trace: Trace) => !trace.isError && !trace.isPending && trace.points.length === 0
+
+/**
  * One metric's row: a short label and the night's extreme in words on the left, the trace beside
  * it. A row, not a card: the three sit inside the night card under the hypnogram, over the same
  * span, the approved mockup's layout.
@@ -47,19 +59,16 @@ function NightTraceRow({ metric, trace, night, figures }: {
   const { t, i18n } = useTranslation()
   const headId = useId()
   const label = t(`sleep.night.traces.${metric}`)
-  // The usual range of the night's mean, shaded behind the trace; none on a thin baseline, which
-  // would draw three nights' worth of history as confidently as sixty. Memoised on the payload's
-  // own baseline object: the chart rebuilds whenever this reference changes.
-  const baseline = figures?.meanFigure.baseline ?? null
-  const usualBand = useMemo(
-    () => (baseline !== null && !baseline.thin ? { low: baseline.low, high: baseline.high } : undefined),
-    [baseline],
-  )
+  // The row keeps the mockup's short "HRV"; the chart's own name says which HRV it is, since the
+  // morning card further down draws another.
+  const chartLabel = metric === 'hrv' ? t('sleep.night.traces.hrvChart') : label
+  // Memoised on the payload's own figures: the chart rebuilds whenever the band's reference changes.
+  const usualBand = useMemo(() => usualBandOf(figures), [figures])
 
   // Absent, not an empty chart: nobody recorded this metric in this window, and the fallback has
   // already been tried (useSourceTrace's own rule), so there is nothing to draw and no claim to
   // make about it beyond the row not being there.
-  if (!trace.isError && !trace.isPending && trace.points.length === 0) return null
+  if (drawsNothing(trace)) return null
 
   const highest = metric === 'hrv'
   const extreme = figures === undefined ? null : highest ? figures.stat.highest : figures.stat.lowest
@@ -84,7 +93,7 @@ function NightTraceRow({ metric, trace, night, figures }: {
             <BasisContext.Provider value={headId}>
               {/* Compact, bounded to the night itself rather than to the readings inside it, so the
                   three rows share one span with each other and with the stages above. */}
-              <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={label} metric={metric}
+              <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={chartLabel} metric={metric}
                 compact offsetMinutes={night.startOffsetMinutes} startMs={night.startMs} endMs={night.endMs}
                 usualBand={usualBand} />
             </BasisContext.Provider>
@@ -123,7 +132,9 @@ export function NightTraces({ night, chosenSource, traces }: {
   ]
 
   // Nothing at all, caption included, once every read has settled on nothing recorded.
-  if (reads.every(([, trace]) => !trace.isError && !trace.isPending && trace.points.length === 0)) return null
+  if (reads.every(([, trace]) => drawsNothing(trace))) return null
+  // The caption explains the shaded band, so it is there only when a drawn row shades one.
+  const anyBand = reads.some(([metric, trace]) => !drawsNothing(trace) && usualBandOf(traces?.[metric]) !== undefined)
 
   // A trace that fell back says so, naming the device that logged nothing and the metric in words
   // (sleep.night.traces.metricNames), the same sentence the workout page words the same case in.
@@ -141,7 +152,7 @@ export function NightTraces({ night, chosenSource, traces }: {
         <NightTraceRow key={metric} metric={metric} trace={trace} night={night} figures={traces?.[metric]} />
       ))}
       {fellBack.length > 0 && <p className="night-traces-basis">{fellBack.join(' ')}</p>}
-      <p className="dash-caption">{t('sleep.night.traces.caption')}</p>
+      {anyBand && <p className="dash-caption">{t('sleep.night.traces.caption')}</p>}
     </div>
   )
 }

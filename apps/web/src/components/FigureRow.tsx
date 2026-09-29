@@ -7,10 +7,16 @@
 import { gaugeFraction, gaugeScale } from '../pages/dashboard/UsualGauge.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { Described } from '../pages/dashboard/cardShared.js'
+import type { PointStanding } from '../charts/base.js'
 
 export interface FigureRowStrip {
   values: (number | null)[], labels: string[], bands?: readonly ({ low: number, high: number } | null)[]
   metric: string, unit: string, formatValue: (value: number | null, absent: string) => string
+  // Where the server said each day stood, so a day outside its usual takes the warning colour.
+  pointStandings?: readonly PointStanding[]
+  // The chart's accessible name when the row's own label is not enough to tell it from another
+  // chart on the same page (two called "HRV", say); the row's label otherwise.
+  label?: string
 }
 
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`
@@ -26,8 +32,8 @@ export function FigureRow({ label, value, verdict, judged, band, mark, strip }: 
       <span className="figure-row-value">{value}</span>
       {strip !== undefined ? (
         <Described text={verdict} hidden>
-          <Sparkline values={strip.values} labels={strip.labels} label={label} unit={strip.unit} metric={strip.metric}
-            formatValue={strip.formatValue} bands={strip.bands} height={30} dots tableToggle={false} />
+          <Sparkline values={strip.values} labels={strip.labels} label={strip.label ?? label} unit={strip.unit} metric={strip.metric}
+            formatValue={strip.formatValue} bands={strip.bands} pointStandings={strip.pointStandings} height={30} dots tableToggle={false} />
         </Described>
       ) : scale !== null && band !== null && (
         <div className="figure-row-bar" aria-hidden="true">

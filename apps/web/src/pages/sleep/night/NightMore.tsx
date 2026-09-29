@@ -37,7 +37,7 @@ export function NightMore({ figures }: { figures: NightPageData['figures'] }) {
       return [{
         key: key as string, label: t(`sleep.night.more.${key}`), figure,
         value: formatFigureValue(figure, figure.value, language, t),
-        verdict: verdictLine(figure, language, t) ?? t('recovery.baselineNote.none'),
+        verdict: verdictLine(figure, language, t) ?? t('glance.usual.none'),
       }]
     })
     const { napCount, napMinutes } = figures
@@ -45,7 +45,7 @@ export function NightMore({ figures }: { figures: NightPageData['figures'] }) {
     const naps = {
       key: 'naps', label: t('sleep.night.more.naps'), figure: napCount,
       value: napCount.value > 0 ? formatFigureValue(napMinutes, napMinutes.value, language, t) : t('sleep.night.more.napsNone'),
-      verdict: verdictLine(napCount, language, t) ?? t('recovery.baselineNote.none'),
+      verdict: verdictLine(napCount, language, t) ?? t('glance.usual.none'),
     }
     return [...plain, naps]
   }, [figures, language, t])

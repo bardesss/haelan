@@ -154,7 +154,9 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
         },
       },
       xAxis: shownX,
-      yAxis: { type: 'category' as const, data: [...LANES].reverse(),
+      // The lanes by their catalogue names, not the stage ids: the ids are English words, so an
+      // untranslated axis passed unnoticed on every English page and read "awake" on a Dutch one.
+      yAxis: { type: 'category' as const, data: [...LANES].reverse().map((stage) => t(STAGE_LABEL_KEY[stage])),
         axisLabel: base.axisLabel, ...base.hiddenAxis, ...(compact && { show: false }) },
       series: [{
         type: 'custom' as const,

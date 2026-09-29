@@ -331,6 +331,31 @@ describe('the overnight traces', () => {
     } finally { restore() }
   })
 
+  // The caption explains the band; with no band drawn on any row there is nothing for it to explain.
+  it('leaves the caption off when no row draws a usual band', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const thin = traces()
+      thin.heart_rate = { ...thin.heart_rate!, meanFigure: { ...thin.heart_rate!.meanFigure, baseline: { center: 60, low: 56, high: 64, thin: true } } }
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={thin} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace [role="img"]') !== null, 'the heart rate row to draw')
+      expect(container!.querySelector('.night-traces > .dash-caption')).toBeNull()
+    } finally { restore() }
+  })
+
+  // The morning card draws an HRV chart of its own, so this one is named for when it was measured.
+  it('names the HRV chart for the night, keeping the short label on its row', async () => {
+    const restore = stub({ 'hrv|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
+      await flush(client, html)
+      await pumpUntil(() => container?.querySelector('.night-trace [role="img"]') !== null, 'the HRV row to draw')
+      expect(container!.querySelector('.night-trace [role="img"]')?.getAttribute('aria-label')).toBe('HRV through the night')
+      expect(container!.querySelector('.night-trace .label')?.textContent).toBe('HRV')
+    } finally { restore() }
+  })
+
   it('never falls back from a source the reader named', async () => {
     const restore = stub({ 'heart_rate|phone': [], 'heart_rate|': [point('watch')] })
     try {

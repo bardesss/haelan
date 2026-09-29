@@ -751,13 +751,23 @@
       "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt."
     },
     "night": {
-      "when": "{{bed}} tot {{wake}} · {{source}}",
+      "when": "Naar bed {{bed}} · wakker {{wake}} · {{source}}",
       "missingTitle": "Geen nacht geregistreerd",
       "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd.",
       "nav": "Nachten",
       "previous": "Vorige nacht",
       "next": "Volgende nacht",
       "allNights": "Alle nachten →",
+      "usualSingle": {
+        "within": "gewoonlijk {{value}}",
+        "above": "boven je gebruikelijke {{value}}",
+        "below": "onder je gebruikelijke {{value}}"
+      },
+      "deviation": {
+        "within": "binnen je gebruikelijke bereik {{range}}",
+        "above": "boven je gebruikelijke bereik {{range}}",
+        "below": "onder je gebruikelijke bereik {{range}}"
+      },
       "hero": {
         "label": "Tijd in slaap",
         "strip": "deze nacht en de zes ervoor"
@@ -773,10 +783,6 @@
         "label": "De nacht",
         "share": "{{duration}} · {{percent}} %"
       },
-      "naps": {
-        "none": "Geen dutjes geregistreerd op deze datum.",
-        "list": "Dutjes:"
-      },
       "traces": {
         "heart_rate": "Hartslag",
         "spo2": "Zuurstof",
@@ -789,10 +795,10 @@
         "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}",
         "lowest": "laagste {{value}} om {{time}}",
         "highest": "hoogste {{value}} om {{time}}",
-        "caption": "band = je gewone bereik · zelfde tijdas als de fasen"
+        "caption": "band = je gebruikelijke bereik · zelfde tijdas als de fasen",
+        "hrvChart": "HRV in de nacht"
       },
       "sessions": {
-        "basis": "een nacht wordt samengesteld uit deze registraties; door er een uit te sluiten wordt de nacht opnieuw afgeleid zonder die registratie",
         "exclude": "Uitsluiten of notitie toevoegen",
         "excluded": "Uitgesloten"
       },
@@ -800,17 +806,30 @@
         "schedule": "Slaapschema",
         "balance": "Slaapbalans",
         "variability": "Bedtijd varieerde ±{{value}} deze week",
-        "balanceAgainstTarget": "tegen je doel van {{target}}",
-        "balanceAgainstBaseline": "tegen je gebruikelijke {{usual}}"
+        "variabilityUsual": "Bedtijd varieerde ±{{value}} deze week · gewoonlijk ±{{low}}–{{high}}",
+        "balanceAgainstTarget": "ten opzichte van je doel van {{target}}",
+        "balanceAgainstBaseline": "ten opzichte van je gebruikelijke {{usual}}",
+        "barsTarget": "elke balk: die nacht tegenover je doel",
+        "barsBaseline": "elke balk: die nacht tegenover je gebruikelijke"
       },
       "morning": {
         "label": "De ochtend erna",
         "labelDated": "Herstel op {{date}}",
         "restingHeartRate": "Rusthartslag",
         "hrv": "HRV",
+        "hrvChart": "HRV vanochtend",
         "breathing": "Ademhaling in slaap",
         "spo2": "Zuurstof (SpO2)",
-        "skinTemperature": "Huidtemperatuur"
+        "skinTemperature": "Huidtemperatuur",
+        "from": "uit {{inputs}}",
+        "and": "{{rest}} en {{last}}",
+        "inputs": {
+          "hrv": "HRV",
+          "restingHeartRate": "rusthartslag",
+          "respiratoryRate": "ademhaling",
+          "sleep": "slaap",
+          "bedtime": "bedtijd"
+        }
       },
       "day": {
         "label": "Die dag",
@@ -824,7 +843,13 @@
       },
       "about": {
         "label": "Over deze nacht",
-        "details": "Details"
+        "details": "Details",
+        "recordings_one": "Eén opname van {{source}}",
+        "recordings_other": "{{count}} opnames van {{source}}",
+        "napsNone": "geen dutjes",
+        "naps_one": "één dutje",
+        "naps_other": "{{count}} dutjes",
+        "action": "uitsluiten of een notitie toevoegen"
       },
       "more": {
         "label": "Meer over de slaap",
@@ -1519,7 +1544,8 @@
       "above": "boven je gebruikelijke bereik {{low}} – {{high}}",
       "below": "onder je gebruikelijke bereik {{low}} – {{high}}",
       "thin": "nog te weinig geschiedenis voor een gebruikelijke waarde",
-      "partial": "tot nu toe; op een gewone dag {{center}}"
+      "partial": "tot nu toe; op een gewone dag {{center}}",
+      "none": "nog geen gebruikelijke waarde"
     },
     "asOf": {
       "time": "bijgewerkt om {{time}}",

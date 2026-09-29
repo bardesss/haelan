@@ -73,11 +73,14 @@ describe('useNightPage', () => {
       return null
     }
 
-    const { client, tree } = withClient(<Probe />, true)
-    mount(tree)
-    await flush(client, () => container!.innerHTML)
-
-    globalThis.fetch = originalFetch
+    try {
+      const { client, tree } = withClient(<Probe />, true)
+      mount(tree)
+      await flush(client, () => container!.innerHTML)
+    } finally {
+      // Put back even when the flush throws, or every later test in this worker inherits the stub.
+      globalThis.fetch = originalFetch
+    }
 
     expect(fetchCalls).toEqual(['/api/v1/p/p1/night/2026-09-06'])
   })
@@ -96,11 +99,14 @@ describe('useNightPage', () => {
       return null
     }
 
-    const { client, tree } = withClient(<Probe />, true)
-    mount(tree)
-    await flush(client, () => container!.innerHTML)
-
-    globalThis.fetch = originalFetch
+    try {
+      const { client, tree } = withClient(<Probe />, true)
+      mount(tree)
+      await flush(client, () => container!.innerHTML)
+    } finally {
+      // Put back even when the flush throws, or every later test in this worker inherits the stub.
+      globalThis.fetch = originalFetch
+    }
 
     expect(fetchCalls.some((path) => path.includes('/night/'))).toBe(false)
   })

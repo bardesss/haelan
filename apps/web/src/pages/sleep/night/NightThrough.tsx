@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
+import { BasisContext } from '../../../components/basis.js'
 import { Hypnogram, stageTotals } from '../../../charts/Hypnogram.js'
 import { STAGE_LABEL_KEY } from '../../../charts/stage.js'
 import { stageOf } from '../../../data/nights.js'
@@ -16,8 +17,8 @@ const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
 
 /**
  * The night itself: its stages across the night, each stage's time and share of it, then the heart
- * rate, HRV and blood oxygen traces over the same span, each against its usual range, then the naps
- * and excluded sessions. One card, the approved mockup's "The night".
+ * rate, HRV and blood oxygen traces over the same span, each against its usual range. One card, the
+ * approved mockup's "The night". Naps are the "More about the sleep" card's to say, not this one's.
  *
  * The segments are raw milliseconds from the night's start, rounded once by stageTotals rather than
  * per boundary: rounding each boundary first compounds into minutes of drift against
@@ -27,7 +28,9 @@ const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
  * server sent no share for reads its minutes alone.
  *
  * The hypnogram is absent, not an empty chart, on a night with no staged segments, which would read
- * as a night with no deep, light or REM sleep at all; the card stays for the traces and naps.
+ * as a night with no deep, light or REM sleep at all; the card stays for the traces, and goes too
+ * when the server found no trace readings either (every trace's `stat` empty). The legend doubles
+ * as the hypnogram's accessible description: it is the chart's content in words.
  *
  * The excluded-sessions notice that used to close this card moved to NightAbout.tsx (M10a-2 task 7),
  * next to the session list it explains; this card no longer reads `night.excludedSessions` at all.
@@ -35,6 +38,7 @@ const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
 export function NightThrough({ page, chosenSource }: { page: NightPageData, chosenSource: string | null }) {
   const { t, i18n } = useTranslation()
   const { night, stagePercent, traces, figures: { awake } } = page
+  const legendId = useId()
 
   const segments = useMemo(() => night.segments
     .map((s) => ({ stage: stageOf(s.stage), startMs: s.startMs - night.startMs, endMs: s.endMs - night.startMs }))
@@ -67,18 +71,19 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
 
   const bedMinutes = inWindow(
     localMinutesOf(night.localDate, night.startMs, night.startOffsetMinutes), WIDE_WINDOW)
-  // At the wake-side offset, the one in force when a nap started: a nap shares its date with the
-  // night's wake, not its bedtime (schedule.ts's comment on napInWindow).
-  const napTimes = night.naps.map((at) => formatClock(localMinutesOf(night.localDate, at, night.endOffsetMinutes)))
   const label = t('sleep.night.through.label')
+  const anyTrace = [traces.heartRate, traces.hrv, traces.spo2].some((trace) => trace.stat.mean !== null)
+  if (segments.length === 0 && !anyTrace) return null
 
   return (
     <Card span={12} label={label}>
       {segments.length > 0 && (
         <>
-          <Hypnogram segments={segments} startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
-            startClock={bedMinutes} label={label} totals={false} />
-          <ul className="night-legend">
+          <BasisContext.Provider value={legendId}>
+            <Hypnogram segments={segments} startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
+              startClock={bedMinutes} label={label} totals={false} />
+          </BasisContext.Provider>
+          <ul className="night-legend" id={legendId}>
             {legend.map(({ stage, text }) => (
               <li key={stage}><span className="night-legend-key" data-stage={stage} aria-hidden="true" />{text}</li>
             ))}
@@ -87,11 +92,6 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
         </>
       )}
       <NightTraces night={night} chosenSource={chosenSource} traces={figures} />
-      <p className="night-naps">
-        {night.naps.length === 0
-          ? t('sleep.night.naps.none')
-          : `${t('sleep.night.naps.list')} ${napTimes.join(', ')}`}
-      </p>
     </Card>
   )
 }

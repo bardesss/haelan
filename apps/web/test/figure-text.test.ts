@@ -1,56 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { formatFigureValue, verdictLine, stripOf } from '../src/pages/sleep/night/figureText.js'
 import type { PageFigure } from '../src/data/useNightPage.js'
+import type { Translate } from '../src/format.js'
+import { initI18n } from '../src/i18n/index.js'
 
-// A minimal Translate stub that returns the interpolated English or Dutch string a real i18next
-// instance would, so these tests assert wording rather than key names.
-function tFor(language: 'en' | 'nl') {
-  const strings: Record<'en' | 'nl', Record<string, string>> = {
-    en: {
-      'common.absent': '—',
-      'charts.units.percent': '%',
-      'charts.units.bpm': 'bpm',
-      'charts.units.milliseconds': 'ms',
-      'charts.units.celsius': '°C',
-      'recovery.units.breathsPerMinuteShort': 'breaths/min',
-      'glance.usual.thin': 'not enough history for a usual yet',
-    },
-    nl: {
-      'common.absent': '—',
-      'charts.units.percent': '%',
-      'charts.units.bpm': 'bpm',
-      'charts.units.milliseconds': 'ms',
-      'charts.units.celsius': '°C',
-      'recovery.units.breathsPerMinuteShort': 'ademhalingen/min',
-      'glance.usual.thin': 'nog niet genoeg geschiedenis voor een gebruikelijke waarde',
-    },
-  }
-  return (key: string, options?: Record<string, unknown>) => {
-    const template = strings[language][key]
-    if (template === undefined) {
-      // The four verdict templates this file exercises directly, English and Dutch.
-      const templates: Record<'en' | 'nl', Record<string, string>> = {
-        en: {
-          'glance.usual.within': 'within your usual {{low}} – {{high}}',
-          'glance.usual.above': 'above your usual {{low}} – {{high}}',
-          'glance.usual.below': 'below your usual {{low}} – {{high}}',
-          'glance.usual.partial': 'so far; your usual day {{center}}',
-        },
-        nl: {
-          'glance.usual.within': 'binnen je gebruikelijke {{low}} – {{high}}',
-          'glance.usual.above': 'boven je gebruikelijke {{low}} – {{high}}',
-          'glance.usual.below': 'onder je gebruikelijke {{low}} – {{high}}',
-          'glance.usual.partial': 'tot nu toe; je gebruikelijke dag {{center}}',
-        },
-      }
-      let out = templates[language][key] ?? key
-      for (const [k, v] of Object.entries(options ?? {})) out = out.replaceAll(`{{${k}}}`, String(v))
-      return out
-    }
-    let out = template
-    for (const [k, v] of Object.entries(options ?? {})) out = out.replaceAll(`{{${k}}}`, String(v))
-    return out
-  }
+// The real catalogues through a real i18next instance, not a stub: a stub asserts what the test
+// author believed the Dutch said, and the page reads what nl.json actually says.
+function tFor(language: 'en' | 'nl'): Translate {
+  const instance = initI18n(language)
+  return (key, options) => instance.t(key, options)
 }
 
 const t = tFor('en')
@@ -144,7 +102,34 @@ describe('verdictLine', () => {
 
   it('says within in Dutch too', () => {
     expect(verdictLine(figure({ unit: 'minutes', value: 400, baseline, standing: 'within' }), 'nl', tNl))
-      .toBe('binnen je gebruikelijke 6h 20m – 7h 00m')
+      .toBe('binnen je gebruikelijke bereik 6h 20m – 7h 00m')
+  })
+})
+
+describe('short spans', () => {
+  // A few minutes read as minutes, not as a duration with an empty hour in front of it.
+  for (const metric of ['active_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability']) {
+    it(`formats ${metric} as plain minutes`, () => {
+      expect(formatFigureValue(figure({ metric, unit: 'minutes' }), 12, 'en', t)).toBe('12 min')
+      expect(formatFigureValue(figure({ metric, unit: 'minutes' }), 69, 'nl', tNl)).toBe('69 min')
+    })
+  }
+
+  it('keeps a long span a duration', () => {
+    expect(formatFigureValue(figure({ metric: 'sleep_awake_minutes', unit: 'minutes' }), 25, 'en', t)).toBe('0h 25m')
+  })
+})
+
+describe('a usual that is a single value', () => {
+  const zero = { center: 0, low: 0, high: 0, thin: false }
+
+  it('reads as that value, in English and Dutch', () => {
+    expect(verdictLine(figure({ unit: 'count', value: 0, baseline: zero, standing: 'within' }), 'en', t)).toBe('usually 0')
+    expect(verdictLine(figure({ unit: 'count', value: 0, baseline: zero, standing: 'within' }), 'nl', tNl)).toBe('gewoonlijk 0')
+  })
+
+  it('keeps the direction when the value is off it', () => {
+    expect(verdictLine(figure({ unit: 'count', value: 2, baseline: zero, standing: 'above' }), 'en', t)).toBe('above your usual 0')
   })
 })
 
@@ -153,14 +138,25 @@ describe('stripOf', () => {
     expect(stripOf(figure({ unit: 'minutes', strip: null }))).toBeNull()
   })
 
-  it('reads values and labels off the strip, in order', () => {
+  it('reads values, labels and standings off the strip, in order', () => {
     const strip = [
       { localDate: '2026-09-01', value: 400, band: null, standing: null },
       { localDate: '2026-09-02', value: null, band: null, standing: null },
+      { localDate: '2026-09-03', value: 430, band: null, standing: 'above' },
     ] as PageFigure['strip']
     const result = stripOf(figure({ unit: 'minutes', strip }))
-    expect(result?.values).toEqual([400, null])
-    expect(result?.labels).toEqual(['2026-09-01', '2026-09-02'])
+    expect(result?.values).toEqual([400, null, 430])
+    expect(result?.labels).toEqual(['2026-09-01', '2026-09-02', '2026-09-03'])
+    expect(result?.pointStandings).toEqual([null, null, 'above'])
+  })
+
+  // One dot joins nothing: the strip is left off and the row falls back to its bar.
+  it('is null with fewer than two readings to join', () => {
+    const strip = [
+      { localDate: '2026-09-01', value: null, band: null, standing: null },
+      { localDate: '2026-09-02', value: 400, band: null, standing: null },
+    ] as PageFigure['strip']
+    expect(stripOf(figure({ unit: 'minutes', strip }))).toBeNull()
   })
 
   it('reports undefined bands for an all-thin strip - deleting this line drops the whole assertion, and the (unverified) untouched-baseline branch would then read as bands present', () => {

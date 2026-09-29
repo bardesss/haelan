@@ -71,12 +71,12 @@ export function NightDay({ day, log }: { day: NightPageData['day'], log: NightPa
         <div className="night-day-figures">
           {day.steps.value !== null && (
             <FigureRow label={t('sleep.night.day.steps')} value={formatFigureValue(day.steps, day.steps.value, language, t)}
-              verdict={verdictLine(day.steps, language, t) ?? t('recovery.baselineNote.none')}
+              verdict={verdictLine(day.steps, language, t) ?? t('glance.usual.none')}
               judged={day.steps.judged} band={day.steps.baseline} mark={day.steps.value} />
           )}
           {day.activeMinutes.value !== null && (
             <FigureRow label={t('sleep.night.day.activeMinutes')} value={formatFigureValue(day.activeMinutes, day.activeMinutes.value, language, t)}
-              verdict={verdictLine(day.activeMinutes, language, t) ?? t('recovery.baselineNote.none')}
+              verdict={verdictLine(day.activeMinutes, language, t) ?? t('glance.usual.none')}
               judged={day.activeMinutes.judged} band={day.activeMinutes.baseline} mark={day.activeMinutes.value} />
           )}
           {day.workouts.length > 0 && (

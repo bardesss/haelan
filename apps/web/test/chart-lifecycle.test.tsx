@@ -486,8 +486,8 @@ describe('the charts across a rerender', () => {
     // points), then the week row's own two (M10a-2's NightWeek: SleepSchedule over the bedtime and
     // waketime strips, BalanceBars over `balance.nights`, both memoised the same way), then the
     // morning after's own ring (a static SVG, `role="img"` same as every echarts host) and its
-    // resting-heart-rate and HRV strips (M10a-2's NightMorning, memoised the same way as every
-    // other strip on this page): twelve charts on this fixture, none absent. Task 7's own NightDay
+    // resting-heart-rate, HRV and skin temperature strips (M10a-2's NightMorning, memoised the
+    // same way as every other strip on this page): thirteen charts on this fixture, none absent. Task 7's own NightDay
     // card adds no chart of its own - its mood face (MoodFaces.tsx's exported MoodFace) is
     // decorative (`aria-hidden`, not `role="img"`; fix round 1's own finding on double
     // announcement), so it does not appear in `chartRoots()` either. spo2 and hrv's own NightTraces
@@ -500,8 +500,9 @@ describe('the charts across a rerender', () => {
     expect(container!.querySelector('[role="img"][aria-label="Sleep schedule"]')).not.toBeNull()
     expect(container!.querySelector('[role="img"][aria-label="Sleep balance"]')).not.toBeNull()
     expect(container!.querySelector('.night-grp [role="img"][aria-label="Resting HR"]')).not.toBeNull()
-    expect(container!.querySelector('.night-grp [role="img"][aria-label="HRV"]')).not.toBeNull()
-    expect(before).toHaveLength(12)
+    expect(container!.querySelector('.night-grp [role="img"][aria-label="HRV this morning"]')).not.toBeNull()
+    expect(container!.querySelector('.night-grp [role="img"][aria-label="Skin temperature"]')).not.toBeNull()
+    expect(before).toHaveLength(13)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled

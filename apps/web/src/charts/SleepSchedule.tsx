@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { EChartsOption, CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams } from 'echarts'
 import { useChart } from './useChart.js'
-import { chartBase, STROKE, SYMBOL } from './base.js'
+import { chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { nightMark, noDataYFor, axisTickInterval, fitWindow, type Night } from './schedule.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -14,10 +14,18 @@ import { scheduleTooltip } from './scheduleTooltip.js'
 // schedule-marks.test.ts) that import them from this module.
 export { AXIS_MIN, AXIS_MAX, NO_DATA_Y } from './schedule.js'
 
-export function SleepSchedule({ nights, label, showNaps = true, axisWindow }: {
+// A stable empty default, so a caller drawing no bands never hands the chart a fresh array.
+const NO_BANDS: readonly { low: number, high: number }[] = []
+
+export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usualBands = NO_BANDS }: {
   nights: Night[]
   label: string
   showNaps?: boolean
+  // Usual bed and wake ranges shaded across the whole chart, already placed in the same frame as
+  // the nights' own bed and wake (the caller's job, as placing the nights is). Left out by the
+  // Sleep page; the night page passes its bedtime and wake time usuals, and none when either is
+  // thin, the rule every usual band on that page keeps. Memoise it: it reaches the chart build.
+  usualBands?: readonly { low: number, high: number }[]
   // Named axisWindow, not window: a plain `window` parameter shadows the DOM global, which this
   // file does not use today but a future edit here easily might reach for without noticing the
   // shadow.
@@ -32,7 +40,11 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow }: {
   axisWindow?: { min: number, max: number }
 }) {
   const { t } = useTranslation()
-  const resolvedWindow = axisWindow ?? fitWindow(nights, { naps: showNaps })
+  // The bands count toward the fit as spans of their own, so a usual that runs past every night
+  // drawn this week is still on the axis rather than clipped off its edge.
+  const resolvedWindow = axisWindow ?? fitWindow(
+    usualBands.length === 0 ? nights : [...nights, ...usualBands.map((b) => ({ bed: b.low, wake: b.high }))],
+    { naps: showNaps })
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -84,7 +96,12 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow }: {
             }
           },
           encode: { x: 0 },
-          data: nights.map((n, i) => [i, n.bed]) },
+          // Each night's placed bed and wake ride along with its index, so the series data states
+          // what is drawn (renderItem itself reads the night from `nights`).
+          data: nights.map((n, i) => [i, n.bed, n.wake]),
+          ...(usualBands.length > 0 && { markArea: { silent: true,
+            itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
+            data: usualBands.map((b) => [{ yAxis: b.low }, { yAxis: b.high }]) } }) },
         // Omitted rather than left to draw nothing: a caller passing showNaps=false is telling
         // this chart it has no nap data at all, and a data-less series is still a series, not the
         // same statement as one that was never asked to exist.
@@ -99,7 +116,7 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow }: {
     // module level constant of its own, for the same reason) should not have to guarantee object
     // identity across renders just to avoid disposing and rebuilding this chart every commit, the
     // defect useChart.ts's own doc comment already names for a freshly constructed array.
-  }, [nights, showNaps, resolvedWindow.min, resolvedWindow.max, t])
+  }, [nights, showNaps, resolvedWindow.min, resolvedWindow.max, usualBands, t])
 
   const { host, style } = useChart(build, 150)
   const baseColumns = [t('charts.columns.night'), t('charts.columns.toBed'), t('charts.columns.woke')]
