@@ -658,13 +658,10 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-about-body .workout-actions { justify-content: flex-start; }
 @media (max-width: 620px) {
   .workout-compared-best { display: none; }
-  .workout-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-  .workout-side-rows, .workout-more-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   /* Small text, a finger still needs 44px: the fold's toggle stays a list item for its triangle
      (.night-about summary's own reason), the night link a flex box. */
   .workout-about summary { display: list-item; min-height: 44px; align-content: center; }
   .workout-after-night { min-height: 44px; display: inline-flex; align-items: center; }
-  .workout-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .workout-all { min-height: 44px; display: inline-flex; align-items: center; }
   .workout-hero-previous a, .workout-compared thead a { display: inline-flex; min-height: 44px; align-items: center; }
   .workout-map[data-both="true"], .workout-zones { grid-template-columns: minmax(0, 1fr); }
@@ -1433,6 +1430,12 @@ button.week-bar-slot { cursor: pointer; }
      not enough either; two across is 170px. */
   .night-grp { grid-template-columns: minmax(0, 1fr); }
   .night-grp .night-morning-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The workout page's rows, for the same reason: at a 621px window the minis' four columns came
+     out 78px and the side cards' three 76px, and an uppercase label ("Cardiobelasting", "Rusthartslag
+     erna") ran past its cell and the page 2px past the viewport. Stacked and two across here, as
+     they already were on a phone. */
+  .workout-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .workout-side-rows, .workout-more-rows, .workout-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean
