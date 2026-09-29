@@ -1780,5 +1780,40 @@
         "none": "steps not judged"
       }
     }
+  },
+  "period": {
+    "window": {
+      "week": "for a week, last {{count}} weeks",
+      "month": "for a month, last {{count}} months",
+      "quarter": "for 3 months, last {{count}} periods of 3 months",
+      "year": "for a year, from {{year}}"
+    },
+    "reason": {
+      "tooFewDays": "too few days so far for a verdict"
+    },
+    "counts": {
+      "usualNights_one": "{{within}} of {{count}} night usual",
+      "usualNights_other": "{{within}} of {{count}} nights usual",
+      "usualDays_one": "{{within}} of {{count}} day usual",
+      "usualDays_other": "{{within}} of {{count}} days usual",
+      "longer": "{{count}} longer",
+      "shorter": "{{count}} shorter",
+      "later": "{{count}} later",
+      "earlier": "{{count}} earlier",
+      "higher": "{{count}} higher",
+      "lower": "{{count}} lower"
+    },
+    "standout": {
+      "longest": "longest: {{value}} on {{date}}",
+      "busiest": "busiest: {{value}} on {{date}}",
+      "previous": "{{delta}} against {{period}}",
+      "yearEarlier": "{{delta}} against last year",
+      "weekBefore": "the week before",
+      "quarterBefore": "the 3 months before"
+    },
+    "value": {
+      "perDay": "{{value}} per day",
+      "perWeek": "{{value}} per week"
+    }
   }
 }

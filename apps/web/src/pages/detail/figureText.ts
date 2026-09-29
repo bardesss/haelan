@@ -22,6 +22,11 @@ const SHORT_SPANS: ReadonlySet<string> = new Set([
   'hardZoneMinutes', 'activeZoneMinutes',
 ])
 
+/** Whether a minutes figure reads in minutes ("12 min") rather than as a duration (SHORT_SPANS above). */
+export function isShortSpan(metric: string): boolean {
+  return SHORT_SPANS.has(metric)
+}
+
 // Running form figures stored in a unit far larger than the reading: a ground contact of 0.248 s
 // reads as "248 ms", a vertical oscillation of 0.089 m as "8.9 cm", the way a watch shows both. Keyed
 // on the figure (its `metric` is its WorkoutFigureKey) rather than on the unit, since distance and
@@ -77,7 +82,7 @@ function figureValueText(
   const small = SMALL_UNITS[figure.metric]
   if (small !== undefined) return `${formatNumber(value * small.factor, small.precision, language, absent)} ${t(small.unit)}`
   switch (figure.unit) {
-    case 'minutes': return SHORT_SPANS.has(figure.metric)
+    case 'minutes': return isShortSpan(figure.metric)
       ? `${formatNumber(value, 0, language, absent)} ${t('activity.units.min')}`
       : formatDuration(value, language)
     case 'minutes_from_local_midnight': return formatClock(value)

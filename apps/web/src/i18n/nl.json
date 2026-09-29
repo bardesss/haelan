@@ -1780,5 +1780,40 @@
         "none": "stappen niet beoordeeld"
       }
     }
+  },
+  "period": {
+    "window": {
+      "week": "voor een week, afgelopen {{count}} weken",
+      "month": "voor een maand, afgelopen {{count}} maanden",
+      "quarter": "voor 3 maanden, afgelopen {{count}} periodes van 3 maanden",
+      "year": "voor een jaar, uit {{year}}"
+    },
+    "reason": {
+      "tooFewDays": "nog te weinig dagen voor een oordeel"
+    },
+    "counts": {
+      "usualNights_one": "{{within}} van {{count}} nacht gebruikelijk",
+      "usualNights_other": "{{within}} van {{count}} nachten gebruikelijk",
+      "usualDays_one": "{{within}} van {{count}} dag gebruikelijk",
+      "usualDays_other": "{{within}} van {{count}} dagen gebruikelijk",
+      "longer": "{{count}} langer",
+      "shorter": "{{count}} korter",
+      "later": "{{count}} later",
+      "earlier": "{{count}} eerder",
+      "higher": "{{count}} hoger",
+      "lower": "{{count}} lager"
+    },
+    "standout": {
+      "longest": "je langste: {{value}} op {{date}}",
+      "busiest": "je drukste: {{value}} op {{date}}",
+      "previous": "{{delta}} tegenover {{period}}",
+      "yearEarlier": "{{delta}} tegenover vorig jaar",
+      "weekBefore": "de week ervoor",
+      "quarterBefore": "de 3 maanden ervoor"
+    },
+    "value": {
+      "perDay": "{{value}} per dag",
+      "perWeek": "{{value}} per week"
+    }
   }
 }
