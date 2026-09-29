@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { dayMetricTarget, sampleTarget, sessionTarget } from '@haelan/core/target-key'
 import { applyOverlay, createOverlay, writeThrough } from '../src/demo/overlay.js'
+import type { UseQueryResult } from '@tanstack/react-query'
+import { distinctSources } from '../src/data/pageShell.js'
+import type { MetricSeries } from '../src/data/useSeries.js'
 
 const PERSON = 'demo'
 const notesUrl = `/api/v1/p/${PERSON}/notes?from=2026-09-01&to=2026-09-07`
@@ -90,6 +93,54 @@ describe('a day-metric exclusion', () => {
 
     const composed = applyOverlay(seriesUrl, CAPTURED_SERIES, overlay) as typeof CAPTURED_SERIES
     expect(composed.series.steps.points).toHaveLength(2)
+  })
+
+  describe('on a compacted capture, where a mix sits only on its first and last day', () => {
+    const mixA = '[{"source":"a","hours":24}]'
+    const mixB = '[{"source":"b","hours":24}]'
+    const url = `/api/v1/p/${PERSON}/series?agg=sum&from=2026-09-01&metric=steps&to=2026-09-04`
+    const compacted = () => ({
+      steps: {
+        points: [
+          { localDate: '2026-09-01', value: 1, sourceMix: mixA },
+          { localDate: '2026-09-02', value: 2 },
+          { localDate: '2026-09-03', value: 3, sourceMix: mixB },
+          { localDate: '2026-09-04', value: 4, sourceMix: mixA },
+        ],
+        reduction: null,
+      },
+    })
+    const exclude = (overlay: ReturnType<typeof createOverlay>, localDate: string) => writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {
+      scope: 'day_metric', targetKey: dayMetricTarget({ localDate, metric: 'steps' }), action: 'exclude', reason: 'x',
+    }, overlay)
+    const sources = (body: ReturnType<typeof compacted>) =>
+      distinctSources([{ data: body } as unknown as UseQueryResult<Record<string, MetricSeries>>])
+
+    it('keeps every source in the picker when both days carrying one are excluded', () => {
+      const overlay = createOverlay()
+      exclude(overlay, '2026-09-01')
+      exclude(overlay, '2026-09-04')
+      const composed = applyOverlay(url, compacted(), overlay) as ReturnType<typeof compacted>
+      expect(composed.steps.points.map((p) => p.localDate)).toEqual(['2026-09-02', '2026-09-03'])
+      expect(sources(composed)).toEqual(['a', 'b'])
+      expect(composed.steps.points[0]).toMatchObject({ localDate: '2026-09-02', sourceMix: mixA })
+    })
+
+    it('moves nothing when a surviving point still names the source', () => {
+      const overlay = createOverlay()
+      exclude(overlay, '2026-09-01')
+      const composed = applyOverlay(url, compacted(), overlay) as ReturnType<typeof compacted>
+      expect(composed.steps.points[0]).not.toHaveProperty('sourceMix')
+    })
+
+    it('never overwrites a null mix, the answer a per-source rollup really gives', () => {
+      const overlay = createOverlay()
+      exclude(overlay, '2026-09-01')
+      const body = compacted()
+      body.steps.points = [body.steps.points[0]!, { localDate: '2026-09-02', value: 2, sourceMix: null as unknown as string }]
+      const composed = applyOverlay(url, body, overlay) as ReturnType<typeof compacted>
+      expect(composed.steps.points).toEqual([{ localDate: '2026-09-02', value: 2, sourceMix: null }])
+    })
   })
 
   it('lists the override it wrote', () => {

@@ -233,13 +233,17 @@ describe('the capture sweep', () => {
       }
     }
 
-    // The year-over-year comparison on the default Month view, so a demo visitor who switches it
-    // on sees it work. Month only: when this was added the capture sat near MAX_CAPTURE_BYTES, and
-    // doubling every other range would have crossed it. Elsewhere the comparison's reads miss the manifest, which
-    // data/lastYear.ts answers by drawing nothing rather than claiming an empty year.
+    // The year-over-year comparison, on every range whose control row offers it (ControlRow's
+    // canCompare: every range but Day). It used to be the Month view only, because the capture sat
+    // near MAX_CAPTURE_BYTES and doubling every other range would have crossed it; compact.ts made
+    // the room, and the other ranges' toggles had been answering "no recorded response" underneath
+    // data/lastYear.ts drawing nothing.
     for (const route of ROUTES) {
       if (route.path.includes(':') || !usesPageControls(route.path) || route.path === '/notes') continue
-      await mount(`${route.path}?range=month&on=${DEMO_DATE}&compare=year`)
+      for (const range of RANGE_KEYS) {
+        if (range === 'day') continue
+        await mount(`${route.path}?range=${range}&on=${DEMO_DATE}&compare=year`)
+      }
     }
 
     const wideFrom = addDays(DEMO_DATE, -(seededDays - 1))
@@ -266,10 +270,17 @@ describe('the capture sweep', () => {
       .toBeGreaterThan(0)
 
     // Ruling B, dimension 1: every source option a picker actually offers, not only the default
-    // (ALL_SOURCES itself is already covered by the grid above).
+    // (ALL_SOURCES itself is already covered by the grid above). The heart rate mix alone is not
+    // that: Activity's longer ranges also offer the phone, which only step counts name, and a demo
+    // visitor who picked it met "no recorded response". So each page and range is remounted (its
+    // reads are already cached) and the options its own source picker renders are read back too.
     for (const path of SOURCE_ROUTES) {
       for (const range of RANGE_KEYS) {
-        for (const source of discoveredSources) {
+        await mount(`${path}?range=${range}&on=${DEMO_DATE}`, { expectGrowth: false })
+        const offered = [...container.querySelectorAll<HTMLOptionElement>('.controls-end select option')]
+          .map((option) => option.value)
+          .filter((value) => value !== ALL_SOURCES)
+        for (const source of new Set([...discoveredSources, ...offered])) {
           await mount(`${path}?range=${range}&on=${DEMO_DATE}&source=${source}`)
         }
       }

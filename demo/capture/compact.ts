@@ -14,7 +14,8 @@
 //   (data/pageShell.ts), which collects the set of sources across every point of every query. A
 //   mix repeated on each day adds nothing to that set. The last appearance is kept as well as the
 //   first so a demo visitor excluding the first day (overlay.ts deletes that point) still leaves
-//   the source in the picker.
+//   the source in the picker, and excluding both is caught at runtime: overlay.ts's
+//   handOnSourceMixes moves an excluded point's mix to a surviving point with none.
 //
 // `coverage` (data/emptyState.ts) and `filled` (data/chartAnnotations.ts, pages/Recovery.tsx) are
 // read, and stay. Should a page start reading one of the dropped fields, it has to come off this
