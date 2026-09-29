@@ -1181,6 +1181,8 @@ button.week-bar-slot { cursor: pointer; }
    keeps a label that wraps to two lines ("Actieve minuten") from spreading them apart. */
 .figure-row-label { line-height: var(--leading-tight); }
 .figure-row-value { font-size: var(--font-size-lg); font-weight: var(--weight-semibold); color: var(--text-primary); }
+/* The unit after a row's number (FigureRow), smaller, as the dashboard sets "18 min". */
+.figure-row-unit { font-size: var(--font-size-sm); font-weight: var(--weight-medium); color: var(--text-secondary); }
 .figure-row-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-inset); }
 .figure-row-band { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--chart-band-baseline); }
 .figure-row-mark { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text-primary); }

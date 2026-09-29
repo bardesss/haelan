@@ -29,6 +29,15 @@ export interface FigureRowStrip {
 
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`
 
+// A formatted value's number and its unit, split at the last no-break space figureText puts between
+// them ("13.8 breaths/min"), so the unit can be set smaller and a long one still fits its column.
+// No split where the last part is itself a number (a duration's "04m", a clock time).
+function valueParts(value: string): { number: string, unit: string | null } {
+  const at = value.lastIndexOf('\u00a0')
+  const unit = at < 0 ? '' : value.slice(at + 1)
+  return at < 0 || /^[\d+-]/.test(unit) ? { number: value, unit: null } : { number: value.slice(0, at + 1), unit }
+}
+
 /**
  * A card's grid of FigureRows: as many columns as it has rows, up to `max` (four across a full
  * card, three where a card gives them three quarters), so one figure never sits in a quarter of its
@@ -55,6 +64,7 @@ export function FigureRow({ label, value, verdict, judged, standing, band, mark,
   const verdictId = useId()
   const scale = band === null || band.thin ? null : gaugeScale(band)
   const tone = verdictTone(judged, standing)
+  const parts = valueParts(value)
   // The mark takes the warning colour exactly when the verdict does, bar the good news: a better
   // figure's words turn green, and a green mark on a blue band would read as a second series.
   const marked = tone === 'worse' || tone === 'is-out'
@@ -62,7 +72,7 @@ export function FigureRow({ label, value, verdict, judged, standing, band, mark,
     <div className="figure-row">
       {/* .label, the card label's own style, so the app spells a small uppercase label one way. */}
       <span className="label figure-row-label">{label}</span>
-      <span className="figure-row-value">{value}</span>
+      <span className="figure-row-value">{parts.number}{parts.unit !== null && <span className="figure-row-unit">{parts.unit}</span>}</span>
       {strip !== undefined ? (
         <BasisContext.Provider value={verdictId}>
           <Sparkline values={strip.values} labels={strip.labels} label={strip.label ?? label} unit={strip.unit} metric={strip.metric}
