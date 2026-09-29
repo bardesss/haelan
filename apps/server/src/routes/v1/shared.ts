@@ -1,5 +1,8 @@
-import type { FastifyReply, FastifyRequest } from 'fastify'
-import { ConfigError, FIGURE_METRIC_ALIAS, figureDirection, judge, metricSpec, PersonQuery, requireDate, standingOf } from '@haelan/core'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import {
+  ConfigError, effectiveTimezone, FIGURE_METRIC_ALIAS, figureDirection, judge, localDateInZone, metricSpec, PersonQuery, requireDate,
+  standingOf,
+} from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
 
@@ -224,15 +227,16 @@ export function roundFigure(figure: GlanceFigure): GlanceFigure {
 }
 
 /** `value` to `precision` decimals, the same toFixed rule roundMetricValue applies with a catalogue precision. */
-function roundTo(precision: number, value: number): number {
+export function roundTo(precision: number, value: number): number {
   return Number(value.toFixed(precision))
 }
 
-function roundToOrNull(precision: number, value: number | null): number | null {
+export function roundToOrNull(precision: number, value: number | null): number | null {
   return value === null ? null : roundTo(precision, value)
 }
 
-function roundBandTo(precision: number, band: GlanceBaseline | null): GlanceBaseline | null {
+/** A band's three numbers to `precision`, keeping whatever else the band carries (a period usual's window and count). */
+export function roundBandTo<B extends GlanceBaseline>(precision: number, band: B | null): B | null {
   return band === null ? null : {
     ...band, center: roundTo(precision, band.center), low: roundTo(precision, band.low), high: roundTo(precision, band.high),
   }
@@ -244,7 +248,7 @@ function roundBandTo(precision: number, band: GlanceBaseline | null): GlanceBase
  * (the workout page's own day's steps while that day is still running), which a PageFigure does
  * not carry for this to recompute. Otherwise `standingOf` on the rounded pair, partial false.
  */
-function standingAfterRounding(
+export function standingAfterRounding(
   before: GlanceStanding | null, value: number | null, band: GlanceBaseline | null,
 ): GlanceStanding | null {
   return before === null ? null : standingOf(value, band, false)
@@ -335,4 +339,21 @@ export function requireDateRange(query: DateRangeQuery): { from: string, to: str
   requireDate('to', to)
   if (from > to) throw new ConfigError(`from '${from}' is after to '${to}'`)
   return { from, to }
+}
+
+/**
+ * The person a detail or overview page is read for, with their today and the names of their
+ * sources. The person's own zone decides today, as the glance does (effectiveTimezone follows the
+ * phone); source names stay on the home zone, as the glance's do. Moved here from detail.ts (M10b)
+ * so the period routes share it rather than carrying a second copy.
+ */
+export function personAndToday(app: FastifyInstance, personId: string) {
+  const person = app.haelan.stores.people.get(personId)
+  // requirePerson has already answered 404 for a person that does not exist before any handler
+  // here runs; this only narrows the type.
+  if (person === null) throw new ConfigError(`no person '${personId}'`)
+  const nowMs = app.haelan.now()
+  const today = localDateInZone(nowMs, effectiveTimezone(person))
+  const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId, person.timezone).map((s) => [s.id, s.name]))
+  return { person, nowMs, today, nameOf: (id: string) => names.get(id) ?? id }
 }

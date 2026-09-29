@@ -294,3 +294,14 @@ export { composeStatus, shownByDefault, PANEL_DEFAULT_WINDOW_DAYS, PHONE_QUIET_M
 export type {
   StatusPanel, StatusInput, StatusConnection, StatusDevice, StatusSync, StatusFailure, ConnectionKind, ConnectionProblem,
 } from './api/statusPanel.ts'
+
+// M10b: the overview pages' period reads: the payload types, and what the route and the parity test use.
+export type { PeriodRange } from './query/periodBounds.ts'
+export { PERIOD_RANGES, periodBounds, stepPeriod } from './query/periodBounds.ts'
+export type {
+  PeriodWindow, PeriodUsual, DayCounts, PeriodStripPoint, PeriodReason, PeriodFigure, PeriodHigh, PeriodChange, PeriodHeader,
+} from './query/periodFigure.ts'
+export { countsOf, highOf } from './query/periodFigure.ts'
+export type { SleepPeriod, SleepListRow, ScheduleSides, ScheduleSide } from './query/sleepPeriod.ts'
+export type { ActivityPeriod, WorkoutListRow, TypeTotal, Vo2Trend } from './query/activityPeriod.ts'
+export { vo2TrendOf } from './query/activityPeriod.ts'
