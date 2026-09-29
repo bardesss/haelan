@@ -773,20 +773,6 @@
         "label": "De nacht",
         "share": "{{duration}} · {{percent}} %"
       },
-      "tiles": {
-        "asleep": "Tijd in slaap",
-        "inBed": "Tijd in bed",
-        "efficiency": "Efficiëntie",
-        "deep": "Diep",
-        "light": "Licht",
-        "rem": "REM",
-        "awake": "Tijd wakker",
-        "naps": "Dutjes"
-      },
-      "tileBasis": "op basis van {{metric}}, zoals deze nacht is afgeleid",
-      "stages": {
-        "label": "Slaapfasen tijdens de nacht"
-      },
       "naps": {
         "none": "Geen dutjes geregistreerd op deze datum.",
         "list": "Dutjes:"

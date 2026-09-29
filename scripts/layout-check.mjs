@@ -169,13 +169,13 @@ const SESSION_ID = manifestUrls
   .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/sessions\/([0-9a-f]+)$/))
   .find((match) => match !== null)?.[1] ?? null
 
-// A real night's own local date, read off exactly the single-day `{from: localDate, to: localDate}`
-// read NightDetail.tsx's own useNights call makes (its own comment: a Night has no id, only a
-// (localDate, sourceId) pair) - not off a week/month list request, which answers with several
-// nights at once and names none of them in its own URL.
+// A real night's own local date, read off the night page's own single-object read
+// (useNightPage.ts's `GET /p/:personId/night/:localDate`, M10a-2's redesigned page) - not off a
+// week/month list request, which answers with several nights at once and names none of them in its
+// own URL.
 const NIGHT_DATE = manifestUrls
-  .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/sleep\/nights\?from=([^&]+)&to=([^&]+)$/))
-  .find((match) => match !== null && match[1] === match[2])?.[1] ?? null
+  .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/night\/([^/?]+)$/))
+  .find((match) => match !== null)?.[1] ?? null
 
 // A past day the dashboard can open (M9c), read off a captured `/glance?day=` the same way: the
 // latest one, the day before the demo day, so its calendar month is the demo's own and carries

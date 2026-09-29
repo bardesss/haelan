@@ -206,6 +206,45 @@ describe('the night page\'s night card', () => {
     const host = await mount({ ...page, stagePercent: { ...page.stagePercent, rem: null } })
     expect([...host.querySelectorAll('.night-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h 03m')
   })
+
+  // A device that recorded a span but no stages leaves nothing for a hypnogram to draw, and an
+  // empty chart would claim a night with no deep, light or REM sleep in it - so the chart and its
+  // legend are absent. The card around them is not: the traces and the nap line below don't depend
+  // on there being a segment to draw (from night-stages.test.tsx, moved here with NightStages).
+  it('keeps the card, the traces and the nap line when the night carries no staged segments', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, night: { ...page.night, segments: [] } })
+    const card = host.querySelector('.night-naps')?.closest('.card')
+    expect(card?.querySelector('.label')?.textContent).toBe('The night')
+    expect(card?.querySelector('.night-legend')).toBeNull()
+    expect(card?.querySelector('[role="img"]')).toBeNull()
+    expect(card?.querySelector('.night-naps')?.textContent).toBe('No naps recorded on this date.')
+  })
+
+  // ASLEEP and RESTLESS are recognised by the derive layer and staged by nobody; a segment carrying
+  // either drops out rather than being drawn as light sleep (from night-stages.test.tsx).
+  it('drops a segment nobody staged rather than drawing it as light sleep', async () => {
+    const page = nightPageFixture()
+    const host = await mount({
+      ...page,
+      night: {
+        ...page.night,
+        segments: [
+          { stage: 'DEEP', startMs: page.night.startMs, endMs: page.night.startMs + 60 * 60_000 },
+          { stage: 'RESTLESS', startMs: page.night.startMs + 60 * 60_000, endMs: page.night.startMs + 70 * 60_000 },
+        ],
+      },
+    })
+    expect([...host.querySelectorAll('.night-legend li')].map((item) => item.textContent)).toEqual(['Deep 1h 00m · 16 %'])
+  })
+
+  // Naps outside the night's own span print their own clock time, at the wake side's offset (from
+  // night-stages.test.tsx).
+  it('lists a nap by its own clock time', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, night: { ...page.night, naps: [Date.UTC(2026, 8, 6, 12, 30)] } })
+    expect(host.querySelector('.night-naps')?.textContent).toBe('Naps: 14:30')
+  })
 })
 
 describe('the night page\'s week', () => {
