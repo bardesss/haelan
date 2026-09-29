@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import { Card } from '../../components/Card.js'
 import { AnnotatePanel } from '../../components/AnnotatePanel.js'
 import type { Night } from '../../data/useNights.js'
 
@@ -32,13 +31,17 @@ import type { Night } from '../../data/useNights.js'
  * One `openSessionId` rather than a boolean, unlike WorkoutDetail's own `annotating`: this card
  * lists several sessions, so which one a click named has to be state, not just whether the panel
  * is open at all.
+ *
+ * Renders no card of its own (M10a-2 task 7): NightDetail.tsx's "About this night" fold
+ * (NightAbout.tsx) supplies the one Card the sessions list and the excluded-sessions notice both
+ * sit inside now, this component's own frame having moved there with it.
  */
 export function NightSessions({ night }: { night: Night }): ReactNode {
   const { t } = useTranslation()
   const [openSessionId, setOpenSessionId] = useState<string | null>(null)
 
   return (
-    <Card span={12} label={t('sleep.night.sessions.label')} basis={t('sleep.night.sessions.basis')}>
+    <>
       <ul className="night-sessions">
         {[...night.sessionIds, ...night.excludedSessions].map((sessionId) => {
           const excluded = night.excludedSessions.includes(sessionId)
@@ -62,6 +65,6 @@ export function NightSessions({ night }: { night: Night }): ReactNode {
           onClose={() => setOpenSessionId(null)}
         />
       )}
-    </Card>
+    </>
   )
 }

@@ -806,7 +806,6 @@
         "caption": "band = your usual range · same time axis as the stages"
       },
       "sessions": {
-        "label": "Sessions in this night",
         "basis": "a night is assembled from these recordings; excluding one re-derives the night without it",
         "exclude": "Exclude or add a note",
         "excluded": "Excluded"
@@ -826,6 +825,20 @@
         "breathing": "Breathing in sleep",
         "spo2": "Oxygen (SpO2)",
         "skinTemperature": "Skin temperature"
+      },
+      "day": {
+        "label": "That day",
+        "subtitle": "{{date}}, the day before this night",
+        "chipCount": "{{kind}} ×{{count}}",
+        "note": "“{{note}}”",
+        "steps": "Steps",
+        "activeMinutes": "Active minutes",
+        "workouts": "Training",
+        "workoutAverage": "average {{bpm}} bpm"
+      },
+      "about": {
+        "label": "About this night",
+        "details": "Details"
       },
       "more": {
         "label": "More about the sleep",

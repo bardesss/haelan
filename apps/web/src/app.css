@@ -607,6 +607,7 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .night-minis-rows, .night-morning-rows, .night-more-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 @media (max-width: 620px) {
   .night-minis-rows, .night-morning-rows, .night-more-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .night-day-figures { grid-template-columns: repeat(1, minmax(0, 1fr)); gap: var(--space-3); }
   .night-all { min-height: 44px; display: inline-flex; align-items: center; }
 }
 
@@ -799,6 +800,28 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* The status word for a session already in night.excludedSessions - no button beside it, since
    this card offers no second way to un-exclude one (see NightSessions.tsx's own comment on why). */
 .night-session-excluded { font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; }
+
+/* NightAbout.tsx's fold around the list just above: closed by default, so a reader who never
+   excludes a session never sees it open. Mirrors .status-failure-details' own summary styling
+   (StatusPanel.tsx), the app's other disclosure triangle. */
+.night-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
+.night-about[open] summary { margin-bottom: var(--space-2); }
+
+/* NightDay.tsx's card (M10a-2 task 7): the mood face and its word beside the chips and note, then
+   steps, active minutes and any workout in a row of their own beneath them. */
+.night-day-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); }
+.night-day-mood { display: flex; align-items: center; gap: var(--space-2); }
+.night-day-mood-word { font-size: var(--font-size-sm); color: var(--text-secondary); }
+.night-day-chips { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); list-style: none; margin: 0; padding: 0; }
+.night-day-chip {
+  font-size: var(--font-size-xs); color: var(--text-secondary); background: var(--surface-inset);
+  border: 1px solid var(--border-subtle); border-radius: 999px; padding: 2px 10px;
+}
+.night-day-note { flex-basis: 100%; margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); font-style: italic; }
+.night-day-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.night-day-workouts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.night-day-workout-link { display: block; text-decoration: none; }
+.night-day-workout-link:hover { text-decoration: underline; }
 
 /* The sentence an insight card exists to print, not a caption beside a value: unlike .basis
    (muted, font-size-xs) this is the whole content of the card, so it reads at body size in the

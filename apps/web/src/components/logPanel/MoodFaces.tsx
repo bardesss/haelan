@@ -24,6 +24,22 @@ function Face({ mouth }: { mouth: string }) {
 }
 
 /**
+ * One of the five faces, read only: the night page's "That day" card names a mood already set,
+ * rather than offering to set one, so it has no use for the radio group above - only for the one
+ * face MoodFaces already knows how to draw. `score` is 1 to 5, the same range the radio group
+ * takes; `label` is the caller's own word for it (`logPanel.mood.{{score}}`), passed in rather than
+ * looked up here, since this file already reads `t` only for the five it draws itself, and a sixth
+ * caller with its own translation hook is not a reason to add a second one to this one.
+ */
+export function MoodFace({ score, label }: { score: number, label: string }) {
+  return (
+    <span className={FACE_CLASS.on} role="img" aria-label={label}>
+      <Face mouth={MOUTHS[score - 1]!} />
+    </span>
+  )
+}
+
+/**
  * How the day felt, scored 1 to 5: a radio group of five faces, each with its word beneath it.
  *
  * A radio group rather than five toggles because only one can be marked, but one that can also be

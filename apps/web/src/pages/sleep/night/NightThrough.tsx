@@ -3,7 +3,6 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { Hypnogram, stageTotals } from '../../../charts/Hypnogram.js'
 import { STAGE_LABEL_KEY } from '../../../charts/stage.js'
-import { NightExcludedSessions } from '../../../components/NightExcludedSessions.js'
 import { stageOf } from '../../../data/nights.js'
 import type { Stage } from '../../../fixtures/july.js'
 import { formatClock, formatDuration, formatNumber } from '../../../format.js'
@@ -29,6 +28,9 @@ const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
  *
  * The hypnogram is absent, not an empty chart, on a night with no staged segments, which would read
  * as a night with no deep, light or REM sleep at all; the card stays for the traces and naps.
+ *
+ * The excluded-sessions notice that used to close this card moved to NightAbout.tsx (M10a-2 task 7),
+ * next to the session list it explains; this card no longer reads `night.excludedSessions` at all.
  */
 export function NightThrough({ page, chosenSource }: { page: NightPageData, chosenSource: string | null }) {
   const { t, i18n } = useTranslation()
@@ -90,7 +92,6 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
           ? t('sleep.night.naps.none')
           : `${t('sleep.night.naps.list')} ${napTimes.join(', ')}`}
       </p>
-      <NightExcludedSessions count={night.excludedSessions.length} />
     </Card>
   )
 }

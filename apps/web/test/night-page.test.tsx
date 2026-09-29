@@ -373,6 +373,67 @@ describe('the night page\'s more about the sleep', () => {
   })
 })
 
+describe('the night page\'s day before it', () => {
+  it('draws the mood, the chips with their counts, the note, steps, active minutes and the workout', async () => {
+    const host = await mount(nightPageFixture())
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
+    expect(card.querySelector('.basis')?.textContent).toBe('Saturday, September 5, the day before this night')
+    expect(card.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Good')
+    expect(card.querySelector('.night-day-mood-word')?.textContent).toBe('Good')
+    // The fixture's only counted kind, alcohol, was tapped twice, so its chip carries the count;
+    // a chip for a kind tapped once would carry none (the brief's own "count shown when > 1").
+    expect([...card.querySelectorAll('.night-day-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol ×2'])
+    expect(card.querySelector('.night-day-note')?.textContent).toBe('“Birthday, home late.”')
+    const rows = [...card.querySelectorAll('.figure-row')].map((row) => [
+      text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '',
+    ])
+    expect(rows[0]).toEqual(['Steps', '11,240'])
+    expect(rows[1]).toEqual(['Active minutes', '0h 48m'])
+    expect(rows[2]?.[0]).toBe('Training')
+    const workoutLink = card.querySelector<HTMLAnchorElement>('.night-day-workout-link')
+    expect(workoutLink?.textContent).toBe('Biking 52 min')
+    expect(workoutLink?.getAttribute('href')).toBe('/activity/w1')
+  })
+
+  it('shows a chip with no count for a kind tapped only once', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, log: { ...page.log, counts: { alcohol: 1 } } })
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
+    expect([...card.querySelectorAll('.night-day-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol'])
+  })
+
+  it('hides the whole card when the day has no log, no figures and no workout', async () => {
+    const page = nightPageFixture()
+    const host = await mount({
+      ...page,
+      day: {
+        ...page.day,
+        steps: { ...page.day.steps, value: null, standing: null, judged: null },
+        activeMinutes: { ...page.day.activeMinutes, value: null, standing: null, judged: null },
+        workouts: [],
+      },
+      log: { ...page.log, mood: null, counts: {}, note: null },
+    })
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')
+    expect(card).toBeUndefined()
+  })
+})
+
+describe('the night page\'s about fold', () => {
+  it('holds the session list and the excluded-sessions notice, closed by default', async () => {
+    const page = nightPageFixture()
+    const host = await mount({ ...page, night: { ...page.night, sessionIds: ['s1'], excludedSessions: ['s2'] } })
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'About this night')!
+    const details = card.querySelector('details.night-about')
+    // happy-dom does not hide a closed <details>' own children, so this asserts the `open`
+    // attribute itself rather than visibility (this file's own comment on why, task 7's brief).
+    expect(details?.hasAttribute('open')).toBe(false)
+    expect(details?.querySelector('summary')?.textContent).toBe('Details')
+    expect(details?.querySelectorAll('.night-session')).toHaveLength(2)
+    expect(details?.textContent).toContain('1 sleep session excluded from this night')
+  })
+})
+
 describe('the night page without a night', () => {
   it('says no night was recorded on a date the server has none for', async () => {
     const host = await mount(null)

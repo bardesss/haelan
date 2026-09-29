@@ -806,7 +806,6 @@
         "caption": "band = je gewone bereik · zelfde tijdas als de fasen"
       },
       "sessions": {
-        "label": "Sessies in deze nacht",
         "basis": "een nacht wordt samengesteld uit deze registraties; door er een uit te sluiten wordt de nacht opnieuw afgeleid zonder die registratie",
         "exclude": "Uitsluiten of notitie toevoegen",
         "excluded": "Uitgesloten"
@@ -826,6 +825,20 @@
         "breathing": "Ademhaling in slaap",
         "spo2": "Zuurstof (SpO2)",
         "skinTemperature": "Huidtemperatuur"
+      },
+      "day": {
+        "label": "Die dag",
+        "subtitle": "{{date}}, de dag vóór deze nacht",
+        "chipCount": "{{kind}} ×{{count}}",
+        "note": "“{{note}}”",
+        "steps": "Stappen",
+        "activeMinutes": "Actieve minuten",
+        "workouts": "Training",
+        "workoutAverage": "gemiddeld {{bpm}} bpm"
+      },
+      "about": {
+        "label": "Over deze nacht",
+        "details": "Details"
       },
       "more": {
         "label": "Meer over de slaap",

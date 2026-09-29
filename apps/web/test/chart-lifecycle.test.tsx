@@ -487,18 +487,20 @@ describe('the charts across a rerender', () => {
     // waketime strips, BalanceBars over `balance.nights`, both memoised the same way), then the
     // morning after's own ring (a static SVG, `role="img"` same as every echarts host) and its
     // resting-heart-rate and HRV strips (M10a-2's NightMorning, memoised the same way as every
-    // other strip on this page): twelve charts on this fixture, none absent. spo2 and hrv's own
-    // NightTraces row both pin to 'watch', find nothing, and fall back to every other source
-    // finding nothing either, so that trace stays absent the same way NightTraces' own "renders a
-    // row only for the metrics something actually recorded" test already covers - this fixture
-    // does not need all three to exercise the same identity chain a fourth trace would.
+    // other strip on this page), then task 7's own NightDay card, whose mood face is a third
+    // static `role="img"` (MoodFaces.tsx's exported MoodFace, drawn for the fixture's `log.mood`):
+    // thirteen charts on this fixture, none absent. spo2 and hrv's own NightTraces row both pin to
+    // 'watch', find nothing, and fall back to every other source finding nothing either, so that
+    // trace stays absent the same way NightTraces' own "renders a row only for the metrics
+    // something actually recorded" test already covers - this fixture does not need all three to
+    // exercise the same identity chain a fourth trace would.
     expect(container!.querySelector('.night-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
     expect(container!.querySelectorAll('.night-minis [role="img"]')).toHaveLength(4)
     expect(container!.querySelector('[role="img"][aria-label="Sleep schedule"]')).not.toBeNull()
     expect(container!.querySelector('[role="img"][aria-label="Sleep balance"]')).not.toBeNull()
     expect(container!.querySelector('.night-grp [role="img"][aria-label="Resting HR"]')).not.toBeNull()
     expect(container!.querySelector('.night-grp [role="img"][aria-label="HRV"]')).not.toBeNull()
-    expect(before).toHaveLength(12)
+    expect(before).toHaveLength(13)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled

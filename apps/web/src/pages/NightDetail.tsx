@@ -11,7 +11,8 @@ import { NightThrough } from './sleep/night/NightThrough.js'
 import { NightWeek } from './sleep/night/NightWeek.js'
 import { NightMorning } from './sleep/night/NightMorning.js'
 import { NightMore } from './sleep/night/NightMore.js'
-import { NightSessions } from './sleep/NightSessions.js'
+import { NightDay } from './sleep/night/NightDay.js'
+import { NightAbout } from './sleep/night/NightAbout.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -62,8 +63,9 @@ export function NightDetail() {
   if (query.isPending) return <div className="grid"><Card span={12}><Loading /></Card></div>
 
   const page = query.data
-  // The sessions card below the night is the pre-M10a one, still reading the night itself; it draws
-  // it from this payload's `night`, so the page makes one read for the night either way.
+  // The "About this night" fold at the foot of the page is the pre-M10a session list (task 7
+  // renamed and re-housed it, never rewrote it); it draws from this payload's `night`, so the page
+  // still makes one read for the night either way.
   return (
     <div className="night-page">
       <NightTop page={page} />
@@ -74,7 +76,8 @@ export function NightDetail() {
         <NightWeek page={page} />
         <NightMorning page={page} />
         <NightMore figures={page.figures} />
-        <NightSessions night={page.night} />
+        <NightDay day={page.day} log={page.log} />
+        <NightAbout night={page.night} />
       </div>
     </div>
   )
