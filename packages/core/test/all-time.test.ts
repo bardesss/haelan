@@ -8,7 +8,9 @@ import { MIN_RUN_DAYS } from '../src/api/runs.ts'
 import { readAllTime } from '../src/query/allTime.ts'
 
 let test: TestDatabase
+let sessionsInserted = 0
 beforeEach(() => {
+  sessionsInserted = 0
   test = createTestDatabase()
   seedPerson(test.db, 'p1')
   test.db.insert(sources).values({
@@ -43,7 +45,11 @@ const insertSession = (o: {
   kind: 'exercise' | 'sleep', localDate: string, id: string,
   minutes?: number, attrs?: Record<string, unknown>,
 }) => {
-  const startMs = Date.parse(`${o.localDate}T08:00:00Z`)
+  // Each session six hours after the last, longer than any fixture here lasts, so sixty sessions
+  // filed under one date are sixty workouts rather than one event recorded sixty times: workouts
+  // are counted merged, and sessions sharing an interval merge into one.
+  const startMs = Date.parse(`${o.localDate}T08:00:00Z`) + sessionsInserted * 6 * 3_600_000
+  sessionsInserted += 1
   test.db.insert(sessions).values({
     id: o.id, personId: 'p1', sourceId: 'watch', kind: o.kind, externalId: o.id,
     startMs, startOffsetMinutes: 0, endMs: startMs + (o.minutes ?? 60) * 60_000,
@@ -301,11 +307,14 @@ describe('readAllTime session records over merged workouts', () => {
     ]).run()
   })
 
-  const insertCopy = (o: { id: string, sourceId: string, minutes: number, attrs: Record<string, unknown> }) => {
+  const insertCopy = (o: {
+    id: string, sourceId: string, minutes: number, attrs: Record<string, unknown>, day?: number,
+  }) => {
+    const startMs = START + (o.day ?? 0) * 86_400_000
     test.db.insert(sessions).values({
       id: o.id, personId: 'p1', sourceId: o.sourceId, kind: 'exercise', externalId: o.id,
-      startMs: START, startOffsetMinutes: 0, endMs: START + o.minutes * MINUTE, endOffsetMinutes: 0,
-      localDate: '2026-09-20', attrs: JSON.stringify(o.attrs), rawPayloadId: null,
+      startMs, startOffsetMinutes: 0, endMs: startMs + o.minutes * MINUTE, endOffsetMinutes: 0,
+      localDate: new Date(startMs).toISOString().slice(0, 10), attrs: JSON.stringify(o.attrs), rawPayloadId: null,
     }).run()
   }
   const exclude = (id: string) => seedOverride(test.db, {
@@ -358,6 +367,18 @@ describe('readAllTime session records over merged workouts', () => {
 
     expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'furthest'))
       .toMatchObject({ sessionId: 'fitbit-run', value: 5_000_000 })
+  })
+
+  it('counts a run recorded on two devices once toward a workout milestone', () => {
+    // Fifty runs, each recorded by the watch and the phone: fifty workouts, not a hundred rows.
+    // Counted raw, the 50th workout would land on the 25th run and a 100th would appear.
+    for (let day = 0; day < 50; day += 1) {
+      insertCopy({ id: `fitbit-${day}`, sourceId: 'fitbit', minutes: 30, attrs: {}, day })
+      insertCopy({ id: `phone-${day}`, sourceId: 'phone', minutes: 31, attrs: {}, day })
+    }
+
+    const counts = readAllTime(test.db, 'p1').milestones.filter((m) => m.kind === 'count')
+    expect(counts).toEqual([{ kind: 'count', metric: 'exercise', count: 50, localDate: '2026-11-08' }])
   })
 
   it('holds no record for an event every copy of which was excluded', () => {
