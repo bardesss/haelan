@@ -807,15 +807,17 @@
       "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet."
     },
     "night": {
-      "when": "Went to bed {{bed}} · woke {{wake}} · {{source}}",
+      "when": "Bedtime {{bed}} · wake time {{wake}} · {{source}}",
       "missingTitle": "No night recorded",
       "missingDetail": "This date has no sleep from this source. It may not have synced yet.",
       "nav": "Nights",
       "previous": "Previous night",
       "next": "Next night",
       "allNights": "All nights",
+      "openNight": "Open this night",
+      "openNightIdle": "Tap a night to open it",
       "usualSingle": {
-        "within": "usually {{value}}",
+        "within": "your usual {{value}}",
         "above": "above your usual {{value}}",
         "below": "below your usual {{value}}"
       },
@@ -826,6 +828,14 @@
       "clockSingle": {
         "above": "later than your usual {{value}}",
         "below": "earlier than your usual {{value}}"
+      },
+      "paceUsual": {
+        "above": "slower than your usual {{low}} – {{high}}",
+        "below": "faster than your usual {{low}} – {{high}}"
+      },
+      "paceSingle": {
+        "above": "slower than your usual {{value}}",
+        "below": "faster than your usual {{value}}"
       },
       "deviation": {
         "within": "within your usual {{range}}",
@@ -870,7 +880,7 @@
         "schedule": "Sleep schedule",
         "balance": "Sleep balance",
         "variability": "Bedtime varied ±{{value}} this week",
-        "variabilityUsual": "Bedtime varied ±{{value}} this week · usually ±{{low}}–{{high}}",
+        "variabilityUsual": "Bedtime varied ±{{value}} this week · your usual ±{{low}}–{{high}}",
         "balanceAgainstTarget": "against your target of {{target}}",
         "balanceAgainstBaseline": "against your usual {{usual}}",
         "barsTarget": "each bar: that night against your target",
@@ -879,7 +889,7 @@
       "morning": {
         "label": "The morning after",
         "labelDated": "Recovery on {{date}}",
-        "restingHeartRate": "Resting HR",
+        "restingHeartRate": "Resting heart rate",
         "hrv": "HRV",
         "hrvChart": "HRV this morning",
         "breathing": "Breathing in sleep",
@@ -902,7 +912,7 @@
         "note": "“{{note}}”",
         "steps": "Steps",
         "activeMinutes": "Active minutes",
-        "workouts": "Training"
+        "workouts": "Workouts"
       },
       "about": {
         "label": "About this night",
@@ -1608,7 +1618,15 @@
       "below": "below your usual {{low}} – {{high}}",
       "thin": "not enough history for a usual yet",
       "partial": "so far; your usual day {{center}}",
-      "none": "no usual yet"
+      "none": "no usual yet",
+      "short": {
+        "above": "above your usual",
+        "below": "below your usual"
+      },
+      "clockShort": {
+        "above": "later than your usual",
+        "below": "earlier than your usual"
+      }
     },
     "asOf": {
       "time": "as of {{time}}",
@@ -1630,31 +1648,19 @@
       "title": "Last night",
       "asleep": "Time asleep",
       "efficiency": "Efficiency",
-      "bed": "Bed",
-      "woke": "Woke",
+      "bed": "Bedtime",
+      "woke": "Wake time",
       "strip": "Time asleep, last 7 nights",
       "stripFinished": "Time asleep, the 7 nights up to that day",
       "caption": "last 7 nights",
       "captionFinished": "the 7 nights up to that day",
       "link": "View this night",
-      "efficiencyStanding": {
-        "above": "higher than usual",
-        "below": "lower than usual"
-      },
-      "bedStanding": {
-        "above": "later than usual",
-        "below": "earlier than usual"
-      },
-      "wokeStanding": {
-        "above": "later than usual",
-        "below": "earlier than usual"
-      },
       "titleFinished": "That night"
     },
     "recovery": {
       "title": "Recovery",
       "index": "Recovery index",
-      "rhr": "Resting HR",
+      "rhr": "Resting heart rate",
       "hrv": "HRV",
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",
@@ -1681,12 +1687,6 @@
       "captionFinished": "the 7 days up to that day",
       "link": "View activity",
       "thatDay": "That day",
-      "dayStanding": {
-        "within": "Within your usual day",
-        "above": "Above your usual day",
-        "below": "Below your usual day"
-      },
-      "usualRange": "usual {{low}} – {{high}}",
       "heartRateWholeDay": "Heart rate · 00:00 → 24:00",
       "heartRateChartThatDay": "Heart rate that day"
     },
@@ -1701,7 +1701,7 @@
       "subtitleFinished": "the 7 days up to that day",
       "steps": "Steps",
       "active": "Active",
-      "asleep": "Asleep",
+      "asleep": "Time asleep",
       "perDay": "{{value}} a day",
       "perNight": "a night",
       "totalPer": "· {{per}}",

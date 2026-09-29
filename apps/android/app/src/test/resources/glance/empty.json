@@ -16,46 +16,54 @@
           "localDate": "2026-08-14",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-19",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-20",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         }
       ],
-      "standing": null
+      "standing": null,
+      "judged": null
     },
     "band": null,
     "missing": [
@@ -76,46 +84,54 @@
           "localDate": "2026-08-13",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-19",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         }
       ],
-      "standing": null
+      "standing": null,
+      "judged": null
     },
     "hrv": {
       "metric": "daily_hrv",
@@ -131,46 +147,54 @@
           "localDate": "2026-08-13",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-14",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-19",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         }
       ],
-      "standing": null
+      "standing": null,
+      "judged": null
     },
     "respiratoryRate": null
   },
@@ -189,46 +213,54 @@
           "localDate": "2026-08-14",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-19",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-20",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         }
       ],
-      "standing": null
+      "standing": null,
+      "judged": null
     },
     "stepsPace": null,
     "activeMinutes": {
@@ -245,46 +277,54 @@
           "localDate": "2026-08-14",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-15",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-16",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-17",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-18",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-19",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         },
         {
           "localDate": "2026-08-20",
           "value": null,
           "band": null,
-          "standing": null
+          "standing": null,
+          "judged": null
         }
       ],
-      "standing": null
+      "standing": null,
+      "judged": null
     },
     "heartRate": {
       "points": [],

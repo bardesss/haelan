@@ -265,7 +265,7 @@ describe('the overnight traces', () => {
       await flush(client, html)
       await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
       // 03:00Z read at the night's +02:00 is 05:00.
-      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('lowest 56 bpm at 05:00')
+      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('lowest 56\u00a0bpm at 05:00')
     } finally { restore() }
   })
 
@@ -275,7 +275,7 @@ describe('the overnight traces', () => {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} traces={traces()} />)
       await flush(client, html)
       await pumpUntil(() => container?.querySelector('.night-trace-summary') !== null, 'the summary to render')
-      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('highest 62 ms at 01:30')
+      expect(container!.querySelector('.night-trace-summary')?.textContent).toBe('highest 62\u00a0ms at 01:30')
     } finally { restore() }
   })
 
@@ -305,7 +305,7 @@ describe('the overnight traces', () => {
       await pumpUntil(() => container?.querySelector('.night-trace [role="img"]') !== null, 'the heart rate row to draw')
       const describedBy = container!.querySelector('.night-trace [role="img"]')!.getAttribute('aria-describedby')
       expect(describedBy).not.toBeNull()
-      expect(document.getElementById(describedBy!)?.textContent).toBe('Heart ratelowest 56 bpm at 05:00')
+      expect(document.getElementById(describedBy!)?.textContent).toBe('Heart ratelowest 56\u00a0bpm at 05:00')
     } finally { restore() }
   })
 

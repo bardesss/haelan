@@ -206,8 +206,8 @@ describe('the workout page\'s hero', () => {
   it('leads with the pace, where it sits against the usual, and how it ranks among recent runs', async () => {
     const host = await mount(workoutPageFixture())
     expect(host.querySelector('.workout-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Pace')
-    expect(text(host, '.workout-hero-value')).toBe('5:24 /km')
-    expect(text(host, '.workout-hero-verdict')).toBe('within your usual 5:22 /km – 5:36 /km')
+    expect(text(host, '.workout-hero-value')).toBe('5:24 /km')
+    expect(text(host, '.workout-hero-verdict')).toBe('within your usual 5:22 – 5:36 /km')
     expect(text(host, '.workout-hero-rank')).toBe('Faster than 17 of your last 20 of this type')
     expect(text(host, '.workout-hero .dash-caption')).toBe('this workout and the nine of this type before it · higher = faster')
     expect(host.querySelector('.workout-hero [role="img"][aria-label="Pace"]')).not.toBeNull()
@@ -245,7 +245,7 @@ describe('the workout page\'s hero', () => {
 
   it('names the Records best for this type as "your best"', async () => {
     const host = await mount(workoutPageFixture())
-    expect(text(host, '.workout-hero-best')).toBe('Your best: fastest kilometre 4:50 /km (June)')
+    expect(text(host, '.workout-hero-best')).toBe('Your best: fastest kilometre 4:50 /km (June)')
   })
 
   it('leads with moving time for a strength session, with no ranking, no previous one and no best', async () => {
@@ -276,9 +276,9 @@ describe('the workout page\'s four figures', () => {
   it('are distance, moving time, average heart rate and cardio load, each with its verdict and strip', async () => {
     const host = await mount(workoutPageFixture())
     expect(minis(host)).toEqual([
-      ['Distance', '5.20 km', 'within your usual 4.60 km – 5.60 km'],
+      ['Distance', '5.20 km', 'within your usual 4.60 – 5.60 km'],
       ['Moving time', '28:04', 'within your usual 25:00 – 31:00'],
-      ['Avg heart rate', '157 bpm', 'within your usual 150 bpm – 158 bpm'],
+      ['Avg heart rate', '157 bpm', 'within your usual 150 – 158 bpm'],
       ['Cardio load', '71', 'above your usual 55 – 70'],
     ])
     expect(host.querySelectorAll('.workout-minis [role="img"]')).toHaveLength(4)
@@ -308,9 +308,9 @@ describe('the workout page\'s compared-with table', () => {
     expect(host.querySelector('.workout-compared thead th .sr-only')?.textContent).toBe('Measure')
     expect(host.querySelector('.workout-compared caption.sr-only')?.textContent).toBe('This workout beside the previous one of its type, the usual range and your best')
     expect(compared(host)).toEqual([
-      ['Pace', '5:24 /km', '5:36 /km -12 s', '5:22 /km – 5:36 /km', '4:50 /km · June'],
-      ['Distance', '5.20 km', '5.00 km +0.20', '4.60 km – 5.60 km', '10.40 km · May'],
-      ['Avg heart rate', '157 bpm', '153 bpm +4', '150 bpm – 158 bpm', '—'],
+      ['Pace', '5:24 /km', '5:36 /km -12 s', '5:22 /km – 5:36 /km', '4:50 /km · June'],
+      ['Distance', '5.20 km', '5.00 km +0.20', '4.60 km – 5.60 km', '10.40 km · May'],
+      ['Avg heart rate', '157 bpm', '153 bpm +4', '150 bpm – 158 bpm', '—'],
       ['Cardio load', '71', '62 +9', '55 – 70', '—'],
     ])
     expect(host.querySelector('.workout-compared thead a')?.getAttribute('href')).toBe(`/activity/${PREVIOUS_ID}`)
@@ -357,7 +357,7 @@ describe('the workout page in Dutch', () => {
     expect(host.querySelector('.workout-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Tempo')
     expect(text(host, '.workout-hero-rank')).toBe('Sneller dan 17 van je laatste 20 van dit type')
     expect(text(host, '.workout-hero-previous')).toBe('12 s/km sneller dan de vorige, dinsdag 1 september · bekijk →')
-    expect(text(host, '.workout-hero-best')).toBe('Je beste: snelste kilometer 4:50 /km (juni)')
+    expect(text(host, '.workout-hero-best')).toBe('Je beste: snelste kilometer 4:50 /km (juni)')
     expect(text(host, '.workout-page h1')).toBe('Hardlopen')
   })
 })
@@ -461,7 +461,7 @@ describe('the workout page\'s route and kilometres', () => {
     const host = await mount(workoutPageFixture(), fullSession())
     expect(host.querySelector('.workout-map .workout-route-svg')).not.toBeNull()
     expect(host.querySelector('.workout-elevation-line')?.getAttribute('points')).toBe('0,40 133.3,0 400,36')
-    expect(text(host, '.workout-elevation-gain')).toBe('+42 m')
+    expect(text(host, '.workout-elevation-gain')).toBe('+42 m')
     expect(kilometres(host)).toEqual([
       ['1', '5:32', '', '146'], ['2', '5:24', '', '152'], ['3', '5:26', '', '156'],
       ['4', '5:15', '', '163'], ['5', '5:02', '', '171'], ['0.2', '4:51', '', '176†'],
@@ -549,7 +549,7 @@ describe('the workout page\'s trace', () => {
     const card = host.querySelector('.workout-through')!.closest('.card')!
     expect(text(card, '.label')).toBe('Through the workout')
     expect(text(card, '.basis')).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40')
-    expect(text(host, '.workout-through-summary')).toBe('highest 178 bpm at 26:30')
+    expect(text(host, '.workout-through-summary')).toBe('highest 178 bpm at 26:30')
     const option = optionIn(host, '.workout-through-chart')
     expect(option.xAxis[0]).toMatchObject({ type: 'value', min: 0, max: 34 * 60_000, interval: 5 * 60_000 })
     const zones = option.series.find((series) => series.id === 'zones')!
@@ -590,7 +590,7 @@ describe('the workout page\'s zones', () => {
     const host = await mount(workoutPageFixture(), fullSession())
     const card = host.querySelector('.workout-zones')!.closest('.card')!
     expect(text(card, '.label')).toBe('Heart-rate zones')
-    expect(text(host, '.workout-zones-verdict')).toBe('15 min hard or peak · above your usual 8 min – 14 min')
+    expect(text(host, '.workout-zones-verdict')).toBe('15 min hard or peak · above your usual 8 – 14 min')
     expect([...host.querySelectorAll('.workout-zones-legend li')].map((li) => li.textContent)).toEqual([
       'Light 4 min', 'Moderate 9 min', 'Vigorous 12 min', 'Peak 3 min',
     ])
@@ -629,11 +629,11 @@ describe('the workout page\'s zones', () => {
   it('words the zones and the trace in Dutch', async () => {
     tracePoints = [reading(minute(10), 150), reading(minute(26) + 30_000, 175, 178)]
     const host = await mount(workoutPageFixture(), fullSession(), 'nl')
-    expect(text(host, '.workout-zones-verdict')).toBe('15 min zwaar of piek · boven je gebruikelijke bereik 8 min – 14 min')
+    expect(text(host, '.workout-zones-verdict')).toBe('15 min zwaar of piek · boven je gebruikelijke bereik 8 – 14 min')
     expect(text(host, '.workout-split-trend')).toBe('Negatieve split · tweede helft 22 s/km sneller')
     expect(host.querySelector('.workout-through')!.closest('.card')!.querySelector('.label')?.textContent).toBe('Door de training')
     // Elapsed time, not a clock time: "na" 26:30, never "om".
-    expect(text(host, '.workout-through-summary')).toBe('hoogste 178 bpm na 26:30')
+    expect(text(host, '.workout-through-summary')).toBe('hoogste 178 bpm na 26:30')
   })
 })
 
@@ -677,11 +677,11 @@ describe('the workout page\'s running form', () => {
     const card = cardLabelled(await mount(workoutPageFixture()), 'Running form')!
     expect(text(card, '.workout-side-caption')).toBe('from your watch, runs only')
     expect(rowsIn(card)).toEqual([
-      ['Cadence', '172 /min', 'within your usual 166 /min – 174 /min'],
-      ['Stride length', '1.09 m', 'within your usual 1.02 m – 1.10 m'],
-      ['Ground contact', '248 ms', 'within your usual 240 ms – 262 ms'],
-      ['Vertical oscillation', '8.9 cm', 'within your usual 8.4 cm – 9.6 cm'],
-      ['Vertical ratio', '8.2 %', 'within your usual 7.9 % – 8.9 %'],
+      ['Cadence', '172 /min', 'within your usual 166 – 174 /min'],
+      ['Stride length', '1.09 m', 'within your usual 1.02 – 1.10 m'],
+      ['Ground contact', '248 ms', 'within your usual 240 – 262 ms'],
+      ['Vertical oscillation', '8.9 cm', 'within your usual 8.4 – 9.6 cm'],
+      ['Vertical ratio', '8.2 %', 'within your usual 7.9 – 8.9 %'],
     ])
   })
 
@@ -694,11 +694,11 @@ describe('the workout page\'s more about this workout', () => {
   it('lists the rest of the figures, elapsed against moving with its pause, and VO2max with its strip', async () => {
     const card = cardLabelled(await mount(workoutPageFixture(), fullSession()), 'More about this workout')!
     expect(rowsIn(card)).toEqual([
-      ['Calories', '412 kcal', 'within your usual 340 kcal – 430 kcal'],
+      ['Calories', '412 kcal', 'within your usual 340 – 430 kcal'],
       ['Steps', '5,310', 'within your usual 4,700 – 5,600'],
-      ['Highest heart rate', '178 bpm', 'no usual yet'],
-      ['Active zone minutes', '43 min', 'within your usual 30 min – 45 min'],
-      ['Elevation gain', '42 m', 'within your usual 20 m – 60 m'],
+      ['Highest heart rate', '178 bpm', 'no usual yet'],
+      ['Active zone minutes', '43 min', 'within your usual 30 – 45 min'],
+      ['Elevation gain', '42 m', 'within your usual 20 – 60 m'],
       ['Load (TRIMP)', '64', 'no usual yet'],
       ['Elapsed', '34:00', '28:04 moving · one pause'],
       ['VO₂max', '46', 'within your usual 44 – 46'],
@@ -759,7 +759,7 @@ describe('the workout page\'s day', () => {
     expect([...card.querySelectorAll('.day-log-chip')].map((chip) => chip.textContent)).toEqual(['Caffeine'])
     expect(rowsIn(card)).toEqual([
       ['Steps that day', '12,880', 'above your usual 6,000 – 10,500'],
-      ['Active minutes', '61 min', 'above your usual 25 min – 60 min'],
+      ['Active minutes', '61 min', 'above your usual 25 – 60 min'],
       ['Other workouts', 'none', 'only this one'],
     ])
   })
@@ -792,9 +792,9 @@ describe('the workout page\'s afterwards', () => {
     const card = cardLabelled(await mount(workoutPageFixture()), 'Afterwards')!
     expect(text(card, '.workout-side-caption')).toBe('the night after this workout and the morning after it')
     expect(rowsIn(card)).toEqual([
-      ['Time asleep', '7h 12m', 'within your usual 5h 30m – 7h 50m'],
-      ['Deep sleep', '1h 22m', 'within your usual 1h 10m – 1h 40m'],
-      ['Resting heart rate after', '55 bpm', 'within your usual 51 bpm – 57 bpm'],
+      ['Time asleep', '7h 12m', 'within your usual 5h 30m – 7h 50m'],
+      ['Deep sleep', '1h 22m', 'within your usual 1h 10m – 1h 40m'],
+      ['Resting heart rate after', '55 bpm', 'within your usual 51 – 57 bpm'],
     ])
     const link = card.querySelector<HTMLAnchorElement>('.workout-after-night')
     expect(link?.textContent).toBe('view the night →')
@@ -847,7 +847,7 @@ describe('the workout page\'s about fold', () => {
 
   it('words the lower sections in Dutch', async () => {
     const host = await mount(workoutPageFixture(), workoutSessionFixture(), 'nl')
-    expect(rowsIn(cardLabelled(host, 'Loopvorm')!)[2]).toEqual(['Grondcontact', '248 ms', 'binnen je gebruikelijke bereik 240 ms – 262 ms'])
+    expect(rowsIn(cardLabelled(host, 'Loopvorm')!)[2]).toEqual(['Grondcontact', '248 ms', 'binnen je gebruikelijke bereik 240 – 262 ms'])
     expect(cardLabelled(host, 'Meer over deze training')).toBeDefined()
     expect(text(cardLabelled(host, 'Die dag')!, '.workout-side-caption')).toBe('vrijdag 4 september')
     expect(cardLabelled(host, 'Daarna')!.querySelector('.workout-after-night')?.textContent).toBe('bekijk de nacht →')

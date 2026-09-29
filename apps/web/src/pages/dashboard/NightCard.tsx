@@ -1,13 +1,15 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Hypnogram } from '../../charts/Hypnogram.js'
 import { Sparkline } from '../../charts/Sparkline.js'
+import { verdictTone } from '../../charts/base.js'
+import { BasisContext } from '../../components/basis.js'
 import { localMinutesOf, inWindow, DEFAULT_WINDOW } from '../../charts/schedule.js'
 import { stageOf } from '../../data/nights.js'
 import { formatClock } from '../../format.js'
 import type { GlanceSleep } from '../../data/useGlance.js'
 import { DashCard, Described, stripBands, useOpensDay } from './cardShared.js'
-import { formatFigure, usualLine } from './glanceText.js'
+import { formatFigure, usualLine, usualShort } from './glanceText.js'
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
 // (see the "does not import the fixtures" test): a local, structurally identical union avoids
@@ -50,8 +52,11 @@ function nightSpan(sleep: GlanceSleep, language: string): string {
  *
  * The grey "within your usual range" line under every figure is gone from sight on purpose (the
  * redesign's point) and kept for a screen reader: the strip's description is usualLine's sentence.
- * A secondary figure outside its usual takes the warning colour and says which way in words, so the
- * colour is never the only signal.
+ * A night outside its usual prints that sentence under the figure instead (the night page's hero
+ * does the same, always), and the strip is then described by it, by id, rather than by a hidden
+ * copy. A secondary figure outside its usual says which way in words beside its value, both in the
+ * tone the server's verdict takes (verdictTone: a better efficiency green, a later bedtime, which
+ * is neither, the warning colour), so the colour is never the only signal.
  */
 // `today` is not used for wording here, as the other redesigned cards use it ("today" vs
 // "yesterday"): a night is always named by the date it ended on. It is read for one thing only,
@@ -67,9 +72,11 @@ export function NightCard({ sleep, span, today, onOpenDay, finished = false }: {
   const language = i18n.language
   const segments = useMemo(() => hypnogramSegments(sleep), [sleep])
   const opens = useOpensDay(today, onOpenDay)
-  const { values, labels, standings, bands } = useMemo(() => ({
+  const verdictId = useId()
+  const { values, labels, standings, judged, bands } = useMemo(() => ({
     values: sleep.asleep.strip.map((d) => d.value), labels: sleep.asleep.strip.map((d) => d.localDate),
-    standings: sleep.asleep.strip.map((d) => d.standing), bands: stripBands(sleep.asleep.strip),
+    standings: sleep.asleep.strip.map((d) => d.standing), judged: sleep.asleep.strip.map((d) => d.judged),
+    bands: stripBands(sleep.asleep.strip),
   }), [sleep.asleep.strip])
   const band = sleep.asleep.baseline !== null && !sleep.asleep.baseline.thin ? sleep.asleep.baseline : undefined
   // R3: the band is shaded behind the strip AND its two edges are labelled, so a reader is never
@@ -88,23 +95,38 @@ export function NightCard({ sleep, span, today, onOpenDay, finished = false }: {
     { key: 'bed', label: t('glance.sleep.bed'), figure: sleep.bedtime },
     { key: 'woke', label: t('glance.sleep.woke'), figure: sleep.waketime },
   ]
+  // The night's own verdict, printed only when it is outside its usual (the dashboard keeps "within"
+  // out of sight); the words are usualLine's, the same the night page prints.
+  const asleepOut = sleep.asleep.standing === 'above' || sleep.asleep.standing === 'below'
+  const asleepVerdict = asleepOut ? usualLine(sleep.asleep, t, language) : null
+  const asleepTone = verdictTone(sleep.asleep.judged, sleep.asleep.standing)
+  const strip = (
+    <Sparkline values={values} labels={labels} label={t(finished ? 'glance.sleep.stripFinished' : 'glance.sleep.strip')} unit={t('glance.sleep.asleep')}
+      metric={sleep.asleep.metric} baseline={band} bands={bands} bandLabels={bandLabels} height={64}
+      dots pointStandings={standings} pointJudged={judged} tableToggle={false} {...opens}
+      formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...sleep.asleep, value: v }, language) ?? absent)} />
+  )
   return (
     <DashCard span={span} title={t(finished ? 'glance.sleep.titleFinished' : 'glance.sleep.title')} subtitle={nightSpan(sleep, language)}
       link={{ to: `/sleep/night/${sleep.localDate}`, text: t('glance.sleep.link') }}>
       <div className="dash-lead">
         <div>
           <div className="dash-headline">{formatFigure(sleep.asleep, language) ?? t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</div>
+          {asleepVerdict !== null && (
+            <p id={verdictId} className={asleepTone === null ? 'detail-verdict' : `detail-verdict ${asleepTone}`}>{asleepVerdict}</p>
+          )}
           <div className="dash-minis">
             {minis.map(({ key, label, figure, unit }) => {
               const value = formatFigure(figure, language)
-              const out = figure.standing === 'above' || figure.standing === 'below'
+              const tone = verdictTone(figure.judged, figure.standing)
+              const note = usualShort(figure, t)
               return (
                 <span key={key} className="dash-mini">
                   <span className="dash-mini-label">{label}</span>{' '}
-                  <b className={out ? 'dash-mini-value is-out' : 'dash-mini-value'}>
-                    {value === null ? t(finished ? 'glance.noReadingFinished' : 'glance.noReading') : unit ? `${value} ${unit}` : value}
+                  <b className={tone === null ? 'dash-mini-value' : `dash-mini-value ${tone}`}>
+                    {value === null ? t(finished ? 'glance.noReadingFinished' : 'glance.noReading') : unit ? `${value}\u00a0${unit}` : value}
                   </b>
-                  {out && <span className="dash-mini-note">{' '}{t(`glance.sleep.${key}Standing.${figure.standing}`)}</span>}
+                  {note !== null && <span className={`dash-mini-note ${tone ?? 'is-out'}`}>{' '}{note}</span>}
                 </span>
               )
             })}
@@ -112,12 +134,9 @@ export function NightCard({ sleep, span, today, onOpenDay, finished = false }: {
         </div>
         {values.filter((v) => v !== null).length > 1 && (
           <div className="dash-lead-strip">
-            <Described text={usualLine(sleep.asleep, t, language) ?? t(finished ? 'glance.sleep.captionFinished' : 'glance.sleep.caption')} hidden>
-              <Sparkline values={values} labels={labels} label={t(finished ? 'glance.sleep.stripFinished' : 'glance.sleep.strip')} unit={t('glance.sleep.asleep')}
-                metric={sleep.asleep.metric} baseline={band} bands={bands} bandLabels={bandLabels} height={64}
-                dots pointStandings={standings} tableToggle={false} {...opens}
-                formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...sleep.asleep, value: v }, language) ?? absent)} />
-            </Described>
+            {asleepVerdict !== null
+              ? <BasisContext.Provider value={verdictId}>{strip}</BasisContext.Provider>
+              : <Described text={usualLine(sleep.asleep, t, language) ?? t(finished ? 'glance.sleep.captionFinished' : 'glance.sleep.caption')} hidden>{strip}</Described>}
             <p className="dash-caption">{t(finished ? 'glance.sleep.captionFinished' : 'glance.sleep.caption')}</p>
           </div>
         )}

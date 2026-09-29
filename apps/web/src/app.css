@@ -686,12 +686,16 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .detail-verdict.better { color: var(--positive); }
 .detail-verdict.worse, .detail-verdict.is-out { color: var(--negative); }
-/* The figures under the hero, and every other card that is a grid of FigureRows: four across on a
-   wide screen, three where a card gives them three quarters (.detail-rows-3), two below the grid's
-   collapse width (the GRID_STACK_WIDTH block, for the reason given there). */
+/* The figures under the hero, and every other card that is a grid of FigureRows (FigureRows): one
+   column per row up to its cap (data-columns, four across a full card, three where a card gives
+   them three quarters), two below the grid's collapse width (the GRID_STACK_WIDTH block, for the
+   reason given there). */
 .detail-minis { display: flex; flex-direction: column; gap: var(--space-2); }
 .detail-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
-.detail-rows-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.detail-rows[data-columns="2"], .detail-side-rows[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-rows[data-columns="3"], .detail-side-rows[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-rows[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 /* SideCard (pages/detail/DayLogBlock.tsx): a narrow column naming the day or night the section is
    about, the section's rows beside it; stacked below the grid's collapse width. */
 .detail-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
@@ -846,6 +850,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-route-map .maplibregl-ctrl-attrib a:hover { color: var(--text-primary); }
 
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
+/* A card's label is its heading (Card.tsx): the label's look, none of a heading's own spacing. */
+h2.label { margin: 0; }
 .value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }
@@ -1170,7 +1176,10 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .dash-mini { display: inline-flex; align-items: baseline; gap: var(--space-1); }
 .dash-mini-label { color: var(--text-faint); }
 .dash-mini-value { font-size: var(--font-size-md); font-weight: var(--weight-semibold); }
-.dash-mini-value.is-out, .dash-mini-note { color: var(--negative); }
+/* A mini and its note take the tone of the server's verdict (verdictTone): better green, worse or
+   outside a neutral usual red. */
+.dash-mini-value.better, .dash-mini-note.better { color: var(--positive); }
+.dash-mini-value.worse, .dash-mini-value.is-out, .dash-mini-note.worse, .dash-mini-note.is-out { color: var(--negative); }
 .dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 
 /* TodayCard.tsx: the two headline figures side by side on one line, and the pace line under them. */
@@ -1179,6 +1188,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .dash-pace { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
 .dash-pace-word { font-weight: var(--weight-medium); }
 .dash-pace.is-ahead .dash-pace-word { color: var(--positive); }
+/* A finished day's verdict line, in the tone of its judgement (TodayCard). */
+.dash-pace.better { color: var(--positive); }
+.dash-pace.worse, .dash-pace.is-out { color: var(--negative); }
 .glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
 .glance-asof { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 .glance-note { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
@@ -1244,6 +1256,8 @@ button.week-bar-slot { cursor: pointer; }
    keeps a label that wraps to two lines ("Actieve minuten") from spreading them apart. */
 .figure-row-label { line-height: var(--leading-tight); }
 .figure-row-value { font-size: var(--font-size-lg); font-weight: var(--weight-semibold); color: var(--text-primary); }
+/* The unit after a row's number (FigureRow), smaller, as the dashboard sets "18 min". */
+.figure-row-unit { font-size: var(--font-size-sm); font-weight: var(--weight-medium); color: var(--text-secondary); }
 .figure-row-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-inset); }
 .figure-row-band { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--chart-band-baseline); }
 .figure-row-mark { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text-primary); }
@@ -1430,6 +1444,8 @@ button.week-bar-slot { cursor: pointer; }
      and at a 621px window each column came out under 80px, narrower than one uppercase label.
      The side cards stack their caption over their rows here too. */
   .detail-rows, .detail-side-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .detail-rows[data-columns], .detail-side-rows[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   /* The workout page's rows, for the same reason: at a 621px window the minis' four columns came
      out 78px and the side cards' three 76px, and an uppercase label ("Cardiobelasting", "Rusthartslag

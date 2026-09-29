@@ -40,6 +40,22 @@ export const AXIS_FONT_SIZE = 12
  */
 export type PointStanding = GlanceStanding | null
 
+/** A day's judgement, as the server sends it (`GlanceStripDay.judged`): its standing read through the metric's direction. */
+export type PointJudged = 'better' | 'worse' | null
+
+/**
+ * The colour a verdict takes, the dashboard's rule and every page's since: a judged figure keeps
+ * its judgement (better, worse), and a figure the server judged neither way - a neutral one, like
+ * a bedtime - that still sits outside its usual takes the "outside usual" mark (`is-out`), so
+ * "outside your usual" never reads in the same grey as "within". Null inside the usual, or with
+ * nothing to stand against. Here rather than beside FigureRow, its first reader, because a strip's
+ * dots (Sparkline) take the same tone as the words beside them.
+ */
+export function verdictTone(judged: PointJudged, standing: PointStanding | undefined): 'better' | 'worse' | 'is-out' | null {
+  if (judged !== null) return judged
+  return standing === 'above' || standing === 'below' ? 'is-out' : null
+}
+
 /**
  * Applies the reader's motion preference to a built option object.
  *

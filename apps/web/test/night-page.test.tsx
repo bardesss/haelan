@@ -109,7 +109,7 @@ describe('the night page\'s top', () => {
     const host = await mount(nightPageFixture())
     expect(text(host, '.detail-page h1')).toBe('Sunday, September 6')
     // Bed and wake are the page's own bedtime and wake time figures, 00:08 and 07:09.
-    expect(text(host, '.dash-date')).toBe('Went to bed 00:08 · woke 07:09 · watch')
+    expect(text(host, '.dash-date')).toBe('Bedtime 00:08 · wake time 07:09 · watch')
   })
 
   it('steps to the neighbouring nights the payload names', async () => {
@@ -161,10 +161,18 @@ describe('the night page\'s hero', () => {
   it('leads with the time asleep and where it sits against the usual', async () => {
     const host = await mount(nightPageFixture())
     expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Time asleep')
-    expect(text(host, '.detail-hero-value')).toBe('6h 36m')
-    expect(text(host, '.detail-verdict')).toBe('within your usual 5h 06m – 7h 48m')
+    expect(text(host, '.detail-hero-value')).toBe('6h\u00a036m')
+    expect(text(host, '.detail-verdict')).toBe('within your usual 5h\u00a006m – 7h\u00a048m')
     expect(text(host, '.detail-hero .dash-caption')).toBe('this night and the six before it')
     expect(host.querySelector('.detail-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
+  })
+
+  // F5: every labelled card is a section under its own heading, not a span a screen reader's
+  // heading list skips; the page had one heading (its h1) before.
+  it('names each labelled card with a heading', async () => {
+    const host = await mount(nightPageFixture())
+    expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector(':scope > h2.label')?.textContent).toBe('Time asleep')
+    expect(host.querySelectorAll('.detail-page .card > h2.label').length).toBeGreaterThanOrEqual(5)
   })
 
   it('is left out when the night has no time asleep', async () => {
@@ -189,15 +197,15 @@ describe('the night page in Dutch', () => {
   it('words the hero and the four figures from the Dutch catalogue', async () => {
     const host = await mount(nightPageFixture(), 'nl')
     expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Tijd in slaap')
-    expect(text(host, '.detail-verdict')).toBe('binnen je gebruikelijke bereik 5h 06m – 7h 48m')
+    expect(text(host, '.detail-verdict')).toBe('binnen je gebruikelijke bereik 5h\u00a006m – 7h\u00a048m')
     expect(text(host, '.detail-hero .dash-caption')).toBe('deze nacht en de zes ervoor')
     expect(minis(host)).toEqual([
-      ['Efficiëntie', '94 %', 'binnen je gebruikelijke bereik 88 % – 96 %'],
-      ['Diepe slaap', '1h 04m', 'onder je gebruikelijke bereik 1h 10m – 1h 40m'],
-      ['REM', '2h 03m', 'binnen je gebruikelijke bereik 1h 30m – 2h 10m'],
+      ['Efficiëntie', '94\u00a0%', 'binnen je gebruikelijke bereik 88 – 96\u00a0%'],
+      ['Diepe slaap', '1h\u00a004m', 'onder je gebruikelijke bereik 1h\u00a010m – 1h\u00a040m'],
+      ['REM', '2h\u00a003m', 'binnen je gebruikelijke bereik 1h\u00a030m – 2h\u00a010m'],
       ['Naar bed', '00:08', 'binnen je gebruikelijke bereik 23:30 – 00:20'],
     ])
-    expect(text(host, '.dash-date')).toBe('Naar bed 00:08 · wakker 07:09 · watch')
+    expect(text(host, '.dash-date')).toBe('Naar bed 00:08 · wakker geworden 07:09 · watch')
   })
 
   it('names the hypnogram lanes in Dutch', async () => {
@@ -212,9 +220,9 @@ describe('the night page\'s four figures', () => {
   it('are efficiency, deep sleep, REM and bedtime, each with its verdict', async () => {
     const host = await mount(nightPageFixture())
     expect(minis(host)).toEqual([
-      ['Efficiency', '94 %', 'within your usual 88 % – 96 %'],
-      ['Deep sleep', '1h 04m', 'below your usual 1h 10m – 1h 40m'],
-      ['REM', '2h 03m', 'within your usual 1h 30m – 2h 10m'],
+      ['Efficiency', '94\u00a0%', 'within your usual 88 – 96\u00a0%'],
+      ['Deep sleep', '1h\u00a004m', 'below your usual 1h\u00a010m – 1h\u00a040m'],
+      ['REM', '2h\u00a003m', 'within your usual 1h\u00a030m – 2h\u00a010m'],
       ['Bedtime', '00:08', 'within your usual 23:30 – 00:20'],
     ])
     // Deep sleep is short, and the server said that is worse; the verdict carries its colour.
@@ -225,7 +233,7 @@ describe('the night page\'s four figures', () => {
   it('say there is no usual yet for a figure the server sent no usual for', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, figures: { ...page.figures, rem: { ...page.figures.rem, baseline: null, standing: null, judged: null } } })
-    expect(minis(host)[2]).toEqual(['REM', '2h 03m', 'no usual yet'])
+    expect(minis(host)[2]).toEqual(['REM', '2h\u00a003m', 'no usual yet'])
   })
 
   it('colour each strip day dot by where the server said that day stood', async () => {
@@ -260,7 +268,7 @@ describe('the night page\'s night card', () => {
     expect(card?.querySelector('[role="img"][aria-label="The night"]')).not.toBeNull()
     // Deep, light and REM carry the server's share of the night; awake is its minutes alone.
     expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual([
-      'Deep 1h 04m · 16 %', 'Light 3h 29m · 53 %', 'REM 2h 03m · 31 %', 'Awake 0h 25m',
+      'Deep 1h\u00a004m · 16 %', 'Light 3h\u00a029m · 53 %', 'REM 2h\u00a003m · 31 %', 'Awake 0h\u00a025m',
     ])
     // Naps are the More card's to say, not this one's.
     expect(card?.querySelector('.night-naps')).toBeNull()
@@ -271,7 +279,7 @@ describe('the night page\'s night card', () => {
     const host = await mount(nightPageFixture())
     const chart = host.querySelector('[role="img"][aria-label="The night"]')!
     const describedBy = chart.getAttribute('aria-describedby')
-    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Deep 1h 04m · 16 %Light 3h 29m · 53 %REM 2h 03m · 31 %Awake 0h 25m')
+    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Deep 1h\u00a004m · 16 %Light 3h\u00a029m · 53 %REM 2h\u00a003m · 31 %Awake 0h\u00a025m')
   })
 
   // The fixture's awake figure and its awake lane agree at 25 minutes, so the note stays away.
@@ -291,7 +299,7 @@ describe('the night page\'s night card', () => {
   it('leaves a stage\'s share off when the server sent none for it', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, stagePercent: { ...page.stagePercent, rem: null } })
-    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h 03m')
+    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h\u00a003m')
   })
 
   // A device that recorded a span but no stages leaves nothing for a hypnogram to draw, and an
@@ -320,7 +328,7 @@ describe('the night page\'s night card', () => {
         ],
       },
     })
-    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual(['Deep 1h 00m · 16 %'])
+    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual(['Deep 1h\u00a000m · 16 %'])
   })
 })
 
@@ -330,7 +338,7 @@ describe('the night page\'s week', () => {
     const card = host.querySelector('[aria-label="Sleep schedule"]')?.closest('.card')
     expect(card?.querySelector('.label')?.textContent).toBe('Sleep schedule')
     expect(card?.querySelectorAll('tbody tr')).toHaveLength(7)
-    expect(text(card!, '.detail-verdict')).toBe('Bedtime varied ±28 min this week · usually ±20–35 min')
+    expect(text(card!, '.detail-verdict')).toBe('Bedtime varied ±28\u00a0min this week · your usual ±20–35\u00a0min')
   })
 
   // The bars are the seven nights' bed and wake placed on the chart's own axis: bed shifted past
@@ -368,7 +376,7 @@ describe('the night page\'s week', () => {
   it('describes the schedule chart by its variability line', async () => {
     const host = await mount(nightPageFixture())
     const describedBy = host.querySelector('[role="img"][aria-label="Sleep schedule"]')!.getAttribute('aria-describedby')
-    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Bedtime varied ±28 min this week · usually ±20–35 min')
+    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Bedtime varied ±28\u00a0min this week · your usual ±20–35\u00a0min')
   })
 
   it('hides the schedule card when neither bedtime nor waketime carries a strip', async () => {
@@ -416,7 +424,7 @@ describe('the night page\'s week', () => {
   it('signs a week ahead of its target with a plus', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, balance: { ...page.balance, total: 26 } })
-    expect(text(host, '.night-week-total')).toBe('+26m')
+    expect(text(host, '.night-week-total')).toBe('+0h 26m')
   })
 
   it('words the balance in Dutch against the target', async () => {
@@ -469,16 +477,16 @@ describe('the night page\'s morning after', () => {
       text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '', text(row, '.figure-row-verdict') ?? '',
     ])
     expect(rows).toEqual([
-      ['Resting HR', '54 bpm', 'within your usual 51 bpm – 57 bpm'],
-      ['HRV', '49 ms', 'within your usual 42 ms – 60 ms'],
-      ['Breathing in sleep', '14.2 breaths/min', 'within your usual 13.0 breaths/min – 15.5 breaths/min'],
-      ['Oxygen (SpO2)', '95.4 %', 'within your usual 94.5 % – 97.0 %'],
+      ['Resting heart rate', '54\u00a0bpm', 'within your usual 51 – 57\u00a0bpm'],
+      ['HRV', '49\u00a0ms', 'within your usual 42 – 60\u00a0ms'],
+      ['Breathing in sleep', '14.2\u00a0breaths/min', 'within your usual 13.0 – 15.5\u00a0breaths/min'],
+      ['Oxygen (SpO2)', '95.4\u00a0%', 'within your usual 94.5 – 97.0\u00a0%'],
       // A deviation, so its usual is worded as one too: the band's edges less its centre.
-      ['Skin temperature', '+0.6 °C', 'above your usual ±0.3 °C'],
+      ['Skin temperature', '+0.6\u00a0°C', 'above your usual ±0.3\u00a0°C'],
     ])
     // Resting HR, HRV and skin temperature are the rows with a trend (a strip); breathing and
     // oxygen draw a bar instead, the spec's and the mockup's own split.
-    expect(card.querySelectorAll('[role="img"][aria-label="Resting HR"]')).toHaveLength(1)
+    expect(card.querySelectorAll('[role="img"][aria-label="Resting heart rate"]')).toHaveLength(1)
     // Named for when, since the night card above draws an HRV chart of its own.
     expect(card.querySelectorAll('[role="img"][aria-label="HRV this morning"]')).toHaveLength(1)
     expect(card.querySelectorAll('[role="img"][aria-label="Skin temperature"]')).toHaveLength(1)
@@ -488,8 +496,8 @@ describe('the night page\'s morning after', () => {
   it('lays the readings out three across', async () => {
     // Root-relative: happy-dom gives import.meta.url an http scheme, so a URL-relative path cannot be read.
     const css = readFileSync('apps/web/src/app.css', 'utf8')
-    expect(css).toMatch(/\.detail-rows-3 \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
-    expect((await mount(nightPageFixture())).querySelector('.night-grp .detail-rows.detail-rows-3')).not.toBeNull()
+    expect(css).toMatch(/\.detail-rows\[data-columns="3"\][^{]*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+    expect((await mount(nightPageFixture())).querySelector('.night-grp .detail-rows[data-columns="3"]')).not.toBeNull()
   })
 
   it('colours the skin temperature strip\'s warm nights by where the server said they stood', async () => {
@@ -507,7 +515,7 @@ describe('the night page\'s morning after', () => {
     const skin = { ...page.morning.skinTemperature, baseline: { center: 33, low: 32.8, high: 33.3, thin: false } }
     const host = await mount({ ...page, morning: { ...page.morning, skinTemperature: skin } })
     const row = [...host.querySelectorAll('.night-grp .figure-row')].at(-1)!
-    expect(text(row, '.figure-row-verdict')).toBe('above your usual -0.2 °C – +0.3 °C')
+    expect(text(row, '.figure-row-verdict')).toBe('above your usual -0.2 – +0.3\u00a0°C')
   })
 
   it('falls back to the skin temperature reading itself when there is no deviation to show', async () => {
@@ -515,7 +523,7 @@ describe('the night page\'s morning after', () => {
     const skin = { ...page.morning.skinTemperature, baseline: { center: 33, low: 32.7, high: 33.3, thin: true }, standing: null, judged: null }
     const host = await mount({ ...page, morning: { ...page.morning, skinTemperature: skin, skinTemperatureDeviation: null } })
     const row = [...host.querySelectorAll('.night-grp .figure-row')].at(-1)!
-    expect(text(row, '.figure-row-value')).toBe('33.6 °C')
+    expect(text(row, '.figure-row-value')).toBe('33.6\u00a0°C')
     expect(text(row, '.figure-row-verdict')).toBe('not enough history for a usual yet')
     expect(row.textContent).not.toContain('— °C')
   })
@@ -551,7 +559,7 @@ describe('the night page\'s morning after', () => {
     const host = await mount({ ...page, morning: { ...page.morning, breathing: { ...page.morning.breathing, value: null } } })
     const card = host.querySelector('.night-grp')?.closest('.card')!
     const labels = [...card.querySelectorAll('.figure-row-label')].map((el) => el.textContent)
-    expect(labels).toEqual(['Resting HR', 'HRV', 'Oxygen (SpO2)', 'Skin temperature'])
+    expect(labels).toEqual(['Resting heart rate', 'HRV', 'Oxygen (SpO2)', 'Skin temperature'])
   })
 
   it('hides the whole card when the morning has nothing at all', async () => {
@@ -580,13 +588,13 @@ describe('the night page\'s more about the sleep', () => {
       text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '', text(row, '.figure-row-verdict') ?? '',
     ])
     expect(rows).toEqual([
-      ['Light sleep', '3h 29m', 'within your usual 3h 00m – 4h 00m'],
-      ['Awake in bed', '0h 25m', 'within your usual 0h 10m – 0h 40m'],
-      ['Time in bed', '7h 01m', 'within your usual 6h 00m – 8h 20m'],
+      ['Light sleep', '3h\u00a029m', 'within your usual 3h\u00a000m – 4h\u00a000m'],
+      ['Awake in bed', '0h\u00a025m', 'within your usual 0h\u00a010m – 0h\u00a040m'],
+      ['Time in bed', '7h\u00a001m', 'within your usual 6h\u00a000m – 8h\u00a020m'],
       ['Wake time', '07:09', 'within your usual 06:30 – 07:30'],
-      ['Time to fall asleep', '12 min', 'within your usual 5 min – 20 min'],
+      ['Time to fall asleep', '12\u00a0min', 'within your usual 5 – 20\u00a0min'],
       ['Times woken', '14', 'within your usual 8 – 18'],
-      ['Minutes after waking', '4 min', 'within your usual 0 min – 10 min'],
+      ['Minutes after waking', '4\u00a0min', 'within your usual 0 – 10\u00a0min'],
       ['Naps', 'none', 'within your usual 0 – 1'],
     ])
     expect(card.querySelectorAll('.figure-row-bar')).toHaveLength(rows.length)
@@ -597,7 +605,7 @@ describe('the night page\'s more about the sleep', () => {
     const napCount = { ...page.figures.napCount, baseline: { center: 0, low: 0, high: 0, thin: false } }
     const host = await mount({ ...page, figures: { ...page.figures, napCount } })
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'More about the sleep')!
-    expect(text(card, '.figure-row:last-child .figure-row-verdict')).toBe('usually 0')
+    expect(text(card, '.figure-row:last-child .figure-row-verdict')).toBe('your usual 0')
   })
 
   it('reads the naps row as its minutes once there was at least one', async () => {
@@ -607,7 +615,7 @@ describe('the night page\'s more about the sleep', () => {
       figures: { ...page.figures, napCount: { ...page.figures.napCount, value: 1 }, napMinutes: { ...page.figures.napMinutes, value: 22, standing: 'within' } },
     })
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'More about the sleep')!
-    expect(text(card, '.figure-row:last-child .figure-row-value')).toBe('0h 22m')
+    expect(text(card, '.figure-row:last-child .figure-row-value')).toBe('0h\u00a022m')
   })
 
   it('leaves out a figure the night has no reading for, and only that one', async () => {
@@ -644,12 +652,12 @@ describe('the night page\'s day before it', () => {
       text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '',
     ])
     expect(rows[0]).toEqual(['Steps', '11,240'])
-    expect(rows[1]).toEqual(['Active minutes', '48 min'])
-    expect(text(card, '.figure-row:nth-child(2) .figure-row-verdict')).toBe('within your usual 25 min – 60 min')
+    expect(rows[1]).toEqual(['Active minutes', '48\u00a0min'])
+    expect(text(card, '.figure-row:nth-child(2) .figure-row-verdict')).toBe('within your usual 25 – 60\u00a0min')
     expect(rows).toHaveLength(2)
     // The workouts are the dashboard's own rows (TodayWorkouts, SessionRow underneath) under this
     // card's word for them, not a copy borrowing the figure rows' classes.
-    expect(text(card, '.today-workouts > .label')).toBe('Training')
+    expect(text(card, '.today-workouts > .label')).toBe('Workouts')
     const workoutLink = card.querySelector<HTMLAnchorElement>('.today-workouts a.session-row-link')
     expect(text(workoutLink!, '.session-row-type')).toBe('Biking')
     expect(text(workoutLink!, '.session-row-duration')).toBe('52 min')

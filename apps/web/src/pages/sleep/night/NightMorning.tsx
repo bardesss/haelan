@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
-import { FigureRow } from '../../../components/FigureRow.js'
+import { FigureRow, FigureRows } from '../../../components/FigureRow.js'
 import type { FigureRowStrip } from '../../../components/FigureRow.js'
 import { ScoreRing } from '../../dashboard/ScoreRing.js'
 import { formatLocalDate, formatSignedNumber } from '../../../format.js'
@@ -87,7 +87,7 @@ export function NightMorning({ page }: { page: NightPageData }) {
       // as "— °C".
       const deviation = key === 'skinTemperature' ? morning.skinTemperatureDeviation : null
       const value = deviation !== null
-        ? `${formatSignedNumber(deviation, figure.precision, language, t('common.absent'))} ${t('charts.units.celsius')}`
+        ? `${formatSignedNumber(deviation, figure.precision, language, t('common.absent'))} ${t('charts.units.celsius')}`
         : formatFigureValue(figure, figure.value, language, t)
       // A row with no usual at all (rather than a thin one, which verdictLine already words) still
       // needs something in its hidden strip description: an empty string there reads as no
@@ -129,12 +129,12 @@ export function NightMorning({ page }: { page: NightPageData }) {
           {from !== null && <p className="night-recovery-from">{from}</p>}
         </div>
         {rows.length > 0 && (
-          <div className="detail-rows detail-rows-3">
+          <FigureRows max={3}>
             {rows.map(({ key, label: rowLabel, value, verdict, figure, strip }) => (
               <FigureRow key={key} label={rowLabel} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
                 band={figure.baseline} mark={figure.value} strip={strip} />
             ))}
-          </div>
+          </FigureRows>
         )}
       </div>
     </Card>

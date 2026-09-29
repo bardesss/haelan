@@ -32,6 +32,15 @@ describe('FigureRow', () => {
     expect(render(<FigureRow label="a" value="1" verdict="v" judged="better" standing="above" band={BAND} mark={120} />))
       .toContain('class="figure-row-verdict better"')
   })
+  // A value never wraps inside itself, so a long unit ("13.8 breaths/min") ran past its column on a
+  // phone: the unit after the no-break space is set smaller, the dashboard's own "18 min" shape,
+  // and a duration, whose last part is a number, is left whole.
+  it('sets a value\'s unit smaller, and leaves a duration whole', () => {
+    expect(render(<FigureRow label="a" value={'13.8\u00a0breaths/min'} verdict="v" judged={null} band={BAND} mark={64} />))
+      .toContain('<span class="figure-row-value">13.8\u00a0<span class="figure-row-unit">breaths/min</span></span>')
+    expect(render(<FigureRow label="a" value={'1h\u00a004m'} verdict="v" judged={null} band={BAND} mark={64} />))
+      .toContain('<span class="figure-row-value">1h\u00a004m</span>')
+  })
   it('labels the row with the card label\'s own style', () => {
     expect(render(<FigureRow label="Deep sleep" value="1" verdict="v" judged={null} band={BAND} mark={64} />))
       .toContain('class="label figure-row-label"')

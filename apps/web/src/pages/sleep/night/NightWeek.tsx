@@ -99,7 +99,7 @@ export function NightWeek({ page }: { page: NightPageData }) {
     ? t('sleep.night.week.balanceAgainstTarget', { target: zeroLineValue })
     : t('sleep.night.week.balanceAgainstBaseline', { usual: zeroLineValue })
   // Signed both ways: formatSignedDuration marks a deficit and leaves a surplus bare, and a bare
-  // "26m" on a balance reads as a size rather than as a week ahead.
+  // "0h 26m" on a balance reads as a size rather than as a week ahead.
   const signedTotal = formatSignedDuration(balance.total, t('common.absent'))
   const total = Math.round(balance.total) > 0 ? `+${signedTotal}` : signedTotal
 

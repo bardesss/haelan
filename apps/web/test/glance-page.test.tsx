@@ -215,7 +215,7 @@ describe('the glance Dashboard', () => {
       expect(night.querySelector('a.card-link')?.getAttribute('href')).toBe('/sleep/night/2026-09-23')
       expect(night.querySelector('[role="img"][aria-label^="Sleep stages through the night of"]')).not.toBeNull()
       // The Bed pair reads the stored bedtime, -50 minutes from the wake date's midnight.
-      const bed = [...night.querySelectorAll('.dash-mini')].find((d) => d.querySelector('.dash-mini-label')?.textContent === 'Bed')
+      const bed = [...night.querySelectorAll('.dash-mini')].find((d) => d.querySelector('.dash-mini-label')?.textContent === 'Bedtime')
       expect(bed?.querySelector('.dash-mini-value')?.textContent).toBe('23:10')
       // The night spans two dates, and the subtitle names both.
       expect(night.querySelector('.dash-card-title span')?.textContent).toMatch(/22.*23/)
@@ -279,7 +279,9 @@ describe('the glance Dashboard', () => {
     }
     const { restore } = await mountPage(nothing)
     try {
-      expect(container!.querySelectorAll('.card')).toHaveLength(0)
+      // Said once, in one full-width card under the header, the night page's shape for every state.
+      expect(container!.querySelectorAll('.dashboard > .grid > .card[data-span="12"] .empty')).toHaveLength(1)
+      expect(container!.querySelectorAll('.card')).toHaveLength(1)
       expect(container!.querySelector('h1')?.textContent).toBe('Good morning')
       expect(container!.querySelector('.empty')?.textContent)
         .toBe('Nothing here yetOnce a sync brings in a night or a day, it shows up here.')
@@ -379,7 +381,7 @@ describe('the glance Dashboard', () => {
       expect(recovery.querySelector('.dash-recovery-words')?.textContent).toBe('Not enough readings to score yet.')
       expect(recovery.querySelector('.glance-note')).toBeNull()
       expect(recovery.textContent).not.toContain('No reading yet')
-      expect([...recovery.querySelectorAll('.dash-dial > .label')].map((l) => l.textContent)).toEqual(['Resting HR', 'Score', 'HRV'])
+      expect([...recovery.querySelectorAll('.dash-dial > .label')].map((l) => l.textContent)).toEqual(['Resting heart rate', 'Score', 'HRV'])
       expect(recovery.querySelectorAll('.usual-gauge')).toHaveLength(2)
     } finally { restore() }
   })
@@ -528,7 +530,7 @@ describe('the glance Dashboard', () => {
       expect(night.querySelector('.dash-card-title')?.textContent).toBe('Die nacht di 22 – wo 23 sep')
       const day = cardTitled('Die dag')!
       expect(day.querySelector('.dash-card-title')?.textContent).toBe('Die dag dinsdag 22 september')
-      expect(day.querySelector('.dash-pace')?.textContent).toBe('Meer dan op een gewone dag · normaal 8.000 – 9.500')
+      expect(day.querySelector('.dash-pace')?.textContent).toBe('boven je gebruikelijke bereik 8.000 – 9.500')
       expect(day.querySelector('.dash-caption')?.textContent).toBe('de 7 dagen tot en met die dag')
       expect(night.querySelector('.dash-caption')?.textContent).toBe('de 7 nachten tot en met die dag')
       expect(cardTitled('Die week')!.querySelector('.dash-card-title')?.textContent).toBe('Die week de 7 dagen tot en met die dag')
@@ -554,14 +556,15 @@ describe('the glance Dashboard', () => {
       })
       expect(container!.querySelector('h1')?.textContent).toBe('Good morning')
       expect(container!.querySelector('.empty')?.textContent).toBe('Loading')
-      expect(container!.querySelectorAll('.card')).toHaveLength(0)
+      expect(container!.querySelectorAll('.dashboard > .grid > .card[data-span="12"] .empty')).toHaveLength(1)
     } finally { globalThis.fetch = original }
   })
 
   it('shows the error state, under the greeting, with a retry that asks again', async () => {
     const { seen, client, restore } = await mountPage(glanceBody(), { status: 500 })
     try {
-      expect(container!.querySelectorAll('.card')).toHaveLength(0)
+      expect(container!.querySelectorAll('.card')).toHaveLength(1)
+      expect(container!.querySelector('.dashboard > .grid > .card[data-span="12"] button')?.textContent).toBe('Try again')
       expect(container!.querySelector('h1')?.textContent).toBe('Good morning')
       const retry = container!.querySelector('button')
       expect(retry?.textContent).toBe('Try again')

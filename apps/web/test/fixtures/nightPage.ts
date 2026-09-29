@@ -50,7 +50,8 @@ function figure(o: {
     // day its own, which for a fixture this size would only add numbers nothing reads.
     strip: o.strip === undefined ? null : STRIP_DATES.map((localDate, i) => {
       const value = o.strip![i] ?? null
-      return { localDate, value, band: o.baseline, standing: standingOf(value, o.baseline) }
+      const dayStanding = standingOf(value, o.baseline)
+      return { localDate, value, band: o.baseline, standing: dayStanding, judged: judgedOf(dayStanding, o.direction) }
     }),
   }
 }
@@ -61,7 +62,7 @@ function glanceFigure(o: Pick<GlanceFigure, 'metric' | 'unit' | 'value'> & { bas
   const baseline = o.baseline ?? null
   return {
     metric: o.metric, value: o.value, unit: o.unit, baseline, asOfDate: NIGHT_DATE, asOfMs: null, partial: false,
-    staleSources: [], strip: [], standing: standingOf(o.value, baseline),
+    staleSources: [], strip: [], standing: standingOf(o.value, baseline), judged: null,
   }
 }
 

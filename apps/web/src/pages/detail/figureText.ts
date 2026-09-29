@@ -3,7 +3,13 @@ import type { WorkoutFigure } from '../../data/useWorkoutPage.js'
 import { formatClock, formatDuration, formatNumber, formatSignedNumber } from '../../format.js'
 import type { Translate } from '../../format.js'
 import { stripBands } from '../dashboard/cardShared.js'
-import type { PointStanding } from '../../charts/base.js'
+import type { PointJudged, PointStanding } from '../../charts/base.js'
+
+// The wording and value rules this module implements, with the rest of the page patterns: PATTERNS.md, beside this file.
+
+// Inside one value a space never breaks ("1h 32m", "58 bpm"): a narrow card wraps between the words
+// of a sentence, never inside a figure.
+const NBSP = '\u00a0'
 
 // Figures measured in minutes that are only ever a few of them: "12 min" reads as what it is,
 // where "0h 12m" puts an empty hour in front of it. Time asleep, the stages, time in bed and time
@@ -48,9 +54,18 @@ function formatStopwatch(totalSeconds: number): string {
  * times, on `baseline.low`, `.high` and `.center`, none of which is the figure's own value.
  *
  * Null formats as `common.absent`, never a placeholder string, the same absence rule formatNumber
- * itself keeps (format.ts's own comment on it).
+ * itself keeps (format.ts's own comment on it). Every space inside the value is a no-break space.
  */
 export function formatFigureValue(
+  figure: Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'>,
+  value: number | null,
+  language: string,
+  t: Translate,
+): string {
+  return figureValueText(figure, value, language, t).replaceAll(' ', NBSP)
+}
+
+function figureValueText(
   figure: Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'>,
   value: number | null,
   language: string,
@@ -92,6 +107,36 @@ export function formatFigureValue(
   }
 }
 
+// The unit a formatted value ends in ("bpm" of "58 bpm"), or null where its last part is a number
+// (a duration's "32m", a clock time): a unit that is part of each number's own shape stays on both.
+function unitOf(text: string): string | null {
+  const at = text.lastIndexOf(NBSP)
+  if (at < 0) return null
+  const unit = text.slice(at + 1)
+  return /^\d/.test(unit) ? null : unit
+}
+
+/**
+ * A usual's two edges, formatted to go either side of a dash: the unit printed once, after the
+ * high ("60 – 65 bpm"), when both carry the same one; both whole otherwise ("6h 20m – 7h 00m").
+ */
+export function formatFigureRange(
+  figure: Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'>, low: number, high: number, language: string, t: Translate,
+): { low: string, high: string } {
+  const from = formatFigureValue(figure, low, language, t)
+  const to = formatFigureValue(figure, high, language, t)
+  const unit = unitOf(to)
+  return { low: unit !== null && unitOf(from) === unit ? from.slice(0, -(unit.length + 1)) : from, high: to }
+}
+
+// Figures whose above and below have words of their own: a clock time is later or earlier, a pace
+// (seconds per kilometre, so a higher number is a slower run) slower or faster.
+function directionWords(unit: string): 'clock' | 'pace' | null {
+  if (unit === 'minutes_from_local_midnight') return 'clock'
+  if (unit === 'seconds_per_km') return 'pace'
+  return null
+}
+
 /**
  * How a figure compares with its own usual, worded the way the glance's `usualLine` already words a
  * GlanceFigure (pages/dashboard/glanceText.ts) - this is that same rule over a PageFigure, whose
@@ -113,16 +158,18 @@ export function verdictLine(figure: Omit<PageFigure, 'strip'>, language: string,
   if (figure.standing === null) {
     return t('glance.usual.partial', { center: formatFigureValue(figure, baseline.center, language, t) })
   }
-  const low = formatFigureValue(figure, baseline.low, language, t)
-  const high = formatFigureValue(figure, baseline.high, language, t)
+  const { low, high } = formatFigureRange(figure, baseline.low, baseline.high, language, t)
   // A clock time off its usual is later or earlier, the words the dashboard's night card uses for
-  // a bedtime or wake time (glance.sleep.bedStanding): "above your usual 22:44 – 01:35" asks the
-  // reader to work out that a higher clock reading is a later night.
-  const clock = figure.unit === 'minutes_from_local_midnight' && figure.standing !== 'within'
+  // a bedtime or wake time (glance.usual.clockShort): "above your usual 22:44 – 01:35" asks the
+  // reader to work out that a higher clock reading is a later night. A pace likewise is slower or
+  // faster, since "below your usual" of a faster run reads as a worse one.
+  const words = figure.standing === 'within' ? null : directionWords(figure.unit)
   // A usual with no width (every night of the window read the same, say no naps at all) is one
   // value, and "0 – 0" reads as a typo for it.
-  if (low === high) return t(`sleep.night.${clock ? 'clockSingle' : 'usualSingle'}.${figure.standing}`, { value: low })
-  if (clock) return t(`sleep.night.clockUsual.${figure.standing}`, { low, high })
+  if (formatFigureValue(figure, baseline.low, language, t) === high) {
+    return t(`sleep.night.${words ?? 'usual'}Single.${figure.standing}`, { value: high })
+  }
+  if (words !== null) return t(`sleep.night.${words}Usual.${figure.standing}`, { low, high })
   if (figure.standing === 'below') return t('glance.usual.below', { low, high })
   if (figure.standing === 'above') return t('glance.usual.above', { low, high })
   return t('glance.usual.within', { low, high })
@@ -142,9 +189,10 @@ export function deviationVerdictLine(figure: PageFigure, language: string, t: Tr
   const absent = t('common.absent')
   const low = formatSignedNumber(baseline.low - baseline.center, figure.precision, language, absent)
   const high = formatSignedNumber(baseline.high - baseline.center, figure.precision, language, absent)
+  // The unit once, after the range, and never on a line of its own (NBSP).
   const range = low.replace(/^-/, '') === high.replace(/^\+/, '')
-    ? `±${high.replace(/^\+/, '')} ${unit}`
-    : `${low} ${unit} – ${high} ${unit}`
+    ? `±${high.replace(/^\+/, '')}${NBSP}${unit}`
+    : `${low} – ${high}${NBSP}${unit}`
   return t(`sleep.night.deviation.${standing}`, { range })
 }
 
@@ -163,7 +211,7 @@ function joins(strip: readonly { value: number | null }[]): boolean {
  * caller then falls back to its bar.
  */
 export function stripOf(figure: PageFigure): {
-  values: (number | null)[], labels: string[], pointStandings: PointStanding[]
+  values: (number | null)[], labels: string[], pointStandings: PointStanding[], pointJudged: PointJudged[]
   bands: ({ low: number, high: number } | null)[] | undefined
 } | null {
   if (figure.strip === null || !joins(figure.strip)) return null
@@ -171,6 +219,7 @@ export function stripOf(figure: PageFigure): {
     values: figure.strip.map((day) => day.value),
     labels: figure.strip.map((day) => day.localDate),
     pointStandings: figure.strip.map((day) => day.standing),
+    pointJudged: figure.strip.map((day) => day.judged),
     bands: stripBands(figure.strip),
   }
 }
