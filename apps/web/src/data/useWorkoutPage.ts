@@ -5,6 +5,7 @@ import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import type { PageFigure } from './useNightPage.js'
 import type { DayLog } from './useNightPage.js'
+import type { GlanceStanding } from './useGlance.js'
 import type { WorkoutSession } from './useSessions.js'
 
 // Mirrors the wire shape of packages/core/src/query/workoutPage.ts's WorkoutPage, after
@@ -19,9 +20,12 @@ export type WorkoutFigureKey = 'pace' | 'speed' | 'distance' | 'movingTime' | 'e
   | 'elevationGain' | 'hardZoneMinutes' | 'cadence' | 'strideLength' | 'groundContact'
   | 'verticalOscillation' | 'verticalRatio' | 'vo2max' | 'swimLengths'
 
-/** One earlier session's bare value for a figure's strip, with no band or verdict of its own
- *  (unlike a night figure's GlanceStripDay) - workoutPage.ts's own WorkoutStripPoint. */
-export interface WorkoutStripPoint { sessionId: string, localDate: string, value: number | null }
+/** One session on a figure's strip, judged against the figure's own usual (one band behind the
+ *  whole strip, unlike a night figure's GlanceStripDay, which carries its day's own) so its dot
+ *  takes its verdict's tone - workoutPage.ts's own WorkoutStripPoint. */
+export interface WorkoutStripPoint {
+  sessionId: string, localDate: string, value: number | null, standing: GlanceStanding | null, judged: 'better' | 'worse' | null
+}
 
 /** A workout figure: a PageFigure whose strip is WorkoutStripPoint rather than GlanceStripDay,
  *  plus the key it is filed under (workoutPage.ts's own WorkoutFigure). */
@@ -55,7 +59,7 @@ export interface WorkoutPageData {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
-  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'distance' | 'averageHeartRate' | 'cardioLoad', number>> } | null
+  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'averageHeartRate' | 'cardioLoad', number>> } | null
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }

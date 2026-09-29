@@ -6,6 +6,7 @@ import { ConfigError } from '../errors.ts'
 import type { PersonQuery } from './personQuery.ts'
 import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS } from './intraday.ts'
 import { activeMinutesFigure, contextFor, dailyFigure, standingOf } from './glance.ts'
+import type { GlanceStanding, Judged } from './glance.ts'
 import { judge, pageFigureOf, usualOf } from './pageFigure.ts'
 import type { FigureDirection, PageFigure } from './pageFigure.ts'
 import type { WorkoutSession } from './sessions.ts'
@@ -29,7 +30,15 @@ export type WorkoutFigureKey = 'pace' | 'speed' | 'distance' | 'movingTime' | 'e
   | 'elevationGain' | 'hardZoneMinutes' | 'cadence' | 'strideLength' | 'groundContact'
   | 'verticalOscillation' | 'verticalRatio' | 'vo2max' | 'swimLengths'
 
-export interface WorkoutStripPoint { sessionId: string, localDate: string, value: number | null }
+/**
+ * One session on a figure's strip, with where it stood against the figure's own usual and that read
+ * through the figure's direction, so its dot takes the tone its verdict line would (verdictTone).
+ * The usual is the one the page judges this workout by, not one of the session's own day: there is
+ * one band behind the whole strip, and a thin one judges no point.
+ */
+export interface WorkoutStripPoint {
+  sessionId: string, localDate: string, value: number | null, standing: GlanceStanding | null, judged: Judged
+}
 export interface WorkoutFigure extends Omit<PageFigure, 'strip'> { key: WorkoutFigureKey, strip: WorkoutStripPoint[] }
 export interface RecordRef { value: number, sessionId: string, localDate: string }
 
@@ -42,7 +51,7 @@ export interface WorkoutPage {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
-  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'distance' | 'averageHeartRate' | 'cardioLoad', number>> } | null
+  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'averageHeartRate' | 'cardioLoad', number>> } | null
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
@@ -158,12 +167,16 @@ function figuresOf(subject: Reading, window: readonly Reading[]): WorkoutPage['f
     // their history is empty and usualOf answers no band: no verdict is claimed on them.
     const baseline = usualOf(history, WORKOUT_BAND_MIN)
     const standing = standingOf(value, baseline, false)
+    const pointOf = (session: WorkoutSession, v: number | null): WorkoutStripPoint => {
+      const pointStanding = standingOf(v, baseline, false)
+      return { sessionId: session.id, localDate: session.localDate, value: v, standing: pointStanding, judged: judge(pointStanding, spec.direction) }
+    }
     figures[spec.key] = {
       key: spec.key, metric: spec.key, value, unit: spec.unit, precision: spec.precision, direction: spec.direction,
       baseline, standing, judged: judge(standing, spec.direction),
       strip: [
-        ...stripped.map((r) => ({ sessionId: r.session.id, localDate: r.session.localDate, value: spec.of(r) })),
-        { sessionId: subject.session.id, localDate: subject.session.localDate, value },
+        ...stripped.map((r) => pointOf(r.session, spec.of(r))),
+        pointOf(subject.session, value),
       ],
     }
   }
@@ -178,7 +191,8 @@ function heroOf(exerciseType: string | null, figures: WorkoutPage['figures']): W
   return figures.movingTime !== undefined ? 'movingTime' : 'elapsed'
 }
 
-// Answers: the latest earlier session of this type the person did not exclude, however long ago.
+// Answers: the latest earlier session of this type the person did not exclude, however long ago,
+// with the values the comparison table's rows read: speed as well as pace, since a ride's rows follow its hero.
 function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession[]): WorkoutPage['previous'] {
   const earlier = candidates.filter((s) => s.id !== subject.id && !s.excluded && s.startMs < subject.startMs)
   const latest = earlier.reduce<WorkoutSession | null>((best, s) => (best === null || s.startMs > best.startMs ? s : best), null)
@@ -187,6 +201,7 @@ function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession
   const values: NonNullable<WorkoutPage['previous']>['values'] = {}
   const put = (key: keyof typeof values, v: number | null) => { if (v !== null) values[key] = v }
   put('pace', r.summary.paceSecondsPerKm)
+  put('speed', r.detail.averageSpeedMetersPerSecond)
   put('distance', r.summary.distanceMeters)
   put('averageHeartRate', r.summary.averageHeartRateBpm)
   put('cardioLoad', r.edwards)

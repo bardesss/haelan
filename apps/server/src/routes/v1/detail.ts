@@ -100,7 +100,9 @@ function roundNightPage(page: NightPage): NightPage {
  * The workout page at the wire's precision, by the same rule as the night page. `previous` and
  * `best` carry pace in seconds, distance in metres, heart rate in bpm, load in TRIMP and a
  * duration in milliseconds: every one of them a whole number on the page's own figures
- * (workoutPage.ts's FIGURES, all precision 0), so each is sent whole.
+ * (workoutPage.ts's FIGURES, all precision 0), so each is sent whole. The previous ride's speed is
+ * the exception, sent at the speed figure's own precision, since a whole metre per second is
+ * 3.6 km/h.
  */
 function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
   const figures: WorkoutPage['figures'] = {}
@@ -115,7 +117,9 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     figures,
     previous: previous === null ? null : {
       ...previous,
-      values: Object.fromEntries(Object.entries(previous.values).map(([key, value]) => [key, whole(value)])),
+      values: Object.fromEntries(Object.entries(previous.values).map(([key, value]) => [
+        key, key === 'speed' ? Number(value.toFixed(figures.speed?.precision ?? 2)) : whole(value),
+      ])),
     },
     best: {
       fastestKmSeconds: ref(page.best.fastestKmSeconds),

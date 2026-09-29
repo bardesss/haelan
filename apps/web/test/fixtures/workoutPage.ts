@@ -57,7 +57,12 @@ function figure(o: {
   return {
     key: o.key, metric: o.key, value: o.value, unit: o.unit, precision: o.precision ?? 0, direction,
     baseline: o.baseline, standing, judged: judgedOf(standing, direction),
-    strip: STRIP_DATES.map((localDate, i) => ({ sessionId: STRIP_IDS[i]!, localDate, value: values[i] ?? null })),
+    // Each point judged against the figure's one usual, as figuresOf judges it.
+    strip: STRIP_DATES.map((localDate, i) => {
+      const value = values[i] ?? null
+      const pointStanding = standingOf(value, o.baseline)
+      return { sessionId: STRIP_IDS[i]!, localDate, value, standing: pointStanding, judged: judgedOf(pointStanding, direction) }
+    }),
   }
 }
 

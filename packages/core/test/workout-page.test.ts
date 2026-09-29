@@ -145,7 +145,24 @@ describe('readWorkoutPage', () => {
     expect(strip).toHaveLength(10)
     // Oldest first: the ninth-latest earlier run through the latest, then this one.
     expect(strip.map((p) => p.sessionId)).toEqual(['run-3', 'run-4', 'run-5', 'run-6', 'run-7', 'run-8', 'run-9', 'run-10', 'run-11', 'subject'])
-    expect(strip.at(-1)).toEqual({ sessionId: 'subject', localDate: SUBJECT_DATE, value: 300 })
+    expect(strip.at(-1)).toEqual({ sessionId: 'subject', localDate: SUBJECT_DATE, value: 300, standing: 'below', judged: 'better' })
+  })
+
+  it('judges every strip point against the figure\'s own usual, so each dot takes its verdict\'s tone', () => {
+    seedRuns(12, { pace: 330 })
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    const strip = readWorkoutPage(q(), input('subject'))!.figures.pace!.strip
+    // The earlier runs at 325 and 335 sit inside the band they make; the subject is below it, and
+    // a lower pace is the better one.
+    expect(strip.slice(0, -1).every((p) => p.standing === 'within' && p.judged === null)).toBe(true)
+    expect(strip.at(-1)).toMatchObject({ standing: 'below', judged: 'better' })
+  })
+
+  it('claims no standing on a strip point while the usual is thin', () => {
+    seedRuns(4, { pace: 330 })
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    const strip = readWorkoutPage(q(), input('subject'))!.figures.pace!.strip
+    expect(strip.map((p) => [p.standing, p.judged])).toEqual(strip.map(() => [null, null]))
   })
 
   it('leaves an excluded run out of the usual range and the strip', () => {
@@ -176,6 +193,12 @@ describe('readWorkoutPage', () => {
     expect(readWorkoutPage(q(), input('subject'))!.previous).toEqual({
       sessionId: 'first', localDate: '2026-01-10', values: { pace: 340, distance: 5000 },
     })
+  })
+
+  it('sends the previous ride\'s speed, so a speed hero\'s table has its row', () => {
+    seedRide('before', '2026-09-01', { distance: 20_000, metrics: { averageSpeedMillimetersPerSecond: 6500 } })
+    seedRide('subject', SUBJECT_DATE, { distance: 21_000, metrics: { averageSpeedMillimetersPerSecond: 7000 } })
+    expect(readWorkoutPage(q(), input('subject'))!.previous!.values).toEqual({ speed: 6.5, distance: 20_000 })
   })
 
   it('names the fastest kilometre of this type from the splits', () => {
