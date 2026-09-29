@@ -42,7 +42,7 @@ import { useSourceNames } from '../../data/useSourceNames.js'
  * function has no route points and nothing claiming one exists, which is overwhelmingly a workout
  * that had no route.
  */
-function gpsSentenceKey(detail: WorkoutDetail, routePointCount: number): string | null {
+export function gpsSentenceKey(detail: WorkoutDetail, routePointCount: number): string | null {
   if (routePointCount > 0) return 'activity.workout.gpsDrawn'
   if (detail.routeConsentRequired) return 'activity.workout.gpsConsentRequired'
   if (detail.hasGps === true) return 'activity.workout.gps'

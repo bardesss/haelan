@@ -13,6 +13,7 @@ import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { pumpUntil } from './flush.js'
+import { workoutPageFixture } from './fixtures/workoutPage.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
 // this, the same reason chart-lifecycle.test.tsx sets them. Only the source-resolution case below
@@ -102,6 +103,17 @@ const SPLIT: FilledSplit = {
   averageHeartRateBpmSource: 'provider',
 }
 
+/**
+ * The workout page's own read (M10a), for whichever session the URL names: the shared fixture's
+ * figures, filed under that id. This file is about the session-backed parts of the page (the
+ * header's lines, the tiles, the route, the splits), so the judged figures are simply present;
+ * workout-detail.test.tsx is where they are tested.
+ */
+function workoutPageFor(url: string) {
+  const id = decodeURIComponent(url.split('/workout/')[1]!.split('?')[0]!)
+  return { ...workoutPageFixture(), sessionId: id }
+}
+
 function stub(sessions: Record<string, WorkoutSession>): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -112,6 +124,7 @@ function stub(sessions: Record<string, WorkoutSession>): () => void {
     for (const [id, session] of Object.entries(sessions)) {
       if (url.includes(`/sessions/${id}`)) return json(session)
     }
+    if (url.includes('/workout/')) return json(workoutPageFor(url))
     if (url.includes('/intraday/window')) return json({ points: [], reduction: null })
     if (url.includes('/sessions')) return json({ items: [], cursor: null })
     if (url.includes('/sources')) return json({ items: [] })
@@ -151,6 +164,7 @@ function stubSessionError(status: number): () => void {
       new Response(JSON.stringify(body), { status: responseStatus, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/sessions/run1')) return json({}, status)
+    if (url.includes('/workout/')) return json(workoutPageFor(url))
     if (url.includes('/intraday/window')) return json({ points: [], reduction: null })
     if (url.includes('/sessions')) return json({ items: [], cursor: null })
     if (url.includes('/sources')) return json({ items: [] })
@@ -669,6 +683,7 @@ describe('the workout page\'s own ?source= parameter', () => {
         new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
       if (url.includes('/api/auth/me')) return json(PERSON)
       if (url.includes('/sessions/run1')) return json(RUN)
+      if (url.includes('/workout/')) return json(workoutPageFor(url))
       // Only 'watch' (the session's own recording device) is real; 'phantom-device' names nothing
       // this person has.
       if (url.includes('/sources')) {

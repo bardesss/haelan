@@ -18,6 +18,7 @@ import { I18nProvider } from '../src/i18n/index.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
 import { glanceBody } from './glanceFixture.js'
 import { nightPageFixture } from './fixtures/nightPage.js'
+import { workoutPageFixture } from './fixtures/workoutPage.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
@@ -166,6 +167,9 @@ function stubWorkoutFetch(): () => void {
       new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/sessions/run1')) return json(WORKOUT_SESSION)
+    // The workout page's own read (M10a): the shared fixture's every figure and strip, filed under
+    // this case's session.
+    if (url.includes('/workout/')) return json({ ...workoutPageFixture(), sessionId: WORKOUT_SESSION.id, localDate: WORKOUT_SESSION.localDate })
     if (url.includes('/intraday/window')) {
       // The pinned read (source=watch, WORKOUT_SESSION's own sourceId) answers real points, so
       // useSourceTrace never needs its all-sources fallback.
@@ -176,9 +180,6 @@ function stubWorkoutFetch(): () => void {
       return json({ points, reduction: null })
     }
     if (url.includes('/sources')) return json({ items: [] })
-    // WorkoutComparison's own useSessions call (a trailing window list, not a third endpoint - its
-    // own comment on why).
-    if (url.includes('/sessions')) return json({ items: [], cursor: null })
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -428,7 +429,7 @@ describe('the charts across a rerender', () => {
   // focus, opening or closing the annotate panel, and the session-scope invalidation M8b itself
   // added among them. This is the same defect the two cases above guard (the Dashboard, and
   // Recovery's Day tab), on a page neither of them ever mounts.
-  it('are not disposed and re-initialised on the workout page either, where WorkoutZones and WorkoutTrace live', async () => {
+  it('are not disposed and re-initialised on the workout page either, where its strips, zones and trace live', async () => {
     const restore = stubWorkoutFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
@@ -441,9 +442,13 @@ describe('the charts across a rerender', () => {
     await flush(client, () => container!.innerHTML)
 
     const before = chartRoots()
-    // The zone bar (a light and a peak zone recorded) and the heart rate trace (the pinned source
-    // answers real points): two charts on this fixture, neither absent.
-    expect(before).toHaveLength(2)
+    // The hero's pace strip and the four figures' strips (M10a: each a Sparkline whose arrays and
+    // formatter come out of a memo on the payload), then the zone bar (a light and a peak zone
+    // recorded) and the heart rate trace (the pinned source answers real points): seven charts on
+    // this fixture, none absent.
+    expect(container!.querySelector('.workout-hero [role="img"][aria-label="Pace"]')).not.toBeNull()
+    expect(container!.querySelectorAll('.workout-minis [role="img"]')).toHaveLength(4)
+    expect(before).toHaveLength(7)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled

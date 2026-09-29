@@ -584,6 +584,44 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    selector to query under. */
 .workout-tiles { display: contents; }
 
+/* --- The workout detail page (M10a-3), WorkoutDetail.tsx and its sections under
+   pages/activity/workout/: the night page's measure, header row and lead, for a workout. --- */
+.workout-page { max-width: 1200px; margin-inline: auto; }
+.workout-top { margin-bottom: var(--space-3); }
+.workout-heading { display: flex; flex-direction: column; gap: var(--space-1); }
+.workout-heading .dash-title { margin: 0; }
+.workout-name { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+/* The workout's own note, in the reader's own words: quoted, and a shade lighter than the when line. */
+.workout-note { margin: 0; font-size: var(--font-size-sm); color: var(--text-primary); }
+.workout-top-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.workout-all { font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; white-space: nowrap; }
+.workout-all:hover { text-decoration: underline; }
+.workout-hero { justify-content: space-between; }
+.workout-hero-value { font-variant-numeric: tabular-nums; }
+.workout-hero-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.workout-hero-verdict.better { color: var(--positive); }
+.workout-hero-verdict.worse { color: var(--negative); }
+/* The ranking, the previous workout and the best under the verdict: one quiet line each. */
+.workout-hero-line { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.workout-hero-rank, .workout-hero-previous, .workout-hero-best { font-variant-numeric: tabular-nums; }
+.workout-hero-previous a { color: var(--accent-soft); }
+.workout-minis { display: flex; flex-direction: column; gap: var(--space-2); }
+.workout-minis-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+/* The compared-with table: .override-table's rows, with this workout's own column the bold one
+   and each difference beside its reading in the plain colour unless the figure has a direction. */
+.workout-compared td { font-variant-numeric: tabular-nums; }
+.workout-compared-this { font-weight: var(--weight-bold); }
+.workout-compared thead a { color: inherit; }
+.workout-diff { margin-left: var(--space-1); color: var(--text-muted); }
+.workout-diff.better { color: var(--positive); }
+.workout-diff.worse { color: var(--negative); }
+@media (max-width: 620px) {
+  .workout-compared-best { display: none; }
+  .workout-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .workout-all { min-height: 44px; display: inline-flex; align-items: center; }
+  .workout-hero-previous a, .workout-compared thead a { display: inline-flex; min-height: 44px; align-items: center; }
+}
+
 /* --- The night detail page (M10a-2), NightDetail.tsx and its sections: the dashboard's measure,
    the header row the dashboard's own, the arrows and the way back to every night together on its
    right, then every card down the grid below it. Grouped in one place (M10a-2 task 8) rather than

@@ -534,6 +534,41 @@
         "tooFew": "Nog niet genoeg trainingen van dit type",
         "tooFewDetail_one": "{{count}} eerdere training van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken.",
         "tooFewDetail_other": "{{count}} eerdere trainingen van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken."
+      },
+      "page": {
+        "nav": "Trainingen",
+        "previous": "Vorige training",
+        "next": "Volgende training",
+        "allWorkouts": "Alle trainingen →",
+        "seconds": "s",
+        "figures": {
+          "pace": "Tempo",
+          "speed": "Snelheid",
+          "distance": "Afstand",
+          "movingTime": "Tijd in beweging",
+          "elapsed": "Verstreken",
+          "averageHeartRate": "Gem. hartslag",
+          "cardioLoad": "Cardiobelasting"
+        },
+        "heroStrip": "deze training en de negen van dit type ervoor",
+        "minisCaption": "elk lijntje: deze training en de negen van dit type ervoor · band = je gewone bereik",
+        "previousFaster": "{{difference}} sneller dan de vorige, {{date}}",
+        "previousSlower": "{{difference}} langzamer dan de vorige, {{date}}",
+        "previousSame": "Even snel als de vorige, {{date}}",
+        "previousOnly": "De vorige: {{date}}",
+        "view": "bekijk →",
+        "secondsPerKm": "{{value}} s/km",
+        "bestFastestKm": "Je beste: snelste kilometer {{value}} ({{month}})",
+        "bestLongest": "Je beste: langste {{value}} ({{month}})",
+        "compared": {
+          "label": "Vergeleken met",
+          "this": "Deze training",
+          "previous": "Vorige · {{date}}",
+          "usual": "Gewoonlijk",
+          "best": "Je beste",
+          "bestValue": "{{value}} · {{month}}",
+          "caption": "Alleen dit type · je beste uit Records"
+        }
       }
     },
     "trainingLoad": {

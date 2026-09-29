@@ -3,7 +3,7 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { FigureRow } from '../../../components/FigureRow.js'
 import { Link } from '../../../router.js'
-import { WORKOUT_ROUTE } from '../../../routes.js'
+import { workoutPath } from '../../activity/workout/workoutText.js'
 import { formatLongDate } from '../../dashboard/glanceText.js'
 import { formatNumber } from '../../../format.js'
 import { kindLabel } from '../../../data/eventKinds.js'
@@ -12,13 +12,6 @@ import { MoodFace } from '../../../components/logPanel/MoodFaces.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import type { NightPageData } from '../../../data/useNightPage.js'
 import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
-
-/** `WORKOUT_ROUTE`'s own `:sessionId` filled in, the same spelling NightRow.tsx's `nightPath`
- *  keeps for `NIGHT_ROUTE`: one function, not a literal path typed again at the one call site
- *  below. */
-function workoutPath(sessionId: string): string {
-  return WORKOUT_ROUTE.replace(':sessionId', encodeURIComponent(sessionId))
-}
 
 /**
  * The day before the night (M10a-2 task 7, the mockup's "Die dag"): how it felt, what was tapped

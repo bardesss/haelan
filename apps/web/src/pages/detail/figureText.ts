@@ -1,4 +1,5 @@
 import type { PageFigure } from '../../data/useNightPage.js'
+import type { WorkoutFigure } from '../../data/useWorkoutPage.js'
 import { formatClock, formatDuration, formatNumber, formatSignedNumber } from '../../format.js'
 import type { Translate } from '../../format.js'
 import { stripBands } from '../dashboard/cardShared.js'
@@ -89,7 +90,7 @@ export function formatFigureValue(
  * only way to reach here with a real, non-thin baseline), which reads as "so far" against the
  * baseline's center, never as a shortfall.
  */
-export function verdictLine(figure: PageFigure, language: string, t: Translate): string | null {
+export function verdictLine(figure: Omit<PageFigure, 'strip'>, language: string, t: Translate): string | null {
   if (figure.value === null || figure.baseline === null) return null
   const { baseline } = figure
   if (baseline.thin) return t('glance.usual.thin')
@@ -126,6 +127,11 @@ export function deviationVerdictLine(figure: PageFigure, language: string, t: Tr
   return t(`sleep.night.deviation.${standing}`, { range })
 }
 
+// One reading is one dot, which joins nothing: below two, every caller falls back to its bar.
+function joins(strip: readonly { value: number | null }[]): boolean {
+  return strip.filter((point) => point.value !== null).length >= 2
+}
+
 /**
  * A figure's own strip, in the shape a sparkline draws: each day's value, a label for it, where
  * the server said that day stood (so a day outside its usual takes the warning colour), and the
@@ -139,12 +145,51 @@ export function stripOf(figure: PageFigure): {
   values: (number | null)[], labels: string[], pointStandings: PointStanding[]
   bands: ({ low: number, high: number } | null)[] | undefined
 } | null {
-  if (figure.strip === null) return null
-  if (figure.strip.filter((day) => day.value !== null).length < 2) return null
+  if (figure.strip === null || !joins(figure.strip)) return null
   return {
     values: figure.strip.map((day) => day.value),
     labels: figure.strip.map((day) => day.localDate),
     pointStandings: figure.strip.map((day) => day.standing),
     bands: stripBands(figure.strip),
+  }
+}
+
+/**
+ * A workout figure's strip (this session and up to nine of its type before it), in the shape
+ * stripOf hands a sparkline, labelled by each session's date. Unlike a night's strip, the points
+ * carry no band or standing of their own (workoutPage.ts's WorkoutStripPoint): there is one usual,
+ * the figure's own, shaded behind every point when it is real and behind none when it is thin,
+ * and no point is coloured, since the server judged only this session.
+ */
+export function workoutStripOf(figure: WorkoutFigure): {
+  values: (number | null)[], labels: string[], bands: { low: number, high: number }[] | undefined
+} | null {
+  if (!joins(figure.strip)) return null
+  const { baseline } = figure
+  const band = baseline === null || baseline.thin ? null : { low: baseline.low, high: baseline.high }
+  return {
+    values: figure.strip.map((point) => point.value),
+    labels: figure.strip.map((point) => point.localDate),
+    bands: band === null ? undefined : figure.strip.map(() => band),
+  }
+}
+
+/**
+ * How far this figure's value lies from another reading of it (the previous workout's), signed,
+ * in the figure's own terms but without its unit: a pace in seconds ("-12 s", the one difference
+ * that needs its unit to read at all), a distance in kilometres at the precision it is printed at
+ * once the value is in kilometres, anything else at its own precision. A difference that rounds
+ * to nothing carries no sign (formatSignedNumber's rule).
+ */
+export function formatFigureDifference(
+  figure: Pick<PageFigure, 'value' | 'unit' | 'precision'>, difference: number, language: string, t: Translate,
+): string {
+  const absent = t('common.absent')
+  switch (figure.unit) {
+    case 'seconds_per_km': return `${formatSignedNumber(difference, 0, language, absent)} ${t('activity.workout.page.seconds')}`
+    case 'meters': return figure.value !== null && figure.value >= 1000
+      ? formatSignedNumber(difference / 1000, 2, language, absent)
+      : formatSignedNumber(difference, figure.precision, language, absent)
+    default: return formatSignedNumber(difference, figure.precision, language, absent)
   }
 }

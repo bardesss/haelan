@@ -534,6 +534,41 @@
         "tooFew": "Not enough workouts of this type yet",
         "tooFewDetail_one": "{{count}} earlier workout of this type in the last 90 days; three are needed to compare.",
         "tooFewDetail_other": "{{count}} earlier workouts of this type in the last 90 days; three are needed to compare."
+      },
+      "page": {
+        "nav": "Workouts",
+        "previous": "Previous workout",
+        "next": "Next workout",
+        "allWorkouts": "All workouts →",
+        "seconds": "s",
+        "figures": {
+          "pace": "Pace",
+          "speed": "Speed",
+          "distance": "Distance",
+          "movingTime": "Moving time",
+          "elapsed": "Elapsed",
+          "averageHeartRate": "Avg heart rate",
+          "cardioLoad": "Cardio load"
+        },
+        "heroStrip": "this workout and the nine of this type before it",
+        "minisCaption": "each line: this workout and the nine of this type before it · band = your usual range",
+        "previousFaster": "{{difference}} faster than the previous one, {{date}}",
+        "previousSlower": "{{difference}} slower than the previous one, {{date}}",
+        "previousSame": "As fast as the previous one, {{date}}",
+        "previousOnly": "The previous one: {{date}}",
+        "view": "view →",
+        "secondsPerKm": "{{value}} s/km",
+        "bestFastestKm": "Your best: fastest kilometre {{value}} ({{month}})",
+        "bestLongest": "Your best: longest {{value}} ({{month}})",
+        "compared": {
+          "label": "Compared with",
+          "this": "This workout",
+          "previous": "Previous · {{date}}",
+          "usual": "Usual",
+          "best": "Your best",
+          "bestValue": "{{value}} · {{month}}",
+          "caption": "This type only · your best from Records"
+        }
       }
     },
     "trainingLoad": {
