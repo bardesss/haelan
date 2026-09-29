@@ -338,7 +338,7 @@ describe('the night page\'s week', () => {
     const card = host.querySelector('[aria-label="Sleep schedule"]')?.closest('.card')
     expect(card?.querySelector('.label')?.textContent).toBe('Sleep schedule')
     expect(card?.querySelectorAll('tbody tr')).toHaveLength(7)
-    expect(text(card!, '.detail-verdict')).toBe('Bedtime varied ±28\u00a0min this week · your usual ±20–35\u00a0min')
+    expect(text(card!, '.detail-verdict')).toBe('Bedtime varied ±28\u00a0min this week · your usual ±20 – 35\u00a0min')
   })
 
   // The bars are the seven nights' bed and wake placed on the chart's own axis: bed shifted past
@@ -376,7 +376,7 @@ describe('the night page\'s week', () => {
   it('describes the schedule chart by its variability line', async () => {
     const host = await mount(nightPageFixture())
     const describedBy = host.querySelector('[role="img"][aria-label="Sleep schedule"]')!.getAttribute('aria-describedby')
-    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Bedtime varied ±28\u00a0min this week · your usual ±20–35\u00a0min')
+    expect(document.getElementById(describedBy ?? '')?.textContent).toBe('Bedtime varied ±28\u00a0min this week · your usual ±20 – 35\u00a0min')
   })
 
   it('hides the schedule card when neither bedtime nor waketime carries a strip', async () => {
@@ -770,7 +770,11 @@ describe('the night page without a night', () => {
       expect(button(host, 'Previous night')!.disabled).toBe(true)
       expect(button(host, 'Next night')!.disabled).toBe(true)
       expect(host.querySelector('.dash-header a.day-nav-back')?.getAttribute('href')).toBe('/sleep')
-      expect(host.querySelector('.dash-date')).toBeNull()
+      // The line's place is kept, empty and out of the accessibility tree, so the header is as tall
+      // as a loaded page's and the card sits the same gap below it in every state.
+      const line = host.querySelector('.dash-heading > p.dash-date')
+      expect(line?.textContent).toBe('\u00a0')
+      expect(line?.getAttribute('aria-hidden')).toBe('true')
       act(() => { root!.unmount() })
       root = createRoot(container!)
       restoreFetch?.()

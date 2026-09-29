@@ -9,7 +9,7 @@ import { stageOf } from '../../data/nights.js'
 import { formatClock } from '../../format.js'
 import type { GlanceSleep } from '../../data/useGlance.js'
 import { DashCard, Described, stripBands, useOpensDay } from './cardShared.js'
-import { formatFigure, usualLine, usualShort } from './glanceText.js'
+import { formatFigure, formatLongDate, usualLine, usualShort } from './glanceText.js'
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
 // (see the "does not import the fixtures" test): a local, structurally identical union avoids
@@ -54,9 +54,10 @@ function nightSpan(sleep: GlanceSleep, language: string): string {
  * redesign's point) and kept for a screen reader: the strip's description is usualLine's sentence.
  * A night outside its usual prints that sentence under the figure instead (the night page's hero
  * does the same, always), and the strip is then described by it, by id, rather than by a hidden
- * copy. A secondary figure outside its usual says which way in words beside its value, both in the
- * tone the server's verdict takes (verdictTone: a better efficiency green, a later bedtime, which
- * is neither, the warning colour), so the colour is never the only signal.
+ * copy. A secondary figure outside its usual says which way in words beside its value, the words in
+ * the tone the server's verdict takes (verdictTone: a better efficiency green, a later bedtime, which
+ * is neither, the warning colour) and the value plain, the one colour rule every page keeps: the
+ * verdict line takes the tone, never the figure.
  */
 // `today` is not used for wording here, as the other redesigned cards use it ("today" vs
 // "yesterday"): a night is always named by the date it ended on. It is read for one thing only,
@@ -123,7 +124,7 @@ export function NightCard({ sleep, span, today, onOpenDay, finished = false }: {
               return (
                 <span key={key} className="dash-mini">
                   <span className="dash-mini-label">{label}</span>{' '}
-                  <b className={tone === null ? 'dash-mini-value' : `dash-mini-value ${tone}`}>
+                  <b className="dash-mini-value">
                     {value === null ? t(finished ? 'glance.noReadingFinished' : 'glance.noReading') : unit ? `${value}\u00a0${unit}` : value}
                   </b>
                   {note !== null && <span className={`dash-mini-note ${tone ?? 'is-out'}`}>{' '}{note}</span>}
@@ -141,9 +142,10 @@ export function NightCard({ sleep, span, today, onOpenDay, finished = false }: {
           </div>
         )}
       </div>
-      <Described hidden text={t('sleep.sleepStages.basis', { date: sleep.localDate })}>
+      {/* Named by the day the night ended, in words, on today and a past day alike. */}
+      <Described hidden text={t('glance.sleep.stages', { date: formatLongDate(sleep.localDate, language) })}>
         <Hypnogram segments={segments} startLabel={startLabel} startClock={bedMinutes} compact tall={span === 12}
-          label={t('sleep.sleepStages.chartLabel', { date: sleep.localDate })} />
+          label={t('glance.sleep.stagesChart', { date: formatLongDate(sleep.localDate, language) })} />
       </Described>
     </DashCard>
   )

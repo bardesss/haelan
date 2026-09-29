@@ -57,6 +57,29 @@ export function verdictTone(judged: PointJudged, standing: PointStanding | undef
 }
 
 /**
+ * The figures whose above and below have words of their own: a clock time is later or earlier, a
+ * pace (seconds per kilometre, so a higher number is a slower run) slower or faster. `unit` is the
+ * catalogue's unit code (MetricSpec.unit, PageFigure.unit). The one table both the verdict line
+ * (figureText's verdictLine) and a strip's accessible table read, so the two cannot disagree.
+ */
+export function directionWords(unit: string | undefined): 'clock' | 'pace' | null {
+  if (unit === 'minutes_from_local_midnight') return 'clock'
+  if (unit === 'seconds_per_km') return 'pace'
+  return null
+}
+
+/**
+ * A day's verdict without its range ("later than your usual"), for a figure measured in `unit`:
+ * a strip's accessible table and the dashboard's inline minis. Empty inside the usual or with no
+ * verdict, since neither states anything about the day.
+ */
+export function standingShort(standing: PointStanding | undefined, unit: string | undefined, t: Translate): string {
+  if (standing !== 'above' && standing !== 'below') return ''
+  const words = directionWords(unit)
+  return t(`glance.usual.${words === null ? 'short' : `${words}Short`}.${standing}`)
+}
+
+/**
  * Applies the reader's motion preference to a built option object.
  *
  * useChart re-runs setOption with notMerge on every theme change, so every chart on the page
@@ -297,8 +320,10 @@ export function dayTableRows(input: {
   // Sparkline's dashboard strips - see Sparkline's own `pointStandings` doc comment for why this
   // is never worked out here from `values` and a baseline.
   standings?: readonly PointStanding[]
+  /** The unit code the values are in, which picks the verdict's words (standingShort). */
+  standingUnit?: string
 }): (string | number)[][] {
-  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear, standings } = input
+  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear, standings, standingUnit } = input
   return values
     .map((v, i) => [v, i] as const)
     // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
@@ -322,7 +347,7 @@ export function dayTableRows(input: {
       const cell = format(v, absent)
       return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
         ...(lastYear !== undefined ? [format(lastYear[i] ?? null, t('charts.absence.noReading'))] : []),
-        [standings?.[i] === 'above' ? t('charts.standing.above') : standings?.[i] === 'below' ? t('charts.standing.below') : '',
+        [standingShort(standings?.[i], standingUnit, t),
           isExcluded ? t('charts.absence.excluded') : '',
           // filter, not find: several annotations can land on the same date now that day level
           // marks join the per-metric ones, and a single find() here would silently show only the

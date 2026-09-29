@@ -732,20 +732,22 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
 
 /* NightSessions.tsx's own list, task 7's exclude-per-session card, inside the About fold.
-   A plain list rather than a table: each row is an id plus one control or one status word, not
+   A plain list rather than a table: each row is a recording plus one control or one status word, not
    values under column headers. .night-session mirrors .night-row's own bottom-border-between-rows
    shape (NightList/NightRow, Sleep.tsx's own list) without reusing that class outright, since this
    row carries a button or a status span where that one carries a link to a whole other page. */
 .night-sessions { list-style: none; margin: 0; padding: 0; }
 .night-session {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3);
   padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
 }
 .night-session:last-child { border-bottom: 0; }
-/* The id itself: a sync id from whichever source produced the session, tabular-nums for the same
-   reason .night-row-clock is - it is often mostly digits, and this keeps a column of them from
-   jittering width row to row. */
-.night-session-id { font-variant-numeric: tabular-nums; color: var(--text-primary); word-break: break-all; }
+/* The recording's name, its source and clock times (NightSessions.tsx), tabular-nums for the reason
+   .night-row-clock is: a column of clock times keeps one width row to row. */
+.night-session-label { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+/* The button keeps its words on one line: on a phone the row wraps and the button takes a line of
+   its own rather than folding into a two-line, 50px-tall block beside the label. */
+.night-session .button { white-space: nowrap; }
 /* The status word for a session already in night.excludedSessions - no button beside it, since
    this card offers no second way to un-exclude one (see NightSessions.tsx's own comment on why). */
 .night-session-excluded { font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; }
@@ -905,11 +907,14 @@ h2.label { margin: 0; }
 /* Dashboard.tsx: the page's own measure. A home screen reads as a composition, and past 1200px the
    lead card's hypnogram and the dials drift apart. Other pages keep .main's 1500px (spec: width). */
 .dashboard { max-width: 1200px; margin-inline: auto; }
-.dash-date { margin: 0 0 var(--space-4); font-size: var(--font-size-xs); color: var(--text-muted); }
+/* PageHeader's line: one line at every width, an ellipsis where it runs out (a phone, a long Dutch
+   line at 800). The gap to the first card is the header's own margin, not this line's, so a state
+   without a line keeps the same gap (PageHeader keeps an empty line's place for the height). */
+.dash-date { margin: 0; font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Dashboard.tsx's header: the title and its line on the left, DayNav.tsx's buttons on the right, one
    row at every width. On a phone the title wraps inside its own column rather than pushing the
    buttons onto a second line (spec M9c, "Phone"). */
-.dash-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.dash-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
 .dash-heading { flex: 1 1 auto; min-width: 0; }
 .dash-title { font-size: var(--font-size-lg); margin: 0 0 var(--space-1); }
 .day-nav { display: flex; flex-wrap: nowrap; flex-shrink: 0; gap: var(--space-1); }
@@ -1141,14 +1146,19 @@ h2.label { margin: 0; }
 .dash-mini { display: inline-flex; align-items: baseline; gap: var(--space-1); }
 .dash-mini-label { color: var(--text-faint); }
 .dash-mini-value { font-size: var(--font-size-md); font-weight: var(--weight-semibold); }
-/* A mini and its note take the tone of the server's verdict (verdictTone): better green, worse or
-   outside a neutral usual red. */
-.dash-mini-value.better, .dash-mini-note.better { color: var(--positive); }
-.dash-mini-value.worse, .dash-mini-value.is-out, .dash-mini-note.worse, .dash-mini-note.is-out { color: var(--negative); }
+/* A mini's note takes the tone of the server's verdict (verdictTone): better green, worse or outside
+   a neutral usual red. The value stays plain, as a detail page's figures do (PATTERNS.md). The row
+   wraps between its value and its note, and neither breaks inside itself: on a phone the note takes
+   a line of its own rather than splitting mid-phrase, and a two-word label stays on one line. */
+.dash-mini { flex-wrap: wrap; }
+.dash-mini-label, .dash-mini-note { white-space: nowrap; }
+.dash-mini-note.better { color: var(--positive); }
+.dash-mini-note.worse, .dash-mini-note.is-out { color: var(--negative); }
 .dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 
-/* TodayCard.tsx: the two headline figures side by side on one line, and the pace line under them. */
-.dash-today-figures { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-6); }
+/* TodayCard.tsx: the two headline figures side by side on one line, the pace line under the steps.
+   Aligned at the top, so the figures stay level whatever length the steps' line runs to. */
+.dash-today-figures { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-6); }
 .dash-headline-sm { font-size: var(--font-size-xl); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -.02em; }
 .dash-pace { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
 .dash-pace-word { font-weight: var(--weight-medium); }

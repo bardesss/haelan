@@ -5,8 +5,8 @@ import type { Translate } from '../src/format.js'
 
 const MESSAGES: Record<string, string> = {
   'charts.tooltip.line': '{{label}}: {{value}}',
-  'charts.columns.toBed': 'To bed',
-  'charts.columns.woke': 'Woke',
+  'charts.columns.toBed': 'Bedtime',
+  'charts.columns.woke': 'Wake time',
   'charts.columns.naps': 'Naps',
   'charts.absence.noReading': 'no reading',
 }
@@ -26,14 +26,14 @@ const nights: Night[] = [
 describe('the sleep schedule tooltip', () => {
   it('names the night and both ends of its span', () => {
     expect(scheduleTooltip(nights, { seriesType: 'custom', value: [0, 1400] }, t))
-      .toBe('2026-08-10<br/>To bed: 23:20<br/>Woke: 07:20')
+      .toBe('2026-08-10<br/>Bedtime: 23:20<br/>Wake time: 07:20')
   })
 
   // The same word the table's own cell carries for a missing end, rather than a blank or a zero
   // that would read as midnight.
   it('says no reading for a night with no bed or wake time', () => {
     expect(scheduleTooltip(nights, { seriesType: 'custom', value: [2, null] }, t))
-      .toBe('2026-08-12<br/>To bed: no reading<br/>Woke: no reading')
+      .toBe('2026-08-12<br/>Bedtime: no reading<br/>Wake time: no reading')
   })
 
   // The trap this function exists for. The naps series is built by flatMap across every night, so
@@ -57,6 +57,6 @@ describe('the sleep schedule tooltip', () => {
   it('routes every word through t(), not a hardcoded literal', () => {
     const shoutingT: Translate = (key, options) => t(key, options).toUpperCase()
     expect(scheduleTooltip(nights, { seriesType: 'custom', value: [0, 1400] }, shoutingT))
-      .toBe('2026-08-10<br/>TO BED: 23:20<br/>WOKE: 07:20')
+      .toBe('2026-08-10<br/>BEDTIME: 23:20<br/>WAKE TIME: 07:20')
   })
 })

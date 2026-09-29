@@ -213,7 +213,7 @@ describe('the glance Dashboard', () => {
     try {
       const night = cards()[0]!
       expect(night.querySelector('a.card-link')?.getAttribute('href')).toBe('/sleep/night/2026-09-23')
-      expect(night.querySelector('[role="img"][aria-label^="Sleep stages through the night of"]')).not.toBeNull()
+      expect(night.querySelector('[role="img"][aria-label^="Sleep stages through the night that ended"]')).not.toBeNull()
       // The Bed pair reads the stored bedtime, -50 minutes from the wake date's midnight.
       const bed = [...night.querySelectorAll('.dash-mini')].find((d) => d.querySelector('.dash-mini-label')?.textContent === 'Bedtime')
       expect(bed?.querySelector('.dash-mini-value')?.textContent).toBe('23:10')
@@ -532,7 +532,7 @@ describe('the glance Dashboard', () => {
       expect(day.querySelector('.dash-card-title')?.textContent).toBe('Die dag dinsdag 22 september')
       expect(day.querySelector('.dash-pace')?.textContent).toBe('boven je gebruikelijke bereik 8.000 – 9.500')
       expect(day.querySelector('.dash-caption')?.textContent).toBe('de 7 dagen tot en met die dag')
-      expect(night.querySelector('.dash-caption')?.textContent).toBe('de 7 nachten tot en met die dag')
+      expect(night.querySelector('.dash-caption')?.textContent).toBe('die nacht en de zes ervoor')
       expect(cardTitled('Die week')!.querySelector('.dash-card-title')?.textContent).toBe('Die week de 7 dagen tot en met die dag')
       act(() => { container!.querySelector<HTMLButtonElement>('button[aria-haspopup]')!.click() })
       await flush(client, () => document.body.innerHTML)

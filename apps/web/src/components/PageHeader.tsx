@@ -27,7 +27,7 @@ export function useHeaderDate(localDate: string | null | undefined): string | nu
  * A page's header row (Dashboard.tsx's, shared with the detail pages by the M10a sweep): the title
  * and its line on the left, the page's navigator on the right. One row at every width, which on a
  * phone stays one row, the title ending in an ellipsis inside its own column rather than pushing
- * the buttons onto a second line (app.css's .dash-title rule). The class names stay the
+ * the buttons onto a second line (app.css's .dash-title rule), and the line under it one line too. The class names stay the
  * dashboard's, since this is the dashboard's header, now reached from more than one page.
  */
 export function PageHeader({ title, line, nav }: { title: ReactNode, line?: ReactNode, nav?: ReactNode }) {
@@ -35,7 +35,13 @@ export function PageHeader({ title, line, nav }: { title: ReactNode, line?: Reac
     <div className="dash-header">
       <div className="dash-heading">
         <h1 className="dash-title">{title}</h1>
-        {line !== undefined && <p className="dash-date">{line}</p>}
+        {/* One line at every width, ending in an ellipsis where it runs out (app.css), the whole of
+            it in `title` for a pointer. A state with no line yet (loading, a missing record) keeps
+            the line's place, empty and hidden from assistive tech, so the header is the same
+            height in every state and the first card sits the same gap below it. */}
+        {line !== undefined
+          ? <p className="dash-date" title={typeof line === 'string' ? line : undefined}>{line}</p>
+          : <p className="dash-date" aria-hidden="true">{'\u00a0'}</p>}
       </div>
       {nav}
     </div>

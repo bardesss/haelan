@@ -332,7 +332,7 @@ describe('the charts across a rerender', () => {
 
     const before = chartRoots()
     // The hypnogram and the heart rate trace, by name, so this cannot pass on the strips alone.
-    expect(container!.querySelector('[role="img"][aria-label^="Sleep stages through the night of"]')).not.toBeNull()
+    expect(container!.querySelector('[role="img"][aria-label^="Sleep stages through the night that ended"]')).not.toBeNull()
     expect(container!.querySelector('[role="img"][aria-label="Heart rate today"]')).not.toBeNull()
     expect(before.every((node) => node !== null)).toBe(true)
 

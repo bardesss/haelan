@@ -5,10 +5,10 @@ import { BasisContext } from '../../../components/basis.js'
 import { SleepSchedule } from '../../../charts/SleepSchedule.js'
 import { BalanceBars } from '../../../charts/BalanceBars.js'
 import { inWindow, withinSchedule, WIDE_WINDOW } from '../../../charts/schedule.js'
-import { formatDuration, formatNumber, formatSignedDuration } from '../../../format.js'
+import { formatDuration, formatSignedDuration } from '../../../format.js'
 import type { GlanceBaseline } from '../../../data/useGlance.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureValue } from '../../detail/figureText.js'
+import { formatFigureRange, formatFigureValue } from '../../detail/figureText.js'
 import { verdictTone } from '../../../components/FigureRow.js'
 
 /**
@@ -85,13 +85,13 @@ export function NightWeek({ page }: { page: NightPageData }) {
   const variabilityTone = verdictTone(variability.judged, variability.standing)
   const variabilityValue = formatFigureValue(variability, variability.value, language, t)
   const variabilityBand = variability.baseline !== null && !variability.baseline.thin ? variability.baseline : null
-  const variabilityLine = variabilityBand === null
+  // The usual in the one range format every page prints (formatFigureRange): spaced dash, the unit
+  // once after the high.
+  const variabilityRange = variabilityBand === null ? null
+    : formatFigureRange(variability, variabilityBand.low, variabilityBand.high, language, t)
+  const variabilityLine = variabilityRange === null
     ? t('sleep.night.week.variability', { value: variabilityValue })
-    : t('sleep.night.week.variabilityUsual', {
-        value: variabilityValue,
-        low: formatNumber(variabilityBand.low, 0, language, t('common.absent')),
-        high: formatFigureValue(variability, variabilityBand.high, language, t),
-      })
+    : t('sleep.night.week.variabilityUsual', { value: variabilityValue, low: variabilityRange.low, high: variabilityRange.high })
 
   const zeroLineValue = formatDuration(balance.zeroLine.minutes)
   const target = balance.zeroLine.source === 'target'

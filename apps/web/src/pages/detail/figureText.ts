@@ -3,6 +3,7 @@ import type { WorkoutFigure } from '../../data/useWorkoutPage.js'
 import { formatClock, formatDuration, formatNumber, formatSignedNumber } from '../../format.js'
 import type { Translate } from '../../format.js'
 import { stripBands } from '../dashboard/cardShared.js'
+import { directionWords } from '../../charts/base.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
 
 // The wording and value rules this module implements, with the rest of the page patterns: PATTERNS.md, beside this file.
@@ -127,14 +128,6 @@ export function formatFigureRange(
   const to = formatFigureValue(figure, high, language, t)
   const unit = unitOf(to)
   return { low: unit !== null && unitOf(from) === unit ? from.slice(0, -(unit.length + 1)) : from, high: to }
-}
-
-// Figures whose above and below have words of their own: a clock time is later or earlier, a pace
-// (seconds per kilometre, so a higher number is a slower run) slower or faster.
-function directionWords(unit: string): 'clock' | 'pace' | null {
-  if (unit === 'minutes_from_local_midnight') return 'clock'
-  if (unit === 'seconds_per_km') return 'pace'
-  return null
 }
 
 /**

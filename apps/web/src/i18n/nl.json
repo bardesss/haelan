@@ -162,7 +162,8 @@
   },
   "common": {
     "bedLabel": "Naar bed {{time}}",
-    "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
+    "bedTimeNotRecorded": "Naar bed niet geregistreerd",
+    "annotate": "Uitsluiten of een notitie toevoegen",
     "to": "tot en met",
     "loading": "Laden",
     "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
@@ -445,7 +446,6 @@
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "alsoRecordedBy": "Ook geregistreerd door {{sources}}",
-      "annotate": "Uitsluiten of een notitie toevoegen",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
       "gpsDrawn": "Er is een GPS-route opgenomen voor deze training, getekend op de kaart hierboven.",
       "gpsConsentRequired": "Er is een GPS-route opgenomen voor deze training, maar Health Connect houdt die achter, dus er is geen kaart. Open Haelan op de telefoon en tik op Routes vrijgeven om die alsnog door te sturen.",
@@ -619,7 +619,7 @@
       "duration": "Duur",
       "night": "Nacht",
       "toBed": "Naar bed",
-      "woke": "Ontwaakt",
+      "woke": "Wakker geworden",
       "naps": "Dutjes",
       "time": "Tijd",
       "source": "Bron",
@@ -634,10 +634,6 @@
       "fri": "Vr",
       "sat": "Za",
       "sun": "Zo"
-    },
-    "standing": {
-      "above": "boven je gebruikelijke waarde",
-      "below": "onder je gebruikelijke waarde"
     },
     "absence": {
       "notWorn": "niet gedragen",
@@ -876,14 +872,14 @@
         "hrvChart": "HRV in de nacht"
       },
       "sessions": {
-        "exclude": "Uitsluiten of notitie toevoegen",
-        "excluded": "Uitgesloten"
+        "excluded": "Uitgesloten",
+        "recording": "{{source}} · {{start}}–{{end}}"
       },
       "week": {
         "schedule": "Slaapschema",
         "balance": "Slaapbalans",
-        "variability": "Bedtijd varieerde ±{{value}} deze week",
-        "variabilityUsual": "Bedtijd varieerde ±{{value}} deze week · je gebruikelijke ±{{low}}–{{high}}",
+        "variability": "Naar bed varieerde ±{{value}} deze week",
+        "variabilityUsual": "Naar bed varieerde ±{{value}} deze week · je gebruikelijke ±{{low}} – {{high}}",
         "balanceAgainstTarget": "ten opzichte van je doel van {{target}}",
         "balanceAgainstBaseline": "ten opzichte van je gebruikelijke {{usual}}",
         "barsTarget": "elke balk: die nacht tegenover je doel",
@@ -1104,12 +1100,12 @@
     "previousDay": "Vorige dag",
     "nextDay": "Volgende dag",
     "mood": {
-      "label": "Hoe voel je je?",
       "1": "Slecht",
       "2": "Matig",
       "3": "Gaat wel",
       "4": "Goed",
-      "5": "Top"
+      "5": "Top",
+      "label": "Hoe voel je je?"
     },
     "chips": {
       "label": "Wat speelde er?",
@@ -1629,6 +1625,10 @@
       "clockShort": {
         "above": "later dan je gebruikelijke tijd",
         "below": "eerder dan je gebruikelijke tijd"
+      },
+      "paceShort": {
+        "above": "langzamer dan je gebruikelijke tempo",
+        "below": "sneller dan je gebruikelijke tempo"
       }
     },
     "asOf": {
@@ -1653,10 +1653,12 @@
       "efficiency": "Efficiëntie",
       "bed": "Naar bed",
       "woke": "Wakker geworden",
-      "strip": "Tijd in slaap, laatste 7 nachten",
-      "stripFinished": "Tijd in slaap, de 7 nachten tot en met die dag",
-      "caption": "laatste 7 nachten",
-      "captionFinished": "de 7 nachten tot en met die dag",
+      "strip": "Tijd in slaap, afgelopen nacht en de zes ervoor",
+      "stripFinished": "Tijd in slaap, die nacht en de zes ervoor",
+      "caption": "afgelopen nacht en de zes ervoor",
+      "captionFinished": "die nacht en de zes ervoor",
+      "stages": "de nacht die eindigde op {{date}}",
+      "stagesChart": "Slaapfasen tijdens de nacht die eindigde op {{date}}",
       "link": "Bekijk deze nacht",
       "titleFinished": "Die nacht"
     },

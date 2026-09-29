@@ -74,7 +74,7 @@ export function WorkoutAbout({ session, detail, exerciseType, onAnnotate }: {
           )}
           {gpsKey !== null && <p className="workout-gps basis">{t(gpsKey)}</p>}
           <div className="workout-actions">
-            <button type="button" className="button" onClick={onAnnotate}>{t('activity.workout.annotate')}</button>
+            <button type="button" className="button" onClick={onAnnotate}>{t('common.annotate')}</button>
           </div>
         </div>
       </details>
