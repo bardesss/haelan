@@ -45,7 +45,6 @@ function smoothed(byMinute: ReadonlyMap<number, number>, unit: string): MinuteSe
  * match, rather than as a whole minute that went slowly. Null too when no minute qualifies.
  */
 export function paceSeries(route: readonly { atMs: number, latitude: number, longitude: number }[], startMs: number): MinuteSeries | null {
-  if (route.length < 2) return null
   const fixes = [...route].sort((a, b) => a.atMs - b.atMs)
   const metres = new Map<number, number>()
   const covered = new Map<number, number>()

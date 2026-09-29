@@ -43,8 +43,9 @@ describe('paceSeries', () => {
   })
 
   it('reads a minute the fixes only partly span over the seconds they do span', () => {
-    // Ninety seconds at 3 m/s: the second minute is thirty seconds of the same pace, not a slow minute.
-    const series = paceSeries(route(Array(9).fill(3)), START)!
+    // Seventy seconds at 3 m/s: the second minute is ten seconds and 30 m of the same pace, neither
+    // a slow minute nor a stop.
+    const series = paceSeries(route(Array(7).fill(3)), START)!
     expect(series.points.map((p) => p.elapsedSeconds)).toEqual([0, 60])
     expect(series.points[1]!.value).toBeCloseTo(1000 / 3, 1)
   })
