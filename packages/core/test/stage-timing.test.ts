@@ -24,6 +24,13 @@ describe('stageTimingOf', () => {
     expect(stageTimingOf([seg('LIGHT', 0, 60), seg('REM', 60, 80), seg('LIGHT', 80, 100), seg('REM', 100, 110)]).cycles).toBe(2)
   })
 
+  it('keeps one episode when a short REM segment lies inside a longer one', () => {
+    // The long segment ends at 120, after the short one nested in it; measured from the short
+    // one's end (90), the next REM at 125 would be 35 minutes on and split the episode.
+    const night = [seg('LIGHT', 0, 60), seg('REM', 60, 120), seg('REM', 70, 90), seg('REM', 125, 140)]
+    expect(stageTimingOf(night).cycles).toBe(1)
+  })
+
   it('says nothing about a classic night', () => {
     expect(stageTimingOf([seg('ASLEEP', 0, 200), seg('RESTLESS', 200, 210), seg('ASLEEP', 210, 400)]))
       .toEqual({ firstDeepMinutes: null, firstRemMinutes: null, cycles: null })

@@ -417,11 +417,21 @@ describe('readNightPage', () => {
     seedDaily(NIGHT, 'sleep_respiratory_rate', 'last', 14.5)
     seedDaily(NIGHT, 'daily_spo2', 'last', 96.5)
     const page = readNightPage(q(), input(NIGHT))!
-    const judged = [page.morning.recovery.index, page.morning.restingHeartRate, page.morning.hrv, page.morning.breathing,
+    const judged = [page.morning.restingHeartRate, page.morning.hrv, page.morning.breathing,
       page.morning.spo2, page.morning.skinTemperature, page.morning.heartRateDip].filter((f) => f.standing !== null)
     expect(page.morning.heartRateDip.standing).toBe('above')
     expect(judged).toHaveLength(5)
     expect(page.morningSummary).toEqual({ outside: 3, of: 5 })
+  })
+
+  it('counts skin temperature among the judged morning figures', () => {
+    for (let i = 1; i <= 60; i += 1) seedDaily(shiftLocalDate(NIGHT, -i), 'sleep_temperature', 'last', i % 2 === 0 ? 33.1 : 33.0)
+    seedNight(NIGHT, {})
+    seedDaily(NIGHT, 'sleep_temperature', 'last', 34.5)
+    const page = readNightPage(q(), input(NIGHT))!
+    expect(page.morning.skinTemperature.standing).toBe('above')
+    // Nothing else has a reading, so skin temperature is the only figure there is to count.
+    expect(page.morningSummary).toEqual({ outside: 1, of: 1 })
   })
 })
 

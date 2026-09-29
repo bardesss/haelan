@@ -29,7 +29,7 @@ export function stageTimingOf(segments: readonly { stage: string, startMs: numbe
   let lastEnd: number | null = null
   for (const rem of rems) {
     if (lastEnd === null || rem.startMs - lastEnd >= REM_EPISODE_GAP_MINUTES * MINUTE_MS) cycles += 1
-    lastEnd = rem.endMs
+    lastEnd = Math.max(lastEnd ?? rem.endMs, rem.endMs)
   }
   return { firstDeepMinutes: since(deep), firstRemMinutes: since(rems[0]), cycles: rems.length === 0 ? null : cycles }
 }
