@@ -813,11 +813,19 @@
       "nav": "Nachten",
       "previous": "Vorige nacht",
       "next": "Volgende nacht",
-      "allNights": "Alle nachten →",
+      "allNights": "Alle nachten",
       "usualSingle": {
         "within": "gewoonlijk {{value}}",
         "above": "boven je gebruikelijke {{value}}",
         "below": "onder je gebruikelijke {{value}}"
+      },
+      "clockUsual": {
+        "above": "later dan je gebruikelijke {{low}} – {{high}}",
+        "below": "eerder dan je gebruikelijke {{low}} – {{high}}"
+      },
+      "clockSingle": {
+        "above": "later dan je gebruikelijke {{value}}",
+        "below": "eerder dan je gebruikelijke {{value}}"
       },
       "deviation": {
         "within": "binnen je gebruikelijke bereik {{range}}",
@@ -894,8 +902,7 @@
         "note": "“{{note}}”",
         "steps": "Stappen",
         "activeMinutes": "Actieve minuten",
-        "workouts": "Training",
-        "workoutAverage": "gemiddeld {{bpm}} bpm"
+        "workouts": "Training"
       },
       "about": {
         "label": "Over deze nacht",

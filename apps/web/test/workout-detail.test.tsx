@@ -768,8 +768,10 @@ describe('the workout page\'s day', () => {
     const page = workoutPageFixture()
     const other = { ...workoutSessionFixture(), id: 'walk1', attrs: { exerciseType: 'WALKING' }, startMs: START - 3_600_000, endMs: START - 1_800_000 }
     const card = cardLabelled(await mount({ ...page, day: { ...page.day, otherWorkouts: [other] } }), 'That day')!
-    const link = card.querySelector<HTMLAnchorElement>('.day-workout-link')
-    expect(link?.textContent).toBe('Walking 30 min')
+    expect(text(card, '.today-workouts > .label')).toBe('Other workouts')
+    const link = card.querySelector<HTMLAnchorElement>('.today-workouts a.session-row-link')
+    expect(text(link!, '.session-row-type')).toBe('Walking')
+    expect(text(link!, '.session-row-duration')).toBe('30 min')
     expect(link?.getAttribute('href')).toBe('/activity/walk1')
   })
 

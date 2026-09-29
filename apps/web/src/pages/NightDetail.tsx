@@ -4,7 +4,7 @@ import { NIGHT_ROUTE } from '../routes.js'
 import { useNightPage } from '../data/useNightPage.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
-import { NightTop } from './sleep/night/NightTop.js'
+import { NightTop, useOpenNight } from './sleep/night/NightTop.js'
 import { NightHero } from './sleep/night/NightHero.js'
 import { NightMinis } from './sleep/night/NightMinis.js'
 import { NightThrough } from './sleep/night/NightThrough.js'
@@ -41,6 +41,7 @@ export function NightDetail() {
   const named = readQuery(route.split('?')[1] ?? '').get('source') ?? ALL_SOURCES
   const source = resolveSource(named, [ALL_SOURCES, ...sources.map((s) => s.id)])
   const query = useNightPage(localDate)
+  const openNight = useOpenNight()
   // null, not ALL_SOURCES: useSourceTrace's own chosenSource takes "the reader named no source" as
   // null specifically, and the all-sources sentinel is this page's spelling of that, not a source
   // name a trace could ever pin to.
@@ -48,29 +49,35 @@ export function NightDetail() {
 
   if (query.isError) {
     // A date with no night answers 404 (routes/v1/detail.ts's no_such_night), as does a demo
-    // manifest miss; both read as "no night recorded" rather than as a failure to retry.
+    // manifest miss; both read as "no night recorded" rather than as a failure to retry. The header
+    // stays, titled with the date asked for, so the way back and the list are one tap away.
     const notFound = query.error instanceof ApiError && query.error.kind === 'not_found'
     return (
-      <div className="grid">
-        <Card span={12}>
-          {notFound
-            ? <EmptyState title={t('sleep.night.missingTitle')} detail={t('sleep.night.missingDetail')} />
-            : <ErrorState onRetry={() => void query.refetch()} error={query.error} />}
-        </Card>
+      <div className="detail-page">
+        <NightTop localDate={localDate} />
+        <div className="grid">
+          <Card span={12}>
+            {notFound
+              ? <EmptyState title={t('sleep.night.missingTitle')} detail={t('sleep.night.missingDetail')} />
+              : <ErrorState onRetry={() => void query.refetch()} error={query.error} />}
+          </Card>
+        </div>
       </div>
     )
   }
-  if (query.isPending) return <div className="grid"><Card span={12}><Loading /></Card></div>
+  if (query.isPending) {
+    return <div className="detail-page"><NightTop localDate={localDate} /><div className="grid"><Card span={12}><Loading /></Card></div></div>
+  }
 
   const page = query.data
   // The "About this night" fold at the foot of the page is the pre-M10a session list (task 7
   // renamed and re-housed it, never rewrote it); it draws from this payload's `night`, so the page
   // still makes one read for the night either way.
   return (
-    <div className="night-page">
-      <NightTop page={page} />
+    <div className="detail-page">
+      <NightTop localDate={localDate} page={page} />
       <div className="grid">
-        <NightHero asleep={page.figures.asleep} />
+        <NightHero asleep={page.figures.asleep} localDate={page.localDate} onOpenNight={openNight} />
         <NightMinis figures={page.figures} />
         <NightThrough page={page} chosenSource={chosenSource} />
         <NightWeek page={page} />

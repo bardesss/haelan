@@ -115,9 +115,14 @@ export function verdictLine(figure: Omit<PageFigure, 'strip'>, language: string,
   }
   const low = formatFigureValue(figure, baseline.low, language, t)
   const high = formatFigureValue(figure, baseline.high, language, t)
+  // A clock time off its usual is later or earlier, the words the dashboard's night card uses for
+  // a bedtime or wake time (glance.sleep.bedStanding): "above your usual 22:44 – 01:35" asks the
+  // reader to work out that a higher clock reading is a later night.
+  const clock = figure.unit === 'minutes_from_local_midnight' && figure.standing !== 'within'
   // A usual with no width (every night of the window read the same, say no naps at all) is one
   // value, and "0 – 0" reads as a typo for it.
-  if (low === high) return t(`sleep.night.usualSingle.${figure.standing}`, { value: low })
+  if (low === high) return t(`sleep.night.${clock ? 'clockSingle' : 'usualSingle'}.${figure.standing}`, { value: low })
+  if (clock) return t(`sleep.night.clockUsual.${figure.standing}`, { low, high })
   if (figure.standing === 'below') return t('glance.usual.below', { low, high })
   if (figure.standing === 'above') return t('glance.usual.above', { low, high })
   return t('glance.usual.within', { low, high })

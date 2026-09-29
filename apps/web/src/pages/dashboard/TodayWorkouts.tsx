@@ -19,13 +19,18 @@ import { SessionRow } from '../activity/SessionRow.js'
  * Renders nothing at all on a day with none, so the column reads exactly as it did before there
  * was anything to list: a morning before the run is not a heading saying "nothing yet" under
  * figures that already say what the day holds.
+ *
+ * `label` names the list where the dashboard's own heading would be wrong: the night page's day
+ * before lists the same rows under its own word for them.
  */
-export function TodayWorkouts({ workouts, finished = false }: { workouts: readonly WorkoutSession[], finished?: boolean }): ReactNode {
+export function TodayWorkouts({ workouts, finished = false, label }: {
+  workouts: readonly WorkoutSession[], finished?: boolean, label?: string
+}): ReactNode {
   const { t } = useTranslation()
   if (workouts.length === 0) return null
   return (
     <div className="today-workouts">
-      <span className="label">{t(finished ? 'glance.workouts.titleThatDay' : 'glance.workouts.title')}</span>
+      <span className="label">{label ?? t(finished ? 'glance.workouts.titleThatDay' : 'glance.workouts.title')}</span>
       {workouts.map((session) => <SessionRow key={session.id} session={session} />)}
     </div>
   )

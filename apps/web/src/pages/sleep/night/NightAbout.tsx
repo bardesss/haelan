@@ -35,8 +35,8 @@ export function NightAbout({ night }: { night: Night }): ReactNode {
   ].join(' · ')
   return (
     <Card span={12} label={t('sleep.night.about.label')}>
-      <p className="night-about-line">{line}</p>
-      <details className="night-about">
+      <p className="detail-about-line">{line}</p>
+      <details className="detail-about">
         <summary>{t('sleep.night.about.details')}</summary>
         <NightSessions night={night} />
         <NightExcludedSessions count={night.excludedSessions.length} />

@@ -315,7 +315,7 @@ const ROUTES = RAW_ROUTES.map(resolveRoute)
 // workout route's annotate button moved into WorkoutAbout's fold the same way (M10a-3).
 const PANEL_OPENERS = [
   { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button', reveal: '.workout-about summary' },
-  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button', reveal: '.night-about summary' },
+  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button', reveal: '.detail-about summary' },
 ]
 
 const server = await startServer()

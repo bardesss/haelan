@@ -500,8 +500,8 @@ describe('the charts across a rerender', () => {
     // either, so that trace stays absent the same way NightTraces' own "renders a row only for the
     // metrics something actually recorded" test already covers - this fixture does not need all
     // three to exercise the same identity chain a fourth trace would.
-    expect(container!.querySelector('.night-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
-    expect(container!.querySelectorAll('.night-minis [role="img"]')).toHaveLength(4)
+    expect(container!.querySelector('.detail-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
+    expect(container!.querySelectorAll('.detail-minis [role="img"]')).toHaveLength(4)
     expect(container!.querySelector('[role="img"][aria-label="Sleep schedule"]')).not.toBeNull()
     expect(container!.querySelector('[role="img"][aria-label="Sleep balance"]')).not.toBeNull()
     expect(container!.querySelector('.night-grp [role="img"][aria-label="Resting HR"]')).not.toBeNull()

@@ -1,14 +1,9 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import { Link } from '../../router.js'
-import { formatNumber } from '../../format.js'
+import { Card } from '../../components/Card.js'
 import { kindLabel } from '../../data/eventKinds.js'
-import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
 import { MoodFace } from '../../components/logPanel/MoodFaces.js'
-import { workoutSummary } from '@haelan/core/workout-summary'
 import type { DayLog } from '../../data/useNightPage.js'
-import type { WorkoutSession } from '../../data/useSessions.js'
-import { workoutPath } from '../activity/workout/workoutText.js'
 
 /** Whether a day's quick log has anything to draw: a mood, a chip tapped at least once, or a note. */
 export function hasDayLog(log: DayLog): boolean {
@@ -16,7 +11,7 @@ export function hasDayLog(log: DayLog): boolean {
 }
 
 /**
- * A day's quick log as both detail pages draw it (the mockups' "Die dag"): the mood face with its
+ * A day's quick log as the detail pages draw it (the mockups' "Die dag"): the mood face with its
  * word, a chip for each kind tapped that day (with its count once there is more than one), and the
  * day's note. One component for the night page's day before and the workout page's day of, so the
  * two cannot drift into two spellings of the same log. Nothing at all when the log is empty
@@ -49,32 +44,18 @@ export function DayLogBlock({ log }: { log: DayLog }): ReactNode {
 }
 
 /**
- * A day's workouts as links to their own pages: the type and its minutes, with the average heart
- * rate beside it when the provider sent one. The night page lists the day's workouts with it, the
- * workout page the day's other ones.
+ * The card a detail page's side section wears (the night's "Die dag", the workout's "Die dag" and
+ * "Daarna"): the card's label, then a narrow column saying which day or night the section is about
+ * beside the section's own rows, stacked where the grid collapses. One layout for every such
+ * section, so the two detail pages cannot draw the same kind of card two ways.
  */
-export function DayWorkoutList({ workouts }: { workouts: readonly WorkoutSession[] }): ReactNode {
-  const { t, i18n } = useTranslation()
-  const language = i18n.language
+export function SideCard({ label, caption, children }: { label: string, caption: string, children: ReactNode }) {
   return (
-    <ul className="day-workouts">
-      {workouts.map((session) => {
-        const summary = workoutSummary(session.attrs)
-        const minutes = Math.round((session.endMs - session.startMs) / 60_000)
-        const duration = `${formatNumber(minutes, 0, language, '0')} ${t('activity.units.min')}`
-        return (
-          <li key={session.id}>
-            <Link to={workoutPath(session.id)} className="figure-row-value day-workout-link">
-              {exerciseTypeLabel(t, summary.exerciseType)} {duration}
-            </Link>
-            {summary.averageHeartRateBpm !== null && (
-              <span className="figure-row-verdict">
-                {t('sleep.night.day.workoutAverage', { bpm: formatNumber(summary.averageHeartRateBpm, 0, language, '') })}
-              </span>
-            )}
-          </li>
-        )
-      })}
-    </ul>
+    <Card span={12} label={label}>
+      <div className="detail-side">
+        <p className="detail-side-caption">{caption}</p>
+        <div className="detail-side-body">{children}</div>
+      </div>
+    </Card>
   )
 }

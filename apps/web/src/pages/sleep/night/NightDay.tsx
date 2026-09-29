@@ -1,18 +1,21 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
-import { Card } from '../../../components/Card.js'
 import { FigureRow } from '../../../components/FigureRow.js'
 import { formatLongDate } from '../../dashboard/glanceText.js'
+import { TodayWorkouts } from '../../dashboard/TodayWorkouts.js'
+import { DayLogBlock, SideCard, hasDayLog } from '../../detail/DayLogBlock.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
 import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
-import { DayLogBlock, DayWorkoutList, hasDayLog } from '../../detail/DayLogBlock.js'
 
 /**
  * The day before the night (M10a-2 task 7, the mockup's "Die dag"): how it felt, what was tapped
  * and written down through the quick log, and its steps, active minutes and workouts, all read
- * off `page.day` and `page.log` rather than computed here (the log and the workout list are
- * DayLogBlock's, shared with the workout page's own day) - the same "server judges, page draws"
+ * off `page.day` and `page.log` rather than computed here - the same "server judges, page draws"
  * split every figure on this page already keeps.
+ *
+ * Drawn in the detail pages' shared side layout (SideCard: which day on the left, the rows on the
+ * right), with the log as DayLogBlock draws it and the workouts as the dashboard's own rows
+ * (TodayWorkouts, SessionRow underneath), so a ride reads here exactly as it does there.
  *
  * `page.log` is the log for `page.day.localDate`, not for the night's own date: a night is filed
  * under the morning it ends on, and the log it draws here is for the evening before it, which
@@ -26,35 +29,28 @@ export function NightDay({ day, log }: { day: NightPageData['day'], log: NightPa
   const { t, i18n } = useTranslation()
   const language = i18n.language
 
-  const hasLog = hasDayLog(log)
   const hasFigures = day.steps.value !== null || day.activeMinutes.value !== null
-  if (!hasLog && !hasFigures && day.workouts.length === 0) return null
+  if (!hasDayLog(log) && !hasFigures && day.workouts.length === 0) return null
 
-  const subtitle = t('sleep.night.day.subtitle', { date: formatLongDate(day.localDate, language) })
+  const caption = t('sleep.night.day.subtitle', { date: formatLongDate(day.localDate, language) })
+  const figures = [
+    { key: 'steps', label: t('sleep.night.day.steps'), figure: day.steps },
+    { key: 'activeMinutes', label: t('sleep.night.day.activeMinutes'), figure: day.activeMinutes },
+  ].filter(({ figure }) => figure.value !== null)
 
   return (
-    <Card span={12} label={t('sleep.night.day.label')} basis={subtitle}>
+    <SideCard label={t('sleep.night.day.label')} caption={caption}>
       <DayLogBlock log={log} />
-      {(hasFigures || day.workouts.length > 0) && (
-        <div className="night-day-figures">
-          {day.steps.value !== null && (
-            <FigureRow label={t('sleep.night.day.steps')} value={formatFigureValue(day.steps, day.steps.value, language, t)}
-              verdict={verdictLine(day.steps, language, t) ?? t('glance.usual.none')}
-              judged={day.steps.judged} band={day.steps.baseline} mark={day.steps.value} />
-          )}
-          {day.activeMinutes.value !== null && (
-            <FigureRow label={t('sleep.night.day.activeMinutes')} value={formatFigureValue(day.activeMinutes, day.activeMinutes.value, language, t)}
-              verdict={verdictLine(day.activeMinutes, language, t) ?? t('glance.usual.none')}
-              judged={day.activeMinutes.judged} band={day.activeMinutes.baseline} mark={day.activeMinutes.value} />
-          )}
-          {day.workouts.length > 0 && (
-            <div className="figure-row">
-              <span className="figure-row-label">{t('sleep.night.day.workouts')}</span>
-              <DayWorkoutList workouts={day.workouts} />
-            </div>
-          )}
+      {figures.length > 0 && (
+        <div className="detail-side-rows">
+          {figures.map(({ key, label, figure }) => (
+            <FigureRow key={key} label={label} value={formatFigureValue(figure, figure.value, language, t)}
+              verdict={verdictLine(figure, language, t) ?? t('glance.usual.none')}
+              judged={figure.judged} standing={figure.standing} band={figure.baseline} mark={figure.value} />
+          ))}
         </div>
       )}
-    </Card>
+      <TodayWorkouts workouts={day.workouts} label={t('sleep.night.day.workouts')} />
+    </SideCard>
   )
 }

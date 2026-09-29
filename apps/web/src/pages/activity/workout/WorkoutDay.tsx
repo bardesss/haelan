@@ -3,14 +3,15 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatLongDate } from '../../dashboard/glanceText.js'
-import { DayLogBlock, DayWorkoutList, hasDayLog } from '../../detail/DayLogBlock.js'
+import { TodayWorkouts } from '../../dashboard/TodayWorkouts.js'
+import { DayLogBlock, hasDayLog } from '../../detail/DayLogBlock.js'
 import { WorkoutFigureRow } from './WorkoutFigureRow.js'
 
 /**
  * The day the workout was done on (the mockup's "Die dag"): its quick log (DayLogBlock, the same
  * block the night page draws), the day's steps and active minutes against their usual, and the
- * day's other workouts linked to their own pages - or "none, only this one", which is worth saying
- * once the card is there at all.
+ * day's other workouts as the dashboard's own rows (TodayWorkouts, as the night page's day lists
+ * them) - or "none, only this one", which is worth saying once the card is there at all.
  *
  * `page.log` is already the log for the workout's own date (routes/v1/detail.ts). Absent when the
  * day has nothing: no log, neither figure and no other workout.
@@ -30,18 +31,15 @@ export function WorkoutDay({ page }: { page: WorkoutPageData }): ReactNode {
           <div className="workout-side-rows">
             <WorkoutFigureRow figure={day.steps} label={t('activity.workout.page.day.steps')} />
             <WorkoutFigureRow figure={day.activeMinutes} label={t('activity.workout.page.day.activeMinutes')} />
-            <div className="figure-row">
-              <span className="figure-row-label">{t('activity.workout.page.day.otherWorkouts')}</span>
-              {day.otherWorkouts.length > 0
-                ? <DayWorkoutList workouts={day.otherWorkouts} />
-                : (
-                  <>
-                    <span className="figure-row-value">{t('activity.workout.page.day.none')}</span>
-                    <span className="figure-row-verdict">{t('activity.workout.page.day.onlyThis')}</span>
-                  </>
-                )}
-            </div>
+            {day.otherWorkouts.length === 0 && (
+              <div className="figure-row">
+                <span className="figure-row-label">{t('activity.workout.page.day.otherWorkouts')}</span>
+                <span className="figure-row-value">{t('activity.workout.page.day.none')}</span>
+                <span className="figure-row-verdict">{t('activity.workout.page.day.onlyThis')}</span>
+              </div>
+            )}
           </div>
+          <TodayWorkouts workouts={day.otherWorkouts} label={t('activity.workout.page.day.otherWorkouts')} />
         </div>
       </div>
     </Card>

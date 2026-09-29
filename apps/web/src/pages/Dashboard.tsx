@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { useIsPhone } from '../ui/breakpoint.js'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { CardGrid } from '../components/CardGrid.js'
@@ -18,7 +17,8 @@ import { LogButton } from '../components/logPanel/LogButton.js'
 import { localToday } from '../controls/range.js'
 import { dashboardRows } from './dashboard/dashboardRows.js'
 import type { DashCardSlot } from './dashboard/dashboardRows.js'
-import { formatHeaderDate, formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
+import { formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
+import { PageHeader, useHeaderDate } from '../components/PageHeader.js'
 import { useDashboardDay } from './dashboard/useDashboardDay.js'
 import { ApiError } from '../api/apiError.js'
 
@@ -29,25 +29,12 @@ const GRID_CLASS = { settled: 'dashboard-grid', stepping: 'dashboard-grid dashbo
 // known before the glance arrives (the clock and the person's zone, or the day in the URL), so
 // loading and error carry the same title rather than flashing a second one.
 // On a phone a past day's title is the short date ("Tue, Sep 22"): the long one wrapped to three
-// lines beside the four buttons, and the header is one line there (spec M9c, "Phone").
-function Title({ timezone, day }: { timezone: string, day: string | null }) {
-  const { t, i18n } = useTranslation()
-  const isPhone = useIsPhone()
-  return <h1 className="dash-title">{day === null ? t(greetingKey(Date.now(), timezone)) : formatHeaderDate(day, i18n.language, isPhone)}</h1>
-}
-
-// The heading block on the left, the day navigator (when there is a glance to navigate from) on the
-// right: one row, which on a phone stays one row, the title wrapping inside its own column.
+// lines beside the four buttons, and the header is one line there (spec M9c, "Phone"). The row
+// itself is PageHeader, shared with the detail pages; the greeting is the dashboard's alone.
 function Header({ timezone, day, line, nav }: { timezone: string, day: string | null, line?: ReactNode, nav?: ReactNode }) {
-  return (
-    <div className="dash-header">
-      <div className="dash-heading">
-        <Title timezone={timezone} day={day} />
-        {line !== undefined && <p className="dash-date">{line}</p>}
-      </div>
-      {nav}
-    </div>
-  )
+  const { t } = useTranslation()
+  const date = useHeaderDate(day)
+  return <PageHeader title={day === null ? t(greetingKey(Date.now(), timezone)) : date} line={line} nav={nav} />
 }
 
 /**

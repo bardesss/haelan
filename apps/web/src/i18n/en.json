@@ -813,11 +813,19 @@
       "nav": "Nights",
       "previous": "Previous night",
       "next": "Next night",
-      "allNights": "All nights →",
+      "allNights": "All nights",
       "usualSingle": {
         "within": "usually {{value}}",
         "above": "above your usual {{value}}",
         "below": "below your usual {{value}}"
+      },
+      "clockUsual": {
+        "above": "later than your usual {{low}} – {{high}}",
+        "below": "earlier than your usual {{low}} – {{high}}"
+      },
+      "clockSingle": {
+        "above": "later than your usual {{value}}",
+        "below": "earlier than your usual {{value}}"
       },
       "deviation": {
         "within": "within your usual {{range}}",
@@ -894,8 +902,7 @@
         "note": "“{{note}}”",
         "steps": "Steps",
         "activeMinutes": "Active minutes",
-        "workouts": "Training",
-        "workoutAverage": "average {{bpm}} bpm"
+        "workouts": "Training"
       },
       "about": {
         "label": "About this night",

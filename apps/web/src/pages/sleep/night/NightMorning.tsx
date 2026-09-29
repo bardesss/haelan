@@ -129,9 +129,9 @@ export function NightMorning({ page }: { page: NightPageData }) {
           {from !== null && <p className="night-recovery-from">{from}</p>}
         </div>
         {rows.length > 0 && (
-          <div className="night-morning-rows">
+          <div className="detail-rows detail-rows-3">
             {rows.map(({ key, label: rowLabel, value, verdict, figure, strip }) => (
-              <FigureRow key={key} label={rowLabel} value={value} verdict={verdict} judged={figure.judged}
+              <FigureRow key={key} label={rowLabel} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
                 band={figure.baseline} mark={figure.value} strip={strip} />
             ))}
           </div>

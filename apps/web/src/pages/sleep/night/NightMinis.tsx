@@ -40,10 +40,10 @@ export function NightMinis({ figures }: { figures: NightPageData['figures'] }) {
 
   return (
     <Card span={12}>
-      <div className="night-minis">
-        <div className="night-minis-rows">
+      <div className="detail-minis">
+        <div className="detail-rows">
           {rows.map(({ key, label, value, verdict, figure, strip }) => (
-            <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged}
+            <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
               band={figure.baseline} mark={figure.value} strip={strip} />
           ))}
         </div>

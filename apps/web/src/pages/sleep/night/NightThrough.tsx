@@ -83,9 +83,9 @@ export function NightThrough({ page, chosenSource }: { page: NightPageData, chos
             <Hypnogram segments={segments} startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
               startClock={bedMinutes} label={label} totals={false} />
           </BasisContext.Provider>
-          <ul className="night-legend" id={legendId}>
+          <ul className="detail-legend" id={legendId}>
             {legend.map(({ stage, text }) => (
-              <li key={stage}><span className="night-legend-key" data-stage={stage} aria-hidden="true" />{text}</li>
+              <li key={stage}><span className="detail-legend-key" data-stage={stage} aria-hidden="true" />{text}</li>
             ))}
           </ul>
           {awakeDiffers && <p className="hypnogram-totals">{t('charts.hypnogram.awakeNote')}</p>}
