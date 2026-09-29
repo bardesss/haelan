@@ -84,6 +84,8 @@ const NO_SUCH_WORKOUT: Answer = { status: 404, body: { error: { code: 'not_found
  * answering `page`, which only the cases that seed nothing ever reach.
  */
 let tracePoints: IntradayPoint[] = []
+// Every URL the page asked for, in order.
+let fetched: string[] = []
 
 function stubFetch(page: Answer): void {
   const original = globalThis.fetch
@@ -92,23 +94,26 @@ function stubFetch(page: Answer): void {
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
+    fetched.push(url)
     if (url.includes('/workout/')) return json(page.body, page.status)
+    // An unseeded session read fails the way the page read is told to.
+    if (url.includes(`/sessions/${WORKOUT_ID}`)) return json(page.body, page.status)
     if (url.includes('/intraday/window')) return json({ points: tracePoints, reduction: null })
     if (url.includes('/sources')) return json({ items: [] })
     return json({ items: [], cursor: null })
   }) as typeof fetch
-  restoreFetch = () => { globalThis.fetch = original; tracePoints = [] }
+  restoreFetch = () => { globalThis.fetch = original; tracePoints = []; fetched = [] }
 }
 
 async function mount(
   page: WorkoutPageData | null, session: WorkoutSessionDetail = workoutSessionFixture(),
-  lng: 'en' | 'nl' = 'en', answer: Answer = NO_SUCH_WORKOUT,
+  lng: 'en' | 'nl' = 'en', answer: Answer = NO_SUCH_WORKOUT, seedSession = true,
 ): Promise<HTMLDivElement> {
   stubFetch(answer)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(sourceNamesKey('p1'), { items: [] })
-  client.setQueryData(queryKeys.resource('p1', 'session', { sessionId: WORKOUT_ID }), session)
+  if (seedSession) client.setQueryData(queryKeys.resource('p1', 'session', { sessionId: WORKOUT_ID }), session)
   if (page !== null) client.setQueryData(workoutPageKey('p1', WORKOUT_ID), page)
   act(() => {
     root!.render(<I18nProvider lng={lng}><QueryClientProvider client={client}><WorkoutDetail /></QueryClientProvider></I18nProvider>)
@@ -171,6 +176,17 @@ describe('the workout page\'s top', () => {
     act(() => { navigate(`/activity/${WORKOUT_ID}`) })
     act(() => { button(host, 'Next workout')!.click() })
     expect(window.location.pathname).toBe(`/activity/${NEXT_ID}`)
+  })
+
+  it('leaves the arrow keys to the map when they are pressed on it', async () => {
+    const host = await mount(workoutPageFixture(), fullSession())
+    // MapLibre never loads under happy-dom (the SVG drawing stands in), so a stand-in for its
+    // container: the live map pans on the arrow keys, which must not also step to another workout.
+    const map = document.createElement('div')
+    map.className = 'workout-route-map'
+    host.querySelector('.workout-map')!.append(map)
+    act(() => { map.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })) })
+    expect(window.location.pathname).toBe(`/activity/${WORKOUT_ID}`)
   })
 
   it('disables the arrow with no workout behind it', async () => {
@@ -357,6 +373,16 @@ describe('the workout page without a workout', () => {
     const host = await mount(null, workoutSessionFixture(), 'en', { status: 500, body: { error: { code: 'internal', message: 'boom' } } })
     expect(host.innerHTML).not.toContain('No such workout')
     expect(host.querySelector('button')?.textContent).toBe('Try again')
+  })
+
+  it('retries every read that failed, not only the first', async () => {
+    const boom = { status: 500, body: { error: { code: 'internal', message: 'boom' } } }
+    const host = await mount(null, workoutSessionFixture(), 'en', boom, false)
+    fetched = []
+    act(() => { host.querySelector('button')!.click() })
+    await pumpUntil(() => fetched.length >= 2, 'both reads to be asked for again')
+    expect(fetched.some((url) => url.includes(`/sessions/${WORKOUT_ID}`))).toBe(true)
+    expect(fetched.some((url) => url.includes('/workout/'))).toBe(true)
   })
 })
 

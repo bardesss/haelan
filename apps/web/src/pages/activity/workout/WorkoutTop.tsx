@@ -66,7 +66,9 @@ export function WorkoutTop({ page, session, detail }: {
       </div>
       <div className="workout-top-nav">
         <div className="day-nav" role="group" aria-label={t('activity.workout.page.nav')}>
-          <StepArrows previous={page.nav.previous} next={page.nav.next} onPick={onPick}
+          {/* The live route map pans on the arrow keys; pressed there, they must not also step
+              to another workout. */}
+          <StepArrows previous={page.nav.previous} next={page.nav.next} onPick={onPick} ignoreKeysInside=".workout-route-map"
             labels={{ previous: t('activity.workout.page.previous'), next: t('activity.workout.page.next') }} />
         </div>
         <Link to="/activity" className="workout-all">{t('activity.workout.page.allWorkouts')}</Link>

@@ -73,12 +73,15 @@ export function WorkoutDetail() {
     // The session's own failure first: it is the read the rest of the page has always stood on.
     const failed = query.isError ? query : pageQuery
     const notFound = failed.error instanceof ApiError && failed.error.kind === 'not_found'
+    // Every read that failed is asked for again: retrying the first alone left the other failed,
+    // and the page stayed on this error after a retry that had worked.
+    const retry = () => { for (const q of [query, pageQuery]) if (q.isError) void q.refetch() }
     return (
       <div className="grid">
         <Card span={12}>
           {notFound
             ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
-            : <ErrorState onRetry={() => void failed.refetch()} error={failed.error} />}
+            : <ErrorState onRetry={retry} error={failed.error} />}
         </Card>
       </div>
     )

@@ -91,7 +91,8 @@ type Props = {
    * measured sessions and zero RESUME, zero AUTO_PAUSE, zero AUTO_RESUME. An interval needs two
    * ends, so a band's right-hand edge would be one this project made up. A tick makes no claim
    * about when the person started again. Since M10a-3 the workout page shades a pause that a later
-   * START or STOP closes (`spans`, workoutText.ts's pausesOf) and marks only the one nothing closes.
+   * START, RESUME or AUTO_RESUME closes (`spans`, workoutText.ts's pausesOf), draws nothing for the
+   * finish sequence's PAUSE that only STOP follows, and marks only a mid-session pause nothing closes.
    *
    * No `label` field: the markLine below draws with `label: { show: false }` (ECharts never
    * renders one) and carries no `name` per entry either, so a caller-supplied label would be
