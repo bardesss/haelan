@@ -191,14 +191,22 @@ describe('readWorkoutPage', () => {
     seedRide('ride', '2026-09-01', {})
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     expect(readWorkoutPage(q(), input('subject'))!.previous).toEqual({
-      sessionId: 'first', localDate: '2026-01-10', values: { pace: 340, distance: 5000 },
+      sessionId: 'first', localDate: '2026-01-10', values: { pace: 340, distance: 5000, elapsed: 1800 },
     })
+  })
+
+  // A time hero leads the comparison table with its own row, so the previous session's moving and
+  // elapsed times travel with its other values.
+  it("sends the previous session's moving and elapsed times, for a time hero's row", () => {
+    seedWorkout('before', '2026-09-01', 'WEIGHTLIFTING', { moving: 2400 }, { minutes: 45 })
+    seedWorkout('subject', SUBJECT_DATE, 'WEIGHTLIFTING', { moving: 2500 }, { minutes: 50 })
+    expect(readWorkoutPage(q(), input('subject'))!.previous!.values).toEqual({ movingTime: 2400, elapsed: 2700 })
   })
 
   it('sends the previous ride\'s speed, so a speed hero\'s table has its row', () => {
     seedRide('before', '2026-09-01', { distance: 20_000, metrics: { averageSpeedMillimetersPerSecond: 6500 } })
     seedRide('subject', SUBJECT_DATE, { distance: 21_000, metrics: { averageSpeedMillimetersPerSecond: 7000 } })
-    expect(readWorkoutPage(q(), input('subject'))!.previous!.values).toEqual({ speed: 6.5, distance: 20_000 })
+    expect(readWorkoutPage(q(), input('subject'))!.previous!.values).toEqual({ speed: 6.5, distance: 20_000, elapsed: 1800 })
   })
 
   it('names the fastest kilometre of this type from the splits', () => {

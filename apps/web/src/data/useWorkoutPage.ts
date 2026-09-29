@@ -59,7 +59,7 @@ export interface WorkoutPageData {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
-  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'averageHeartRate' | 'cardioLoad', number>> } | null
+  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad', number>> } | null
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }

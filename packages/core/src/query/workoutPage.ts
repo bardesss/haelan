@@ -51,7 +51,7 @@ export interface WorkoutPage {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
-  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'averageHeartRate' | 'cardioLoad', number>> } | null
+  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad', number>> } | null
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
@@ -192,7 +192,8 @@ function heroOf(exerciseType: string | null, figures: WorkoutPage['figures']): W
 }
 
 // Answers: the latest earlier session of this type the person did not exclude, however long ago,
-// with the values the comparison table's rows read: speed as well as pace, since a ride's rows follow its hero.
+// with the values the comparison table's rows read: speed as well as pace, since a ride's rows follow its hero,
+// and moving and elapsed time, since a time hero leads the table with its own row.
 function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession[]): WorkoutPage['previous'] {
   const earlier = candidates.filter((s) => s.id !== subject.id && !s.excluded && s.startMs < subject.startMs)
   const latest = earlier.reduce<WorkoutSession | null>((best, s) => (best === null || s.startMs > best.startMs ? s : best), null)
@@ -203,6 +204,8 @@ function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession
   put('pace', r.summary.paceSecondsPerKm)
   put('speed', r.detail.averageSpeedMetersPerSecond)
   put('distance', r.summary.distanceMeters)
+  put('movingTime', r.detail.activeDurationSeconds)
+  put('elapsed', (latest.endMs - latest.startMs) / 1000)
   put('averageHeartRate', r.summary.averageHeartRateBpm)
   put('cardioLoad', r.edwards)
   return { sessionId: latest.id, localDate: latest.localDate, values }
