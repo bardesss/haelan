@@ -7,6 +7,7 @@ import { act } from 'react'
 import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import { StepArrows } from '../src/components/StepArrows.js'
+import { DetailNav } from '../src/components/PageHeader.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -79,6 +80,26 @@ describe('StepArrows', () => {
     press('ArrowLeft', chip)
     press('ArrowRight', chip)
     expect(onPick).not.toHaveBeenCalled()
+  })
+
+  // A detail page's navigator hands its own escape hatch through to the arrows it draws: the
+  // workout page's map and panels have arrow keys of their own.
+  it('DetailNav passes ignoreKeysInside through to its arrows', () => {
+    const onPick = vi.fn()
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <div data-map=""><button type="button" data-testid="map">Map</button></div>
+          <DetailNav label="Nights" previous="2026-09-21" next="2026-09-23" onPick={onPick}
+            labels={{ previous: 'Previous night', next: 'Next night' }} back={{ to: '/sleep', text: 'All nights' }}
+            ignoreKeysInside="[data-map]" />
+        </I18nProvider>,
+      )
+    })
+    press('ArrowLeft', container!.querySelector('[data-testid="map"]')!)
+    expect(onPick).not.toHaveBeenCalled()
+    press('ArrowLeft')
+    expect(onPick.mock.calls).toEqual([['2026-09-21']])
   })
 
   it('sets titles and aria-keyshortcuts', () => {

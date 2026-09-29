@@ -50,18 +50,22 @@ export function PageHeader({ title, line, nav }: { title: ReactNode, line?: Reac
  * `previous` and `next` are null while the page has no payload to name them (loading, a date with
  * nothing on it, a failed read): both arrows disabled rather than hidden, so the row keeps its
  * shape and the way back is still there.
+ *
+ * `ignoreKeysInside` goes straight to StepArrows: a selector for the parts of the page with arrow
+ * keys of their own (a map, a panel), where ← and → must not also step to the next record.
  */
-export function DetailNav({ label, previous, next, onPick, labels, back }: {
+export function DetailNav({ label, previous, next, onPick, labels, back, ignoreKeysInside }: {
   label: string
   previous: string | null
   next: string | null
   onPick: (target: string) => void
   labels: { previous: string, next: string }
   back: { to: string, text: string }
+  ignoreKeysInside?: string
 }) {
   return (
     <div className="day-nav" role="group" aria-label={label}>
-      <StepArrows previous={previous} next={next} onPick={onPick} labels={labels} />
+      <StepArrows previous={previous} next={next} onPick={onPick} labels={labels} ignoreKeysInside={ignoreKeysInside} />
       <Link to={back.to} className="button day-nav-back">{back.text}</Link>
     </div>
   )
