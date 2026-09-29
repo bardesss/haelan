@@ -89,9 +89,9 @@ function sleepFixture(over: {
   }
 }
 
-function renderNight(props: Partial<Parameters<typeof NightCard>[0]> = {}): string {
+function renderNight(props: Partial<Parameters<typeof NightCard>[0]> = {}, lng = 'en'): string {
   return renderToStaticMarkup(
-    <I18nProvider lng="en">
+    <I18nProvider lng={lng}>
       <NightCard sleep={sleepFixture()} span={8} today={TODAY} {...props} />
     </I18nProvider>,
   )
@@ -193,6 +193,20 @@ describe('NightCard', () => {
     expect(html).toContain('<p class="hypnogram-totals is-compact">Deep 1h 40m · Light 1h 00m · REM 0h 47m · Awake 0h 07m</p>')
     expect(html).not.toContain('class="hypnogram-totals"')
     expect(html).not.toContain('Awake counts the awake stages')
+  })
+
+  it('writes the stage totals\' hours as "u" in Dutch', () => {
+    const base = sleepFixture()
+    const start = base.startMs
+    const sleep: GlanceSleep = {
+      ...base,
+      segments: [
+        { stage: 'LIGHT', startMs: start, endMs: start + 60 * 60_000 },
+        { stage: 'DEEP', startMs: start + 60 * 60_000, endMs: start + 160 * 60_000 },
+      ],
+    }
+    const totals = /<p class="hypnogram-totals is-compact">([^<]*)<\/p>/.exec(renderNight({ sleep }, 'nl'))
+    expect(totals?.[1]).toBe('Diep 1u 40m · Licht 1u 00m')
   })
 
   it('draws no visible show-numbers control, and keeps each chart\'s table for assistive tech', () => {
@@ -482,9 +496,9 @@ describe('TodayCard', () => {
   })
 })
 
-function renderWeek(props: Partial<Parameters<typeof WeekCard>[0]> = {}): string {
+function renderWeek(props: Partial<Parameters<typeof WeekCard>[0]> = {}, lng = 'en'): string {
   return renderToStaticMarkup(
-    <I18nProvider lng="en">
+    <I18nProvider lng={lng}>
       <WeekCard glance={glanceBody()} span={4} {...props} />
     </I18nProvider>,
   )
@@ -655,6 +669,16 @@ describe('WeekCard', () => {
     expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">57,432</span> <span class="dash-week-per">· 8,205 a day</span></div>')
     expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">4h 12m</span> <span class="dash-week-per">· 36 min a day</span></div>')
     expect(html).toContain('<div class="dash-week-figure"><span class="dash-week-value">6h 58m</span> <span class="dash-week-per">a night</span></div>')
+  })
+
+  it('writes the week\'s durations with a Dutch hour, "u"', () => {
+    const g = { ...glanceBody(), week: {
+      steps: { perDay: 8205.4, days: 6, total: 57432 },
+      activeMinutes: { perDay: 36.2, days: 6, total: 252 },
+      asleep: { perDay: 418, days: 7, total: 2926 },
+    } }
+    const values = [...renderWeek({ glance: g }, 'nl').matchAll(/<span class="dash-week-value">([^<]*)<\/span>/g)].map((m) => m[1])
+    expect(values).toEqual(['57.432', '4u 12m', '6u 58m'])
   })
 
   // The dot between the total and the per-day average has to come from the catalogue, not a

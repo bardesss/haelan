@@ -166,6 +166,16 @@ describe('the all-time page', () => {
     expect(text("[data-record='fastest-km'] .record-value")).toBe('5:09 / km')
   })
 
+  it('writes the longest session\'s hour as "u" in Dutch', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
+      ],
+    }, 'nl')
+    expect(text("[data-record='longest'] .record-value")).toBe('4u 24m')
+  })
+
   it('shows only the session records the sessions support', () => {
     // A household that only lifts has a longest session and no distance at all. A card reading
     // "furthest: none" would be worse than no card.

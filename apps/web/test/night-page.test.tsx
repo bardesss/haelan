@@ -112,12 +112,12 @@ async function settled(client: QueryClient, html: () => string): Promise<void> {
   )
 }
 
-function mount(node: ReactNode): { client: QueryClient, html: () => string } {
+function mount(node: ReactNode, lng = 'en'): { client: QueryClient, html: () => string } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
-        <I18nProvider lng="en">{node}</I18nProvider>
+        <I18nProvider lng={lng}>{node}</I18nProvider>
       </QueryClientProvider>,
     )
   })
@@ -195,6 +195,22 @@ describe('the night tiles', () => {
       expect(valueOf('Deep')).toBe('1h 02m')
       expect(valueOf('Time awake')).toBe('0h 20m')
       expect(valueOf('Naps')).toBe('1')
+    } finally { restore() }
+  })
+
+  it('writes the duration tiles\' hour as "u" in Dutch', async () => {
+    const restore = stub([NIGHT], {
+      sleep_asleep_minutes: 447, sleep_in_bed_minutes: 467, sleep_efficiency: 96,
+      sleep_deep_minutes: 62, sleep_light_minutes: 290, sleep_rem_minutes: 95,
+      sleep_awake_minutes: 20, sleep_nap_count: 1,
+    })
+    try {
+      const { client, html } = mount(<NightDetail />, 'nl')
+      // settled() waits on the English '>Loading<', which a Dutch page never prints.
+      await pumpUntil(() => (container?.querySelectorAll('.night-tiles .card .value').length ?? 0) > 0, 'the Dutch tiles')
+      await settled(client, html)
+      const values = [...(container?.querySelectorAll('.night-tiles .card .value') ?? [])].map((v) => v.textContent)
+      expect(values).toEqual(expect.arrayContaining(['7u 27m', '7u 47m', '1u 02m', '4u 50m', '1u 35m', '0u 20m']))
     } finally { restore() }
   })
 

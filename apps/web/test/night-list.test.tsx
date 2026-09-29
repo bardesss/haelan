@@ -64,11 +64,11 @@ function clientWith(items: Night[]): QueryClient {
   return client
 }
 
-function mount(client: QueryClient, node: ReactNode): void {
+function mount(client: QueryClient, node: ReactNode, lng = 'en'): void {
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
-        <I18nProvider lng="en">{node}</I18nProvider>
+        <I18nProvider lng={lng}>{node}</I18nProvider>
       </QueryClientProvider>,
     )
   })
@@ -114,6 +114,12 @@ describe('the night list', () => {
     const row = container?.querySelector('.night-row')?.textContent ?? ''
     expect(row).toContain('watch')
     expect(row).toContain('8h 00m')
+    expect(container?.querySelector('.night-row-duration')?.textContent).toBe('8h 00m')
+  })
+
+  it('writes the night\'s hour as "u" in Dutch', () => {
+    mount(clientWith([night('2026-08-03', 'watch', 8)]), <NightList controls={CONTROLS} />, 'nl')
+    expect(container?.querySelector('.night-row-duration')?.textContent).toBe('8u 00m')
   })
 
   // Task 2 review: nothing exercised night-row-excluded, the branch that says a session was thrown

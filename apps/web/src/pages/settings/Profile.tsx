@@ -41,7 +41,7 @@ function timezoneOptions(): string[] {
  * said before the button rather than reported after it.
  */
 export function Profile() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const session = useSession()
   const save = useSaveProfile()
@@ -222,7 +222,7 @@ export function Profile() {
             {t('settings.profile.sleepTargetHint')}{' '}
             {value.sleepTargetMinutes === undefined
               ? t('settings.profile.sleepTargetUnreadable')
-              : t('settings.profile.sleepTargetReadback', { duration: formatDuration(value.sleepTargetMinutes) })}
+              : t('settings.profile.sleepTargetReadback', { duration: formatDuration(value.sleepTargetMinutes, i18n.language) })}
           </span>
         </label>
 

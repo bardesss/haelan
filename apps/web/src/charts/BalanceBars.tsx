@@ -75,7 +75,7 @@ export function BalanceBars({
   // than to the metric catalogue: there is no metric behind these numbers, they are a subtraction
   // the caller performed, and formatMetricValue would need a metric name that does not exist.
   const format = (value: number | null, absent: string): string =>
-    formatValue ? formatValue(value, absent) : formatSignedDuration(value, absent)
+    formatValue ? formatValue(value, absent) : formatSignedDuration(value, absent, i18n.language)
 
   // A ref, not `build` dependencies: `formatValue` is a fresh arrow at any call site that passes
   // one, and folding it into `build`'s dependency array would dispose and reinitialise the chart

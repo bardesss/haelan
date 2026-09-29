@@ -24,17 +24,19 @@ export function hypnogramTooltip(
   segments: readonly { stage: Stage; startMs: number; endMs: number }[],
   index: number | undefined,
   t: Translate,
+  // The page's language, for the duration's hour unit (formatDuration).
+  language: string,
   // The night's start as a clock minute (Hypnogram's `startClock`): with it, from and to are clock
   // times, matching the axis and the table; without it, elapsed time since the night began.
   origin: number | null = null,
 ): string {
   const segment = index === undefined ? undefined : segments[index]
   if (!segment) return ''
-  const at = (ms: number) => origin === null ? formatDuration(ms / MINUTE_MS) : formatClock(origin + ms / MINUTE_MS)
+  const at = (ms: number) => origin === null ? formatDuration(ms / MINUTE_MS, language) : formatClock(origin + ms / MINUTE_MS)
   const span = t('charts.hypnogramTooltip.span', { from: at(segment.startMs), to: at(segment.endMs) })
   const stage = t('charts.tooltip.line', {
     label: t(STAGE_LABEL_KEY[segment.stage]),
-    value: formatDuration((segment.endMs - segment.startMs) / MINUTE_MS),
+    value: formatDuration((segment.endMs - segment.startMs) / MINUTE_MS, language),
   })
   return tip`${span}<br/>${stage}`
 }

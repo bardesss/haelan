@@ -111,7 +111,7 @@ export function NightTiles({ localDate, source }: { localDate: string, source: s
       // packages/core/test/sleep-derive.test.ts ("KNOWN GAP: overlapping sessions within a night
       // double count toward asleep and efficiency"), and clamping here would hide that real defect
       // behind a plausible-looking figure, on the one surface that shows it most prominently.
-      text: tile.duration ? formatDuration(value) : formatMetricValue(value, tile.metric, i18n.language, ''),
+      text: tile.duration ? formatDuration(value, i18n.language) : formatMetricValue(value, tile.metric, i18n.language, ''),
     }]
   })
 

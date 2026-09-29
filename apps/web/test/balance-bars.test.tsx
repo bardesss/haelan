@@ -69,10 +69,10 @@ type Option = {
   }[]
 }
 
-function mount(props: Partial<Parameters<typeof BalanceBars>[0]> = {}): Option {
+function mount(props: Partial<Parameters<typeof BalanceBars>[0]> = {}, lng = 'en'): Option {
   act(() => {
     root!.render(
-      <I18nProvider lng="en">
+      <I18nProvider lng={lng}>
         <BalanceBars values={values} labels={labels} label="balance, august 2026"
           unit="Minutes over or under"
           annotations={[]} excluded={[]} {...props} />
@@ -169,6 +169,12 @@ describe('BalanceBars', () => {
     const option = mount()
     expect(option.yAxis.axisLabel!.formatter!(-105)).toBe('-1h 45m')
     expect(option.yAxis.axisLabel!.formatter!(45)).toBe('45m')
+  })
+
+  it('writes the hour as "u" in Dutch, on the axis and in the table', () => {
+    const option = mount({}, 'nl')
+    expect(option.yAxis.axisLabel!.formatter!(-105)).toBe('-1u 45m')
+    expect(tableRowFor('2026-08-12')![1]).toBe('-1u 45m')
   })
 
   it('states a signed balance per readable night in its accessible table', () => {

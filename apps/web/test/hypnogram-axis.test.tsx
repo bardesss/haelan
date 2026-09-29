@@ -43,9 +43,9 @@ type Axis = {
   axisLabel?: { customValues?: number[], formatter?: (v: number) => string },
 }
 
-function xAxisOf(startClock: number | null): Axis {
+function xAxisOf(startClock: number | null, lng = 'en'): Axis {
   act(() => {
-    root!.render(<I18nProvider lng="en">
+    root!.render(<I18nProvider lng={lng}>
       <Hypnogram segments={SEGMENTS} startLabel="Bed 00:40" label="stages" startClock={startClock} />
     </I18nProvider>)
   })
@@ -85,6 +85,10 @@ describe('the hypnogram axis', () => {
     expect(axis.min).toBe(0)
     expect(axis.axisLabel!.formatter!(120)).toBe('2h')
   })
+
+  it('writes the elapsed hour as "u" in Dutch', () => {
+    expect(xAxisOf(null, 'nl').axisLabel!.formatter!(120)).toBe('2u')
+  })
 })
 
 describe('clockHours', () => {
@@ -109,10 +113,10 @@ describe('the hypnogram tooltip', () => {
       : `${String(options?.label)}: ${String(options?.value)}`) as never
 
   it('says clock times when the axis does', () => {
-    expect(hypnogramTooltip(SEGMENTS, 1, t, 40)).toContain('02:10 to 03:30')
+    expect(hypnogramTooltip(SEGMENTS, 1, t, 'en', 40)).toContain('02:10 to 03:30')
   })
 
   it('keeps elapsed time without a known start', () => {
-    expect(hypnogramTooltip(SEGMENTS, 1, t)).toContain('1h 30m to 2h 50m')
+    expect(hypnogramTooltip(SEGMENTS, 1, t, 'en')).toContain('1h 30m to 2h 50m')
   })
 })

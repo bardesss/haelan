@@ -196,7 +196,7 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
                 <span className="session-day-summary">
                   {t('activity.sessions.daySummary', {
                     count: group.sessions.length,
-                    duration: formatDuration(totalMinutes(group.sessions)),
+                    duration: formatDuration(totalMinutes(group.sessions), i18n.language),
                   })}
                 </span>
               </h3>

@@ -6,7 +6,7 @@ import type { ChartTokens } from './tokens.js'
 import type { Stage } from '../fixtures/july.js'
 import { stageMark, STAGE_LABEL_KEY } from './stage.js'
 import { ChartFigure } from './ChartFigure.js'
-import { formatClock, formatDuration } from '../format.js'
+import { formatClock, formatDuration, hourUnit } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
 import { hypnogramTooltip } from './hypnogramTooltip.js'
 
@@ -116,7 +116,8 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   // `compact` - the full form's height is fixed at 130 regardless.
   tall?: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const language = i18n.language
   const origin = startClock ?? null
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
@@ -129,7 +130,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
     // let ECharts pick its own spacing in minutes since bed, which is what printed "0h 1h 3h 5h".
     const xAxis = origin === null
       ? { type: 'value' as const, min: 0, max: spanMinutes,
-          axisLabel: { ...base.axisLabel, formatter: (v: number) => `${Math.floor(v / 60)}h` },
+          axisLabel: { ...base.axisLabel, formatter: (v: number) => `${Math.floor(v / 60)}${hourUnit(language)}` },
           splitLine: base.splitLine }
       : (() => {
           const hours = clockHours(shift, shift + spanMinutes)
@@ -150,7 +151,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
         trigger: 'item' as const,
         formatter: (params: unknown) => {
           const p = Array.isArray(params) ? params[0] : params
-          return hypnogramTooltip(segments, (p as { dataIndex?: number } | undefined)?.dataIndex, t, origin)
+          return hypnogramTooltip(segments, (p as { dataIndex?: number } | undefined)?.dataIndex, t, language, origin)
         },
       },
       xAxis: shownX,
@@ -184,10 +185,10 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
       graphic: compact ? [] : [{ type: 'text' as const, left: 46, top: 0,
         style: { text: startLabel, fill: tokens.muted, fontSize: base.axisLabel.fontSize } }],
     }
-  }, [segments, startLabel, origin, t, compact])
+  }, [segments, startLabel, origin, t, compact, language])
 
   // The table's From and To say what the axis says: clock times when the night's start is known.
-  const at = (ms: number) => origin === null ? formatDuration(ms / MINUTE_MS) : formatClock(origin + ms / MINUTE_MS)
+  const at = (ms: number) => origin === null ? formatDuration(ms / MINUTE_MS, language) : formatClock(origin + ms / MINUTE_MS)
 
   const { host, style } = useChart(build, compact ? (tall ? COMPACT_HEIGHT_TALL : COMPACT_HEIGHT) : 130)
 
@@ -200,7 +201,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
   const minutesByStage = new Map(totals.map((total) => [total.stage, total.minutes]))
   const stageFigures = STAGE_ORDER
     .filter((stage) => minutesByStage.has(stage))
-    .map((stage) => `${t(STAGE_LABEL_KEY[stage])} ${formatDuration(minutesByStage.get(stage)!)}`)
+    .map((stage) => `${t(STAGE_LABEL_KEY[stage])} ${formatDuration(minutesByStage.get(stage)!, language)}`)
   const totalsRow = stageFigures.join(ANNOTATION_JOIN)
   // Said out loud, only on a night that actually has an awake total to be read the wrong way.
   //
@@ -224,7 +225,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
           // so it carries none of the accumulation risk stageTotals' own comment describes.
           rows: segments.map((s) => [
             at(s.startMs), at(s.endMs),
-            t(STAGE_LABEL_KEY[s.stage]), formatDuration((s.endMs - s.startMs) / MINUTE_MS),
+            t(STAGE_LABEL_KEY[s.stage]), formatDuration((s.endMs - s.startMs) / MINUTE_MS, language),
           ]),
         }} />
       {/* Empty totals is a classic (ASLEEP/RESTLESS-only) night, which carries no DEEP/LIGHT/REM

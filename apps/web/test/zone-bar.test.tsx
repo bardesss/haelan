@@ -12,6 +12,7 @@ import type { EChartsOption } from 'echarts'
 import { ZoneBar, SESSION_ZONE_KEYS } from '../src/charts/ZoneBar.js'
 import type { ZoneRow } from '../src/charts/ZoneBar.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
+import { I18nProvider } from '../src/i18n/index.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
 // this, the same reason chart-marks.test.tsx and chart-lifecycle.test.tsx set them.
@@ -118,5 +119,13 @@ describe('ZoneBar', () => {
     expect(html).toContain('<th scope="row">light</th>')
     const cells = [...html.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]!)
     expect(cells).toEqual(['1h 10m'])
+  })
+
+  it('writes the duration cell\'s hour as "u" in Dutch', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider lng="nl"><ZoneBar rows={[row('light', 70)]} label="Tijd in hartslagzones" /></I18nProvider>,
+    )
+    const cells = [...html.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]!)
+    expect(cells).toEqual(['1u 10m'])
   })
 })

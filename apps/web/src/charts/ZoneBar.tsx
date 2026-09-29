@@ -38,7 +38,8 @@ const HEIGHT = 48
  * the read order is the constant, not any one colour being at either end.
  */
 export function ZoneBar({ rows, label }: { rows: readonly ZoneRow[], label: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const language = i18n.language
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -50,7 +51,7 @@ export function ZoneBar({ rows, label }: { rows: readonly ZoneRow[], label: stri
         trigger: 'item' as const,
         formatter: (params: unknown) => {
           const p = params as { seriesName?: string, value?: number }
-          return `${p.seriesName ?? ''}: ${formatDuration(Number(p.value ?? 0))}`
+          return `${p.seriesName ?? ''}: ${formatDuration(Number(p.value ?? 0), language)}`
         },
       },
       xAxis: { type: 'value' as const, ...base.hiddenAxis, max: rows.reduce((a, r) => a + r.minutes, 0) || 1 },
@@ -66,7 +67,7 @@ export function ZoneBar({ rows, label }: { rows: readonly ZoneRow[], label: stri
         itemStyle: { color: stops[SESSION_ZONE_KEYS.indexOf(row.zone) % stops.length]! },
       })),
     }
-  }, [rows, label])
+  }, [rows, label, language])
 
   const { host, style } = useChart(build, HEIGHT)
 
@@ -81,7 +82,7 @@ export function ZoneBar({ rows, label }: { rows: readonly ZoneRow[], label: stri
         // finding - activity.units.minutes ("Minutes") is a StatTile unit elsewhere in this app and
         // was reused here without noticing it no longer matched the cell.
         columns: [t('activity.workout.zones.column'), t('activity.workout.zones.duration')],
-        rows: rows.map((row) => [row.label, formatDuration(row.minutes)]),
+        rows: rows.map((row) => [row.label, formatDuration(row.minutes, language)]),
       }}
     />
   )

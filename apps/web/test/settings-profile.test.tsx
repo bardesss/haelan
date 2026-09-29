@@ -42,7 +42,7 @@ const SESSION: Session = {
   baseUrl: 'http://localhost:4235',
 }
 
-function mountSection(overrides: Partial<Session> = {}): QueryClient {
+function mountSection(overrides: Partial<Session> = {}, lng = 'en'): QueryClient {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
   })
@@ -50,7 +50,7 @@ function mountSection(overrides: Partial<Session> = {}): QueryClient {
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
-        <I18nProvider lng="en"><Profile /></I18nProvider>
+        <I18nProvider lng={lng}><Profile /></I18nProvider>
       </QueryClientProvider>,
     )
   })
@@ -396,6 +396,13 @@ describe('the sleep target control', () => {
     expect(fields()[FIELDS.sleepTarget]!.value).toBe('450')
     expect(container!.textContent).toContain('Reads as 7h 30m.')
     expect(container!.textContent).not.toContain('Reads as 8h 00m.')
+  })
+
+  it('reads the target back with a Dutch hour, "u"', () => {
+    mountSection({}, 'nl')
+    const hint = [...container!.querySelectorAll('.field-hint')].map((h) => h.textContent ?? '')
+      .find((text) => text.includes('Dat is'))
+    expect(hint?.endsWith(' Dat is 8u 00m.')).toBe(true)
   })
 
   it('carries the store\'s own bounds, so the form cannot offer a value the store refuses', () => {
