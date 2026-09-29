@@ -514,22 +514,6 @@ export function IntradayHeartRate({
             ] as [{ name: string, yAxis: number, itemStyle: { color: string, opacity: number } }, { yAxis: number }]),
           },
         }]),
-        // Last of all, for the same series-index-stability reason as the events and spans series
-        // above: pointsBySeriesIndex and excludedBySeriesIndex count from the front (3i+2), so
-        // nothing appended after them can shift either lookup.
-        ...(usualBand === undefined ? [] : [{
-          type: 'line' as const,
-          // Behind both the trace (z 2) and the spans shading (z 1): the usual range is context for
-          // the reading, not something that should sit on top of a span that already marks a
-          // stretch as set apart.
-          z: 0,
-          data: [],
-          markArea: {
-            silent: true,
-            itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
-            data: [[{ yAxis: usualBand.low }, { yAxis: usualBand.high }] as [{ yAxis: number }, { yAxis: number }]],
-          },
-        }]),
       ],
     }
   }, [series, pointsBySeriesIndex, tick, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, endMs, lastMs, spans, axis, usualBand, zoned, elapsedFrom, x])
