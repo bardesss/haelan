@@ -737,6 +737,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-legend-key[data-stage="light"] { background: var(--chart-stage-light); }
 .detail-legend-key[data-stage="rem"] { background: var(--chart-stage-rem); }
 .detail-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
+/* The stage timing rows under that legend: the traces' own gap above them, so a row's label does
+   not sit on the legend's line. */
+.detail-legend + .detail-rows { margin-top: var(--space-3); }
 
 /* NightSessions.tsx's own list, task 7's exclude-per-session card, inside the About fold.
    A plain list rather than a table: each row is a recording plus one control or one status word, not
