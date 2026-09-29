@@ -385,7 +385,12 @@ describe('readNightPage', () => {
 
   it('counts how many of the judged morning figures sat outside their usual', () => {
     // Sixty mornings of steady readings, then a morning with a high resting heart rate and a low
-    // HRV and everything else usual: two outside, of every figure with a usual to stand on.
+    // HRV and everything else usual; the last twenty nights lowest at 40, so their dips are 10 and
+    // 12, and tonight's at 20. Three outside, of every figure with a usual to stand on.
+    const hr = (localDate: string) => insertSample(test.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '03:00'), tzOffsetMinutes: OFFSET, value: 40,
+    })
+    for (let i = 1; i <= 20; i += 1) { seedNight(shiftLocalDate(NIGHT, -i), {}); hr(shiftLocalDate(NIGHT, -i)) }
     for (let i = 1; i <= 60; i += 1) {
       const date = shiftLocalDate(NIGHT, -i)
       const odd = i % 2 === 1
@@ -395,6 +400,7 @@ describe('readNightPage', () => {
       seedDaily(date, 'daily_spo2', 'last', odd ? 97 : 96)
     }
     seedNight(NIGHT, {})
+    hr(NIGHT)
     seedDaily(NIGHT, 'resting_heart_rate', 'last', 60)
     seedDaily(NIGHT, 'daily_hrv', 'last', 30)
     seedDaily(NIGHT, 'sleep_respiratory_rate', 'last', 14.5)
@@ -402,8 +408,9 @@ describe('readNightPage', () => {
     const page = readNightPage(q(), input(NIGHT))!
     const judged = [page.morning.recovery.index, page.morning.restingHeartRate, page.morning.hrv, page.morning.breathing,
       page.morning.spo2, page.morning.skinTemperature, page.morning.heartRateDip].filter((f) => f.standing !== null)
-    expect(judged).toHaveLength(4)
-    expect(page.morningSummary).toEqual({ outside: 2, of: 4 })
+    expect(page.morning.heartRateDip.standing).toBe('above')
+    expect(judged).toHaveLength(5)
+    expect(page.morningSummary).toEqual({ outside: 3, of: 5 })
   })
 })
 

@@ -21,7 +21,9 @@ export function stageTimingOf(segments: readonly { stage: string, startMs: numbe
   const onset = ordered.find((s) => ASLEEP_STAGES.includes(s.stage))
   const deep = ordered.find((s) => s.stage === 'DEEP')
   const rems = ordered.filter((s) => s.stage === 'REM')
-  if (onset === undefined || (deep === undefined && rems.length === 0)) return NONE
+  // A classic night needs no guard of its own: with no DEEP and no REM segment every value below
+  // comes out null. Only a night with nothing asleep in it at all has no onset to measure from.
+  if (onset === undefined) return NONE
   const since = (s: { startMs: number } | undefined) => (s === undefined ? null : (s.startMs - onset.startMs) / MINUTE_MS)
   let cycles = 0
   let lastEnd: number | null = null

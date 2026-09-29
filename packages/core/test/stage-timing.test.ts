@@ -29,6 +29,10 @@ describe('stageTimingOf', () => {
       .toEqual({ firstDeepMinutes: null, firstRemMinutes: null, cycles: null })
   })
 
+  it('says nothing about a night with nothing asleep in it', () => {
+    expect(stageTimingOf([seg('AWAKE', 0, 30)])).toEqual({ firstDeepMinutes: null, firstRemMinutes: null, cycles: null })
+  })
+
   it('measures from the first asleep segment, not from an awake start', () => {
     const night = [seg('AWAKE', 0, 10), seg('LIGHT', 10, 40), seg('DEEP', 40, 90), seg('REM', 90, 120)]
     expect(stageTimingOf(night)).toEqual({ firstDeepMinutes: 30, firstRemMinutes: 80, cycles: 1 })
