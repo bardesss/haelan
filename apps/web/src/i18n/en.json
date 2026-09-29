@@ -161,8 +161,9 @@
     }
   },
   "common": {
-    "bedLabel": "Bed {{time}}",
-    "bedTimeNotRecorded": "Bed time not recorded",
+    "bedLabel": "Bedtime {{time}}",
+    "bedTimeNotRecorded": "Bedtime not recorded",
+    "annotate": "Exclude or add a note",
     "to": "to",
     "loading": "Loading",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
@@ -446,7 +447,6 @@
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "alsoRecordedBy": "Also recorded by {{sources}}",
-      "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
       "gpsDrawn": "A GPS route was recorded for this workout, drawn below.",
       "gpsConsentRequired": "A GPS route was recorded for this workout, but Health Connect withheld it, so there is no map. Open Haelan on the phone and tap Release routes to hand it over.",
@@ -559,8 +559,8 @@
       "stage": "Stage",
       "duration": "Duration",
       "night": "Night",
-      "toBed": "To bed",
-      "woke": "Woke",
+      "toBed": "Bedtime",
+      "woke": "Wake time",
       "naps": "Naps",
       "time": "Time",
       "source": "Source",
@@ -575,10 +575,6 @@
       "fri": "Fri",
       "sat": "Sat",
       "sun": "Sun"
-    },
-    "standing": {
-      "above": "above your usual",
-      "below": "below your usual"
     },
     "absence": {
       "notWorn": "not worn",
@@ -597,7 +593,8 @@
     "units": {
       "bpm": "bpm",
       "percent": "%",
-      "milliseconds": "ms"
+      "milliseconds": "ms",
+      "celsius": "°C"
     },
     "tooltip": {
       "line": "{{label}}: {{value}}"
@@ -750,43 +747,134 @@
       "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet."
     },
     "night": {
-      "when": "{{bed}} to {{wake}} · {{source}}",
+      "when": "Bedtime {{bed}} · wake time {{wake}} · {{source}}",
       "missingTitle": "No night recorded",
       "missingDetail": "This date has no sleep from this source. It may not have synced yet.",
-      "tiles": {
-        "asleep": "Time asleep",
-        "inBed": "Time in bed",
+      "nav": "Nights",
+      "previous": "Previous night",
+      "next": "Next night",
+      "allNights": "All nights",
+      "openNight": "Open this night",
+      "openNightIdle": "Tap a night to open it",
+      "usualSingle": {
+        "within": "your usual {{value}}",
+        "above": "above your usual {{value}}",
+        "below": "below your usual {{value}}"
+      },
+      "clockUsual": {
+        "above": "later than your usual {{low}} – {{high}}",
+        "below": "earlier than your usual {{low}} – {{high}}"
+      },
+      "clockSingle": {
+        "above": "later than your usual {{value}}",
+        "below": "earlier than your usual {{value}}"
+      },
+      "paceUsual": {
+        "above": "slower than your usual {{low}} – {{high}}",
+        "below": "faster than your usual {{low}} – {{high}}"
+      },
+      "paceSingle": {
+        "above": "slower than your usual {{value}}",
+        "below": "faster than your usual {{value}}"
+      },
+      "deviation": {
+        "within": "within your usual {{range}}",
+        "above": "above your usual {{range}}",
+        "below": "below your usual {{range}}"
+      },
+      "hero": {
+        "label": "Time asleep",
+        "strip": "this night and the six before it"
+      },
+      "minis": {
         "efficiency": "Efficiency",
-        "deep": "Deep",
-        "light": "Light",
+        "deep": "Deep sleep",
         "rem": "REM",
-        "awake": "Time awake",
-        "naps": "Naps"
+        "bedtime": "Bedtime",
+        "caption": "each line: this night and the six before it · band = your usual range"
       },
-      "tileBasis": "from {{metric}}, as this night was derived",
-      "stages": {
-        "label": "Stages through the night"
-      },
-      "naps": {
-        "none": "No naps recorded on this date.",
-        "list": "Naps:"
+      "through": {
+        "label": "The night",
+        "share": "{{duration}} · {{percent}} %"
       },
       "traces": {
-        "heart_rate": "Heart rate through the night",
-        "spo2": "Blood oxygen through the night",
-        "hrv": "Heart rate variability through the night",
+        "heart_rate": "Heart rate",
+        "spo2": "Blood oxygen",
+        "hrv": "HRV",
         "metricNames": {
           "heart_rate": "heart rate",
           "spo2": "blood oxygen",
           "hrv": "heart rate variability"
         },
-        "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}"
+        "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}",
+        "lowest": "lowest {{value}} at {{time}}",
+        "highest": "highest {{value}} at {{time}}",
+        "caption": "band = your usual range · same time axis as the stages",
+        "hrvChart": "HRV through the night"
       },
       "sessions": {
-        "label": "Sessions in this night",
-        "basis": "a night is assembled from these recordings; excluding one re-derives the night without it",
-        "exclude": "Exclude or add a note",
-        "excluded": "Excluded"
+        "excluded": "Excluded",
+        "recording": "{{source}} · {{start}}–{{end}}"
+      },
+      "week": {
+        "schedule": "Sleep schedule",
+        "balance": "Sleep balance",
+        "variability": "Bedtime varied ±{{value}} this week",
+        "variabilityUsual": "Bedtime varied ±{{value}} this week · your usual ±{{low}} – {{high}}",
+        "balanceAgainstTarget": "against your target of {{target}}",
+        "balanceAgainstBaseline": "against your usual {{usual}}",
+        "barsTarget": "each bar: that night against your target",
+        "barsBaseline": "each bar: that night against your usual"
+      },
+      "morning": {
+        "label": "The morning after",
+        "labelDated": "Recovery on {{date}}",
+        "restingHeartRate": "Resting heart rate",
+        "hrv": "HRV",
+        "hrvChart": "HRV this morning",
+        "breathing": "Breathing in sleep",
+        "spo2": "Oxygen (SpO2)",
+        "skinTemperature": "Skin temperature",
+        "from": "from {{inputs}}",
+        "and": "{{rest}} and {{last}}",
+        "inputs": {
+          "hrv": "HRV",
+          "restingHeartRate": "resting heart rate",
+          "respiratoryRate": "breathing",
+          "sleep": "sleep",
+          "bedtime": "bedtime"
+        }
+      },
+      "day": {
+        "label": "That day",
+        "subtitle": "{{date}}, the day before this night",
+        "chipCount": "{{kind}} ×{{count}}",
+        "note": "“{{note}}”",
+        "steps": "Steps",
+        "activeMinutes": "Active minutes",
+        "workouts": "Workouts"
+      },
+      "about": {
+        "label": "About this night",
+        "details": "Details",
+        "recordings_one": "One recording from {{source}}",
+        "recordings_other": "{{count}} recordings from {{source}}",
+        "napsNone": "no naps",
+        "naps_one": "one nap",
+        "naps_other": "{{count}} naps",
+        "action": "exclude or add a note"
+      },
+      "more": {
+        "label": "More about the sleep",
+        "light": "Light sleep",
+        "awake": "Awake in bed",
+        "inBed": "Time in bed",
+        "waketime": "Wake time",
+        "minutesToFallAsleep": "Time to fall asleep",
+        "awakenings": "Times woken",
+        "minutesAfterWakeUp": "Minutes after waking",
+        "naps": "Naps",
+        "napsNone": "none"
       }
     }
   },
@@ -953,12 +1041,12 @@
     "previousDay": "Previous day",
     "nextDay": "Next day",
     "mood": {
-      "label": "How do you feel?",
       "1": "Bad",
       "2": "Poor",
       "3": "Okay",
       "4": "Good",
-      "5": "Great"
+      "5": "Great",
+      "label": "How do you feel?"
     },
     "chips": {
       "label": "What happened?",
@@ -1469,7 +1557,20 @@
       "above": "above your usual {{low}} – {{high}}",
       "below": "below your usual {{low}} – {{high}}",
       "thin": "not enough history for a usual yet",
-      "partial": "so far; your usual day {{center}}"
+      "partial": "so far; your usual day {{center}}",
+      "none": "no usual yet",
+      "short": {
+        "above": "above your usual",
+        "below": "below your usual"
+      },
+      "clockShort": {
+        "above": "later than your usual",
+        "below": "earlier than your usual"
+      },
+      "paceShort": {
+        "above": "slower than your usual",
+        "below": "faster than your usual"
+      }
     },
     "asOf": {
       "time": "as of {{time}}",
@@ -1491,31 +1592,21 @@
       "title": "Last night",
       "asleep": "Time asleep",
       "efficiency": "Efficiency",
-      "bed": "Bed",
-      "woke": "Woke",
-      "strip": "Time asleep, last 7 nights",
-      "stripFinished": "Time asleep, the 7 nights up to that day",
-      "caption": "last 7 nights",
-      "captionFinished": "the 7 nights up to that day",
+      "bed": "Bedtime",
+      "woke": "Wake time",
+      "strip": "Time asleep, last night and the six before it",
+      "stripFinished": "Time asleep, that night and the six before it",
+      "caption": "last night and the six before it",
+      "captionFinished": "that night and the six before it",
+      "stages": "the night that ended {{date}}",
+      "stagesChart": "Sleep stages through the night that ended {{date}}",
       "link": "View this night",
-      "efficiencyStanding": {
-        "above": "higher than usual",
-        "below": "lower than usual"
-      },
-      "bedStanding": {
-        "above": "later than usual",
-        "below": "earlier than usual"
-      },
-      "wokeStanding": {
-        "above": "later than usual",
-        "below": "earlier than usual"
-      },
       "titleFinished": "That night"
     },
     "recovery": {
       "title": "Recovery",
       "index": "Recovery index",
-      "rhr": "Resting HR",
+      "rhr": "Resting heart rate",
       "hrv": "HRV",
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",
@@ -1542,12 +1633,6 @@
       "captionFinished": "the 7 days up to that day",
       "link": "View activity",
       "thatDay": "That day",
-      "dayStanding": {
-        "within": "Within your usual day",
-        "above": "Above your usual day",
-        "below": "Below your usual day"
-      },
-      "usualRange": "usual {{low}} – {{high}}",
       "heartRateWholeDay": "Heart rate · 00:00 → 24:00",
       "heartRateChartThatDay": "Heart rate that day"
     },
@@ -1562,7 +1647,7 @@
       "subtitleFinished": "the 7 days up to that day",
       "steps": "Steps",
       "active": "Active",
-      "asleep": "Asleep",
+      "asleep": "Time asleep",
       "perDay": "{{value}} a day",
       "perNight": "a night",
       "totalPer": "· {{per}}",

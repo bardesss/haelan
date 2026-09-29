@@ -126,7 +126,7 @@ export function WorkoutDetail() {
       <WorkoutHeader session={query.data} detail={detail} route={query.data.route} />
       <div className="workout-actions">
         <button type="button" className="button" onClick={() => setAnnotating(true)}>
-          {t('activity.workout.annotate')}
+          {t('common.annotate')}
         </button>
       </div>
       <div className="grid">

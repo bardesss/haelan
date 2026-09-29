@@ -262,7 +262,7 @@ export type {
   Glance, GlanceFigure, GlanceBaseline, GlanceStripDay, GlanceStaleSource, GlanceSleep, GlanceRecovery, GlanceDay, GlanceHeartRate,
   GlanceStanding, GlanceStepsPace, GlanceWeek, GlanceWeekFigure,
 } from './query/glance.ts'
-export { standingOf } from './query/glance.ts'
+export { figureDirection, standingOf } from './query/glance.ts'
 
 // M10a: the night and workout pages, reachable through PersonQuery.nightPage and .workoutPage, and
 // the judged figure shape both detail pages share. `judge` is exported as well, for the HTTP route

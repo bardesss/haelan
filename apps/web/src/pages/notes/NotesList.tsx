@@ -3,7 +3,7 @@ import { useTranslation } from '../../i18n/index.js'
 import type { Translate } from '../../format.js'
 import { useAnnotations, useRemoveEvent, useRemoveNote } from '../../data/useAnnotations.js'
 import type { AnnotationRange, StoredEvent, StoredNote } from '../../data/useAnnotations.js'
-import { SEED_KINDS } from '../../data/eventKinds.js'
+import { kindLabel } from '../../data/eventKinds.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { EmptyState } from '../../components/EmptyState.js'
@@ -23,12 +23,6 @@ interface Row {
   eventId: string | null
 }
 
-/** An event's own `kind` is free text past the SEED_KINDS the chart panel's datalist offers
- * (eventKinds.ts's own comment on why the column is not an enum), so only a seed kind is looked up
- * in the catalogue; anything else is the reader's own words, printed exactly as typed. */
-function kindLabel(t: Translate, kind: string): string {
-  return SEED_KINDS.includes(kind) ? t(`annotate.event.kinds.${kind}`) : kind
-}
 
 /**
  * Notes and events for the range, one row per item, newest day first. Two lists rather than one

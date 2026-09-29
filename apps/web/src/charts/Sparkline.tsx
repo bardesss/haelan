@@ -2,11 +2,13 @@ import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams, ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
 import { chartBase, dayMarks, dayPointDate, dayTableRows, escapeHtml, AXIS_FONT_SIZE, STROKE, OPACITY, SYMBOL } from './base.js'
-import type { PointStanding } from './base.js'
+import { verdictTone } from './base.js'
+import type { PointJudged, PointStanding } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatLocalDate, formatMetricValue } from '../format.js'
+import { METRICS } from '@haelan/core/metrics'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
 
@@ -93,13 +95,19 @@ export function bandStep(tokens: ChartTokens) {
 
 // Re-exported from base.ts (defined there so dayTableRows can read it too) rather than defined
 // here a second time: every existing caller imports `PointStanding` from this module.
-export type { PointStanding } from './base.js'
+export type { PointJudged, PointStanding } from './base.js'
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
-  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, opensDay, bands,
+  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, opensDay, bands,
+  standingUnit,
 }: {
+  // The unit code the values are in, which picks the words a day's verdict takes in the table
+  // (standingShort: a clock time later or earlier, a pace slower or faster). Defaults to the
+  // catalogue's unit for `metric`; a figure that is not in the catalogue (a workout's pace) names
+  // its own.
+  standingUnit?: string
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
   // comment says why a points array straight off /series is not enough. A day with no position on
@@ -192,12 +200,15 @@ export function Sparkline({
   // A dot on every day with a value, the latest one larger and in the primary text colour. Off
   // (the default, every caller but the dashboard's three strips) draws the plain line it always has.
   dots?: boolean
-  // One verdict per entry of `values`, from the server (GlanceStripDay.standing): a dot whose day
-  // is 'above' or 'below' takes the warning colour. Read, never worked out here: comparing a value
-  // against `baseline` in the client would be a second rule for the same verdict, and the server's
-  // own already knows what the client cannot (a thin band, a day still running). Ignored without
-  // `dots`; a missing entry is no verdict.
+  // One verdict per entry of `values`, from the server (GlanceStripDay.standing and .judged): a dot
+  // takes the tone its day's verdict line takes (verdictTone), green for a day judged better, the
+  // warning colour for one judged worse or for an unjudged day still outside its usual. Read, never
+  // worked out here: comparing a value against `baseline` in the client would be a second rule for
+  // the same verdict, and the server's own already knows what the client cannot (a thin band, a day
+  // still running). Ignored without `dots`; a missing entry is no verdict. A caller that passes
+  // standings without judgements colours every day outside its usual as out.
   pointStandings?: readonly PointStanding[]
+  pointJudged?: readonly PointJudged[]
   // The dashboard's strips (M9c), where a click on a dot opens that day rather than annotating it.
   // `current` is the day already on screen: it opens nothing, so a click on it does nothing, a tap
   // on a phone does not select it, and its tooltip does not offer it. Every other day with a value
@@ -343,11 +354,11 @@ export function Sparkline({
         data: dots
           ? values.map((v, i) => {
             if (v === null) return null
-            const standing = pointStandings[i] ?? null
-            const out = standing === 'above' || standing === 'below'
+            const tone = verdictTone(pointJudged[i] ?? null, pointStandings[i] ?? null)
             const isLatest = i === latest
+            const color = tone === 'better' ? tokens.positive : tone !== null ? tokens.negative : isLatest ? tokens.primary : tokens.series
             return { value: v, symbolSize: isLatest ? DOT.latest : DOT.day,
-              itemStyle: { color: out ? tokens.negative : isLatest ? tokens.primary : tokens.series,
+              itemStyle: { color,
                 borderColor: tokens.surface, borderWidth: isLatest ? DOT.rim : 0 } }
           })
           : values,
@@ -434,7 +445,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, latest, bands])
+  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, pointJudged, latest, bands])
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current
@@ -472,7 +483,8 @@ export function Sparkline({
           // dayTableRows (base.ts): shared with DailyBars' own accessible table, which needs
           // neither the trend column nor the episodic filter, so both default off there.
           rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend,
-            lastYear: comparing ? lastYear : undefined, standings: dots ? pointStandings : undefined }),
+            lastYear: comparing ? lastYear : undefined, standings: dots ? pointStandings : undefined,
+            standingUnit: standingUnit ?? METRICS[metric]?.unit }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can

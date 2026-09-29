@@ -9,7 +9,7 @@ import { MoodFaces } from './MoodFaces.js'
 import { PresetEditor } from './PresetEditor.js'
 import { useSession } from '../../auth/session.js'
 import type { GlanceLog } from '../../data/useGlance.js'
-import { SEED_KINDS } from '../../data/eventKinds.js'
+import { SEED_KINDS, kindLabel as sharedKindLabel } from '../../data/eventKinds.js'
 import {
   dayLogKey, useDayLog, useQuickLogTap, useSaveNote, useSetMood, useUndoTap,
 } from '../../data/useQuickLog.js'
@@ -204,7 +204,7 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
     )
   }
 
-  const kindLabel = (kind: string) => SEED_KINDS.includes(kind) ? t(`annotate.event.kinds.${kind}`) : kind
+  const kindLabel = (kind: string) => sharedKindLabel(t, kind)
   const chipName = (kind: string, count: number) => count === 0 ? kindLabel(kind)
     : isToday ? t('logPanel.chips.countToday', { kind: kindLabel(kind), count })
       : t('logPanel.chips.countDay', { kind: kindLabel(kind), count })

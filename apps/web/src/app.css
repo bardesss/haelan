@@ -578,25 +578,131 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    on this line to align it against. */
 .workout-actions { display: flex; justify-content: flex-end; }
 
-/* NightDetail.tsx's own heading, the same shape .workout-header is: a page title followed by one
-   line naming when the night ran and who recorded it, above the `.grid` rather than one of the
-   cards inside it. */
-.night-header { display: flex; flex-direction: column; gap: var(--space-1); }
-.night-title { font-size: var(--font-size-xl); margin: 0; }
-.night-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
-
 /* Not a grid of its own: WorkoutTiles.tsx's own comment says why - the page's `.grid` above is
    already this section's grid, and `display: contents` makes each `Card` child a direct grid item
    of it, exactly as an unwrapped card would be, while still giving this section's own tests a
    selector to query under. */
 .workout-tiles { display: contents; }
-.night-tiles { display: contents; }
-/* NightTraces.tsx wraps each metric's own Card in this class, one wrapper per card rather than one
-   around the group the way .night-tiles is above: the tests count `.night-trace` elements to
-   assert how many of the three metrics rendered a card, and a single group wrapper could not tell
-   that apart from a group of one. `display: contents` for the same reason as .night-tiles: the
-   wrapper must not become a grid item itself, only its `Card` child should. */
-.night-trace { display: contents; }
+
+/* --- The detail pages (M10a): what the night page and the workout page share. The header row is
+   the dashboard's own (PageHeader.tsx: .dash-header and .day-nav), so it is not repeated here;
+   these are the pieces below it that both pages draw, under one set of names so the two cannot
+   drift into two spellings of the same card. --- */
+/* The dashboard's measure: a detail page reads as a composition the way the home screen does. */
+.detail-page { max-width: 1200px; margin-inline: auto; }
+/* A card's label directly over its first row or figure: the label is an inline span, so without
+   this the row's own uppercase label sat flush under it and read as one label doubled. */
+.detail-page .card > .label + :not(.basis), .detail-page .card > .basis + * { margin-top: var(--space-3); }
+/* The hero: the figure in display type and its verdict, the strip beside it (the dashboard's
+   .dash-lead does the layout). */
+.detail-hero { justify-content: space-between; }
+.detail-hero-value { font-variant-numeric: tabular-nums; }
+/* A verdict line under a figure. Coloured the way FigureRow colours its own (verdictTone): judged
+   better or worse, or outside the usual on a figure judged neither way (the dashboard's is-out). */
+.detail-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.detail-verdict.better { color: var(--positive); }
+.detail-verdict.worse, .detail-verdict.is-out { color: var(--negative); }
+/* The figures under the hero, and every other card that is a grid of FigureRows (FigureRows): one
+   column per row up to its cap (data-columns, four across a full card, three where a card gives
+   them three quarters), two below the grid's collapse width (the GRID_STACK_WIDTH block, for the
+   reason given there). */
+.detail-minis { display: flex; flex-direction: column; gap: var(--space-2); }
+.detail-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+.detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.detail-rows[data-columns="2"], .detail-side-rows[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-rows[data-columns="3"], .detail-side-rows[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-rows[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* SideCard (pages/detail/DayLogBlock.tsx): a narrow column naming the day or night the section is
+   about, the section's rows beside it; stacked below the grid's collapse width. */
+.detail-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
+.detail-side-caption { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.detail-side-body { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.detail-side-rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+/* A chart's legend: each key in its series' colour, then its words, wrapping onto a second line on
+   a phone. The keys' colours are the caller's (the night's stages, further down). */
+.detail-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); list-style: none; margin: var(--space-2) 0 0; padding: 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.detail-legend li { display: inline-flex; align-items: center; gap: var(--space-1); }
+.detail-legend-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+/* The About fold at the foot of a detail page: one line saying what is behind it, then a
+   disclosure closed by default. Mirrors .status-failure-details' own summary styling
+   (StatusPanel.tsx), the app's other disclosure triangle. */
+.detail-about-line { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
+.detail-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
+.detail-about[open] summary { margin-bottom: var(--space-2); }
+/* A day's quick log (DayLogBlock): the mood face and its word beside the chips, the note under. */
+.day-log { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); }
+.day-log-mood { display: flex; align-items: center; gap: var(--space-2); }
+.day-log-mood-word { font-size: var(--font-size-sm); color: var(--text-secondary); }
+.day-log-chips { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); list-style: none; margin: 0; padding: 0; }
+.day-log-chip {
+  font-size: var(--font-size-xs); color: var(--text-secondary); background: var(--surface-inset);
+  border: 1px solid var(--border-subtle); border-radius: 999px; padding: 2px 10px;
+}
+.day-log-note { flex-basis: 100%; margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); font-style: italic; }
+@media (max-width: 620px) {
+  /* The About fold's toggle is small text; a finger still needs 44px. The summary stays a list
+     item, so it keeps its disclosure triangle (.status-failure-details summary's own reason), and
+     align-content centres the text in the taller block. */
+  .detail-about summary { display: list-item; min-height: 44px; align-content: center; }
+}
+/* --- end detail pages --- */
+
+/* --- The night detail page (M10a-2), NightDetail.tsx: what only the night draws. --- */
+.night-week-total { font-variant-numeric: tabular-nums; }
+.night-week-against { margin: var(--space-1) 0 var(--space-3); font-size: var(--font-size-sm); color: var(--text-secondary); }
+/* Under the balance bars: what each bar is measured against (the mockup's "elke balk: ..."). */
+.night-week-bars-caption { margin-top: var(--space-2); }
+/* Under the recovery ring: the index's usual, then what it is made of. */
+.night-recovery-usual, .night-recovery-from { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); text-align: center; }
+.night-recovery-from { color: var(--text-muted); }
+
+/* NightMorning.tsx's own two-column layout: the recovery ring at a quarter width, its five
+   readings taking the rest, stacked on a phone the way every other side-by-side pair on this page
+   already collapses. It stacks at the grid's own collapse width, not the phone's: see that
+   block (the one at GRID_STACK_WIDTH) for why. */
+.night-grp { display: grid; grid-template-columns: 1fr 3fr; gap: var(--space-4); align-items: center; }
+
+/* NightTraces.tsx's rows inside the night card, under the hypnogram (the approved mockup's "The
+   night"): a short label and the night's extreme in a fixed left column, the compact trace beside
+   it. On a phone the column stacks over the chart, so the chart keeps the card's full width. */
+.night-traces { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+.night-trace { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: var(--space-3); align-items: center; }
+.night-trace-head { min-width: 0; }
+.night-trace-chart { min-width: 0; }
+@media (max-width: 620px) {
+  .night-trace { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+}
+.night-traces-basis { margin: 0; font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-tight); }
+/* NightTraces.tsx's line under each row's label: the night's extreme and when. */
+.night-trace-summary { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+
+/* NightThrough.tsx's stage legend (a .detail-legend): each stage's key in its own lane colour. */
+.detail-legend-key[data-stage="deep"] { background: var(--chart-stage-deep); }
+.detail-legend-key[data-stage="light"] { background: var(--chart-stage-light); }
+.detail-legend-key[data-stage="rem"] { background: var(--chart-stage-rem); }
+.detail-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
+
+/* NightSessions.tsx's own list, task 7's exclude-per-session card, inside the About fold.
+   A plain list rather than a table: each row is a recording plus one control or one status word, not
+   values under column headers. .night-session mirrors .night-row's own bottom-border-between-rows
+   shape (NightList/NightRow, Sleep.tsx's own list) without reusing that class outright, since this
+   row carries a button or a status span where that one carries a link to a whole other page. */
+.night-sessions { list-style: none; margin: 0; padding: 0; }
+.night-session {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
+}
+.night-session:last-child { border-bottom: 0; }
+/* The recording's name, its source and clock times (NightSessions.tsx), tabular-nums for the reason
+   .night-row-clock is: a column of clock times keeps one width row to row. */
+.night-session-label { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+/* The button keeps its words on one line: on a phone the row wraps and the button takes a line of
+   its own rather than folding into a two-line, 50px-tall block beside the label. */
+.night-session .button { white-space: nowrap; }
+/* The status word for a session already in night.excludedSessions - no button beside it, since
+   this card offers no second way to un-exclude one (see NightSessions.tsx's own comment on why). */
+.night-session-excluded { font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; }
+/* --- end night detail page --- */
 
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
    the same card - each is its own Card, this only styles the table each one wraps. */
@@ -671,6 +777,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-comparison { margin: 0; padding-left: var(--space-4); }
 
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
+/* A card's label is its heading (Card.tsx): the label's look, none of a heading's own spacing. */
+h2.label { margin: 0; }
 .value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }
@@ -726,30 +834,6 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* The dashboard's compact hypnogram: its totals as one faint line under the stage blocks. */
 .hypnogram-totals.is-compact { margin: 0; color: var(--text-faint); }
 
-/* NightStages.tsx's own nap line, beneath the hypnogram and above NightExcludedSessions' own
-   .chart-note - a step up from .hypnogram-totals' caption size, since this is body text stating a
-   fact about the night rather than a chart's own small print. */
-.night-naps { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
-
-/* NightSessions.tsx's own list, task 7's exclude-per-session card, last in the night page's grid.
-   A plain list rather than a table: each row is an id plus one control or one status word, not
-   values under column headers. .night-session mirrors .night-row's own bottom-border-between-rows
-   shape (NightList/NightRow, Sleep.tsx's own list) without reusing that class outright, since this
-   row carries a button or a status span where that one carries a link to a whole other page. */
-.night-sessions { list-style: none; margin: 0; padding: 0; }
-.night-session {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
-}
-.night-session:last-child { border-bottom: 0; }
-/* The id itself: a sync id from whichever source produced the session, tabular-nums for the same
-   reason .night-row-clock is - it is often mostly digits, and this keeps a column of them from
-   jittering width row to row. */
-.night-session-id { font-variant-numeric: tabular-nums; color: var(--text-primary); word-break: break-all; }
-/* The status word for a session already in night.excludedSessions - no button beside it, since
-   this card offers no second way to un-exclude one (see NightSessions.tsx's own comment on why). */
-.night-session-excluded { font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; }
-
 /* The sentence an insight card exists to print, not a caption beside a value: unlike .basis
    (muted, font-size-xs) this is the whole content of the card, so it reads at body size in the
    primary text colour rather than as a subordinate line under something else. */
@@ -783,18 +867,29 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* Dashboard.tsx: the page's own measure. A home screen reads as a composition, and past 1200px the
    lead card's hypnogram and the dials drift apart. Other pages keep .main's 1500px (spec: width). */
 .dashboard { max-width: 1200px; margin-inline: auto; }
-.dash-date { margin: 0 0 var(--space-4); font-size: var(--font-size-xs); color: var(--text-muted); }
+/* PageHeader's line: one line at every width, an ellipsis where it runs out (a phone, a long Dutch
+   line at 800). The gap to the first card is the header's own margin, not this line's, so a state
+   without a line keeps the same gap (PageHeader keeps an empty line's place for the height). */
+.dash-date { margin: 0; font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Dashboard.tsx's header: the title and its line on the left, DayNav.tsx's buttons on the right, one
    row at every width. On a phone the title wraps inside its own column rather than pushing the
    buttons onto a second line (spec M9c, "Phone"). */
-.dash-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.dash-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
 .dash-heading { flex: 1 1 auto; min-width: 0; }
 .dash-title { font-size: var(--font-size-lg); margin: 0 0 var(--space-1); }
 .day-nav { display: flex; flex-wrap: nowrap; flex-shrink: 0; gap: var(--space-1); }
 /* The previous day's cards, held on screen while the day stepped to loads (useGlance's placeholder). */
 .dashboard-grid-stale { opacity: .6; transition: opacity .15s; }
-.day-nav-btn { min-width: 36px; justify-content: center; }
-.day-nav-today { justify-content: center; }
+/* An explicit height, so a row of arrows alone (a detail page's) is as tall as the dashboard's,
+   where a labelled button beside them set it; the phone block's 44px still wins below 620px. */
+.day-nav-btn { min-width: 36px; min-height: 32px; justify-content: center; }
+/* A stepped-to-the-end arrow dims and keeps the card fill. .button:disabled's grey fill is meant for a
+   form's inert action; in the light theme it made the arrow read as a filled chip beside its live twin.
+   Same specificity as that rule, so it wins by coming later. */
+.day-nav-btn:disabled { background: var(--surface-card); }
+.day-nav-today { min-height: 32px; justify-content: center; }
+/* A detail page's way back to its list (DetailNav): a link that is the Today button's twin. */
+.day-nav-back { min-height: 32px; justify-content: center; text-decoration: none; white-space: nowrap; }
 
 /* GlanceCalendar.tsx, the day navigator's calendar (spec M9c, "The calendar (C2)"). The popover is
    fixed and portalled like .status-popover, placed under the button by placementFor through inline
@@ -1015,15 +1110,26 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .dash-mini { display: inline-flex; align-items: baseline; gap: var(--space-1); }
 .dash-mini-label { color: var(--text-faint); }
 .dash-mini-value { font-size: var(--font-size-md); font-weight: var(--weight-semibold); }
-.dash-mini-value.is-out, .dash-mini-note { color: var(--negative); }
+/* A mini's note takes the tone of the server's verdict (verdictTone): better green, worse or outside
+   a neutral usual red. The value stays plain, as a detail page's figures do (PATTERNS.md). The row
+   wraps between its value and its note, and neither breaks inside itself: on a phone the note takes
+   a line of its own rather than splitting mid-phrase, and a two-word label stays on one line. */
+.dash-mini { flex-wrap: wrap; }
+.dash-mini-label, .dash-mini-note { white-space: nowrap; }
+.dash-mini-note.better { color: var(--positive); }
+.dash-mini-note.worse, .dash-mini-note.is-out { color: var(--negative); }
 .dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 
-/* TodayCard.tsx: the two headline figures side by side on one line, and the pace line under them. */
-.dash-today-figures { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-6); }
+/* TodayCard.tsx: the two headline figures side by side on one line, the pace line under the steps.
+   Aligned at the top, so the figures stay level whatever length the steps' line runs to. */
+.dash-today-figures { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-6); }
 .dash-headline-sm { font-size: var(--font-size-xl); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -.02em; }
 .dash-pace { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
 .dash-pace-word { font-weight: var(--weight-medium); }
 .dash-pace.is-ahead .dash-pace-word { color: var(--positive); }
+/* A finished day's verdict line, in the tone of its judgement (TodayCard). */
+.dash-pace.better { color: var(--positive); }
+.dash-pace.worse, .dash-pace.is-out { color: var(--negative); }
 .glance-unit { font-size: var(--font-size-lg); color: var(--text-muted); }
 .glance-asof { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }
 .glance-note { margin: 0; font-size: var(--font-size-xs); color: var(--negative); }
@@ -1085,15 +1191,19 @@ button.week-bar-slot { cursor: pointer; }
 /* FigureRow (M10a): one figure on a detail page against its usual range, shared by the night and
    workout pages. */
 .figure-row { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.figure-row-label { font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+/* The row's label is a .label (FigureRow.tsx), so it takes the card label's own type; this only
+   keeps a label that wraps to two lines ("Actieve minuten") from spreading them apart. */
+.figure-row-label { line-height: var(--leading-tight); }
 .figure-row-value { font-size: var(--font-size-lg); font-weight: var(--weight-semibold); color: var(--text-primary); }
+/* The unit after a row's number (FigureRow), smaller, as the dashboard sets "18 min". */
+.figure-row-unit { font-size: var(--font-size-sm); font-weight: var(--weight-medium); color: var(--text-secondary); }
 .figure-row-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-inset); }
 .figure-row-band { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--chart-band-baseline); }
 .figure-row-mark { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text-primary); }
-.figure-row-mark.worse { background: var(--negative); }
+.figure-row-mark.worse, .figure-row-mark.is-out { background: var(--negative); }
 .figure-row-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
 .figure-row-verdict.better { color: var(--positive); }
-.figure-row-verdict.worse { color: var(--negative); }
+.figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
 
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
@@ -1220,6 +1330,10 @@ button.week-bar-slot { cursor: pointer; }
   clip-path: inset(50%); white-space: nowrap; border: 0; padding: 0; margin: -1px;
 }
 
+/* ChartFigure's figure, without the browser's default margin. One class, so the detail pages'
+   card-label gap (.detail-page .card > .label + ...) still outweighs it; inline, it did not. */
+.chart-figure { margin: 0; }
+
 /* The table's own control, deliberately lighter than `.button`: it sits under every chart on
    every page, so it is text rather than a bordered box. Spec section 5.3 sets the weight. */
 .chart-table-toggle { background: none; border: 0; padding: 2px 0; font-size: var(--font-size-micro); color: var(--text-faint); cursor: pointer; }
@@ -1244,28 +1358,40 @@ button.week-bar-slot { cursor: pointer; }
 .chart-table thead th { position: sticky; top: 0; background: var(--surface-card); color: var(--text-faint); }
 
 /* .grid > * reaches every ordinary grid item, but not a Card sitting one level under a
-   `display: contents` wrapper (.workout-tiles, .night-tiles, .night-trace above): display:
-   contents changes which boxes become grid items, but a CSS combinator still walks the real DOM,
-   where the Card is a child of the wrapper, not of .grid itself - so its own span (3, here) never
-   collapsed to 12 below this breakpoint. Latent on WorkoutTiles, whose labels all happened to fit
-   inside a quarter-width card and so never showed it; real on M7b's own night page, where the
-   Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
+   `display: contents` wrapper (.workout-tiles above): display: contents changes which boxes
+   become grid items, but a CSS combinator still walks the real DOM, where the Card is a child of
+   the wrapper, not of .grid itself - so its own span (3, here) never collapsed to 12 below this
+   breakpoint. Real on M7b's own night page (M10a-2 task 8 removed that page's own wrapper,
+   .night-tiles, along with the rest of NightTiles.tsx; this rule and its history stayed relevant
+   because .workout-tiles is still a `display: contents` wrapper with the identical shape):
+   the Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
    375px viewport (measured: 424px scrollWidth in a 375px viewport, and 651px in the 621px band).
-
-   Three wrappers listed, but only one of them ever had a card to collapse. .night-tiles is the
-   real one, the overflow above. .workout-tiles was latent: same shape, `span={3}` cards, and its
-   labels happened to fit. .night-trace is neither - NightTraces.tsx renders `<Card span={12}>`
-   inside it, already the full width this rule would set - so `.night-trace > *` is a no-op today
-   and is kept only so the list covers every `display: contents` wrapper in the file rather than
-   the subset that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
+   .workout-tiles was latent there too - same shape, `span={3}` cards, and its labels happened to
+   fit - so it is listed alongside every other `display: contents` wrapper in the file rather than
+   only the one that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
    the wrappers out of this stylesheet and fails if one of them is missing from the list below,
-   including the fourth nobody has written yet. */
+   including the next nobody has written yet. */
 @media (max-width: 900px) {
-  .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; }
+  .grid > *, .workout-tiles > * { grid-column: span 12 !important; }
   /* Where every card spans the row, a week bar is a finger's target: the bars take the row's full
      width under the figure, seven 44px slots at the narrowest phone. */
   .dash-week-row { grid-template-columns: minmax(0, 1fr); }
   .week-bars { width: 100%; height: 44px; }
+  /* NightMorning's ring and readings stack here rather than at the phone breakpoint, and the
+     readings go two across: the rail keeps its 186px between the two widths, so a 621px window
+     leaves this card the same ~360px a phone does. Side by side there, the three reading columns
+     came out 76px each, narrower than one unbreakable word ("Huidtemperatuur", "ademh./min", 122px
+     and more), and the page ran 25px past the viewport. Stacked but still three across is 109px,
+     not enough either; two across is 170px. */
+  .night-grp { grid-template-columns: minmax(0, 1fr); }
+  /* Every detail page's rows, for the same reason: between 620px and 900px the minis under the
+     night's hero and "more about the sleep" stayed four across where a phone already had two,
+     and at a 621px window each column came out under 80px, narrower than one uppercase label.
+     The side cards stack their caption over their rows here too. */
+  .detail-rows, .detail-side-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .detail-rows[data-columns], .detail-side-rows[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean

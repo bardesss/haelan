@@ -13,6 +13,7 @@ import { openHaelan } from '../src/instance.ts'
 import { PeopleStore } from '../src/store/people.ts'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
 import { MERGED_SOURCE } from '../src/derive/rollup.ts'
+import { PersonQuery } from '../src/query/personQuery.ts'
 
 const END = Date.parse('2026-03-01T00:00:00Z')
 
@@ -190,6 +191,51 @@ describe('seedArchive', () => {
     } finally {
       // Handles closed before the directory comes down: an open SQLite handle on Windows turns
       // rmSync's EPERM into the error a failing coverage assertion would otherwise report.
+      instance.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  // The demo's night page draws every section only if a seeded night carries what each one reads:
+  // the provider's summary (latency, awakenings), the intraday HRV and SpO2 its traces plot, the
+  // nightly temperature and breathing rate the morning after names. Asserted through nightPage
+  // after a real rebuild, since each of those only exists once the app has derived it.
+  it('gives a seeded night everything the night page shows', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-night-page-'))
+    const instance = openHaelan(dir)
+    try {
+      seedPerson(instance.db, 'p1')
+      const endMs = localMidnightMs('2026-09-07')
+      seedArchive({ archive: instance.archive, personId: 'p1', days: 21, endMs })
+      const report = runRebuild({
+        db: instance.db, archive: instance.archive, peopleStore: new PeopleStore(instance.db),
+        priority: instance.sourcePriority, overrides: instance.overrides, settings: instance.settings, nowMs: endMs,
+      })
+      expect(report.failures).toEqual([])
+      const q = new PersonQuery(instance.db, 'p1')
+      const page = q.nightPage({
+        localDate: '2026-09-06', today: '2026-09-07', nowMs: endMs, nameOf: (id) => id,
+        sleepTargetMinutes: 480, sleepUseBaseline: true,
+      })
+      expect(page).not.toBeNull()
+      const { figures, traces, morning, night } = page!
+      expect(figures.minutesToFallAsleep.value).toBeGreaterThanOrEqual(5)
+      expect(figures.minutesToFallAsleep.value).toBeLessThanOrEqual(25)
+      expect(figures.awakenings.value).toBeGreaterThanOrEqual(8)
+      expect(figures.awakenings.value).toBeLessThanOrEqual(18)
+      expect(figures.minutesAfterWakeUp.value).not.toBeNull()
+      expect(traces.spo2.stat.lowest!.value).toBeGreaterThanOrEqual(93)
+      expect(traces.spo2.stat.highest!.value).toBeLessThanOrEqual(98)
+      expect(traces.hrv.stat.lowest!.value).toBeGreaterThanOrEqual(30)
+      expect(traces.hrv.stat.highest!.value).toBeLessThanOrEqual(70)
+      expect(morning.skinTemperature.value).not.toBeNull()
+      expect(morning.breathing.value).not.toBeNull()
+      expect(morning.spo2.value).not.toBeNull()
+      // Every five minutes through the night, not the hourly day curve alone.
+      const perMetric = (metric: string) => q.intradayWindow({ metric, startMs: night.startMs, endMs: night.endMs, points: 100_000 }).points.length
+      const expected = Math.floor((night.endMs - night.startMs) / 300_000)
+      for (const metric of ['heart_rate', 'hrv', 'spo2']) expect(perMetric(metric), metric).toBeGreaterThanOrEqual(expected - 1)
+    } finally {
       instance.close()
       rmSync(dir, { recursive: true, force: true })
     }

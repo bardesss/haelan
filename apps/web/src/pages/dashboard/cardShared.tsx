@@ -72,14 +72,19 @@ export function stripBands(strip: readonly GlanceStripDay[]): ({ low: number, hi
  * `current` is the day the page shows, which is never an opener - it is already open. Nothing at
  * all without `onOpenDay`, so a card mounted without somewhere to go keeps a plain strip.
  * Memoised, since `onPointClick` reaches Sparkline's click resolver's dependencies.
+ *
+ * `opens` names what a dot opens, for the words: a day (the dashboard's strips) or a night (the
+ * night page's strip, whose dots open a night's own page, "Tap a night to open it").
  */
-export function useOpensDay(current: string, onOpenDay: ((day: string) => void) | undefined) {
+export function useOpensDay(current: string, onOpenDay: ((day: string) => void) | undefined, opens: 'day' | 'night' = 'day') {
   const { t } = useTranslation()
   return useMemo(() => onOpenDay === undefined ? {} : {
     onPointClick: onOpenDay,
     opensDay: {
-      current, tail: t('glance.openDay'), idle: t('glance.openDayIdle'),
+      current,
+      tail: t(opens === 'night' ? 'sleep.night.openNight' : 'glance.openDay'),
+      idle: t(opens === 'night' ? 'sleep.night.openNightIdle' : 'glance.openDayIdle'),
       named: (name: string) => t('glance.openDayNamed', { date: name }),
     },
-  }, [current, onOpenDay, t])
+  }, [current, onOpenDay, opens, t])
 }

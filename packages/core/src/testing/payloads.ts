@@ -76,6 +76,34 @@ export const dailyRollupBody = (payloadKey: string, windows: RollupWindow[]): st
     })),
   })
 
+// The three figures of a provider summary no stage timeline can give. Everything else in the
+// summary is worked out from the stages themselves, so the two never disagree about the night.
+export interface SleepSummaryInput { minutesToFallAsleep: number, minutesAfterWakeUp: number, awakenings: number }
+
+const minutesBetween = (startTime: string, endTime: string): number =>
+  (Date.parse(endTime) - Date.parse(startTime)) / 60_000
+
+// The stored shape (probe/findings/field-map.md's sleep.summary), every number a string the way
+// the provider sends int64s. Per-stage minutes and counts come from the stage list; AWAKE's count
+// is the caller's instead, because a real night's awakenings are mostly short ones the stage
+// list never carries as segments of their own.
+function sleepSummaryOf(o: { startTime: string, endTime: string, stages: SleepStage[] }, input: SleepSummaryInput): Record<string, unknown> {
+  const types = ['AWAKE', 'LIGHT', 'DEEP', 'REM']
+  const minutesOf = (type: string) => Math.round(o.stages.filter((s) => s.type === type)
+    .reduce((sum, s) => sum + minutesBetween(s.startTime, s.endTime), 0))
+  const countOf = (type: string) => (type === 'AWAKE' ? input.awakenings : o.stages.filter((s) => s.type === type).length)
+  const inPeriod = Math.round(minutesBetween(o.startTime, o.endTime))
+  const awake = minutesOf('AWAKE')
+  return {
+    minutesInSleepPeriod: String(inPeriod),
+    minutesAsleep: String(inPeriod - awake),
+    minutesAwake: String(awake),
+    minutesToFallAsleep: String(input.minutesToFallAsleep),
+    minutesAfterWakeUp: String(input.minutesAfterWakeUp),
+    stagesSummary: types.map((type) => ({ type, minutes: String(minutesOf(type)), count: String(countOf(type)) })),
+  }
+}
+
 export function sleepPoint(o: {
   name?: string
   startTime: string
@@ -84,6 +112,8 @@ export function sleepPoint(o: {
   stages: SleepStage[]
   mainSleep?: boolean
   dataSource?: Record<string, unknown>
+  /** Omitted, the point carries no summary at all, the shape every earlier fixture was built on. */
+  summary?: SleepSummaryInput
 }): Record<string, unknown> {
   const offset = o.utcOffset ?? '7200s'
   return {
@@ -97,6 +127,7 @@ export function sleepPoint(o: {
       type: 'STAGES',
       metadata: { mainSleep: o.mainSleep ?? true, processed: true, stagesStatus: 'SUCCEEDED' },
       stages: o.stages.map((s) => ({ ...s, startUtcOffset: offset, endUtcOffset: offset })),
+      ...(o.summary ? { summary: sleepSummaryOf(o, o.summary) } : {}),
     },
   }
 }
