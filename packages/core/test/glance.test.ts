@@ -291,7 +291,7 @@ describe('readRecovery', () => {
     expect(recovery.band).not.toBeNull()
     expect(recovery.missing).toBeNull()
     // The strip is the index's week, still ending on today, where today is a gap.
-    expect(recovery.index.strip.at(-1)).toEqual({ localDate: TODAY, value: null, band: null, standing: null })
+    expect(recovery.index.strip.at(-1)).toEqual({ localDate: TODAY, value: null, band: null, standing: null, judged: null })
     expect(recovery.index.strip.at(-2)!.value).toBe(recovery.index.value)
   })
 
@@ -353,6 +353,33 @@ describe('strip standing', () => {
     expect(byDate.get('2026-08-18')).toBe('above')
     expect(byDate.get('2026-08-17')).toBe('within')
     expect(byDate.get(TODAY)).toBe('within')
+  })
+
+  // A strip day is judged the way its figure is (the metric's direction), so a dot and the verdict
+  // line beside it can take the same colour: a lower resting heart rate is better, a higher worse.
+  it('judges each strip day by the metric\'s direction, and the figure by the same rule', () => {
+    for (const date of datesEnding('2026-08-19', 60)) {
+      if (date === '2026-08-16' || date === '2026-08-18') continue
+      insert({ metric: 'resting_heart_rate', agg: 'last', localDate: date, value: 55 + (Number(date.slice(-1)) % 3) })
+    }
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: '2026-08-16', value: 10 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: '2026-08-18', value: 200 })
+    insert({ metric: 'resting_heart_rate', agg: 'last', localDate: TODAY, value: 200 })
+    const figure = dailyFigure(ctx(), { metric: 'resting_heart_rate', agg: 'last', on: TODAY, partial: false, asOfMs: null })
+    const byDate = new Map(figure.strip.map((d) => [d.localDate, d.judged]))
+    expect(byDate.get('2026-08-16')).toBe('better')
+    expect(byDate.get('2026-08-18')).toBe('worse')
+    expect(byDate.get('2026-08-17')).toBeNull()
+    expect(figure.judged).toBe('worse')
+  })
+
+  it('judges nothing on a neutral metric, however far outside its usual a day sits', () => {
+    for (const date of datesEnding('2026-08-19', 60)) insert({ metric: 'sleep_bedtime_minutes', agg: 'last', localDate: date, value: -30 + (Number(date.slice(-1)) % 3) })
+    insert({ metric: 'sleep_bedtime_minutes', agg: 'last', localDate: TODAY, value: 120 })
+    const figure = dailyFigure(ctx(), { metric: 'sleep_bedtime_minutes', agg: 'last', on: TODAY, partial: false, asOfMs: null })
+    expect(figure.standing).toBe('above')
+    expect(figure.judged).toBeNull()
+    expect(figure.strip.at(-1)!.judged).toBeNull()
   })
 
   it('has no standing on a thin band, anywhere in the strip', () => {
@@ -421,7 +448,7 @@ describe('readGlance', () => {
 })
 
 describe('weekOf', () => {
-  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, band: null, standing: null }))
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, band: null, standing: null, judged: null }))
   it('averages the six finished days and never today', () => {
     expect(weekOf(strip([1, 2, 3, 4, 5, 6, 1000]))).toEqual({ perDay: 3.5, days: 6, total: 1021 })
   })
@@ -437,7 +464,7 @@ describe('weekOf', () => {
 })
 
 describe('weekOfFinished', () => {
-  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, band: null, standing: null }))
+  const strip = (values: (number | null)[]) => values.map((value, i) => ({ localDate: `2026-08-${String(14 + i).padStart(2, '0')}`, value, band: null, standing: null, judged: null }))
   it('averages all seven days, the last included, because a night strip ends on a finished night', () => {
     expect(weekOfFinished(strip([1, 2, 3, 4, 5, 6, 7]))).toEqual({ perDay: 4, days: 7, total: 28 })
   })

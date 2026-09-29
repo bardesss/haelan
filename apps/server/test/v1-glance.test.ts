@@ -156,6 +156,41 @@ describe('GET /api/v1/p/:personId/glance', () => {
     expect(body.recovery.restingHeartRate.value).toBe(60)
     expect(body.recovery.restingHeartRate.baseline.high).toBe(60)
     expect(body.recovery.restingHeartRate.standing).toBe('within')
+    // `judged` follows the rounded standing too: core judged the unrounded 59.8 worse (above, and a
+    // higher resting heart rate is worse), and a red dot beside "within your usual" is the mismatch
+    // the per-day judgement exists to prevent. The strip's last day is the figure's own.
+    expect(body.recovery.restingHeartRate.judged).toBeNull()
+    expect(body.recovery.restingHeartRate.strip.at(-1).judged).toBeNull()
+  })
+
+  // Each strip day carries its judgement (the metric's direction over its standing), through the
+  // route's rounding, so a dot can take the verdict line's colour rather than a colour of its own.
+  it('judges each strip day and each figure by its metric\'s direction', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = Date.parse('2026-08-20T08:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'w1', personId: 'p1', externalId: 'w1', displayName: 'Watch', kind: 'device', createdAtMs: 0 }).run()
+    const row = (metric: string, agg: string, localDate: string, value: number) => db.insert(schema.daily).values({
+      personId: 'p1', localDate, metric, agg, source: 'merged', value, coverage: 1, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    for (let i = 0; i < 60; i += 1) {
+      const localDate = new Date(Date.parse('2026-08-19T00:00:00Z') - i * 86_400_000).toISOString().slice(0, 10)
+      if (localDate === '2026-08-18' || localDate === '2026-08-17') continue
+      row('steps', 'sum', localDate, 8000 + (i % 3) * 100)
+      row('resting_heart_rate', 'last', localDate, 55 + (i % 3))
+    }
+    row('steps', 'sum', '2026-08-18', 20000)
+    row('steps', 'sum', '2026-08-17', 8100)
+    row('resting_heart_rate', 'last', '2026-08-18', 70)
+    row('resting_heart_rate', 'last', '2026-08-20', 70)
+    const body = (await get(harness, token, '/glance')).json()
+    const judgedOn = (strip: Array<{ localDate: string, judged: string | null }>, date: string) => strip.find((d) => d.localDate === date)?.judged
+    expect(judgedOn(body.day.steps.strip, '2026-08-18')).toBe('better')
+    expect(judgedOn(body.day.steps.strip, '2026-08-17')).toBeNull()
+    expect(judgedOn(body.recovery.restingHeartRate.strip, '2026-08-18')).toBe('worse')
+    expect(body.recovery.restingHeartRate.judged).toBe('worse')
   })
 
   it('carries a steps pace once today has a step sample, rounded to a whole step', async () => {
