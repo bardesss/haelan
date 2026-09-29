@@ -306,3 +306,6 @@ export type {
 export {
   PERIOD_MIN_PERIODS, PERIOD_MIN_DAYS, blockMean, periodUsual, periodFigureOf, countsOf, highOf, changeOf,
 } from './query/periodFigure.ts'
+export type { PeriodSeries, CatalogueFigureInput } from './query/periodRead.ts'
+export { readSpan, readPeriodSeries, catalogueFigure } from './query/periodRead.ts'
+export type { SleepPeriod, SleepPeriodInput, SleepListRow, SleepSchedule, ScheduleSide } from './query/sleepPeriod.ts'

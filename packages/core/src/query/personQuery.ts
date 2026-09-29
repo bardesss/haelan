@@ -55,6 +55,9 @@ import { readNightPage } from './nightPage.ts'
 import type { NightPage, NightPageInput } from './nightPage.ts'
 import { readWorkoutPage } from './workoutPage.ts'
 import type { WorkoutPage } from './workoutPage.ts'
+import { readSleepPeriod } from './sleepPeriod.ts'
+import type { SleepPeriod, SleepPeriodInput } from './sleepPeriod.ts'
+import { periodBounds, PERIOD_RANGES } from './periodBounds.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -288,6 +291,21 @@ export class PersonQuery {
     requireDate('today', input.today)
     if (input.localDate > input.today) throw new ConfigError(`localDate '${input.localDate}' is after today '${input.today}'`)
     return readNightPage(this, input)
+  }
+
+  /**
+   * The Sleep overview (M10b): a week, month, three months or year of nights around `anchor`, each
+   * figure judged against periods of its own length. A period that starts after today has no nights
+   * to show, so asking for one is refused rather than answered empty.
+   */
+  sleepPeriod(input: SleepPeriodInput): SleepPeriod {
+    if (!PERIOD_RANGES.includes(input.range)) throw new ConfigError(`range must be one of ${PERIOD_RANGES.join(', ')}, got '${input.range}'`)
+    requireDate('anchor', input.anchor)
+    requireDate('today', input.today)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
+    const { from } = periodBounds(input.range, input.anchor)
+    if (from > input.today) throw new ConfigError(`the ${input.range} of '${input.anchor}' starts after today '${input.today}'`)
+    return readSleepPeriod(this, input)
   }
 
   /**
