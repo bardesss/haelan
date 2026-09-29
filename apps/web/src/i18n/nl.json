@@ -1812,8 +1812,7 @@
       "quarterBefore": "de 3 maanden ervoor"
     },
     "value": {
-      "perDay": "{{value}} per dag",
-      "perWeek": "{{value}} per week"
+      "perDay": "{{value}} per dag"
     }
   }
 }

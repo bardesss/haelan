@@ -217,9 +217,8 @@ describe('periodValueLine', () => {
     expect(periodValueLine(f, 'nl', tNl)).toEqual({ value: `156,00${NB}km`, under: `5,20${NB}km per dag` })
   })
 
-  it('says per week under a per-week total', () => {
-    const f = figure({ metric: 'active_minutes', unit: 'minutes', per: 'week', value: 150, total: 600 })
-    expect(periodValueLine(f, 'en', t)).toEqual({ value: `600${NB}min`, under: `150${NB}min per week` })
+  it('prints the sleep hero\'s average, not the total the server also sends', () => {
+    expect(periodValueLine(figure({ value: 420, total: 12600 }), 'en', t)).toEqual({ value: `7h${NB}00m`, under: null })
   })
 
   it('prints the value alone for a figure with no total', () => {

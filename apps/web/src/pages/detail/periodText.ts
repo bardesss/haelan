@@ -139,15 +139,18 @@ export function periodStripOf(figure: PeriodFigure): {
   }
 }
 
+// The figures printed as the period's total, by name: the spec's "Distance, floors and elevation show
+// the period total". The server sends a total for every summed metric (time asleep among them), so a
+// total on the wire is not by itself a reason to print one.
+export const PERIOD_TOTAL_METRICS: readonly string[] = ['distance', 'floors', 'altitude_gain']
+
 /**
- * The figure's value: for a total (distance, floors, climb), the period's total, with its average
- * per day, or per week for a per-week figure, in the line under it; otherwise the average alone.
+ * The figure's value: for a total (PERIOD_TOTAL_METRICS), the period's total, with its average per day
+ * in the line under it; otherwise the average alone (per night, per day, or per week), whether or not
+ * the server sent a total.
  */
 export function periodValueLine(figure: PeriodFigure, language: string, t: Translate): { value: string, under: string | null } {
   const value = formatFigureValue(figure, figure.value, language, t)
-  if (figure.total === null) return { value, under: null }
-  return {
-    value: formatFigureValue(figure, figure.total, language, t),
-    under: t(`period.value.${figure.per === 'week' ? 'perWeek' : 'perDay'}`, { value }),
-  }
+  if (figure.total === null || !PERIOD_TOTAL_METRICS.includes(figure.metric)) return { value, under: null }
+  return { value: formatFigureValue(figure, figure.total, language, t), under: t('period.value.perDay', { value }) }
 }

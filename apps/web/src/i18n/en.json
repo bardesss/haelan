@@ -1812,8 +1812,7 @@
       "quarterBefore": "the 3 months before"
     },
     "value": {
-      "perDay": "{{value}} per day",
-      "perWeek": "{{value}} per week"
+      "perDay": "{{value}} per day"
     }
   }
 }
