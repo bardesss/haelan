@@ -346,6 +346,17 @@ describe('readNightPage', () => {
       expect(readNightPage(q(), input(NIGHT))!.morning.heartRateDip).toMatchObject({ value: null, standing: null })
     })
 
+    it('is null when the only resting heart rate was recorded the day before', () => {
+      seedNight(NIGHT, {})
+      hr(NIGHT, 40)
+      seedDaily(shiftLocalDate(NIGHT, -1), 'resting_heart_rate', 'last', 60)
+      // Tonight is today's night, the one case where the morning figure falls back to the day
+      // before while the watch has not synced; the dip does not follow it.
+      const page = readNightPage(q(), { ...input(NIGHT), today: NIGHT })!
+      expect(page.morning.recovery.restingHeartRate.asOfDate).toBe(shiftLocalDate(NIGHT, -1))
+      expect(page.morning.heartRateDip).toMatchObject({ value: null, standing: null })
+    })
+
     it('reads each night of history for heart rate once, shared by the trace and the dip', () => {
       seedHistory()
       seedNight(NIGHT, {})

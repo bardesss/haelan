@@ -190,7 +190,10 @@ export function readNightPage(q: PersonQuery, input: NightPageInput): NightPage 
   const hrv = pageFigureOf(recovery.hrv, true)
   const breathing = figure('sleep_respiratory_rate', 'last')
   const spo2 = figure('daily_spo2', 'last')
-  const dip = heartRateDip(q, restingHeartRate.value, heartRate.stat.lowest?.value ?? null, history, heartRateHistory, window)
+  // Only a resting heart rate recorded on the night's own date, as each history night's is; the
+  // glance's fallback to the day before would measure tonight against a different morning.
+  const restingTonight = recovery.restingHeartRate.asOfDate === localDate ? restingHeartRate.value : null
+  const dip = heartRateDip(q, restingTonight, heartRate.stat.lowest?.value ?? null, history, heartRateHistory, window)
 
   return {
     localDate,
@@ -224,10 +227,9 @@ export function readNightPage(q: PersonQuery, input: NightPageInput): NightPage 
       spo2: nightTrace(q, 'spo2', night, history),
     },
     stageTiming: stageTimingFigures(night, history),
-    // The index is counted only when it was judged, since morningSummaryOf skips a figure without a
-    // standing; readRecovery gives it none today (it is already a distance from the person's own
-    // baselines), so it joins the count only if it ever gains a band.
-    morningSummary: morningSummaryOf([recovery.index, restingHeartRate, hrv, breathing, spo2, skinTemperature, dip]),
+    // The recovery index is left out: readRecovery never judges it (it is already a distance from
+    // the person's own baselines), so it could never count.
+    morningSummary: morningSummaryOf([restingHeartRate, hrv, breathing, spo2, skinTemperature, dip]),
     morning: {
       recovery,
       // The glance's figures carry no direction or verdict of their own; as page figures they are
