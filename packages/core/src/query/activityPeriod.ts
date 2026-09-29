@@ -10,9 +10,9 @@ import type { WorkoutSession } from './sessions.ts'
 import { ACTIVE_MINUTE_METRICS, FIGURE_METRIC_ALIAS, standingOf } from './glance.ts'
 import type { FigureDirection, GlanceStanding } from './glance.ts'
 import { usualOf } from './pageFigure.ts'
-import { earlierBlocks, periodBounds } from './periodBounds.ts'
+import { daysIn, earlierBlocks, periodBounds } from './periodBounds.ts'
 import type { DateSpan, PeriodRange } from './periodBounds.ts'
-import { blockMean, highOf, PERIOD_MIN_PERIODS, periodFigureOf } from './periodFigure.ts'
+import { blockMean, highOf, PERIOD_MIN_PERIODS, periodFigureOf, windowOf } from './periodFigure.ts'
 import type { PeriodChange, PeriodFigure, PeriodHeader, PeriodHigh, PeriodUsual } from './periodFigure.ts'
 import { bandsOver, catalogueRead, orNull, periodChanges, periodHeader, readSpan, shown } from './periodRead.ts'
 
@@ -98,11 +98,14 @@ function typesOf(
 ): TypeTotal[] {
   const { unit, blocks } = earlierBlocks(range, bounds)
   const observed = blocks.filter((b) => blockMean(steps, b, b.to).mean !== null)
-  const window = { unit, count: blocks.length, from: blocks[0]!.from, to: blocks[blocks.length - 1]!.to }
+  const window = windowOf(unit, blocks)
   const groups = new Map<string | null, WorkoutListRow[]>()
   for (const w of counted) groups.set(w.type, [...(groups.get(w.type) ?? []), w])
   return [...groups].map(([type, rows]): TypeTotal => {
-    const counts = observed.map((b) => earlierTypes.filter((w) => w.type === type && within(w.localDate, b)).length)
+    // Each block's count scaled to the period's length, the rate the figures compare per day: a year
+    // is judged against the previous year's quarters, and a 31-day month against months of 28 to 31.
+    const counts = observed.map((b) =>
+      earlierTypes.filter((w) => w.type === type && within(w.localDate, b)).length * daysIn(bounds) / daysIn(b))
     const usual = usualOf(counts, PERIOD_MIN_PERIODS[range])
     const usualCount = usual === null ? null : { ...usual, window, periods: counts.length }
     const distances = rows.flatMap((w) => (w.distanceMeters === null ? [] : [w.distanceMeters]))
@@ -125,10 +128,9 @@ function vo2Of(q: PersonQuery, span: DateSpan, lastDay: string, source: string |
     const cutoff = shiftLocalDate(last.localDate, -VO2_EARLIER_DAYS)
     const before = points.filter((p) => p.localDate <= cutoff)
     const earlier = before[before.length - 1] ?? null
-    const trend = earlier === null ? null
-      : last.value - earlier.value >= VO2_TREND_STEP ? 'rising'
-        : earlier.value - last.value >= VO2_TREND_STEP ? 'falling'
-          : 'steady'
+    // Rounded to the tenth the readings carry, so 31.3 to 32.3 is a rise of one, not of 0.9999999999999964.
+    const diff = earlier === null ? null : Math.round((last.value - earlier.value) * 10) / 10
+    const trend = diff === null ? null : diff >= VO2_TREND_STEP ? 'rising' : diff <= -VO2_TREND_STEP ? 'falling' : 'steady'
     return {
       metric, latest: last.value, latestDate: last.localDate,
       earlier: earlier?.value ?? null, earlierDate: earlier?.localDate ?? null, trend,

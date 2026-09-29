@@ -78,6 +78,11 @@ export function blockMean(values: ReadonlyMap<string, number>, span: DateSpan, l
   return { mean: present.reduce((s, v) => s + v, 0) / present.length, days: present.length }
 }
 
+/** The earlier blocks a usual was drawn from, as the page names them. */
+export function windowOf(unit: PeriodWindow['unit'], blocks: readonly DateSpan[]): PeriodWindow {
+  return { unit, count: blocks.length, from: blocks[0]!.from, to: blocks[blocks.length - 1]!.to }
+}
+
 export function periodUsual(values: ReadonlyMap<string, number>, range: PeriodRange, bounds: DateSpan, scale: number): PeriodUsual | null {
   const { unit, blocks } = earlierBlocks(range, bounds)
   // Earlier blocks are all finished, so nothing bounds them from above.
@@ -87,7 +92,7 @@ export function periodUsual(values: ReadonlyMap<string, number>, range: PeriodRa
   })
   const usual = usualOf(means, PERIOD_MIN_PERIODS[range])
   if (usual === null) return null
-  return { ...usual, window: { unit, count: blocks.length, from: blocks[0]!.from, to: blocks[blocks.length - 1]!.to }, periods: means.length }
+  return { ...usual, window: windowOf(unit, blocks), periods: means.length }
 }
 
 export function countsOf(daily: readonly PeriodStripPoint[]): DayCounts {

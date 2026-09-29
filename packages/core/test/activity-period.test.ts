@@ -8,7 +8,7 @@ import { sessionTarget } from '../src/derive/targetKey.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { readActivityPeriod } from '../src/query/activityPeriod.ts'
 import type { ActivityPeriodInput } from '../src/query/activityPeriod.ts'
-import { datesIn, periodBounds } from '../src/query/periodBounds.ts'
+import { datesIn, daysIn, periodBounds } from '../src/query/periodBounds.ts'
 
 // Synthetic days and workouts only. Every daily series runs the 400 days from FIRST through TODAY,
 // a Wednesday, so August 2026 has eleven whole earlier months behind it (August 2025 starts too late).
@@ -105,6 +105,12 @@ function seedAugustWorkouts(earlierMonths: readonly string[] = monthsBefore('202
   }
 }
 
+/** The usual of `perMonth` workouts a month, each month's count scaled to a period of `periodDays`. */
+function scaledCenter(months: readonly string[], perMonth: number, periodDays: number): number {
+  const scaled = months.map((m) => perMonth * periodDays / daysIn(periodBounds('month', `${m}-01`)))
+  return scaled.reduce((s, v) => s + v, 0) / scaled.length
+}
+
 function monthsBefore(month: string, n: number): string[] {
   return Array.from({ length: n }, (_, i) => {
     const d = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 - (n - i), 1))
@@ -167,8 +173,9 @@ describe('readActivityPeriod', () => {
     expect(types.map((t) => [t.type, t.count])).toEqual([['RUNNING', 3], ['WALKING', 1]])
     const running = types[0]!
     expect(running).toMatchObject({ seconds: 3 * 1800, distanceMeters: 12_000, standing: 'above' })
-    // August 2025 began before the days did, so eleven months make the usual.
-    expect(running.usualCount).toMatchObject({ center: 2, periods: 11 })
+    // August 2025 began before the days did, so eleven months make the usual, each scaled to August's 31 days.
+    expect(running.usualCount).toMatchObject({ periods: 11 })
+    expect(running.usualCount!.center).toBeCloseTo(scaledCenter(monthsBefore('2026-08', 11), 2, 31), 9)
     expect(running.usualCount?.window).toMatchObject({ unit: 'month', count: 12, from: '2025-08-01', to: '2026-07-31' })
     expect(types[1]).toMatchObject({ distanceMeters: null, usualCount: { center: 0 } })
   })
@@ -179,7 +186,30 @@ describe('readActivityPeriod', () => {
     // An excluded run in each earlier month does not count towards the usual either.
     for (const month of monthsBefore('2026-08', 7)) seedWorkout(`${month}-12`, 'RUNNING', { excluded: true })
     const running = readActivityPeriod(q(), input(AUGUST)).types[0]!
-    expect(running.usualCount).toMatchObject({ center: 2, periods: 7, thin: true })
+    expect(running.usualCount).toMatchObject({ periods: 7, thin: true })
+    expect(running.usualCount!.center).toBeCloseTo(scaledCenter(monthsBefore('2026-08', 7), 2, 31), 9)
+  })
+
+  it('scales each earlier month to the length of the month read: a run every day is the usual in any month', () => {
+    seedDays()
+    for (const date of datesIn({ from: '2025-09-01', to: '2026-08-31' })) seedWorkout(date, 'RUNNING')
+    const running = readActivityPeriod(q(), input(AUGUST)).types[0]!
+    expect(running.count).toBe(31)
+    expect(running.usualCount!.center).toBeCloseTo(31, 9)
+    expect(running.usualCount!.high - running.usualCount!.low).toBeCloseTo(0, 9)
+    expect(running.standing).toBe('within')
+  })
+
+  it("judges a year against the previous year's quarters at the same rate, not against a quarter's count", () => {
+    seedDays({ from: '2024-01-01' })
+    for (const date of datesIn({ from: '2024-01-01', to: '2025-12-31' })) {
+      if (date.endsWith('-01') || date.endsWith('-15')) seedWorkout(date, 'RUNNING')
+    }
+    const running = readActivityPeriod(q(), input({ range: 'year', anchor: '2025-06-15' })).types[0]!
+    expect(running.count).toBe(24)
+    expect(running.usualCount).toMatchObject({ periods: 4, thin: false, window: { unit: 'year', count: 4 } })
+    expect(running.usualCount!.center).toBeCloseTo(24, 0)
+    expect(running.standing).toBe('within')
   })
 
   it('orders the types by count, then by type, an untyped workout last among its equals', () => {
@@ -201,7 +231,8 @@ describe('readActivityPeriod', () => {
     }
     for (const day of ['01', '03', '05', '07', '09']) seedWorkout(`2026-09-${day}`, 'RUNNING')
     const running = readActivityPeriod(q(), input({ range: 'month', anchor: TODAY })).types[0]!
-    expect(running).toMatchObject({ count: 5, usualCount: { center: 2, thin: false }, standing: null })
+    expect(running).toMatchObject({ count: 5, usualCount: { thin: false }, standing: null })
+    expect(running.usualCount!.center).toBeCloseTo(scaledCenter(monthsBefore('2026-09', 12), 2, 30), 9)
   })
 
   it('reads the VO2 max trend of the first metric that has one', () => {
@@ -229,6 +260,12 @@ describe('readActivityPeriod', () => {
     seedDays()
     seedLast('daily_vo2_max', { '2026-03-01': 45, '2026-07-10': 45.5 })
     expect(readActivityPeriod(q(), input(AUGUST)).vo2max).toMatchObject({ earlier: 45, trend: 'steady' })
+  })
+
+  it('calls a rise of one tenth-rounded point rising, though the float difference falls short of one', () => {
+    seedDays()
+    seedLast('daily_vo2_max', { '2026-03-01': 31.3, '2026-07-10': 32.3 })
+    expect(readActivityPeriod(q(), input(AUGUST)).vo2max).toMatchObject({ earlier: 31.3, latest: 32.3, trend: 'rising' })
   })
 
   it('hides a section without data', () => {

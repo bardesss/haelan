@@ -304,7 +304,7 @@ export type {
   PeriodHeader, PeriodFigureInput,
 } from './query/periodFigure.ts'
 export {
-  PERIOD_MIN_PERIODS, PERIOD_MIN_DAYS, blockMean, periodUsual, periodFigureOf, countsOf, highOf, changeOf,
+  PERIOD_MIN_PERIODS, PERIOD_MIN_DAYS, blockMean, windowOf, periodUsual, periodFigureOf, countsOf, highOf, changeOf,
 } from './query/periodFigure.ts'
 export type { PeriodSeries, CatalogueFigureInput } from './query/periodRead.ts'
 export { readSpan, readPeriodSeries, catalogueFigure } from './query/periodRead.ts'
