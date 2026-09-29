@@ -56,6 +56,19 @@ describe('groupSessions', () => {
     expect(groups[0]?.primary.id).toBe('b')
   })
 
+  it('still reaches a session past a shorter one that ended first', () => {
+    // The scan stops early once a session starts after the one it is comparing ends. It has to
+    // compare against that session's own end, not a neighbour's: 'short' ends before 'late'
+    // starts, but 'long' covers both, and a stop keyed on the wrong end would leave 'late' alone.
+    const groups = group([
+      session({ id: 'long', startMs: 0, endMs: 8 * HOUR }),
+      session({ id: 'short', sourceId: 'phone', startMs: HOUR, endMs: 2 * HOUR }),
+      session({ id: 'late', sourceId: 'phone', startMs: 5 * HOUR, endMs: 6 * HOUR }),
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.alternates.map((s) => s.id).sort()).toEqual(['late', 'short'])
+  })
+
   it('never groups two kinds together', () => {
     const groups = group([
       session({ id: 'a', kind: 'sleep', startMs: 0, endMs: 8 * HOUR }),
