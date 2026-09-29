@@ -457,6 +457,33 @@ describe('the workout page\'s route and kilometres', () => {
     expect(kilometres(host)).toHaveLength(6)
     expect(host.querySelector('.workout-split-trend')).toBeNull()
   })
+
+  // Moved from the old WorkoutRoute.tsx's own card test (workout-route-card.test.tsx), which
+  // asserted this against WorkoutRoute directly before Task 5 of M10a-3 retired that card: the
+  // count is still real behaviour of this card, now built by WorkoutMap.tsx from the session's own
+  // route length rather than by the component this used to test.
+  it('states how many points the phone recorded as the route half\'s own basis', async () => {
+    const host = await mount(workoutPageFixture(), fullSession())
+    const card = host.querySelector('.workout-map')!.closest('.card')!
+    expect(text(card, '.basis')).toBe(`every point the phone recorded, ${ROUTE_FIXTURE.length} in total`)
+  })
+
+  // Moved from the old WorkoutSplits.tsx's own tests (workout-splits.test.tsx), which asserted this
+  // absent-vs-zero distinction against that component's table directly before Task 5 of M10a-3
+  // retired it: the kilometre table (WorkoutMap.tsx's KilometreTable) reads pace and heart rate the
+  // same defensive way, `=== null` rather than truthiness, so a recorded zero must not collapse
+  // into the same absent marker as a field the split never recorded.
+  it('leaves the pace and heart rate cells absent when a split recorded neither, without turning a real zero absent too', async () => {
+    const mixed = [
+      { ...SPLITS_FIXTURE[0]!, paceSecondsPerKm: null, averageHeartRateBpm: null, averageHeartRateBpmSource: null },
+      { ...SPLITS_FIXTURE[1]!, averageHeartRateBpm: 0, averageHeartRateBpmSource: 'provider' as const },
+    ]
+    const host = await mount(workoutPageFixture(), { ...fullSession(), autoSplits: mixed })
+    expect(kilometres(host)).toEqual([
+      ['1', '—', '', '—'],
+      ['2', '5:24', '', '0'],
+    ])
+  })
 })
 
 describe('the workout page\'s trace', () => {

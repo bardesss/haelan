@@ -553,20 +553,18 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    are what wanted the limit; the card was only ever where it was easiest to put it. */
 .list-measured { max-width: 46rem; }
 
-/* WorkoutDetail.tsx's own heading, above its `.grid` rather than one of the cards inside it - the
-   same "heading, then grid" shape every sibling page's own `<h1>` sits in front of, just with more
-   to say than a page title alone (the workout's name, when it happened, and its excluded badge). */
-.workout-header { display: flex; flex-direction: column; gap: var(--space-1); }
-.workout-title { font-size: var(--font-size-xl); margin: 0; }
+/* The workout page's excluded badge and "also recorded by"/gps sentences moved into the About fold
+   (WorkoutAbout.tsx, M10a-3) when the old header (WorkoutHeader.tsx) was retired in Task 5 of
+   M10a-3; `.workout-when` stayed a shared class, now carried by WorkoutTop.tsx's own heading. */
 .workout-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
 .workout-excluded { color: var(--text-muted); font-size: var(--font-size-sm); margin: 0; }
 /* .basis.workout-gps, not .workout-gps alone: the element carries both classes
-   (WorkoutHeader.tsx's own comment says why), and a single-class rule here sits at equal
+   (WorkoutAbout.tsx's own comment says why), and a single-class rule here sits at equal
    specificity with .basis's own `margin-top`, declared later in this file - the later rule wins
    the cascade regardless of which is "more specific to workout", and the margin reset below never
    took effect (review finding). Two classes on the selector beats .basis's one regardless of
-   source order, so every child of .workout-header keeps the plain `margin: 0` the others already
-   carry, with spacing between them coming only from .workout-header's own flex `gap`. */
+   source order, so every child of .workout-about-body keeps the plain `margin: 0` the others
+   already carry, with spacing between them coming from that fold's own layout instead. */
 .basis.workout-gps { margin: 0; }
 /* The "also recorded by" line under the when line, a `.basis` for the same reason and with the
    same two-class selector for the same cascade reason as .basis.workout-gps just above. */
@@ -577,12 +575,6 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    left-aligned the way ControlRow's own buttons sit, since there is only the one and nothing else
    on this line to align it against. */
 .workout-actions { display: flex; justify-content: flex-end; }
-
-/* Not a grid of its own: WorkoutTiles.tsx's own comment says why - the page's `.grid` above is
-   already this section's grid, and `display: contents` makes each `Card` child a direct grid item
-   of it, exactly as an unwrapped card would be, while still giving this section's own tests a
-   selector to query under. */
-.workout-tiles { display: contents; }
 
 /* --- The workout detail page (M10a-3), WorkoutDetail.tsx and its sections under
    pages/activity/workout/: the night page's measure, header row and lead, for a workout. --- */
@@ -807,24 +799,17 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
   .day-workout-link { min-height: 44px; display: flex; align-items: center; }
 }
 
-/* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
-   the same card - each is its own Card, this only styles the table each one wraps. */
-.workout-splits { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
-.workout-splits th { text-align: left; color: var(--text-muted); font-weight: var(--weight-medium); padding: var(--space-1) 0; }
-.workout-splits td { padding: var(--space-1) 0; border-top: 1px solid var(--border-subtle); }
 /* The dagger footnote under a table where at least one row was filled from the trace - see
-   WorkoutSplits.tsx's own comment on why it never appears under a table of provider values. */
+   WorkoutMap.tsx's own comment (the kilometre table, M10a-3) on why it never appears under a table
+   of provider values. */
 .workout-splits-footnote { margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--font-size-sm); }
-/* WorkoutDynamics.tsx's own tile row - up to five StatTiles, fewer when a session recorded fewer
-   of the five fields, wrapping onto a second row on a narrow viewport rather than compressing. */
-.workout-dynamics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
-/* Activity's zone minutes card, which holds the same StatTiles as .workout-dynamics but in a
-   span-12 card rather than a narrow one. `1fr` there divides a workout card's width between a
-   handful of tiles and reads well; across 1214px it gave each of three tiles some 400px, and
-   StatTile's header is a space-between flex row, so every label sat a third of a screen away from
-   its own delta badge. A capped track keeps the three figures close enough to compare, which is
-   the only reason they share a card, and `justify-content: start` stops the grid spreading the
-   tracks out again once they stop filling the row. */
+/* Activity's zone minutes card: up to three StatTiles in a span-12 card, deliberately not an
+   auto-fit `1fr` track (which reads well in a narrower card, but across this card's 1214px gave
+   each of three tiles some 400px, and StatTile's header is a space-between flex row, so every
+   label sat a third of a screen away from its own delta badge). A capped track keeps the three
+   figures close enough to compare, which is the only reason they share a card, and
+   `justify-content: start` stops the grid spreading the tracks out again once they stop filling
+   the row. */
 .zone-tiles {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 230px));
   justify-content: start; gap: var(--space-4) var(--space-5);
@@ -835,11 +820,10 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    push the track wider than its share. */
 .workout-dynamic-tile { min-width: 0; }
 
-/* WorkoutRoute.tsx's own card: the drawn trace, nothing numeric beside it since fix round 1 (see
-   that file's own comment on why). Sized by the viewBox drawn there, never by a fixed pixel box
-   here: `height: auto` is what lets that viewBox's own aspect ratio, not this stylesheet, decide
-   the drawn shape. */
-/* max-height is what stops a tall route from taking over the page. `height: auto` sizes the
+/* RouteDrawing's own trace (WorkoutRoute.tsx), sized by the viewBox drawn there, never by a fixed
+   pixel box here: `height: auto` is what lets that viewBox's own aspect ratio, not this
+   stylesheet, decide the drawn shape.
+   max-height is what stops a tall route from taking over the page. `height: auto` sizes the
    element from the viewBox's aspect ratio, and that ratio is the route's own shape: a run straight
    up a coastline projects to something like 1:10, which across a full-width card computes to
    several thousand pixels of card for one thin line. Clamping the height leaves the default
@@ -874,10 +858,6 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 }
 .workout-route-map .maplibregl-ctrl-attrib a { color: var(--text-muted); }
 .workout-route-map .maplibregl-ctrl-attrib a:hover { color: var(--text-primary); }
-
-/* WorkoutComparison.tsx's own sentence list, one per compared facet - a plain list, not a table,
-   since each row is a full sentence rather than a value under a column header. */
-.workout-comparison { margin: 0; padding-left: var(--space-4); }
 
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
 .value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
@@ -1429,21 +1409,19 @@ button.week-bar-slot { cursor: pointer; }
 .chart-table thead th { position: sticky; top: 0; background: var(--surface-card); color: var(--text-faint); }
 
 /* .grid > * reaches every ordinary grid item, but not a Card sitting one level under a
-   `display: contents` wrapper (.workout-tiles above): display: contents changes which boxes
-   become grid items, but a CSS combinator still walks the real DOM, where the Card is a child of
-   the wrapper, not of .grid itself - so its own span (3, here) never collapsed to 12 below this
-   breakpoint. Real on M7b's own night page (M10a-2 task 8 removed that page's own wrapper,
-   .night-tiles, along with the rest of NightTiles.tsx; this rule and its history stayed relevant
-   because .workout-tiles is still a `display: contents` wrapper with the identical shape):
-   the Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
+   `display: contents` wrapper: display: contents changes which boxes become grid items, but a CSS
+   combinator still walks the real DOM, where the Card is a child of the wrapper, not of .grid
+   itself - so its own span (3, say) never collapsed to 12 below this breakpoint. Real on M7b's own
+   night page (M10a-2 task 8 removed that page's own wrapper, .night-tiles, along with the rest of
+   NightTiles.tsx; Task 5 of M10a-3 removed the last one, .workout-tiles, the same way): the
+   Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
    375px viewport (measured: 424px scrollWidth in a 375px viewport, and 651px in the 621px band).
-   .workout-tiles was latent there too - same shape, `span={3}` cards, and its labels happened to
-   fit - so it is listed alongside every other `display: contents` wrapper in the file rather than
-   only the one that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
-   the wrappers out of this stylesheet and fails if one of them is missing from the list below,
-   including the next nobody has written yet. */
+   No `display: contents` wrapper is left in this file as of M10a-3, so nothing needs listing here
+   beside .grid itself - but the next one written will, and grid-collapse.test.ts is what holds
+   that promise: it reads the wrappers out of this stylesheet and fails if one of them is missing
+   from the list below. */
 @media (max-width: 900px) {
-  .grid > *, .workout-tiles > * { grid-column: span 12 !important; }
+  .grid > * { grid-column: span 12 !important; }
   /* Where every card spans the row, a week bar is a finger's target: the bars take the row's full
      width under the figure, seven 44px slots at the narrowest phone. */
   .dash-week-row { grid-template-columns: minmax(0, 1fr); }

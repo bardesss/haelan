@@ -1,7 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import { Card } from '../../components/Card.js'
-import { formatNumber } from '../../format.js'
 import { useRouteBasemapStatus } from '../../data/useRouteBasemap.js'
 import type { RoutePoint } from '../../data/useSessions.js'
 import { mountBasemap } from './basemap.js'
@@ -68,11 +66,13 @@ export function projectRoute(
 }
 
 /**
- * The route card: the trace drawn from the points, and nothing numeric beside it. Fix round 1 on
- * this task removed a distance and an elevation gain computed straight off these points - a second
- * measurement of a fact WorkoutTiles.tsx already states from the provider, a few percent off it for
- * reasons no reader could see, on the same page. One fact, one figure: the provider's, already on
- * the page, consistent with every other tile. This card draws where, not how far or how high.
+ * The drawing itself, no card of its own: a MapLibre basemap under the trace when the instance
+ * allows one, the bare SVG trace otherwise. The workout page's route and kilometres card
+ * (workout/WorkoutMap.tsx, M10a-3) is this function's only caller now, and puts it beside the
+ * kilometre table in a card of its own. This file used to render its own card too (WorkoutRoute,
+ * with nothing numeric beside the trace since fix round 1 on this task removed a distance and an
+ * elevation gain WorkoutTiles.tsx already stated from the provider) until Task 5 of M10a-3 retired
+ * it along with the rest of the old workout page.
  *
  * A basemap under the trace, when the instance-wide setting below is on - off by default, because
  * a route's first and last point is usually this household's own address, and a tile request is
@@ -84,35 +84,6 @@ export function projectRoute(
  * household that opens a workout page, on or off, undoing the whole point of Task 5 drawing the
  * trace by hand so that a household which never turns this on never downloads it.
  *
- * `route` is typed as possibly undefined, not trusted as the always-present array
- * WorkoutSessionDetail declares it: WorkoutSplits.tsx's own comment on `autoSplits`/`laps` gives
- * the reason, and it applies unchanged here - an older cached response or any shape that predates
- * this deploy can simply be missing the field, this app has no error boundary around this section,
- * and an unguarded `.length` on `undefined` would blank the whole page rather than only leave this
- * one card off it.
- *
- * Absent entirely, not an empty map, when the session carries no points - a Google session and a
- * companion session whose route the app could not read both read as "nothing to draw" here, the
- * same absence WorkoutZones and WorkoutTrace already give their own missing data.
- */
-export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefined }) {
-  const { t, i18n } = useTranslation()
-  const recorded = route ?? []
-  if (recorded.length === 0) return null
-  const n = (value: number, precision: number) => formatNumber(value, precision, i18n.language, '')
-  return (
-    <Card span={12} label={t('activity.workout.route.label')}
-      basis={t('activity.workout.route.basis', { count: n(recorded.length, 0) })}>
-      <RouteDrawing route={recorded} />
-    </Card>
-  )
-}
-
-/**
- * The drawing itself, without a card: a MapLibre basemap under the trace when the instance allows
- * one, the bare SVG trace otherwise. WorkoutRoute above puts it in a card of its own; the workout
- * page's route and kilometres card (workout/WorkoutMap.tsx, M10a-3) sets it beside the kilometre
- * table. Everything WorkoutRoute's comment says about the basemap setting lives here, unchanged.
  * Nothing for an empty route.
  */
 export function RouteDrawing({ route }: { route: readonly RoutePoint[] }) {

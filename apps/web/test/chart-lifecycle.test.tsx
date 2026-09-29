@@ -139,11 +139,10 @@ function stubFetch(): () => void {
   return () => { globalThis.fetch = original }
 }
 
-// A session carrying both a heart rate zone breakdown (WorkoutZones' own ZoneBar) and a PAUSE
-// event with a real instant (WorkoutTrace's own eventMarks), so both of the workout page's echarts
-// instances actually mount - one from a fresh `zoneRows(...)` call and one from a fresh
-// `filter().map()`, if either WorkoutZones.tsx or WorkoutTrace.tsx went back to computing it
-// inline on every render.
+// A session carrying both a heart rate zone breakdown (workout/WorkoutZones.tsx's own ZoneBar) and
+// a PAUSE event with a real instant (workout/WorkoutThrough.tsx's own eventMarks), so both of the
+// workout page's echarts instances actually mount - one from a fresh `zoneRows(...)` call and one
+// from a fresh `filter().map()`, if either file went back to computing it inline on every render.
 const WORKOUT_SESSION = {
   id: 'run1', sourceId: 'watch',
   startMs: Date.UTC(2026, 7, 3, 6, 0), endMs: Date.UTC(2026, 7, 3, 6, 54),
@@ -423,11 +422,12 @@ describe('the charts across a rerender', () => {
   })
 
   // Final review finding on M8b: WorkoutDetail.tsx built `detail` fresh from `workoutDetail(...)`
-  // on every render, and WorkoutTrace.tsx's own `marks` and WorkoutZones.tsx's own `rows` were each
-  // a fresh `filter().map()` / `zoneRows(...)` call over it, so the workout page's two charts (the
-  // zone bar and the heart rate trace) were disposed and reinitialised on every commit - window
-  // focus, opening or closing the annotate panel, and the session-scope invalidation M8b itself
-  // added among them. This is the same defect the two cases above guard (the Dashboard, and
+  // on every render, and workout/WorkoutThrough.tsx's own `marks` and workout/WorkoutZones.tsx's
+  // own `rows` were each a fresh `filter().map()` / `zoneRows(...)` call over it, so the workout
+  // page's two charts (the zone bar and the heart rate trace) were disposed and reinitialised on
+  // every commit - window focus, opening or closing the annotate panel, and the session-scope
+  // invalidation M8b itself added among them. This is the same defect the two cases above guard
+  // (the Dashboard, and
   // Recovery's Day tab), on a page neither of them ever mounts.
   it('are not disposed and re-initialised on the workout page either, where its strips, zones and trace live', async () => {
     const restore = stubWorkoutFetch()

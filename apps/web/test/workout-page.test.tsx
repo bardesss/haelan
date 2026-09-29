@@ -448,9 +448,9 @@ describe('the workout page', () => {
   })
 })
 
-// Same shape as the splits fix below: WorkoutRoute.tsx's own card-level tests (workout-route-
-// card.test.tsx) cover its rendering in isolation, but nothing there proves this page actually
-// hands it `query.data.route` rather than, say, `query.data.autoSplits` by a copy-paste mistake.
+// Same shape as the splits fix below: workout-route-card.test.tsx's own tests cover RouteDrawing's
+// rendering in isolation, but nothing there proves this page actually hands it `query.data.route`
+// rather than, say, `query.data.autoSplits` by a copy-paste mistake.
 // RUN itself carries no `route` field (a plain WorkoutSession, not a WorkoutSessionDetail), so the
 // absence case is already exercised by every other test in this file; this pins the presence case.
 describe('the route card', () => {
