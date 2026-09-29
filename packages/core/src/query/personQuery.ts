@@ -302,7 +302,8 @@ export class PersonQuery {
     if (!PERIOD_RANGES.includes(input.range)) throw new ConfigError(`range must be one of ${PERIOD_RANGES.join(', ')}, got '${input.range}'`)
     requireDate('anchor', input.anchor)
     requireDate('today', input.today)
-    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
+    // A device id only: the nights and their sessions are read per device, and have no merge to name.
+    requireSource(this.#db, this.#personId, input.source, [])
     const { from } = periodBounds(input.range, input.anchor)
     if (from > input.today) throw new ConfigError(`the ${input.range} of '${input.anchor}' starts after today '${input.today}'`)
     return readSleepPeriod(this, input)

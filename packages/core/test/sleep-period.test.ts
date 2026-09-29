@@ -76,12 +76,13 @@ function seedNights(o: { asleep?: (date: string) => number } = {}) {
 const at = (localDate: string, hhmm: string) => Date.parse(`${localDate}T${hhmm}:00Z`) - OFFSET * 60_000
 
 /** One main sleep session filed under `localDate`, with the provider's summary in attrs as mapSessions stores it. */
-function seedSession(localDate: string, latency: number) {
-  const id = `night-${localDate}`
+function seedSession(localDate: string, latency: number, o: { sourceId?: string, endLocal?: string } = {}) {
+  const sourceId = o.sourceId ?? 'watch'
+  const id = `night-${sourceId}-${localDate}`
   const startMs = at(shiftLocalDate(localDate, -1), '23:00')
-  const endMs = at(localDate, '07:00')
+  const endMs = at(localDate, o.endLocal ?? '07:00')
   test.db.insert(sessions).values({
-    id, personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: id,
+    id, personId: 'p1', sourceId, kind: 'sleep', externalId: id,
     startMs, startOffsetMinutes: OFFSET, endMs, endOffsetMinutes: OFFSET, localDate, rawPayloadId: null,
     attrs: JSON.stringify({
       type: null, mainSleep: true, stagesStatus: 'SUCCEEDED',
@@ -123,7 +124,13 @@ describe('readSleepPeriod', () => {
     expect(page.yearEarlier.delta).toBeCloseTo(monthMean('2026-08', asleep) - monthMean('2025-08', asleep), 9)
     expect(page.high?.value).toBe(Math.max(...datesIn({ from: '2026-08-01', to: '2026-08-31' }).map(asleep)))
     const good = page.nights.filter((n) => n.good)
-    expect(good.every((n) => n.judged === 'better')).toBe(true)
+    // Each night is judged against its own sixty nights before it, so the first four weeks of the
+    // longer month still stand above a usual made of the shorter nights; the last few begin to be
+    // judged against a usual the longer nights have pulled up.
+    const early = page.nights.filter((n) => n.localDate <= '2026-08-28')
+    expect(early).toHaveLength(28)
+    expect(early.every((n) => n.good)).toBe(true)
+    expect(good.length).toBe(29)
   })
 
   it('reaches back a year for a week, so the year-earlier change has its values', () => {
@@ -231,6 +238,32 @@ describe('readSleepPeriod', () => {
     expect(page.nights[0]!.sourceId).toBe('b')
   })
 
+  it('reads the nights and their summaries of the source asked for', () => {
+    seedSeries('sleep_asleep_minutes', 'sum', (d) => 420 + jitter(d), { source: 'b' })
+    for (const date of ['2026-08-10', '2026-08-11', '2026-08-12']) {
+      // The watch's night is the longer, so an unscoped read would pick it as the night of the date.
+      seedSession(date, 10, { sourceId: 'watch', endLocal: '08:00' })
+      seedSession(date, 30, { sourceId: 'b', endLocal: '06:00' })
+    }
+    const query = q()
+    const sessionReads: (string | undefined)[] = []
+    const readSessions = query.sessions.bind(query)
+    query.sessions = (o) => { sessionReads.push(o.sourceId); return readSessions(o) }
+    const page = readSleepPeriod(query, input({ range: 'month', anchor: '2026-08-15', source: 'b' }))
+    expect(page.more.find((f) => f.metric === 'sleep_latency_minutes')?.value).toBe(30)
+    expect(page.nights.find((n) => n.localDate === '2026-08-11')?.sourceId).toBe('b')
+    // The summary lookup goes by the night's own session ids, so an unscoped read would still answer
+    // right; it would read every source's sessions to do it.
+    expect(sessionReads).toEqual(['b'])
+  })
+
+  it('uses the target as the zero line when the person does not follow their usual', () => {
+    seedNights()
+    const page = readSleepPeriod(q(), input({ range: 'month', anchor: '2026-08-15', sleepUseBaseline: false, sleepTargetMinutes: 450 }))
+    expect(page.balance!.zeroLine).toEqual({ minutes: 450, source: 'target' })
+    expect(page.balance!.values[0]).toBe(asleepOf('2026-08-01') - 450)
+  })
+
   it('carries weekly points for three months and a year, not for a week or a month', () => {
     seedNights()
     const weekly = (range: SleepPeriodInput['range'], anchor: string) => readSleepPeriod(q(), input({ range, anchor })).hero.weekly
@@ -254,7 +287,14 @@ describe('readSleepPeriod', () => {
     const calls = new Map<string, number>()
     const series = query.series.bind(query)
     query.series = (o) => { calls.set(o.metric, (calls.get(o.metric) ?? 0) + 1); return series(o) }
+    let nightReads = 0
+    let sessionReads = 0
+    const sleepNights = query.sleepNights.bind(query)
+    const readSessions = query.sessions.bind(query)
+    query.sleepNights = (o) => { nightReads += 1; return sleepNights(o) }
+    query.sessions = (o) => { sessionReads += 1; return readSessions(o) }
     readSleepPeriod(query, input({ range: 'month', anchor: '2026-08-15' }))
+    expect([nightReads, sessionReads]).toEqual([1, 1])
     // The recovery index is scored from its own merged read of its five inputs, so those five are read twice.
     const recoveryInputs = new Set(RECOVERY_METRIC_SOURCES.map((s) => s.metric))
     for (const [metric, n] of calls) expect([metric, n]).toEqual([metric, recoveryInputs.has(metric) && metric !== 'respiratory_rate' ? 2 : 1])
@@ -278,5 +318,17 @@ describe('PersonQuery.sleepPeriod', () => {
     expect(() => q().sleepPeriod(input({ range: 'day' as never, anchor: '2026-08-15' }))).toThrow(/range/)
     expect(() => q().sleepPeriod(input({ range: 'month', anchor: '2026-10-02' }))).toThrow(/after today/)
     expect(q().sleepPeriod(input({ range: 'month', anchor: '2026-08-15' })).period.from).toBe('2026-08-01')
+  })
+
+  it('refuses a merge name as the source: the page narrows to a device, and nights have no merge', () => {
+    // Refused at the boundary, before anything is read, not later by the nights read.
+    const query = q()
+    let reads = 0
+    const series = query.series.bind(query)
+    query.series = (o) => { reads += 1; return series(o) }
+    expect(() => query.sleepPeriod(input({ range: 'month', anchor: '2026-08-15', source: 'merged' }))).toThrow(/merged/)
+    expect(reads).toBe(0)
+    expect(() => q().sleepPeriod(input({ range: 'month', anchor: '2026-08-15', source: 'provider' }))).toThrow(/provider/)
+    expect(q().sleepPeriod(input({ range: 'month', anchor: '2026-08-15', source: 'b' })).period.from).toBe('2026-08-01')
   })
 })
