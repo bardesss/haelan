@@ -685,6 +685,34 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-about-line { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
 .detail-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
 .detail-about[open] summary { margin-bottom: var(--space-2); }
+/* The overview pages' shared pieces (pages/period/, PATTERNS.md's "Overview pages"). The hero's
+   strip anchors the small panel a tapped point opens (PointPanel): under the strip, over the cards
+   below it, card surface and a border and no shadow, as .cal-popover. */
+.period-hero-strip { position: relative; }
+.period-hero-panel { position: absolute; top: 100%; right: 0; z-index: 30; width: min(20rem, 100%); margin-top: var(--space-1); }
+.point-panel {
+  box-sizing: border-box; padding: var(--space-3); background: var(--surface-card); color: var(--text-primary);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+}
+.point-panel-title { margin: 0; font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
+.point-panel-rows { margin: var(--space-2) 0 0; display: grid; gap: var(--space-1); }
+.point-panel-row { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-sm); }
+.point-panel-row dt { color: var(--text-secondary); }
+.point-panel-row dd { margin: 0; font-variant-numeric: tabular-nums; }
+.point-panel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); }
+.point-panel-actions .card-link { margin: 0; }
+/* A list (ExpandableList): the first seven, then every item flowing into columns of at least
+   18rem, a month's heading kept with its first item; one column on a phone. */
+/* The list's items across the card, its toggle at its own width under them. */
+.period-list { display: flex; flex-direction: column; align-items: flex-start; }
+.period-list-items { align-self: stretch; min-width: 0; }
+.period-list-expanded { columns: 3 18rem; column-gap: var(--space-4); }
+.period-list-heading { margin: var(--space-3) 0 var(--space-1); break-after: avoid; }
+.period-list-group:first-child .period-list-heading { margin-top: 0; }
+.period-list-toggle { margin-top: var(--space-3); }
+@media (max-width: 620px) {
+  .period-list-expanded { columns: 1; }
+}
 /* A day's quick log (DayLogBlock): the mood face and its word beside the chips, the note under. */
 .day-log { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); }
 .day-log-mood { display: flex; align-items: center; gap: var(--space-2); }

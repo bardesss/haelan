@@ -1813,6 +1813,10 @@
     },
     "value": {
       "perDay": "{{value}} per dag"
+    },
+    "list": {
+      "showAll": "Toon alle {{count}}",
+      "showFewer": "Toon minder"
     }
   }
 }

@@ -1813,6 +1813,10 @@
     },
     "value": {
       "perDay": "{{value}} per day"
+    },
+    "list": {
+      "showAll": "Show all {{count}}",
+      "showFewer": "Show fewer"
     }
   }
 }
