@@ -4,7 +4,7 @@ import type { Translate } from '../../format.js'
 import { stripBands } from '../dashboard/cardShared.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
 
-// The page patterns every redesigned page follows, this module's wording rules among them: PATTERNS.md, beside this file.
+// The wording and value rules this module implements, with the rest of the page patterns: PATTERNS.md, beside this file.
 
 // Inside one value a space never breaks ("1h 32m", "58 bpm"): a narrow card wraps between the words
 // of a sentence, never inside a figure.

@@ -1,3 +1,4 @@
+// The header every redesigned page shares; the rules for it and the pieces beside it: pages/detail/PATTERNS.md.
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { useIsPhone } from '../ui/breakpoint.js'

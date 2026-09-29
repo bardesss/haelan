@@ -1,3 +1,4 @@
+// The day block and SideCard as every redesigned page uses them: PATTERNS.md, beside this file.
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Card } from '../../components/Card.js'

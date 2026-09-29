@@ -1,3 +1,4 @@
+// The page patterns these rows follow (columns, verdict words and tone): pages/detail/PATTERNS.md.
 // One figure on a detail page: label, value, where it sits against the usual, and the verdict in
 // words. The server has already judged it (standing, better or worse); this only draws. The bar uses
 // the dashboard gauge's scale, the usual band in the middle fifth, so "inside" and "outside" read the
