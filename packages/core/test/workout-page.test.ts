@@ -7,7 +7,7 @@ import { shiftLocalDate } from '../src/derive/localDay.ts'
 import { sessionTarget } from '../src/derive/targetKey.ts'
 import { PeopleStore } from '../src/store/people.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { readWorkoutPage } from '../src/query/workoutPage.ts'
+import { readWorkoutPage, splitTrendOf } from '../src/query/workoutPage.ts'
 import { compareWorkout } from '../src/api/workoutComparison.ts'
 
 const TODAY = '2026-09-10'
@@ -145,7 +145,24 @@ describe('readWorkoutPage', () => {
     expect(strip).toHaveLength(10)
     // Oldest first: the ninth-latest earlier run through the latest, then this one.
     expect(strip.map((p) => p.sessionId)).toEqual(['run-3', 'run-4', 'run-5', 'run-6', 'run-7', 'run-8', 'run-9', 'run-10', 'run-11', 'subject'])
-    expect(strip.at(-1)).toEqual({ sessionId: 'subject', localDate: SUBJECT_DATE, value: 300 })
+    expect(strip.at(-1)).toEqual({ sessionId: 'subject', localDate: SUBJECT_DATE, value: 300, standing: 'below', judged: 'better' })
+  })
+
+  it('judges every strip point against the figure\'s own usual, so each dot takes its verdict\'s tone', () => {
+    seedRuns(12, { pace: 330 })
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    const strip = readWorkoutPage(q(), input('subject'))!.figures.pace!.strip
+    // The earlier runs at 325 and 335 sit inside the band they make; the subject is below it, and
+    // a lower pace is the better one.
+    expect(strip.slice(0, -1).every((p) => p.standing === 'within' && p.judged === null)).toBe(true)
+    expect(strip.at(-1)).toMatchObject({ standing: 'below', judged: 'better' })
+  })
+
+  it('claims no standing on a strip point while the usual is thin', () => {
+    seedRuns(4, { pace: 330 })
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    const strip = readWorkoutPage(q(), input('subject'))!.figures.pace!.strip
+    expect(strip.map((p) => [p.standing, p.judged])).toEqual(strip.map(() => [null, null]))
   })
 
   it('leaves an excluded run out of the usual range and the strip', () => {
@@ -174,8 +191,22 @@ describe('readWorkoutPage', () => {
     seedRide('ride', '2026-09-01', {})
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     expect(readWorkoutPage(q(), input('subject'))!.previous).toEqual({
-      sessionId: 'first', localDate: '2026-01-10', values: { pace: 340, distance: 5000 },
+      sessionId: 'first', localDate: '2026-01-10', values: { pace: 340, distance: 5000, elapsed: 1800 },
     })
+  })
+
+  // A time hero leads the comparison table with its own row, so the previous session's moving and
+  // elapsed times travel with its other values.
+  it("sends the previous session's moving and elapsed times, for a time hero's row", () => {
+    seedWorkout('before', '2026-09-01', 'WEIGHTLIFTING', { moving: 2400 }, { minutes: 45 })
+    seedWorkout('subject', SUBJECT_DATE, 'WEIGHTLIFTING', { moving: 2500 }, { minutes: 50 })
+    expect(readWorkoutPage(q(), input('subject'))!.previous!.values).toEqual({ movingTime: 2400, elapsed: 2700 })
+  })
+
+  it('sends the previous ride\'s speed, so a speed hero\'s table has its row', () => {
+    seedRide('before', '2026-09-01', { distance: 20_000, metrics: { averageSpeedMillimetersPerSecond: 6500 } })
+    seedRide('subject', SUBJECT_DATE, { distance: 21_000, metrics: { averageSpeedMillimetersPerSecond: 7000 } })
+    expect(readWorkoutPage(q(), input('subject'))!.previous!.values).toEqual({ speed: 6.5, distance: 20_000, elapsed: 1800 })
   })
 
   it('names the fastest kilometre of this type from the splits', () => {
@@ -289,6 +320,62 @@ describe('readWorkoutPage', () => {
     const banister = q().cardioLoad({ sessionId: 'subject' })!.banister!
     expect(banister).toBeGreaterThan(0)
     expect(page.figures.banister).toMatchObject({ value: banister, unit: 'trimp', baseline: null, standing: null })
+  })
+
+  it('says how much faster the second half of the kilometres went than the first, distance-weighted', () => {
+    // First half 330 and 320 s/km; second half 300 over a full kilometre and 280 over a fifth of
+    // one. By distance the second half is (300 + 56) / 1.2 = 296.67 s/km, 28.33 faster than 325;
+    // a plain mean of the four paces would say 35.
+    seedRun('subject', SUBJECT_DATE, { splits: [
+      { distance: 1000, seconds: 330 }, { distance: 1000, seconds: 320 },
+      { distance: 1000, seconds: 300 }, { distance: 200, seconds: 56 },
+    ] })
+    expect(readWorkoutPage(q(), input('subject'))!.splitTrend!.secondHalfFasterBySecondsPerKm).toBeCloseTo(28.333, 2)
+  })
+
+  it('leaves the middle kilometre out of an odd count, and reads a slower second half as negative', () => {
+    seedRun('subject', SUBJECT_DATE, { splits: [
+      { distance: 1000, seconds: 300 }, { distance: 1000, seconds: 999 }, { distance: 1000, seconds: 310 },
+    ] })
+    expect(readWorkoutPage(q(), input('subject'))!.splitTrend).toEqual({ secondHalfFasterBySecondsPerKm: -10 })
+  })
+
+  it('skips a split with no pace, no distance or a zero distance, rather than letting it into a half', () => {
+    const split = (pace: number | null, distance: number | null) => ({
+      startMs: null, endMs: null, splitType: 'DISTANCE', activeDurationSeconds: null, distanceMeters: distance,
+      paceSecondsPerKm: pace, averageHeartRateBpm: null,
+    })
+    // Without the skip there are five splits: the halves are the first two and the last two, and
+    // the unreadable ones poison both. With it, 330 against 300.
+    expect(splitTrendOf([split(330, 1000), split(null, 1000), split(999, null), split(999, 0), split(300, 1000)]))
+      .toEqual({ secondHalfFasterBySecondsPerKm: 30 })
+    expect(splitTrendOf([split(330, 1000), split(null, 1000)])).toBeNull()
+  })
+
+  it('claims no split trend with fewer than two kilometres', () => {
+    seedRun('one', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 300 }] })
+    seedRun('none', SUBJECT_DATE, { pace: 300 }, { hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('one'))!.splitTrend).toBeNull()
+    expect(readWorkoutPage(q(), input('none'))!.splitTrend).toBeNull()
+  })
+
+  it("draws the zones from the provider's ceilings for the day, the ones the Banister load's maximum is read from", () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_light_max_bpm', 'last', 113)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_moderate_max_bpm', 'last', 137)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_vigorous_max_bpm', 'last', 162)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_peak_max_bpm', 'last', 187)
+    expect(readWorkoutPage(q(), input('subject'))!.zoneBounds).toEqual({ moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 })
+  })
+
+  it('draws no zones when a ceiling is missing or the ceilings are out of order, rather than inventing one', () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_light_max_bpm', 'last', 113)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_moderate_max_bpm', 'last', 137)
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_peak_max_bpm', 'last', 187)
+    expect(readWorkoutPage(q(), input('subject'))!.zoneBounds).toBeNull()
+    seedDaily(SUBJECT_DATE, 'heart_rate_zone_vigorous_max_bpm', 'last', 130)
+    expect(readWorkoutPage(q(), input('subject'))!.zoneBounds).toBeNull()
   })
 
   it('leads with speed for a ride, with moving time for a strength session, and with elapsed time when that is all there is', () => {

@@ -4,142 +4,132 @@ import { workoutDetail } from '@haelan/core/workout-summary'
 import { useRoute, routeParams, readQuery } from '../router.js'
 import { WORKOUT_ROUTE } from '../routes.js'
 import { useWorkoutSession } from '../data/useWorkoutSession.js'
+import { useWorkoutPage } from '../data/useWorkoutPage.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { ApiError } from '../api/client.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
-import { WorkoutHeader } from './activity/WorkoutHeader.js'
-import { WorkoutTiles } from './activity/WorkoutTiles.js'
-import { WorkoutZones } from './activity/WorkoutZones.js'
-import { WorkoutTrace } from './activity/WorkoutTrace.js'
-import { WorkoutRoute } from './activity/WorkoutRoute.js'
-import { WorkoutSplits } from './activity/WorkoutSplits.js'
-import { WorkoutDynamics } from './activity/WorkoutDynamics.js'
-import { WorkoutComparison } from './activity/WorkoutComparison.js'
+import { WorkoutTop, useOpenWorkout } from './activity/workout/WorkoutTop.js'
+import { WorkoutHero } from './activity/workout/WorkoutHero.js'
+import { WorkoutMinis } from './activity/workout/WorkoutMinis.js'
+import { WorkoutCompared } from './activity/workout/WorkoutCompared.js'
+import { WorkoutMap } from './activity/workout/WorkoutMap.js'
+import { WorkoutThrough } from './activity/workout/WorkoutThrough.js'
+import { WorkoutZones } from './activity/workout/WorkoutZones.js'
+import { WorkoutForm } from './activity/workout/WorkoutForm.js'
+import { WorkoutMore } from './activity/workout/WorkoutMore.js'
+import { WorkoutDay } from './activity/workout/WorkoutDay.js'
+import { WorkoutAfter } from './activity/workout/WorkoutAfter.js'
+import { WorkoutAbout } from './activity/workout/WorkoutAbout.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
 import { EmptyState } from '../components/EmptyState.js'
 
 /**
- * One workout, everything recorded about it. Reads its own route parameter rather than taking one
- * as a prop: Shell renders `active.element`, a static node, so there is nothing above this page to
- * hand it a parameter.
+ * One workout, everything recorded about it (M10a): the header row, the figure its type is judged
+ * by against its usual, the four figures under it and the comparison table, then the sections
+ * below. Reads its own route parameter rather than taking one as a prop: Shell renders
+ * `active.element`, a static node, so there is nothing above this page to hand it a parameter.
  *
- * Its three query states are handled here by hand, the way SessionList handles its own, for the
- * same reason: a session carries no metric and no points, so there is no MetricCard to gate on.
- * A 404 is a real answer rather than an error - the id in the URL names no session of this
- * person's, which readSession answers identically for somebody else's id (M8a's own comment on
- * why it is never a 403) - so it reads as an empty state, not a retry.
+ * Two reads. The workout page (useWorkoutPage) carries every figure already judged against the
+ * earlier sessions of the type, the neighbours for ‹ › and the Records best; the session itself
+ * (useWorkoutSession, /sessions/:id) still carries what only its attrs and rows hold - the note,
+ * the clock times, the route points, the splits, the events, the other copies of a merged
+ * workout - which the map, the trace, the zones, the pauses and the About fold draw from. The page waits for both, so it never draws a
+ * header without its figures or figures under the wrong header.
  *
- * All three states render inside `<div className="grid"><Card span={12}>...</Card></div>`,
- * Nutrition.tsx's own shape for a whole page that is one card - not SessionList.tsx's, which was
- * the wrong precedent: SessionList's hand-rolled states render inside a `Card` its *caller*
- * (Activity.tsx) already supplies, whereas Shell renders `active.element` straight into `.main`,
- * which carries no card background of its own. Without this a cold load, a slow network or a
- * stale/bad session id in a link showed unstyled floating text - review finding on this task.
+ * A 404 from either is a real answer rather than an error - the id in the URL names no workout of
+ * this person's, which the server answers identically for somebody else's id (M8a's own comment on
+ * why it is never a 403) - so it reads as an empty state, not a retry. Every state keeps the header
+ * (WorkoutTop without a payload: a generic title, the arrows disabled, the way back live) and draws
+ * its message in `<div className="grid"><Card span={12}>...</Card></div>`, as the night page does.
  *
- * No `.page` or `.workout-page` wrapper on the loaded state below: every page in this app returns
- * a fragment, a heading - here, WorkoutHeader rather than a plain `<h1>`, since this page's heading
- * also carries the workout's clock times, its source and its excluded badge - followed by the
- * twelve-column `.grid` the design's cards land in: the stat tiles first, then the zone card, the
- * heart rate trace, the route card (Task 5 of the workout routes plan), the splits and running
- * dynamics cards, then the comparison card last. Notes.tsx is the shortest example of the same
- * shape this page follows.
- *
- * The one-button `.workout-actions` row between the heading and the grid is this page's own
- * control, not ControlRow's: every other page that opens AnnotatePanel does it from a chart click
- * (an `onPointClick` handing back the day or sample the reader clicked), and this page has no such
- * click to hang it off - the target is the session itself, named by the route, not a point on a
- * chart. `annotating` gates the panel the same way `annotateTarget` does on those pages; there is
- * only ever one target here, so a boolean is enough where they need a nullable target object.
- * Task 7 (M8b) is what makes `scope: 'session'` reachable at all - see AnnotatePanel.tsx's own
- * comment on that variant, and useAnnotations.ts's on why writing at this scope also has to
- * invalidate this page's own cached session and intraday window.
- *
- * WorkoutComparison (unlike WorkoutTrace, which takes the resolved session as a prop but owns its
- * own hook the same way) is mounted only here, inside the grid reached only once `query` has left
- * both isPending and isError below - the guard useWorkoutComparison's own comment names: it is
- * never asked to compare against a session that has not resolved.
+ * The annotate button lives in the About fold at the foot of the page (WorkoutAbout); the panel it
+ * opens is rendered here, over the whole page. The target is the session itself, named by the
+ * route, not a point on a chart. `annotating` gates the panel the way `annotateTarget` does on the
+ * chart pages; there is only ever one target here.
  */
 export function WorkoutDetail() {
   const { t } = useTranslation()
   const route = useRoute()
   const sessionId = routeParams(WORKOUT_ROUTE, route)?.sessionId
   const query = useWorkoutSession(sessionId)
+  const pageQuery = useWorkoutPage(sessionId)
   const { sources } = useSourceNames()
   const [annotating, setAnnotating] = useState(false)
+  const openWorkout = useOpenWorkout()
 
-  // Memoised on query.data itself, not rebuilt by hand on every read: WorkoutTrace's own `marks`
+  // Memoised on query.data itself, not rebuilt by hand on every read: WorkoutThrough's own pauses
   // and WorkoutZones' own `rows` derive from this object, and useChart keys each chart's own
   // init/dispose effect on values built from them, so a `detail` that changed reference on every
-  // render (a bare `workoutDetail(query.data.attrs)` call here did) disposed and reinitialised
-  // both of this page's charts on every commit - window focus, opening or closing the annotate
-  // panel, and this task's own session-scope invalidation among them. Final review finding.
+  // render disposed and reinitialised both of this page's charts on every commit (M8b's final
+  // review finding).
   const detail = useMemo(
     () => (query.data === undefined ? null : workoutDetail(query.data.attrs)),
     [query.data],
   )
 
-  if (query.isError) {
-    const notFound = query.error instanceof ApiError && query.error.kind === 'not_found'
+  if (query.isError || pageQuery.isError) {
+    // The session's own failure first: it is the read the rest of the page has always stood on.
+    const failed = query.isError ? query : pageQuery
+    const notFound = failed.error instanceof ApiError && failed.error.kind === 'not_found'
+    // Every read that failed is asked for again: retrying the first alone left the other failed,
+    // and the page stayed on this error after a retry that had worked.
+    const retry = () => { for (const q of [query, pageQuery]) if (q.isError) void q.refetch() }
     return (
-      <div className="grid">
-        <Card span={12}>
-          {notFound
-            ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
-            : <ErrorState onRetry={() => void query.refetch()} error={query.error} />}
-        </Card>
+      <div className="detail-page">
+        <WorkoutTop />
+        <div className="grid">
+          <Card span={12}>
+            {notFound
+              ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
+              : <ErrorState onRetry={retry} error={failed.error} />}
+          </Card>
+        </div>
       </div>
     )
   }
   // `detail === null` cannot actually happen once isPending is false (both read query.data), but
-  // spelling it out here rather than asserting past it is what lets TypeScript narrow `detail` to
-  // non-null for the rest of the function without a bare `!`.
-  if (query.isPending || detail === null) {
+  // spelling it out lets TypeScript narrow `detail` for the rest of the function without a `!`.
+  if (query.isPending || pageQuery.isPending || detail === null) {
     return (
-      <div className="grid">
-        <Card span={12}><Loading /></Card>
+      <div className="detail-page">
+        <WorkoutTop />
+        <div className="grid">
+          <Card span={12}><Loading /></Card>
+        </div>
       </div>
     )
   }
 
-  // The reader's own choice, when they arrived carrying one; null otherwise. Read from the URL
-  // rather than from a control row: this page has none, and useSourceTrace's fallback rule turns
-  // on whether the READER chose a source, which only the URL can say here.
-  //
-  // Routed through resolveSource, like every sibling page (Activity.tsx, Dashboard.tsx, Health.tsx,
-  // Recovery.tsx, Sleep.tsx, Weight.tsx): a link can name a source this person does not have, and a
-  // source can be removed after a link was made, and both must read as the all-sources view, not as
-  // an explicit (and therefore unfalling-back) choice of a device that will never answer. Final
-  // review finding - as shipped, an unknown source id suppressed useSourceTrace's fallback rule and
-  // made the trace card vanish, which reads as "no heart rate was recorded", the exact false claim
-  // that rule exists to prevent.
+  // The reader's own choice, when they arrived carrying one; null otherwise. Routed through
+  // resolveSource like every sibling page: a link can name a source this person does not have, and
+  // a source can be removed after a link was made, and both must read as the all-sources view, not
+  // as an explicit choice of a device that will never answer (an unknown id used to suppress
+  // useSourceTrace's fallback and make the trace card vanish, which reads as "no heart rate").
   const chosenSourceParam = readQuery(route.split('?')[1] ?? '').get('source')
   const resolvedSource = chosenSourceParam === null
     ? ALL_SOURCES
     : resolveSource(chosenSourceParam, [ALL_SOURCES, ...sources.map((s) => s.id)])
   const chosenSource = resolvedSource === ALL_SOURCES ? null : resolvedSource
+  const page = pageQuery.data
 
   return (
-    <>
-      <WorkoutHeader session={query.data} detail={detail} route={query.data.route} />
-      <div className="workout-actions">
-        <button type="button" className="button" onClick={() => setAnnotating(true)}>
-          {t('common.annotate')}
-        </button>
-      </div>
+    <div className="detail-page">
+      <WorkoutTop page={page} session={query.data} />
       <div className="grid">
-        {/* First: where a workout went is what a reader looks for before any of its numbers, and
-            the card hides itself on a workout with no points, so an indoor session still opens on
-            its tiles. */}
-        <WorkoutRoute route={query.data.route} />
-        <WorkoutTiles session={query.data} detail={detail} cardioLoad={query.data.cardioLoad} />
-        <WorkoutZones detail={detail} />
-        <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
-        <WorkoutSplits autoSplits={query.data.autoSplits} laps={query.data.laps} />
-        <WorkoutDynamics detail={detail} />
-        <WorkoutComparison session={query.data} />
+        <WorkoutHero page={page} onOpenWorkout={openWorkout} />
+        <WorkoutMinis page={page} />
+        <WorkoutCompared page={page} />
+        <WorkoutMap session={query.data} page={page} />
+        <WorkoutThrough session={query.data} detail={detail} page={page} chosenSource={chosenSource} />
+        <WorkoutZones detail={detail} page={page} />
+        <WorkoutForm page={page} />
+        <WorkoutMore page={page} detail={detail} endMs={query.data.endMs} />
+        <WorkoutDay page={page} note={detail.notes} />
+        <WorkoutAfter page={page} />
+        <WorkoutAbout session={query.data} detail={detail} exerciseType={page.exerciseType} onAnnotate={() => setAnnotating(true)} />
       </div>
       {annotating && (
         <AnnotatePanel
@@ -152,6 +142,6 @@ export function WorkoutDetail() {
           onClose={() => setAnnotating(false)}
         />
       )}
-    </>
+    </div>
   )
 }

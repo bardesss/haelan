@@ -277,7 +277,11 @@ export function roundPageFigure(figure: PageFigure): PageFigure {
   }
 }
 
-/** roundPageFigure's rule for a workout figure, whose strip is earlier sessions' bare values with no band or verdict of their own. */
+/**
+ * roundPageFigure's rule for a workout figure, whose strip is earlier sessions judged against the
+ * figure's one usual rather than a band of their own: each point is re-judged against the rounded
+ * baseline, as the figure is, so a dot and the value it stands for cannot disagree.
+ */
 export function roundWorkoutFigure(figure: WorkoutFigure): WorkoutFigure {
   const { precision } = figure
   const value = roundToOrNull(precision, figure.value)
@@ -289,7 +293,11 @@ export function roundWorkoutFigure(figure: WorkoutFigure): WorkoutFigure {
     baseline,
     standing,
     judged: judge(standing, figure.direction),
-    strip: figure.strip.map((point) => ({ ...point, value: roundToOrNull(precision, point.value) })),
+    strip: figure.strip.map((point) => {
+      const pointValue = roundToOrNull(precision, point.value)
+      const pointStanding = standingAfterRounding(point.standing, pointValue, baseline)
+      return { ...point, value: pointValue, standing: pointStanding, judged: judge(pointStanding, figure.direction) }
+    }),
   }
 }
 

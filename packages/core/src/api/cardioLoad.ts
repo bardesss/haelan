@@ -187,3 +187,34 @@ export interface CardioLoad {
   banister: number | null
   banisterBasis: BanisterBasis | null
 }
+
+/**
+ * A workout's heart rate zones in bpm, where each zone above light begins. The provider's own
+ * daily ceilings (`heart_rate_zone_*_max_bpm`), the same rows the Banister maximum is read from
+ * (`providerZoneCeiling`), so the bands drawn behind a trace and the load beside it describe one
+ * model of one person. There is no `lightMin`: the API stores ceilings and never floors (see
+ * `banisterLoad`'s own comment), so light has no lower edge to send, and none is invented here.
+ */
+export interface ZoneBounds {
+  moderateMin: number
+  vigorousMin: number
+  peakMin: number
+  max: number
+}
+
+/**
+ * The four ceilings as zone bounds, or null unless all four are present and strictly rising: a day
+ * missing one, or ceilings out of order, is a record that cannot be drawn as four bands, and
+ * filling the gap from a formula would put a boundary on the page that nobody measured.
+ */
+export function zoneBoundsOf(ceilings: {
+  light: number | null
+  moderate: number | null
+  vigorous: number | null
+  peak: number | null
+}): ZoneBounds | null {
+  const { light, moderate, vigorous, peak } = ceilings
+  if (light === null || moderate === null || vigorous === null || peak === null) return null
+  if (!(light < moderate && moderate < vigorous && vigorous < peak)) return null
+  return { moderateMin: light, vigorousMin: moderate, peakMin: vigorous, max: peak }
+}

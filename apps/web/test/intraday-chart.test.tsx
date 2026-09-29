@@ -29,6 +29,23 @@ import type { NamedSource } from '../src/data/useSourceNames.js'
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 /**
+ * Sets custom properties for one test and hands back what undoes it: each property restored to
+ * the value it had before (the file-level stub's, when it set one), or removed when it had none,
+ * so a later test never inherits a value this one invented.
+ */
+function overrideVars(values: Record<string, string>): () => void {
+  const style = document.documentElement.style
+  const before = Object.keys(values).map((variable) => [variable, style.getPropertyValue(variable)] as const)
+  for (const [variable, value] of Object.entries(values)) style.setProperty(variable, value)
+  return () => {
+    for (const [variable, value] of before) {
+      if (value === '') style.removeProperty(variable)
+      else style.setProperty(variable, value)
+    }
+  }
+}
+
+/**
  * Stands in for the real echarts instance useChart.ts creates, the same stub spo2-range.test.tsx
  * and chart-marks.test.tsx use for their own wiring tests, so `setOption`'s own argument (the
  * option this chart actually built) can be captured without a real canvas.
@@ -133,6 +150,9 @@ function optionFor(props: {
   axis?: 'clock' | 'elapsed'
   usualBand?: { low: number, high: number }
   compact?: boolean
+  zoneBands?: readonly { low: number | null, high: number, label: string, token: 'stageRem' | 'stageLight' | 'stageAwake' | 'negative' }[]
+  spans?: readonly { startMs: number, endMs: number }[]
+  eventMarks?: readonly { atMs: number }[]
 }): EChartsOption {
   const session: Session = {
     personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', effectiveTimezone: 'UTC', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
@@ -149,7 +169,8 @@ function optionFor(props: {
       <I18nProvider lng="en">
         <QueryClientProvider client={client}>
           <IntradayHeartRate points={props.points} reduction={null} label="Heart rate"
-            startMs={props.startMs} endMs={props.endMs} axis={props.axis} usualBand={props.usualBand} compact={props.compact} />
+            startMs={props.startMs} endMs={props.endMs} axis={props.axis} usualBand={props.usualBand} compact={props.compact}
+            zoneBands={props.zoneBands} spans={props.spans} eventMarks={props.eventMarks} />
         </QueryClientProvider>
       </I18nProvider>,
     )
@@ -409,16 +430,54 @@ describe('IntradayHeartRate, bounded to its session', () => {
   const END = START + 34 * 60_000
   const ONE = [{ sourceId: 'watch', utcMs: START + 10 * 60_000, min: 140, mean: 150, max: 160, n: 1, excluded: false }]
 
+  // The elapsed axis is a value axis over time into the session (M10a-3), so its bounds are 0 and
+  // the session's length rather than two instants.
   it('spans the session, not a day, when the session has a single reading', () => {
     const option = optionFor({ points: ONE, startMs: START, endMs: END, axis: 'elapsed' })
-    expect((option.xAxis as { min: number }).min).toBe(START)
-    expect((option.xAxis as { max: number }).max).toBe(END)
+    expect((option.xAxis as { min: number }).min).toBe(0)
+    expect((option.xAxis as { max: number }).max).toBe(END - START)
+  })
+
+  it('bounds a clock axis by the two instants, as before', () => {
+    const option = optionFor({ points: ONE, startMs: START, endMs: END })
+    expect(option.xAxis).toMatchObject({ type: 'time', min: START, max: END })
   })
 
   it('labels its ticks as time into the session', () => {
     const option = optionFor({ points: ONE, startMs: START, endMs: END, axis: 'elapsed' })
     const formatter = (option.xAxis as { axisLabel: { formatter: (v: number) => string } }).axisLabel.formatter
-    expect(formatter(START + 5 * 60_000)).toBe('5:00')
+    expect(formatter(5 * 60_000)).toBe('5:00')
+  })
+
+  // M10a-1's final review: on a time axis the ticks fell on clock boundaries, so a run started at
+  // 18:02 read 3:00, 8:00, 13:00. On a value axis from 0, stepped by elapsedInterval, every tick is a
+  // whole five minutes from the start whatever the clock said.
+  it('ticks on whole five minutes from the start, whatever minute the session started on', () => {
+    const offStart = START + 2 * 60_000 + 17_000
+    const points = [{ sourceId: 'watch', utcMs: offStart + 10 * 60_000, min: 140, mean: 150, max: 160, n: 1, excluded: false }]
+    const option = optionFor({ points, startMs: offStart, endMs: offStart + 34 * 60_000, axis: 'elapsed' })
+    expect(option.xAxis).toMatchObject({ type: 'value', min: 0, interval: 5 * 60_000 })
+    // The readings sit on the same axis: ten minutes in, not an instant.
+    const mean = (option.series as { name?: string, data?: unknown[] }[])[2]!
+    expect(mean.data).toEqual([[10 * 60_000, 150]])
+    // 34 minutes is no whole step, so the end is not labelled beside 30:00.
+    expect((option.xAxis as { axisLabel: { showMaxLabel: boolean } }).axisLabel.showMaxLabel).toBe(false)
+    // A value axis draws a gridline at every tick unless told otherwise, in echarts' own default
+    // grey; they take the same soft style as the y axis's, not a heavy line every five minutes.
+    const splitLine = (axis: unknown) => (axis as { splitLine?: { lineStyle?: { color?: string } } }).splitLine
+    expect(splitLine(option.xAxis)?.lineStyle?.color).toBeDefined()
+    expect(splitLine(option.xAxis)).toEqual(splitLine(option.yAxis))
+  })
+
+  it('keeps the pause shading and the pause marks on the elapsed axis too', () => {
+    const option = optionFor({
+      points: ONE, startMs: START, endMs: END, axis: 'elapsed',
+      spans: [{ startMs: START + 12 * 60_000, endMs: START + 14 * 60_000 }],
+      eventMarks: [{ atMs: START + 20 * 60_000 }],
+    })
+    const series = option.series as { markArea?: { data: unknown }, markLine?: { data: unknown } }[]
+    expect(series.find((s) => s.markLine !== undefined)!.markLine!.data).toEqual([{ xAxis: 20 * 60_000 }])
+    expect(series.find((s) => s.markArea !== undefined)!.markArea!.data).toEqual([[{ xAxis: 12 * 60_000 }, { xAxis: 14 * 60_000 }]])
   })
 
   it('draws the usual band behind the lines', () => {
@@ -476,5 +535,58 @@ describe('IntradayHeartRate, bounded to its session', () => {
     // START + 5 minutes, read as a UTC clock time (the session's own effectiveTimezone in this
     // helper), not '5:00' - there is no session start here for 'elapsed' to measure from.
     expect(formatter(START + 5 * 60_000)).toBe('16:05')
+  })
+})
+
+// M10a-3: the workout's heart rate zones as labelled bands behind the line. The axis is fitted to
+// the readings (to whole tens, five bpm of air each side) and each band is cut to it, so a label
+// is never placed on a band that runs off the plot; a zone the readings never come near is left out.
+describe('IntradayHeartRate, zone bands', () => {
+  const START = Date.UTC(2026, 8, 4, 16, 0)
+  const END = START + 34 * 60_000
+  const POINTS = [
+    { sourceId: 'watch', utcMs: START + 5 * 60_000, min: 128, mean: 131, max: 134, n: 1, excluded: false },
+    { sourceId: 'watch', utcMs: START + 20 * 60_000, min: 160, mean: 168, max: 171, n: 1, excluded: false },
+  ]
+  const BANDS = [
+    { low: null, high: 113, label: 'Light', token: 'stageRem' as const },
+    { low: 113, high: 137, label: 'Moderate', token: 'stageLight' as const },
+    { low: 137, high: 162, label: 'Vigorous', token: 'stageAwake' as const },
+    { low: 162, high: 187, label: 'Peak', token: 'negative' as const },
+  ]
+
+  it('draws each zone the readings reach as a named band in its own colour, cut to the plot', () => {
+    // Every chart token is #000000 in this file; give the four their own so the colours are told apart.
+    const restore = overrideVars({
+      '--chart-stage-rem': '#000001', '--chart-stage-light': '#000002', '--chart-stage-awake': '#000003', '--negative': '#000004',
+    })
+    try {
+      const option = optionFor({ points: POINTS, startMs: START, endMs: END, axis: 'elapsed', zoneBands: BANDS })
+      expect(option.yAxis).toMatchObject({ min: 120, max: 180 })
+      const zones = (option.series as { id?: string, markArea?: { data: { name?: string, yAxis: number, itemStyle?: { color: string } }[][] } }[])
+        .find((s) => s.id === 'zones')!
+      expect(zones.markArea!.data.map(([from, to]) => [from!.name, from!.yAxis, to!.yAxis, from!.itemStyle?.color])).toEqual([
+        ['Moderate', 120, 137, '#000002'],
+        ['Vigorous', 137, 162, '#000003'],
+        ['Peak', 162, 180, '#000004'],
+      ])
+    } finally { restore() }
+  })
+
+  it('opens the light band downward, to the bottom of the plot, since light has no floor', () => {
+    // Readings 95 to 105 fit an axis of 90 to 110: light from its bottom to its top, nothing else.
+    const low = [{ sourceId: 'watch', utcMs: START + 5 * 60_000, min: 95, mean: 100, max: 105, n: 1, excluded: false }]
+    const option = optionFor({ points: low, startMs: START, endMs: END, axis: 'elapsed', zoneBands: BANDS })
+    const zones = (option.series as { id?: string, markArea?: { data: { name?: string, yAxis: number }[][] } }[])
+      .find((s) => s.id === 'zones')!
+    expect(zones.markArea!.data.map(([from, to]) => [from!.name, from!.yAxis, to!.yAxis])).toEqual([
+      ['Light', 90, 110],
+    ])
+  })
+
+  it('draws no zone series and leaves the y axis alone without bands', () => {
+    const option = optionFor({ points: POINTS, startMs: START, endMs: END, axis: 'elapsed' })
+    expect((option.series as { id?: string }[]).some((s) => s.id === 'zones')).toBe(false)
+    expect((option.yAxis as { min?: unknown }).min).toBeUndefined()
   })
 })

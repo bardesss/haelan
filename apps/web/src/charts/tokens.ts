@@ -21,6 +21,11 @@ const CHART_SOURCES = {
   // readChartTokens throws on a name the stylesheet does not define.
   balanceOver: 'balance-over',
   balanceUnder: 'balance-under',
+  // A workout's four heart-rate zones (ZoneBar and the trace's bands behind the heart rate).
+  zoneLight: 'zone-light',
+  zoneModerate: 'zone-moderate',
+  zoneVigorous: 'zone-vigorous',
+  zonePeak: 'zone-peak',
   band: 'band-baseline',
   excluded: 'state-excluded',
   noData: 'state-no-data',
