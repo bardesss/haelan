@@ -27,13 +27,18 @@ function Face({ mouth }: { mouth: string }) {
  * One of the five faces, read only: the night page's "That day" card names a mood already set,
  * rather than offering to set one, so it has no use for the radio group above - only for the one
  * face MoodFaces already knows how to draw. `score` is 1 to 5, the same range the radio group
- * takes; `label` is the caller's own word for it (`logPanel.mood.{{score}}`), passed in rather than
- * looked up here, since this file already reads `t` only for the five it draws itself, and a sixth
- * caller with its own translation hook is not a reason to add a second one to this one.
+ * takes.
+ *
+ * Decorative, not `role="img"`/`aria-label`: NightDay.tsx's only caller always prints the mood's
+ * own word (`logPanel.mood.{{score}}`) right beside this face (fix round 1's own finding - a
+ * caller that named the same word twice, once here and once in that visible text, had a screen
+ * reader announce it twice for one mood). A future caller that draws this face with no such text
+ * beside it would need a label of its own, which is a reason to add one back conditionally then,
+ * not to keep one unused here now.
  */
-export function MoodFace({ score, label }: { score: number, label: string }) {
+export function MoodFace({ score }: { score: number }) {
   return (
-    <span className={FACE_CLASS.on} role="img" aria-label={label}>
+    <span className={FACE_CLASS.on} aria-hidden="true">
       <Face mouth={MOUTHS[score - 1]!} />
     </span>
   )

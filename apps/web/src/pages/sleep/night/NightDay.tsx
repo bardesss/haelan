@@ -51,7 +51,7 @@ export function NightDay({ day, log }: { day: NightPageData['day'], log: NightPa
         <div className="night-day-top">
           {log.mood !== null && (
             <div className="night-day-mood">
-              <MoodFace score={log.mood} label={t(`logPanel.mood.${log.mood}`)} />
+              <MoodFace score={log.mood} />
               <span className="night-day-mood-word">{t(`logPanel.mood.${log.mood}`)}</span>
             </div>
           )}

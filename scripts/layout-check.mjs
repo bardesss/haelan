@@ -304,9 +304,16 @@ const ROUTES = RAW_ROUTES.map(resolveRoute)
 // The two routes that open the annotate panel from a control the check can click by name, rather
 // than from a tap on a plotted point. Declared beside ROUTES because the run's closing line counts
 // them; the reasoning for the pair is with the sweep that uses them.
+//
+// `reveal` is an optional selector clicked once before `opener` is located, for an opener a real
+// browser hides until something else opens it first. The night route's own opener sits inside
+// NightAbout's `<details>` (M10a-2 task 7), which the design keeps closed by default and which a
+// real Chromium hides while closed - happy-dom does not, which is exactly why this check exists
+// on top of the vitest suite (see the file's own top comment on why plain unit tests cannot see
+// this). Clicking the `<summary>` opens the fold the same way a reader's own click would.
 const PANEL_OPENERS = [
   { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button' },
-  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button' },
+  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button', reveal: '.night-about summary' },
 ]
 
 const server = await startServer()
@@ -412,8 +419,9 @@ try {
   // collapsed, where app.css swaps which edge it opens from. The icon itself is one component,
   // mounted once in the shell, so what differs between those opens is only which chrome renders
   // it and which edge of the rail it opens from, never which page it is on.
-  for (const { route, opener } of PANEL_OPENERS) {
+  for (const { route, opener, reveal } of PANEL_OPENERS) {
     await open(route)
+    if (reveal) await page.locator(reveal).first().click()
     const control = page.locator(opener).first()
     const present = await control.isVisible().catch(() => false)
     check(present, `${route}: no control to open the annotate panel (${opener})`)

@@ -378,7 +378,9 @@ describe('the night page\'s day before it', () => {
     const host = await mount(nightPageFixture())
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
     expect(card.querySelector('.basis')?.textContent).toBe('Saturday, September 5, the day before this night')
-    expect(card.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Good')
+    // The face itself is decorative (aria-hidden): the word beside it is what a screen reader
+    // announces, and this asserts the word is present rather than assuming the face's own markup.
+    expect(card.querySelector('.night-day-mood [aria-hidden="true"]')).not.toBeNull()
     expect(card.querySelector('.night-day-mood-word')?.textContent).toBe('Good')
     // The fixture's only counted kind, alcohol, was tapped twice, so its chip carries the count;
     // a chip for a kind tapped once would carry none (the brief's own "count shown when > 1").
@@ -393,6 +395,26 @@ describe('the night page\'s day before it', () => {
     const workoutLink = card.querySelector<HTMLAnchorElement>('.night-day-workout-link')
     expect(workoutLink?.textContent).toBe('Biking 52 min')
     expect(workoutLink?.getAttribute('href')).toBe('/activity/w1')
+  })
+
+  it('shows the workout\'s average heart rate when its metricsSummary carries one', async () => {
+    const page = nightPageFixture()
+    // The stored provider shape (workoutSummary.ts's own comment on it): metricsSummary is a
+    // nested object, and averageHeartRateBeatsPerMinute arrives as a string there, not a number -
+    // the fixture's own plain `attrs: { averageHeartRate: 131 }` is not a shape workoutSummary
+    // reads at all, which is exactly why this never showed against that fixture on its own.
+    const host = await mount({
+      ...page,
+      day: {
+        ...page.day,
+        workouts: [{
+          ...page.day.workouts[0]!,
+          attrs: { exerciseType: 'BIKING', metricsSummary: { averageHeartRateBeatsPerMinute: '131' } },
+        }],
+      },
+    })
+    const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
+    expect(card.textContent).toContain('average 131 bpm')
   })
 
   it('shows a chip with no count for a kind tapped only once', async () => {
