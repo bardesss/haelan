@@ -5,7 +5,7 @@ import { daily, sources, sessions, sessionSegments } from '../src/db/schema/inde
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { shiftLocalDate } from '../src/derive/localDay.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { readNightPage } from '../src/query/nightPage.ts'
+import { morningSummaryOf, readNightPage } from '../src/query/nightPage.ts'
 import type { NightPageInput } from '../src/query/nightPage.ts'
 
 const NIGHT = '2026-09-06'
@@ -39,6 +39,8 @@ const at = (localDate: string, hhmm: string) => Date.parse(`${localDate}T${hhmm}
 interface NightValues {
   asleep?: number, deep?: number, light?: number, rem?: number, latency?: number, awakenings?: number
   startLocal?: string, endLocal?: string
+  /** The night's segments as [stage, from, to] in minutes after its start; one lowercase 'light' segment when absent. */
+  segments?: readonly (readonly [string, number, number])[]
 }
 
 /**
@@ -69,7 +71,13 @@ function seedNight(localDate: string, v: NightValues) {
       },
     }),
   }).run()
-  test.db.insert(sessionSegments).values({ id: `${id}-1`, sessionId: id, stage: 'light', startMs, endMs }).run()
+  if (v.segments === undefined) {
+    test.db.insert(sessionSegments).values({ id: `${id}-1`, sessionId: id, stage: 'light', startMs, endMs }).run()
+  } else {
+    v.segments.forEach(([stage, from, to], i) => test.db.insert(sessionSegments).values({
+      id: `${id}-${i + 1}`, sessionId: id, stage, startMs: startMs + from * 60_000, endMs: startMs + to * 60_000,
+    }).run())
+  }
   seedDaily(localDate, 'sleep_asleep_minutes', 'sum', v.asleep ?? 420)
   if (v.deep !== undefined) seedDaily(localDate, 'sleep_deep_minutes', 'sum', v.deep)
   if (v.light !== undefined) seedDaily(localDate, 'sleep_light_minutes', 'sum', v.light)
@@ -305,5 +313,105 @@ describe('readNightPage', () => {
     expect(figure.value).toBeCloseTo(sd)
     expect(figure).toMatchObject({ metric: 'sleep_bedtime_variability', standing: 'above', judged: 'worse' })
     expect(figure.baseline!.thin).toBe(false)
+  })
+
+  describe('the heart-rate dip', () => {
+    const hr = (localDate: string, bpm: number) => insertSample(test.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '03:00'), tzOffsetMinutes: OFFSET, value: bpm,
+    })
+    /** Twenty nights before NIGHT, each resting at 54 or 56 by turns and lowest at 44: dips of 10 and 12. */
+    function seedHistory() {
+      for (let i = 1; i <= 20; i += 1) {
+        const date = shiftLocalDate(NIGHT, -i)
+        seedNight(date, {})
+        hr(date, 44)
+        seedDaily(date, 'resting_heart_rate', 'last', i % 2 === 0 ? 54 : 56)
+      }
+    }
+
+    it('is the resting heart rate minus the lowest of the night, judged against the same on earlier nights', () => {
+      seedHistory()
+      seedNight(NIGHT, {})
+      hr(NIGHT, 40)
+      seedDaily(NIGHT, 'resting_heart_rate', 'last', 60)
+      const dip = readNightPage(q(), input(NIGHT))!.morning.heartRateDip
+      expect(dip).toMatchObject({ metric: 'sleep_heart_rate_dip', unit: 'bpm', precision: 0, direction: 'up', value: 20, standing: 'above', judged: 'better' })
+      expect(dip.baseline!.center).toBeCloseTo(11)
+      expect(dip.baseline!.thin).toBe(false)
+    })
+
+    it('is null without a resting heart rate', () => {
+      seedNight(NIGHT, {})
+      hr(NIGHT, 40)
+      expect(readNightPage(q(), input(NIGHT))!.morning.heartRateDip).toMatchObject({ value: null, standing: null })
+    })
+
+    it('reads each night of history for heart rate once, shared by the trace and the dip', () => {
+      seedHistory()
+      seedNight(NIGHT, {})
+      const pq = q()
+      const read = pq.intradayWindow.bind(pq)
+      let heartRateReads = 0
+      pq.intradayWindow = (i) => { if (i.metric === 'heart_rate') heartRateReads += 1; return read(i) }
+      readNightPage(pq, input(NIGHT))
+      expect(heartRateReads).toBe(20 + 1)
+    })
+  })
+
+  it('times the first deep and REM sleep and counts REM episodes, against the nights before', () => {
+    // Twenty nights whose deep sleep came 50 or 54 minutes in by turns, REM at 170 or 174, one episode each.
+    for (let i = 1; i <= 20; i += 1) {
+      const d = i % 2 === 0 ? 0 : 4
+      seedNight(shiftLocalDate(NIGHT, -i), {
+        segments: [['AWAKE', 0, 5], ['LIGHT', 5, 55 + d], ['DEEP', 55 + d, 110], ['LIGHT', 110, 175 + d], ['REM', 175 + d, 260], ['LIGHT', 260, 480]],
+      })
+    }
+    // Tonight deep sleep came 90 minutes after falling asleep, REM at 172, in two episodes.
+    seedNight(NIGHT, {
+      segments: [['AWAKE', 0, 5], ['LIGHT', 5, 95], ['DEEP', 95, 140], ['LIGHT', 140, 177], ['REM', 177, 220], ['LIGHT', 220, 300], ['REM', 300, 340], ['LIGHT', 340, 480]],
+    })
+    const { stageTiming } = readNightPage(q(), input(NIGHT))!
+    expect(stageTiming.firstDeep).toMatchObject({ metric: 'sleep_first_deep_minutes', unit: 'minutes', precision: 0, direction: 'neutral', value: 90, standing: 'above' })
+    expect(stageTiming.firstDeep.baseline!.center).toBeCloseTo(52)
+    expect(stageTiming.firstRem).toMatchObject({ metric: 'sleep_first_rem_minutes', value: 172, standing: 'within' })
+    expect(stageTiming.cycles).toMatchObject({ metric: 'sleep_cycles', unit: 'count', value: 2, standing: 'above' })
+  })
+
+  it('leaves stage timing unjudged on a classic night', () => {
+    seedNight(NIGHT, { segments: [['ASLEEP', 0, 200], ['RESTLESS', 200, 210], ['ASLEEP', 210, 480]] })
+    const { stageTiming } = readNightPage(q(), input(NIGHT))!
+    expect([stageTiming.firstDeep.value, stageTiming.firstRem.value, stageTiming.cycles.value]).toEqual([null, null, null])
+  })
+
+  it('counts how many of the judged morning figures sat outside their usual', () => {
+    // Sixty mornings of steady readings, then a morning with a high resting heart rate and a low
+    // HRV and everything else usual: two outside, of every figure with a usual to stand on.
+    for (let i = 1; i <= 60; i += 1) {
+      const date = shiftLocalDate(NIGHT, -i)
+      const odd = i % 2 === 1
+      seedDaily(date, 'resting_heart_rate', 'last', odd ? 52 : 50)
+      seedDaily(date, 'daily_hrv', 'last', odd ? 44 : 40)
+      seedDaily(date, 'sleep_respiratory_rate', 'last', odd ? 15 : 14)
+      seedDaily(date, 'daily_spo2', 'last', odd ? 97 : 96)
+    }
+    seedNight(NIGHT, {})
+    seedDaily(NIGHT, 'resting_heart_rate', 'last', 60)
+    seedDaily(NIGHT, 'daily_hrv', 'last', 30)
+    seedDaily(NIGHT, 'sleep_respiratory_rate', 'last', 14.5)
+    seedDaily(NIGHT, 'daily_spo2', 'last', 96.5)
+    const page = readNightPage(q(), input(NIGHT))!
+    const judged = [page.morning.recovery.index, page.morning.restingHeartRate, page.morning.hrv, page.morning.breathing,
+      page.morning.spo2, page.morning.skinTemperature, page.morning.heartRateDip].filter((f) => f.standing !== null)
+    expect(judged).toHaveLength(4)
+    expect(page.morningSummary).toEqual({ outside: 2, of: 4 })
+  })
+})
+
+describe('morningSummaryOf', () => {
+  it('counts only the judged figures, and of those the ones above or below', () => {
+    expect(morningSummaryOf([
+      { standing: 'above' }, { standing: 'within' }, { standing: null }, { standing: 'below' },
+      { standing: 'within' }, { standing: 'within' }, { standing: null },
+    ])).toEqual({ outside: 2, of: 5 })
   })
 })

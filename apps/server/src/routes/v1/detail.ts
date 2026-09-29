@@ -87,6 +87,7 @@ function roundNightPage(page: NightPage): NightPage {
       // point need not come out exactly 0.5.
       skinTemperatureDeviation: skinTemperature.value === null || skinBaseline === null || skinBaseline.thin
         ? null : roundMetricValue('sleep_temperature', skinTemperature.value - skinBaseline.center),
+      heartRateDip: roundPageFigure(page.morning.heartRateDip),
     },
     day: {
       ...page.day,
