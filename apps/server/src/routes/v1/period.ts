@@ -1,10 +1,8 @@
 import type { FastifyInstance } from 'fastify'
-import {
-  balanceOf, ConfigError, countsOf, highOf, judge, PERIOD_RANGES, periodBounds, requireDate, standingOf, vo2TrendOf,
-} from '@haelan/core'
+import { balanceOf, countsOf, highOf, judge, standingOf, vo2TrendOf } from '@haelan/core'
 import type { ActivityPeriod, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, SleepPeriod } from '@haelan/core'
 import {
-  personAndToday, personIdOf, personQueryOf, requireString, roundBandTo, roundMetricValue, roundToOrNull, sendHashed,
+  personAndToday, personIdOf, personQueryOf, requireString, roundBandTo, roundMetricValue, roundTo, roundToOrNull, sendHashed,
   standingAfterRounding,
 } from './shared.ts'
 
@@ -54,8 +52,6 @@ function roundChange(change: PeriodChange, hero: PeriodFigure): PeriodChange {
   return { ...change, value, delta }
 }
 
-const whole = (value: number) => Number(value.toFixed(0))
-const wholeOrNull = (value: number | null) => (value === null ? null : whole(value))
 
 /**
  * The Sleep overview at the wire's precision. Every figure goes through roundPeriodFigure; the
@@ -74,9 +70,8 @@ export function roundSleepPeriod(p: SleepPeriod): SleepPeriod {
   const bedOn = valueOn(bedtime)
   const wakeOn = valueOn(waketime)
   const { shares } = p.stages
-  const share = (v: number) => Number(v.toFixed(3))
   const side = (s: SleepPeriod['schedule']['sides']['weekday']) =>
-    (s === null ? null : { ...s, bedtimeMinutes: whole(s.bedtimeMinutes), waketimeMinutes: whole(s.waketimeMinutes) })
+    (s === null ? null : { ...s, bedtimeMinutes: roundTo(0, s.bedtimeMinutes), waketimeMinutes: roundTo(0, s.waketimeMinutes) })
   let balance: SleepPeriod['balance'] = null
   if (p.balance !== null) {
     const zeroMinutes = roundMetricValue('sleep_asleep_minutes', p.balance.zeroLine.minutes)
@@ -94,7 +89,7 @@ export function roundSleepPeriod(p: SleepPeriod): SleepPeriod {
       deep: roundOrNull(p.stages.deep), light: roundOrNull(p.stages.light),
       rem: roundOrNull(p.stages.rem), awake: roundOrNull(p.stages.awake),
       shares: shares === null ? null
-        : { deep: share(shares.deep), light: share(shares.light), rem: share(shares.rem), awake: share(shares.awake) },
+        : { deep: roundTo(3, shares.deep), light: roundTo(3, shares.light), rem: roundTo(3, shares.rem), awake: roundTo(3, shares.awake) },
     },
     schedule: {
       bedtime, waketime, variability: roundOrNull(p.schedule.variability),
@@ -148,24 +143,24 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
     },
     workouts: p.workouts.map((w) => ({
       ...w,
-      durationSeconds: wholeOrNull(w.durationSeconds),
-      distanceMeters: wholeOrNull(w.distanceMeters),
-      caloriesKcal: wholeOrNull(w.caloriesKcal),
-      averageHeartRateBpm: wholeOrNull(w.averageHeartRateBpm),
+      durationSeconds: roundToOrNull(0, w.durationSeconds),
+      distanceMeters: roundToOrNull(0, w.distanceMeters),
+      caloriesKcal: roundToOrNull(0, w.caloriesKcal),
+      averageHeartRateBpm: roundToOrNull(0, w.averageHeartRateBpm),
     })),
     types: p.types.map((t) => {
       const usualCount = roundBandTo(1, t.usualCount)
       return {
         ...t,
-        seconds: whole(t.seconds),
-        distanceMeters: wholeOrNull(t.distanceMeters),
+        seconds: roundTo(0, t.seconds),
+        distanceMeters: roundToOrNull(0, t.distanceMeters),
         usualCount,
         standing: standingOf(t.count, usualCount, p.period.partial),
       }
     }),
     cardioLoad: roundOrNull(p.cardioLoad),
     vo2max: vo2max === null ? null : (() => {
-      const latest = Number(vo2max.latest.toFixed(1))
+      const latest = roundTo(1, vo2max.latest)
       const earlier = roundToOrNull(1, vo2max.earlier)
       return { ...vo2max, latest, earlier, trend: vo2TrendOf(latest, earlier) }
     })(),
@@ -174,21 +169,18 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
 }
 
 /**
- * The range, anchor and source every period read takes, refused here in the route's own words
- * before core sees them. `all` (or no source) is the merge; any other value is passed through, and
- * core refuses an unknown or derived source name with a 400, as /insights does.
+ * The range, anchor and source every period read takes. Only their presence is checked here: core's
+ * sleepPeriod and activityPeriod refuse an unknown range (`day` included), a malformed anchor and a
+ * period that starts after today, each with a ConfigError (400). `all` (or no source) is the merge;
+ * any other value is passed through, and core refuses an unknown or derived source name with a 400,
+ * as /insights does.
  */
-function periodQuery(query: PeriodQuery, today: string): { range: PeriodRange, anchor: string, source: string | undefined } {
-  const range = requireString(query.range, 'range')
-  if (!(PERIOD_RANGES as readonly string[]).includes(range)) {
-    throw new ConfigError(`range must be one of ${PERIOD_RANGES.join(', ')}, got '${range}'`)
-  }
+function periodQuery(query: PeriodQuery): { range: PeriodRange, anchor: string, source: string | undefined } {
+  // Narrowed by cast only: core refuses a range outside PERIOD_RANGES before it reads anything.
+  const range = requireString(query.range, 'range') as PeriodRange
   const anchor = requireString(query.anchor, 'anchor')
-  requireDate('anchor', anchor)
-  const { from } = periodBounds(range as PeriodRange, anchor)
-  if (from > today) throw new ConfigError(`the ${range} of '${anchor}' starts after today '${today}'`)
   const source = query.source === undefined || query.source === 'all' ? undefined : query.source
-  return { range: range as PeriodRange, anchor, source }
+  return { range, anchor, source }
 }
 
 /**
@@ -198,7 +190,7 @@ function periodQuery(query: PeriodQuery, today: string): { range: PeriodRange, a
 export function registerPeriodRoutes(app: FastifyInstance): void {
   app.get<{ Params: PersonParams, Querystring: PeriodQuery }>('/p/:personId/sleep/period', async (request, reply) => {
     const { person, today } = personAndToday(app, personIdOf(request))
-    const { range, anchor, source } = periodQuery(request.query, today)
+    const { range, anchor, source } = periodQuery(request.query)
     const period = personQueryOf(request).sleepPeriod({
       range, anchor, today, source,
       sleepTargetMinutes: person.sleepTargetMinutes, sleepUseBaseline: person.sleepUseBaseline,
@@ -208,7 +200,7 @@ export function registerPeriodRoutes(app: FastifyInstance): void {
 
   app.get<{ Params: PersonParams, Querystring: PeriodQuery }>('/p/:personId/activity/period', async (request, reply) => {
     const { today } = personAndToday(app, personIdOf(request))
-    const { range, anchor, source } = periodQuery(request.query, today)
+    const { range, anchor, source } = periodQuery(request.query)
     return sendHashed(reply, request, roundActivityPeriod(personQueryOf(request).activityPeriod({ range, anchor, today, source })))
   })
 }

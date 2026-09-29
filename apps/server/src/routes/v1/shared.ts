@@ -227,7 +227,7 @@ export function roundFigure(figure: GlanceFigure): GlanceFigure {
 }
 
 /** `value` to `precision` decimals, the same toFixed rule roundMetricValue applies with a catalogue precision. */
-function roundTo(precision: number, value: number): number {
+export function roundTo(precision: number, value: number): number {
   return Number(value.toFixed(precision))
 }
 
