@@ -162,6 +162,19 @@ describe('readSleepPeriod', () => {
     expect(page.more.map((f) => f.metric)).toEqual(['sleep_light_minutes', 'sleep_awake_minutes', 'sleep_waketime_minutes'])
   })
 
+  it('bands every night of the hero but no day of the recovery index', () => {
+    seedNights()
+    seedSeries('respiratory_rate', 'last', (d) => 14 + jitter(d) / 10)
+    const page = readSleepPeriod(q(), input({ range: 'month', anchor: '2026-08-15' }))
+    const recovery = page.mornings.find((f) => f.metric === 'recovery_index')!
+    // The index is already a distance from the person's own baselines; a band of it would be a
+    // baseline of a baseline (readRecovery's rule), so its days are neither banded nor judged.
+    expect(recovery.days).toBeGreaterThan(0)
+    expect(recovery.daily.every((p) => p.band === null && p.standing === null && p.judged === null)).toBe(true)
+    expect(recovery.usual).not.toBeNull()
+    expect(page.hero.daily.every((p) => p.band !== null)).toBe(true)
+  })
+
   it('shows SpO2 once it has rows', () => {
     seedNights()
     seedSeries('daily_spo2', 'last', (d) => 96 + jitter(d) / 10)

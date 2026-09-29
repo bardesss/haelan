@@ -6,6 +6,7 @@ import { oneNightPerDate } from '../api/nights.ts'
 import { recoveryIndexSeries, sleepWeekSeries } from '../api/recoveryIndex.ts'
 import { balanceOf, balanceZeroLine } from '../api/sleepBalance.ts'
 import type { ZeroLine } from '../api/sleepBalance.ts'
+import type { Baseline } from './baseline.ts'
 import type { SleepSummary } from '../api/sleepSummary.ts'
 import { readRecoveryInput } from './recoveryInput.ts'
 import { summaryOf } from './nightPage.ts'
@@ -92,8 +93,10 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
   const soFar: DateSpan = { from: bounds.from, to: lastDay }
 
   // Figures over values computed here rather than read, each banded in memory as `baselines` would.
-  const derived = (metric: string, o: { unit: string, precision: number, direction: 'up' | 'down' | 'neutral' }, values: Map<string, number>) =>
-    periodFigureOf({ metric, ...o, range, anchor, lastDay, values, dailyBands: bandsOver(values, bounds, lastDay), additive: false })
+  const derived = (
+    metric: string, o: { unit: string, precision: number, direction: 'up' | 'down' | 'neutral' }, values: Map<string, number>,
+    dailyBands: ReadonlyMap<string, Baseline | null> = bandsOver(values, bounds, lastDay),
+  ) => periodFigureOf({ metric, ...o, range, anchor, lastDay, values, dailyBands, additive: false })
 
   const asleep = read('sleep_asleep_minutes', 'sum')
   const hero = asleep.figure
@@ -112,8 +115,11 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
 
   // The index is scored from merged rows, whatever source the page is narrowed to, as the glance scores it.
   const scores = recoveryIndexSeries(readRecoveryInput(q, { from: span.from, to: lastDay }).input, { from: span.from, to: lastDay })
+  // The index keeps its period usual, made of period means of the index, but no day of it is banded:
+  // it already is a distance from the person's own baselines, and a baseline of that would be a
+  // baseline of a baseline (readRecovery, glance.ts). So its daily standing and verdict stay null.
   const recovery = derived('recovery_index', { unit: 'score', precision: 0, direction: 'up' },
-    new Map([...scores].flatMap(([date, day]) => (day.enough ? [[date, day.score] as const] : []))))
+    new Map([...scores].flatMap(([date, day]) => (day.enough ? [[date, day.score] as const] : []))), new Map())
 
   // The three figures only the provider's summary holds, from one read of the nights and their sessions.
   const nightsInSpan = oneNightPerDate(q.sleepNights({ from: span.from, to: lastDay, sourceId: source }))
