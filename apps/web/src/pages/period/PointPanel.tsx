@@ -27,7 +27,8 @@ export function PointPanel({ title, rows, open, onAnnotate, onClose }: {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+      // An Escape a layer above already claimed is not this panel's (LogButton's rule).
+      if (event.key !== 'Escape' || event.defaultPrevented) return
       event.preventDefault()
       event.stopPropagation()
       closeRef.current()

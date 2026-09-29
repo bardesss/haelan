@@ -147,6 +147,25 @@ describe('PeriodHero', () => {
     expect(dialogs[0]!.getAttribute('aria-label')).toBe('2026-08-05')
   })
 
+  it('closes the panel when the period changes, even onto a point starting on the same date', () => {
+    const shift = (from: string) => from.replace('2026-08', '2026-07')
+    const earlier = { ...SLEEP_PERIOD_MONTH.hero, daily: SLEEP_PERIOD_MONTH.hero.daily.map((day) => ({ ...day, from: shift(day.from), to: shift(day.to) })) }
+    // The new period still holds a point on 2026-08-03 (its last day), so only the period can close it.
+    earlier.daily.push({ ...SLEEP_PERIOD_MONTH.hero.daily[2]! })
+    mount(hero(SLEEP_PERIOD_MONTH.hero))
+    act(() => { sparklineProps!.onPointClick!('2026-08-03') })
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+    mount(hero(earlier))
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('keeps the panel open when the same period renders again', () => {
+    mount(hero(SLEEP_PERIOD_MONTH.hero))
+    act(() => { sparklineProps!.onPointClick!('2026-08-03') })
+    mount(hero({ ...SLEEP_PERIOD_MONTH.hero }))
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+
   it('opens a week\'s panel on a weekly strip', () => {
     const weeks = SLEEP_PERIOD_YEAR.hero.weekly!
     const panel = vi.fn(panelFor)

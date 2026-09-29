@@ -50,23 +50,34 @@ describe('PeriodFigureRows', () => {
     expect(rowProps[1]!.standing).toBe('within')
   })
 
-  it('follows the verdict with the day counts', () => {
+  it('puts the day counts in the plain note under the verdict, not in its toned words', () => {
     render([deep, bedtime])
-    expect(rowProps[0]!.verdict).toMatch(/for a month, last 12 months · 17 of 28 nights usual · 6 longer · 5 shorter$/)
-    expect(rowProps[1]!.verdict).toMatch(/ · 16 of 28 nights usual · 5 later · 7 earlier$/)
+    expect(rowProps[0]!.verdict).toMatch(/for a month, last 12 months$/)
+    expect(rowProps[0]!.note).toBe('17 of 28 nights usual · 6 longer · 5 shorter')
+    expect(rowProps[1]!.note).toBe('16 of 28 nights usual · 5 later · 7 earlier')
   })
 
-  it('says there is no usual yet where there is no verdict, and no counts where no day was judged', () => {
+  it('keeps the counts out of a verdict judged worse, which takes the warning tone', () => {
+    const worse = { ...deep, standing: 'below' as const, judged: 'worse' as const }
+    render([worse])
+    expect(rowProps[0]!.judged).toBe('worse')
+    expect(rowProps[0]!.verdict).not.toContain('nights usual')
+    expect(rowProps[0]!.note).toContain('17 of 28 nights usual')
+  })
+
+  it('says there is no usual yet where there is no verdict, and no note where no day was judged', () => {
     const unjudged = { ...deep, usual: null, standing: null, counts: { within: 0, above: 0, below: 0, unjudged: 28 } }
     render([unjudged])
     expect(rowProps[0]!.verdict).toBe('no usual yet')
+    expect(rowProps[0]!.note).toBeUndefined()
   })
 
-  it('leads a total\'s line with its average per day', () => {
+  it('leads a total\'s note with its average per day', () => {
     const distance = { ...deep, metric: 'distance', unit: 'meters', value: 5200, total: 156000 }
     render([distance])
     expect(rowProps[0]!.value).toBe(`156.00${NB}km`)
-    expect(rowProps[0]!.verdict.startsWith(`5.20${NB}km per day · `)).toBe(true)
+    expect(rowProps[0]!.note).toBe(`5.20${NB}km per day · 17 of 28 nights usual · 6 higher · 5 lower`)
+    expect(rowProps[0]!.verdict).not.toContain('per day')
   })
 
   it('draws each figure\'s strip of its points, each over its own usual', () => {

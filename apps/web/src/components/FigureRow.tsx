@@ -57,10 +57,13 @@ export function FigureRows({ max, side = false, children }: { max?: 1 | 2 | 3 | 
  * wiring Card gives its basis line, so a screen reader hears the verdict once, where it is printed,
  * rather than once there and again from a hidden copy.
  */
-export function FigureRow({ label, value, verdict, judged, standing, band, mark, strip }: {
+export function FigureRow({ label, value, verdict, judged, standing, band, mark, strip, note }: {
   label: string, value: string, verdict: string, judged: 'better' | 'worse' | null
   standing?: 'within' | 'above' | 'below' | null
   band: { center: number, low: number, high: number, thin: boolean } | null, mark: number | null, strip?: FigureRowStrip
+  // A plain line under the verdict for what is not a verdict (an overview page's day counts, a
+  // total's per-day average), so only the verdict's own words take its tone.
+  note?: string
 }) {
   const verdictId = useId()
   const scale = band === null || band.thin ? null : gaugeScale(band)
@@ -86,6 +89,7 @@ export function FigureRow({ label, value, verdict, judged, standing, band, mark,
         </div>
       )}
       <span id={verdictId} className={tone === null ? 'figure-row-verdict' : `figure-row-verdict ${tone}`}>{verdict}</span>
+      {note !== undefined && <span className="figure-row-note">{note}</span>}
     </div>
   )
 }

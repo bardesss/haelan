@@ -54,9 +54,13 @@ export function PeriodHero({ label, figure, noun, standout, caption, lastYear, p
   }, [figure, band, language, t])
 
   // The open point by the date it starts on, which is what a dot's click hands back (its label).
-  const [openFrom, setOpenFrom] = useState<string | null>(null)
-  const close = useCallback(() => setOpenFrom(null), [])
-  const open = openFrom === null ? undefined : points.find((point) => point.from === openFrom)
+  // Kept with the period it was opened in: a new period (a range or date change) closes it, even
+  // where a point of the new one starts on the same date.
+  const period = figure.daily[0]?.from ?? figure.weekly?.[0]?.from ?? null
+  const [opened, setOpened] = useState<{ period: string | null, from: string } | null>(null)
+  const openAt = useCallback((from: string) => setOpened({ period, from }), [period])
+  const close = useCallback(() => setOpened(null), [])
+  const open = opened === null || opened.period !== period ? undefined : points.find((point) => point.from === opened.from)
 
   if (figure.value === null) return null
   const { value, under } = periodValueLine(figure, language, t)
@@ -82,7 +86,7 @@ export function PeriodHero({ label, figure, noun, standout, caption, lastYear, p
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={figure.metric}
                 formatValue={formatValue} baseline={band} bands={strip.bands} bandLabels={bandLabels}
                 pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} pointMarks={marks}
-                lastYear={strip.weekly ? undefined : lastYear} height={64} dots tableToggle={false} onPointClick={setOpenFrom} />
+                lastYear={strip.weekly ? undefined : lastYear} height={64} dots tableToggle={false} onPointClick={openAt} />
             </BasisContext.Provider>
             <p id={captionId} className="dash-caption">{caption}</p>
             {open !== undefined && <div key={open.from} className="period-hero-panel">{panel(open, close)}</div>}

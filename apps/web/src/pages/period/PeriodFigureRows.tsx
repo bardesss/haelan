@@ -10,8 +10,8 @@ const SEPARATOR = ' · '
 
 /**
  * An overview page's figures as FigureRows, NightMinis's rows over the period read: each figure's
- * value (the period total, for a total, with its per-day average leading the line under it), the
- * verdict against the usual for a period of that length, then its day counts, over a strip of its
+ * value (the period total, for a total), the verdict against the usual for a period of that length,
+ * and under it, plain, a total's per-day average and the day counts, over a strip of its
  * points each against its own usual, or with `bars` (a `more` figure, sent with no points) the bar.
  *
  * A figure with no value is left out, and with none left the rows are null, so the caller's card
@@ -38,16 +38,18 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
       formatValue: (value, absent) => (value === null ? absent : formatFigureValue(figure, value, language, t)),
     }
     const { value, under } = periodValueLine(figure, language, t)
-    const verdict = [under, periodVerdictLine(figure, language, t) ?? t('glance.usual.none'), dayCountsLine(figure, noun, t)]
-      .filter((part) => part !== null).join(SEPARATOR)
-    return [{ key: figure.metric, label, value, verdict, figure, strip }]
+    const verdict = periodVerdictLine(figure, language, t) ?? t('glance.usual.none')
+    // What is not a verdict goes under it, plain, so only the verdict's words take its tone.
+    const parts = [under, dayCountsLine(figure, noun, t)].filter((part) => part !== null)
+    const note = parts.length === 0 ? undefined : parts.join(SEPARATOR)
+    return [{ key: figure.metric, label, value, verdict, note, figure, strip }]
   }), [figures, labelOf, noun, bars, language, t])
   if (rows.length === 0) return null
 
   return (
     <FigureRows max={max} side={side}>
-      {rows.map(({ key, label, value, verdict, figure, strip }) => (
-        <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
+      {rows.map(({ key, label, value, verdict, note, figure, strip }) => (
+        <FigureRow key={key} label={label} value={value} verdict={verdict} note={note} judged={figure.judged} standing={figure.standing}
           band={figure.usual} mark={figure.value} strip={strip} />
       ))}
     </FigureRows>

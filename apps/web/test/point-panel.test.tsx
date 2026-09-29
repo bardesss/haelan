@@ -85,6 +85,14 @@ describe('PointPanel', () => {
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('leaves an Escape a layer above already claimed', () => {
+    const props = mount()
+    const claimed = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    claimed.preventDefault()
+    act(() => { document.dispatchEvent(claimed) })
+    expect(props.onClose).not.toHaveBeenCalled()
+  })
+
   it('ignores other keys', () => {
     const props = mount()
     act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
