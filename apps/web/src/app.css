@@ -716,11 +716,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 
 /* NightMorning.tsx's own two-column layout: the recovery ring at a quarter width, its five
    readings taking the rest, stacked on a phone the way every other side-by-side pair on this page
-   already collapses. */
+   already collapses. It stacks at the grid's own collapse width, not the phone's: see that
+   block (the one at GRID_STACK_WIDTH) for why. */
 .night-grp { display: grid; grid-template-columns: 1fr 3fr; gap: var(--space-4); align-items: center; }
-@media (max-width: 620px) {
-  .night-grp { grid-template-columns: 1fr; }
-}
 
 /* NightTraces.tsx's rows inside the night card, under the hypnogram (the approved mockup's "The
    night"): a short label and the night's extreme in a fixed left column, the compact trace beside
@@ -1427,6 +1425,14 @@ button.week-bar-slot { cursor: pointer; }
      width under the figure, seven 44px slots at the narrowest phone. */
   .dash-week-row { grid-template-columns: minmax(0, 1fr); }
   .week-bars { width: 100%; height: 44px; }
+  /* NightMorning's ring and readings stack here rather than at the phone breakpoint, and the
+     readings go two across: the rail keeps its 186px between the two widths, so a 621px window
+     leaves this card the same ~360px a phone does. Side by side there, the three reading columns
+     came out 76px each, narrower than one unbreakable word ("Huidtemperatuur", "ademh./min", 122px
+     and more), and the page ran 25px past the viewport. Stacked but still three across is 109px,
+     not enough either; two across is 170px. */
+  .night-grp { grid-template-columns: minmax(0, 1fr); }
+  .night-grp .night-morning-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean
