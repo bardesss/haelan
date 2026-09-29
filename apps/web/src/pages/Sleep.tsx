@@ -32,7 +32,7 @@ import { LIST_VISIBLE } from './period/ExpandableList.js'
 import { periodLine } from './period/periodLine.js'
 import { nightPath } from './sleep/NightRow.js'
 import { useSleepLabel } from './sleep/period/labels.js'
-import { SleepStages, hasStages } from './sleep/period/SleepStages.js'
+import { SleepStages } from './sleep/period/SleepStages.js'
 import { SleepScheduleCard, hasSchedule } from './sleep/period/SleepScheduleCard.js'
 import { SleepNightsList } from './sleep/period/SleepNightsList.js'
 import { SleepBalanceCard, hasBalance } from './sleep/period/SleepBalanceCard.js'
@@ -175,7 +175,7 @@ export function Sleep() {
             </div>
           </Card>
         )}
-        {hasStages(data.stages) && <SleepStages stages={data.stages} />}
+        <SleepStages stages={data.stages} />
         {scheduleShown && (
           <SleepScheduleCard data={data} range={data.period.range} span={nightsSpan}
             nightsRange={{ from: data.period.from, to: data.period.to, source }} />

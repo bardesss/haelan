@@ -101,6 +101,10 @@ describe('the Sleep page: header and requests', () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
     expect(container!.querySelector('h1')?.textContent).toBe('Sleep')
     expect(container!.querySelector('.dash-date')?.textContent).toBe('Aug 1 – 31, 2026 · All sources')
+    // The export downloads the period's summed sleep rollups.
+    const exported = new URLSearchParams(container!.querySelector('a[href*="/export?"]')!.getAttribute('href')!.split('?')[1])
+    expect(exported.getAll('metric')).toContain('sleep_asleep_minutes')
+    expect([exported.get('agg'), exported.get('from'), exported.get('to')]).toEqual(['sum', '2026-08-01', '2026-08-31'])
   })
 
   it('names a picked source by its name in the header line, and asks for it', async () => {
@@ -144,6 +148,8 @@ describe('the Sleep page: header and requests', () => {
     expect(container!.querySelector('h1')?.textContent).toBe('Sleep')
     expect(container!.querySelector('.controls')).not.toBeNull()
     expect(cardFor('Time asleep')).toBeUndefined()
+    // The error's own way back, not a loading line standing in for it.
+    expect(container!.querySelector('.empty .button')?.textContent).toBe('Try again')
     act(() => { root?.unmount() })
     root = createRoot(container!)
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_EMPTY })
@@ -380,10 +386,18 @@ describe('the Sleep page: the nights, the stages, the mornings', () => {
       .find((r) => r.querySelector('.figure-row-label')?.textContent === 'Skin temperature')!
     expect(row().querySelector('.figure-row-value')?.textContent).toBe('+0.3 °C')
     expect(row().querySelector('.figure-row-verdict')?.textContent).toContain('±0.3 °C')
-    act(() => { root?.unmount() })
-    root = createRoot(container!)
-    await renderAt(MONTH_URL, { period: month({ mornings: [{ ...skin, usual: null, reason: 'thin-usual', standing: null }] }) })
-    expect(row().querySelector('.figure-row-value')?.textContent).toBe('33.6 °C')
+    // No usual, a thin one, or a reason not to judge: the reading itself, never "— °C".
+    const unjudged: PeriodFigure[] = [
+      { ...skin, usual: null, reason: 'thin-usual', standing: null },
+      { ...skin, usual: { ...skin.usual!, thin: true }, standing: null },
+      { ...skin, reason: 'too-few-days', standing: null },
+    ]
+    for (const figure of unjudged) {
+      act(() => { root?.unmount() })
+      root = createRoot(container!)
+      await renderAt(MONTH_URL, { period: month({ mornings: [figure] }) })
+      expect(row().querySelector('.figure-row-value')?.textContent).toBe('33.6 °C')
+    }
   })
 })
 
@@ -439,7 +453,8 @@ describe('the Sleep page: the schedule chart', () => {
       { series?: { markArea?: { data?: [{ yAxis: number }, { yAxis: number }][] } }[] }
     const bands = option.series!.flatMap((series) => series.markArea?.data ?? [])
     expect(bands).toHaveLength(2)
-    const [[bed], [wake]] = bands
+    const bed = bands[0]![0]
+    const wake = bands[1]![0]
     // In the frame the bars are drawn in: bed in the evening, wake the next morning, a night after it.
     expect(bed!.yAxis).toBeGreaterThan(1200)
     expect(bed!.yAxis).toBeLessThan(1500)

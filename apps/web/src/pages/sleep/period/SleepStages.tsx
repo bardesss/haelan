@@ -16,11 +16,6 @@ const STAGES: readonly { stage: Stage, token: keyof ChartTokens }[] = [
   { stage: 'awake', token: 'stageAwake' },
 ]
 
-/** Whether the period has any stage to draw: all four null leaves the section out. */
-export function hasStages(stages: SleepPeriodData['stages']): boolean {
-  return STAGES.some(({ stage }) => stages[stage] !== null)
-}
-
 // A stage's points: its weeks on 3 months and Year, its nights otherwise.
 const pointsOf = (figure: PeriodFigure) => figure.weekly ?? figure.daily
 
@@ -28,7 +23,8 @@ const pointsOf = (figure: PeriodFigure) => figure.weekly ?? figure.daily
  * "De nachten": each night's stages as one stacked bar (each week's averages on 3 months and Year),
  * in the stages' own colours, the night page's legend under it with the period's average of each
  * and its share of the night (the server's `shares`). The axis runs along whichever stage the
- * server sent; the four share it, since each figure's points cover the same period.
+ * server sent; the four share it, since each figure's points cover the same period. Nothing at
+ * all when the server sent no stage.
  */
 export function SleepStages({ stages }: { stages: SleepPeriodData['stages'] }) {
   const { t, i18n } = useTranslation()
