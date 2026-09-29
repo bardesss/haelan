@@ -113,8 +113,8 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
       ],
     }
     // axisWindow.min/max rather than axisWindow itself: this chart's own default is a module level
-    // constant so it never churns, but a caller building its own window prop (Sleep.tsx passes a
-    // module level constant of its own, for the same reason) should not have to guarantee object
+    // constant so it never churns, but a caller building its own window prop should not have to
+    // guarantee object
     // identity across renders just to avoid disposing and rebuilding this chart every commit, the
     // defect useChart.ts's own doc comment already names for a freshly constructed array.
   }, [nights, showNaps, resolvedWindow.min, resolvedWindow.max, usualBands, t])

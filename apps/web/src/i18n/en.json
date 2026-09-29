@@ -883,7 +883,8 @@
         "same": "at the same time"
       },
       "mornings": "The mornings",
-      "scheduleCaption": "each bar: one night, bedtime to wake time · band = your usual times"
+      "scheduleCaption": "each bar: one night, bedtime to wake time",
+      "scheduleCaptionBand": "each bar: one night, bedtime to wake time · band = your usual times"
     }
   },
   "setup": {

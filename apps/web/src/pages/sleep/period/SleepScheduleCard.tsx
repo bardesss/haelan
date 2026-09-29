@@ -24,11 +24,6 @@ export function drawsNights(range: PeriodRange): boolean {
   return range === 'week' || range === 'month'
 }
 
-// A bedtime as the reading sleep_bedtime_minutes is stored as, minutes from the wake day's midnight
-// in [-720, 720): a reading past noon is the evening before (23:04 as -56). withinSchedule needs bed
-// before wake, and a bedtime sent as the clock's own 1384 would read as after that morning's wake.
-const bedReading = (minutes: number): number => (minutes >= 720 ? minutes - 1440 : minutes)
-
 // The usual of the most recent night that has one: a night's own usual, which the strips shade
 // (PATTERNS.md: strips shade each day's own usual), rather than the period's usual for an average.
 function latestBand(points: readonly PeriodStripPoint[] | undefined): PeriodStripPoint['band'] {
@@ -98,7 +93,9 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
 
   // Oldest first, as the chart reads down its rows; the list sends the newest first.
   const nights = useMemo(() => [...data.nights].reverse().map((night) => {
-    const bedRaw = night.bedtimeMinutes === null ? null : bedReading(night.bedtimeMinutes)
+    // Signed minutes from the wake day's midnight, as stored: 23:04 is -56, and a day sleeper's
+    // 13:00 is 780. withinSchedule places the pair; nothing is folded into a range here.
+    const bedRaw = night.bedtimeMinutes
     const wakeRaw = night.waketimeMinutes
     const naps = napsByDate.get(night.localDate)
     return {
@@ -111,9 +108,7 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
   const bedBand = latestBand(schedule.bedtime?.daily)
   const wakeBand = latestBand(schedule.waketime?.daily)
   const usualBands = useMemo(() => {
-    const bed = bedBand === null ? null
-      : { ...bedBand, low: bedReading(bedBand.low), high: bedReading(bedBand.high), center: bedReading(bedBand.center) }
-    return [placedUsualBand(bed, bed?.low ?? null), placedUsualBand(wakeBand, bed?.center ?? null)]
+    return [placedUsualBand(bedBand, bedBand?.low ?? null), placedUsualBand(wakeBand, bedBand?.center ?? null)]
       .filter((band): band is { low: number, high: number } => band !== null)
   }, [bedBand, wakeBand])
 
@@ -129,7 +124,7 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
           <BasisContext.Provider value={captionId}>
             <SleepSchedule nights={nights} showNaps={nightsQuery.isSuccess} label={label} usualBands={usualBands} />
           </BasisContext.Provider>
-          <p id={captionId} className="dash-caption">{t('sleep.period.scheduleCaption')}</p>
+          <p id={captionId} className="dash-caption">{t(usualBands.length > 0 ? 'sleep.period.scheduleCaptionBand' : 'sleep.period.scheduleCaption')}</p>
         </>
       )}
       <PeriodFigureRows figures={rows} labelOf={labelOf} noun="night" />

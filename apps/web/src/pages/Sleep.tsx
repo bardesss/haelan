@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
-import { navigate, withQuery } from '../router.js'
+import { navigate } from '../router.js'
 import { Card } from '../components/Card.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -30,7 +30,7 @@ import { PeriodFigureRows } from './period/PeriodFigureRows.js'
 import { PointPanel } from './period/PointPanel.js'
 import { LIST_VISIBLE } from './period/ExpandableList.js'
 import { periodLine } from './period/periodLine.js'
-import { nightPath } from './sleep/NightRow.js'
+import { useNightHref } from './sleep/NightRow.js'
 import { useSleepLabel } from './sleep/period/labels.js'
 import { SleepStages } from './sleep/period/SleepStages.js'
 import { SleepScheduleCard, hasSchedule } from './sleep/period/SleepScheduleCard.js'
@@ -77,8 +77,7 @@ export function Sleep() {
   const isDay = controls.tab === 'day'
 
   // The night page for a date, keeping the source the reader named in the URL (useOpenNight's rule).
-  const nightHref = (localDate: string) =>
-    withQuery(nightPath(localDate), { source: controls.source === ALL_SOURCES ? null : controls.source })
+  const nightHref = useNightHref()
   const dayTarget = isDay ? nightHref(controls.anchor) : null
   useEffect(() => {
     if (dayTarget !== null) navigate(dayTarget, { replace: true })
@@ -96,7 +95,9 @@ export function Sleep() {
 
   const heroDates = useMemo(() => data?.hero.daily.map((point) => point.from) ?? NO_DATES, [data])
   // Ended at historicalTo: a month six days old is set against the same six days a year earlier.
-  const lastYear = useLastYear(LAST_YEAR_GROUPS, { ...range, to: controls.historicalTo }, heroDates, controls.compareYear === true)
+  // Asked on Week and Month only: on 3 months and Year the strip is weekly and draws no overlay.
+  const overlaid = controls.tab === 'week' || controls.tab === 'month'
+  const lastYear = useLastYear(LAST_YEAR_GROUPS, { ...range, to: controls.historicalTo }, heroDates, controls.compareYear === true && overlaid)
 
   // The list's expansion belongs to the period it was opened in: a new period opens collapsed.
   const periodKey = `${controls.tab}:${controls.from}:${source}`

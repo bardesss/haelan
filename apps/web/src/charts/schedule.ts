@@ -99,10 +99,10 @@ export function fitWindow(
 }
 
 // A further noon two days on rather than one: wide enough that a night running past the default
-// window's own noon sits inside it instead of on its edge or past it. Sleep.tsx's own schedule
-// card passes this; Dashboard's stays on DEFAULT_WINDOW. Exported here rather than declared on the
-// page that uses it, once schedule-marks.test.ts needed the same numbers to pin the no-data dot's
-// clearance under it too.
+// window's own noon sits inside it instead of on its edge or past it. Both schedule charts place
+// their nights in it (the Sleep page's SleepScheduleCard and the night page's NightWeek), and the
+// night page's hypnogram bed label reads through it. Exported here rather than declared on a page,
+// once schedule-marks.test.ts needed the same numbers to pin the no-data dot's clearance under it too.
 export const WIDE_WINDOW = { min: AXIS_MIN, max: AXIS_MIN + 36 * 60 }
 
 // 60 minutes below the top of whichever window is in force, not a fixed point tied to the default
@@ -151,8 +151,8 @@ export const NO_DATA_Y = noDataYFor(DEFAULT_WINDOW)
 // Minutes from the local midnight of `localDate`, negative before it: the convention
 // packages/core/src/derive/localDay.ts sets and sleep_bedtime_minutes/sleep_waketime_minutes are
 // stored in ("an 23:30 bedtime is -30", packages/core/src/derive/metrics.ts). Also how a caller
-// reading /sleep/nights directly (Sleep.tsx's own hypnogram bed label) derives the same figure
-// from a Night's timestamps, which carry no pre-computed minutes value of their own.
+// reading /sleep/nights directly (NightThrough's hypnogram bed label, the schedule's naps)
+// derives the same figure from a Night's timestamps, which carry no pre-computed minutes value of their own.
 export function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number): number {
   const wall = utcMs + offsetMinutes * 60_000
   return Math.round((wall - Date.parse(`${localDate}T00:00:00Z`)) / 60_000)

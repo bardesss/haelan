@@ -875,15 +875,16 @@
       "stages": {
         "label": "De nachten"
       },
-      "variability": "Variatie naar bed",
+      "variability": "Variatie in bedtijd",
       "sides": "In het weekend {{bed}} naar bed en {{wake}} wakker",
       "shift": {
         "later": "{{value}} later",
         "earlier": "{{value}} eerder",
-        "same": "even laat"
+        "same": "op dezelfde tijd"
       },
       "mornings": "De ochtenden",
-      "scheduleCaption": "elke balk: één nacht, naar bed tot wakker geworden · band = je gebruikelijke tijden"
+      "scheduleCaption": "elke balk: één nacht, naar bed tot wakker geworden",
+      "scheduleCaptionBand": "elke balk: één nacht, naar bed tot wakker geworden · band = je gebruikelijke tijden"
     }
   },
   "setup": {

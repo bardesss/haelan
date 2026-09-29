@@ -1,5 +1,6 @@
+import { useCallback } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import { Link } from '../../router.js'
+import { Link, readQuery, useRoute, withQuery } from '../../router.js'
 import { formatDuration, formatClock, formatSessionDateHeading } from '../../format.js'
 import { standingShort, verdictTone } from '../../charts/base.js'
 import type { SleepListRow } from '../../data/periodTypes.js'
@@ -7,6 +8,18 @@ import type { SleepListRow } from '../../data/periodTypes.js'
 /** One spelling of the path, shared by the row that links there and the tests that assert it. */
 export function nightPath(localDate: string): string {
   return `/sleep/night/${encodeURIComponent(localDate)}`
+}
+
+/**
+ * A night's page as a link from wherever the reader is, keeping the `source` their URL names: the
+ * night page's traces still honour it, and moving to a night should not drop a choice the reader
+ * made. Every way onward to a night goes through this (the night page's arrows and strip, the Sleep
+ * page's list, point panel and Day tab).
+ */
+export function useNightHref(): (localDate: string) => string {
+  const route = useRoute()
+  const source = readQuery(route.split('?')[1] ?? '').get('source')
+  return useCallback((localDate: string) => withQuery(nightPath(localDate), { source }), [source])
 }
 
 /**
@@ -19,12 +32,13 @@ export function nightPath(localDate: string): string {
 export function NightRow({ night }: { night: SleepListRow }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
+  const nightHref = useNightHref()
   const tone = verdictTone(night.judged, night.standing)
   const standing = standingShort(night.standing ?? undefined, 'minutes', t)
   const { bedtimeMinutes: bed, waketimeMinutes: wake } = night
 
   return (
-    <Link to={nightPath(night.localDate)} className="night-row-link">
+    <Link to={nightHref(night.localDate)} className="night-row-link">
       <div className="night-row">
         <div className="night-row-main">
           <span className="night-row-primary">
