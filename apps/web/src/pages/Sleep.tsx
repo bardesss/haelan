@@ -115,9 +115,10 @@ export function Sleep() {
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath} yearCompare />
     </>
   )
-  const alone = (body: ReactNode) => <>{header}<div className="grid"><Card span={12}>{body}</Card></div></>
+  // A detail page's root (PATTERNS.md's page shell), for its card-label gap and width, in every state.
+  const alone = (body: ReactNode) => <div className="detail-page">{header}<div className="grid"><Card span={12}>{body}</Card></div></div>
 
-  if (isDay) return header
+  if (isDay) return <div className="detail-page">{header}</div>
   if (query.isError) return alone(<ErrorState onRetry={() => void query.refetch()} error={query.error} />)
   if (data === undefined) return alone(<Loading />)
   if (data.hero.days === 0) return alone(<EmptyState title={t('sleep.nights.emptyTitle')} detail={t('sleep.nights.emptyDetail')} />)
@@ -163,7 +164,7 @@ export function Sleep() {
   const morningSpan = balanceShown && morningsShown ? 6 : 12
 
   return (
-    <>
+    <div className="detail-page">
       {header}
       <div className="grid">
         <PeriodHero label={heroLabel} figure={hero} noun="night" standout={standout}
@@ -194,6 +195,6 @@ export function Sleep() {
         {hasFigures(data.more) && <SleepMore figures={data.more} />}
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
-    </>
+    </div>
   )
 }

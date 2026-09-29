@@ -1750,6 +1750,11 @@
     "list": {
       "showAll": "Show all {{count}}",
       "showFewer": "Show fewer"
+    },
+    "tap": {
+      "tail": "Show its figures",
+      "idle": "Tap a point for its figures",
+      "named": "Figures for {{date}}"
     }
   }
 }

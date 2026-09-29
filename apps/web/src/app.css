@@ -668,6 +668,11 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    would, not the whole card: a strip and a verdict stretched to 1200px read as a chart of their
    own. One of two below 900px (the collapse block), the whole card on a phone. */
 .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - 2 * var(--space-4)) / 3)); }
+/* A half card (an overview page's schedule beside its list) is already a third of a wide row or
+   less, so a lone row there takes the card, not a third of it (a sixth of the page, its verdict
+   wrapping a word a line). Below the collapse width the card spans the row, so the collapse and
+   phone blocks give it back the lone row's usual half and whole. */
+.card[data-span="6"] .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
 /* SideCard (pages/detail/DayLogBlock.tsx): a narrow column naming the day or night the section is
    about, the section's rows beside it; stacked below the grid's collapse width. */
 .detail-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
@@ -701,6 +706,18 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .point-panel-row dd { margin: 0; font-variant-numeric: tabular-nums; }
 .point-panel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); }
 .point-panel-actions .card-link { margin: 0; }
+/* On a phone the panel is a sheet along the bottom edge (the approved mockup's, .cal-sheet's
+   edges): anchored under the strip it ran past the fold and over the next card. Still non-modal, so
+   a press outside closes it as before; its two ways onward stack, each a 44px target. */
+@media (max-width: 620px) {
+  .period-hero-panel { position: fixed; top: auto; right: 0; bottom: 0; left: 0; width: auto; margin: 0; z-index: 40; }
+  .period-hero-panel .point-panel {
+    max-height: 85dvh; overflow-y: auto;
+    border-width: 1px 0 0; border-radius: var(--radius-md) var(--radius-md) 0 0;
+  }
+  .point-panel-actions { flex-direction: column; align-items: stretch; }
+  .point-panel-actions .card-link, .point-panel-actions .button { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+}
 /* A list (ExpandableList): the first seven, then every item flowing into columns of at least
    18rem, a month's heading kept with its first item; one column on a phone. */
 /* The list's items across the card, its toggle at its own width under them. */
@@ -1466,11 +1483,11 @@ button.week-bar-slot { cursor: pointer; }
   .detail-rows, .detail-side-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .detail-rows[data-columns], .detail-side-rows[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-  .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - var(--space-3)) / 2)); }
+  .detail-rows[data-columns="1"], .card[data-span="6"] .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - var(--space-3)) / 2)); }
   .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 }
 @media (max-width: 620px) {
-  .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
+  .detail-rows[data-columns="1"], .card[data-span="6"] .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean
@@ -1904,7 +1921,7 @@ button.week-bar-slot { cursor: pointer; }
 
 /* NightRow.tsx: a night in the Sleep page's list (M10b; M8c's list before it), one row per night
    with the date as its first column; the rows' own bottom borders separate them, as .record-row's do. */
-.night-row-date { color: var(--text-secondary); font-weight: var(--weight-medium); min-width: 11rem; }
+.night-row-date { color: var(--text-secondary); font-weight: var(--weight-medium); min-width: 6.5rem; }
 .night-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
 .night-row:last-child { border-bottom: 0; }
 .night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
@@ -2133,7 +2150,7 @@ button.week-bar-slot { cursor: pointer; }
   .member-identity { flex: 1; min-width: 120px; }
   .member-activity { flex-basis: 100%; }
 
-  /* The date takes 11rem on a wide screen so the duration beside it lines up down the list. At
+  /* The date takes 6.5rem on a wide screen so the duration beside it lines up down the list. At
      375px that width, plus the duration, the source and the clock, came to 406px in a 375px
      viewport - which layout:check caught and nothing local could, since Playwright will not
      install on this machine. The alignment it buys is worth nothing on a phone, so the date gives

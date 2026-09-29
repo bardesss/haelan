@@ -82,18 +82,31 @@ describe('PeriodHero', () => {
     expect(lines()[0]).toBe(`5.20${NB}km per day`)
   })
 
-  it('draws the strip of its days, each over its own usual, labelling the period\'s usual', () => {
+  it('draws the strip of its days, each over its own usual, labelling the latest day\'s', () => {
     mount(hero(SLEEP_PERIOD_MONTH.hero))
     const days = SLEEP_PERIOD_MONTH.hero.daily
     expect(sparklineProps?.values).toEqual(days.map((day) => day.value))
     expect(sparklineProps?.labels).toEqual(days.map((day) => day.from))
     expect(sparklineProps?.bands?.[0]).toEqual({ low: 402, high: 437 })
     expect(sparklineProps?.pointJudged).toEqual(days.map((day) => day.judged))
-    expect(sparklineProps?.baseline).toEqual(SLEEP_PERIOD_MONTH.hero.usual)
-    expect(sparklineProps?.bandLabels).toEqual({ low: `6h${NB}59m`, high: `7h${NB}00m` })
+    // The band drawn behind the last point, not the period's usual (6h 59m - 7h 00m) the verdict
+    // prints: a band of period averages is too narrow for its two labels not to overprint.
+    expect(sparklineProps?.baseline).toEqual({ low: 401, high: 436 })
+    expect(sparklineProps?.bandLabels).toEqual({ low: `6h${NB}41m`, high: `7h${NB}16m` })
     expect(sparklineProps?.height).toBe(64)
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.tableToggle).toBe(false)
+  })
+
+  it('words a dot as opening its figures, not as annotating it, and marks no point as the one shown', () => {
+    mount(hero(SLEEP_PERIOD_MONTH.hero))
+    expect(sparklineProps?.opensDay?.idle).toBe('Tap a point for its figures')
+    expect(sparklineProps?.opensDay?.tail).toBe('Show its figures')
+    expect(sparklineProps?.opensDay?.named('Aug 3')).toBe('Figures for Aug 3')
+    expect(sparklineProps?.opensDay?.current).toBe('')
+    act(() => { root.render(<I18nProvider lng="nl">{hero(SLEEP_PERIOD_MONTH.hero)}</I18nProvider>) })
+    expect(sparklineProps?.opensDay?.idle).toBe('Tik op een punt voor de cijfers')
+    expect(sparklineProps?.opensDay?.named('3 aug')).toBe('Cijfers van 3 aug')
   })
 
   it('rings the good days, and only those', () => {
@@ -113,9 +126,29 @@ describe('PeriodHero', () => {
     expect(sparklineProps?.lastYear).toBeUndefined()
   })
 
-  it('draws no band for a thin usual', () => {
-    const thin = { ...SLEEP_PERIOD_MONTH.hero, usual: { ...SLEEP_PERIOD_MONTH.hero.usual, thin: true } }
+  it('labels the latest point that has a band, whatever the period\'s usual', () => {
+    const days = SLEEP_PERIOD_MONTH.hero.daily
+    const thin = {
+      ...SLEEP_PERIOD_MONTH.hero, usual: { ...SLEEP_PERIOD_MONTH.hero.usual!, thin: true },
+      daily: days.map((day, index) => (index === days.length - 1 ? { ...day, band: null } : day)),
+    }
     mount(hero(thin))
+    expect(sparklineProps?.baseline).toEqual({ low: 402, high: 437 })
+  })
+
+  it('passes over a thin band, which the strip leaves unshaded', () => {
+    const days = SLEEP_PERIOD_MONTH.hero.daily
+    const thinLast = {
+      ...SLEEP_PERIOD_MONTH.hero,
+      daily: days.map((day, index) => (index === days.length - 1 ? { ...day, band: { ...day.band!, thin: true } } : day)),
+    }
+    mount(hero(thinLast))
+    expect(sparklineProps?.baseline).toEqual({ low: 402, high: 437 })
+  })
+
+  it('labels no band when no point has one', () => {
+    const bare = { ...SLEEP_PERIOD_MONTH.hero, daily: SLEEP_PERIOD_MONTH.hero.daily.map((day) => ({ ...day, band: null })) }
+    mount(hero(bare))
     expect(sparklineProps?.baseline).toBeUndefined()
     expect(sparklineProps?.bandLabels).toBeUndefined()
   })

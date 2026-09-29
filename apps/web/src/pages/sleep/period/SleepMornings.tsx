@@ -16,13 +16,17 @@ export function hasFigures(figures: readonly PeriodFigure[]): boolean {
  * "De ochtenden": the mornings after the period's nights, each an average against its usual with
  * its strip (the recovery index, resting heart rate, HRV, breathing in sleep, oxygen and skin
  * temperature, those the server sent). Skin temperature reads as a deviation from its usual.
+ *
+ * Two across in a half card, as the mockup draws it: three came out ~98px each at a 960px window,
+ * narrower than one Dutch label ("Huidtemperatuur"), and the page ran past the viewport. Alone
+ * across the row it keeps side's three.
  */
 export function SleepMornings({ figures, span }: { figures: PeriodFigure[], span: number }) {
   const { t } = useTranslation()
   const labelOf = useSleepLabel()
   return (
     <Card span={span} label={t('sleep.period.mornings')}>
-      <PeriodFigureRows figures={figures} labelOf={labelOf} noun="day" side deviation={DEVIATION} />
+      <PeriodFigureRows figures={figures} labelOf={labelOf} noun="day" side max={span === 6 ? 2 : undefined} deviation={DEVIATION} />
     </Card>
   )
 }

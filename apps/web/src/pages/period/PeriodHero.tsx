@@ -7,7 +7,7 @@ import { verdictTone } from '../../components/FigureRow.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import type { PeriodFigure, PeriodStripPoint } from '../../data/periodTypes.js'
 import { formatFigureValue } from '../detail/figureText.js'
-import { dayCountsLine, periodStripOf, periodValueLine, periodVerdictLine } from '../detail/periodText.js'
+import { dayCountsLine, latestBand, periodStripOf, periodValueLine, periodVerdictLine } from '../detail/periodText.js'
 
 /**
  * An overview page's lead, NightHero's markup over the period read (PATTERNS.md's "Overview
@@ -48,10 +48,25 @@ export function PeriodHero({ label, figure, noun, standout, caption, lastYear, p
     () => (value: number | null, absent: string) => (value === null ? absent : formatFigureValue(figure, value, language, t)),
     [figure, language, t],
   )
-  const band = figure.usual !== null && !figure.usual.thin ? figure.usual : undefined
+  // The labels name the band drawn behind the points, the latest point's own usual (the dashboard's
+  // "the day shown, the last step"), not the period's: that one is printed in the verdict, and as a
+  // band of period averages it is far narrower than any day's, so its two edge labels overprinted
+  // each other on a strip that never shades it.
+  const band = useMemo(() => {
+    const latest = latestBand(points)
+    return latest === null ? undefined : { low: latest.low, high: latest.high }
+  }, [points])
   const bandLabels = useMemo(() => band === undefined ? undefined : {
     low: formatFigureValue(figure, band.low, language, t), high: formatFigureValue(figure, band.high, language, t),
   }, [figure, band, language, t])
+
+  // A dot opens the panel, so the tooltip's tail and a phone's tap control say that, not the chart's
+  // default "Tap a point to annotate" (Sparkline's opensDay). No point is the one on screen: `current`
+  // matches none.
+  const opens = useMemo(() => ({
+    current: '', tail: t('period.tap.tail'), idle: t('period.tap.idle'),
+    named: (date: string) => t('period.tap.named', { date }),
+  }), [t])
 
   // The open point by the date it starts on, which is what a dot's click hands back (its label).
   // Kept with the period it was opened in: a new period (a range or date change) closes it, even
@@ -86,7 +101,7 @@ export function PeriodHero({ label, figure, noun, standout, caption, lastYear, p
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={figure.metric}
                 formatValue={formatValue} baseline={band} bands={strip.bands} bandLabels={bandLabels}
                 pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} pointMarks={marks}
-                lastYear={strip.weekly ? undefined : lastYear} height={64} dots tableToggle={false} onPointClick={openAt} />
+                lastYear={strip.weekly ? undefined : lastYear} height={64} dots tableToggle={false} onPointClick={openAt} opensDay={opens} />
             </BasisContext.Provider>
             <p id={captionId} className="dash-caption">{caption}</p>
             {open !== undefined && <div key={open.from} className="period-hero-panel">{panel(open, close)}</div>}

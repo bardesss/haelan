@@ -1750,6 +1750,11 @@
     "list": {
       "showAll": "Toon alle {{count}}",
       "showFewer": "Toon minder"
+    },
+    "tap": {
+      "tail": "Toon de cijfers",
+      "idle": "Tik op een punt voor de cijfers",
+      "named": "Cijfers van {{date}}"
     }
   }
 }

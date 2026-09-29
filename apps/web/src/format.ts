@@ -131,6 +131,17 @@ export function formatSessionDateHeading(date: string, language: string): string
 }
 
 /**
+ * A local date with its weekday, short: "ma 31 aug", "Mon, Aug 31". An overview page's nights list
+ * (NightRow), whose expanded columns are too narrow for formatSessionDateHeading's long form: the
+ * good-night mark wrapped onto a line of its own. Same UTC anchoring as formatLocalDate.
+ */
+export function formatWeekdayDate(date: string, language: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleString(language, {
+    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+  })
+}
+
+/**
  * How long ago something happened, in the reader's own language: "3 minutes ago", "2 uur geleden".
  *
  * Intl.RelativeTimeFormat rather than a hand-built string, because "ago" is grammar and every

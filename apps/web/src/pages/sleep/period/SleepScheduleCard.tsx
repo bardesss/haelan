@@ -6,9 +6,10 @@ import { SleepSchedule } from '../../../charts/SleepSchedule.js'
 import { localMinutesOf, napInWindow, placedUsualBand, withinSchedule, WIDE_WINDOW } from '../../../charts/schedule.js'
 import { useNights } from '../../../data/useNights.js'
 import { oneNightPerDate } from '../../../data/nights.js'
-import type { PeriodFigure, PeriodRange, PeriodStripPoint, ScheduleSides, SleepPeriodData } from '../../../data/periodTypes.js'
+import type { PeriodFigure, PeriodRange, ScheduleSides, SleepPeriodData } from '../../../data/periodTypes.js'
 import type { Translate } from '../../../format.js'
 import { PeriodFigureRows } from '../../period/PeriodFigureRows.js'
+import { latestBand } from '../../detail/periodText.js'
 import { useSleepLabel } from './labels.js'
 
 const NBSP = ' '
@@ -22,17 +23,6 @@ export function hasSchedule(schedule: SleepPeriodData['schedule']): boolean {
 /** Whether the range draws each night on the schedule chart (week and month) rather than weekly rows. */
 export function drawsNights(range: PeriodRange): boolean {
   return range === 'week' || range === 'month'
-}
-
-// The usual of the most recent night that has one: a night's own usual, which the strips shade
-// (PATTERNS.md: strips shade each day's own usual), rather than the period's usual for an average.
-function latestBand(points: readonly PeriodStripPoint[] | undefined): PeriodStripPoint['band'] {
-  if (points === undefined) return null
-  for (let i = points.length - 1; i >= 0; i -= 1) {
-    const band = points[i]!.band
-    if (band !== null) return band
-  }
-  return null
 }
 
 // A difference in clock minutes, taken the short way round midnight: -720 up to 720.
@@ -127,7 +117,8 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
           <p id={captionId} className="dash-caption">{t(usualBands.length > 0 ? 'sleep.period.scheduleCaptionBand' : 'sleep.period.scheduleCaption')}</p>
         </>
       )}
-      <PeriodFigureRows figures={rows} labelOf={labelOf} noun="night" />
+      {/* Two across at most in a half card, as the mornings: three came out narrower than their labels. */}
+      <PeriodFigureRows figures={rows} labelOf={labelOf} noun="night" max={span === 6 ? 2 : undefined} />
       {sides !== null && <p className="detail-verdict">{sides}</p>}
     </Card>
   )

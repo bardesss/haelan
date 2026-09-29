@@ -1,4 +1,4 @@
-import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodWindow } from '../../data/periodTypes.js'
+import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodStripPoint, PeriodWindow } from '../../data/periodTypes.js'
 import { formatShortDate, formatSignedDuration, formatSignedNumber } from '../../format.js'
 import type { Translate } from '../../format.js'
 import { directionWords } from '../../charts/base.js'
@@ -139,6 +139,20 @@ export function periodStripOf(figure: PeriodFigure): {
     pointJudged: points.map((point) => point.judged),
     weekly: figure.weekly !== null,
   }
+}
+
+/**
+ * The usual of the most recent point that has one, a point's own (PATTERNS.md: strips shade each day's
+ * own usual) rather than the period's usual for an average. A thin one is passed over, as stripBands
+ * leaves it unshaded: it judges nothing. Null with none.
+ */
+export function latestBand(points: readonly PeriodStripPoint[] | undefined): PeriodStripPoint['band'] {
+  if (points === undefined) return null
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    const band = points[index]!.band
+    if (band !== null && !band.thin) return band
+  }
+  return null
 }
 
 // The figures printed as the period's total, by name: the spec's "Distance, floors and elevation show

@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Link, readQuery, useRoute, withQuery } from '../../router.js'
-import { formatDuration, formatClock, formatSessionDateHeading } from '../../format.js'
+import { formatDuration, formatClock, formatWeekdayDate } from '../../format.js'
 import { standingShort, verdictTone } from '../../charts/base.js'
 import type { SleepListRow } from '../../data/periodTypes.js'
 
@@ -42,7 +42,7 @@ export function NightRow({ night }: { night: SleepListRow }) {
       <div className="night-row">
         <div className="night-row-main">
           <span className="night-row-primary">
-            <span className="night-row-date">{formatSessionDateHeading(night.localDate, language)}</span>
+            <span className="night-row-date">{formatWeekdayDate(night.localDate, language)}</span>
             <span className="night-row-duration">
               {night.asleepMinutes === null ? t('common.absent') : formatDuration(night.asleepMinutes, language)}
             </span>

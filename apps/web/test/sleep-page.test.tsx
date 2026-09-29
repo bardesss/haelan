@@ -145,6 +145,16 @@ describe('the Sleep page: header and requests', () => {
     expect(cardFor('Sleep schedule')).toBeDefined()
   })
 
+  it.each<[string, SleepStub]>([
+    ['a loaded period', { period: SLEEP_PERIOD_MONTH }],
+    ['a failed read', { period: SLEEP_PERIOD_MONTH, status: 400 }],
+    ['an empty period', { period: SLEEP_PERIOD_EMPTY }],
+  ])('draws %s inside a detail page, so its cards take the card-label gap', async (_, stub) => {
+    await renderAt(MONTH_URL, stub)
+    expect(container!.querySelector(':scope > .detail-page > h1, :scope > .detail-page h1')?.textContent).toBe('Sleep')
+    expect(container!.querySelector(':scope > .detail-page > .grid')).not.toBeNull()
+  })
+
   it('keeps the header over an error, and over an empty period says there are no nights', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH, status: 400 })
     expect(container!.querySelector('h1')?.textContent).toBe('Sleep')
@@ -237,6 +247,24 @@ describe('the Sleep page: sections', () => {
     expect(cardFor(partner)!.dataset.span).toBe('12')
   })
 
+  it.each<[string, Partial<SleepPeriodData>, string]>([
+    ['two across in a half card', {}, '2'],
+    ['three across alone', { balance: null }, '3'],
+  ])('sets the mornings %s', async (_, patch, columns) => {
+    await renderAt(MONTH_URL, { period: month(patch) })
+    expect(cardFor('The mornings')!.querySelector<HTMLElement>('.detail-side-rows')!.dataset.columns).toBe(columns)
+  })
+
+  it.each<[string, Partial<SleepPeriodData>, string]>([
+    ['two across in a half card', {}, '2'],
+    ['three across alone', { nights: [] }, '3'],
+  ])('sets a year\'s schedule rows %s', async (_, patch, columns) => {
+    await renderAt(YEAR_URL, { period: { ...SLEEP_PERIOD_YEAR, ...patch } })
+    const rows = cardFor('Sleep schedule')!.querySelector<HTMLElement>('.detail-rows')!
+    expect(rows.querySelectorAll('.figure-row')).toHaveLength(3)
+    expect(rows.dataset.columns).toBe(columns)
+  })
+
   it('leaves out the balance when no night in it has a reading', async () => {
     const balance = { ...SLEEP_PERIOD_MONTH.balance, values: SLEEP_PERIOD_MONTH.balance.values.map(() => null) }
     await renderAt(MONTH_URL, { period: month({ balance }) })
@@ -279,6 +307,8 @@ describe('the Sleep page: sections', () => {
     expect(cardFor('Tijd in slaap')!.querySelector('.detail-hero-value')?.textContent).toBe('6u 59m')
     expect(cardFor('Tijd in slaap')!.querySelector('.detail-verdict')?.textContent).toContain('gebruikelijk')
     expect(text()).not.toMatch(/\dh\s\d\dm/)
+    // The list's short weekday date, so an expanded column keeps a row on one line.
+    expect(cardFor('Nachten')!.querySelector('.night-row-date')?.textContent).toBe('ma 31 aug')
   })
 })
 
@@ -314,7 +344,7 @@ describe('the Sleep page: the nights, the stages, the mornings', () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
     const first = cardFor('Nights')!.querySelector('a')!
     expect(first.getAttribute('href')).toBe(nightPath('2026-08-31'))
-    expect(first.querySelector('.night-row-date')?.textContent).toBe('Monday, August 31')
+    expect(first.querySelector('.night-row-date')?.textContent).toBe('Mon, Aug 31')
     expect(first.querySelector('.night-row-duration')?.textContent).toBe('7h 18m')
     expect(first.querySelector('.night-row-dot')?.className).toBe('night-row-dot better')
     expect(first.querySelector('.night-row-good')?.textContent).toBe('✦')
