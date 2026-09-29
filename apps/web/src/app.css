@@ -1316,6 +1316,10 @@ button.week-bar-slot { cursor: pointer; }
   clip-path: inset(50%); white-space: nowrap; border: 0; padding: 0; margin: -1px;
 }
 
+/* ChartFigure's figure, without the browser's default margin. One class, so the detail pages'
+   card-label gap (.detail-page .card > .label + ...) still outweighs it; inline, it did not. */
+.chart-figure { margin: 0; }
+
 /* The table's own control, deliberately lighter than `.button`: it sits under every chart on
    every page, so it is text rather than a bordered box. Spec section 5.3 sets the weight. */
 .chart-table-toggle { background: none; border: 0; padding: 2px 0; font-size: var(--font-size-micro); color: var(--text-faint); cursor: pointer; }

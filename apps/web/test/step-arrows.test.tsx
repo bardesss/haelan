@@ -8,6 +8,8 @@ import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import { StepArrows } from '../src/components/StepArrows.js'
 import { DetailNav } from '../src/components/PageHeader.js'
+import { DayNav } from '../src/pages/dashboard/DayNav.js'
+import { glanceBody } from './glanceFixture.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -100,6 +102,28 @@ describe('StepArrows', () => {
     expect(onPick).not.toHaveBeenCalled()
     press('ArrowLeft')
     expect(onPick.mock.calls).toEqual([['2026-09-21']])
+  })
+
+  // The dashboard's arrows and a detail page's must look alike: same element, same classes, same
+  // wrapper, so no rule can reach one pair and not the other. Checked with the same state on both
+  // (both neighbours present), since a disabled arrow is meant to look different.
+  it('draws the dashboard\'s arrows and a detail page\'s identically', () => {
+    const arrows = (): string[] => [...container!.querySelectorAll<HTMLButtonElement>('button[aria-keyshortcuts^="Arrow"]')]
+      .map((b) => `${b.parentElement!.className} > ${b.tagName}.${b.className} ${b.innerHTML}`)
+    act(() => {
+      root!.render(<I18nProvider lng="en"><DayNav glance={{ ...glanceBody(), today: '2026-09-22', finished: true, nav: { previous: '2026-09-21', next: '2026-09-23' } }} onPick={() => {}} /></I18nProvider>)
+    })
+    const dashboard = arrows()
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <DetailNav label="Nights" previous="2026-09-21" next="2026-09-23" onPick={() => {}}
+            labels={{ previous: 'Previous night', next: 'Next night' }} back={{ to: '/sleep', text: 'All nights' }} />
+        </I18nProvider>,
+      )
+    })
+    expect(dashboard).toHaveLength(2)
+    expect(arrows()).toEqual(dashboard)
   })
 
   it('sets titles and aria-keyshortcuts', () => {
