@@ -1,5 +1,5 @@
 import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodWindow } from '../../data/periodTypes.js'
-import { formatDuration, formatShortDate } from '../../format.js'
+import { formatShortDate, formatSignedDuration } from '../../format.js'
 import type { Translate } from '../../format.js'
 import { directionWords } from '../../charts/base.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
@@ -59,12 +59,12 @@ export function dayCountsLine(figure: PeriodFigure, noun: 'night' | 'day', t: Tr
 // formatFigureDifference, taken between the two values as printed.
 function changeText(figure: PeriodFigure, change: PeriodChange & { value: number, delta: number }, language: string, t: Translate): string {
   if (figure.unit === 'minutes') {
-    const minutes = Math.round(change.value + change.delta) - Math.round(change.value)
     if (isShortSpan(figure.metric)) {
       return `${formatFigureDifference(figure, change.value + change.delta, change.value, language, t)}${NBSP}${t('activity.units.min')}`
     }
-    const sign = minutes > 0 ? '+' : minutes < 0 ? '-' : ''
-    return `${sign}${formatDuration(Math.abs(minutes), language)}`.replaceAll(' ', NBSP)
+    // formatSignedDuration signs only a negative; a change reads with its "+" as well.
+    const minutes = Math.round(change.value + change.delta) - Math.round(change.value)
+    return `${minutes > 0 ? '+' : ''}${formatSignedDuration(minutes, '', language)}`.replaceAll(' ', NBSP)
   }
   return formatFigureDifference(figure, change.value + change.delta, change.value, language, t)
 }
@@ -110,7 +110,9 @@ export function standoutLine(o: {
       delta: changeText(figure, previous, language, t), period: previousName(previous, language, t),
     }))
   }
-  if (hasChange(yearEarlier)) {
+  // On the year range the period before is the previous calendar year, and so is the same period a
+  // year earlier: one change, said once.
+  if (hasChange(yearEarlier) && !(yearEarlier.from === previous.from && yearEarlier.to === previous.to)) {
     parts.push(t('period.standout.yearEarlier', { delta: changeText(figure, yearEarlier, language, t) }))
   }
   return parts.length === 0 ? null : parts.join(SEPARATOR)

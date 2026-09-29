@@ -138,6 +138,13 @@ describe('standoutLine', () => {
     expect(standoutLine({ ...o, language: 'nl', t: tNl })).toBe(`-0u${NB}10m tegenover juli · +0u${NB}10m tegenover vorig jaar`)
   })
 
+  it('says a year-earlier change spanning the same days as the period before only once', () => {
+    const lastYear = { from: '2025-01-01', to: '2025-12-31', value: 400, delta: 5 }
+    expect(standoutLine({
+      figure: figure(), high: null, previous: lastYear, yearEarlier: { ...lastYear }, highWord: 'longest', language: 'en', t,
+    })).toBe(`+0h${NB}05m against 2025`)
+  })
+
   it('names the period before by its length', () => {
     const base = { figure: figure(), high: null, yearEarlier: null, highWord: 'busiest' as const, language: 'en', t }
     expect(standoutLine({ ...base, previous: { from: '2026-08-24', to: '2026-08-30', value: 400, delta: 5 } }))
