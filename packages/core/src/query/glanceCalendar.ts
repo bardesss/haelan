@@ -1,7 +1,6 @@
 import type { PersonQuery } from './personQuery.ts'
 import { requireDate } from './personQuery.ts'
-import type { Baseline } from './baseline.ts'
-import { standingOf } from './glance.ts'
+import { standingOf, toGlanceBaseline } from './glance.ts'
 import type { GlanceBaseline } from './glance.ts'
 import { ConfigError } from '../errors.ts'
 
@@ -101,13 +100,6 @@ function monthEndOf(month: string): string {
   return `${month}-${String(days).padStart(2, '0')}`
 }
 
-/** One place turns a query's baseline into the band `judgeCalendarDay` reads (same shape `glance.ts`'s own `toGlanceBaseline` builds). */
-function toBand(baseline: Baseline | null): GlanceBaseline | null {
-  return baseline === null ? null : {
-    center: baseline.center, low: baseline.center - baseline.spread, high: baseline.center + baseline.spread, thin: baseline.thin,
-  }
-}
-
 /**
  * The calendar's raw reader (M9c spec, "Server and data"): every local date in `month` (up to
  * `today`, for the current month) that has a glance-day row, each with its unrounded sleep and
@@ -145,9 +137,9 @@ export function readGlanceCalendarRaw(q: PersonQuery, input: { month: string, to
   const days = dates.map((localDate): RawCalendarDay => ({
     localDate,
     sleepValue: sleepByDate.get(localDate) ?? null,
-    sleepBand: toBand(sleepBands.get(localDate) ?? null),
+    sleepBand: toGlanceBaseline(sleepBands.get(localDate) ?? null),
     stepsValue: stepsByDate.get(localDate) ?? null,
-    stepsBand: toBand(stepsBands.get(localDate) ?? null),
+    stepsBand: toGlanceBaseline(stepsBands.get(localDate) ?? null),
     stepsPartial: localDate === input.today,
   }))
 
