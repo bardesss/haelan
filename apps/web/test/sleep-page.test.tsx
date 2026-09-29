@@ -73,8 +73,12 @@ async function renderAt(path: string, stub: SleepStub, lng = 'en'): Promise<stri
 const cardFor = (label: string): HTMLElement | undefined => [...container!.querySelectorAll<HTMLElement>('section.card')]
   .find((card) => card.querySelector(':scope > .label')?.textContent === label)
 const text = (): string => container!.textContent ?? ''
-const standout = (): string | undefined => [...container!.querySelectorAll('.workout-hero-line')]
-  .map((line) => line.textContent ?? '').find((line) => line.startsWith('longest') || line.startsWith('je langste'))
+// The hero's own label, which names the average ("Time asleep, average per night"); the panel and
+// the night page keep the figure's plain name.
+const HERO = 'Time asleep, average per night'
+// The hero's quiet lines under the verdict: the counts, then one line for each thing that stood out.
+const heroLines = (): string[] => [...cardFor(HERO)!.querySelectorAll('.workout-hero-line')].map((line) => line.textContent ?? '')
+const heroBold = (): string[] => [...cardFor(HERO)!.querySelectorAll('.workout-hero-line strong')].map((line) => line.textContent ?? '')
 const month = (patch: Partial<SleepPeriodData>): SleepPeriodData => ({ ...SLEEP_PERIOD_MONTH, ...patch })
 
 // One night, for the schedule chart's cases: the list row's bed and wake are what it draws.
@@ -105,6 +109,11 @@ describe('the Sleep page: header and requests', () => {
     const exported = new URLSearchParams(container!.querySelector('a[href*="/export?"]')!.getAttribute('href')!.split('?')[1])
     expect(exported.getAll('metric')).toContain('sleep_asleep_minutes')
     expect([exported.get('agg'), exported.get('from'), exported.get('to')]).toEqual(['sum', '2026-08-01', '2026-08-31'])
+  })
+
+  it('spaces the dash of a Dutch range inside one month, which the locale closes up', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    expect(container!.querySelector('.dash-date')?.textContent).toBe('1 – 31 aug 2026 · Alle bronnen')
   })
 
   it('names a picked source by its name in the header line, and asks for it', async () => {
@@ -159,7 +168,7 @@ describe('the Sleep page: header and requests', () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH, status: 400 })
     expect(container!.querySelector('h1')?.textContent).toBe('Sleep')
     expect(container!.querySelector('.controls')).not.toBeNull()
-    expect(cardFor('Time asleep')).toBeUndefined()
+    expect(cardFor(HERO)).toBeUndefined()
     // The error's own way back, not a loading line standing in for it.
     expect(container!.querySelector('.empty .button')?.textContent).toBe('Try again')
     act(() => { root?.unmount() })
@@ -182,7 +191,7 @@ describe('the Sleep page: header and requests', () => {
 describe('the Sleep page: sections', () => {
   it('draws every section from the month fixture', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
-    for (const label of ['Time asleep', 'The nights', 'Sleep schedule', 'Nights', 'Sleep balance', 'The mornings', 'More about the sleep']) {
+    for (const label of [HERO, 'The nights', 'Sleep schedule', 'Nights', 'Sleep balance', 'The mornings', 'More about the sleep']) {
       expect(cardFor(label), label).toBeDefined()
     }
     // The four figures, in a card of their own with no label.
@@ -194,19 +203,46 @@ describe('the Sleep page: sections', () => {
     expect(cardFor('The mornings')!.dataset.span).toBe('6')
   })
 
-  it('leads with time asleep, its verdict with the window, the day counts and what stood out', async () => {
+  it('leads with time asleep per night, its verdict with the window, the day counts and what stood out', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
-    const hero = cardFor('Time asleep')!
+    const hero = cardFor(HERO)!
     expect(hero.querySelector('.detail-hero-value')?.textContent).toBe('6h 59m')
-    expect(hero.querySelector('.detail-verdict')?.textContent).toContain('for a month, last 12 months')
-    expect(standout()).toBe('longest: 7h 27m on Aug 23 ✦ · -0h 01m against July')
-    expect(hero.querySelector('.dash-caption')?.textContent).toBe('each night of this period')
-    expect(sparklines.get('Time asleep')!.values).toHaveLength(31)
+    // The window follows the range after a plain space: the one place the page names it.
+    expect(hero.querySelector('.detail-verdict')?.textContent).toBe('within your usual 6h 59m – 7h 00m for a month, last 12 months')
+    expect(heroLines()).toEqual(['16 of 28 nights usual · 6 longer · 6 shorter', 'longest: 7h 27m on Sun, Aug 23 ✦', '-0h 01m against July'])
+    expect(heroBold()).toEqual(['7h 27m', '-0h 01m'])
+    expect([...hero.querySelectorAll('.period-hero-captions .dash-caption')].map((caption) => caption.textContent))
+      .toEqual(['every night this month', 'tap a night for the figures'])
+    expect(sparklines.get(HERO)!.values).toHaveLength(31)
   })
 
-  it('adds the year-earlier clause to the stood-out line with the comparison on, and only then', async () => {
+  it('names the window in the hero alone: no other verdict on the page repeats it', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    expect(text().split('for a month, last 12 months')).toHaveLength(2)
+  })
+
+  it('adds the year-earlier change as a line of its own with the comparison on, and only then', async () => {
     await renderAt(`${MONTH_URL}&compare=year`, { period: SLEEP_PERIOD_MONTH })
-    expect(standout()).toBe('longest: 7h 27m on Aug 23 ✦ · -0h 01m against July · -0h 01m against last year')
+    expect(heroLines()).toEqual([
+      '16 of 28 nights usual · 6 longer · 6 shorter', 'longest: 7h 27m on Sun, Aug 23 ✦', '-0h 01m against July', '-0h 01m against last year',
+    ])
+  })
+
+  it('says under each card of strips what a line and its band are', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('each line: every night this month · band = your usual range')
+    expect(cardFor('The mornings')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('each line: every morning this month · band = your usual range')
+  })
+
+  it('counts the mornings in mornings, and More about the sleep without a noun', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    const notes = (label: string) => [...cardFor(label)!.querySelectorAll('.figure-row-note')].map((note) => note.textContent ?? '')
+    expect(notes('The mornings').length).toBeGreaterThan(0)
+    for (const note of notes('The mornings')) expect(note).toMatch(/^\d+ of \d+ mornings? usual/)
+    expect(notes('More about the sleep').length).toBeGreaterThan(0)
+    for (const note of notes('More about the sleep')) expect(note).toMatch(/^\d+ of \d+ usual/)
   })
 
   it('overlays last year\'s nights on the hero\'s strip with the comparison on, aligned by date', async () => {
@@ -216,7 +252,7 @@ describe('the Sleep page: sections', () => {
     })
     // One /series read, for time asleep alone, only while the comparison is on.
     expect(urls.filter((url) => url.includes('/series'))).toHaveLength(1)
-    const lastYear = sparklines.get('Time asleep')!.lastYear!
+    const lastYear = sparklines.get(HERO)!.lastYear!
     expect(lastYear).toHaveLength(31)
     expect(lastYear[4]).toBe(400)
     expect(lastYear.filter((value) => value !== null)).toEqual([400])
@@ -228,7 +264,7 @@ describe('the Sleep page: sections', () => {
   ])('leaves out %s when its data is absent', async (label, patch) => {
     await renderAt(MONTH_URL, { period: month(patch) })
     expect(cardFor(label)).toBeUndefined()
-    expect(cardFor('Time asleep')).toBeDefined()
+    expect(cardFor(HERO)).toBeDefined()
   })
 
   it('leaves out the four figures when none has a value', async () => {
@@ -255,14 +291,15 @@ describe('the Sleep page: sections', () => {
     expect(cardFor('The mornings')!.querySelector<HTMLElement>('.detail-side-rows')!.dataset.columns).toBe(columns)
   })
 
-  it.each<[string, Partial<SleepPeriodData>, string]>([
-    ['two across in a half card', {}, '2'],
-    ['three across alone', { nights: [] }, '3'],
-  ])('sets a year\'s schedule rows %s', async (_, patch, columns) => {
+  // Bedtime and wake time: two rows, two across whether the card is half or whole.
+  it.each<[string, Partial<SleepPeriodData>]>([
+    ['in a half card', {}],
+    ['alone', { nights: [] }],
+  ])('sets the two schedule rows of a year two across %s', async (_, patch) => {
     await renderAt(YEAR_URL, { period: { ...SLEEP_PERIOD_YEAR, ...patch } })
     const rows = cardFor('Sleep schedule')!.querySelector<HTMLElement>('.detail-rows')!
-    expect(rows.querySelectorAll('.figure-row')).toHaveLength(3)
-    expect(rows.dataset.columns).toBe(columns)
+    expect(rows.querySelectorAll('.figure-row')).toHaveLength(2)
+    expect(rows.dataset.columns).toBe('2')
   })
 
   it('leaves out the balance when no night in it has a reading', async () => {
@@ -288,12 +325,21 @@ describe('the Sleep page: sections', () => {
 
   it('draws weekly points on a year, and groups the expanded list by month', async () => {
     await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR })
-    expect(sparklines.get('Time asleep')!.values).toHaveLength(SLEEP_PERIOD_YEAR.hero.weekly!.length)
-    expect(cardFor('Time asleep')!.querySelector('.dash-caption')?.textContent).toBe('each week of this period, as its average')
-    // No schedule chart on a year: its bedtime and wake time rows over their weeks instead.
+    expect(sparklines.get(HERO)!.values).toHaveLength(SLEEP_PERIOD_YEAR.hero.weekly!.length)
+    expect([...cardFor(HERO)!.querySelectorAll('.period-hero-captions .dash-caption')].map((caption) => caption.textContent))
+      .toEqual(['every week, as its average', 'tap a week for the figures'])
+    expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('each line: every week, the average of its nights · band = your usual range')
+    expect(cardFor('The mornings')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('each line: every week, the average of its mornings · band = your usual range')
+    expect(cardFor('The nights')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('stages per night, averaged per week · average per night in the legend')
+    // No schedule chart on a year: its bedtime and wake time rows over their weeks, under the
+    // variability sentence, which replaces its row on every range.
     expect(scheduleHost()).toBeNull()
     expect([...cardFor('Sleep schedule')!.querySelectorAll('.figure-row-label')].map((l) => l.textContent))
-      .toEqual(['Bedtime', 'Wake time', 'Bedtime variability'])
+      .toEqual(['Bedtime', 'Wake time'])
+    expect(cardFor('Sleep schedule')!.querySelector('.schedule-sentences p')?.textContent).toMatch(/^Bedtime varied ±\d+\smin this year/)
     expect(sparklines.get('Bedtime')!.values).toHaveLength(SLEEP_PERIOD_YEAR.schedule.bedtime!.weekly!.length)
     expect(cardFor('Nights')!.querySelector('.period-list-heading')).toBeNull()
     act(() => { cardFor('Nights')!.querySelector<HTMLButtonElement>('.period-list-toggle')!.click() })
@@ -304,8 +350,20 @@ describe('the Sleep page: sections', () => {
 
   it('writes the hour as "u" in Dutch, and the verdict in the catalogue\'s words', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
-    expect(cardFor('Tijd in slaap')!.querySelector('.detail-hero-value')?.textContent).toBe('6u 59m')
-    expect(cardFor('Tijd in slaap')!.querySelector('.detail-verdict')?.textContent).toContain('gebruikelijk')
+    const hero = cardFor('Tijd in slaap, gemiddeld per nacht')!
+    expect(hero.querySelector('.detail-hero-value')?.textContent).toBe('6u 59m')
+    expect(hero.querySelector('.detail-verdict')?.textContent).toBe('binnen je gebruikelijke bereik 6u 59m – 7u 00m voor een maand, afgelopen 12 maanden')
+    expect([...hero.querySelectorAll('.workout-hero-line')].map((line) => line.textContent))
+      .toEqual(['16 van 28 nachten gebruikelijk · 6 langer · 6 korter', 'je langste: 7u 27m op zo 23 aug ✦', '-0u 01m tegenover juli'])
+    expect([...hero.querySelectorAll('.period-hero-captions .dash-caption')].map((caption) => caption.textContent))
+      .toEqual(['elke nacht deze maand', 'tik op een nacht voor de cijfers'])
+    expect(cardFor('De nachten')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('fasen per nacht deze maand · gemiddeld per nacht in de legenda')
+    expect(cardFor('Nachten')!.querySelector('.night-list-caption')?.textContent).toBe('de nieuwste eerst · de stip is de verdict van die nacht')
+    expect(cardFor('Nachten')!.querySelector('.period-list-toggle')?.textContent).toBe(`Toon alle ${SLEEP_PERIOD_MONTH.nights.length} nachten`)
+    expect(cardFor('Slaapbalans')!.querySelector('.night-week-against')?.textContent).toBe('ten opzichte van je gebruikelijke 6u 59m, over 28 nachten')
+    expect(cardFor('De ochtenden')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('elk lijntje: elke ochtend deze maand · band = je gebruikelijke bereik')
     expect(text()).not.toMatch(/\dh\s\d\dm/)
     // The list's short weekday date, so an expanded column keeps a row on one line.
     expect(cardFor('Nachten')!.querySelector('.night-row-date')?.textContent).toBe('ma 31 aug')
@@ -315,7 +373,7 @@ describe('the Sleep page: sections', () => {
 describe('the Sleep page: the hero\'s point panel', () => {
   it('opens a night\'s panel with its figures and its page, and hands the annotate over to the AnnotatePanel', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
-    act(() => { sparklines.get('Time asleep')!.onPointClick!('2026-08-31') })
+    act(() => { sparklines.get(HERO)!.onPointClick!('2026-08-31') })
     const panel = container!.querySelector('.point-panel')!
     expect(panel.querySelector('.point-panel-title')?.textContent).toBe('Aug 31, 2026')
     expect([...panel.querySelectorAll('.point-panel-row')].map((row) => row.textContent))
@@ -330,7 +388,7 @@ describe('the Sleep page: the hero\'s point panel', () => {
   it('opens a week\'s panel on a year with that week\'s time asleep alone, and no way onward', async () => {
     await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR })
     const week = SLEEP_PERIOD_YEAR.hero.weekly![3]!
-    act(() => { sparklines.get('Time asleep')!.onPointClick!(week.from) })
+    act(() => { sparklines.get(HERO)!.onPointClick!(week.from) })
     const panel = container!.querySelector('.point-panel')!
     expect(panel.querySelectorAll('.point-panel-row')).toHaveLength(1)
     expect(panel.querySelector('.point-panel-row dt')?.textContent).toBe('Time asleep')
@@ -342,17 +400,33 @@ describe('the Sleep page: the hero\'s point panel', () => {
 describe('the Sleep page: the nights, the stages, the mornings', () => {
   it('lists each night with its time asleep, a verdict dot, bed to wake and the good-night mark, linking to it', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    expect(cardFor('Nights')!.querySelector('.night-list-caption')?.textContent).toBe('newest first · the dot is that night\'s verdict')
     const first = cardFor('Nights')!.querySelector('a')!
     expect(first.getAttribute('href')).toBe(nightPath('2026-08-31'))
+    // The mockup's order: date, time asleep, dot, bed to wake, then the good-night mark.
+    expect([...first.querySelector('.night-row-main')!.children].map((child) => child.className))
+      .toEqual(['night-row-date', 'night-row-duration', 'night-row-dot better', 'sr-only', 'night-row-clock', 'night-row-good'])
     expect(first.querySelector('.night-row-date')?.textContent).toBe('Mon, Aug 31')
     expect(first.querySelector('.night-row-duration')?.textContent).toBe('7h 18m')
     expect(first.querySelector('.night-row-dot')?.className).toBe('night-row-dot better')
     expect(first.querySelector('.night-row-good')?.textContent).toBe('✦')
-    expect(first.querySelector('.night-row-clock')?.textContent).toBe('22:44 to 06:32')
+    expect(first.querySelector('.night-row-clock')?.textContent).toBe('22:44 – 06:32')
     // The dot's standing in words, for a screen reader.
     expect(first.querySelector('.sr-only')?.textContent).toBe('above your usual')
     const second = cardFor('Nights')!.querySelectorAll('a')[1]!
     expect(second.querySelector('.night-row-good')).toBeNull()
+  })
+
+  it('names the period\'s high as the longest, and offers all its nights by name', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    const toggle = cardFor('Nights')!.querySelector<HTMLButtonElement>('.period-list-toggle')!
+    expect(toggle.textContent).toBe(`Show all ${SLEEP_PERIOD_MONTH.nights.length} nights`)
+    act(() => { toggle.click() })
+    const rowOn = (date: string) => cardFor('Nights')!.querySelector(`a[href="${nightPath(date)}"]`)!
+    // SLEEP_PERIOD_MONTH's high is the good night of Aug 23; Aug 31 is good but not the high.
+    expect(SLEEP_PERIOD_MONTH.high?.localDate).toBe('2026-08-23')
+    expect(rowOn('2026-08-23').querySelector('.night-row-good')?.textContent).toBe('✦ your longest')
+    expect(rowOn('2026-08-31').querySelector('.night-row-good')?.textContent).toBe('✦')
   })
 
   // The source the reader named goes with them, the same way the hero's panel and the Day tab take it.
@@ -360,14 +434,15 @@ describe('the Sleep page: the nights, the stages, the mornings', () => {
     await renderAt(`${MONTH_URL}&source=watch`, { period: SLEEP_PERIOD_MONTH })
     const expected = `${nightPath('2026-08-31')}?source=watch`
     expect(cardFor('Nights')!.querySelector('a')!.getAttribute('href')).toBe(expected)
-    act(() => { sparklines.get('Time asleep')!.onPointClick!('2026-08-31') })
+    act(() => { sparklines.get(HERO)!.onPointClick!('2026-08-31') })
     expect(container!.querySelector('.point-panel a')?.getAttribute('href')).toBe(expected)
   })
 
   it('leaves out bed to wake on a night missing either', async () => {
     const [night] = oneNight(-40, 425)
     await renderAt(MONTH_URL, { period: month({ nights: [{ ...night!, bedtimeMinutes: null }] }) })
-    expect(cardFor('Nights')!.querySelector('.night-row-clock')).toBeNull()
+    // The column stays, empty, so the rows under it keep their line.
+    expect(cardFor('Nights')!.querySelector('.night-row-clock')?.textContent).toBe('')
     expect(cardFor('Nights')!.querySelector('.night-row-dot')?.className).toBe('night-row-dot')
   })
 
@@ -385,15 +460,39 @@ describe('the Sleep page: the nights, the stages, the mornings', () => {
     }
   })
 
+  it('reads the stages\' axis in whole hours, and says what a bar is', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    const host = cardFor('De nachten')!.querySelector<HTMLDivElement>('div[role="img"]')!
+    const option = echarts.getInstanceByDom(host)?.getOption() as { yAxis?: { name?: string, interval?: number, axisLabel?: { formatter?: (v: number) => string } }[] }
+    const yAxis = option.yAxis![0]!
+    expect(yAxis.interval).toBe(240)
+    expect([0, 240, 480].map((v) => yAxis.axisLabel!.formatter!(v))).toEqual(['0u', '4u', '8u'])
+    expect(yAxis.name ?? '').toBe('')
+  })
+
   it('gives each stage\'s average and share in the legend, through the shared stage names', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
     const legend = [...cardFor('De nachten')!.querySelectorAll('.detail-legend li')].map((li) => li.textContent)
     expect(legend).toEqual(['Diep 1u 10m · 16 %', 'Licht 4u 10m · 58 %', 'REM 1u 25m · 20 %', 'Wakker 0u 28m · 6 %'])
   })
 
-  it('says the weekend against the weekdays under the schedule', async () => {
+  it('opens the schedule with the variability and the weekend, the weekend\'s amounts bold', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
-    expect(cardFor('Sleep schedule')!.textContent).toContain('At the weekend 6 min later to bed and 7 min later up')
+    const sentences = [...cardFor('Sleep schedule')!.querySelectorAll('.schedule-sentences p')]
+    const variability = SLEEP_PERIOD_MONTH.schedule.variability!
+    expect(sentences.map((sentence) => sentence.textContent)).toEqual([
+      `Bedtime varied ±${variability.value} min this month · your usual ±${variability.usual!.low} – ${variability.usual!.high} min`,
+      'At the weekend 6 min later to bed and 7 min later up',
+    ])
+    expect([...sentences[1]!.querySelectorAll('strong')].map((strong) => strong.textContent)).toEqual(['6 min later', '7 min later'])
+    // The sentence replaces the variability row: no figure row in the card on a month.
+    expect(cardFor('Sleep schedule')!.querySelector('.figure-row')).toBeNull()
+  })
+
+  it('says the variability alone where its usual is thin', async () => {
+    const variability = { ...SLEEP_PERIOD_MONTH.schedule.variability!, usual: { ...SLEEP_PERIOD_MONTH.schedule.variability!.usual!, thin: true } }
+    await renderAt(MONTH_URL, { period: month({ schedule: { ...SLEEP_PERIOD_MONTH.schedule, variability } }) }, 'nl')
+    expect(cardFor('Slaapschema')!.querySelector('.schedule-sentences p')?.textContent).toBe(`Naar bed varieerde ±${variability.value} min deze maand`)
   })
 
   // Earlier, the same, and across midnight, in the stored convention (signed minutes from the wake
@@ -511,7 +610,8 @@ describe('the Sleep page: the schedule chart', () => {
 
   it('draws a bedtime before midnight, stored as -56, at 23:04 the evening before', async () => {
     await renderAt(MONTH_URL, { period: month({ nights: oneNight(-56, 400) }) })
-    expect(placed()).toEqual([[0, 1384, 1840]])
+    // Aug 15 2026 is a Saturday: a weekend night, and a bedtime with no verdict, undotted.
+    expect(placed()).toEqual([[0, 1384, 1840, 1, 0]])
     const table = [...container!.querySelectorAll('table.sr-only')].find((t) => t.textContent?.includes('Naps'))!
     expect(table.textContent).toContain('23:04')
   })
@@ -519,18 +619,37 @@ describe('the Sleep page: the schedule chart', () => {
   // A day sleeper's main sleep ends on its own date, so its bed is 780 (13:00) and its wake 1200.
   it('draws a day sleeper\'s 13:00 to 20:00 as seven hours, not a day and seven hours', async () => {
     await renderAt(MONTH_URL, { period: month({ nights: oneNight(780, 1200) }) })
-    expect(placed()).toEqual([[0, 780, 1200]])
+    expect(placed()).toEqual([[0, 780, 1200, 1, 0]])
   })
 
-  it('names the band in the caption only when one is drawn', async () => {
+  const legend = () => [...cardFor('Sleep schedule')!.querySelectorAll('.detail-legend li')].map((li) => li.textContent)
+
+  it('keys the weekdays, the weekend, a bedtime outside its usual and the usual band, and says what a bar is', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
-    expect(cardFor('Sleep schedule')!.querySelector('.dash-caption')?.textContent)
-      .toBe('each bar: one night, bedtime to wake time · band = your usual times')
-    act(() => { root?.unmount() })
-    root = createRoot(container!)
-    const unbanded = (figure: PeriodFigure | null) => figure && { ...figure, daily: figure.daily.map((point) => ({ ...point, band: null })) }
+    expect(legend()).toEqual(['weekdays', 'weekend', 'bedtime outside your usual', 'your usual times'])
+    expect(cardFor('Sleep schedule')!.querySelector('.dash-caption')?.textContent).toBe('bedtime and wake time, every night this month')
+  })
+
+  it('keys the usual band only when one is drawn, and a bedtime outside it only when a night has one', async () => {
+    const unbanded = (figure: PeriodFigure | null) => figure && { ...figure, daily: figure.daily.map((point) => ({ ...point, band: null, standing: 'within' as const })) }
     const schedule = { ...SLEEP_PERIOD_MONTH.schedule, bedtime: unbanded(SLEEP_PERIOD_MONTH.schedule.bedtime), waketime: unbanded(SLEEP_PERIOD_MONTH.schedule.waketime) }
     await renderAt(MONTH_URL, { period: month({ schedule }) })
-    expect(cardFor('Sleep schedule')!.querySelector('.dash-caption')?.textContent).toBe('each bar: one night, bedtime to wake time')
+    expect(legend()).toEqual(['weekdays', 'weekend'])
+  })
+
+  // The weekend flag and the dot, off the chart's own series data: a Saturday or Sunday morning is
+  // a weekend night (the server's rule for the sentence), and a bedtime the server put outside its
+  // usual is dotted.
+  it('marks each weekend night and each bedtime outside its usual in the chart\'s data', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    const rows = placed() as [number, number, number, number, number][]
+    const oldestFirst = [...SLEEP_PERIOD_MONTH.nights].reverse()
+    const out = new Set(SLEEP_PERIOD_MONTH.schedule.bedtime!.daily.filter((p) => p.standing === 'above' || p.standing === 'below').map((p) => p.from))
+    expect(out.size).toBeGreaterThan(0)
+    expect(rows.map((row) => row[3])).toEqual(oldestFirst.map((night) => ([0, 6].includes(new Date(`${night.localDate}T00:00:00Z`).getUTCDay()) ? 1 : 0)))
+    expect(rows.map((row) => row[4])).toEqual(oldestFirst.map((night) => (out.has(night.localDate) ? 1 : 0)))
+    // Aug 1 2026 is a Saturday, Aug 3 a Monday.
+    expect(rows[oldestFirst.findIndex((night) => night.localDate === '2026-08-01')]![3]).toBe(1)
+    expect(rows[oldestFirst.findIndex((night) => night.localDate === '2026-08-03')]![3]).toBe(0)
   })
 })

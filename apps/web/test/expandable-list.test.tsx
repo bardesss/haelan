@@ -44,6 +44,12 @@ describe('ExpandableList', () => {
     expect(render({ expanded: true }, 'nl').querySelector('button')?.textContent).toBe('Toon minder')
   })
 
+  it('names what it shows where the caller words the button', () => {
+    expect(render({ showAll: (count) => `Show all ${count} nights` }).querySelector('button')?.textContent).toBe('Show all 20 nights')
+    // Expanded, "Show fewer" stays the list's own.
+    expect(render({ expanded: true, showAll: (count) => `Show all ${count} nights` }).querySelector('button')?.textContent).toBe('Show fewer')
+  })
+
   it('takes its own count of visible items', () => {
     expect(nights(render({ visible: 3 }))).toEqual(NIGHTS.slice(0, 3))
   })

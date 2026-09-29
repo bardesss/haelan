@@ -541,13 +541,13 @@ describe('the charts across a rerender', () => {
 
     // Every chart is on the page, so the case cannot pass by measuring a page that rendered nothing
     // to dispose: the hero's strip, the four figures', the stages, the schedule, the balance and
-    // the mornings' three strips.
-    for (const label of ['Time asleep', 'The nights', 'Sleep schedule', 'Sleep balance', 'Resting heart rate']) {
+    // the mornings' strips. Eleven: the bedtime variability is a sentence now, with no strip.
+    for (const label of ['Time asleep, average per night', 'The nights', 'Sleep schedule', 'Sleep balance', 'Resting heart rate']) {
       expect(container!.querySelector(`div[role="img"][aria-label="${label}"]`), label).not.toBeNull()
     }
 
     const before = chartRoots()
-    expect(before).toHaveLength(12)
+    expect(before).toHaveLength(11)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  dayCountsLine, periodStripOf, periodValueLine, periodVerdictLine, standoutLine, windowPhrase,
+  dayCountsLine, emphasise, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
+  thisPeriod, windowPhrase,
 } from '../src/pages/detail/periodText.js'
 import type { PeriodChange, PeriodFigure, PeriodStripPoint, PeriodWindow } from '../src/data/periodTypes.js'
 import type { Translate } from '../src/format.js'
@@ -55,12 +56,27 @@ describe('windowPhrase', () => {
   })
 })
 
+describe('thisPeriod', () => {
+  it('names each range as a caption does, in both languages', () => {
+    expect(['week', 'month', '3months', 'year'].map((range) => thisPeriod(range as never, t)))
+      .toEqual(['this week', 'this month', 'these 3 months', 'this year'])
+    expect(['week', 'month', '3months', 'year'].map((range) => thisPeriod(range as never, tNl)))
+      .toEqual(['deze week', 'deze maand', 'deze 3 maanden', 'dit jaar'])
+  })
+})
+
 describe('periodVerdictLine', () => {
-  it('words a month within its usual, then names the window', () => {
+  it('words a month within its usual, the window following the range after a plain space', () => {
     const f = figure({ usual: { center: 430, low: 410, high: 450, thin: false, window: MONTH, periods: 12 } })
-    expect(periodVerdictLine(f, 'en', t)).toBe(`within your usual 6h${NB}50m – 7h${NB}30m · for a month, last 12 months`)
-    expect(periodVerdictLine(f, 'nl', tNl))
-      .toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m · voor een maand, afgelopen 12 maanden`)
+    expect(periodVerdictLine(f, 'en', t, { window: true })).toBe(`within your usual 6h${NB}50m – 7h${NB}30m for a month, last 12 months`)
+    expect(periodVerdictLine(f, 'nl', tNl, { window: true }))
+      .toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een maand, afgelopen 12 maanden`)
+  })
+
+  it('is the verdict and its range alone without the window', () => {
+    const f = figure({ usual: { center: 430, low: 410, high: 450, thin: false, window: MONTH, periods: 12 } })
+    expect(periodVerdictLine(f, 'en', t)).toBe(`within your usual 6h${NB}50m – 7h${NB}30m`)
+    expect(periodVerdictLine(f, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m`)
   })
 
   it('words a bedtime above its usual as later', () => {
@@ -68,13 +84,19 @@ describe('periodVerdictLine', () => {
       metric: 'sleep_bedtime_minutes', unit: 'minutes_from_local_midnight', direction: 'neutral', value: -20,
       usual: { center: -60, low: -75, high: -45, thin: false, window: MONTH, periods: 12 }, standing: 'above',
     })
-    expect(periodVerdictLine(f, 'en', t)).toBe('later than your usual 22:45 – 23:15 · for a month, last 12 months')
+    expect(periodVerdictLine(f, 'en', t, { window: true })).toBe('later than your usual 22:45 – 23:15 for a month, last 12 months')
+    expect(periodVerdictLine(f, 'nl', tNl)).toBe('later dan je gebruikelijke 22:45 – 23:15')
   })
 
   it('names the year its usual comes from on a year', () => {
     const f = figure({ usual: { center: 430, low: 410, high: 450, thin: false, periods: 4,
       window: { unit: 'year', count: 1, from: '2025-01-01', to: '2025-12-31' } } })
-    expect(periodVerdictLine(f, 'en', t)).toBe(`within your usual 6h${NB}50m – 7h${NB}30m · for a year, from 2025`)
+    expect(periodVerdictLine(f, 'en', t, { window: true })).toBe(`within your usual 6h${NB}50m – 7h${NB}30m for a year, from 2025`)
+    expect(periodVerdictLine(f, 'nl', tNl, { window: true })).toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een jaar, uit 2025`)
+  })
+
+  it('prints a reason the same with the window asked for', () => {
+    expect(periodVerdictLine(figure({ reason: 'thin-usual', standing: null }), 'en', t, { window: true })).toBe('not enough history for a usual yet')
   })
 
   it('prints the reason, never a verdict', () => {
@@ -104,6 +126,15 @@ describe('dayCountsLine', () => {
     expect(dayCountsLine(f, 'day', tNl)).toBe('5 van 7 dagen gebruikelijk · 1 hoger · 1 lager')
   })
 
+  it('counts mornings, and counts with no noun where the card says it once', () => {
+    const f = figure({ unit: 'bpm', counts: { within: 25, above: 3, below: 2, unjudged: 0 } })
+    expect(dayCountsLine(f, 'morning', t)).toBe('25 of 30 mornings usual · 3 higher · 2 lower')
+    expect(dayCountsLine(f, 'morning', tNl)).toBe('25 van 30 ochtenden gebruikelijk · 3 hoger · 2 lager')
+    expect(dayCountsLine(figure(), 'none', t)).toBe('24 of 30 usual · 3 longer · 3 shorter')
+    expect(dayCountsLine(figure(), 'none', tNl)).toBe('24 van 30 gebruikelijk · 3 langer · 3 korter')
+    expect(dayCountsLine(figure({ counts: { within: 1, above: 0, below: 0, unjudged: 0 } }), 'morning', tNl)).toBe('1 van 1 ochtend gebruikelijk')
+  })
+
   it('leaves out the sides no day fell on, and says one night in the singular', () => {
     expect(dayCountsLine(figure({ counts: { within: 30, above: 0, below: 0, unjudged: 0 } }), 'night', t)).toBe('30 of 30 nights usual')
     expect(dayCountsLine(figure({ counts: { within: 1, above: 0, below: 0, unjudged: 0 } }), 'night', t)).toBe('1 of 1 night usual')
@@ -115,69 +146,100 @@ describe('dayCountsLine', () => {
   })
 })
 
-describe('standoutLine', () => {
-  const previous: PeriodChange = { from: '2026-07-01', to: '2026-07-31', value: 397, delta: 23 }
+describe('emphasise', () => {
+  it('sets the named values apart from the catalogue\'s words around them', () => {
+    expect(emphasise(t, 'period.standout.previous', { delta: '+3', period: 'July' }, ['delta']))
+      .toEqual([{ text: '+3', strong: true }, { text: ' against July', strong: false }])
+    expect(emphasise(tNl, 'sleep.period.sides', { bed: '45 min later', wake: '70 min later' }, ['bed', 'wake'])).toEqual([
+      { text: 'In het weekend ', strong: false }, { text: '45 min later', strong: true }, { text: ' naar bed en ', strong: false },
+      { text: '70 min later', strong: true }, { text: ' wakker', strong: false },
+    ])
+  })
 
-  it('names a good high with ✦ and the change against the month before', () => {
+  it('leaves a value it was not asked to emphasise in the plain text', () => {
+    expect(emphasise(t, 'period.standout.previous', { delta: '+3', period: 'July' }, [])).toEqual([{ text: '+3 against July', strong: false }])
+  })
+})
+
+describe('standoutLines', () => {
+  const previous: PeriodChange = { from: '2026-07-01', to: '2026-07-31', value: 397, delta: 23 }
+  const plain = (lines: ReturnType<typeof standoutLines>) => lines.map(plainText)
+  const strong = (lines: ReturnType<typeof standoutLines>) => lines.map((line) => line.filter((run) => run.strong).map((run) => run.text))
+
+  it('names a good high with its weekday and ✦, and the change against the month before, a line each', () => {
     const o = { figure: figure(), high: { localDate: '2026-08-23', value: 501, good: true }, previous, yearEarlier: null, highWord: 'longest' as const }
-    expect(standoutLine({ ...o, language: 'en', t })).toBe(`longest: 8h${NB}21m on Aug 23 ✦ · +0h${NB}23m against July`)
-    expect(standoutLine({ ...o, language: 'nl', t: tNl })).toBe(`je langste: 8u${NB}21m op 23 aug ✦ · +0u${NB}23m tegenover juli`)
+    const en = standoutLines({ ...o, language: 'en', t })
+    expect(plain(en)).toEqual([`longest: 8h${NB}21m on Sun, Aug 23 ✦`, `+0h${NB}23m against July`])
+    expect(strong(en)).toEqual([[`8h${NB}21m`], [`+0h${NB}23m`]])
+    const nl = standoutLines({ ...o, language: 'nl', t: tNl })
+    expect(plain(nl)).toEqual([`je langste: 8u${NB}21m op zo 23 aug ✦`, `+0u${NB}23m tegenover juli`])
+    expect(strong(nl)).toEqual([[`8u${NB}21m`], [`+0u${NB}23m`]])
   })
 
   it('leaves the ✦ off a high that is not good', () => {
     const o = { figure: figure(), high: { localDate: '2026-08-23', value: 501, good: false }, previous: NO_CHANGE, yearEarlier: null, highWord: 'longest' as const }
-    expect(standoutLine({ ...o, language: 'en', t })).toBe(`longest: 8h${NB}21m on Aug 23`)
+    expect(plain(standoutLines({ ...o, language: 'en', t }))).toEqual([`longest: 8h${NB}21m on Sun, Aug 23`])
   })
 
-  it('adds the change against the same period a year earlier', () => {
+  it('adds the change against the same period a year earlier as its own line', () => {
     const o = {
       figure: figure(), high: null, previous: { ...previous, delta: -10 },
       yearEarlier: { from: '2025-08-01', to: '2025-08-31', value: 410, delta: 10 }, highWord: 'longest' as const,
     }
-    expect(standoutLine({ ...o, language: 'en', t })).toBe(`-0h${NB}10m against July · +0h${NB}10m against last year`)
-    expect(standoutLine({ ...o, language: 'nl', t: tNl })).toBe(`-0u${NB}10m tegenover juli · +0u${NB}10m tegenover vorig jaar`)
+    expect(plain(standoutLines({ ...o, language: 'en', t }))).toEqual([`-0h${NB}10m against July`, `+0h${NB}10m against last year`])
+    const nl = standoutLines({ ...o, language: 'nl', t: tNl })
+    expect(plain(nl)).toEqual([`-0u${NB}10m tegenover juli`, `+0u${NB}10m tegenover vorig jaar`])
+    expect(strong(nl)[1]).toEqual([`+0u${NB}10m`])
   })
 
   it('says a year-earlier change spanning the same days as the period before only once', () => {
     const lastYear = { from: '2025-01-01', to: '2025-12-31', value: 400, delta: 5 }
-    expect(standoutLine({
+    expect(plain(standoutLines({
       figure: figure(), high: null, previous: lastYear, yearEarlier: { ...lastYear }, highWord: 'longest', language: 'en', t,
-    })).toBe(`+0h${NB}05m against 2025`)
+    }))).toEqual([`+0h${NB}05m against 2025`])
   })
 
   it('names the period before by its length', () => {
     const base = { figure: figure(), high: null, yearEarlier: null, highWord: 'busiest' as const, language: 'en', t }
-    expect(standoutLine({ ...base, previous: { from: '2026-08-24', to: '2026-08-30', value: 400, delta: 5 } }))
-      .toBe(`+0h${NB}05m against the week before`)
-    expect(standoutLine({ ...base, previous: { from: '2026-04-01', to: '2026-06-30', value: 400, delta: 5 } }))
-      .toBe(`+0h${NB}05m against the 3 months before`)
-    expect(standoutLine({ ...base, previous: { from: '2025-01-01', to: '2025-12-31', value: 400, delta: 5 } }))
-      .toBe(`+0h${NB}05m against 2025`)
-    expect(standoutLine({ ...base, t: tNl, language: 'nl', previous: { from: '2026-08-24', to: '2026-08-30', value: 400, delta: 5 } }))
-      .toBe(`+0u${NB}05m tegenover de week ervoor`)
+    expect(plain(standoutLines({ ...base, previous: { from: '2026-08-24', to: '2026-08-30', value: 400, delta: 5 } })))
+      .toEqual([`+0h${NB}05m against the week before`])
+    expect(plain(standoutLines({ ...base, previous: { from: '2026-04-01', to: '2026-06-30', value: 400, delta: 5 } })))
+      .toEqual([`+0h${NB}05m against the 3 months before`])
+    expect(plain(standoutLines({ ...base, previous: { from: '2025-01-01', to: '2025-12-31', value: 400, delta: 5 } })))
+      .toEqual([`+0h${NB}05m against 2025`])
+    expect(plain(standoutLines({ ...base, t: tNl, language: 'nl', previous: { from: '2026-08-24', to: '2026-08-30', value: 400, delta: 5 } })))
+      .toEqual([`+0u${NB}05m tegenover de week ervoor`])
   })
 
   it('words a busiest high and a non-duration difference', () => {
     const steps = figure({ metric: 'steps', unit: 'count' })
-    expect(standoutLine({
+    expect(plain(standoutLines({
       figure: steps, high: { localDate: '2026-08-02', value: 15000, good: true },
       previous: { from: '2026-07-01', to: '2026-07-31', value: 8000, delta: 450 }, yearEarlier: null,
       highWord: 'busiest', language: 'en', t,
-    })).toBe('busiest: 15,000 on Aug 2 ✦ · +450 against July')
+    }))).toEqual(['busiest: 15,000 on Sun, Aug 2 ✦', '+450 against July'])
   })
 
   it('words a short span\'s change in minutes', () => {
     const active = figure({ metric: 'active_minutes', per: 'week' })
-    expect(standoutLine({
+    expect(plain(standoutLines({
       figure: active, high: null, previous: { from: '2026-07-01', to: '2026-07-31', value: 150, delta: -12 }, yearEarlier: null,
       highWord: 'busiest', language: 'en', t,
-    })).toBe(`-12${NB}min against July`)
+    }))).toEqual([`-12${NB}min against July`])
   })
 
-  it('is null when nothing stood out', () => {
-    expect(standoutLine({
+  it('is empty when nothing stood out', () => {
+    expect(standoutLines({
       figure: figure(), high: null, previous: NO_CHANGE, yearEarlier: { ...NO_CHANGE }, highWord: 'longest', language: 'en', t,
-    })).toBeNull()
+    })).toEqual([])
+  })
+})
+
+describe('periodDeviationLine', () => {
+  it('words skin temperature as a deviation, with no window', () => {
+    const skin = figure({ metric: 'sleep_temperature', unit: 'celsius', precision: 1, value: 33.8,
+      usual: { center: 33.7, low: 33.5, high: 34.0, thin: false, window: MONTH, periods: 12 } })
+    expect(periodDeviationLine(skin, 'en', t)).toEqual({ value: `+0.1${NB}°C`, verdict: `within your usual -0.2 – +0.3${NB}°C` })
   })
 })
 

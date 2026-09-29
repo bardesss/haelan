@@ -13,6 +13,7 @@ import type { Sparkline } from '../src/charts/Sparkline.js'
 import type { PeriodFigure, PeriodStripPoint } from '../src/data/periodTypes.js'
 import { PeriodHero } from '../src/pages/period/PeriodHero.js'
 import { PointPanel } from '../src/pages/period/PointPanel.js'
+import type { Emphasised } from '../src/pages/detail/periodText.js'
 import { SLEEP_PERIOD_EMPTY, SLEEP_PERIOD_MONTH, SLEEP_PERIOD_YEAR } from './fixtures/sleepPeriod.js'
 
 let sparklineProps: ComponentProps<typeof Sparkline> | null = null
@@ -49,35 +50,50 @@ const panelFor = (point: PeriodStripPoint, close: () => void) => (
     onAnnotate={null} onClose={close} />
 )
 
-function hero(figure: PeriodFigure, o: { standout?: string | null, lastYear?: (number | null)[], panel?: typeof panelFor } = {}) {
+const LONGEST: Emphasised = [{ text: 'longest: ', strong: false }, { text: '7h 27m', strong: true }, { text: ' on Sun, Aug 23 ✦', strong: false }]
+const CHANGE: Emphasised = [{ text: '+0h 23m', strong: true }, { text: ' against July', strong: false }]
+
+function hero(figure: PeriodFigure, o: { standout?: Emphasised[], hint?: string, lastYear?: (number | null)[], panel?: typeof panelFor } = {}) {
   return (
-    <PeriodHero label="Time asleep" figure={figure} noun="night" standout={o.standout === undefined ? 'longest night' : o.standout}
-      caption="each night of this month" lastYear={o.lastYear} panel={o.panel ?? panelFor} />
+    <PeriodHero label="Time asleep" figure={figure} noun="night" standout={o.standout ?? [LONGEST]}
+      caption="every night this month" hint={o.hint} lastYear={o.lastYear} panel={o.panel ?? panelFor} />
   )
 }
 
 const lines = () => [...container.querySelectorAll('.workout-hero-line')].map((line) => line.textContent)
 
 describe('PeriodHero', () => {
-  it('prints the value, the verdict, then the counts and the standout line under it', () => {
-    mount(hero(SLEEP_PERIOD_MONTH.hero, { standout: 'longest: 7h 27m on Aug 23 ✦' }))
+  it('prints the value, the verdict with its window, then the counts and a line for each thing that stood out', () => {
+    mount(hero(SLEEP_PERIOD_MONTH.hero, { standout: [LONGEST, CHANGE] }))
     expect(container.querySelector('.detail-hero-value')?.textContent).toBe(`6h${NB}59m`)
     const verdict = container.querySelector('.detail-verdict')
-    expect(verdict?.textContent).toContain('for a month, last 12 months')
-    expect(lines()).toEqual(['16 of 28 nights usual · 6 longer · 6 shorter', 'longest: 7h 27m on Aug 23 ✦'])
-    expect(container.querySelector('.dash-caption')?.textContent).toBe('each night of this month')
+    expect(verdict?.textContent).toMatch(/^within your usual .* for a month, last 12 months$/)
+    expect(verdict?.textContent).not.toContain(' · ')
+    expect(lines()).toEqual(['16 of 28 nights usual · 6 longer · 6 shorter', 'longest: 7h 27m on Sun, Aug 23 ✦', '+0h 23m against July'])
+    // The values the lines turn on are bold, and nothing else is.
+    expect([...container.querySelectorAll('.workout-hero-line strong')].map((strong) => strong.textContent)).toEqual(['7h 27m', '+0h 23m'])
+    expect(container.querySelector('.dash-caption')?.textContent).toBe('every night this month')
     expect(container.querySelector('h2')?.textContent).toBe('Time asleep')
+  })
+
+  it('puts the tap hint beside the caption, and draws none without one', () => {
+    mount(hero(SLEEP_PERIOD_MONTH.hero, { hint: 'tap a night for the figures' }))
+    expect([...container.querySelectorAll('.period-hero-captions .dash-caption')].map((caption) => caption.textContent))
+      .toEqual(['every night this month', 'tap a night for the figures'])
+    expect(container.querySelector('.period-hero-hint')?.textContent).toBe('tap a night for the figures')
+    mount(hero(SLEEP_PERIOD_MONTH.hero))
+    expect(container.querySelector('.period-hero-hint')).toBeNull()
   })
 
   it('leaves out the lines that have nothing to say', () => {
     const unjudged = { ...SLEEP_PERIOD_MONTH.hero, counts: { within: 0, above: 0, below: 0, unjudged: 28 } }
-    mount(hero(unjudged, { standout: null }))
+    mount(hero(unjudged, { standout: [] }))
     expect(lines()).toEqual([])
   })
 
   it('prints a total\'s per-day average under its value', () => {
     const distance = { ...SLEEP_PERIOD_MONTH.hero, metric: 'distance', unit: 'meters', value: 5200, total: 156000 }
-    mount(hero(distance, { standout: null }))
+    mount(hero(distance, { standout: [] }))
     expect(container.querySelector('.detail-hero-value')?.textContent).toBe(`156.00${NB}km`)
     expect(lines()[0]).toBe(`5.20${NB}km per day`)
   })

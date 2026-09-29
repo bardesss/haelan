@@ -731,9 +731,13 @@
     },
     "nights": {
       "label": "Nachten",
-      "clock": "{{bed}} tot {{wake}}",
+      "clock": "{{bed}} – {{wake}}",
       "emptyTitle": "Geen nachten in deze periode",
-      "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt."
+      "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt.",
+      "caption": "de nieuwste eerst · de stip is de verdict van die nacht",
+      "longest": "je langste",
+      "showAll_one": "Toon alle {{count}} nacht",
+      "showAll_other": "Toon alle {{count}} nachten"
     },
     "night": {
       "when": "Naar bed {{bed}} · wakker geworden {{wake}} · {{source}}",
@@ -869,11 +873,13 @@
     "openNight": "Bekijk nacht",
     "period": {
       "caption": {
-        "daily": "elke nacht van deze periode",
-        "weekly": "elke week van deze periode, als gemiddelde"
+        "daily": "elke nacht {{period}}",
+        "weekly": "elke week, als gemiddelde"
       },
       "stages": {
-        "label": "De nachten"
+        "label": "De nachten",
+        "caption": "fasen per nacht {{period}} · gemiddeld per nacht in de legenda",
+        "captionWeekly": "fasen per nacht, gemiddeld per week · gemiddeld per nacht in de legenda"
       },
       "variability": "Variatie in bedtijd",
       "sides": "In het weekend {{bed}} naar bed en {{wake}} wakker",
@@ -883,8 +889,32 @@
         "same": "op dezelfde tijd"
       },
       "mornings": "De ochtenden",
-      "scheduleCaption": "elke balk: één nacht, naar bed tot wakker geworden",
-      "scheduleCaptionBand": "elke balk: één nacht, naar bed tot wakker geworden · band = je gebruikelijke tijden"
+      "scheduleCaption": "naar bed en wakker, elke nacht {{period}}",
+      "hero": {
+        "label": "Tijd in slaap, gemiddeld per nacht"
+      },
+      "hint": {
+        "daily": "tik op een nacht voor de cijfers",
+        "weekly": "tik op een week voor de cijfers"
+      },
+      "lines": {
+        "nights": "elk lijntje: elke nacht {{period}} · band = je gebruikelijke bereik",
+        "mornings": "elk lijntje: elke ochtend {{period}} · band = je gebruikelijke bereik",
+        "weeklyNights": "elk lijntje: elke week, het gemiddelde van haar nachten · band = je gebruikelijke bereik",
+        "weeklyMornings": "elk lijntje: elke week, het gemiddelde van die ochtenden · band = je gebruikelijke bereik"
+      },
+      "varied": "Naar bed varieerde ±{{value}} {{period}}",
+      "variedUsual": "Naar bed varieerde ±{{value}} {{period}} · je gebruikelijke ±{{low}} – {{high}}",
+      "legend": {
+        "weekday": "doordeweeks",
+        "weekend": "weekend",
+        "out": "naar bed buiten je gebruikelijke",
+        "usual": "je gebruikelijke tijden"
+      },
+      "balanceAgainstBaseline_one": "ten opzichte van je gebruikelijke {{usual}}, over {{count}} nacht",
+      "balanceAgainstBaseline_other": "ten opzichte van je gebruikelijke {{usual}}, over {{count}} nachten",
+      "balanceAgainstTarget_one": "ten opzichte van je doel van {{target}}, over {{count}} nacht",
+      "balanceAgainstTarget_other": "ten opzichte van je doel van {{target}}, over {{count}} nachten"
     }
   },
   "setup": {
@@ -1734,7 +1764,11 @@
       "later": "{{count}} later",
       "earlier": "{{count}} eerder",
       "higher": "{{count}} hoger",
-      "lower": "{{count}} lager"
+      "lower": "{{count}} lager",
+      "usualMornings_one": "{{within}} van {{count}} ochtend gebruikelijk",
+      "usualMornings_other": "{{within}} van {{count}} ochtenden gebruikelijk",
+      "usual_one": "{{within}} van {{count}} gebruikelijk",
+      "usual_other": "{{within}} van {{count}} gebruikelijk"
     },
     "standout": {
       "longest": "je langste: {{value}} op {{date}}",
@@ -1755,6 +1789,12 @@
       "tail": "Toon de cijfers",
       "idle": "Tik op een punt voor de cijfers",
       "named": "Cijfers van {{date}}"
+    },
+    "this": {
+      "week": "deze week",
+      "month": "deze maand",
+      "3months": "deze 3 maanden",
+      "year": "dit jaar"
     }
   }
 }

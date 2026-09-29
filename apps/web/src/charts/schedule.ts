@@ -1,14 +1,17 @@
 import type { ChartTokens } from './tokens.js'
 
-export type Night = { date: string; bed: number | null; wake: number | null; naps: number[] }
+// `weekend` and `bedOut` are a per-night variant the Sleep page's schedule draws (the approved
+// mockup's): a weekend night in the lighter step of the same family, and a bedtime the server judged
+// outside its usual marked with a dot at the bed end. Left out, a night draws as it always has.
+export type Night = { date: string; bed: number | null; wake: number | null; naps: number[]; weekend?: boolean; bedOut?: boolean }
 
 export type NightMark =
   | { kind: 'no-data'; color: string }
-  | { kind: 'span'; bed: number; wake: number; color: string }
+  | { kind: 'span'; bed: number; wake: number; color: string; bedOut: boolean }
 
 export function nightMark(night: Night, t: ChartTokens): NightMark {
   if (night.bed === null || night.wake === null) return { kind: 'no-data', color: t.noData }
-  return { kind: 'span', bed: night.bed, wake: night.wake, color: t.stageLight }
+  return { kind: 'span', bed: night.bed, wake: night.wake, color: night.weekend === true ? t.stageRem : t.stageLight, bedOut: night.bedOut === true }
 }
 
 // Noon to noon: shifted rather than widened, so naps at 13:00 fit without compressing the sleep

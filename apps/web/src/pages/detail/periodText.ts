@@ -1,5 +1,5 @@
-import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodStripPoint, PeriodWindow } from '../../data/periodTypes.js'
-import { formatShortDate, formatSignedDuration, formatSignedNumber } from '../../format.js'
+import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodRange, PeriodStripPoint, PeriodWindow } from '../../data/periodTypes.js'
+import { formatSignedDuration, formatSignedNumber, formatWeekdayDate } from '../../format.js'
 import type { Translate } from '../../format.js'
 import { directionWords } from '../../charts/base.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
@@ -18,18 +18,26 @@ export function windowPhrase(window: PeriodWindow, t: Translate): string {
   return t(`period.window.${window.unit}`, { count: window.count, year: window.from.slice(0, 4) })
 }
 
+/** The period by its length, as a caption names it: "this month" / "deze maand", "this year" / "dit jaar". */
+export function thisPeriod(range: PeriodRange, t: Translate): string {
+  return t(`period.this.${range}`)
+}
+
 /**
- * verdictLine on the period figure, its usual standing in for the night page's baseline, then the
- * window that usual comes from; or, where the server gave a reason not to judge, the reason's own
- * words (no-data says nothing at all).
+ * verdictLine on the period figure, its usual standing in for the night page's baseline; or, where
+ * the server gave a reason not to judge, the reason's own words (no-data says nothing at all).
+ *
+ * With `window` the window the usual comes from follows the range after a plain space ("... 6h 40m
+ * - 7h 35m for a month, last 12 months"): a page names it once, in the hero, and every other
+ * figure's verdict is the verdict and its range alone.
  */
-export function periodVerdictLine(figure: PeriodFigure, language: string, t: Translate): string | null {
+export function periodVerdictLine(figure: PeriodFigure, language: string, t: Translate, o: { window?: boolean } = {}): string | null {
   if (figure.reason === 'no-data') return null
   if (figure.reason === 'too-few-days') return t('period.reason.tooFewDays')
   if (figure.reason === 'thin-usual') return t('glance.usual.thin')
   const verdict = verdictLine({ ...figure, baseline: figure.usual }, language, t)
-  if (verdict === null || figure.usual === null) return verdict
-  return verdict + SEPARATOR + windowPhrase(figure.usual.window, t)
+  if (verdict === null || figure.usual === null || o.window !== true) return verdict
+  return `${verdict} ${windowPhrase(figure.usual.window, t)}`
 }
 
 // A day above or below its usual, in the words its unit reads in: a clock time is later or earlier
@@ -40,15 +48,20 @@ function sideWords(unit: string): { above: string, below: string } {
   return { above: 'higher', below: 'lower' }
 }
 
+// The counted noun's key: nights, days, mornings (the mornings after a period's nights), or none at
+// all where a card of one kind of day says it once for every row ("26 of 30 usual").
+const COUNT_KEYS = { night: 'usualNights', day: 'usualDays', morning: 'usualMornings', none: 'usual' } as const
+export type CountNoun = keyof typeof COUNT_KEYS
+
 /** "24 of 30 nights usual · 3 longer · 3 shorter"; null when no day was counted, or none judged. */
-export function dayCountsLine(figure: PeriodFigure, noun: 'night' | 'day', t: Translate): string | null {
+export function dayCountsLine(figure: PeriodFigure, noun: CountNoun, t: Translate): string | null {
   const { within, above, below, unjudged } = figure.counts
   // No day judged covers no day at all: a figure the server never judges by day (the recovery index)
   // counts every day unjudged, and says nothing here either.
   if (within + above + below === 0) return null
   const count = within + above + below + unjudged
   const words = sideWords(figure.unit)
-  const parts = [t(`period.counts.${noun === 'night' ? 'usualNights' : 'usualDays'}`, { within, count })]
+  const parts = [t(`period.counts.${COUNT_KEYS[noun]}`, { within, count })]
   if (above > 0) parts.push(t(`period.counts.${words.above}`, { count: above }))
   if (below > 0) parts.push(t(`period.counts.${words.below}`, { count: below }))
   return parts.join(SEPARATOR)
@@ -89,33 +102,60 @@ function hasChange(change: PeriodChange | null): change is PeriodChange & { valu
   return change !== null && change.delta !== null && change.value !== null
 }
 
+/** A line in runs of plain and emphasised text: the figures a sentence turns on are set bold. */
+export type Emphasised = { text: string, strong: boolean }[]
+
+// A mark no catalogue string contains, either side of the index of each emphasised value.
+const MARK = '\u0000'
+
 /**
- * The one line saying what stood out: the high point ("longest: 8h 21m on Aug 23", with ✦ when the
- * server judged it better), the change against the period before, and, when given, against the same
- * period a year earlier. Null when none of the three has anything to say.
+ * A catalogue sentence with the values named in `strong` emphasised: each is interpolated as a
+ * mark, the sentence split at the marks, and the value put back as a run of its own. The words
+ * around a value stay the catalogue's, whatever order a language puts them in.
  */
-export function standoutLine(o: {
+export function emphasise(t: Translate, key: string, params: Record<string, string | number>, strong: readonly string[]): Emphasised {
+  const marked: Record<string, string | number> = { ...params }
+  strong.forEach((name, index) => { marked[name] = `${MARK}${index}${MARK}` })
+  // The marked indexes land at the odd positions of the split.
+  return t(key, marked).split(MARK).flatMap((piece, index): Emphasised => {
+    if (index % 2 === 0) return piece === '' ? [] : [{ text: piece, strong: false }]
+    return [{ text: String(params[strong[Number(piece)]!]), strong: true }]
+  })
+}
+
+/** A line's text with its emphasis dropped. */
+export function plainText(line: Emphasised): string {
+  return line.map((run) => run.text).join('')
+}
+
+/**
+ * What stood out, a line each: the high point ("longest: **8h 21m** on Sun, Aug 23", with ✦ when
+ * the server judged it better), the change against the period before ("**+0h 23m** against July"),
+ * and, when given, against the same period a year earlier. Empty when none of the three has
+ * anything to say.
+ */
+export function standoutLines(o: {
   figure: PeriodFigure, high: PeriodHigh | null, previous: PeriodChange, yearEarlier: PeriodChange | null,
   highWord: 'longest' | 'busiest', language: string, t: Translate,
-}): string | null {
+}): Emphasised[] {
   const { figure, high, previous, yearEarlier, language, t } = o
-  const parts: string[] = []
+  const lines: Emphasised[] = []
   if (high !== null) {
-    const date = formatShortDate(high.localDate, high.localDate, language)
-    const words = t(`period.standout.${o.highWord}`, { value: formatFigureValue(figure, high.value, language, t), date })
-    parts.push(high.good ? `${words} ✦` : words)
+    const date = formatWeekdayDate(high.localDate, language)
+    const line = emphasise(t, `period.standout.${o.highWord}`, { value: formatFigureValue(figure, high.value, language, t), date }, ['value'])
+    lines.push(high.good ? [...line, { text: ' ✦', strong: false }] : line)
   }
   if (hasChange(previous)) {
-    parts.push(t('period.standout.previous', {
+    lines.push(emphasise(t, 'period.standout.previous', {
       delta: changeText(figure, previous, language, t), period: previousName(previous, language, t),
-    }))
+    }, ['delta']))
   }
   // On the year range the period before is the previous calendar year, and so is the same period a
   // year earlier: one change, said once.
   if (hasChange(yearEarlier) && !(yearEarlier.from === previous.from && yearEarlier.to === previous.to)) {
-    parts.push(t('period.standout.yearEarlier', { delta: changeText(figure, yearEarlier, language, t) }))
+    lines.push(emphasise(t, 'period.standout.yearEarlier', { delta: changeText(figure, yearEarlier, language, t) }, ['delta']))
   }
-  return parts.length === 0 ? null : parts.join(SEPARATOR)
+  return lines
 }
 
 /**
@@ -174,17 +214,17 @@ export function periodValueLine(figure: PeriodFigure, language: string, t: Trans
 /**
  * Skin temperature on an overview page, worded as the night page words it (NightMorning): the
  * period's average as a signed deviation from its usual's centre ("+0.3 °C"), and the usual as a
- * deviation too (deviationVerdictLine), then the window. Null without a usual worth deviating from
+ * deviation too (deviationVerdictLine), with no window: a row's verdict is the verdict and its range
+ * alone, the window said once, in the hero. Null without a usual worth deviating from
  * (none, or thin), or where the server gave a reason not to judge: the figure then reads as its
  * reading, through periodValueLine and periodVerdictLine, never as "— °C".
  */
-export function periodDeviationLine(figure: PeriodFigure, language: string, t: Translate): { value: string, verdict: string } | null {
+export function periodDeviationLine(figure: PeriodFigure, language: string, t: Translate): { value: string, verdict: string | null } | null {
   const { usual } = figure
   if (figure.value === null || figure.reason !== null || usual === null || usual.thin) return null
   const deviation = formatSignedNumber(figure.value - usual.center, figure.precision, language, t('common.absent'))
-  const verdict = deviationVerdictLine({ ...figure, baseline: usual, strip: null }, language, t)
   return {
     value: `${deviation}${NBSP}${t('charts.units.celsius')}`,
-    verdict: verdict === null ? windowPhrase(usual.window, t) : verdict + SEPARATOR + windowPhrase(usual.window, t),
+    verdict: deviationVerdictLine({ ...figure, baseline: usual, strip: null }, language, t),
   }
 }

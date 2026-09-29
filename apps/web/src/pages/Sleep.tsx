@@ -24,7 +24,7 @@ import type { MetricGroup } from '../data/useMetricGroups.js'
 import { exportPathFor } from '../data/pageShell.js'
 import { formatClock, formatLocalDate, formatLocalDateRange } from '../format.js'
 import { formatFigureValue } from './detail/figureText.js'
-import { standoutLine } from './detail/periodText.js'
+import { standoutLines, thisPeriod } from './detail/periodText.js'
 import { PeriodHero } from './period/PeriodHero.js'
 import { PeriodFigureRows } from './period/PeriodFigureRows.js'
 import { PointPanel } from './period/PointPanel.js'
@@ -125,14 +125,15 @@ export function Sleep() {
 
   const { hero } = data
   const weekly = hero.weekly !== null
-  const heroLabel = t('sleep.night.hero.label')
+  const heroLabel = t('sleep.period.hero.label')
+  const period = thisPeriod(data.period.range, t)
   const nightOn = new Map(data.nights.map((night) => [night.localDate, night]))
 
   // A day's panel: that night's time asleep, bed and wake, the way to its page, and the day-metric
   // exclude and annotate, which closes the panel as the AnnotatePanel opens. A week's: that week's
   // time asleep alone, and nowhere to go (the other figures carry only their weeks on these ranges).
   const panel = (point: PeriodStripPoint, close: () => void) => {
-    const asleep = { label: heroLabel, value: formatFigureValue(hero, point.value, language, t) }
+    const asleep = { label: t('sleep.night.hero.label'), value: formatFigureValue(hero, point.value, language, t) }
     if (weekly) {
       return <PointPanel title={formatLocalDateRange(point.from, point.to, language)} rows={[asleep]} open={null} onAnnotate={null} onClose={close} />
     }
@@ -148,7 +149,7 @@ export function Sleep() {
     )
   }
 
-  const standout = standoutLine({
+  const standout = standoutLines({
     figure: hero, high: data.high, previous: data.previous, yearEarlier: controls.compareYear === true ? data.yearEarlier : null,
     highWord: 'longest', language, t,
   })
@@ -168,30 +169,32 @@ export function Sleep() {
       {header}
       <div className="grid">
         <PeriodHero label={heroLabel} figure={hero} noun="night" standout={standout}
-          caption={t(weekly ? 'sleep.period.caption.weekly' : 'sleep.period.caption.daily')}
+          caption={weekly ? t('sleep.period.caption.weekly') : t('sleep.period.caption.daily', { period })}
+          hint={t(weekly ? 'sleep.period.hint.weekly' : 'sleep.period.hint.daily')}
           lastYear={lastYear.alignedOf(ASLEEP)} panel={panel} />
         {hasFigures(data.figures) && (
           <Card span={12}>
             <div className="detail-minis">
               <PeriodFigureRows figures={data.figures} labelOf={labelOf} noun="night" />
             </div>
+            <p className="dash-caption">{weekly ? t('sleep.period.lines.weeklyNights') : t('sleep.period.lines.nights', { period })}</p>
           </Card>
         )}
-        <SleepStages stages={data.stages} />
+        <SleepStages stages={data.stages} range={data.period.range} />
         {scheduleShown && (
           <SleepScheduleCard data={data} range={data.period.range} span={nightsSpan}
             nightsRange={{ from: data.period.from, to: data.period.to, source }} />
         )}
         {listShown && (
-          <SleepNightsList nights={data.nights} range={data.period.range} span={nightsSpan} expanded={expanded}
+          <SleepNightsList nights={data.nights} range={data.period.range} longest={data.high?.localDate ?? null} span={nightsSpan} expanded={expanded}
             onToggle={() => setExpandedFor(expanded ? null : periodKey)} />
         )}
         {balanceShown && data.balance !== null && (
-          <SleepBalanceCard balance={data.balance} dates={heroDates} span={morningSpan}
+          <SleepBalanceCard balance={data.balance} dates={heroDates} nights={hero.days} span={morningSpan}
             excluded={overrides.excluded} annotations={overrides.annotations}
             onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: ASLEEP })} />
         )}
-        {morningsShown && <SleepMornings figures={data.mornings} span={morningSpan} />}
+        {morningsShown && <SleepMornings figures={data.mornings} range={data.period.range} span={morningSpan} />}
         {hasFigures(data.more) && <SleepMore figures={data.more} />}
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}

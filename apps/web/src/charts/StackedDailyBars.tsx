@@ -57,7 +57,7 @@ function clampBand(values: readonly (number | null)[]): (number | null)[] {
  * not invent the wiring.
  */
 export function StackedDailyBars({
-  series, labels, label, unit, axisUnit, metric, height = 130,
+  series, labels, label, unit, axisUnit, metric, height = 130, valueAxis,
 }: {
   series: readonly BandSeries[]
   labels: string[]
@@ -70,6 +70,11 @@ export function StackedDailyBars({
   // `metric` prop: this chart never converts.
   metric: string
   height?: number
+  /** The value axis's own ticks, for a caller whose readers count in a larger unit than the stored
+   *  one (the sleep stages' minutes read in hours, "0h 4h 8h"): the step between ticks, in the stored
+   *  unit, and each tick's label. The labels then say the unit, so `axisUnit` is not printed. Keep it
+   *  stable (a module constant or memoised): it reaches the chart build. */
+  valueAxis?: { interval: number, format: (value: number) => string }
 }) {
   const { t, i18n } = useTranslation()
 
@@ -140,10 +145,11 @@ export function StackedDailyBars({
         // axis that does not start at zero misstates every band's share of the column, not only the
         // total's ratio between two days DailyBars' own comment on this same line describes.
         min: 0,
-        name: axisUnit,
-        nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize },
+        ...(valueAxis === undefined
+          ? { name: axisUnit, nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize } }
+          : { interval: valueAxis.interval }),
         splitLine: base.splitLine,
-        axisLabel: { ...base.axisLabel, formatter: (value: number) => format(value, '') },
+        axisLabel: { ...base.axisLabel, formatter: valueAxis?.format ?? ((value: number) => format(value, '')) },
       },
       series: clamped.map((band, index) => ({
         type: 'bar' as const,
@@ -154,7 +160,7 @@ export function StackedDailyBars({
         itemStyle: { color: band.token !== undefined ? tokens[band.token] : stops[index % stops.length] },
       })),
     }
-  }, [clamped, labels, axisUnit, metric, i18n.language, marks, t])
+  }, [clamped, labels, axisUnit, valueAxis, metric, i18n.language, marks, t])
 
   const { host, style } = useChart(build, height)
 

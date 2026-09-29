@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/index.js'
 /**
  * An overview page's list (nights, workouts), PATTERNS.md's "Overview pages": the first `visible`
  * items, most recent first as the caller orders them, and a "Show all N" button when there are
- * more. Expanded, every item, under a heading per group when `groupOf` names one (a month, on 3
+ * more, which names what it shows where the caller words it (`showAll`: "Show all 30 nights"). Expanded, every item, under a heading per group when `groupOf` names one (a month, on 3
  * months and Year), flowing into columns (.period-list-expanded), and a "Show fewer" button.
  *
  * The page owns `expanded`, since the list's card takes its own full-width row when it opens and
@@ -14,7 +14,7 @@ import { useTranslation } from '../../i18n/index.js'
 /** How many items a list shows before "Show all"; a page sizing the list's card by it reads this. */
 export const LIST_VISIBLE = 7
 
-export function ExpandableList<T>({ items, keyOf, render, groupOf, groupLabel, expanded, onToggle, visible = LIST_VISIBLE }: {
+export function ExpandableList<T>({ items, keyOf, render, groupOf, groupLabel, expanded, onToggle, visible = LIST_VISIBLE, showAll }: {
   items: T[]
   keyOf: (item: T) => string
   render: (item: T) => ReactNode
@@ -23,6 +23,7 @@ export function ExpandableList<T>({ items, keyOf, render, groupOf, groupLabel, e
   expanded: boolean
   onToggle: () => void
   visible?: number
+  showAll?: (count: number) => string
 }) {
   const { t } = useTranslation()
   const more = items.length > visible
@@ -43,7 +44,7 @@ export function ExpandableList<T>({ items, keyOf, render, groupOf, groupLabel, e
       </div>
       {more && (
         <button type="button" className="button period-list-toggle" aria-expanded={open} onClick={onToggle}>
-          {open ? t('period.list.showFewer') : t('period.list.showAll', { count: items.length })}
+          {open ? t('period.list.showFewer') : showAll?.(items.length) ?? t('period.list.showAll', { count: items.length })}
         </button>
       )}
     </div>

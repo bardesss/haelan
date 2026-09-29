@@ -5,8 +5,9 @@ import { BasisContext } from '../../../components/basis.js'
 import { StackedDailyBars } from '../../../charts/StackedDailyBars.js'
 import type { BandSeries } from '../../../charts/StackedDailyBars.js'
 import type { ChartTokens } from '../../../charts/tokens.js'
-import { formatDuration, formatNumber } from '../../../format.js'
-import type { PeriodFigure, SleepPeriodData } from '../../../data/periodTypes.js'
+import { formatDuration, formatNumber, hourUnit } from '../../../format.js'
+import type { PeriodFigure, PeriodRange, SleepPeriodData } from '../../../data/periodTypes.js'
+import { thisPeriod } from '../../detail/periodText.js'
 
 type Stage = 'deep' | 'light' | 'rem' | 'awake'
 const STAGES: readonly { stage: Stage, token: keyof ChartTokens }[] = [
@@ -23,13 +24,15 @@ const pointsOf = (figure: PeriodFigure) => figure.weekly ?? figure.daily
  * "De nachten": each night's stages as one stacked bar (each week's averages on 3 months and Year),
  * in the stages' own colours, the night page's legend under it with the period's average of each
  * and its share of the night (the server's `shares`). The axis runs along whichever stage the
- * server sent; the four share it, since each figure's points cover the same period. Nothing at
- * all when the server sent no stage.
+ * server sent; the four share it, since each figure's points cover the same period. The value axis
+ * reads in whole hours ("0h 4h 8h"), a night's length as a reader counts it, and a caption under
+ * the legend says what a bar is. Nothing at all when the server sent no stage.
  */
-export function SleepStages({ stages }: { stages: SleepPeriodData['stages'] }) {
+export function SleepStages({ stages, range }: { stages: SleepPeriodData['stages'], range: PeriodRange }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const legendId = useId()
+  const valueAxis = useMemo(() => ({ interval: 240, format: (minutes: number) => `${Math.round(minutes / 60)}${hourUnit(language)}` }), [language])
   const present = useMemo(() => STAGES.flatMap(({ stage, token }) => {
     const figure = stages[stage]
     return figure === null ? [] : [{ stage, token, figure }]
@@ -55,13 +58,18 @@ export function SleepStages({ stages }: { stages: SleepPeriodData['stages'] }) {
     <Card span={12} label={label}>
       <BasisContext.Provider value={legendId}>
         <StackedDailyBars series={series} labels={labels} label={label} unit={t('sleep.units.minutes')}
-          axisUnit={t('sleep.units.minutes')} metric="sleep_deep_minutes" />
+          axisUnit={t('sleep.units.minutes')} metric="sleep_deep_minutes" valueAxis={valueAxis} />
       </BasisContext.Provider>
       <ul className="detail-legend" id={legendId}>
         {legend.map(({ stage, text }) => (
           <li key={stage}><span className="detail-legend-key" data-stage={stage} aria-hidden="true" />{text}</li>
         ))}
       </ul>
+      <p className="dash-caption">
+        {present[0] !== undefined && present[0].figure.weekly !== null
+          ? t('sleep.period.stages.captionWeekly')
+          : t('sleep.period.stages.caption', { period: thisPeriod(range, t) })}
+      </p>
     </Card>
   )
 }

@@ -8,12 +8,14 @@ import { Sparkline } from '../../charts/Sparkline.js'
 import type { PeriodFigure, PeriodStripPoint } from '../../data/periodTypes.js'
 import { formatFigureValue } from '../detail/figureText.js'
 import { dayCountsLine, latestBand, periodStripOf, periodValueLine, periodVerdictLine } from '../detail/periodText.js'
+import type { Emphasised } from '../detail/periodText.js'
+import { EmphasisedText } from './EmphasisedText.js'
 
 /**
  * An overview page's lead, NightHero's markup over the period read (PATTERNS.md's "Overview
  * pages"): the period's figure in display type, the verdict against the usual for a period of that
- * length, then the day counts and the stood-out line, each a quiet line under the verdict. Beside
- * them the strip of the period's points (its days, or on 3 months and Year its weeks), each shaded
+ * length with the window that usual comes from (the one place a page names it), then the day
+ * counts and what stood out, each a quiet line under the verdict. Beside them the strip of the period's points (its days, or on 3 months and Year its weeks), each shaded
  * with its own usual, toned by its own verdict, and a good one ringed.
  *
  * A dot opens a small panel under the strip rather than a page: `panel` gives its contents for the
@@ -23,14 +25,16 @@ import { dayCountsLine, latestBand, periodStripOf, periodValueLine, periodVerdic
  * Nothing at all without a value, so the grid closes up. The strip's arrays and formatter are
  * memoised on the figure: a fresh one every render would rebuild the chart.
  */
-export function PeriodHero({ label, figure, noun, standout, caption, lastYear, panel }: {
+export function PeriodHero({ label, figure, noun, standout, caption, hint, lastYear, panel }: {
   label: string
   figure: PeriodFigure
   noun: 'night' | 'day'
-  /** From standoutLine; null when nothing stood out. */
-  standout: string | null
-  /** What the points are: "each night of this month", "each week of this year". */
+  /** From standoutLines, a line each; empty when nothing stood out. */
+  standout: readonly Emphasised[]
+  /** What the points are: "every night this month", "every week, as its average". */
   caption: string
+  /** What a tap on a point does, beside the caption: "tap a night for the figures". */
+  hint?: string
   /** The same days a year earlier, aligned to the daily points; ignored when the strip is weekly. */
   lastYear?: (number | null)[]
   /** The PointPanel for a tapped point, and how it closes itself. */
@@ -79,7 +83,7 @@ export function PeriodHero({ label, figure, noun, standout, caption, lastYear, p
 
   if (figure.value === null) return null
   const { value, under } = periodValueLine(figure, language, t)
-  const verdict = periodVerdictLine(figure, language, t)
+  const verdict = periodVerdictLine(figure, language, t, { window: true })
   const counts = dayCountsLine(figure, noun, t)
   const tone = verdictTone(figure.judged, figure.standing)
 
@@ -93,7 +97,7 @@ export function PeriodHero({ label, figure, noun, standout, caption, lastYear, p
             <p id={verdictId} className={tone === null ? 'detail-verdict' : `detail-verdict ${tone}`}>{verdict}</p>
           )}
           {counts !== null && <p className="workout-hero-line">{counts}</p>}
-          {standout !== null && <p className="workout-hero-line">{standout}</p>}
+          {standout.map((line, index) => <p key={index} className="workout-hero-line"><EmphasisedText line={line} /></p>)}
         </div>
         {strip !== null && (
           <div className="dash-lead-strip period-hero-strip">
@@ -103,7 +107,10 @@ export function PeriodHero({ label, figure, noun, standout, caption, lastYear, p
                 pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} pointMarks={marks}
                 lastYear={strip.weekly ? undefined : lastYear} height={64} dots tableToggle={false} onPointClick={openAt} opensDay={opens} />
             </BasisContext.Provider>
-            <p id={captionId} className="dash-caption">{caption}</p>
+            <div className="period-hero-captions">
+              <p id={captionId} className="dash-caption">{caption}</p>
+              {hint !== undefined && <p className="dash-caption period-hero-hint">{hint}</p>}
+            </div>
             {open !== undefined && <div key={open.from} className="period-hero-panel">{panel(open, close)}</div>}
           </div>
         )}

@@ -731,9 +731,13 @@
     },
     "nights": {
       "label": "Nights",
-      "clock": "{{bed}} to {{wake}}",
+      "clock": "{{bed}} – {{wake}}",
       "emptyTitle": "No nights in this period",
-      "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet."
+      "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet.",
+      "caption": "newest first · the dot is that night's verdict",
+      "longest": "your longest",
+      "showAll_one": "Show all {{count}} night",
+      "showAll_other": "Show all {{count}} nights"
     },
     "night": {
       "when": "Bedtime {{bed}} · wake time {{wake}} · {{source}}",
@@ -869,11 +873,13 @@
     "openNight": "View night",
     "period": {
       "caption": {
-        "daily": "each night of this period",
-        "weekly": "each week of this period, as its average"
+        "daily": "every night {{period}}",
+        "weekly": "every week, as its average"
       },
       "stages": {
-        "label": "The nights"
+        "label": "The nights",
+        "caption": "stages per night {{period}} · average per night in the legend",
+        "captionWeekly": "stages per night, averaged per week · average per night in the legend"
       },
       "variability": "Bedtime variability",
       "sides": "At the weekend {{bed}} to bed and {{wake}} up",
@@ -883,8 +889,32 @@
         "same": "at the same time"
       },
       "mornings": "The mornings",
-      "scheduleCaption": "each bar: one night, bedtime to wake time",
-      "scheduleCaptionBand": "each bar: one night, bedtime to wake time · band = your usual times"
+      "scheduleCaption": "bedtime and wake time, every night {{period}}",
+      "hero": {
+        "label": "Time asleep, average per night"
+      },
+      "hint": {
+        "daily": "tap a night for the figures",
+        "weekly": "tap a week for the figures"
+      },
+      "lines": {
+        "nights": "each line: every night {{period}} · band = your usual range",
+        "mornings": "each line: every morning {{period}} · band = your usual range",
+        "weeklyNights": "each line: every week, the average of its nights · band = your usual range",
+        "weeklyMornings": "each line: every week, the average of its mornings · band = your usual range"
+      },
+      "varied": "Bedtime varied ±{{value}} {{period}}",
+      "variedUsual": "Bedtime varied ±{{value}} {{period}} · your usual ±{{low}} – {{high}}",
+      "legend": {
+        "weekday": "weekdays",
+        "weekend": "weekend",
+        "out": "bedtime outside your usual",
+        "usual": "your usual times"
+      },
+      "balanceAgainstBaseline_one": "against your usual {{usual}}, over {{count}} night",
+      "balanceAgainstBaseline_other": "against your usual {{usual}}, over {{count}} nights",
+      "balanceAgainstTarget_one": "against your target of {{target}}, over {{count}} night",
+      "balanceAgainstTarget_other": "against your target of {{target}}, over {{count}} nights"
     }
   },
   "setup": {
@@ -1734,7 +1764,11 @@
       "later": "{{count}} later",
       "earlier": "{{count}} earlier",
       "higher": "{{count}} higher",
-      "lower": "{{count}} lower"
+      "lower": "{{count}} lower",
+      "usualMornings_one": "{{within}} of {{count}} morning usual",
+      "usualMornings_other": "{{within}} of {{count}} mornings usual",
+      "usual_one": "{{within}} of {{count}} usual",
+      "usual_other": "{{within}} of {{count}} usual"
     },
     "standout": {
       "longest": "longest: {{value}} on {{date}}",
@@ -1755,6 +1789,12 @@
       "tail": "Show its figures",
       "idle": "Tap a point for its figures",
       "named": "Figures for {{date}}"
+    },
+    "this": {
+      "week": "this week",
+      "month": "this month",
+      "3months": "these 3 months",
+      "year": "this year"
     }
   }
 }

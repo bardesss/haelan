@@ -75,13 +75,13 @@ describe('the sleep balance card', () => {
   it('states the period\'s running total, signed, against the usual it was measured from', async () => {
     await renderWith({ period: SLEEP_PERIOD_MONTH })
     expect(balanceCard()!.querySelector('.night-week-total')?.textContent).toBe('+0h 09m')
-    expect(balanceCard()!.querySelector('.night-week-against')?.textContent).toBe('against your usual 6h 59m')
+    expect(balanceCard()!.querySelector('.night-week-against')?.textContent).toBe('against your usual 6h 59m, over 28 nights')
     expect(balanceCard()!.querySelector('.night-week-bars-caption')?.textContent).toBe('each bar: that night against your usual')
   })
 
   it('names the target when the server measured against it', async () => {
     await renderWith({ period: withBalance({ zeroLine: { minutes: 480, source: 'target' } }) })
-    expect(balanceCard()!.querySelector('.night-week-against')?.textContent).toBe('against your target of 8h 00m')
+    expect(balanceCard()!.querySelector('.night-week-against')?.textContent).toBe('against your target of 8h 00m, over 28 nights')
     expect(balanceCard()!.querySelector('.night-week-bars-caption')?.textContent).toBe('each bar: that night against your target')
   })
 
@@ -92,7 +92,7 @@ describe('the sleep balance card', () => {
 
   it('words the zero line in Dutch too', async () => {
     await renderWith({ period: SLEEP_PERIOD_MONTH }, 'nl')
-    expect(balanceCard('Slaapbalans')!.querySelector('.night-week-against')?.textContent).toBe('ten opzichte van je gebruikelijke 6u 59m')
+    expect(balanceCard('Slaapbalans')!.querySelector('.night-week-against')?.textContent).toBe('ten opzichte van je gebruikelijke 6u 59m, over 28 nachten')
   })
 
   it('draws each night on its own date, and a night with no reading as no bar rather than a zero', async () => {

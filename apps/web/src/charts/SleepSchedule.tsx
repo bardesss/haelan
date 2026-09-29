@@ -90,16 +90,24 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
             }
             const top = api.coord([api.value(0), mark.bed])
             const bottom = api.coord([api.value(0), mark.wake])
-            return {
-              type: 'line',
+            const span = {
+              type: 'line' as const,
               shape: { x1: top[0] ?? 0, y1: top[1] ?? 0, x2: bottom[0] ?? 0, y2: bottom[1] ?? 0 },
-              style: { stroke: mark.color, lineWidth: STROKE.nightSpan, lineCap: 'round' },
+              style: { stroke: mark.color, lineWidth: STROKE.nightSpan, lineCap: 'round' as const },
             }
+            if (!mark.bedOut) return span
+            // A bedtime outside its usual: a dot at the bed end, in the verdict's warning tone.
+            return { type: 'group' as const, children: [span, {
+              type: 'circle' as const,
+              shape: { cx: top[0] ?? 0, cy: top[1] ?? 0, r: SYMBOL.bedOut },
+              style: { fill: tokens.negative },
+            }] }
           },
           encode: { x: 0 },
-          // Each night's placed bed and wake ride along with its index, so the series data states
-          // what is drawn (renderItem itself reads the night from `nights`).
-          data: nights.map((n, i) => [i, n.bed, n.wake]),
+          // Each night's placed bed and wake ride along with its index, then whether it is a weekend
+          // night and whether its bedtime is dotted (1 or 0), so the series data states what is drawn
+          // (renderItem itself reads the night from `nights`).
+          data: nights.map((n, i) => [i, n.bed, n.wake, n.weekend === true ? 1 : 0, n.bedOut === true ? 1 : 0]),
           ...(usualBands.length > 0 && { markArea: { silent: true,
             itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
             data: usualBands.map((b) => [{ yAxis: b.low }, { yAxis: b.high }]) } }) },

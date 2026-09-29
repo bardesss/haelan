@@ -2,6 +2,7 @@ import { useId, useMemo } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { BasisContext } from '../../../components/basis.js'
+import { verdictTone } from '../../../components/FigureRow.js'
 import { SleepSchedule } from '../../../charts/SleepSchedule.js'
 import { localMinutesOf, napInWindow, placedUsualBand, withinSchedule, WIDE_WINDOW } from '../../../charts/schedule.js'
 import { useNights } from '../../../data/useNights.js'
@@ -9,7 +10,10 @@ import { oneNightPerDate } from '../../../data/nights.js'
 import type { PeriodFigure, PeriodRange, ScheduleSides, SleepPeriodData } from '../../../data/periodTypes.js'
 import type { Translate } from '../../../format.js'
 import { PeriodFigureRows } from '../../period/PeriodFigureRows.js'
-import { latestBand } from '../../detail/periodText.js'
+import { EmphasisedText } from '../../period/EmphasisedText.js'
+import { emphasise, latestBand, thisPeriod } from '../../detail/periodText.js'
+import type { Emphasised } from '../../detail/periodText.js'
+import { variedLine } from '../../detail/figureText.js'
 import { useSleepLabel } from './labels.js'
 
 const NBSP = ' '
@@ -36,22 +40,35 @@ function shift(minutes: number, t: Translate): string {
   return t(rounded > 0 ? 'sleep.period.shift.later' : 'sleep.period.shift.earlier', { value })
 }
 
-/** "At the weekend 45 min later to bed and 70 min later up"; null when either side is missing. */
-export function sidesSentence(sides: ScheduleSides, t: Translate): string | null {
+/** "At the weekend **45 min later** to bed and **70 min later** up"; null when either side is missing. */
+export function sidesSentence(sides: ScheduleSides, t: Translate): Emphasised | null {
   const { weekday, weekend } = sides
   if (weekday === null || weekend === null) return null
-  return t('sleep.period.sides', {
+  return emphasise(t, 'sleep.period.sides', {
     bed: shift(clockDifference(weekend.bedtimeMinutes, weekday.bedtimeMinutes), t),
     wake: shift(clockDifference(weekend.waketimeMinutes, weekday.waketimeMinutes), t),
-  })
+  }, ['bed', 'wake'])
 }
 
 /**
- * "Slaapschema": on Week and Month every night's bed to wake on the schedule chart, against the
- * usual bed and wake bands, with the naps /sleep/nights knows the times of; on 3 months and Year the
- * bedtime and wake time rows over their weekly points instead, since a year of nights is no chart
- * to read. Under either, the bedtime variability against its usual, and the weekend against the
- * weekdays in one sentence.
+ * Whether a night is a weekend night, by the date it is filed under (the morning it ended): Saturday
+ * and Sunday mornings, the nights of Friday and Saturday. The server's own rule for the weekend side
+ * of the sentence (sleepPeriod.ts's sides), so the chart's colours and the sentence mean the same
+ * nights.
+ */
+export function isWeekendNight(localDate: string): boolean {
+  const day = new Date(`${localDate}T00:00:00Z`).getUTCDay()
+  return day === 0 || day === 6
+}
+
+/**
+ * "Slaapschema", the approved mockup's: first the bedtime variability as a sentence against its
+ * usual ("Bedtime varied ±34 min this month · your usual ±20 – 40 min") and the weekend against the
+ * weekdays in another, its amounts bold. Then on Week and Month every night's bed to wake on the
+ * schedule chart, a weekend night in the lighter step of the same colour and a bedtime the server
+ * judged outside its usual dotted at its bed end, against the usual bed and wake bands, with the
+ * naps /sleep/nights knows the times of, a legend and a caption; on 3 months and Year the bedtime
+ * and wake time rows over their weekly points instead, since a year of nights is no chart to read.
  *
  * Bed and wake are the period read's own (each night's sleep_bedtime_minutes and
  * sleep_waketime_minutes, the same pair the old page read from /series); /sleep/nights adds only
@@ -65,7 +82,8 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
   span: number
   nightsRange: { from: string, to: string, source: string }
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const language = i18n.language
   const labelOf = useSleepLabel()
   const captionId = useId()
   const short = drawsNights(range)
@@ -81,6 +99,11 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
     return out
   }, [nightsQuery.data])
 
+  // The nights whose bedtime the server judged outside its usual, by date: each is dotted.
+  const bedOut = useMemo(() => new Set((schedule.bedtime?.daily ?? [])
+    .filter((point) => point.standing === 'above' || point.standing === 'below')
+    .map((point) => point.from)), [schedule.bedtime])
+
   // Oldest first, as the chart reads down its rows; the list sends the newest first.
   const nights = useMemo(() => [...data.nights].reverse().map((night) => {
     // Signed minutes from the wake day's midnight, as stored: 23:04 is -56, and a day sleeper's
@@ -92,8 +115,10 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
       date: night.localDate,
       ...withinSchedule(bedRaw, wakeRaw, WIDE_WINDOW),
       naps: naps === undefined ? EMPTY_NAPS : naps.map((raw) => napInWindow(raw, bedRaw ?? wakeRaw, WIDE_WINDOW)),
+      weekend: isWeekendNight(night.localDate),
+      bedOut: bedOut.has(night.localDate),
     }
-  }), [data.nights, napsByDate])
+  }), [data.nights, napsByDate, bedOut])
 
   const bedBand = latestBand(schedule.bedtime?.daily)
   const wakeBand = latestBand(schedule.waketime?.daily)
@@ -102,24 +127,40 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
       .filter((band): band is { low: number, high: number } => band !== null)
   }, [bedBand, wakeBand])
 
-  const rows = useMemo(() => [...(short ? [] : [schedule.bedtime, schedule.waketime]), schedule.variability]
+  const rows = useMemo(() => (short ? [] : [schedule.bedtime, schedule.waketime])
     .filter((figure): figure is PeriodFigure => figure !== null), [short, schedule])
+  const period = thisPeriod(range, t)
+  const { variability } = schedule
+  const varied = variability === null || variability.value === null ? null : variedLine(variability, variability.usual,
+    { plain: 'sleep.period.varied', usual: 'sleep.period.variedUsual' }, language, t, { period })
+  const variedTone = variability === null ? null : verdictTone(variability.judged, variability.standing)
   const sides = sidesSentence(schedule.sides, t)
   const label = t('sleep.night.week.schedule')
+  const anyOut = nights.some((night) => night.bedOut)
 
   return (
     <Card span={span} label={label}>
+      {(varied !== null || sides !== null) && (
+        <div className="schedule-sentences">
+          {varied !== null && <p className={variedTone === null ? 'detail-verdict' : `detail-verdict ${variedTone}`}>{varied}</p>}
+          {sides !== null && <p className="detail-verdict"><EmphasisedText line={sides} /></p>}
+        </div>
+      )}
       {short && (
         <>
           <BasisContext.Provider value={captionId}>
             <SleepSchedule nights={nights} showNaps={nightsQuery.isSuccess} label={label} usualBands={usualBands} />
           </BasisContext.Provider>
-          <p id={captionId} className="dash-caption">{t(usualBands.length > 0 ? 'sleep.period.scheduleCaptionBand' : 'sleep.period.scheduleCaption')}</p>
+          <ul className="detail-legend">
+            <li><span className="detail-legend-key" data-schedule="weekday" aria-hidden="true" />{t('sleep.period.legend.weekday')}</li>
+            <li><span className="detail-legend-key" data-schedule="weekend" aria-hidden="true" />{t('sleep.period.legend.weekend')}</li>
+            {anyOut && <li><span className="detail-legend-key" data-schedule="out" aria-hidden="true" />{t('sleep.period.legend.out')}</li>}
+            {usualBands.length > 0 && <li><span className="detail-legend-key" data-schedule="usual" aria-hidden="true" />{t('sleep.period.legend.usual')}</li>}
+          </ul>
+          <p id={captionId} className="dash-caption">{t('sleep.period.scheduleCaption', { period })}</p>
         </>
       )}
-      {/* Two across at most in a half card, as the mornings: three came out narrower than their labels. */}
-      <PeriodFigureRows figures={rows} labelOf={labelOf} noun="night" max={span === 6 ? 2 : undefined} />
-      {sides !== null && <p className="detail-verdict">{sides}</p>}
+      <PeriodFigureRows figures={rows} labelOf={labelOf} noun="night" />
     </Card>
   )
 }

@@ -14,14 +14,17 @@ export function hasBalance(balance: SleepPeriodData['balance']): boolean {
 /**
  * "Slaapbalans": each night against the zero line the server chose (`zeroLine`: the person's usual
  * once it is worth standing on, their target until then, or the target always when they switched
- * the usual off), the period's running total over it, and which of the two it is, in the night
- * page's words. A night with no reading draws no bar rather than a zero (BalanceBars), and an
+ * the usual off), the period's running total over it, which of the two it is and over how many
+ * nights ("against your usual 7h 08m, over 30 nights"), the night count the server's (the hero's
+ * `days`, the nights with a reading, which are the nights with a balance). A night with no reading draws no bar rather than a zero (BalanceBars), and an
  * excluded night is named on the chart. A bar opens the day-metric exclude and annotate.
  */
-export function SleepBalanceCard({ balance, dates, span, excluded, annotations, onPointClick }: {
+export function SleepBalanceCard({ balance, dates, nights, span, excluded, annotations, onPointClick }: {
   balance: NonNullable<SleepPeriodData['balance']>
   /** The hero's days, which the balance values run along one for one. */
   dates: string[]
+  /** The nights with a reading, which the total adds up. */
+  nights: number
   span: number
   excluded: string[]
   annotations: { date: string, text: string }[]
@@ -34,8 +37,8 @@ export function SleepBalanceCard({ balance, dates, span, excluded, annotations, 
   const zeroLine = formatDuration(balance.zeroLine.minutes, language)
   const target = balance.zeroLine.source === 'target'
   const against = target
-    ? t('sleep.night.week.balanceAgainstTarget', { target: zeroLine })
-    : t('sleep.night.week.balanceAgainstBaseline', { usual: zeroLine })
+    ? t('sleep.period.balanceAgainstTarget', { target: zeroLine, count: nights })
+    : t('sleep.period.balanceAgainstBaseline', { usual: zeroLine, count: nights })
   // Signed both ways, as the night page signs it: a bare "0h 26m" reads as a size, not a surplus.
   const signed = formatSignedDuration(balance.total, t('common.absent'), language)
   const total = Math.round(balance.total) > 0 ? `+${signed}` : signed

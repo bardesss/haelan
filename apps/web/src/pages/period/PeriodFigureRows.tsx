@@ -5,14 +5,15 @@ import type { FigureRowStrip } from '../../components/FigureRow.js'
 import type { PeriodFigure } from '../../data/periodTypes.js'
 import { formatFigureValue } from '../detail/figureText.js'
 import { dayCountsLine, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine } from '../detail/periodText.js'
+import type { CountNoun } from '../detail/periodText.js'
 
 const SEPARATOR = ' · '
 const NONE: readonly string[] = []
 
 /**
  * An overview page's figures as FigureRows, NightMinis's rows over the period read: each figure's
- * value (the period total, for a total), the verdict against the usual for a period of that length,
- * and under it, plain, a total's per-day average and the day counts, over a strip of its
+ * value (the period total, for a total), the verdict against the usual for a period of that length
+ * (its range alone: the window that usual comes from is named once, in the hero), and under it, plain, a total's per-day average and the day counts, over a strip of its
  * points each against its own usual, or with `bars` (a `more` figure, sent with no points) the bar.
  *
  * A figure with no value is left out, and with none left the rows are null, so the caller's card
@@ -24,7 +25,8 @@ const NONE: readonly string[] = []
 export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, bars = false, deviation = NONE }: {
   figures: PeriodFigure[]
   labelOf: (metric: string) => string
-  noun: 'night' | 'day'
+  /** What the day counts count ("nights", "mornings"), or 'none' where the card says it once. */
+  noun: CountNoun
   max?: 1 | 2 | 3 | 4
   side?: boolean
   bars?: boolean
@@ -43,7 +45,7 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
     }
     const deviated = deviation.includes(figure.metric) ? periodDeviationLine(figure, language, t) : null
     const { value, under } = deviated === null ? periodValueLine(figure, language, t) : { value: deviated.value, under: null }
-    const verdict = deviated?.verdict ?? periodVerdictLine(figure, language, t) ?? t('glance.usual.none')
+    const verdict = (deviated === null ? periodVerdictLine(figure, language, t) : deviated.verdict) ?? t('glance.usual.none')
     // What is not a verdict goes under it, plain, so only the verdict's words take its tone.
     const parts = [under, dayCountsLine(figure, noun, t)].filter((part) => part !== null)
     const note = parts.length === 0 ? undefined : parts.join(SEPARATOR)

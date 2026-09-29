@@ -23,13 +23,15 @@ export function useNightHref(): (localDate: string) => string {
 }
 
 /**
- * A night's own row in the Sleep page's list, linking to its night page: the date, the time asleep,
- * a dot in the tone of the server's verdict on that night (verdictTone, plain when usual), bed to
- * wake, and ✦ for a good night (PATTERNS.md's good-day mark). Every figure is the period read's own
+ * A night's own row in the Sleep page's list, linking to its night page, in the approved mockup's
+ * order: the date, the time asleep, a dot in the tone of the server's verdict on that night
+ * (verdictTone, plain when usual), bed to wake ("23:06 – 06:57"), and ✦ for a good night
+ * (PATTERNS.md's good-day mark), with "your longest" beside it on the night that is the period's
+ * high (`longest`, the server's `high`). Every figure is the period read's own
  * (SleepListRow), so the row prints what the hero and its strip print for the same night. The dot's
  * standing is said in words for a screen reader, since a colour alone says nothing there.
  */
-export function NightRow({ night }: { night: SleepListRow }) {
+export function NightRow({ night, longest = false }: { night: SleepListRow, longest?: boolean }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const nightHref = useNightHref()
@@ -41,20 +43,16 @@ export function NightRow({ night }: { night: SleepListRow }) {
     <Link to={nightHref(night.localDate)} className="night-row-link">
       <div className="night-row">
         <div className="night-row-main">
-          <span className="night-row-primary">
-            <span className="night-row-date">{formatWeekdayDate(night.localDate, language)}</span>
-            <span className="night-row-duration">
-              {night.asleepMinutes === null ? t('common.absent') : formatDuration(night.asleepMinutes, language)}
-            </span>
-            <span className={tone === null ? 'night-row-dot' : `night-row-dot ${tone}`} aria-hidden="true" />
-            {standing !== '' && <span className="sr-only">{standing}</span>}
-            {night.good && <span className="night-row-good">✦</span>}
+          <span className="night-row-date">{formatWeekdayDate(night.localDate, language)}</span>
+          <span className="night-row-duration">
+            {night.asleepMinutes === null ? t('common.absent') : formatDuration(night.asleepMinutes, language)}
           </span>
-          {bed !== null && wake !== null && (
-            <span className="night-row-clock">
-              {t('sleep.nights.clock', { bed: formatClock(bed), wake: formatClock(wake) })}
-            </span>
-          )}
+          <span className={tone === null ? 'night-row-dot' : `night-row-dot ${tone}`} aria-hidden="true" />
+          {standing !== '' && <span className="sr-only">{standing}</span>}
+          <span className="night-row-clock">
+            {bed !== null && wake !== null && t('sleep.nights.clock', { bed: formatClock(bed), wake: formatClock(wake) })}
+          </span>
+          {night.good && <span className="night-row-good">{longest ? `✦ ${t('sleep.nights.longest')}` : '✦'}</span>}
         </div>
       </div>
     </Link>
