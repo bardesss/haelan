@@ -618,12 +618,12 @@ describe('the night page\'s day before it', () => {
     expect(card.querySelector('.basis')?.textContent).toBe('Saturday, September 5, the day before this night')
     // The face itself is decorative (aria-hidden): the word beside it is what a screen reader
     // announces, and this asserts the word is present rather than assuming the face's own markup.
-    expect(card.querySelector('.night-day-mood [aria-hidden="true"]')).not.toBeNull()
-    expect(card.querySelector('.night-day-mood-word')?.textContent).toBe('Good')
+    expect(card.querySelector('.day-log-mood [aria-hidden="true"]')).not.toBeNull()
+    expect(card.querySelector('.day-log-mood-word')?.textContent).toBe('Good')
     // The fixture's only counted kind, alcohol, was tapped twice, so its chip carries the count;
     // a chip for a kind tapped once would carry none (the brief's own "count shown when > 1").
-    expect([...card.querySelectorAll('.night-day-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol ×2'])
-    expect(card.querySelector('.night-day-note')?.textContent).toBe('“Birthday, home late.”')
+    expect([...card.querySelectorAll('.day-log-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol ×2'])
+    expect(card.querySelector('.day-log-note')?.textContent).toBe('“Birthday, home late.”')
     const rows = [...card.querySelectorAll('.figure-row')].map((row) => [
       text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '',
     ])
@@ -631,7 +631,7 @@ describe('the night page\'s day before it', () => {
     expect(rows[1]).toEqual(['Active minutes', '48 min'])
     expect(text(card, '.figure-row:nth-child(2) .figure-row-verdict')).toBe('within your usual 25 min – 60 min')
     expect(rows[2]?.[0]).toBe('Training')
-    const workoutLink = card.querySelector<HTMLAnchorElement>('.night-day-workout-link')
+    const workoutLink = card.querySelector<HTMLAnchorElement>('.day-workout-link')
     expect(workoutLink?.textContent).toBe('Biking 52 min')
     expect(workoutLink?.getAttribute('href')).toBe('/activity/w1')
   })
@@ -660,7 +660,7 @@ describe('the night page\'s day before it', () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, log: { ...page.log, counts: { alcohol: 1 } } })
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
-    expect([...card.querySelectorAll('.night-day-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol'])
+    expect([...card.querySelectorAll('.day-log-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol'])
   })
 
   it('hides the whole card when the day has no log, no figures and no workout', async () => {

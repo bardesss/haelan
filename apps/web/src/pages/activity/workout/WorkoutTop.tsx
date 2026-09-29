@@ -8,7 +8,6 @@ import { StepArrows } from '../../../components/StepArrows.js'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import type { WorkoutSessionDetail } from '../../../data/useSessions.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
-import { gpsSentenceKey } from '../WorkoutHeader.js'
 import { workoutPath } from './workoutText.js'
 
 /**
@@ -26,9 +25,8 @@ import { workoutPath } from './workoutText.js'
  * neighbouring workouts of any type, in the order they started. A step keeps the reader's
  * `source` from the URL, for the trace below it, as the night page's step does.
  *
- * The other sources, the excluded badge and the route sentence are the old header's, carried here
- * until the sections that will own them (the route card, the About fold) take them over, so
- * nothing the page said disappears in between.
+ * The other sources, the excluded badge and the route sentence the old header carried live in the
+ * About fold at the foot of the page (WorkoutAbout), beside the control that acts on them.
  */
 export function WorkoutTop({ page, session, detail }: {
   page: WorkoutPageData
@@ -48,9 +46,6 @@ export function WorkoutTop({ page, session, detail }: {
   const name = detail.displayName !== null && detail.displayName.toLocaleLowerCase(language) !== title.toLocaleLowerCase(language)
     ? detail.displayName
     : null
-  const others = (session.sources ?? []).filter((id) => id !== session.sourceId)
-  // Possibly undefined on an older cached response (WorkoutRoute.tsx's own comment on its prop).
-  const gpsKey = gpsSentenceKey(detail, (session.route ?? []).length)
 
   return (
     <div className="dash-header workout-top">
@@ -68,21 +63,6 @@ export function WorkoutTop({ page, session, detail }: {
         {detail.notes !== null && detail.notes.trim() !== '' && (
           <p className="workout-note">{t('sleep.night.day.note', { note: detail.notes.trim() })}</p>
         )}
-        {others.length > 0 && (
-          <p className="workout-also basis">
-            {t('activity.workout.alsoRecordedBy', {
-              sources: new Intl.ListFormat(language, { type: 'conjunction' }).format(others.map(nameOf)),
-            })}
-          </p>
-        )}
-        {session.excluded && (
-          <p className="workout-excluded">
-            {session.excludeReason !== null
-              ? t('activity.sessions.excluded', { reason: session.excludeReason })
-              : t('activity.sessions.excludedNoReason')}
-          </p>
-        )}
-        {gpsKey !== null && <p className="workout-gps basis">{t(gpsKey)}</p>}
       </div>
       <div className="workout-top-nav">
         <div className="day-nav" role="group" aria-label={t('activity.workout.page.nav')}>

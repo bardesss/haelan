@@ -650,8 +650,30 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-zones-key[data-zone="moderate"] { background: var(--chart-stage-light); }
 .workout-zones-key[data-zone="vigorous"] { background: var(--chart-stage-awake); }
 .workout-zones-key[data-zone="peak"] { background: var(--negative); }
+/* WorkoutForm, WorkoutDay and WorkoutAfter: a line saying what the card holds on the left, its
+   rows three across on the right (the mockup's "Loopvorm", "Die dag", "Daarna"); WorkoutMore's rows
+   four across the whole card, as the minis. */
+.workout-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
+.workout-side-caption { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.workout-side-rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.workout-more-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+.workout-after-cell { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.workout-after-night { font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; }
+.workout-after-night:hover { text-decoration: underline; }
+/* WorkoutAbout.tsx's fold: NightAbout's line and summary, and the lines the header used to carry. */
+.workout-about-line { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
+.workout-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
+.workout-about[open] summary { margin-bottom: var(--space-2); }
+.workout-about-body { display: flex; flex-direction: column; gap: var(--space-2); }
+.workout-about-body .workout-actions { justify-content: flex-start; }
 @media (max-width: 620px) {
   .workout-compared-best { display: none; }
+  .workout-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .workout-side-rows, .workout-more-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  /* Small text, a finger still needs 44px: the fold's toggle stays a list item for its triangle
+     (.night-about summary's own reason), the night link a flex box. */
+  .workout-about summary { display: list-item; min-height: 44px; align-content: center; }
+  .workout-after-night { min-height: 44px; display: inline-flex; align-items: center; }
   .workout-minis-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .workout-all { min-height: 44px; display: inline-flex; align-items: center; }
   .workout-hero-previous a, .workout-compared thead a { display: inline-flex; min-height: 44px; align-items: center; }
@@ -692,11 +714,11 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
   .night-minis-rows, .night-morning-rows, .night-more-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .night-day-figures { grid-template-columns: repeat(1, minmax(0, 1fr)); gap: var(--space-3); }
   .night-all { min-height: 44px; display: inline-flex; align-items: center; }
-  /* The About fold's toggle and a workout's link are small text; a finger still needs 44px. The
-     summary stays a list item, so it keeps its disclosure triangle (.status-failure-details
-     summary's own reason), and align-content centres the text in the taller block. */
+  /* The About fold's toggle is small text; a finger still needs 44px. The summary stays a list
+     item, so it keeps its disclosure triangle (.status-failure-details summary's own reason), and
+     align-content centres the text in the taller block. A day's workout link gets the same, with
+     its base rule (DayLogBlock's block, further down). */
   .night-about summary { display: list-item; min-height: 44px; align-content: center; }
-  .night-day-workout-link { min-height: 44px; display: flex; align-items: center; }
 }
 /* Under the recovery ring: the index's usual, then what it is made of. */
 .night-recovery-usual, .night-recovery-from { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); text-align: center; }
@@ -760,22 +782,30 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .night-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
 .night-about[open] summary { margin-bottom: var(--space-2); }
 
-/* NightDay.tsx's card (M10a-2 task 7): the mood face and its word beside the chips and note, then
-   steps, active minutes and any workout in a row of their own beneath them. */
-.night-day-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); }
-.night-day-mood { display: flex; align-items: center; gap: var(--space-2); }
-.night-day-mood-word { font-size: var(--font-size-sm); color: var(--text-secondary); }
-.night-day-chips { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); list-style: none; margin: 0; padding: 0; }
-.night-day-chip {
+/* NightDay.tsx's card (M10a-2 task 7): the day's log (DayLogBlock, below), then steps, active
+   minutes and any workout in a row of their own beneath it. */
+.night-day-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+/* --- end night detail page --- */
+
+/* pages/detail/DayLogBlock.tsx, both detail pages' "That day": the mood face and its word beside
+   the chips and note, and a day's workouts as links. The phone rule comes after the base rules on
+   purpose: it sat in the night page's earlier media block once, and this block's later
+   `display: block` won the cascade at equal specificity, so the link never got its 44px. */
+.day-log { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); }
+.day-log-mood { display: flex; align-items: center; gap: var(--space-2); }
+.day-log-mood-word { font-size: var(--font-size-sm); color: var(--text-secondary); }
+.day-log-chips { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); list-style: none; margin: 0; padding: 0; }
+.day-log-chip {
   font-size: var(--font-size-xs); color: var(--text-secondary); background: var(--surface-inset);
   border: 1px solid var(--border-subtle); border-radius: 999px; padding: 2px 10px;
 }
-.night-day-note { flex-basis: 100%; margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); font-style: italic; }
-.night-day-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
-.night-day-workouts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.night-day-workout-link { display: block; text-decoration: none; }
-.night-day-workout-link:hover { text-decoration: underline; }
-/* --- end night detail page --- */
+.day-log-note { flex-basis: 100%; margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); font-style: italic; }
+.day-workouts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.day-workout-link { display: block; text-decoration: none; }
+.day-workout-link:hover { text-decoration: underline; }
+@media (max-width: 620px) {
+  .day-workout-link { min-height: 44px; display: flex; align-items: center; }
+}
 
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
    the same card - each is its own Card, this only styles the table each one wraps. */

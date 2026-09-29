@@ -5,49 +5,12 @@ import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import type { RoutePoint, WorkoutSession } from '../../data/useSessions.js'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
 import { useSourceNames } from '../../data/useSourceNames.js'
+import { gpsSentenceKey } from './workout/workoutText.js'
 
 
-/**
- * Which of the three sentences about a route belongs under this workout's heading, or null for
- * the fourth case that gets none at all: a provider that said plainly there was nothing to record.
- *
- * Points decide first, regardless of `hasGps`: a session that carried points needs no sourcing
- * argument, the trace is drawn right below in WorkoutRoute.tsx, and a Google session can never
- * reach this branch since the v4 API sends no route to carry (mapSessions.ts's own comment on
- * `route` says so). Only once there are none does `hasGps` speak - true is Google's own claim of a
- * route this API withholds, unchanged from what this sentence has always said.
- *
- * null says nothing, and used to say the wrong thing. `hasGps` is null for EVERY companion
- * session - Health Connect carries no such field, so this is the normal state rather than a signal
- * - which meant a sentence reading "a GPS route may have been recorded, this app was not able to
- * read it" printed under every workout synced from a phone, an indoor yoga session as readily as a
- * run. It was also false by then: the app could not read routes at all when that sentence was
- * written, and now asks for the permission and reads them.
- *
- * `routeConsentRequired` is the one thing that can be said about a session with no points, and it
- * is said before `hasGps` because it is the more specific claim. It means the phone found a track
- * and Health Connect would not release it, which is a different answer from "there was no route"
- * and the only one worth a sentence. The sentence used to add that the phone sync "cannot ask
- * for" the route, which stopped being true in android 0.4.0: the companion app requests
- * READ_EXERCISE_ROUTES (SyncEngine.kt). Not as "grant it and sync again", though, which a first
- * rewrite said: Health Connect ignores a request for that permission, and hands a background
- * reader ConsentRequired for another app's routes even under Always allow. What does release one
- * is the app's own Release routes button, which walks the withheld workouts in the foreground
- * through Health Connect's per-workout route screen - so that is what the sentence points at.
- *
- * Everything else with no points says nothing. That is deliberate and it replaced a sentence that
- * said the wrong thing: `hasGps` is null for EVERY companion session, so "a GPS route may have
- * been recorded, this app was not able to read it" used to print under every workout synced from a
- * phone, an indoor yoga session as readily as a run. A workout that reaches the end of this
- * function has no route points and nothing claiming one exists, which is overwhelmingly a workout
- * that had no route.
- */
-export function gpsSentenceKey(detail: WorkoutDetail, routePointCount: number): string | null {
-  if (routePointCount > 0) return 'activity.workout.gpsDrawn'
-  if (detail.routeConsentRequired) return 'activity.workout.gpsConsentRequired'
-  if (detail.hasGps === true) return 'activity.workout.gps'
-  return null
-}
+// Moved to workout/workoutText.ts with the About fold that now says it (M10a-3); re-exported
+// here only until this file goes.
+export { gpsSentenceKey }
 
 /**
  * displayName when present, the exercise type when it is not, the date and both clock times, the

@@ -311,9 +311,10 @@ const ROUTES = RAW_ROUTES.map(resolveRoute)
 // NightAbout's `<details>` (M10a-2 task 7), which the design keeps closed by default and which a
 // real Chromium hides while closed - happy-dom does not, which is exactly why this check exists
 // on top of the vitest suite (see the file's own top comment on why plain unit tests cannot see
-// this). Clicking the `<summary>` opens the fold the same way a reader's own click would.
+// this). Clicking the `<summary>` opens the fold the same way a reader's own click would. The
+// workout route's annotate button moved into WorkoutAbout's fold the same way (M10a-3).
 const PANEL_OPENERS = [
-  { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button' },
+  { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button', reveal: '.workout-about summary' },
   { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button', reveal: '.night-about summary' },
 ]
 

@@ -577,3 +577,188 @@ describe('pausesOf', () => {
     expect(pausesOf([at(0, 'START'), at(600_000, 'AUTO_PAUSE')], end)).toEqual({ spans: [], marks: [{ atMs: 600_000 }] })
   })
 })
+
+// The card whose own label reads `label`, or undefined when the page drew none.
+const cardLabelled = (host: ParentNode, label: string) =>
+  [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === label)
+
+// Each figure row in `card` as [label, value, verdict], cell by cell (the minis' own reason).
+function rowsIn(card: ParentNode): string[][] {
+  return [...card.querySelectorAll('.figure-row')].map((row) => [
+    text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '', text(row, '.figure-row-verdict') ?? '',
+  ])
+}
+
+describe('the workout page\'s running form', () => {
+  it('reads cadence, stride, ground contact in milliseconds, oscillation in centimetres and the ratio, each against its usual', async () => {
+    const card = cardLabelled(await mount(workoutPageFixture()), 'Running form')!
+    expect(text(card, '.workout-side-caption')).toBe('from your watch, runs only')
+    expect(rowsIn(card)).toEqual([
+      ['Cadence', '172 /min', 'within your usual 166 /min – 174 /min'],
+      ['Stride length', '1.09 m', 'within your usual 1.02 m – 1.10 m'],
+      ['Ground contact', '248 ms', 'within your usual 240 ms – 262 ms'],
+      ['Vertical oscillation', '8.9 cm', 'within your usual 8.4 cm – 9.6 cm'],
+      ['Vertical ratio', '8.2 %', 'within your usual 7.9 % – 8.9 %'],
+    ])
+  })
+
+  it('is left out for a workout with no running form at all', async () => {
+    expect(cardLabelled(await mount(strengthPageFixture(), strengthSessionFixture()), 'Running form')).toBeUndefined()
+  })
+})
+
+describe('the workout page\'s more about this workout', () => {
+  it('lists the rest of the figures, elapsed against moving with its pause, and VO2max with its strip', async () => {
+    const card = cardLabelled(await mount(workoutPageFixture(), fullSession()), 'More about this workout')!
+    expect(rowsIn(card)).toEqual([
+      ['Calories', '412 kcal', 'within your usual 340 kcal – 430 kcal'],
+      ['Steps', '5,310', 'within your usual 4,700 – 5,600'],
+      ['Highest heart rate', '178 bpm', 'no usual yet'],
+      ['Active zone minutes', '43 min', 'within your usual 30 min – 45 min'],
+      ['Elevation gain', '42 m', 'within your usual 20 m – 60 m'],
+      ['Load (TRIMP)', '64', 'no usual yet'],
+      ['Elapsed', '34:00', '28:04 moving · one pause'],
+      ['VO₂max', '46', 'within your usual 44 – 46'],
+    ])
+    const rows = [...card.querySelectorAll('.figure-row')]
+    // The trend is VO2max's alone: every other row here draws today's reading on its bar.
+    expect(rows[7]!.querySelector('[role="img"]')).not.toBeNull()
+    expect(rows.slice(0, 7).some((row) => row.querySelector('[role="img"]') !== null)).toBe(false)
+  })
+
+  it('says only the moving time when the workout never paused, and counts more than one', async () => {
+    const plain = cardLabelled(await mount(workoutPageFixture()), 'More about this workout')!
+    expect(rowsIn(plain).find(([label]) => label === 'Elapsed')?.[2]).toBe('28:04 moving')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const twice = withEvents([
+      { eventTime: new Date(START).toISOString(), exerciseEventType: 'START' },
+      { eventTime: new Date(minute(5)).toISOString(), exerciseEventType: 'PAUSE' },
+      { eventTime: new Date(minute(6)).toISOString(), exerciseEventType: 'RESUME' },
+      { eventTime: new Date(minute(15)).toISOString(), exerciseEventType: 'AUTO_PAUSE' },
+      { eventTime: new Date(minute(16)).toISOString(), exerciseEventType: 'AUTO_RESUME' },
+      { eventTime: new Date(END).toISOString(), exerciseEventType: 'STOP' },
+    ])
+    const card = cardLabelled(await mount(workoutPageFixture(), twice), 'More about this workout')!
+    expect(rowsIn(card).find(([label]) => label === 'Elapsed')?.[2]).toBe('28:04 moving · 2 pauses')
+  })
+
+  it('counts a swim\'s lengths and names the pool they were swum in', async () => {
+    const page = workoutPageFixture()
+    const swim: WorkoutPageData = {
+      ...page, exerciseType: 'SWIMMING',
+      figures: { swimLengths: { ...page.figures.calories!, key: 'swimLengths', metric: 'swimLengths', unit: 'count', value: 40, baseline: null, standing: null, judged: null } },
+    }
+    const session = workoutSessionFixture()
+    const card = cardLabelled(await mount(swim, { ...session, attrs: { exerciseType: 'SWIMMING', exerciseMetadata: { poolLengthMillimeters: 25_000 } } }), 'More about this workout')!
+    expect(rowsIn(card)).toEqual([['Lengths', '40', '25 m pool · no usual yet']])
+  })
+
+  it('is left out when none of its figures has a reading', async () => {
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, figures: { pace: page.figures.pace! } })
+    expect(cardLabelled(host, 'More about this workout')).toBeUndefined()
+  })
+})
+
+describe('the workout page\'s day', () => {
+  it('draws the day\'s mood, chips, steps, active minutes and says there was no other workout', async () => {
+    const card = cardLabelled(await mount(workoutPageFixture()), 'That day')!
+    expect(text(card, '.workout-side-caption')).toBe('Friday, September 4')
+    expect(text(card, '.day-log-mood-word')).toBe('Great')
+    expect([...card.querySelectorAll('.day-log-chip')].map((chip) => chip.textContent)).toEqual(['Caffeine'])
+    expect(rowsIn(card)).toEqual([
+      ['Steps that day', '12,880', 'above your usual 6,000 – 10,500'],
+      ['Active minutes', '61 min', 'above your usual 25 min – 60 min'],
+      ['Other workouts', 'none', 'only this one'],
+    ])
+  })
+
+  it('links every other workout that day to its own page', async () => {
+    const page = workoutPageFixture()
+    const other = { ...workoutSessionFixture(), id: 'walk1', attrs: { exerciseType: 'WALKING' }, startMs: START - 3_600_000, endMs: START - 1_800_000 }
+    const card = cardLabelled(await mount({ ...page, day: { ...page.day, otherWorkouts: [other] } }), 'That day')!
+    const link = card.querySelector<HTMLAnchorElement>('.day-workout-link')
+    expect(link?.textContent).toBe('Walking 30 min')
+    expect(link?.getAttribute('href')).toBe('/activity/walk1')
+  })
+
+  it('is left out when the day has no log, no figures and no other workout', async () => {
+    const page = workoutPageFixture()
+    const blank = { value: null, standing: null, judged: null }
+    const host = await mount({
+      ...page,
+      day: { steps: { ...page.day.steps, ...blank }, activeMinutes: { ...page.day.activeMinutes, ...blank }, otherWorkouts: [] },
+      log: { ...page.log, mood: null, counts: {}, note: null },
+    })
+    expect(cardLabelled(host, 'That day')).toBeUndefined()
+  })
+})
+
+describe('the workout page\'s afterwards', () => {
+  it('draws the night after, linked to its page, and the next morning\'s resting heart rate', async () => {
+    const card = cardLabelled(await mount(workoutPageFixture()), 'Afterwards')!
+    expect(text(card, '.workout-side-caption')).toBe('the night after this workout and the morning after it')
+    expect(rowsIn(card)).toEqual([
+      ['Time asleep', '7h 12m', 'within your usual 5h 30m – 7h 50m'],
+      ['Deep sleep', '1h 22m', 'within your usual 1h 10m – 1h 40m'],
+      ['Resting heart rate after', '55 bpm', 'within your usual 51 bpm – 57 bpm'],
+    ])
+    const link = card.querySelector<HTMLAnchorElement>('.workout-after-night')
+    expect(link?.textContent).toBe('view the night →')
+    expect(link?.getAttribute('href')).toBe('/sleep/night/2026-09-05')
+  })
+
+  it('keeps the resting heart rate without a night', async () => {
+    const page = workoutPageFixture()
+    const card = cardLabelled(await mount({ ...page, after: { ...page.after, night: null } }), 'Afterwards')!
+    expect(rowsIn(card).map(([label]) => label)).toEqual(['Resting heart rate after'])
+    expect(card.querySelector('.workout-after-night')).toBeNull()
+  })
+
+  it('is left out with neither a night nor a resting heart rate', async () => {
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, after: { night: null, restingHeartRate: null } })
+    expect(cardLabelled(host, 'Afterwards')).toBeUndefined()
+  })
+})
+
+describe('the workout page\'s about fold', () => {
+  it('says who recorded it above the fold, and keeps the sources, the route sentence and the annotate button inside it', async () => {
+    const host = await mount(workoutPageFixture(), { ...fullSession(), sources: ['watch', 'phone'], alternateIds: ['phone-run'] })
+    const card = cardLabelled(host, 'About this workout')!
+    expect(text(card, '.workout-about-line')).toBe('Recorded by watch, merged with phone · exclude or add a note')
+    const details = card.querySelector('details.workout-about')!
+    // happy-dom does not hide a closed <details>' children, so the attribute is what is asserted.
+    expect(details.hasAttribute('open')).toBe(false)
+    expect(text(details, 'summary')).toBe('Details')
+    expect(text(details, '.workout-also')).toBe('Also recorded by phone')
+    expect(details.querySelector('.workout-gps')).not.toBeNull()
+    expect(details.querySelector('.workout-actions button')?.textContent).toBe('Exclude or add a note')
+    // Nothing of it is left in the header.
+    expect(host.querySelector('.workout-top .workout-also, .workout-top .workout-gps, .workout-top .workout-excluded')).toBeNull()
+    expect(host.querySelectorAll('.workout-actions')).toHaveLength(1)
+  })
+
+  it('says a workout is excluded above the fold, with the reason inside it', async () => {
+    const host = await mount(workoutPageFixture(), { ...workoutSessionFixture(), excluded: true, excludeReason: 'duplicate' })
+    const card = cardLabelled(host, 'About this workout')!
+    expect(text(card, '.workout-about-line')).toBe('Recorded by watch · excluded · exclude or add a note')
+    expect(card.querySelector('details .workout-excluded')?.textContent).toContain('duplicate')
+  })
+
+  it('opens the annotate panel from inside the fold', async () => {
+    const host = await mount(workoutPageFixture(), { ...workoutSessionFixture(), alternateIds: ['phone-run'] })
+    act(() => { host.querySelector<HTMLButtonElement>('details.workout-about .workout-actions button')!.click() })
+    expect(host.querySelector('.annotate-panel')).not.toBeNull()
+  })
+
+  it('words the lower sections in Dutch', async () => {
+    const host = await mount(workoutPageFixture(), workoutSessionFixture(), 'nl')
+    expect(rowsIn(cardLabelled(host, 'Loopvorm')!)[2]).toEqual(['Grondcontact', '248 ms', 'binnen je gebruikelijke bereik 240 ms – 262 ms'])
+    expect(cardLabelled(host, 'Meer over deze training')).toBeDefined()
+    expect(text(cardLabelled(host, 'Die dag')!, '.workout-side-caption')).toBe('vrijdag 4 september')
+    expect(cardLabelled(host, 'Daarna')!.querySelector('.workout-after-night')?.textContent).toBe('bekijk de nacht →')
+    expect(text(cardLabelled(host, 'Over deze training')!, '.workout-about-line')).toBe('Opgenomen door watch · uitsluiten of een notitie toevoegen')
+  })
+})

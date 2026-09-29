@@ -2,21 +2,16 @@ import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { FigureRow } from '../../../components/FigureRow.js'
-import { Link } from '../../../router.js'
-import { workoutPath } from '../../activity/workout/workoutText.js'
 import { formatLongDate } from '../../dashboard/glanceText.js'
-import { formatNumber } from '../../../format.js'
-import { kindLabel } from '../../../data/eventKinds.js'
-import { exerciseTypeLabel } from '../../../data/exerciseTypeLabel.js'
-import { MoodFace } from '../../../components/logPanel/MoodFaces.js'
-import { workoutSummary } from '@haelan/core/workout-summary'
 import type { NightPageData } from '../../../data/useNightPage.js'
 import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
+import { DayLogBlock, DayWorkoutList, hasDayLog } from '../../detail/DayLogBlock.js'
 
 /**
  * The day before the night (M10a-2 task 7, the mockup's "Die dag"): how it felt, what was tapped
  * and written down through the quick log, and its steps, active minutes and workouts, all read
- * off `page.day` and `page.log` rather than computed here - the same "server judges, page draws"
+ * off `page.day` and `page.log` rather than computed here (the log and the workout list are
+ * DayLogBlock's, shared with the workout page's own day) - the same "server judges, page draws"
  * split every figure on this page already keeps.
  *
  * `page.log` is the log for `page.day.localDate`, not for the night's own date: a night is filed
@@ -31,8 +26,7 @@ export function NightDay({ day, log }: { day: NightPageData['day'], log: NightPa
   const { t, i18n } = useTranslation()
   const language = i18n.language
 
-  const chips = Object.entries(log.counts).filter(([, count]) => count > 0)
-  const hasLog = log.mood !== null || chips.length > 0 || log.note !== null
+  const hasLog = hasDayLog(log)
   const hasFigures = day.steps.value !== null || day.activeMinutes.value !== null
   if (!hasLog && !hasFigures && day.workouts.length === 0) return null
 
@@ -40,26 +34,7 @@ export function NightDay({ day, log }: { day: NightPageData['day'], log: NightPa
 
   return (
     <Card span={12} label={t('sleep.night.day.label')} basis={subtitle}>
-      {hasLog && (
-        <div className="night-day-top">
-          {log.mood !== null && (
-            <div className="night-day-mood">
-              <MoodFace score={log.mood} />
-              <span className="night-day-mood-word">{t(`logPanel.mood.${log.mood}`)}</span>
-            </div>
-          )}
-          {chips.length > 0 && (
-            <ul className="night-day-chips">
-              {chips.map(([kind, count]) => (
-                <li key={kind} className="night-day-chip">
-                  {count > 1 ? t('sleep.night.day.chipCount', { kind: kindLabel(t, kind), count }) : kindLabel(t, kind)}
-                </li>
-              ))}
-            </ul>
-          )}
-          {log.note !== null && <p className="night-day-note">{t('sleep.night.day.note', { note: log.note })}</p>}
-        </div>
-      )}
+      <DayLogBlock log={log} />
       {(hasFigures || day.workouts.length > 0) && (
         <div className="night-day-figures">
           {day.steps.value !== null && (
@@ -75,25 +50,7 @@ export function NightDay({ day, log }: { day: NightPageData['day'], log: NightPa
           {day.workouts.length > 0 && (
             <div className="figure-row">
               <span className="figure-row-label">{t('sleep.night.day.workouts')}</span>
-              <ul className="night-day-workouts">
-                {day.workouts.map((session) => {
-                  const summary = workoutSummary(session.attrs)
-                  const minutes = Math.round((session.endMs - session.startMs) / 60_000)
-                  const duration = `${formatNumber(minutes, 0, language, '0')} ${t('activity.units.min')}`
-                  return (
-                    <li key={session.id}>
-                      <Link to={workoutPath(session.id)} className="figure-row-value night-day-workout-link">
-                        {exerciseTypeLabel(t, summary.exerciseType)} {duration}
-                      </Link>
-                      {summary.averageHeartRateBpm !== null && (
-                        <span className="figure-row-verdict">
-                          {t('sleep.night.day.workoutAverage', { bpm: formatNumber(summary.averageHeartRateBpm, 0, language, '') })}
-                        </span>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
+              <DayWorkoutList workouts={day.workouts} />
             </div>
           )}
         </div>

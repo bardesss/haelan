@@ -94,7 +94,7 @@ export function workoutPageFixture(): WorkoutPageData {
       groundContact: figure({ key: 'groundContact', unit: 'seconds', precision: 3, value: 0.248, baseline: band(0.251, 0.24, 0.262) }),
       verticalOscillation: figure({ key: 'verticalOscillation', unit: 'meters', precision: 3, value: 0.089, baseline: band(0.09, 0.084, 0.096) }),
       verticalRatio: figure({ key: 'verticalRatio', unit: 'ratio', precision: 1, value: 8.2, baseline: band(8.4, 7.9, 8.9) }),
-      vo2max: figure({ key: 'vo2max', unit: 'ml_per_kg_min', direction: 'up', value: 46, baseline: band(45, 44, 46) }),
+      vo2max: figure({ key: 'vo2max', unit: 'ml_per_kg_min', direction: 'up', value: 46, baseline: band(45, 44, 46), strip: [44, 44, 44, 45, 45, 45, 45, 46, 45, 46] }),
     },
     comparison: {
       exerciseType: 'RUNNING', of: 20, reason: null,

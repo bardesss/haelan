@@ -16,8 +16,11 @@ import { WorkoutCompared } from './activity/workout/WorkoutCompared.js'
 import { WorkoutMap } from './activity/workout/WorkoutMap.js'
 import { WorkoutThrough } from './activity/workout/WorkoutThrough.js'
 import { WorkoutZones } from './activity/workout/WorkoutZones.js'
-import { WorkoutTiles } from './activity/WorkoutTiles.js'
-import { WorkoutDynamics } from './activity/WorkoutDynamics.js'
+import { WorkoutForm } from './activity/workout/WorkoutForm.js'
+import { WorkoutMore } from './activity/workout/WorkoutMore.js'
+import { WorkoutDay } from './activity/workout/WorkoutDay.js'
+import { WorkoutAfter } from './activity/workout/WorkoutAfter.js'
+import { WorkoutAbout } from './activity/workout/WorkoutAbout.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -32,8 +35,8 @@ import { EmptyState } from '../components/EmptyState.js'
  * Two reads. The workout page (useWorkoutPage) carries every figure already judged against the
  * earlier sessions of the type, the neighbours for ‹ › and the Records best; the session itself
  * (useWorkoutSession, /sessions/:id) still carries what only its attrs and rows hold - the note,
- * the clock times, the route points, the splits, the other copies of a merged workout - and the
- * sections below the new ones still draw from it. The page waits for both, so it never draws a
+ * the clock times, the route points, the splits, the events, the other copies of a merged
+ * workout - which the map, the trace, the zones, the pauses and the About fold draw from. The page waits for both, so it never draws a
  * header without its figures or figures under the wrong header.
  *
  * A 404 from either is a real answer rather than an error - the id in the URL names no workout of
@@ -42,9 +45,10 @@ import { EmptyState } from '../components/EmptyState.js'
  * inside `<div className="grid"><Card span={12}>...</Card></div>`, since Shell renders straight into
  * `.main`, which carries no card background of its own.
  *
- * The one-button `.workout-actions` row under the header is this page's own control: the annotate
- * target is the session itself, named by the route, not a point on a chart. `annotating` gates the
- * panel the way `annotateTarget` does on the chart pages; there is only ever one target here.
+ * The annotate button lives in the About fold at the foot of the page (WorkoutAbout); the panel it
+ * opens is rendered here, over the whole page. The target is the session itself, named by the
+ * route, not a point on a chart. `annotating` gates the panel the way `annotateTarget` does on the
+ * chart pages; there is only ever one target here.
  */
 export function WorkoutDetail() {
   const { t } = useTranslation()
@@ -104,11 +108,6 @@ export function WorkoutDetail() {
   return (
     <div className="workout-page">
       <WorkoutTop page={page} session={query.data} detail={detail} />
-      <div className="workout-actions">
-        <button type="button" className="button" onClick={() => setAnnotating(true)}>
-          {t('activity.workout.annotate')}
-        </button>
-      </div>
       <div className="grid">
         <WorkoutHero page={page} />
         <WorkoutMinis page={page} />
@@ -116,9 +115,11 @@ export function WorkoutDetail() {
         <WorkoutMap session={query.data} page={page} />
         <WorkoutThrough session={query.data} detail={detail} page={page} chosenSource={chosenSource} />
         <WorkoutZones detail={detail} page={page} />
-        {/* The pre-M10a sections, below the new ones until their redesigned replacements land. */}
-        <WorkoutTiles session={query.data} detail={detail} cardioLoad={query.data.cardioLoad} />
-        <WorkoutDynamics detail={detail} />
+        <WorkoutForm page={page} />
+        <WorkoutMore page={page} detail={detail} endMs={query.data.endMs} />
+        <WorkoutDay page={page} />
+        <WorkoutAfter page={page} />
+        <WorkoutAbout session={query.data} detail={detail} onAnnotate={() => setAnnotating(true)} />
       </div>
       {annotating && (
         <AnnotatePanel

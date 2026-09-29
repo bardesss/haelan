@@ -8,7 +8,6 @@ import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { RoutePoint, WorkoutSession } from '../src/data/useSessions.js'
-import type { BanisterBasis } from '@haelan/core/cardio-load'
 import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -62,11 +61,6 @@ export const RUN: WorkoutSession = {
   excluded: false, excludeReason: null,
 }
 
-/** A session carrying nothing but its span: every optional card must be absent. */
-const BARE: WorkoutSession = {
-  ...RUN, id: 'bare', attrs: { exerciseType: 'WALKING' },
-}
-
 /** A Google session that says plainly there was nothing to record - the one case with no sentence
  *  at all, now that an absent exerciseMetadata means "unknown" rather than "false" (Task 7). */
 const NO_GPS: WorkoutSession = {
@@ -91,10 +85,6 @@ const PHONE: WorkoutSession = {
 const ROUTE_POINT: RoutePoint = {
   atMs: Date.UTC(2026, 7, 3, 6, 10), latitude: 52.1, longitude: 4.3,
   altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
-}
-
-const BASIS: BanisterBasis = {
-  restingBpm: 52, maxBpm: 181, maxBpmSource: 'providerZoneCeiling', k: 1.92, minutes: 45,
 }
 
 const SPLIT: FilledSplit = {
@@ -458,159 +448,6 @@ describe('the workout page', () => {
   })
 })
 
-describe('the workout stat tiles', () => {
-  it('shows moving time only when it differs from elapsed', async () => {
-    // 54 minutes elapsed, 50 moving: two different facts, so two tiles.
-    const restore = stub({ run1: RUN })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
-      expect(labels).toContain('Elapsed')
-      expect(labels).toContain('Moving')
-    } finally { restore() }
-  })
-
-  it('drops the moving tile when the two are the same, rather than printing the same figure twice', async () => {
-    const equal = { ...RUN, attrs: { ...(RUN.attrs as object), activeDuration: '3240s' } } // 54 min
-    const restore = stub({ run1: equal })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
-      expect(labels).toContain('Elapsed')
-      expect(labels).not.toContain('Moving')
-    } finally { restore() }
-  })
-
-  it('renders a tile for every field this session recorded and no tile for any it did not', async () => {
-    const restore = stub({ run1: RUN })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
-      expect(labels).toEqual(['Elapsed', 'Moving', 'Distance', 'Calories'])
-    } finally { restore() }
-  })
-
-  it('prints a recorded zero rather than dropping the tile', async () => {
-    // workoutDetail keeps a recorded 0 apart from an unrecorded field; a truthiness guard in this
-    // component would undo that one line before it reaches a reader.
-    const zeroed = { ...RUN, attrs: { ...(RUN.attrs as object), metricsSummary: { steps: '0' } } }
-    const restore = stub({ run1: zeroed })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
-      const steps = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Steps')
-      expect(steps?.querySelector('.value')?.textContent).toBe('0')
-    } finally { restore() }
-  })
-
-  it('renders the tile section with a single Elapsed tile for a session carrying nothing but its span', async () => {
-    window.history.replaceState(null, '', '/activity/bare')
-    const restore = stub({ bare: BARE })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      // Elapsed is always computable from the span, so the section is present with exactly one tile.
-      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
-      expect(labels).toEqual(['Elapsed'])
-    } finally { restore() }
-  })
-
-  it('shows both cardio load tiles when both models ran', async () => {
-    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: 84, banisterBasis: BASIS } }
-    const restore = stub({ run1: loaded })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
-      expect(labels).toContain('Cardio load (Edwards)')
-      expect(labels).toContain('Cardio load (Banister)')
-      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
-      const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
-      const banisterTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Banister)')
-      // Whole-cell assertions, not substrings: '100' alone would also match a cell reading '1004'.
-      expect(edwardsTile?.querySelector('.value')?.textContent).toBe('100 TRIMP')
-      expect(banisterTile?.querySelector('.value')?.textContent).toBe('84 TRIMP')
-    } finally { restore() }
-  })
-
-  it('shows only Edwards when Banister could not run', async () => {
-    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: null, banisterBasis: null } }
-    const restore = stub({ run1: loaded })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
-      expect(labels).toContain('Cardio load (Edwards)')
-      expect(labels).not.toContain('Cardio load (Banister)')
-    } finally { restore() }
-  })
-
-  it('shows neither when the session carried no load at all', async () => {
-    const loaded = { ...RUN, cardioLoad: null }
-    const restore = stub({ run1: loaded })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
-      expect(labels).not.toContain('Cardio load (Edwards)')
-      expect(labels).not.toContain('Cardio load (Banister)')
-    } finally { restore() }
-  })
-
-  // The basis is the reason these tiles are safe to show at all. Google Health shows a cardio load
-  // too, and a reader comparing the two numbers has to be able to see that this one is ours - so the
-  // exact copy is asserted whole here, not just checked for containing "Haelan".
-  it('says the number is Haelan\'s own, not the provider\'s', async () => {
-    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: null, banisterBasis: null } }
-    const restore = stub({ run1: loaded })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
-      const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
-      expect(edwardsTile?.querySelector('.basis')?.textContent).toBe(
-        'Training impulse: minutes in each heart rate zone, weighted by zone. '
-        + 'Haelan\'s own figure, and the one your weekly cardio load is built from. '
-        + 'Not the number Google Health shows.',
-      )
-    } finally { restore() }
-  })
-
-  it('names the resting and maximum bpm the Banister figure was computed against', async () => {
-    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: 84, banisterBasis: BASIS } }
-    const restore = stub({ run1: loaded })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
-      const banisterTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Banister)')
-      expect(banisterTile?.querySelector('.basis')?.textContent).toBe(
-        'Training impulse by a second method, from this session\'s heart rate against a resting 52 '
-        + 'and a maximum 181 bpm. Shown for this workout only; nothing else in Haelan reads it. '
-        + 'Not the number Google Health shows.',
-      )
-    } finally { restore() }
-  })
-
-  it('prints a recorded Edwards zero rather than dropping the tile', async () => {
-    // Same rule as the steps zero test above, for the field this task adds: a recorded 0 is a fact,
-    // not an absence, and cardioLoad?.edwards == null must not treat 0 as null via truthiness.
-    const loaded = { ...RUN, cardioLoad: { edwards: 0, banister: null, banisterBasis: null } }
-    const restore = stub({ run1: loaded })
-    try {
-      const { client, html } = mount(<WorkoutDetail />)
-      await settled(client, html)
-      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
-      const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
-      expect(edwardsTile?.querySelector('.value')?.textContent).toBe('0 TRIMP')
-    } finally { restore() }
-  })
-})
-
 // Same shape as the splits fix below: WorkoutRoute.tsx's own card-level tests (workout-route-
 // card.test.tsx) cover its rendering in isolation, but nothing there proves this page actually
 // hands it `query.data.route` rather than, say, `query.data.autoSplits` by a copy-paste mistake.
@@ -662,7 +499,8 @@ describe('the splits card', () => {
       await settled(client, html)
       expect(container?.querySelector('.workout-km')).toBeNull()
       expect(html()).toContain('Morning run')
-      expect(container?.querySelector('.workout-tiles')).not.toBeNull()
+      // The page's last card, so everything above it rendered too.
+      expect(container?.querySelector('.workout-about')).not.toBeNull()
     } finally { restore() }
   })
 })

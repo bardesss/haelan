@@ -548,7 +548,20 @@
           "movingTime": "Tijd in beweging",
           "elapsed": "Verstreken",
           "averageHeartRate": "Gem. hartslag",
-          "cardioLoad": "Cardiobelasting"
+          "cardioLoad": "Cardiobelasting",
+          "highestHeartRate": "Hoogste hartslag",
+          "banister": "Belasting (TRIMP)",
+          "calories": "Calorieën",
+          "steps": "Stappen",
+          "activeZoneMinutes": "Actieve zoneminuten",
+          "elevationGain": "Hoogtemeters",
+          "cadence": "Cadans",
+          "strideLength": "Paslengte",
+          "groundContact": "Grondcontact",
+          "verticalOscillation": "Verticale oscillatie",
+          "verticalRatio": "Verticale ratio",
+          "vo2max": "VO₂max",
+          "swimLengths": "Baantjes"
         },
         "heroStrip": "deze training en de negen van dit type ervoor",
         "minisCaption": "elk lijntje: deze training en de negen van dit type ervoor · band = je gewone bereik",
@@ -594,6 +607,41 @@
         "zones": {
           "label": "Hartslagzones",
           "hard": "{{value}} zwaar of piek"
+        },
+        "form": {
+          "label": "Loopvorm",
+          "caption": "van je horloge, alleen bij hardlopen"
+        },
+        "more": {
+          "label": "Meer over deze training",
+          "moving": "{{value}} in beweging",
+          "pauses_one": "één pauze",
+          "pauses_other": "{{count}} pauzes",
+          "pool": "bad van {{meters}} m"
+        },
+        "day": {
+          "label": "Die dag",
+          "steps": "Stappen die dag",
+          "activeMinutes": "Actieve minuten",
+          "otherWorkouts": "Andere trainingen",
+          "none": "geen",
+          "onlyThis": "alleen deze"
+        },
+        "after": {
+          "label": "Daarna",
+          "caption": "de nacht na deze training en de ochtend erna",
+          "asleep": "Tijd in slaap",
+          "deep": "Diepe slaap",
+          "restingHeartRate": "Rusthartslag erna",
+          "night": "bekijk de nacht →"
+        },
+        "about": {
+          "label": "Over deze training",
+          "recordedBy": "Opgenomen door {{source}}",
+          "merged": "Opgenomen door {{source}}, samengevoegd met {{others}}",
+          "excluded": "uitgesloten",
+          "action": "uitsluiten of een notitie toevoegen",
+          "details": "Details"
         }
       }
     },

@@ -8,17 +8,28 @@ import type { PointStanding } from '../../charts/base.js'
 // Figures measured in minutes that are only ever a few of them: "12 min" reads as what it is,
 // where "0h 12m" puts an empty hour in front of it. Time asleep, the stages, time in bed and time
 // awake stay durations, since those do run to hours. A workout's minutes in the hard zones
-// (workoutPage.ts's `hardZoneMinutes`) is the same kind: "15 min hard or peak".
+// (workoutPage.ts's `hardZoneMinutes`) is the same kind: "15 min hard or peak", and so are its
+// active zone minutes ("43 min").
 const SHORT_SPANS: ReadonlySet<string> = new Set([
   'active_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability',
-  'hardZoneMinutes',
+  'hardZoneMinutes', 'activeZoneMinutes',
 ])
 
 // A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading
 // zero on the minutes, an hour digit only once there is one to show. workoutPage.ts's `pace`
 // (seconds per kilometre) and its true durations (`movingTime`, `elapsed`) share this shape; the
-// sub-second figures that also carry the 'seconds' unit (`groundContact`) are not rendered through
-// this page yet, and would need a different rule when they are.
+// one sub-second figure that also carries the 'seconds' unit (`groundContact`) reads in
+// milliseconds instead (SMALL_UNITS below).
+// Running form figures stored in a unit far larger than the reading: a ground contact of 0.248 s
+// reads as "248 ms", a vertical oscillation of 0.089 m as "8.9 cm", the way a watch shows both. Keyed
+// on the figure (its `metric` is its WorkoutFigureKey) rather than on the unit, since distance and
+// elapsed time share those units and read in kilometres and on a clock. Converted, so each carries
+// its own display precision rather than the stored unit's.
+const SMALL_UNITS: Readonly<Record<string, { factor: number, precision: number, unit: string }>> = {
+  groundContact: { factor: 1000, precision: 0, unit: 'activity.units.ms' },
+  verticalOscillation: { factor: 100, precision: 1, unit: 'activity.units.cm' },
+}
+
 function formatElapsed(totalSeconds: number): string {
   const total = Math.round(totalSeconds)
   const hours = Math.floor(total / 3600)
@@ -46,6 +57,8 @@ export function formatFigureValue(
 ): string {
   const absent = t('common.absent')
   if (value === null) return absent
+  const small = SMALL_UNITS[figure.metric]
+  if (small !== undefined) return `${formatNumber(value * small.factor, small.precision, language, absent)} ${t(small.unit)}`
   switch (figure.unit) {
     case 'minutes': return SHORT_SPANS.has(figure.metric)
       ? `${formatNumber(value, 0, language, absent)} ${t('activity.units.min')}`
