@@ -17,6 +17,23 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 // this, the same reason chart-marks.test.tsx and chart-lifecycle.test.tsx set them.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
+/**
+ * Sets custom properties for one test and hands back what undoes it: each property restored to
+ * the value it had before (the file-level stub's, when it set one), or removed when it had none,
+ * so a later test never inherits a value this one invented.
+ */
+function overrideVars(values: Record<string, string>): () => void {
+  const style = document.documentElement.style
+  const before = Object.keys(values).map((variable) => [variable, style.getPropertyValue(variable)] as const)
+  for (const [variable, value] of Object.entries(values)) style.setProperty(variable, value)
+  return () => {
+    for (const [variable, value] of before) {
+      if (value === '') style.removeProperty(variable)
+      else style.setProperty(variable, value)
+    }
+  }
+}
+
 // Five DISTINCT stops, not the uniform '#000000' the loop above leaves every other token at: a
 // test asserting which stop a zone drew in would pass trivially against a ramp where every stop is
 // the same colour, which is exactly why this file cannot stop at the loop above the way every
@@ -105,16 +122,13 @@ describe('ZoneBar', () => {
   // blue, blue, amber and red, from the zone tokens the trace's bands use (ZONE_TOKENS), still by
   // each zone's own identity rather than its row's position.
   it('draws each zone in its own zone token when asked for distinct colours', () => {
-    const vars = { '--chart-stage-rem': '#0000a1', '--chart-stage-light': '#0000a2', '--chart-stage-awake': '#0000a3', '--negative': '#0000a4' }
-    for (const [variable, value] of Object.entries(vars)) document.documentElement.style.setProperty(variable, value)
+    const restore = overrideVars({ '--chart-stage-rem': '#0000a1', '--chart-stage-light': '#0000a2', '--chart-stage-awake': '#0000a3', '--negative': '#0000a4' })
     try {
       act(() => { root!.render(<ZoneBar rows={[row('light', 4), row('vigorous', 12), row('peak', 3)]} label="Zones" distinct />) })
       const option = chartStubs.at(-1)!.setOption.mock.calls[0]![0] as EChartsOption
       expect((option.series as { itemStyle: { color: string } }[]).map((s) => s.itemStyle.color)).toEqual(['#0000a1', '#0000a3', '#0000a4'])
       expect(ZONE_TOKENS).toEqual({ light: 'stageRem', moderate: 'stageLight', vigorous: 'stageAwake', peak: 'negative' })
-    } finally {
-      for (const variable of Object.keys(vars)) document.documentElement.style.setProperty(variable, '#000000')
-    }
+    } finally { restore() }
   })
 
   // Final review finding: the accessible table's second column was headed "Minutes" while its own

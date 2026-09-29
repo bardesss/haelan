@@ -29,6 +29,23 @@ import type { NamedSource } from '../src/data/useSourceNames.js'
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 /**
+ * Sets custom properties for one test and hands back what undoes it: each property restored to
+ * the value it had before (the file-level stub's, when it set one), or removed when it had none,
+ * so a later test never inherits a value this one invented.
+ */
+function overrideVars(values: Record<string, string>): () => void {
+  const style = document.documentElement.style
+  const before = Object.keys(values).map((variable) => [variable, style.getPropertyValue(variable)] as const)
+  for (const [variable, value] of Object.entries(values)) style.setProperty(variable, value)
+  return () => {
+    for (const [variable, value] of before) {
+      if (value === '') style.removeProperty(variable)
+      else style.setProperty(variable, value)
+    }
+  }
+}
+
+/**
  * Stands in for the real echarts instance useChart.ts creates, the same stub spo2-range.test.tsx
  * and chart-marks.test.tsx use for their own wiring tests, so `setOption`'s own argument (the
  * option this chart actually built) can be captured without a real canvas.
@@ -532,11 +549,12 @@ describe('IntradayHeartRate, zone bands', () => {
     { low: 137, high: 162, label: 'Vigorous', token: 'stageAwake' as const },
     { low: 162, high: 187, label: 'Peak', token: 'negative' as const },
   ]
-  const TOKEN_VARS = ['--chart-stage-rem', '--chart-stage-light', '--chart-stage-awake', '--negative']
 
   it('draws each zone the readings reach as a named band in its own colour, cut to the plot', () => {
     // Every chart token is #000000 in this file; give the four their own so the colours are told apart.
-    TOKEN_VARS.forEach((variable, i) => document.documentElement.style.setProperty(variable, `#00000${i + 1}`))
+    const restore = overrideVars({
+      '--chart-stage-rem': '#000001', '--chart-stage-light': '#000002', '--chart-stage-awake': '#000003', '--negative': '#000004',
+    })
     try {
       const option = optionFor({ points: POINTS, startMs: START, endMs: END, axis: 'elapsed', zoneBands: BANDS })
       expect(option.yAxis).toMatchObject({ min: 120, max: 180 })
@@ -547,9 +565,7 @@ describe('IntradayHeartRate, zone bands', () => {
         ['Vigorous', 137, 162, '#000003'],
         ['Peak', 162, 180, '#000004'],
       ])
-    } finally {
-      for (const variable of TOKEN_VARS) document.documentElement.style.setProperty(variable, '#000000')
-    }
+    } finally { restore() }
   })
 
   it('opens the light band downward, to the bottom of the plot, since light has no floor', () => {

@@ -62,7 +62,7 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     sessionSourceId: session.sourceId, chosenSource,
   })
   // Memoised: each reaches the chart's build, and a fresh reference every render rebuilds it.
-  const pauses = useMemo(() => pausesOf(detail.events), [detail.events])
+  const pauses = useMemo(() => pausesOf(detail.events, session.endMs), [detail.events, session.endMs])
   const zoneBands = useMemo(() => zoneBandsOf(page.zoneBounds, t), [page.zoneBounds, t])
 
   const label = t('activity.workout.page.through.label')

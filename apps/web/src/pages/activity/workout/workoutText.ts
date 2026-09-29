@@ -20,18 +20,27 @@ export function bestMonth(date: string, workoutDate: string, language: string): 
   })
 }
 
-// The events that stop the clock, and the ones that start it again. A STOP ends a pause too: a
-// workout paused and then finished was paused until it finished.
+// The provider's event kinds (workoutSummary.ts's WorkoutEvent): what stops the clock, and what
+// starts it again. STOP is neither: it ends the workout.
 const PAUSE_STARTS: ReadonlySet<string> = new Set(['PAUSE', 'AUTO_PAUSE'])
-const PAUSE_ENDS: ReadonlySet<string> = new Set(['START', 'RESUME', 'AUTO_RESUME', 'STOP'])
+const RESUMES: ReadonlySet<string> = new Set(['START', 'RESUME', 'AUTO_RESUME'])
+const STOP = 'STOP'
+/**
+ * How near the end a pause is read as the finish. Every PAUSE in this household's archive is part
+ * of the finish sequence: PAUSE and STOP at the same instant, or STOP then PAUSE a second later,
+ * all within two minutes of the session's end. Shaded, each drew a one-second "pause of 0:01".
+ */
+const FINISH_WINDOW_MS = 2 * 60_000
 
 /**
- * A workout's pauses from its events: each PAUSE up to the next event that starts the clock again
- * or stops the workout, as a span the trace shades. A pause with no such event after it has only
- * one end the archive supplies, so it stays a mark at its instant rather than a span whose right
- * edge this page would be making up (IntradayHeartRate's own comment on `eventMarks`).
+ * A workout's real pauses from its events: each PAUSE up to the next START, RESUME or AUTO_RESUME,
+ * as a span the trace shades. A pause is the finish, not a pause, when it begins within
+ * FINISH_WINDOW_MS of `endMs` or when only STOP closes it: then nothing is drawn or counted. A
+ * mid-session pause with nothing after it has only one end the archive supplies, so it stays a
+ * mark at its instant rather than a span whose right edge this page would be making up
+ * (IntradayHeartRate's own comment on `eventMarks`).
  */
-export function pausesOf(events: readonly { atMs: number | null, kind: string | null }[]): {
+export function pausesOf(events: readonly { atMs: number | null, kind: string | null }[], endMs: number): {
   spans: { startMs: number, endMs: number }[]
   marks: { atMs: number }[]
 } {
@@ -41,8 +50,11 @@ export function pausesOf(events: readonly { atMs: number | null, kind: string | 
   const spans: { startMs: number, endMs: number }[] = []
   let open: number | null = null
   for (const event of timed) {
-    if (PAUSE_STARTS.has(event.kind)) open ??= event.atMs
-    else if (PAUSE_ENDS.has(event.kind) && open !== null) {
+    if (PAUSE_STARTS.has(event.kind)) {
+      if (open === null && event.atMs < endMs - FINISH_WINDOW_MS) open = event.atMs
+    } else if (event.kind === STOP) {
+      open = null
+    } else if (RESUMES.has(event.kind) && open !== null) {
       if (event.atMs > open) spans.push({ startMs: open, endMs: event.atMs })
       open = null
     }

@@ -16,7 +16,8 @@ import { workoutPageKey } from '../src/data/useWorkoutPage.js'
 import type { WorkoutPageData } from '../src/data/useWorkoutPage.js'
 import type { WorkoutSessionDetail } from '../src/data/useSessions.js'
 import * as echarts from 'echarts'
-import { CHART_VARS } from '../src/charts/tokens.js'
+import { CHART_VARS, readChartTokens } from '../src/charts/tokens.js'
+import { SESSION_ZONE_KEYS, ZONE_TOKENS } from '../src/charts/ZoneBar.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { navigate } from '../src/router.js'
 import { pumpUntil } from './flush.js'
@@ -25,9 +26,27 @@ import {
   strengthPageFixture, strengthSessionFixture, workoutPageFixture, workoutSessionFixture,
 } from './fixtures/workoutPage.js'
 import type { IntradayPoint } from '../src/data/useIntraday.js'
+import { pausesOf } from '../src/pages/activity/workout/workoutText.js'
 
 // happy-dom applies no stylesheet, so the page's charts throw "missing chart token" without this.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
+
+/**
+ * Sets custom properties for one test and hands back what undoes it: each property restored to
+ * the value it had before (the file-level stub's, when it set one), or removed when it had none,
+ * so a later test never inherits a value this one invented.
+ */
+function overrideVars(values: Record<string, string>): () => void {
+  const style = document.documentElement.style
+  const before = Object.keys(values).map((variable) => [variable, style.getPropertyValue(variable)] as const)
+  for (const [variable, value] of Object.entries(values)) style.setProperty(variable, value)
+  return () => {
+    for (const [variable, value] of before) {
+      if (value === '') style.removeProperty(variable)
+      else style.setProperty(variable, value)
+    }
+  }
+}
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -324,7 +343,12 @@ const START = workoutSessionFixture().startMs
 const END = workoutSessionFixture().endMs
 const minute = (n: number) => START + n * 60_000
 
-/** The fixture session with a route, the mockup's six splits, a pause and the four zones. */
+/**
+ * The fixture session with a route, the mockup's six splits, a pause and the four zones. The pause
+ * is synthetic: a PAUSE twelve minutes in, resumed by a START, is the shape a mid-session pause
+ * would take, but no archived session has one yet. Real sessions carry PAUSE only in the finish
+ * sequence (`finishEvents` below), which draws no pause at all.
+ */
 function fullSession(): WorkoutSessionDetail {
   const session = workoutSessionFixture()
   return {
@@ -345,6 +369,26 @@ function fullSession(): WorkoutSessionDetail {
       ],
     },
   }
+}
+
+/** The two finish sequences archived sessions really carry: PAUSE a second before STOP at the end,
+ *  and STOP at the end with PAUSE a second after it. */
+const finishEvents = {
+  pauseThenStop: [
+    { eventTime: new Date(START).toISOString(), exerciseEventType: 'START' },
+    { eventTime: new Date(END - 1000).toISOString(), exerciseEventType: 'PAUSE' },
+    { eventTime: new Date(END).toISOString(), exerciseEventType: 'STOP' },
+  ],
+  stopThenPause: [
+    { eventTime: new Date(START).toISOString(), exerciseEventType: 'START' },
+    { eventTime: new Date(END).toISOString(), exerciseEventType: 'STOP' },
+    { eventTime: new Date(END + 1000).toISOString(), exerciseEventType: 'PAUSE' },
+  ],
+}
+
+const withEvents = (events: unknown[]): WorkoutSessionDetail => {
+  const session = fullSession()
+  return { ...session, attrs: { ...(session.attrs as Record<string, unknown>), exerciseEvents: events } }
 }
 
 const reading = (utcMs: number, mean: number, max = mean + 2): IntradayPoint =>
@@ -433,6 +477,19 @@ describe('the workout page\'s trace', () => {
     expect(pause.markArea!.data).toEqual([[expect.objectContaining({ xAxis: 12 * 60_000 }), expect.objectContaining({ xAxis: 13 * 60_000 + 40_000 })]])
   })
 
+  for (const [shape, events] of Object.entries(finishEvents)) {
+    it(`reads the finish sequence (${shape}) as the end of the workout, not as a pause`, async () => {
+      tracePoints = [reading(minute(10), 150), reading(minute(33), 160)]
+      const host = await mount(workoutPageFixture(), withEvents(events))
+      const card = host.querySelector('.workout-through')!.closest('.card')!
+      expect(text(card, '.basis')).toBe("on the workout's own clock, 0:00 to 34:00")
+      const option = echarts.getInstanceByDom(host.querySelector<HTMLDivElement>('.workout-through-chart [role="img"]')!)!
+        .getOption() as { series: { markArea?: { data: { xAxis?: number }[][] }, markLine?: unknown }[] }
+      expect(option.series.some((series) => series.markArea?.data[0]?.[0]?.xAxis !== undefined)).toBe(false)
+      expect(option.series.some((series) => series.markLine !== undefined)).toBe(false)
+    })
+  }
+
   it('draws no zones when the server sent no bounds, and is left out with no heart rate at all', async () => {
     tracePoints = [reading(minute(10), 150)]
     const host = await mount({ ...workoutPageFixture(), zoneBounds: null }, fullSession())
@@ -458,15 +515,26 @@ describe('the workout page\'s zones', () => {
   })
 
   it('draws the bar in the four zone colours, not the ramp', async () => {
-    const vars = ['--chart-stage-rem', '--chart-stage-light', '--chart-stage-awake', '--negative']
-    vars.forEach((variable, i) => document.documentElement.style.setProperty(variable, `#0000b${i}`))
+    const restore = overrideVars({
+      '--chart-stage-rem': '#0000b0', '--chart-stage-light': '#0000b1', '--chart-stage-awake': '#0000b2', '--negative': '#0000b3',
+    })
     try {
       const host = await mount(workoutPageFixture(), fullSession())
       const option = echarts.getInstanceByDom(host.querySelector<HTMLDivElement>('.workout-zones-bar [role="img"]')!)!
         .getOption() as { series: { itemStyle: { color: string } }[] }
       expect(option.series.map((series) => series.itemStyle.color)).toEqual(['#0000b0', '#0000b1', '#0000b2', '#0000b3'])
-    } finally {
-      for (const variable of vars) document.documentElement.style.setProperty(variable, '#000000')
+    } finally { restore() }
+  })
+
+  // The legend's swatches are CSS and the bar and the trace's bands are ZONE_TOKENS; this ties the
+  // two, reading each token's custom property off readChartTokens itself (handed a style whose
+  // every property "is" its own name), so a zone recoloured in one place fails here until the
+  // other follows.
+  it('keys the legend in the same zone colours the bar and the bands are drawn in', () => {
+    const css = readFileSync('apps/web/src/app.css', 'utf8')
+    const variableOf = readChartTokens({ getPropertyValue: (variable: string) => variable })
+    for (const zone of SESSION_ZONE_KEYS) {
+      expect(css).toContain(`.workout-zones-key[data-zone="${zone}"] { background: var(${variableOf[ZONE_TOKENS[zone]]}); }`)
     }
   })
 
@@ -476,10 +544,36 @@ describe('the workout page\'s zones', () => {
   })
 
   it('words the zones and the trace in Dutch', async () => {
-    tracePoints = [reading(minute(10), 150)]
+    tracePoints = [reading(minute(10), 150), reading(minute(26) + 30_000, 175, 178)]
     const host = await mount(workoutPageFixture(), fullSession(), 'nl')
     expect(text(host, '.workout-zones-verdict')).toBe('15 min zwaar of piek · boven je gebruikelijke bereik 8 min – 14 min')
     expect(text(host, '.workout-split-trend')).toBe('Negatieve split · tweede helft 22 s/km sneller')
     expect(host.querySelector('.workout-through')!.closest('.card')!.querySelector('.label')?.textContent).toBe('Door de training')
+    // Elapsed time, not a clock time: "na" 26:30, never "om".
+    expect(text(host, '.workout-through-summary')).toBe('hoogste 178 bpm na 26:30')
+  })
+})
+
+describe('pausesOf', () => {
+  const at = (ms: number, kind: string) => ({ atMs: ms, kind })
+  const end = 34 * 60_000
+
+  it('shades a pause the clock was started again after, by START, RESUME or AUTO_RESUME', () => {
+    for (const resume of ['START', 'RESUME', 'AUTO_RESUME']) {
+      expect(pausesOf([at(0, 'START'), at(600_000, 'PAUSE'), at(700_000, resume), at(end, 'STOP')], end))
+        .toEqual({ spans: [{ startMs: 600_000, endMs: 700_000 }], marks: [] })
+    }
+  })
+
+  it('draws nothing for the finish: a pause near the end, or one only a STOP closes', () => {
+    expect(pausesOf([at(0, 'START'), at(end - 1000, 'PAUSE'), at(end, 'STOP')], end)).toEqual({ spans: [], marks: [] })
+    expect(pausesOf([at(0, 'START'), at(end, 'STOP'), at(end + 1000, 'PAUSE')], end)).toEqual({ spans: [], marks: [] })
+    expect(pausesOf([at(0, 'START'), at(end - 90_000, 'PAUSE'), at(end - 30_000, 'START')], end)).toEqual({ spans: [], marks: [] })
+    // Mid-session, but closed by STOP: the person paused and then finished.
+    expect(pausesOf([at(0, 'START'), at(600_000, 'PAUSE'), at(end, 'STOP')], end)).toEqual({ spans: [], marks: [] })
+  })
+
+  it('marks a mid-session pause nothing after it closes, drawing no span it would have to invent', () => {
+    expect(pausesOf([at(0, 'START'), at(600_000, 'AUTO_PAUSE')], end)).toEqual({ spans: [], marks: [{ atMs: 600_000 }] })
   })
 })

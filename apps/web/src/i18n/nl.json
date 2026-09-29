@@ -588,7 +588,7 @@
           "pauses_one": "één pauze van {{duration}}",
           "pauses_other": "{{count}} pauzes, samen {{duration}}",
           "heartRate": "Hartslag",
-          "highest": "hoogste {{value}} om {{time}}",
+          "highest": "hoogste {{value}} na {{time}}",
           "highestOnly": "hoogste {{value}}"
         },
         "zones": {

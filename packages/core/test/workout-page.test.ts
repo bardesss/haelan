@@ -7,7 +7,7 @@ import { shiftLocalDate } from '../src/derive/localDay.ts'
 import { sessionTarget } from '../src/derive/targetKey.ts'
 import { PeopleStore } from '../src/store/people.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { readWorkoutPage } from '../src/query/workoutPage.ts'
+import { readWorkoutPage, splitTrendOf } from '../src/query/workoutPage.ts'
 import { compareWorkout } from '../src/api/workoutComparison.ts'
 
 const TODAY = '2026-09-10'
@@ -307,6 +307,18 @@ describe('readWorkoutPage', () => {
       { distance: 1000, seconds: 300 }, { distance: 1000, seconds: 999 }, { distance: 1000, seconds: 310 },
     ] })
     expect(readWorkoutPage(q(), input('subject'))!.splitTrend).toEqual({ secondHalfFasterBySecondsPerKm: -10 })
+  })
+
+  it('skips a split with no pace, no distance or a zero distance, rather than letting it into a half', () => {
+    const split = (pace: number | null, distance: number | null) => ({
+      startMs: null, endMs: null, splitType: 'DISTANCE', activeDurationSeconds: null, distanceMeters: distance,
+      paceSecondsPerKm: pace, averageHeartRateBpm: null,
+    })
+    // Without the skip there are five splits: the halves are the first two and the last two, and
+    // the unreadable ones poison both. With it, 330 against 300.
+    expect(splitTrendOf([split(330, 1000), split(null, 1000), split(999, null), split(999, 0), split(300, 1000)]))
+      .toEqual({ secondHalfFasterBySecondsPerKm: 30 })
+    expect(splitTrendOf([split(330, 1000), split(null, 1000)])).toBeNull()
   })
 
   it('claims no split trend with fewer than two kilometres', () => {
