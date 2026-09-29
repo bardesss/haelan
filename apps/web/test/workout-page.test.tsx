@@ -557,7 +557,7 @@ describe('the workout page\'s own ?source= parameter', () => {
       const traceCard = cards.find((c) => c.querySelector('.label')?.textContent === 'Through the workout')
       expect(traceCard, 'the trace card was absent').not.toBeUndefined()
       expect(traceCard?.querySelector('.workout-through-note')?.textContent).toBe(
-        'Pixel Watch 4 recorded no heart rate in this window, so this is every other device instead; '
+        'Pixel Watch 4 recorded no heart rate during this workout, so this line comes from your other devices; '
         + 'this 1 point is the reading',
       )
     } finally { globalThis.fetch = original }

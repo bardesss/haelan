@@ -28,7 +28,8 @@ function previousLine(page: WorkoutPageData, hero: WorkoutFigure, language: stri
   const date = formatSessionDateHeading(previous.localDate, language)
   const before = hero.key === 'pace' ? previous.values.pace : undefined
   if (before === undefined || hero.value === null) return t('activity.workout.page.previousOnly', { date })
-  const seconds = Math.round(hero.value - before)
+  // Between the two paces as printed (whole seconds), as the comparison table takes its difference.
+  const seconds = Math.round(hero.value) - Math.round(before)
   if (seconds === 0) return t('activity.workout.page.previousSame', { date })
   const difference = t('activity.workout.page.secondsPerKm', { value: Math.abs(seconds) })
   return t(seconds < 0 ? 'activity.workout.page.previousFaster' : 'activity.workout.page.previousSlower', { difference, date })
@@ -63,7 +64,7 @@ function bestLine(page: WorkoutPageData, hero: WorkoutFigure, language: string, 
  * by (the server's `hero`: pace on foot, speed on a bike, moving time otherwise) in display type,
  * its verdict in `.detail-verdict` coloured by verdictTone, how it ranks among recent workouts of
  * the type, the difference from the previous one with a way to it, the Records best, and a strip of
- * this workout and the nine of its type before it with the usual shaded behind and both its edges
+ * this workout and up to nine of its type before it with the usual shaded behind and both its edges
  * labelled, each dot in its own verdict's tone and opening that workout's page. Every verdict is
  * the server's; this only words them.
  *
@@ -107,15 +108,22 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   const tone = verdictTone(hero.judged, hero.standing)
   const { comparison } = page
   const rankable = RANKED_BY_PACE.has(hero.key) && comparison.reason === null && band !== undefined
+  // "Faster than 20 of your last 20" is a sum the reader has to check; every one of them is "all".
   const rank = rankable && comparison.pace !== null
-    ? t('activity.workout.comparison.pace', { better: comparison.pace.better, of: comparison.pace.of })
+    ? t(comparison.pace.better === comparison.pace.of ? 'activity.workout.comparison.paceAll' : 'activity.workout.comparison.pace',
+      { better: comparison.pace.better, of: comparison.pace.of })
     : null
   const previous = previousLine(page, hero, language, t)
   const best = bestLine(page, hero, language, t)
   // A pace strip is drawn upside down so a faster run sits higher; the caption says so, since a
-  // reader of any other strip on the page takes higher to mean more.
+  // reader of any other strip on the page takes higher to mean more. It counts the earlier
+  // workouts the strip actually draws, never a fixed nine: a type done three times before draws four.
   const inverse = hero.direction === 'down'
-  const caption = t(inverse ? 'activity.workout.page.heroStripInverse' : 'activity.workout.page.heroStrip')
+  const earlier = strip === null ? 0 : strip.values.length - 1
+  const caption = [
+    t('activity.workout.page.heroStrip', { count: earlier }),
+    ...(inverse ? [t('activity.workout.page.higherFaster')] : []),
+  ].join(' · ')
 
   return (
     <Card span={12} label={label}>

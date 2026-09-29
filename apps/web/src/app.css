@@ -588,6 +588,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* The previous workout's column head is a way to it: a .card-link, set on the head's own line. */
 .workout-compared thead .card-link { margin: 0; }
 .workout-diff { color: var(--text-muted); }
+/* The table's footnote, a caption's distance under its last row rather than flush against it. */
+.workout-compared-footnote { margin-top: var(--space-2); }
 /* WorkoutMap.tsx: the route with its height profile, two thirds, beside the kilometres, one third;
    either alone takes the whole card. */
 .workout-map { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
@@ -627,8 +629,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-about-body .workout-actions { justify-content: flex-start; }
 @media (max-width: 620px) {
   /* The best and the usual columns go on a phone, so the table fits its card instead of scrolling
-     sideways; the hero and the rows above it already say the usual. */
-  .workout-compared-best, .workout-compared-usual { display: none; }
+     sideways; the hero and the rows above it already say the usual. The caption's and the
+     footnote's words about them (.workout-compared-wide) go with them. */
+  .workout-compared-best, .workout-compared-usual, .workout-compared-wide { display: none; }
   .workout-map[data-both="true"], .workout-zones { grid-template-columns: minmax(0, 1fr); }
   .workout-through { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 }
@@ -661,6 +664,10 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-rows[data-columns="2"], .detail-side-rows[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .detail-rows[data-columns="3"], .detail-side-rows[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .detail-rows[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* A lone row across a full card (a strength session's one mini) takes the width one of three
+   would, not the whole card: a strip and a verdict stretched to 1200px read as a chart of their
+   own. One of two below 900px (the collapse block), the whole card on a phone. */
+.detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - 2 * var(--space-4)) / 3)); }
 /* SideCard (pages/detail/DayLogBlock.tsx): a narrow column naming the day or night the section is
    about, the section's rows beside it; stacked below the grid's collapse width. */
 .detail-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
@@ -1425,7 +1432,11 @@ button.week-bar-slot { cursor: pointer; }
   .detail-rows, .detail-side-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .detail-rows[data-columns], .detail-side-rows[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - var(--space-3)) / 2)); }
   .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+}
+@media (max-width: 620px) {
+  .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean
@@ -1523,7 +1534,9 @@ button.week-bar-slot { cursor: pointer; }
 .override-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
 .override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
 .override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
-.override-table tbody tr:last-child td { border-bottom: 0; }
+/* The last row draws no rule under any of its cells, its row header included, so the table never
+   ends in a rule under its first column alone. */
+.override-table tbody tr:last-child td, .override-table tbody tr:last-child th { border-bottom: 0; }
 /* NotesList.tsx's table in a scroller of its own, so a table wider than its card (five columns
    and a Remove button, at phone width in Dutch) scrolls inside the card rather than widening the
    page. Found once the demo seed gave the Notes page rows (M9c). */

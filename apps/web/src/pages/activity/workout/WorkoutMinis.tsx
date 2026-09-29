@@ -11,7 +11,7 @@ const MINIS = ['distance', 'movingTime', 'averageHeartRate', 'cardioLoad'] as co
 
 /**
  * Distance, moving time, average heart rate and cardio load, each with its value, a line of this
- * workout and the nine of its type before it over the usual for the type, and the server's verdict
+ * workout and up to nine of its type before it over the usual for the type, and the server's verdict
  * in words - the night page's NightMinis, for a workout.
  *
  * A figure the workout has no reading for is left out (the payload has no entry for it at all),
@@ -40,6 +40,14 @@ export function WorkoutMinis({ page }: { page: WorkoutPageData }) {
     }]
   }), [figures, hero, language, t])
   if (rows.length === 0) return null
+  // What the lines are, counted off the strips themselves (the longest, since a figure a session
+  // did not record has fewer points), and the band named only when one is drawn.
+  const drawn = rows.flatMap(({ strip }) => (strip === undefined ? [] : [strip]))
+  const earlier = Math.max(0, ...drawn.map((strip) => strip.values.length - 1))
+  const caption = [
+    t('activity.workout.page.minisCaption', { count: earlier }),
+    ...(drawn.some((strip) => strip.bands !== undefined) ? [t('activity.workout.page.stripBand')] : []),
+  ].join(' · ')
 
   return (
     <Card span={12}>
@@ -50,7 +58,7 @@ export function WorkoutMinis({ page }: { page: WorkoutPageData }) {
               band={figure.baseline} mark={figure.value} strip={strip} />
           ))}
         </FigureRows>
-        <p className="dash-caption">{t('activity.workout.page.minisCaption')}</p>
+        {drawn.length > 0 && <p className="dash-caption">{caption}</p>}
       </div>
     </Card>
   )

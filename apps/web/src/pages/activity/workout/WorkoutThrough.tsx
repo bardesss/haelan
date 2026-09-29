@@ -98,7 +98,7 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     : trace.reduction === null ? null : intradayBasis(t, trace.reduction, trace.points.length)
 
   return (
-    <Card span={12} label={label} basis={basis}>
+    <Card span={12} label={label}>
       <div className="workout-through">
         <div className="workout-through-head" id={headId}>
           <span className="label">{t('activity.workout.page.through.heartRate')}</span>
@@ -114,6 +114,8 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
           </BasisContext.Provider>
         </div>
       </div>
+      {/* What the axis is, under the chart it describes, so the card's first line is its label. */}
+      <p className="dash-caption">{basis}</p>
       {note !== null && <p className="workout-through-note">{note}</p>}
     </Card>
   )

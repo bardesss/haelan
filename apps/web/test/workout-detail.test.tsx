@@ -223,8 +223,29 @@ describe('the workout page\'s hero', () => {
     expect(text(host, '.detail-hero .detail-verdict')).toBe('within your usual 5:22 – 5:36\u00a0/km')
     expect(host.querySelector('.detail-hero .detail-verdict')?.className).toBe('detail-verdict')
     expect(text(host, '.workout-hero-rank')).toBe('Faster than 17 of your last 20 of this type')
-    expect(text(host, '.detail-hero .dash-caption')).toBe('this workout and the nine of this type before it · higher = faster')
+    expect(text(host, '.detail-hero .dash-caption')).toBe('this workout and the 9 of this type before it · higher = faster')
     expect(host.querySelector('.detail-hero [role="img"][aria-label="Pace"]')).not.toBeNull()
+  })
+
+  // The caption counts the points the strip draws, never a fixed "nine": a type done four times
+  // before draws five points and says so, and one done once before says "the one".
+  it('captions the strip with the number of earlier workouts it actually draws', async () => {
+    const page = workoutPageFixture()
+    const short = { ...page.figures.pace!, strip: page.figures.pace!.strip.slice(-4) }
+    const host = await mount({ ...page, figures: { ...page.figures, pace: short } })
+    expect(text(host, '.detail-hero .dash-caption')).toBe('this workout and the 3 of this type before it · higher = faster')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const two = { ...page.figures.pace!, strip: page.figures.pace!.strip.slice(-2) }
+    const pair = await mount({ ...page, figures: { ...page.figures, pace: two } }, workoutSessionFixture(), 'nl')
+    expect(text(pair, '.detail-hero .dash-caption')).toBe('deze training en de vorige van dit type · hoger = sneller')
+  })
+
+  // "Faster than 20 of your last 20" reads as a sum to check; every one of them is "all".
+  it('says "all" when the workout beat every one it is ranked against', async () => {
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, comparison: { ...page.comparison, pace: { ...page.comparison.pace!, better: 20, of: 20 } } })
+    expect(text(host, '.workout-hero-rank')).toBe('Faster than all of your last 20 of this type')
   })
 
   // verdictTone, as the night's hero: better or worse on a judged figure, outside the usual on one
@@ -268,12 +289,12 @@ describe('the workout page\'s hero', () => {
       strip: page.figures.pace!.strip.map((point) => ({ ...point, value: point.value === null ? null : 1000 / point.value })) }
     const speedHost = await mount({ ...page, hero: 'speed', figures: { ...page.figures, speed } })
     expect(yInverse(speedHost)).toBe(false)
-    expect(text(speedHost, '.detail-hero .dash-caption')).toBe('this workout and the nine of this type before it')
+    expect(text(speedHost, '.detail-hero .dash-caption')).toBe('this workout and the 9 of this type before it')
   })
 
   it('says how it compares with the previous one of this type, and links to it', async () => {
     const host = await mount(workoutPageFixture())
-    expect(text(host, '.workout-hero-previous')).toBe('12 s/km faster than the previous one, Tuesday, September 1')
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1')
     const link = host.querySelector<HTMLAnchorElement>('.detail-hero a.card-link')
     expect(link?.textContent).toBe('View the previous one')
     expect(link?.getAttribute('href')).toBe(`/activity/${PREVIOUS_ID}`)
@@ -282,7 +303,7 @@ describe('the workout page\'s hero', () => {
   it('says slower, not a negative faster, when the pace was slower', async () => {
     const page = workoutPageFixture()
     const host = await mount({ ...page, previous: { ...page.previous!, values: { ...page.previous!.values, pace: 318 } } })
-    expect(text(host, '.workout-hero-previous')).toBe('6 s/km slower than the previous one, Tuesday, September 1')
+    expect(text(host, '.workout-hero-previous')).toBe('6\u00a0s/km slower than the previous one, Tuesday, September 1')
   })
 
   it('names the Records best for this type as "your best"', async () => {
@@ -341,7 +362,17 @@ describe('the workout page\'s four figures', () => {
     expect(host.querySelector('.detail-minis .detail-rows')?.getAttribute('data-columns')).toBe('4')
     // Cardio load sits above its usual on a figure judged neither way: its words take the tone.
     expect(host.querySelectorAll('.detail-minis .figure-row-verdict')[3]?.className).toBe('figure-row-verdict is-out')
-    expect(text(host, '.detail-minis .dash-caption')).toBe('each line: this workout and the nine of this type before it · band = your usual range')
+    expect(text(host, '.detail-minis .dash-caption')).toBe('each line: this workout and the 9 of this type before it · band = your usual range')
+  })
+
+  // No band is drawn behind a strip with a thin usual, so the caption does not name one.
+  it('caption no band when none of the strips draws one', async () => {
+    const page = workoutPageFixture()
+    const thin = (key: 'distance' | 'movingTime' | 'averageHeartRate' | 'cardioLoad') =>
+      ({ ...page.figures[key]!, baseline: { ...page.figures[key]!.baseline!, thin: true }, standing: null, judged: null })
+    const figures = { ...page.figures, distance: thin('distance'), movingTime: thin('movingTime'), averageHeartRate: thin('averageHeartRate'), cardioLoad: thin('cardioLoad') }
+    const host = await mount({ ...page, figures })
+    expect(text(host, '.detail-minis .dash-caption')).toBe('each line: this workout and the 9 of this type before it')
   })
 
   it('leave out a figure the workout has no reading for, and the one the hero already leads with', async () => {
@@ -382,12 +413,51 @@ describe('the workout page\'s compared-with table', () => {
     expect(host.querySelector('.workout-compared thead th .sr-only')?.textContent).toBe('Measure')
     expect(host.querySelector('.workout-compared caption.sr-only')?.textContent).toBe('This workout beside the previous one of its type, the usual range and your best')
     expect(compared(host)).toEqual([
-      ['Pace', '5:24\u00a0/km', '5:36\u00a0/km -12 s', '5:22 – 5:36\u00a0/km', '4:50\u00a0/km · June'],
+      ['Pace', '5:24\u00a0/km', '5:36\u00a0/km -12\u00a0s/km', '5:22 – 5:36\u00a0/km', 'fastest km 4:50\u00a0/km · June'],
       ['Distance', '5.20\u00a0km', '5.00\u00a0km +0.20', '4.60 – 5.60\u00a0km', '10.40\u00a0km · May'],
       ['Avg heart rate', '157\u00a0bpm', '153\u00a0bpm +4', '150 – 158\u00a0bpm', '—'],
       ['Cardio load', '71', '62 +9', '55 – 70', '—'],
     ])
     expect(host.querySelector('.workout-compared thead a.card-link')?.getAttribute('href')).toBe(`/activity/${PREVIOUS_ID}`)
+    expect(text(host, '.workout-compared-footnote')).toBe('This type only · your best from Records')
+  })
+
+  // The difference is the difference of the two printed values, so the row adds up: 5.20 against
+  // 5.00 reads +0.20, even when the unrounded readings (5204 and 4996 m) differ by 208 m.
+  it('computes each difference from the values as printed', async () => {
+    const page = workoutPageFixture()
+    const distance = { ...page.figures.distance!, value: 5204 }
+    const host = await mount({ ...page, figures: { ...page.figures, distance }, previous: { ...page.previous!, values: { ...page.previous!.values, distance: 4996, pace: 335.6 } } })
+    expect(compared(host)[1]![2]).toBe('5.00\u00a0km +0.20')
+    // 5:24 against 5:36 (335.6 s printed as 5:36): 12 s/km, not 11.6 rounded to 12 by luck.
+    expect(compared(host)[0]![2]).toBe('5:36\u00a0/km -12\u00a0s/km')
+  })
+
+  // A time hero leads the table with its own row, and the caption and footnote name only the
+  // columns that are there.
+  it('leads a time hero\'s table with that time, and words its captions for the columns shown', async () => {
+    const strength = strengthPageFixture()
+    const host = await mount({
+      ...strength, previous: { sessionId: PREVIOUS_ID, localDate: '2026-09-01', values: { movingTime: 2600, averageHeartRate: 115 } },
+    }, strengthSessionFixture())
+    expect(compared(host).map((row) => row[0])).toEqual(['Moving time', 'Avg heart rate'])
+    expect(compared(host)[0]![2]).toBe('43:20 +1:40')
+    expect(host.querySelector('.workout-compared caption')?.textContent).toBe('This workout beside the previous one of its type')
+    expect(text(host, '.workout-compared-footnote')).toBe('This type only')
+  })
+
+  // The best column goes on a phone, so the words naming it go with it.
+  it('hides the words about the best wherever the best column is hidden', async () => {
+    const host = await mount(workoutPageFixture())
+    expect(host.querySelector('.workout-compared caption .workout-compared-wide')?.textContent).toBe(', the usual range and your best')
+    expect(host.querySelector('.workout-compared-footnote .workout-compared-wide')?.textContent).toBe(' · your best from Records')
+    const css = readFileSync('apps/web/src/app.css', 'utf8')
+    expect(css).toMatch(/@media \(max-width: 620px\) \{[^}]*\.workout-compared-best, \.workout-compared-usual, \.workout-compared-wide \{ display: none; \}/)
+  })
+
+  it('draws the last row\'s rule under every cell or none, never under the first column alone', () => {
+    const css = readFileSync('apps/web/src/app.css', 'utf8')
+    expect(css).toMatch(/\.override-table tbody tr:last-child td, \.override-table tbody tr:last-child th \{ border-bottom: 0; \}/)
   })
 
   // A ride leads with its speed, so its table's first row is speed, with the previous ride's own.
@@ -418,7 +488,7 @@ describe('the workout page\'s compared-with table', () => {
     expect(host.querySelectorAll('.workout-compared .workout-compared-best')).toHaveLength(5)
     expect(host.querySelectorAll('.workout-compared .workout-compared-usual')).toHaveLength(5)
     const css = readFileSync('apps/web/src/app.css', 'utf8')
-    expect(css).toMatch(/@media \(max-width: 620px\) \{[^}]*\.workout-compared-best, \.workout-compared-usual \{ display: none; \}/)
+    expect(css).toMatch(/@media \(max-width: 620px\) \{[^}]*\.workout-compared-best, \.workout-compared-usual, \.workout-compared-wide \{ display: none; \}/)
   })
 
   it('leaves out a row the workout has no value for, and the previous column when there is no previous one', async () => {
@@ -444,14 +514,15 @@ describe('the workout page in Dutch', () => {
     const host = await mount(workoutPageFixture(), workoutSessionFixture(), 'nl')
     expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Tempo')
     expect(text(host, '.workout-hero-rank')).toBe('Sneller dan 17 van je laatste 20 van dit type')
-    expect(text(host, '.workout-hero-previous')).toBe('12 s/km sneller dan de vorige, dinsdag 1 september')
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km sneller dan de vorige, dinsdag 1 september')
     expect(text(host, '.detail-hero a.card-link')).toBe('Bekijk de vorige')
     expect(text(host, '.workout-hero-best')).toBe('Je beste: snelste kilometer 4:50\u00a0/km (juni)')
     expect(text(host, '.detail-page h1')).toBe('Hardlopen')
     expect(text(host, '.day-nav-back')).toBe('Alle trainingen')
-    expect(text(host, '.detail-minis .dash-caption')).toBe('elk lijntje: deze training en de negen van dit type ervoor · band = je gebruikelijke bereik')
+    expect(text(host, '.detail-minis .dash-caption')).toBe('elk lijntje: deze training en de 9 van dit type ervoor · band = je gebruikelijke bereik')
     expect([...host.querySelectorAll('.workout-compared thead th')].map((th) => th.textContent)).toContain('Gebruikelijk')
     expect(host.querySelector('.workout-compared caption')?.textContent).toBe('Deze training naast de vorige van dit type, het gebruikelijke bereik en je beste')
+    expect(text(host, '.workout-compared-footnote')).toBe('Alleen dit type · je beste uit Records')
   })
 })
 
@@ -570,12 +641,12 @@ describe('the workout page\'s route and kilometres', () => {
     expect(widths[0]).toBe('40%')
     expect(widths[5]).toBe('100%')
     expect(host.querySelector('.workout-map .workout-splits-footnote')).not.toBeNull()
-    expect(text(host, '.workout-split-trend')).toBe('Negative split · second half 22 s/km faster')
+    expect(text(host, '.workout-split-trend')).toBe('Negative split · second half 22\u00a0s/km faster')
   })
 
   it('words a slower second half as a positive split, and a level one as even', async () => {
     const slower = await mount({ ...workoutPageFixture(), splitTrend: { secondHalfFasterBySecondsPerKm: -9 } }, fullSession())
-    expect(text(slower, '.workout-split-trend')).toBe('Positive split · second half 9 s/km slower')
+    expect(text(slower, '.workout-split-trend')).toBe('Positive split · second half 9\u00a0s/km slower')
     act(() => { root!.unmount() })
     root = createRoot(container!)
     const even = await mount({ ...workoutPageFixture(), splitTrend: { secondHalfFasterBySecondsPerKm: 0 } }, fullSession())
@@ -651,7 +722,9 @@ describe('the workout page\'s trace', () => {
     const host = await mount(workoutPageFixture(), fullSession())
     const card = host.querySelector('.workout-through')!.closest('.card')!
     expect(text(card, '.label')).toBe('Through the workout')
-    expect(text(card, '.basis')).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40')
+    // Label, then the chart, then what the axis is under it: the card's first line is its label.
+    expect(card.querySelector('.basis')).toBeNull()
+    expect(text(card, '.workout-through + .dash-caption')).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40')
     expect(text(host, '.workout-through-summary')).toBe('highest 178\u00a0bpm at 26:30')
     const option = optionIn(host, '.workout-through-chart')
     expect(option.xAxis[0]).toMatchObject({ type: 'value', min: 0, max: 34 * 60_000, interval: 5 * 60_000 })
@@ -668,7 +741,7 @@ describe('the workout page\'s trace', () => {
       tracePoints = [reading(minute(10), 150), reading(minute(33), 160)]
       const host = await mount(workoutPageFixture(), withEvents(events))
       const card = host.querySelector('.workout-through')!.closest('.card')!
-      expect(text(card, '.basis')).toBe("on the workout's own clock, 0:00 to 34:00")
+      expect(text(card, '.workout-through + .dash-caption')).toBe("on the workout's own clock, 0:00 to 34:00")
       const option = echarts.getInstanceByDom(host.querySelector<HTMLDivElement>('.workout-through-chart [role="img"]')!)!
         .getOption() as { series: { markArea?: { data: { xAxis?: number }[][] }, markLine?: unknown }[] }
       expect(option.series.some((series) => series.markArea?.data[0]?.[0]?.xAxis !== undefined)).toBe(false)
@@ -693,7 +766,8 @@ describe('the workout page\'s zones', () => {
     const host = await mount(workoutPageFixture(), fullSession())
     const card = host.querySelector('.workout-zones')!.closest('.card')!
     expect(text(card, '.label')).toBe('Heart-rate zones')
-    expect(text(host, '.workout-zones-verdict')).toBe('15\u00a0min hard or peak · above your usual 8 – 14\u00a0min')
+    // The legend's own names: the zones are called one thing everywhere on the page.
+    expect(text(host, '.workout-zones-verdict')).toBe('15\u00a0min vigorous or peak · above your usual 8 – 14\u00a0min')
     expect([...host.querySelectorAll('.workout-zones .detail-legend li')].map((li) => li.textContent)).toEqual([
       'Light 4\u00a0min', 'Moderate 9\u00a0min', 'Vigorous 12\u00a0min', 'Peak 3\u00a0min',
     ])
@@ -732,8 +806,8 @@ describe('the workout page\'s zones', () => {
   it('words the zones and the trace in Dutch', async () => {
     tracePoints = [reading(minute(10), 150), reading(minute(26) + 30_000, 175, 178)]
     const host = await mount(workoutPageFixture(), fullSession(), 'nl')
-    expect(text(host, '.workout-zones-verdict')).toBe('15\u00a0min zwaar of piek · boven je gebruikelijke bereik 8 – 14\u00a0min')
-    expect(text(host, '.workout-split-trend')).toBe('Negatieve split · tweede helft 22 s/km sneller')
+    expect(text(host, '.workout-zones-verdict')).toBe('15\u00a0min intensief of piek · boven je gebruikelijke bereik 8 – 14\u00a0min')
+    expect(text(host, '.workout-split-trend')).toBe('Negatieve split · tweede helft 22\u00a0s/km sneller')
     expect(host.querySelector('.workout-through')!.closest('.card')!.querySelector('.label')?.textContent).toBe('Door de training')
     // Elapsed time, not a clock time: "na" 26:30, never "om".
     expect(text(host, '.workout-through-summary')).toBe('hoogste 178\u00a0bpm na 26:30')

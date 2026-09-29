@@ -244,22 +244,30 @@ export function workoutStripOf(figure: WorkoutFigure): {
 
 /**
  * How far this figure's value lies from another reading of it (the previous workout's), signed,
- * in the figure's own terms but without its unit: a pace in seconds ("-12 s", the one difference
- * that needs its unit to read at all), a speed in km/h, a distance in kilometres at the precision it is printed at
- * once the value is in kilometres, anything else at its own precision. A difference that rounds
- * to nothing carries no sign (formatSignedNumber's rule).
+ * in the figure's own terms: a pace in seconds per kilometre ("-12 s/km", the words the hero's
+ * previous line uses), a stopwatch time as a stopwatch ("+1:40"), a speed in km/h, a distance in
+ * kilometres once the value is in kilometres, anything else at its own precision, the last three
+ * without their unit. Taken between the two values as they are printed, each rounded first, so a
+ * row adds up: 5.20 km beside 5.00 km reads +0.20 whatever the metres behind them. A difference
+ * that rounds to nothing carries no sign (formatSignedNumber's rule).
  */
 export function formatFigureDifference(
-  figure: Pick<PageFigure, 'value' | 'unit' | 'precision'>, difference: number, language: string, t: Translate,
+  figure: Pick<PageFigure, 'value' | 'unit' | 'precision'>, value: number, before: number, language: string, t: Translate,
 ): string {
   const absent = t('common.absent')
+  // The two values rounded to 1/`scale` of the stored unit, as printed, and their difference.
+  const between = (scale: number) => (Math.round(value * scale) - Math.round(before * scale)) / scale
   switch (figure.unit) {
-    case 'seconds_per_km': return `${formatSignedNumber(difference, 0, language, absent)} ${t('activity.workout.page.seconds')}`
+    case 'seconds_per_km': return t('activity.workout.page.secondsPerKm', { value: formatSignedNumber(between(1), 0, language, absent) })
+    case 'seconds': {
+      const seconds = between(1)
+      return `${seconds > 0 ? '+' : seconds < 0 ? '-' : ''}${formatStopwatch(Math.abs(seconds))}`
+    }
     // A speed is printed in km/h at one decimal (formatFigureValue), so its difference is too.
-    case 'meters_per_second': return formatSignedNumber(difference * 3.6, 1, language, absent)
+    case 'meters_per_second': return formatSignedNumber(between(36) * 3.6, 1, language, absent)
     case 'meters': return figure.value !== null && figure.value >= 1000
-      ? formatSignedNumber(difference / 1000, 2, language, absent)
-      : formatSignedNumber(difference, figure.precision, language, absent)
-    default: return formatSignedNumber(difference, figure.precision, language, absent)
+      ? formatSignedNumber(between(1 / 10) / 1000, 2, language, absent)
+      : formatSignedNumber(between(10 ** figure.precision), figure.precision, language, absent)
+    default: return formatSignedNumber(between(10 ** figure.precision), figure.precision, language, absent)
   }
 }

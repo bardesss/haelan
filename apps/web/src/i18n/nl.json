@@ -462,7 +462,7 @@
       "trace": {
         "label": "Hartslag tijdens deze training",
         "events": "Pauzes",
-        "basisFellBack": "{{pinned}} registreerde geen hartslag in dit venster, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
+        "basisFellBack": "{{pinned}} registreerde geen hartslag tijdens deze training, dus deze lijn komt van je andere apparaten; {{detail}}"
       },
       "route": {
         "label": "Route",
@@ -475,7 +475,8 @@
         "filledFromTrace": "Hartslagen met † zijn niet per tussentijd of ronde opgeslagen; ze komen uit de hartslag van deze sessie over dat stuk."
       },
       "comparison": {
-        "pace": "Sneller dan {{better}} van je laatste {{of}} van dit type"
+        "pace": "Sneller dan {{better}} van je laatste {{of}} van dit type",
+        "paceAll": "Sneller dan al je laatste {{of}} van dit type"
       },
       "page": {
         "nav": "Trainingen",
@@ -483,7 +484,6 @@
         "previous": "Vorige training",
         "next": "Volgende training",
         "allWorkouts": "Alle trainingen",
-        "seconds": "s",
         "figures": {
           "pace": "Tempo",
           "speed": "Snelheid",
@@ -506,17 +506,20 @@
           "vo2max": "VO₂max",
           "swimLengths": "Baantjes"
         },
-        "heroStrip": "deze training en de negen van dit type ervoor",
-        "heroStripInverse": "deze training en de negen van dit type ervoor · hoger = sneller",
+        "heroStrip_one": "deze training en de vorige van dit type",
+        "heroStrip_other": "deze training en de {{count}} van dit type ervoor",
+        "higherFaster": "hoger = sneller",
         "openWorkout": "Open deze training",
         "openWorkoutIdle": "Tik op een training om hem te openen",
-        "minisCaption": "elk lijntje: deze training en de negen van dit type ervoor · band = je gebruikelijke bereik",
+        "minisCaption_one": "elk lijntje: deze training en de vorige van dit type",
+        "minisCaption_other": "elk lijntje: deze training en de {{count}} van dit type ervoor",
+        "stripBand": "band = je gebruikelijke bereik",
         "previousFaster": "{{difference}} sneller dan de vorige, {{date}}",
         "previousSlower": "{{difference}} langzamer dan de vorige, {{date}}",
         "previousSame": "Even snel als de vorige, {{date}}",
         "previousOnly": "De vorige: {{date}}",
         "view": "Bekijk de vorige",
-        "secondsPerKm": "{{value}} s/km",
+        "secondsPerKm": "{{value}} s/km",
         "bestFastestKm": "Je beste: snelste kilometer {{value}} ({{month}})",
         "bestLongest": "Je beste: langste {{value}} ({{month}})",
         "compared": {
@@ -526,8 +529,22 @@
           "usual": "Gebruikelijk",
           "best": "Je beste",
           "bestValue": "{{value}} · {{month}}",
-          "caption": "Alleen dit type · je beste uit Records",
-          "tableCaption": "Deze training naast de vorige van dit type, het gebruikelijke bereik en je beste",
+          "bestFastestKm": "snelste km {{value}} · {{month}}",
+          "bestLongest": "langste {{value}} · {{month}}",
+          "caption": "Alleen dit type",
+          "captionBest": "je beste uit Records",
+          "tableCaption": "Deze training naast de vorige van dit type",
+          "tableCaptionAlone": "Deze training",
+          "captionWith": {
+            "usualBest": ", het gebruikelijke bereik en je beste",
+            "usual": " en het gebruikelijke bereik",
+            "best": " en je beste"
+          },
+          "captionAlone": {
+            "usualBest": " naast het gebruikelijke bereik en je beste",
+            "usual": " naast het gebruikelijke bereik",
+            "best": " naast je beste"
+          },
           "measure": "Meting"
         },
         "map": {
@@ -539,8 +556,8 @@
           "negative": "Negatieve split",
           "positive": "Positieve split",
           "even": "Gelijke split",
-          "faster": "tweede helft {{value}} s/km sneller",
-          "slower": "tweede helft {{value}} s/km langzamer",
+          "faster": "tweede helft {{value}} s/km sneller",
+          "slower": "tweede helft {{value}} s/km langzamer",
           "same": "beide helften even snel"
         },
         "through": {
@@ -554,7 +571,7 @@
         },
         "zones": {
           "label": "Hartslagzones",
-          "hard": "{{value}} zwaar of piek"
+          "hard": "{{value}} intensief of piek"
         },
         "form": {
           "label": "Loopvorm",
