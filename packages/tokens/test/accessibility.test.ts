@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveChart, CHART_KEYS, STAGE_KEYS, SCALE_KEYS, type ChartToken } from '../src/chart.js'
+import { resolveChart, CHART_KEYS, STAGE_KEYS, ZONE_KEYS, SCALE_KEYS, type ChartToken } from '../src/chart.js'
 import { resolveMap, MAP_KEYS, type MapToken } from '../src/map.js'
 import { resolveSemantic, SEMANTIC_KEYS, SURFACE_KEYS, TEXT_KEYS, THEMES, type SemanticToken } from '../src/semantic.js'
 import { deltaE, toLab, hexToRgb, rgbToHex } from '../src/color/convert.js'
@@ -71,6 +71,21 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
 
   it.each(CVD_KINDS)('keeps the sleep stages separable under %s', (kind) => {
     for (const [a, b] of pairs(stages.map((hex) => simulate(kind, hex)))) {
+      expect(deltaE(a, b), `${a} vs ${b} under ${kind}`).toBeGreaterThanOrEqual(MIN_SIMULATED)
+    }
+  })
+
+  // The four heart-rate zones sit side by side in one bar and behind one trace, so every pair of
+  // them has to be told apart, as the stages are; the legend names each one as well.
+  const zones = ZONE_KEYS.map((k) => chart[k])
+  it('separates the heart-rate zones in normal vision', () => {
+    for (const [a, b] of pairs(zones)) {
+      expect(deltaE(a, b), `${a} vs ${b}`).toBeGreaterThanOrEqual(MIN_NORMAL)
+    }
+  })
+
+  it.each(CVD_KINDS)('keeps the heart-rate zones separable under %s', (kind) => {
+    for (const [a, b] of pairs(zones.map((hex) => simulate(kind, hex)))) {
       expect(deltaE(a, b), `${a} vs ${b} under ${kind}`).toBeGreaterThanOrEqual(MIN_SIMULATED)
     }
   })
@@ -315,7 +330,7 @@ describe('assertion coverage', () => {
     ...INTERACTION_SURFACE_KEYS, 'border-accent', 'text-disabled', 'border-chosen',
   ]
   const ASSERTED_CHART: readonly ChartToken[] = [
-    ...STAGE_KEYS, ...SCALE_KEYS,
+    ...STAGE_KEYS, ...ZONE_KEYS, ...SCALE_KEYS,
     'series', 'series-alt', 'grid', 'axis', 'band-baseline',
     'state-excluded', 'state-no-data', 'tooltip-bg', 'balance-over', 'balance-under',
   ]
