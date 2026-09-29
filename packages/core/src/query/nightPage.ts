@@ -17,7 +17,6 @@ import type { PageFigure } from './pageFigure.ts'
 import { nightTrace, nightTraceHistory } from './nightTraces.ts'
 import type { NightTrace, NightTraceStat } from './nightTraces.ts'
 import { stageTimingOf } from './stageTiming.ts'
-import type { StageTimingValues } from './stageTiming.ts'
 import type { Night } from './sleepNights.ts'
 import type { WorkoutSession } from './sessions.ts'
 
@@ -41,8 +40,11 @@ export interface NightPage {
   stagePercent: { deep: number | null, light: number | null, rem: number | null }
   balance: { zeroLine: ZeroLine, nights: { localDate: string, difference: number | null }[], total: number }
   traces: { heartRate: NightTrace, hrv: NightTrace, spo2: NightTrace }
-  /** How long after falling asleep the first deep and REM sleep began, and how many REM episodes; null on a classic night. */
-  stageTiming: { firstDeep: PageFigure, firstRem: PageFigure, cycles: PageFigure }
+  /**
+   * How long after falling asleep the first deep and REM sleep began, and how many REM episodes;
+   * with the instants the first deep and REM segment began. Null on a classic night.
+   */
+  stageTiming: { firstDeep: PageFigure, firstRem: PageFigure, cycles: PageFigure, firstDeepAtMs: number | null, firstRemAtMs: number | null }
   /** Of the morning's judged figures, how many sat outside their usual. */
   morningSummary: MorningSummary
   morning: {
@@ -54,7 +56,7 @@ export interface NightPage {
     spo2: PageFigure
     skinTemperature: PageFigure
     skinTemperatureDeviation: number | null
-    /** Resting heart rate minus the night's lowest: how far the heart rate fell while asleep. */
+    /** How far the heart rate fell below the morning's resting rate while asleep, in percent of the resting rate. */
     heartRateDip: PageFigure
   }
   day: { localDate: string, steps: PageFigure, activeMinutes: PageFigure, workouts: WorkoutSession[] }
@@ -104,7 +106,7 @@ function summaryFigures(q: PersonQuery, night: Night, history: readonly Night[],
 function stageTimingFigures(night: Night, history: readonly Night[]): NightPage['stageTiming'] {
   const own = stageTimingOf(night.segments)
   const earlier = history.map((n) => stageTimingOf(n.segments))
-  const figure = (metric: string, key: keyof StageTimingValues, unit: string) => figureFromValues({
+  const figure = (metric: string, key: 'firstDeepMinutes' | 'firstRemMinutes' | 'cycles', unit: string) => figureFromValues({
     metric, unit, precision: 0, direction: 'neutral', value: own[key], minN: BASELINE_MIN_DAYS,
     history: earlier.flatMap((t) => (t[key] === null ? [] : [t[key]])),
   })
@@ -112,11 +114,15 @@ function stageTimingFigures(night: Night, history: readonly Night[]): NightPage[
     firstDeep: figure('sleep_first_deep_minutes', 'firstDeepMinutes', 'minutes'),
     firstRem: figure('sleep_first_rem_minutes', 'firstRemMinutes', 'minutes'),
     cycles: figure('sleep_cycles', 'cycles', 'count'),
+    firstDeepAtMs: own.firstDeepAtMs,
+    firstRemAtMs: own.firstRemAtMs,
   }
 }
 
-// Answers: how far the heart rate fell below the morning's resting rate while asleep, against the
-// same difference on the nights before. The lowest readings are the heart-rate trace's own history
+const dipPercent = (resting: number, lowest: number) => ((resting - lowest) / resting) * 100
+
+// Answers: how far the heart rate fell below the morning's resting rate while asleep, as a percent
+// of that resting rate ((resting - lowest) / resting x 100), against the same on the nights before. The lowest readings are the heart-rate trace's own history
 // stats, aligned with `history`, so no night's window is read a second time here.
 function heartRateDip(
   q: PersonQuery, resting: number | null, lowest: number | null,
@@ -126,11 +132,11 @@ function heartRateDip(
     .points.map((p) => [p.localDate, p.value]))
   const earlier = historyStats.flatMap((stat, i) => {
     const r = restingOn.get(history[i]!.localDate)
-    return r === undefined || stat.lowest === null ? [] : [r - stat.lowest.value]
+    return r === undefined || stat.lowest === null ? [] : [dipPercent(r, stat.lowest.value)]
   })
   return figureFromValues({
-    metric: 'sleep_heart_rate_dip', unit: 'bpm', precision: 0, direction: 'up', minN: BASELINE_MIN_DAYS,
-    value: resting === null || lowest === null ? null : resting - lowest, history: earlier,
+    metric: 'sleep_heart_rate_dip', unit: 'percent', precision: 0, direction: 'up', minN: BASELINE_MIN_DAYS,
+    value: resting === null || lowest === null ? null : dipPercent(resting, lowest), history: earlier,
   })
 }
 

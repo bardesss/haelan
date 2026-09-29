@@ -3,18 +3,22 @@
 // classic recording (ASLEEP/RESTLESS, no stages) has nothing to say and says nothing.
 import { ASLEEP_STAGES } from '../derive/sleep.ts'
 
-export interface StageTimingValues { firstDeepMinutes: number | null, firstRemMinutes: number | null, cycles: number | null }
+export interface StageTimingValues {
+  firstDeepMinutes: number | null, firstRemMinutes: number | null, cycles: number | null
+  /** The instants the first DEEP and the first REM segment began, for the clock time beside the minutes. */
+  firstDeepAtMs: number | null, firstRemAtMs: number | null
+}
 
 /** REM segments closer together than this are one episode; a gap at least this long starts the next. */
 export const REM_EPISODE_GAP_MINUTES = 20
 
 const MINUTE_MS = 60_000
-const NONE: StageTimingValues = { firstDeepMinutes: null, firstRemMinutes: null, cycles: null }
+const NONE: StageTimingValues = { firstDeepMinutes: null, firstRemMinutes: null, cycles: null, firstDeepAtMs: null, firstRemAtMs: null }
 
 /**
  * From a night's segments: minutes from the first asleep segment's start to the first DEEP / REM
  * start; cycles = REM episodes, a new episode starting after at least REM_EPISODE_GAP_MINUTES
- * without REM. All null when the night has no DEEP or REM segment at all (a classic recording).
+ * without REM; and the instants those first segments began. All null when the night has no DEEP or REM segment at all (a classic recording).
  */
 export function stageTimingOf(segments: readonly { stage: string, startMs: number, endMs: number }[]): StageTimingValues {
   const ordered = [...segments].sort((a, b) => a.startMs - b.startMs)
@@ -31,5 +35,8 @@ export function stageTimingOf(segments: readonly { stage: string, startMs: numbe
     if (lastEnd === null || rem.startMs - lastEnd >= REM_EPISODE_GAP_MINUTES * MINUTE_MS) cycles += 1
     lastEnd = Math.max(lastEnd ?? rem.endMs, rem.endMs)
   }
-  return { firstDeepMinutes: since(deep), firstRemMinutes: since(rems[0]), cycles: rems.length === 0 ? null : cycles }
+  return {
+    firstDeepMinutes: since(deep), firstRemMinutes: since(rems[0]), cycles: rems.length === 0 ? null : cycles,
+    firstDeepAtMs: deep?.startMs ?? null, firstRemAtMs: rems[0]?.startMs ?? null,
+  }
 }

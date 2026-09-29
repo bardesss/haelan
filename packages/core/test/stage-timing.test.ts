@@ -11,7 +11,7 @@ describe('stageTimingOf', () => {
       seg('LIGHT', 0, 52), seg('DEEP', 52, 116), seg('LIGHT', 116, 175),
       seg('REM', 175, 298), seg('AWAKE', 298, 323), seg('LIGHT', 323, 421),
     ]
-    expect(stageTimingOf(night)).toEqual({ firstDeepMinutes: 52, firstRemMinutes: 175, cycles: 1 })
+    expect(stageTimingOf(night)).toEqual({ firstDeepMinutes: 52, firstRemMinutes: 175, cycles: 1, firstDeepAtMs: 52 * M, firstRemAtMs: 175 * M })
   })
 
   it('keeps REM segments 15 minutes apart as one episode, and splits them at 25', () => {
@@ -33,25 +33,25 @@ describe('stageTimingOf', () => {
 
   it('says nothing about a classic night', () => {
     expect(stageTimingOf([seg('ASLEEP', 0, 200), seg('RESTLESS', 200, 210), seg('ASLEEP', 210, 400)]))
-      .toEqual({ firstDeepMinutes: null, firstRemMinutes: null, cycles: null })
+      .toEqual({ firstDeepMinutes: null, firstRemMinutes: null, cycles: null, firstDeepAtMs: null, firstRemAtMs: null })
   })
 
   it('says nothing about a night with nothing asleep in it', () => {
-    expect(stageTimingOf([seg('AWAKE', 0, 30)])).toEqual({ firstDeepMinutes: null, firstRemMinutes: null, cycles: null })
+    expect(stageTimingOf([seg('AWAKE', 0, 30)])).toEqual({ firstDeepMinutes: null, firstRemMinutes: null, cycles: null, firstDeepAtMs: null, firstRemAtMs: null })
   })
 
   it('measures from the first asleep segment, not from an awake start', () => {
     const night = [seg('AWAKE', 0, 10), seg('LIGHT', 10, 40), seg('DEEP', 40, 90), seg('REM', 90, 120)]
-    expect(stageTimingOf(night)).toEqual({ firstDeepMinutes: 30, firstRemMinutes: 80, cycles: 1 })
+    expect(stageTimingOf(night)).toEqual({ firstDeepMinutes: 30, firstRemMinutes: 80, cycles: 1, firstDeepAtMs: 40 * M, firstRemAtMs: 90 * M })
   })
 
   it('reads segments in time order whatever order they arrive in', () => {
     const night = [seg('REM', 90, 120), seg('DEEP', 40, 90), seg('LIGHT', 10, 40), seg('AWAKE', 0, 10)]
-    expect(stageTimingOf(night)).toEqual({ firstDeepMinutes: 30, firstRemMinutes: 80, cycles: 1 })
+    expect(stageTimingOf(night)).toEqual({ firstDeepMinutes: 30, firstRemMinutes: 80, cycles: 1, firstDeepAtMs: 40 * M, firstRemAtMs: 90 * M })
   })
 
   it('leaves REM timing and cycles null on a night with deep sleep but no REM', () => {
     expect(stageTimingOf([seg('LIGHT', 0, 30), seg('DEEP', 30, 90)]))
-      .toEqual({ firstDeepMinutes: 30, firstRemMinutes: null, cycles: null })
+      .toEqual({ firstDeepMinutes: 30, firstRemMinutes: null, cycles: null, firstDeepAtMs: 30 * M, firstRemAtMs: null })
   })
 })

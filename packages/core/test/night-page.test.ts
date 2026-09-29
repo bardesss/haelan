@@ -319,7 +319,7 @@ describe('readNightPage', () => {
     const hr = (localDate: string, bpm: number) => insertSample(test.db, {
       personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '03:00'), tzOffsetMinutes: OFFSET, value: bpm,
     })
-    /** Twenty nights before NIGHT, each resting at 54 or 56 by turns and lowest at 44: dips of 10 and 12. */
+    /** Twenty nights before NIGHT, each resting at 54 or 56 by turns and lowest at 44: dips of 10/54 and 12/56. */
     function seedHistory() {
       for (let i = 1; i <= 20; i += 1) {
         const date = shiftLocalDate(NIGHT, -i)
@@ -329,14 +329,17 @@ describe('readNightPage', () => {
       }
     }
 
-    it('is the resting heart rate minus the lowest of the night, judged against the same on earlier nights', () => {
+    it('is how far the lowest of the night fell below the resting heart rate, in percent of it, judged against the same on earlier nights', () => {
       seedHistory()
       seedNight(NIGHT, {})
       hr(NIGHT, 40)
       seedDaily(NIGHT, 'resting_heart_rate', 'last', 60)
       const dip = readNightPage(q(), input(NIGHT))!.morning.heartRateDip
-      expect(dip).toMatchObject({ metric: 'sleep_heart_rate_dip', unit: 'bpm', precision: 0, direction: 'up', value: 20, standing: 'above', judged: 'better' })
-      expect(dip.baseline!.center).toBeCloseTo(11)
+      expect(dip).toMatchObject({ metric: 'sleep_heart_rate_dip', unit: 'percent', precision: 0, direction: 'up', standing: 'above', judged: 'better' })
+      // (60 - 40) / 60, not / 40.
+      expect(dip.value).toBeCloseTo(100 / 3)
+      // Halfway between 10/54 and 12/56, each of the resting rate of its own night.
+      expect(dip.baseline!.center).toBeCloseTo((1000 / 54 + 1200 / 56) / 2)
       expect(dip.baseline!.thin).toBe(false)
     })
 
@@ -381,7 +384,10 @@ describe('readNightPage', () => {
     seedNight(NIGHT, {
       segments: [['AWAKE', 0, 5], ['LIGHT', 5, 95], ['DEEP', 95, 140], ['LIGHT', 140, 177], ['REM', 177, 220], ['LIGHT', 220, 300], ['REM', 300, 340], ['LIGHT', 340, 480]],
     })
-    const { stageTiming } = readNightPage(q(), input(NIGHT))!
+    const { stageTiming, night } = readNightPage(q(), input(NIGHT))!
+    // The instants the first deep and REM segment began, beside the minutes since falling asleep.
+    expect(stageTiming.firstDeepAtMs).toBe(night.startMs + 95 * 60_000)
+    expect(stageTiming.firstRemAtMs).toBe(night.startMs + 177 * 60_000)
     expect(stageTiming.firstDeep).toMatchObject({ metric: 'sleep_first_deep_minutes', unit: 'minutes', precision: 0, direction: 'neutral', value: 90, standing: 'above' })
     expect(stageTiming.firstDeep.baseline!.center).toBeCloseTo(52)
     expect(stageTiming.firstRem).toMatchObject({ metric: 'sleep_first_rem_minutes', value: 172, standing: 'within' })
@@ -396,8 +402,8 @@ describe('readNightPage', () => {
 
   it('counts how many of the judged morning figures sat outside their usual', () => {
     // Sixty mornings of steady readings, then a morning with a high resting heart rate and a low
-    // HRV and everything else usual; the last twenty nights lowest at 40, so their dips are 10 and
-    // 12, and tonight's at 20. Three outside, of every figure with a usual to stand on.
+    // HRV and everything else usual; the last twenty nights lowest at 40, so their dips are 12/52
+    // and 10/50, and tonight's 20/60. Three outside, of every figure with a usual to stand on.
     const hr = (localDate: string) => insertSample(test.db, {
       personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '03:00'), tzOffsetMinutes: OFFSET, value: 40,
     })
