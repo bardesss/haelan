@@ -44,7 +44,7 @@ function seedNight(h: Harness, localDate: string, asleep: number): void {
     startMs, startOffsetMinutes: OFFSET, endMs, endOffsetMinutes: OFFSET, localDate, rawPayloadId: null,
     attrs: JSON.stringify({ type: null, mainSleep: true, stagesStatus: 'SUCCEEDED', summary: { minutesInSleepPeriod: '480' } }),
   }).run()
-  db.insert(schema.sessionSegments).values({ id: `${id}-1`, sessionId: id, stage: 'light', startMs, endMs }).run()
+  db.insert(schema.sessionSegments).values({ id: `${id}-1`, sessionId: id, stage: 'LIGHT', startMs, endMs }).run()
   seedDaily(h, localDate, 'sleep_asleep_minutes', 'sum', asleep)
 }
 
@@ -154,6 +154,52 @@ describe('GET /night/:localDate', () => {
     expect(skinTemperature.value).toBe(33.5)
     expect(skinTemperature.baseline.center).toBe(33)
     expect(body.morning.skinTemperatureDeviation).toBe(0.5)
+  })
+
+  // Twenty nights whose heart rate falls 10.6 below a resting rate of 54.6, and a night that falls
+  // 10.8 below 54.8. Core judges the dip above its band; on the wire both are 11, so it must read
+  // within, and the summary must count it as judged but not as outside.
+  it('re-judges the heart-rate dip on the wire, and the morning summary with it', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    const lowest = (localDate: string) => insertSample(harness!.app.haelan.instance.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '03:00'), tzOffsetMinutes: OFFSET, value: 44,
+    })
+    for (let i = 1; i <= 20; i += 1) {
+      const date = shiftLocalDate(NIGHT, -i)
+      seedNight(harness, date, 400)
+      lowest(date)
+      seedDaily(harness, date, 'resting_heart_rate', 'last', 54.6)
+    }
+    seedNight(harness, NIGHT, 400)
+    lowest(NIGHT)
+    seedDaily(harness, NIGHT, 'resting_heart_rate', 'last', 54.8)
+
+    const body = (await get(harness, token, `/night/${NIGHT}`)).json()
+    expect(body.morning.heartRateDip).toMatchObject({ value: 11, standing: 'within', judged: null })
+    expect(body.morning.heartRateDip.baseline).toMatchObject({ center: 11, low: 11, high: 11 })
+    // Twenty nights are too few for a usual resting rate, so the dip is the one judged figure.
+    expect(body.morningSummary).toEqual({ outside: 0, of: 1 })
+  })
+
+  // First deep sleep 52.6 minutes after onset is sent as 53, like every other whole-number figure.
+  it('sends the stage timing rounded', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedNight(harness, NIGHT, 400)
+    const start = at(shiftLocalDate(NIGHT, -1), '23:00')
+    harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+      id: 'deep-1', sessionId: `night-${NIGHT}`, stage: 'DEEP', startMs: start + 52.6 * 60_000, endMs: start + 100 * 60_000,
+    }).run()
+
+    const { stageTiming } = (await get(harness, token, `/night/${NIGHT}`)).json()
+    expect(stageTiming.firstDeep.value).toBe(53)
+    expect(stageTiming.firstRem.value).toBeNull()
+    expect(stageTiming.cycles.value).toBeNull()
   })
 
   // Each strip day is judged against its own day's band, and re-judged on the wire as the headline

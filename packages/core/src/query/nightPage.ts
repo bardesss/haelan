@@ -68,6 +68,15 @@ export function morningSummaryOf(figures: readonly { standing: GlanceStanding | 
   return { outside: judged.filter((f) => f.standing !== 'within').length, of: judged.length }
 }
 
+/**
+ * The summary over a page's morning figures. The one list of what counts, shared with the route,
+ * which calls it again over the rounded figures. The recovery index is left out: readRecovery
+ * never judges it (it is already a distance from the person's own baselines), so it could never count.
+ */
+export function morningSummaryOfMorning(m: Pick<NightPage['morning'], 'restingHeartRate' | 'hrv' | 'breathing' | 'spo2' | 'skinTemperature' | 'heartRateDip'>): MorningSummary {
+  return morningSummaryOf([m.restingHeartRate, m.hrv, m.breathing, m.spo2, m.skinTemperature, m.heartRateDip])
+}
+
 // Answers: which sleep session speaks for a night's provider summary - the main sleep, else the first.
 export function summaryOf(night: Night, attrsById: ReadonlyMap<string, unknown>): SleepSummary | null {
   const attrs = night.sessionIds.map((id) => attrsById.get(id)).filter((a) => a !== undefined)
@@ -227,9 +236,7 @@ export function readNightPage(q: PersonQuery, input: NightPageInput): NightPage 
       spo2: nightTrace(q, 'spo2', night, history),
     },
     stageTiming: stageTimingFigures(night, history),
-    // The recovery index is left out: readRecovery never judges it (it is already a distance from
-    // the person's own baselines), so it could never count.
-    morningSummary: morningSummaryOf([restingHeartRate, hrv, breathing, spo2, skinTemperature, dip]),
+    morningSummary: morningSummaryOfMorning({ restingHeartRate, hrv, breathing, spo2, skinTemperature, heartRateDip: dip }),
     morning: {
       recovery,
       // The glance's figures carry no direction or verdict of their own; as page figures they are

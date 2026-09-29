@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { balanceOf, ConfigError, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
+import { balanceOf, ConfigError, morningSummaryOfMorning, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
 import type { NightPage, NightTrace, WorkoutPage } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
@@ -52,9 +52,24 @@ function roundNightPage(page: NightPage): NightPage {
   const balanced = balanceOf(strip.map((d) => d.value), zeroMinutes)
   const skinTemperature = roundPageFigure(page.morning.skinTemperature)
   const skinBaseline = skinTemperature.baseline
+  const morning = {
+    restingHeartRate: roundPageFigure(page.morning.restingHeartRate),
+    hrv: roundPageFigure(page.morning.hrv),
+    breathing: roundPageFigure(page.morning.breathing),
+    spo2: roundPageFigure(page.morning.spo2),
+    skinTemperature,
+    heartRateDip: roundPageFigure(page.morning.heartRateDip),
+  }
   return {
     ...page,
     figures,
+    stageTiming: {
+      firstDeep: roundPageFigure(page.stageTiming.firstDeep),
+      firstRem: roundPageFigure(page.stageTiming.firstRem),
+      cycles: roundPageFigure(page.stageTiming.cycles),
+    },
+    // Judged again on the rounded figures: a dip that rounds onto its band edge is within.
+    morningSummary: morningSummaryOfMorning(morning),
     stagePercent: {
       deep: roundPercent(page.stagePercent.deep),
       light: roundPercent(page.stagePercent.light),
@@ -78,16 +93,11 @@ function roundNightPage(page: NightPage): NightPage {
         hrv: roundFigure(recovery.hrv),
         respiratoryRate: recovery.respiratoryRate === null ? null : roundFigure(recovery.respiratoryRate),
       },
-      restingHeartRate: roundPageFigure(page.morning.restingHeartRate),
-      hrv: roundPageFigure(page.morning.hrv),
-      breathing: roundPageFigure(page.morning.breathing),
-      spo2: roundPageFigure(page.morning.spo2),
-      skinTemperature,
+      ...morning,
       // Core's null rules, on the rounded pair; rounded once more because 33.5 - 33.0 in floating
       // point need not come out exactly 0.5.
       skinTemperatureDeviation: skinTemperature.value === null || skinBaseline === null || skinBaseline.thin
         ? null : roundMetricValue('sleep_temperature', skinTemperature.value - skinBaseline.center),
-      heartRateDip: roundPageFigure(page.morning.heartRateDip),
     },
     day: {
       ...page.day,
