@@ -4,7 +4,8 @@
 // same on every page. A strip of the last days replaces the bar where the trend is the point.
 // `band` takes a figure's baseline as the server sends it; a thin one draws no bar at all, since a
 // band from three nights looks exactly as authoritative as one from sixty (bandFrom's rule).
-import { useId } from 'react'
+import { Children, useId } from 'react'
+import type { ReactNode } from 'react'
 import { gaugeFraction, gaugeScale } from '../pages/dashboard/UsualGauge.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { BasisContext } from './basis.js'
@@ -27,6 +28,18 @@ export interface FigureRowStrip {
 }
 
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`
+
+/**
+ * A card's grid of FigureRows: as many columns as it has rows, up to `max` (four across a full
+ * card, three where a card gives them three quarters), so one figure never sits in a quarter of its
+ * card beside three empty ones. Two across below the grid's collapse width, where a card is as
+ * narrow as a phone's (app.css). `side` is the same grid inside a SideCard, capped at three.
+ */
+export function FigureRows({ max, side = false, children }: { max?: 1 | 2 | 3 | 4, side?: boolean, children: ReactNode }) {
+  // Children.toArray drops the false and null a condition leaves, so only rows are counted.
+  const columns = Math.max(1, Math.min(Children.toArray(children).length, max ?? (side ? 3 : 4)))
+  return <div className={side ? 'detail-side-rows' : 'detail-rows'} data-columns={columns}>{children}</div>
+}
 
 /**
  * `standing` is where the server said the figure sits against its usual; it only colours a figure

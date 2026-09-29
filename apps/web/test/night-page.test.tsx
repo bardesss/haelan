@@ -496,8 +496,8 @@ describe('the night page\'s morning after', () => {
   it('lays the readings out three across', async () => {
     // Root-relative: happy-dom gives import.meta.url an http scheme, so a URL-relative path cannot be read.
     const css = readFileSync('apps/web/src/app.css', 'utf8')
-    expect(css).toMatch(/\.detail-rows-3 \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
-    expect((await mount(nightPageFixture())).querySelector('.night-grp .detail-rows.detail-rows-3')).not.toBeNull()
+    expect(css).toMatch(/\.detail-rows\[data-columns="3"\][^{]*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+    expect((await mount(nightPageFixture())).querySelector('.night-grp .detail-rows[data-columns="3"]')).not.toBeNull()
   })
 
   it('colours the skin temperature strip\'s warm nights by where the server said they stood', async () => {

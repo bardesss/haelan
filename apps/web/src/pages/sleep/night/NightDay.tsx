@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
-import { FigureRow } from '../../../components/FigureRow.js'
+import { FigureRow, FigureRows } from '../../../components/FigureRow.js'
 import { formatLongDate } from '../../dashboard/glanceText.js'
 import { TodayWorkouts } from '../../dashboard/TodayWorkouts.js'
 import { DayLogBlock, SideCard, hasDayLog } from '../../detail/DayLogBlock.js'
@@ -42,13 +42,13 @@ export function NightDay({ day, log }: { day: NightPageData['day'], log: NightPa
     <SideCard label={t('sleep.night.day.label')} caption={caption}>
       <DayLogBlock log={log} />
       {figures.length > 0 && (
-        <div className="detail-side-rows">
+        <FigureRows side>
           {figures.map(({ key, label, figure }) => (
             <FigureRow key={key} label={label} value={formatFigureValue(figure, figure.value, language, t)}
               verdict={verdictLine(figure, language, t) ?? t('glance.usual.none')}
               judged={figure.judged} standing={figure.standing} band={figure.baseline} mark={figure.value} />
           ))}
-        </div>
+        </FigureRows>
       )}
       <TodayWorkouts workouts={day.workouts} label={t('sleep.night.day.workouts')} />
     </SideCard>

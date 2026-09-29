@@ -602,12 +602,16 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .detail-verdict.better { color: var(--positive); }
 .detail-verdict.worse, .detail-verdict.is-out { color: var(--negative); }
-/* The figures under the hero, and every other card that is a grid of FigureRows: four across on a
-   wide screen, three where a card gives them three quarters (.detail-rows-3), two below the grid's
-   collapse width (the GRID_STACK_WIDTH block, for the reason given there). */
+/* The figures under the hero, and every other card that is a grid of FigureRows (FigureRows): one
+   column per row up to its cap (data-columns, four across a full card, three where a card gives
+   them three quarters), two below the grid's collapse width (the GRID_STACK_WIDTH block, for the
+   reason given there). */
 .detail-minis { display: flex; flex-direction: column; gap: var(--space-2); }
 .detail-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
-.detail-rows-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.detail-rows[data-columns="2"], .detail-side-rows[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-rows[data-columns="3"], .detail-side-rows[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-rows[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 /* SideCard (pages/detail/DayLogBlock.tsx): a narrow column naming the day or night the section is
    about, the section's rows beside it; stacked below the grid's collapse width. */
 .detail-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
@@ -1365,6 +1369,8 @@ button.week-bar-slot { cursor: pointer; }
      and at a 621px window each column came out under 80px, narrower than one uppercase label.
      The side cards stack their caption over their rows here too. */
   .detail-rows, .detail-side-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .detail-rows[data-columns], .detail-side-rows[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 }
 
