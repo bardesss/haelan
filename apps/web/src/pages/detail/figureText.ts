@@ -79,7 +79,7 @@ function figureValueText(
   switch (figure.unit) {
     case 'minutes': return SHORT_SPANS.has(figure.metric)
       ? `${formatNumber(value, 0, language, absent)} ${t('activity.units.min')}`
-      : formatDuration(value)
+      : formatDuration(value, language)
     case 'minutes_from_local_midnight': return formatClock(value)
     case 'percent': return `${formatNumber(value, figure.precision, language, absent)} ${t('charts.units.percent')}`
     case 'bpm': return `${formatNumber(value, figure.precision, language, absent)} ${t('charts.units.bpm')}`

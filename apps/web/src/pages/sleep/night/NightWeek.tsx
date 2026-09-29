@@ -93,14 +93,14 @@ export function NightWeek({ page }: { page: NightPageData }) {
     ? t('sleep.night.week.variability', { value: variabilityValue })
     : t('sleep.night.week.variabilityUsual', { value: variabilityValue, low: variabilityRange.low, high: variabilityRange.high })
 
-  const zeroLineValue = formatDuration(balance.zeroLine.minutes)
+  const zeroLineValue = formatDuration(balance.zeroLine.minutes, language)
   const target = balance.zeroLine.source === 'target'
   const against = target
     ? t('sleep.night.week.balanceAgainstTarget', { target: zeroLineValue })
     : t('sleep.night.week.balanceAgainstBaseline', { usual: zeroLineValue })
   // Signed both ways: formatSignedDuration marks a deficit and leaves a surplus bare, and a bare
   // "0h 26m" on a balance reads as a size rather than as a week ahead.
-  const signedTotal = formatSignedDuration(balance.total, t('common.absent'))
+  const signedTotal = formatSignedDuration(balance.total, t('common.absent'), language)
   const total = Math.round(balance.total) > 0 ? `+${signedTotal}` : signedTotal
 
   const scheduleLabel = t('sleep.night.week.schedule')

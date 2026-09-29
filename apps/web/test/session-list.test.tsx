@@ -339,6 +339,6 @@ describe('SessionList', () => {
 
     const summaries = [...container!.querySelectorAll('.session-day-summary')].map((s) => s.textContent)
     // 28 + 24 on the 27th, and a singular for the one session on the 24th.
-    expect(summaries).toEqual(['2 sessies · 0h 52m', '1 sessie · 0h 43m'])
+    expect(summaries).toEqual(['2 sessies · 0u 52m', '1 sessie · 0u 43m'])
   })
 })

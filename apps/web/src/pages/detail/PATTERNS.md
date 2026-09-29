@@ -44,7 +44,7 @@ Every redesigned page is built from the pieces below. A section that looks like 
 ## Values
 
 - One formatter per unit, and three duration forms, each on purpose:
-  - "0h 25m" (a signed one "-0h 23m") for a span that runs to hours: time asleep, the stages, time in bed, a balance.
+  - "6h 36m" in English, "6u 36m" in Dutch (a signed one "-0h 23m" / "-0u 23m") for a span that runs to hours: time asleep, the stages, time in bed, a balance. `formatDuration` and `formatSignedDuration` take the language for the hour unit.
   - "12 min" for a figure that is only ever a few minutes (time to fall asleep, active minutes, bedtime variability) and for a workout's length in a session row ("34 min").
   - A stopwatch "28:04", "1:05:05" for time into or across a workout (elapsed, moving time, pauses, splits), the way the watch that recorded it reads.
 - A value never wraps inside itself: `formatFigureValue` joins its parts with no-break spaces.

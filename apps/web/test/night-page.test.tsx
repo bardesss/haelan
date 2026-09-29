@@ -197,12 +197,14 @@ describe('the night page in Dutch', () => {
   it('words the hero and the four figures from the Dutch catalogue', async () => {
     const host = await mount(nightPageFixture(), 'nl')
     expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Tijd in slaap')
-    expect(text(host, '.detail-verdict')).toBe('binnen je gebruikelijke bereik 5h\u00a006m – 7h\u00a048m')
+    // The hero's own duration, whole: Dutch writes the hour "u" (for "uur"), never the English "h".
+    expect(text(host, '.detail-hero-value')).toBe('6u\u00a036m')
+    expect(text(host, '.detail-verdict')).toBe('binnen je gebruikelijke bereik 5u\u00a006m – 7u\u00a048m')
     expect(text(host, '.detail-hero .dash-caption')).toBe('deze nacht en de zes ervoor')
     expect(minis(host)).toEqual([
       ['Efficiëntie', '94\u00a0%', 'binnen je gebruikelijke bereik 88 – 96\u00a0%'],
-      ['Diepe slaap', '1h\u00a004m', 'onder je gebruikelijke bereik 1h\u00a010m – 1h\u00a040m'],
-      ['REM', '2h\u00a003m', 'binnen je gebruikelijke bereik 1h\u00a030m – 2h\u00a010m'],
+      ['Diepe slaap', '1u\u00a004m', 'onder je gebruikelijke bereik 1u\u00a010m – 1u\u00a040m'],
+      ['REM', '2u\u00a003m', 'binnen je gebruikelijke bereik 1u\u00a030m – 2u\u00a010m'],
       ['Naar bed', '00:08', 'binnen je gebruikelijke bereik 23:30 – 00:20'],
     ])
     expect(text(host, '.dash-date')).toBe('Naar bed 00:08 · wakker geworden 07:09 · watch')
@@ -429,14 +431,14 @@ describe('the night page\'s week', () => {
 
   it('words the balance in Dutch against the target', async () => {
     const host = await mount(nightPageFixture(), 'nl')
-    expect(text(host, '.night-week-against')).toBe('ten opzichte van je doel van 7h 30m')
+    expect(text(host, '.night-week-against')).toBe('ten opzichte van je doel van 7u 30m')
     expect(text(host, '.night-week-bars-caption')).toBe('elke balk: die nacht tegenover je doel')
   })
 
   it('words the balance in Dutch against the usual', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, balance: { ...page.balance, zeroLine: { minutes: 400, source: 'baseline' } } }, 'nl')
-    expect(text(host, '.night-week-against')).toBe('ten opzichte van je gebruikelijke 6h 40m')
+    expect(text(host, '.night-week-against')).toBe('ten opzichte van je gebruikelijke 6u 40m')
     expect(text(host, '.night-week-bars-caption')).toBe('elke balk: die nacht tegenover je gebruikelijke')
   })
 

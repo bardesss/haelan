@@ -2,7 +2,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
-import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
+import { formatDuration, formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 import { useAllTime } from '../data/useAllTime.js'
 import { sourceLabel } from '../data/useSourceNames.js'
 import { useSession } from '../auth/session.js'
@@ -178,8 +178,7 @@ function RecordRow({ record, t, language }: {
  */
 function sessionValue(record: SessionRecord, language: string): string {
   if (record.kind === 'longest') {
-    const minutes = Math.round(record.value / 60_000)
-    return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+    return formatDuration(record.value / 60_000, language)
   }
   if (record.kind === 'furthest') {
     return `${formatNumber(record.value / 1_000_000, 1, language, '')} km`

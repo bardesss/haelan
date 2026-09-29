@@ -166,10 +166,22 @@ export function formatSince(atMs: number, nowMs: number, language: string): stri
   return relative.format(-Math.round(hours / 24), 'day')
 }
 
+/**
+ * The short hour unit in `language`: "u" in Dutch (for "uur"), "h" otherwise. Dutch reads "6h"
+ * as English; its own short form is "6u". Minutes stay "m" in both, which Dutch writes the same way.
+ * Keyed on the primary subtag so "nl-NL" and "nl-BE" read as Dutch too. A regex test rather than a
+ * split, so a component rendered outside any I18nProvider (i18n.language undefined, as several chart
+ * tests do) falls back to English instead of throwing.
+ */
+export function hourUnit(language: string): string {
+  return /^nl(-|$)/i.test(language) ? 'u' : 'h'
+}
+
 // Round to whole minutes before splitting, not after: splitting first turns 419.6 into 6h and round(59.6)m ("6h 60m").
-export function formatDuration(minutes: number): string {
+// The hour unit follows `language` (hourUnit above): "6h 36m" in English, "6u 36m" in Dutch.
+export function formatDuration(minutes: number, language: string): string {
   const total = Math.round(minutes)
-  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}m`
+  return `${Math.floor(total / 60)}${hourUnit(language)} ${String(total % 60).padStart(2, '0')}m`
 }
 
 /**
@@ -186,18 +198,17 @@ export function formatDuration(minutes: number): string {
  * two formats for one unit. One format everywhere (the M10a joint review's F23). A value that
  * rounds to no minutes at all carries no sign.
  *
- * Takes `absent` directly, the exact `(value, absent) => string` shape `InsightCard`'s own
- * `formatValue` prop expects, so a caller with nothing more to add can pass this function itself
- * rather than writing a one-line wrapper around it. First extracted here after the identical
+ * Takes `absent` second, after the value, the order `InsightCard`'s own `(value, absent) => string`
+ * `formatValue` prop uses; `language` comes last, so a caller binds it in a one-line arrow. First extracted here after the identical
  * closure, each carrying its own copy of this comment, drifted onto two pages (Dashboard's own
  * sleep card and Sleep's own asleep card) with no shared owner: a future fix to one was not a fix
  * to the other.
  */
-export function formatSignedDuration(value: number | null, absent: string): string {
+export function formatSignedDuration(value: number | null, absent: string, language: string): string {
   if (value === null) return absent
   const minutes = Math.round(Math.abs(value))
   const sign = value < 0 && minutes > 0 ? '-' : ''
-  return `${sign}${formatDuration(minutes)}`
+  return `${sign}${formatDuration(minutes, language)}`
 }
 
 /**

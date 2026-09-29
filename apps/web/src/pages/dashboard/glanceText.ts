@@ -23,7 +23,7 @@ function figureKind(metric: string): FigureKind {
 // rather than merely documented.
 function formatValue(value: number, metric: string, language: string): string {
   switch (figureKind(metric)) {
-    case 'duration': return formatDuration(value)
+    case 'duration': return formatDuration(value, language)
     case 'clock': return formatClock(value)
     case 'count': return String(Math.round(value))
     case 'metric': return formatMetricValue(value, metric, language, '')

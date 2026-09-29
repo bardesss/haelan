@@ -38,6 +38,10 @@ describe('formatFigure', () => {
     expect(formatFigure(figure({ metric: 'sleep_asleep_minutes', value: 419 }), 'en')).toBe('6h 59m')
   })
 
+  it('writes the duration\'s hour as "u" in Dutch', () => {
+    expect(formatFigure(figure({ metric: 'sleep_asleep_minutes', value: 419 }), 'nl')).toBe('6u 59m')
+  })
+
   it('formats sleep_bedtime_minutes and sleep_waketime_minutes as a clock time', () => {
     expect(formatFigure(figure({ metric: 'sleep_bedtime_minutes', value: -40 }), 'en')).toBe('23:20')
     expect(formatFigure(figure({ metric: 'sleep_waketime_minutes', value: 390 }), 'en')).toBe('06:30')

@@ -26,6 +26,12 @@ describe('formatFigureValue', () => {
     expect(formatFigureValue(figure({ unit: 'minutes', precision: 0 }), 396, 'en', t)).toBe('6h\u00a036m')
   })
 
+  // Dutch writes the hour "u" (for "uur"); a short span keeps its "min" in both languages.
+  it('writes a duration\'s hour as "u" in Dutch, and leaves a short span\'s "min" alone', () => {
+    expect(formatFigureValue(figure({ unit: 'minutes', precision: 0 }), 396, 'nl', tNl)).toBe('6u\u00a036m')
+    expect(formatFigureValue(figure({ unit: 'minutes', metric: 'sleep_latency_minutes', precision: 0 }), 12, 'nl', tNl)).toBe('12\u00a0min')
+  })
+
   it('formats minutes_from_local_midnight as a clock time, wrapping a negative value', () => {
     expect(formatFigureValue(figure({ unit: 'minutes_from_local_midnight', precision: 0 }), -40, 'en', t)).toBe('23:20')
   })
@@ -184,7 +190,7 @@ describe('verdictLine', () => {
 
   it('says within in Dutch too', () => {
     expect(verdictLine(figure({ unit: 'minutes', value: 400, baseline, standing: 'within' }), 'nl', tNl))
-      .toBe('binnen je gebruikelijke bereik 6h\u00a020m – 7h\u00a000m')
+      .toBe('binnen je gebruikelijke bereik 6u\u00a020m – 7u\u00a000m')
   })
 })
 

@@ -22,11 +22,20 @@ function stubT(): { t: Translate, calls: [string, Record<string, unknown> | unde
 describe('formatDuration', () => {
   it('rounds to whole minutes before splitting, not after', () => {
     // Splitting first gives 6h and round(59.6)m, which renders as "6h 60m".
-    expect(formatDuration(419.6)).toBe('7h 00m')
-    expect(formatDuration(59.5)).toBe('1h 00m')
-    expect(formatDuration(0)).toBe('0h 00m')
-    expect(formatDuration(419)).toBe('6h 59m')
-    expect(formatDuration(480)).toBe('8h 00m')
+    expect(formatDuration(419.6, 'en')).toBe('7h 00m')
+    expect(formatDuration(59.5, 'en')).toBe('1h 00m')
+    expect(formatDuration(0, 'en')).toBe('0h 00m')
+    expect(formatDuration(419, 'en')).toBe('6h 59m')
+    expect(formatDuration(480, 'en')).toBe('8h 00m')
+  })
+
+  // Dutch writes an hour as "uur", so its short form is "u": "6u 36m", never the English "6h".
+  // Minutes stay "m" in both. Whole strings, not substrings: toContain('36m') stays green on "6h 36m".
+  it('writes the hour as "u" in Dutch and "h" in English', () => {
+    expect(formatDuration(396, 'nl')).toBe('6u 36m')
+    expect(formatDuration(396, 'nl-NL')).toBe('6u 36m')
+    expect(formatDuration(396, 'en')).toBe('6h 36m')
+    expect(formatDuration(396, 'en-GB')).toBe('6h 36m')
   })
 })
 
@@ -34,24 +43,29 @@ describe('formatSignedDuration', () => {
   // One duration format across the app (formatDuration's): the night's balance printed "+2m" beside
   // a "0h 25m" awake time on the same page.
   it('keeps the empty hour under an hour, as formatDuration does, in both directions', () => {
-    expect(formatSignedDuration(-7, '')).toBe('-0h 07m')
-    expect(formatSignedDuration(23, '')).toBe('0h 23m')
-    expect(formatSignedDuration(-22.5, '')).toBe('-0h 23m')
+    expect(formatSignedDuration(-7, '', 'en')).toBe('-0h 07m')
+    expect(formatSignedDuration(23, '', 'en')).toBe('0h 23m')
+    expect(formatSignedDuration(-22.5, '', 'en')).toBe('-0h 23m')
   })
 
   it('keeps hours and padded minutes from an hour up, with one leading minus', () => {
-    expect(formatSignedDuration(-67, '')).toBe('-1h 07m')
-    expect(formatSignedDuration(393, '')).toBe('6h 33m')
-    expect(formatSignedDuration(59.6, '')).toBe('1h 00m')
+    expect(formatSignedDuration(-67, '', 'en')).toBe('-1h 07m')
+    expect(formatSignedDuration(393, '', 'en')).toBe('6h 33m')
+    expect(formatSignedDuration(59.6, '', 'en')).toBe('1h 00m')
   })
 
   it('carries no sign on a value that rounds to no minutes at all', () => {
-    expect(formatSignedDuration(-0.4, '')).toBe('0h 00m')
-    expect(formatSignedDuration(0, '')).toBe('0h 00m')
+    expect(formatSignedDuration(-0.4, '', 'en')).toBe('0h 00m')
+    expect(formatSignedDuration(0, '', 'en')).toBe('0h 00m')
+  })
+
+  it('writes the hour as "u" in Dutch', () => {
+    expect(formatSignedDuration(-67, '', 'nl')).toBe('-1u 07m')
+    expect(formatSignedDuration(-7, '', 'nl')).toBe('-0u 07m')
   })
 
   it('answers the absent text for null', () => {
-    expect(formatSignedDuration(null, '-')).toBe('-')
+    expect(formatSignedDuration(null, '-', 'en')).toBe('-')
   })
 })
 
