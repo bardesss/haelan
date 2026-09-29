@@ -883,6 +883,10 @@ h2.label { margin: 0; }
 /* An explicit height, so a row of arrows alone (a detail page's) is as tall as the dashboard's,
    where a labelled button beside them set it; the phone block's 44px still wins below 620px. */
 .day-nav-btn { min-width: 36px; min-height: 32px; justify-content: center; }
+/* A stepped-to-the-end arrow dims and keeps the card fill. .button:disabled's grey fill is meant for a
+   form's inert action; in the light theme it made the arrow read as a filled chip beside its live twin.
+   Same specificity as that rule, so it wins by coming later. */
+.day-nav-btn:disabled { background: var(--surface-card); }
 .day-nav-today { min-height: 32px; justify-content: center; }
 /* A detail page's way back to its list (DetailNav): a link that is the Today button's twin. */
 .day-nav-back { min-height: 32px; justify-content: center; text-decoration: none; white-space: nowrap; }

@@ -97,4 +97,13 @@ describe('the detail pages\' stylesheet', () => {
       expect(rule?.body, selector).toMatch(/min-height:\s*32px/)
     }
   })
+
+  // .button:disabled paints a grey fill that is only right for a form; a disabled arrow must dim
+  // the same way in both themes, so it puts the card fill back after that rule.
+  it('keeps a disabled day-nav arrow on the card fill', () => {
+    const rule = all.find((r) => r.media === null && r.selectors.includes('.day-nav-btn:disabled'))
+    expect(rule?.body).toMatch(/background:\s*var\(--surface-card\)/)
+    const base = css.indexOf('.button:disabled')
+    expect(css.indexOf('.day-nav-btn:disabled')).toBeGreaterThan(base)
+  })
 })
