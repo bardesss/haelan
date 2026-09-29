@@ -700,6 +700,15 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     expect(JSON.stringify(page)).not.toMatch(/latitude|longitude/)
   })
 
+  it('has efforts on a routed run and none on a routed ride', () => {
+    seedRide('ride', SUBJECT_DATE, {})
+    seedRoute('ride', SUBJECT_DATE, { speed: 8, fixes: 200 })
+    seedRun('run', SUBJECT_DATE, {}, { hhmm: '18:00' })
+    seedRoute('run', SUBJECT_DATE, { fixes: 200, hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('ride'))!.efforts).toBeNull()
+    expect(readWorkoutPage(q(), input('run'))!.efforts!.fiveK).toMatchObject({ isBest: true })
+  })
+
   it('has no efforts without a route', () => {
     seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 300 }] })
     expect(readWorkoutPage(q(), input('subject'))!.efforts).toBeNull()

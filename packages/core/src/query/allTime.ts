@@ -2,8 +2,8 @@ import { sql } from 'drizzle-orm'
 import { eddingtonOf } from '../api/eddington.ts'
 import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
-import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
-import type { SessionRecord } from '../api/sessionRecords.ts'
+import { GPS_EFFORT_TYPE, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
+import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
 import type { NamedSource } from '../store/sourceAliases.ts'
 import type { DefaultName } from '../api/sourceNames.ts'
@@ -224,13 +224,11 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
   // Read once and shared: the session records and the workout counts both mean one workout per
   // event, and reading it twice would pay the whole-history merge twice.
   const workouts = keptWorkouts(db, personId)
-  // Every kept workout's route in one read, for the fastest efforts among the session records.
-  const routes = readRoutesFor(db, workouts)
 
   return {
     span: { from: span.from ?? '', to: span.to ?? '', days: span.days ?? 0 },
     records,
-    sessionRecords: sessionRecordsOf(workouts.map((workout) => sessionForRecords(workout, routes.get(workout.id)))),
+    sessionRecords: sessionRecordsOf(sessionsForRecords(db, workouts)),
     eddington,
     milestones: milestonesOf(records, stepDays, {
       exercise: workouts.map((workout) => workout.localDate),
@@ -303,6 +301,29 @@ function soleSourceOn(
 function keptWorkouts(db: DbOrTx, personId: string): WorkoutSession[] {
   const raw = readSessions(db, { personId, kind: 'exercise', from: '0000-01-01', to: '9999-12-31' })
   return mergeWorkouts(raw, mergeRuleFor(db, personId)).filter((workout) => !workout.excluded)
+}
+
+/** Routes are read this many sessions to a query, so a 1 Hz phone route history is never all in memory at once. */
+export const ROUTE_CHUNK_SESSIONS = 100
+
+/**
+ * Every workout in the shape sessionRecordsOf reads, in the same order. Only a run's route yields
+ * efforts (GPS_EFFORT_TYPE), so only runs have their routes read: RUNNING sessions in chunks of
+ * ROUTE_CHUNK_SESSIONS, each chunk's efforts computed and its points let go before the next read.
+ */
+function sessionsForRecords(db: DbOrTx, workouts: readonly WorkoutSession[]): SessionForRecords[] {
+  const parsed = workouts.map((workout) => sessionForRecords(workout))
+  const runs = workouts.filter((_, i) => parsed[i]!.exerciseType === GPS_EFFORT_TYPE)
+  const withRoute = new Map<string, SessionForRecords>()
+  for (let from = 0; from < runs.length; from += ROUTE_CHUNK_SESSIONS) {
+    const chunk = runs.slice(from, from + ROUTE_CHUNK_SESSIONS)
+    const routes = readRoutesFor(db, chunk)
+    for (const run of chunk) {
+      const route = routes.get(run.id)
+      if (route !== undefined) withRoute.set(run.id, sessionForRecords(run, route))
+    }
+  }
+  return parsed.map((session) => withRoute.get(session.sessionId) ?? session)
 }
 
 /**

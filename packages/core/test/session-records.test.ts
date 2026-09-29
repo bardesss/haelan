@@ -105,5 +105,8 @@ describe('sessionForRecords', () => {
     expect(withRoute.efforts.km).toBeCloseTo(250, 6)
     expect([withRoute.efforts.mile, withRoute.efforts.fiveK]).toEqual([null, null])
     expect(sessionForRecords(row).efforts).toEqual({ km: null, mile: null, fiveK: null })
+    // A ride's route yields no efforts; its splits still count as they always have.
+    const ride = sessionForRecords({ ...row, attrs: { exerciseType: 'BIKING' } }, route)
+    expect(ride.efforts).toEqual({ km: null, mile: null, fiveK: null })
   })
 })

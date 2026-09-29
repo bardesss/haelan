@@ -36,6 +36,13 @@ export interface SessionForRecords {
   efforts: Record<EffortKey, number | null>
 }
 
+/**
+ * The one exercise type whose route yields fastest efforts: the spec's efforts are "inside the
+ * run", and a ride's fastest kilometre off its GPS would take every running record by being on
+ * wheels. Split-based kilometres are left as they were, for every type.
+ */
+export const GPS_EFFORT_TYPE = 'RUNNING'
+
 export type SessionRecordKind = 'longest' | 'furthest' | 'fastest-km' | 'fastest-mile' | 'fastest-5k'
 
 export interface SessionRecord {
@@ -130,13 +137,14 @@ export function sessionForRecords(session: {
     if (Number.isFinite(seconds) && seconds > 0) kilometreSeconds.push(seconds)
   }
 
+  const exerciseType = typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null
   return {
     sessionId: session.id,
     localDate: session.localDate,
-    exerciseType: typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null,
+    exerciseType,
     durationMs: session.endMs - session.startMs,
     distanceMm: distance,
     kilometreSeconds,
-    efforts: route === undefined ? { km: null, mile: null, fiveK: null } : fastestEfforts(route),
+    efforts: route === undefined || exerciseType !== GPS_EFFORT_TYPE ? { km: null, mile: null, fiveK: null } : fastestEfforts(route),
   }
 }

@@ -20,7 +20,7 @@ import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
 import { compareWorkout, sameTypeWindow } from '../api/workoutComparison.ts'
 import type { WorkoutComparison } from '../api/workoutComparison.ts'
-import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
+import { GPS_EFFORT_TYPE, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
 import type { SessionRecord, SessionRecordKind } from '../api/sessionRecords.ts'
 import { routeSignature, sameRoute as onSameRoute } from '../api/routeMatch.ts'
 import { EFFORT_DISTANCES, fastestEfforts } from '../api/fastestEfforts.ts'
@@ -306,9 +306,10 @@ function sameRouteOf(
 
 const EFFORT_KINDS: Record<EffortKey, SessionRecordKind> = { km: 'fastest-km', mile: 'fastest-mile', fiveK: 'fastest-5k' }
 
-// Answers: the fastest efforts inside this workout's route, each beside the type's Records best.
-function effortsOf(subject: WorkoutSession, route: readonly RoutePoint[] | undefined, records: readonly SessionRecord[]): WorkoutPage['efforts'] {
-  if (route === undefined || route.length < 2) return null
+// Answers: the fastest efforts inside a run's route, each beside the type's Records best; null for
+// any other type (GPS_EFFORT_TYPE), as the records themselves read no efforts off it.
+function effortsOf(subject: Reading, route: readonly RoutePoint[] | undefined, records: readonly SessionRecord[]): WorkoutPage['efforts'] {
+  if (route === undefined || route.length < 2 || subject.summary.exerciseType !== GPS_EFFORT_TYPE) return null
   const own = fastestEfforts(route)
   const efforts = {} as NonNullable<WorkoutPage['efforts']>
   for (const key of Object.keys(EFFORT_DISTANCES) as EffortKey[]) {
@@ -317,7 +318,7 @@ function effortsOf(subject: WorkoutSession, route: readonly RoutePoint[] | undef
     efforts[key] = seconds === null ? null : {
       seconds,
       best: record === undefined ? null : { value: record.value, sessionId: record.sessionId, localDate: record.localDate },
-      isBest: record?.sessionId === subject.id,
+      isBest: record?.sessionId === subject.session.id,
     }
   }
   return efforts
@@ -486,6 +487,6 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     splitTrend: splitTrendOf(subject.detail.autoSplits),
     zoneBounds: q.workoutZoneBounds({ sessionId: session.id }),
     sameRoute: sameRouteOf(subject, kept, routes),
-    efforts: effortsOf(session, routes.get(session.id), records),
+    efforts: effortsOf(subject, routes.get(session.id), records),
   }
 }
