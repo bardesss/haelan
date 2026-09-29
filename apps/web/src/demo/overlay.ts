@@ -1,5 +1,6 @@
 import { parseDayMetricTarget, parseSampleTarget, parseSessionTarget } from '@haelan/core/target-key'
 import { ApiError } from '../api/apiError.js'
+import { sourcesIn } from '../data/pageShell.js'
 import { DEMO_CLOCK_MS, amsterdamOffsetSeconds } from './instant.js'
 
 // Mirrors OverrideAction in apps/web/src/data/useAnnotations.ts, mirrored there by value for the
@@ -404,13 +405,55 @@ function removeSeriesPoints(node: unknown, metric: string, dates: ReadonlySet<st
     const points = (value as { points?: unknown }).points
     if (key === metric && Array.isArray(points)) {
       const series = value as { points: Record<string, unknown>[] }
-      series.points = series.points.filter((point) => {
+      const removed: { index: number, mix: string }[] = []
+      const kept: { index: number, point: Record<string, unknown> }[] = []
+      series.points.forEach((point, index) => {
         const date = point['localDate'] ?? point['date']
-        return typeof date !== 'string' || !dates.has(date)
+        if (typeof date === 'string' && dates.has(date)) {
+          if (typeof point['sourceMix'] === 'string') removed.push({ index, mix: point['sourceMix'] })
+        } else {
+          kept.push({ index, point })
+        }
       })
+      handOnSourceMixes(removed, kept)
+      series.points = kept.map((entry) => entry.point)
     } else {
       removeSeriesPoints(value, metric, dates)
     }
+  }
+}
+
+/**
+ * The published capture keeps a point's `sourceMix` only on the first and last day each mix
+ * appears (demo/capture/compact.ts), since the source picker's distinctSources only collects the
+ * set of sources across all points. Excluding exactly those days would take a source out of the
+ * picker that the real instance still offers off the days in between, so an excluded point whose
+ * mix names a source no surviving point names hands that mix to the nearest survivor with no
+ * `sourceMix` key at all. A point with the key, null included, is left alone: null is a per-source
+ * rollup's real answer, and an uncompacted capture has the key on every point, so this does
+ * nothing there.
+ */
+function handOnSourceMixes(
+  removed: readonly { index: number, mix: string }[],
+  kept: readonly { index: number, point: Record<string, unknown> }[],
+): void {
+  if (removed.length === 0) return
+  const named = new Set<string>()
+  for (const { point } of kept) {
+    if (typeof point['sourceMix'] === 'string') for (const source of sourcesIn(point['sourceMix'])) named.add(source)
+  }
+  for (const { index, mix } of removed) {
+    if (sourcesIn(mix).every((source) => named.has(source))) continue
+    let nearest: Record<string, unknown> | undefined
+    let distance = Infinity
+    for (const entry of kept) {
+      if ('sourceMix' in entry.point) continue
+      const d = Math.abs(entry.index - index)
+      if (d < distance) { distance = d; nearest = entry.point }
+    }
+    if (nearest === undefined) continue
+    nearest['sourceMix'] = mix
+    for (const source of sourcesIn(mix)) named.add(source)
   }
 }
 
