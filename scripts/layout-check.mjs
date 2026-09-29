@@ -135,16 +135,17 @@ if (!existsSync(join(DIST, 'index.html'))) {
 // (26, 45 and 55 minutes) answer exactly 1 point, regardless of which session is chosen. Widening
 // that would mean teaching the shared seed generator to sample heart rate more densely during a
 // workout's own hour, which several tests outside this task pin exact counts against (
-// apps/server/test/upgrade-rehearsal.test.ts's `heart_rate: 4 * 24 * SEED_DAYS`, `samples: 2492`,
+// apps/server/test/upgrade-rehearsal.test.ts's per-metric heart_rate count, `samples: 9220`,
 // and friends, hand-verified by running the fixture and reading real row counts back) - a change
 // with a real, measured cost this task's own brief did not ask for, not merely a longer capture.
 // So: not widened. This route's checks below assert the honest, smaller claim - a page carrying
 // one data point does not overflow and its controls are still tappable - the same claim
 // `/nutrition`'s already-empty page settles for, and for the same reason.
 //
-// The night page (`/sleep/night/:localDate`) is not in the same spot: a night spans several hours,
-// so the same hourly grid gives it several points for free - this worktree's own capture answers
-// 7 to 9 points for every single-day night window recorded, a real (if coarse) trace rather than a
+// The night page (`/sleep/night/:localDate`) is not in the same spot: the seed writes heart rate,
+// HRV and SpO2 every five minutes through every seeded night (seed.ts, since the seeded nights
+// gained what the night page shows), so each night's traces are real ones - this worktree's own
+// capture answers roughly 60 to 100 points per metric for each night window recorded, not a
 // single dot. Its checks below are the fuller claim the workout page's cannot honestly make.
 //
 // The two parameterised routes' real ids, read out of the built demo's own capture manifest
