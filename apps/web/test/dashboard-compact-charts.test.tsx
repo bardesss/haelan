@@ -210,7 +210,7 @@ describe('Hypnogram, compact', () => {
     const totals = host.querySelectorAll('.hypnogram-totals')
     expect(totals).toHaveLength(1)
     expect(totals[0]!.className).toBe('hypnogram-totals is-compact')
-    expect(totals[0]!.textContent).toBe('Deep 1h 40m · Light 1h 00m · Awake 0h 07m')
+    expect(totals[0]!.textContent).toBe('Deep 1h\u00a040m · Light 1h\u00a000m · Awake 0h\u00a007m')
     expectTableForAssistiveTechOnly(host, 3)
   })
 })
