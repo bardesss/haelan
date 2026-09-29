@@ -66,9 +66,27 @@ Every redesigned page is built from the pieces below. A section that looks like 
 
 `DayLogBlock` (mood, chips, note, and a note written on the page's own record passed as `note`), then steps and active minutes as `FigureRow`s, then `TodayWorkouts` labelled "Trainingen" / "Workouts", which draws nothing on a day without one (no "none" row). The block is left out with no log, no note, neither figure and no workout.
 
+## Overview pages (Sleep, Activity)
+
+- The header is `PageHeader` with the page's name as `title` and the period and source as `line` ("1 – 30 sep 2026 · Alle bronnen"), then the existing `ControlRow`. The Day tab is not a period: Sleep opens that date's night page, Activity the dashboard on that day.
+- Every figure is the period's average (per night, per day, or per week for active minutes) against the **usual for a period of that length**, from the earlier periods of the same length: a week against the last 12 weeks, a month against the last 12 months, 3 months against the 4 before it, a year against the year before (its quarters). The server sends it as `usual` with its `window`; the verdict names the window ("… voor een maand, afgelopen 12 maanden" / "… for a month, last 12 months"; "… voor een jaar, uit 2025" / "… for a year, from 2025"). A thin usual (`thin-usual`), a running period with fewer than three days (`too-few-days`) or a period with no days (`no-data`) prints the reason (`reason`), never a verdict.
+- A total (distance, floors, climb, calories) prints the period total as the value and the per-day average in the line under it; the verdict judges the average, so a running period is compared fairly.
+- A per-week figure (`per: 'week'`, active minutes) prints its value and its usual per week, and its weekly points per week. Its daily points are each day's own minutes against that day's own usual, so a day's dot and its panel read that day, never seven times it.
+- Day counts sit beside every average, from the server's `counts`: "24 van 30 nachten gebruikelijk · 3 korter · 3 langer" / "24 of 30 nights usual · 3 shorter · 3 longer", in the verdict catalogue's words for the figure (later/earlier for a clock time). Only days with a value count. The line is left out when no day is judged (`within + above + below === 0`): the recovery index's days carry no usual of their own, so it prints its average and verdict without one.
+- One line says what stood out: the high point (`high`) and the change against the previous period (`previous`), and with the comparison on, against the same period a year earlier (`yearEarlier`). Nothing else goes on that line.
+- A good day (`judged === 'better'` on the hero figure) is marked quietly: a ring on its dot, ✦ after it in text and lists. No other good-day mark exists.
+- Strips shade each day's own usual; the verdict above uses the period's. On 3 months and Year the strip draws one point per week (`weekly`), each against the usual for a week.
+- On 3 months and Year only the hero keeps its days (`daily`); every other figure is sent with its weekly points alone and draws those.
+- A figure in `more` is sent with no daily or weekly points on any range: the page draws it as a bar with its day counts, never a strip.
+- Tapping a strip point opens a small panel first (that day's key figures, "Bekijk nacht" / "Bekijk dag", "Uitsluiten of een notitie toevoegen"), and the page from there: the day-metric exclude and annotate stay reachable.
+- The panel reads the payload's own points; there is no separate day read. A day point shows that day's figures from the figures' `daily` and links to the day. A week point shows that week's values from `weekly` and has no link.
+- A list (nights, workouts) shows the 7 most recent and a "Toon alle N" / "Show all N" button. Expanded, it takes its own full-width row and flows into columns (grouped by month on 3 months and Year); the card beside it widens with it so no hole opens.
+- Workout type counts are scaled to the period's length before they are compared with the usual, so a week's count is not read against a month's.
+- Sections the archive has no data for are left out by the server (`days === 0`); the page draws what it is sent.
+
 ## Terms (nl / en)
 
-Tijd in slaap / Time asleep · Naar bed / Bedtime · Wakker geworden / Wake time · Efficiëntie / Efficiency · Stappen / Steps · Actieve minuten / Active minutes · Trainingen / Workouts · Rusthartslag / Resting heart rate · gebruikelijk / usual · Uitsluiten of een notitie toevoegen / Exclude or add a note (`common.annotate`).
+Tijd in slaap / Time asleep · Naar bed / Bedtime · Wakker geworden / Wake time · Efficiëntie / Efficiency · Stappen / Steps · Actieve minuten / Active minutes · Trainingen / Workouts · Rusthartslag / Resting heart rate · gebruikelijk / usual · Uitsluiten of een notitie toevoegen / Exclude or add a note (`common.annotate`) · Gebruikelijk voor een maand / Usual for a month · Nachten / Nights · Toon alle / Show all · Doordeweeks / Weekdays · Weekend / Weekend.
 
 The heart-rate zones: Licht / Light · Matig / Moderate · Intensief / Vigorous · Piek / Peak; the time in the top two is "intensief of piek" / "vigorous or peak".
 

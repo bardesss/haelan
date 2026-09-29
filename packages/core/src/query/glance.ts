@@ -215,7 +215,7 @@ export function stripDates(on: string): string[] {
 }
 
 /** One place turns a query's baseline into the band a client draws, so the two figures below cannot drift apart on the shape. */
-function toGlanceBaseline(baseline: Baseline | null): GlanceBaseline | null {
+export function toGlanceBaseline(baseline: Baseline | null): GlanceBaseline | null {
   return baseline === null ? null : {
     center: baseline.center, low: baseline.center - baseline.spread, high: baseline.center + baseline.spread, thin: baseline.thin,
   }

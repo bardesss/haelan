@@ -53,7 +53,7 @@ export interface NightPage {
 }
 
 // Answers: which sleep session speaks for a night's provider summary - the main sleep, else the first.
-function summaryOf(night: Night, attrsById: ReadonlyMap<string, unknown>): SleepSummary | null {
+export function summaryOf(night: Night, attrsById: ReadonlyMap<string, unknown>): SleepSummary | null {
   const attrs = night.sessionIds.map((id) => attrsById.get(id)).filter((a) => a !== undefined)
   const main = attrs.find((a) => isMainSleep(a) === true) ?? attrs[0]
   return main === undefined ? null : sleepSummary(main)
