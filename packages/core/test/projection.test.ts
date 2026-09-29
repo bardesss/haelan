@@ -99,8 +99,9 @@ describe('the projection', () => {
 
   it("carries alice's rows and none of bart's", () => {
     const { db, close } = openProjection('alice')
+    const daily = db.prepare('SELECT * FROM daily').all() as { value: number }[]
     const dump = JSON.stringify({
-      daily: db.prepare('SELECT * FROM daily').all(),
+      daily,
       sessions: db.prepare('SELECT * FROM sessions').all(),
       sessionSegments: db.prepare('SELECT * FROM session_segments').all(),
       notes: db.prepare('SELECT * FROM notes').all(),
@@ -109,8 +110,12 @@ describe('the projection', () => {
       sources: db.prepare('SELECT * FROM sources').all(),
     })
     close()
+    // The step counts are the one fingerprint that is a number, so they are checked as the daily
+    // values themselves: a substring search for '8800' also matched the random UUIDs the note and
+    // event stores mint (664c8800-...), failing a correct projection now and then, and '1200'
+    // could pass on an id alone.
+    expect(daily.map((row) => row.value)).toEqual([1200])
     expect(dump).toContain('alice-note-sentinel')
-    expect(dump).toContain('1200')
     expect(dump).toContain('alice-segment-sentinel')
     expect(dump).toContain('alice-observation-sentinel')
     // The join that resolves observations.source_name is the one Finding 1 scoped: this is the
@@ -118,7 +123,7 @@ describe('the projection', () => {
     // only the SQL saying so.
     expect(dump).toContain("alice's watch")
     for (const fingerprint of [
-      'bart', 'bart-note-sentinel', 'bart-event-sentinel', '8800',
+      'bart', 'bart-note-sentinel', 'bart-event-sentinel',
       'bart-segment-sentinel', 'bart-observation-sentinel', "bart's watch",
     ]) {
       expect(dump).not.toContain(fingerprint)
