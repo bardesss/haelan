@@ -554,21 +554,26 @@ describe('the upgrade path', () => {
       // same lone source as every hour's winner) land in `daily` for that one day: 3 metrics x 2
       // rows (source + merged) x 1 day = 6, and 904 + 6 = 910. See this file's per-metric
       // breakdown below for the three metrics by name.
+      //
+      // 9220 samples and 1244 daily rows since the seeded nights gained what the night page shows:
+      // five-minute heart rate, HRV and SpO2 through every night, plus the night's temperature,
+      // breathing rate and the morning's SpO2. They draw from a PRNG stream of their own, so none
+      // of the magnitudes pinned below moved; the breakdowns below name every added row.
       expect({
         samples: countOf(db, 'samples'),
         daily: countOf(db, 'daily'),
         sessions: countOf(db, 'sessions'),
         observations: countOf(db, 'observations'),
-      }).toEqual({ samples: 2492, daily: 910, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 9220, daily: 1244, sessions: 19, observations: 14 })
       // The report an operator reads has to say what the tables say.
       expect({
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
-      }).toEqual({ samples: 2492, dailyRows: 910, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 9220, dailyRows: 1244, sessions: 19, observations: 14 })
 
       // Broken down per metric, so a regression that lost 300 steps samples while a mapper
       // started emitting 300 spurious weight rows - invisible to the bare total above, which
-      // would still read 2492 - names what moved. Six of the ten are one raw sample a day, exact
+      // would still read 9220 - names what moved. Six of the ten are one raw sample a day, exact
       // against SEED_DAYS; heart_rate is downsampled to the minute, so its one reading an hour
       // becomes four rows (mean, min, max, count); steps, distance and active_energy have no
       // downsampling and report every one of their twenty-four hourly points; distance tracks the
@@ -576,10 +581,24 @@ describe('the upgrade path', () => {
       // matches steps' count exactly. floors and total_calories are not here at all - dailyRollUp
       // lands only in `daily`, as a `provider` row, never in `samples` (see mapRollups.ts's own
       // comment on why).
+      //
+      // The night page's readings (seed.ts's nightReadingsFor) add one HRV and one SpO2 reading
+      // every five minutes of every night: NIGHT_READINGS across these fourteen nights, measured
+      // rather than derived, since each night's length is its own draw. Heart rate gets the same
+      // five-minute readings less the ones on an exact hour, which the hourly day curve already
+      // holds (NIGHT_HOUR_MARKS of them), four rows each for the same downsampling as above. The
+      // night's temperature, its breathing rate and the morning's SpO2 are one reading a day.
+      const NIGHT_READINGS = 1179
+      const NIGHT_HOUR_MARKS = 97
       expect(countsByKey(db, 'select m.name as key, count(*) as n from samples s'
         + ' join metrics m on m.ref = s.metric_ref group by m.name')).toEqual({
         steps: 24 * SEED_DAYS,
-        heart_rate: 4 * 24 * SEED_DAYS,
+        heart_rate: 4 * 24 * SEED_DAYS + 4 * (NIGHT_READINGS - NIGHT_HOUR_MARKS),
+        hrv: NIGHT_READINGS,
+        spo2: NIGHT_READINGS,
+        daily_spo2: SEED_DAYS,
+        sleep_temperature: SEED_DAYS,
+        sleep_respiratory_rate: SEED_DAYS,
         weight: SEED_DAYS,
         daily_hrv: SEED_DAYS,
         respiratory_rate: SEED_DAYS,
@@ -621,7 +640,18 @@ describe('the upgrade path', () => {
           // heart_rate daily rows the same as any other; the UTC-only '0s' payloads this file
           // used to write could never produce it, because under a zero offset a local day and a
           // UTC day are always the same day.
-          heart_rate: 10 * SEED_DAYS + 10,
+          //
+          // And +10 more at the other end: the first night's five-minute readings (seed.ts's
+          // nightReadingsFor) begin the evening before the first seeded day, so that evening's
+          // local date gets heart_rate rows of its own too.
+          heart_rate: 10 * SEED_DAYS + 10 + 10,
+          // The night page's HRV and SpO2 readings: four aggregates each, a source row and a merged
+          // row, over fifteen local dates - the fourteen mornings and the evening before the first.
+          hrv: 4 * 2 * (SEED_DAYS + 1),
+          spo2: 4 * 2 * (SEED_DAYS + 1),
+          daily_spo2: 2 * SEED_DAYS,
+          sleep_temperature: 2 * SEED_DAYS,
+          sleep_respiratory_rate: 2 * SEED_DAYS,
           respiratory_rate: 2 * SEED_DAYS,
           resting_heart_rate: 2 * SEED_DAYS,
           sleep_asleep_minutes: 2 * SEED_DAYS,
@@ -748,13 +778,15 @@ describe('the upgrade path', () => {
       // pass, so name what came back. Every seeded type is here: steps, heart rate, weight, the
       // three daily recovery metrics (resting heart rate, HRV, respiratory rate), distance and
       // active energy burned, and the six active-minutes/active-zone-minutes sub-dimension
-      // metrics - as samples; sleep and exercise as sessions; moods as observations. floors and
+      // metrics, and the night page's intraday HRV and SpO2, its temperature, its breathing rate
+      // and the morning's SpO2 - as samples; sleep and exercise as sessions; moods as observations. floors and
       // total_calories are not here: they are dailyRollUp types and land only in `daily`.
       expect(namesOf(db, 'select distinct m.name as name from samples s'
         + ' join metrics m on m.ref = s.metric_ref')).toEqual([
         'active_energy', 'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
         'active_zone_minutes_cardio', 'active_zone_minutes_fat_burn', 'active_zone_minutes_peak',
-        'daily_hrv', 'distance', 'heart_rate', 'respiratory_rate', 'resting_heart_rate', 'steps', 'weight',
+        'daily_hrv', 'daily_spo2', 'distance', 'heart_rate', 'hrv', 'respiratory_rate', 'resting_heart_rate',
+        'sleep_respiratory_rate', 'sleep_temperature', 'spo2', 'steps', 'weight',
       ])
       expect(namesOf(db, 'select distinct kind as name from sessions'))
         .toEqual(['exercise', 'sleep'])
@@ -819,14 +851,17 @@ describe('the upgrade path', () => {
       // empty database that also happens not to hold the marker.
       expect(restored.overrides.get(PERSON, overrideId)?.targetKey).toBe(targetKey)
       expect(restored.events.listFor(PERSON, '2026-01-01', '2026-12-31')).toHaveLength(1)
-      expect(countOf(restored.db, 'samples')).toBe(2492)
+      expect(countOf(restored.db, 'samples')).toBe(9220)
       // 175, not the prior round's 117: 8 list calls a day plus one exercise call every third day
       // was 117 over SEED_DAYS=14 (14*8+5). Four more list calls a day - distance,
       // active-energy-burned, active-minutes, active-zone-minutes - add 4*14=56, and floors and
       // total-calories each add exactly one dailyRollUp call: putRollups chunks by
       // rollupRangeCapDays, and fourteen days is inside floors' 90-day cap and exactly at
-      // total-calories' 14-day cap (both close on one chunk), so +2, not +14 apiece.
-      expect(countOf(restored.db, 'raw_payloads')).toBe(175)
+      // total-calories' 14-day cap (both close on one chunk), so +2, not +14 apiece. The night
+      // page's readings add six more a day, 6*14=84: four list calls over each night's own span
+      // (heart rate, HRV, SpO2, the night's breathing rate) and two over its day (the morning's
+      // SpO2 and the night's temperature).
+      expect(countOf(restored.db, 'raw_payloads')).toBe(259)
       closeRestored()
     } finally {
       for (const close of [...openHandles]) close()

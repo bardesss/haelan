@@ -162,7 +162,8 @@
   },
   "common": {
     "bedLabel": "Naar bed {{time}}",
-    "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
+    "bedTimeNotRecorded": "Naar bed niet geregistreerd",
+    "annotate": "Uitsluiten of een notitie toevoegen",
     "to": "tot en met",
     "loading": "Laden",
     "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
@@ -446,7 +447,6 @@
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "alsoRecordedBy": "Ook geregistreerd door {{sources}}",
-      "annotate": "Uitsluiten of een notitie toevoegen",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
       "gpsDrawn": "Er is een GPS-route opgenomen voor deze training, hieronder getekend.",
       "gpsConsentRequired": "Er is een GPS-route opgenomen voor deze training, maar Health Connect houdt die achter, dus er is geen kaart. Open Haelan op de telefoon en tik op Routes vrijgeven om die alsnog door te sturen.",
@@ -560,7 +560,7 @@
       "duration": "Duur",
       "night": "Nacht",
       "toBed": "Naar bed",
-      "woke": "Ontwaakt",
+      "woke": "Wakker geworden",
       "naps": "Dutjes",
       "time": "Tijd",
       "source": "Bron",
@@ -575,10 +575,6 @@
       "fri": "Vr",
       "sat": "Za",
       "sun": "Zo"
-    },
-    "standing": {
-      "above": "boven je gebruikelijke waarde",
-      "below": "onder je gebruikelijke waarde"
     },
     "absence": {
       "notWorn": "niet gedragen",
@@ -597,7 +593,8 @@
     "units": {
       "bpm": "bpm",
       "percent": "%",
-      "milliseconds": "ms"
+      "milliseconds": "ms",
+      "celsius": "°C"
     },
     "tooltip": {
       "line": "{{label}}: {{value}}"
@@ -672,12 +669,12 @@
       "napsShort": "dutjes"
     },
     "insights": {
-      "asleepMinutes": "Tijd geslapen, deze periode tegenover de vorige"
+      "asleepMinutes": "Tijd in slaap, deze periode tegenover de vorige"
     },
     "asleepMinutes": {
-      "label": "Tijd geslapen",
+      "label": "Tijd in slaap",
       "basis": "gemiddelde, {{reported}} van {{total}} nachten; {{note}}",
-      "chartLabel": "Tijd geslapen per nacht in {{period}}"
+      "chartLabel": "Tijd in slaap per nacht in {{period}}"
     },
     "deepMinutes": {
       "basis": "gemiddelde, {{reported}} van {{total}} nachten",
@@ -750,43 +747,134 @@
       "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt."
     },
     "night": {
-      "when": "{{bed}} tot {{wake}} · {{source}}",
+      "when": "Naar bed {{bed}} · wakker geworden {{wake}} · {{source}}",
       "missingTitle": "Geen nacht geregistreerd",
       "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd.",
-      "tiles": {
-        "asleep": "Tijd in slaap",
-        "inBed": "Tijd in bed",
+      "nav": "Nachten",
+      "previous": "Vorige nacht",
+      "next": "Volgende nacht",
+      "allNights": "Alle nachten",
+      "openNight": "Open deze nacht",
+      "openNightIdle": "Tik op een nacht om hem te openen",
+      "usualSingle": {
+        "within": "je gebruikelijke {{value}}",
+        "above": "boven je gebruikelijke {{value}}",
+        "below": "onder je gebruikelijke {{value}}"
+      },
+      "clockUsual": {
+        "above": "later dan je gebruikelijke {{low}} – {{high}}",
+        "below": "eerder dan je gebruikelijke {{low}} – {{high}}"
+      },
+      "clockSingle": {
+        "above": "later dan je gebruikelijke {{value}}",
+        "below": "eerder dan je gebruikelijke {{value}}"
+      },
+      "paceUsual": {
+        "above": "langzamer dan je gebruikelijke {{low}} – {{high}}",
+        "below": "sneller dan je gebruikelijke {{low}} – {{high}}"
+      },
+      "paceSingle": {
+        "above": "langzamer dan je gebruikelijke {{value}}",
+        "below": "sneller dan je gebruikelijke {{value}}"
+      },
+      "deviation": {
+        "within": "binnen je gebruikelijke bereik {{range}}",
+        "above": "boven je gebruikelijke bereik {{range}}",
+        "below": "onder je gebruikelijke bereik {{range}}"
+      },
+      "hero": {
+        "label": "Tijd in slaap",
+        "strip": "deze nacht en de zes ervoor"
+      },
+      "minis": {
         "efficiency": "Efficiëntie",
-        "deep": "Diep",
-        "light": "Licht",
+        "deep": "Diepe slaap",
         "rem": "REM",
-        "awake": "Tijd wakker",
-        "naps": "Dutjes"
+        "bedtime": "Naar bed",
+        "caption": "elk lijntje: deze nacht en de zes ervoor · band = je gebruikelijke bereik"
       },
-      "tileBasis": "op basis van {{metric}}, zoals deze nacht is afgeleid",
-      "stages": {
-        "label": "Slaapfasen tijdens de nacht"
-      },
-      "naps": {
-        "none": "Geen dutjes geregistreerd op deze datum.",
-        "list": "Dutjes:"
+      "through": {
+        "label": "De nacht",
+        "share": "{{duration}} · {{percent}} %"
       },
       "traces": {
-        "heart_rate": "Hartslag tijdens de nacht",
-        "spo2": "Zuurstofsaturatie tijdens de nacht",
-        "hrv": "Hartslagvariabiliteit tijdens de nacht",
+        "heart_rate": "Hartslag",
+        "spo2": "Zuurstof",
+        "hrv": "HRV",
         "metricNames": {
           "heart_rate": "hartslag",
           "spo2": "zuurstofsaturatie",
           "hrv": "hartslagvariabiliteit"
         },
-        "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
+        "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}",
+        "lowest": "laagste {{value}} om {{time}}",
+        "highest": "hoogste {{value}} om {{time}}",
+        "caption": "band = je gebruikelijke bereik · zelfde tijdas als de fasen",
+        "hrvChart": "HRV in de nacht"
       },
       "sessions": {
-        "label": "Sessies in deze nacht",
-        "basis": "een nacht wordt samengesteld uit deze registraties; door er een uit te sluiten wordt de nacht opnieuw afgeleid zonder die registratie",
-        "exclude": "Uitsluiten of notitie toevoegen",
-        "excluded": "Uitgesloten"
+        "excluded": "Uitgesloten",
+        "recording": "{{source}} · {{start}}–{{end}}"
+      },
+      "week": {
+        "schedule": "Slaapschema",
+        "balance": "Slaapbalans",
+        "variability": "Naar bed varieerde ±{{value}} deze week",
+        "variabilityUsual": "Naar bed varieerde ±{{value}} deze week · je gebruikelijke ±{{low}} – {{high}}",
+        "balanceAgainstTarget": "ten opzichte van je doel van {{target}}",
+        "balanceAgainstBaseline": "ten opzichte van je gebruikelijke {{usual}}",
+        "barsTarget": "elke balk: die nacht tegenover je doel",
+        "barsBaseline": "elke balk: die nacht tegenover je gebruikelijke"
+      },
+      "morning": {
+        "label": "De ochtend erna",
+        "labelDated": "Herstel op {{date}}",
+        "restingHeartRate": "Rusthartslag",
+        "hrv": "HRV",
+        "hrvChart": "HRV vanochtend",
+        "breathing": "Ademhaling in slaap",
+        "spo2": "Zuurstof (SpO2)",
+        "skinTemperature": "Huidtemperatuur",
+        "from": "uit {{inputs}}",
+        "and": "{{rest}} en {{last}}",
+        "inputs": {
+          "hrv": "HRV",
+          "restingHeartRate": "rusthartslag",
+          "respiratoryRate": "ademhaling",
+          "sleep": "slaap",
+          "bedtime": "bedtijd"
+        }
+      },
+      "day": {
+        "label": "Die dag",
+        "subtitle": "{{date}}, de dag vóór deze nacht",
+        "chipCount": "{{kind}} ×{{count}}",
+        "note": "“{{note}}”",
+        "steps": "Stappen",
+        "activeMinutes": "Actieve minuten",
+        "workouts": "Trainingen"
+      },
+      "about": {
+        "label": "Over deze nacht",
+        "details": "Details",
+        "recordings_one": "Eén opname van {{source}}",
+        "recordings_other": "{{count}} opnames van {{source}}",
+        "napsNone": "geen dutjes",
+        "naps_one": "één dutje",
+        "naps_other": "{{count}} dutjes",
+        "action": "uitsluiten of een notitie toevoegen"
+      },
+      "more": {
+        "label": "Meer over de slaap",
+        "light": "Lichte slaap",
+        "awake": "Wakker in bed",
+        "inBed": "Tijd in bed",
+        "waketime": "Wakker geworden",
+        "minutesToFallAsleep": "In slaap vallen",
+        "awakenings": "Keren wakker",
+        "minutesAfterWakeUp": "Na wakker in bed",
+        "naps": "Dutjes",
+        "napsNone": "geen"
       }
     }
   },
@@ -953,12 +1041,12 @@
     "previousDay": "Vorige dag",
     "nextDay": "Volgende dag",
     "mood": {
-      "label": "Hoe voel je je?",
       "1": "Slecht",
       "2": "Matig",
       "3": "Gaat wel",
       "4": "Goed",
-      "5": "Top"
+      "5": "Top",
+      "label": "Hoe voel je je?"
     },
     "chips": {
       "label": "Wat speelde er?",
@@ -1448,7 +1536,7 @@
     "unavailable": "Te weinig recente gegevens om met je gebruikelijke waarde te vergelijken.",
     "input": {
       "hrv": "Hartslagvariabiliteit",
-      "restingHeartRate": "Hartslag in rust",
+      "restingHeartRate": "Rusthartslag",
       "sleep": "Afgelopen week aan slaap",
       "respiratoryRate": "Ademhalingsfrequentie"
     },
@@ -1469,7 +1557,20 @@
       "above": "boven je gebruikelijke bereik {{low}} – {{high}}",
       "below": "onder je gebruikelijke bereik {{low}} – {{high}}",
       "thin": "nog te weinig geschiedenis voor een gebruikelijke waarde",
-      "partial": "tot nu toe; op een gewone dag {{center}}"
+      "partial": "tot nu toe; je gebruikelijke dag {{center}}",
+      "none": "nog geen gebruikelijke waarde",
+      "short": {
+        "above": "boven je gebruikelijke bereik",
+        "below": "onder je gebruikelijke bereik"
+      },
+      "clockShort": {
+        "above": "later dan je gebruikelijke tijd",
+        "below": "eerder dan je gebruikelijke tijd"
+      },
+      "paceShort": {
+        "above": "langzamer dan je gebruikelijke tempo",
+        "below": "sneller dan je gebruikelijke tempo"
+      }
     },
     "asOf": {
       "time": "bijgewerkt om {{time}}",
@@ -1485,31 +1586,21 @@
       "ahead": "Vóór op je gebruikelijke tempo",
       "on": "Op je gebruikelijke tempo",
       "behind": "Achter op je gebruikelijke tempo",
-      "usualBy": "normaal zit je om {{time}} op {{value}}"
+      "usualBy": "gebruikelijk om {{time}}: {{value}}"
     },
     "sleep": {
       "title": "Afgelopen nacht",
-      "asleep": "Slaaptijd",
+      "asleep": "Tijd in slaap",
       "efficiency": "Efficiëntie",
       "bed": "Naar bed",
-      "woke": "Wakker",
-      "strip": "Tijd geslapen, laatste 7 nachten",
-      "stripFinished": "Tijd geslapen, de 7 nachten tot en met die dag",
-      "caption": "laatste 7 nachten",
-      "captionFinished": "de 7 nachten tot en met die dag",
+      "woke": "Wakker geworden",
+      "strip": "Tijd in slaap, afgelopen nacht en de zes ervoor",
+      "stripFinished": "Tijd in slaap, die nacht en de zes ervoor",
+      "caption": "afgelopen nacht en de zes ervoor",
+      "captionFinished": "die nacht en de zes ervoor",
+      "stages": "de nacht die eindigde op {{date}}",
+      "stagesChart": "Slaapfasen tijdens de nacht die eindigde op {{date}}",
       "link": "Bekijk deze nacht",
-      "efficiencyStanding": {
-        "above": "hoger dan gewoonlijk",
-        "below": "lager dan gewoonlijk"
-      },
-      "bedStanding": {
-        "above": "later dan gewoonlijk",
-        "below": "eerder dan gewoonlijk"
-      },
-      "wokeStanding": {
-        "above": "later dan gewoonlijk",
-        "below": "eerder dan gewoonlijk"
-      },
       "titleFinished": "Die nacht"
     },
     "recovery": {
@@ -1542,12 +1633,6 @@
       "captionFinished": "de 7 dagen tot en met die dag",
       "link": "Bekijk activiteit",
       "thatDay": "Die dag",
-      "dayStanding": {
-        "within": "Zoals op een gewone dag",
-        "above": "Meer dan op een gewone dag",
-        "below": "Minder dan op een gewone dag"
-      },
-      "usualRange": "normaal {{low}} – {{high}}",
       "heartRateWholeDay": "Hartslag · 00:00 → 24:00",
       "heartRateChartThatDay": "Hartslag die dag"
     },
@@ -1562,7 +1647,7 @@
       "subtitleFinished": "de 7 dagen tot en met die dag",
       "steps": "Stappen",
       "active": "Actief",
-      "asleep": "Slaaptijd",
+      "asleep": "Tijd in slaap",
       "perDay": "{{value}} per dag",
       "perNight": "per nacht",
       "totalPer": "· {{per}}",
@@ -1615,7 +1700,7 @@
       },
       "spokenSteps": {
         "reached": "je gebruikelijke aantal stappen gehaald",
-        "below": "minder stappen dan gewoonlijk",
+        "below": "minder stappen dan gebruikelijk",
         "none": "stappen niet beoordeeld"
       }
     }

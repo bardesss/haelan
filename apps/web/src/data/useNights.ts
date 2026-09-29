@@ -36,6 +36,9 @@ export interface Night {
   /** The ids of this night's own source's sleep sessions the person excluded. Always present;
    *  empty is a measurement, never "not asked" (packages/core/src/query/sleepNights.ts). */
   excludedSessions: string[]
+  /** Every session of `sessionIds` then `excludedSessions`, each with its own span and offsets.
+   *  Optional: a response cached from before the field existed has none (NightSessions falls back). */
+  sessionSpans?: { id: string, startMs: number, endMs: number, startOffsetMinutes: number, endOffsetMinutes: number }[]
 }
 
 /**

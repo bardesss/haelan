@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Icon } from '../../components/icons.js'
+import { StepArrows } from '../../components/StepArrows.js'
 import { useShortcutKeys } from '../../ui/shortcuts.js'
 import type { Glance } from '../../data/useGlance.js'
 
@@ -17,7 +18,8 @@ import type { Glance } from '../../data/useGlance.js'
  * The keys are ControlRow's (← → step, T returns to today), with the same titles and
  * aria-keyshortcuts, bound here because the dashboard has no control row. Keys typed in a field
  * (useShortcutKeys' own rule) or inside the calendar, which has arrow keys of its own for its
- * grid, are left alone.
+ * grid, are left alone. ← → and the arrow buttons themselves are StepArrows.tsx (M10a-2), shared
+ * with the detail pages; T stays here since StepArrows knows nothing about "today".
  *
  * `logButton` is quick logging's Log button (LogButton.tsx), leading the row when the person has the
  * switch on; without it the row is exactly the four controls it always was. Keys pressed inside
@@ -47,28 +49,15 @@ export function DayNav({ glance, onPick, logButton, calendarButton, pending = fa
   useShortcutKeys((event) => {
     if (event.shiftKey) return
     if (event.target instanceof Element && event.target.closest('[data-calendar], [data-log-panel]') !== null) return
-    if (event.key === 'ArrowLeft') {
-      if (previous === null) return
-      event.preventDefault(); onPick(previous); return
-    }
-    if (event.key === 'ArrowRight') {
-      if (next === null) return
-      event.preventDefault(); onPick(next); return
-    }
     if ((event.key === 't' || event.key === 'T') && finished) onPick(null)
   })
 
   return (
     <div className="day-nav" role="group" aria-label={t('glance.dayNav.label')}>
       {logButton}
-      <button type="button" className="button day-nav-btn" aria-label={t('glance.dayNav.previous')}
-        title={t('shortcuts.withKey', { label: t('glance.dayNav.previous'), key: '←' })}
-        aria-keyshortcuts="ArrowLeft" disabled={previous === null}
-        onClick={() => { if (previous !== null) onPick(previous) }}><Icon name="chevronLeft" /></button>
-      <button type="button" className="button day-nav-btn" aria-label={t('glance.dayNav.next')}
-        title={t('shortcuts.withKey', { label: t('glance.dayNav.next'), key: '→' })}
-        aria-keyshortcuts="ArrowRight" disabled={next === null}
-        onClick={() => { if (next !== null) onPick(next) }}><Icon name="chevronRight" /></button>
+      <StepArrows previous={previous} next={next} onPick={onPick}
+        labels={{ previous: t('glance.dayNav.previous'), next: t('glance.dayNav.next') }}
+        ignoreKeysInside="[data-calendar], [data-log-panel]" />
       {calendarButton ?? (
         <button type="button" className="button day-nav-btn" aria-label={t('glance.dayNav.calendar')} disabled>
           <Icon name="calendar" />

@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import { ConfigError, FIGURE_METRIC_ALIAS, judge, metricSpec, PersonQuery, requireDate, standingOf } from '@haelan/core'
+import { ConfigError, FIGURE_METRIC_ALIAS, figureDirection, judge, metricSpec, PersonQuery, requireDate, standingOf } from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
 
@@ -192,11 +192,15 @@ export function roundBand(metric: string, band: GlanceBaseline | null): GlanceBa
  * otherwise disagree with the band a reader is actually shown, e.g. "60 bpm, above your usual
  * 52 - 60". One rule (`standingOf`), reapplied here at the wire's own precision; core's callers
  * (MCP and others) keep the unrounded figure, so their own comparisons stay internally consistent.
+ * `judged` is re-read from each recomputed standing by the metric's direction, so a dot's colour
+ * and the verdict words beside it rest on the same rounded pair.
  */
 export function roundFigure(figure: GlanceFigure): GlanceFigure {
   const metric = ROUNDED_AS[figure.metric] ?? figure.metric
+  const direction = figureDirection(figure.metric)
   const band = roundBand(metric, figure.baseline)
   const value = roundMetricValueOrNull(metric, figure.value)
+  const standing = standingOf(value, band, figure.partial)
   // The figure's own day is always the strip's last entry (stripDates ends on `on`); `partial`
   // never applies to an earlier, already-finished day in the same strip (glance.ts's stripOf).
   const ownDate = figure.strip.at(-1)?.localDate ?? null
@@ -211,9 +215,11 @@ export function roundFigure(figure: GlanceFigure): GlanceFigure {
     strip: figure.strip.map((day) => {
       const dayValue = roundMetricValueOrNull(metric, day.value)
       const dayBand = roundBand(metric, day.band)
-      return { ...day, value: dayValue, band: dayBand, standing: standingOf(dayValue, dayBand, figure.partial && day.localDate === ownDate) }
+      const dayStanding = standingOf(dayValue, dayBand, figure.partial && day.localDate === ownDate)
+      return { ...day, value: dayValue, band: dayBand, standing: dayStanding, judged: judge(dayStanding, direction) }
     }),
-    standing: standingOf(value, band, figure.partial),
+    standing,
+    judged: judge(standing, direction),
   }
 }
 
@@ -265,7 +271,8 @@ export function roundPageFigure(figure: PageFigure): PageFigure {
     strip: figure.strip === null ? null : figure.strip.map((day) => {
       const dayValue = roundToOrNull(precision, day.value)
       const dayBand = roundBandTo(precision, day.band)
-      return { ...day, value: dayValue, band: dayBand, standing: standingAfterRounding(day.standing, dayValue, dayBand) }
+      const dayStanding = standingAfterRounding(day.standing, dayValue, dayBand)
+      return { ...day, value: dayValue, band: dayBand, standing: dayStanding, judged: judge(dayStanding, figure.direction) }
     }),
   }
 }

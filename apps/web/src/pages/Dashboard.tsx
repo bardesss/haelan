@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { useIsPhone } from '../ui/breakpoint.js'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
+import { Card } from '../components/Card.js'
 import { CardGrid } from '../components/CardGrid.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -18,7 +18,8 @@ import { LogButton } from '../components/logPanel/LogButton.js'
 import { localToday } from '../controls/range.js'
 import { dashboardRows } from './dashboard/dashboardRows.js'
 import type { DashCardSlot } from './dashboard/dashboardRows.js'
-import { formatHeaderDate, formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
+import { formatLongDate, formatTimeOfDay, greetingKey } from './dashboard/glanceText.js'
+import { PageHeader, useHeaderDate } from '../components/PageHeader.js'
 import { useDashboardDay } from './dashboard/useDashboardDay.js'
 import { ApiError } from '../api/apiError.js'
 
@@ -29,23 +30,22 @@ const GRID_CLASS = { settled: 'dashboard-grid', stepping: 'dashboard-grid dashbo
 // known before the glance arrives (the clock and the person's zone, or the day in the URL), so
 // loading and error carry the same title rather than flashing a second one.
 // On a phone a past day's title is the short date ("Tue, Sep 22"): the long one wrapped to three
-// lines beside the four buttons, and the header is one line there (spec M9c, "Phone").
-function Title({ timezone, day }: { timezone: string, day: string | null }) {
-  const { t, i18n } = useTranslation()
-  const isPhone = useIsPhone()
-  return <h1 className="dash-title">{day === null ? t(greetingKey(Date.now(), timezone)) : formatHeaderDate(day, i18n.language, isPhone)}</h1>
+// lines beside the four buttons, and the header is one line there (spec M9c, "Phone"). The row
+// itself is PageHeader, shared with the detail pages; the greeting is the dashboard's alone.
+function Header({ timezone, day, line, nav }: { timezone: string, day: string | null, line?: ReactNode, nav?: ReactNode }) {
+  const { t } = useTranslation()
+  const date = useHeaderDate(day)
+  return <PageHeader title={day === null ? t(greetingKey(Date.now(), timezone)) : date} line={line} nav={nav} />
 }
 
-// The heading block on the left, the day navigator (when there is a glance to navigate from) on the
-// right: one row, which on a phone stays one row, the title wrapping inside its own column.
-function Header({ timezone, day, line, nav }: { timezone: string, day: string | null, line?: ReactNode, nav?: ReactNode }) {
+// The page's other states (loading, a failed read, nothing to show): the header, then the message
+// in one full-width card, the shape the night page gives the same states, so a state never reads
+// as a bare line of text under the title.
+function StatePage({ header, children }: { header: ReactNode, children: ReactNode }) {
   return (
-    <div className="dash-header">
-      <div className="dash-heading">
-        <Title timezone={timezone} day={day} />
-        {line !== undefined && <p className="dash-date">{line}</p>}
-      </div>
-      {nav}
+    <div className="dashboard">
+      {header}
+      <div className="grid"><Card span={12}>{children}</Card></div>
     </div>
   )
 }
@@ -96,10 +96,14 @@ export function Dashboard() {
   }, [refused, setDay])
 
   // On its way to the nearest day (or back to today), the refusal is not an error to show.
-  if (isError && nearest === null && !refused) return <><Header timezone={timezone} day={urlDay} /><ErrorState onRetry={() => void refetch()} error={error} /></>
+  if (isError && nearest === null && !refused) {
+    return <StatePage header={<Header timezone={timezone} day={urlDay} />}><ErrorState onRetry={() => void refetch()} error={error} /></StatePage>
+  }
   // A gap day's 404 carries the glance already on screen, if there was one (useGlance), so the
   // redirect to its nearest day holds the page rather than flashing this.
-  if (glance === undefined || (isError && nearest === null)) return <><Header timezone={timezone} day={urlDay} /><Loading /></>
+  if (glance === undefined || (isError && nearest === null)) {
+    return <StatePage header={<Header timezone={timezone} day={urlDay} />}><Loading /></StatePage>
+  }
 
   const { sleep, recovery, day } = glance
   // Stepping to a day not in the cache: `glance` is still the previous day's answer (useGlance's
@@ -134,7 +138,11 @@ export function Dashboard() {
   // A workout is something to show, so a day that holds only a run is not an empty page.
   if (sleep === null && day.heartRate.points.length === 0 && day.workouts.length === 0
     && figures.every((f) => f === null || f.value === null)) {
-    return <><Header timezone={timezone} day={shownDay} nav={nav} /><EmptyState title={t('glance.empty.title')} detail={t('glance.empty.detail')} /></>
+    return (
+      <StatePage header={<Header timezone={timezone} day={shownDay} nav={nav} />}>
+        <EmptyState title={t('glance.empty.title')} detail={t('glance.empty.detail')} />
+      </StatePage>
+    )
   }
 
   // The latest instant anything on the page was read at: the heart rate trace samples most often,

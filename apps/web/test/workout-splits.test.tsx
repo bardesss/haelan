@@ -79,7 +79,7 @@ const split = (over: Record<string, unknown> = {}) => ({
 // still pass against a component that always rendered the typed key. Reading the exact label
 // text out of each card is the assertion that actually distinguishes the two.
 const labelsIn = (html: string): string[] =>
-  [...html.matchAll(/<span class="label">([^<]*)<\/span>/g)].map((match) => match[1]!)
+  [...html.matchAll(/<(?:span|h2) class="label">([^<]*)<\/(?:span|h2)>/g)].map((match) => match[1]!)
 
 /** Every value cell in a split row, in column order: #, distance, duration, pace, heart rate. */
 const cellsIn = (html: string): string[] =>

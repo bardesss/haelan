@@ -343,6 +343,29 @@ function activeZoneMinutesPoint(o: {
   }
 }
 
+// Seeds the night page's own stream (see nightRand in seedArchive). Any fixed nonzero value would
+// do; XORed into the caller's seed, a different seed still gets a different night stream.
+const NIGHT_STREAM = 0x6e696768
+
+const FIVE_MINUTES_MS = 300_000
+
+interface NightReading { atMs: number, heartRate: number, hrv: number, spo2: number }
+
+// Every five minutes from bedtime to waking: heart rate a few beats under the day's resting figure,
+// the band the hourly overnight samples already use, HRV swinging around the person's own baseline
+// inside 30 to 70 ms, SpO2 between 93 and 98 %.
+function nightReadingsFor(rand: () => number, night: { startMs: number, endMs: number }, restingHrBpm: number, hrvBaselineMs: number): NightReading[] {
+  const readings: NightReading[] = []
+  const first = Math.ceil(night.startMs / FIVE_MINUTES_MS) * FIVE_MINUTES_MS
+  for (let atMs = first; atMs < night.endMs; atMs += FIVE_MINUTES_MS) {
+    const heartRate = Math.round(range(rand, restingHrBpm - 6, restingHrBpm - 1))
+    const hrv = Number(Math.min(70, Math.max(30, hrvBaselineMs + range(rand, -15, 15))).toFixed(1))
+    const spo2 = Number(range(rand, 93, 98).toFixed(1))
+    readings.push({ atMs, heartRate, hrv, spo2 })
+  }
+  return readings
+}
+
 const pad2 = (n: number): string => String(n).padStart(2, '0')
 const civilDateStr = (d: { year: number, month: number, day: number }): string =>
   `${d.year}-${pad2(d.month)}-${pad2(d.day)}`
@@ -385,8 +408,9 @@ export interface SeedArchiveInput {
    * ends that morning, a workout, the 20:00 mood. A payload whose every point was cut is still
    * written, empty, the way a sync of an hour with nothing in it would be.
    *
-   * Resting heart rate, HRV and respiratory rate are left as they are. Each is a once-a-day figure
-   * read off the night before, so by midday it already exists in full.
+   * Resting heart rate, HRV, respiratory rate, the morning's SpO2 and the night's temperature are
+   * left as they are. Each is a once-a-day figure read off the night before, so by midday it already
+   * exists in full.
    *
    * Filters and scales only: every value is still drawn from the PRNG exactly as it would be
    * without this option, so no other day in the span changes.
@@ -417,8 +441,20 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const ACTIVE_ZONE_MINUTES = requireType('active-zone-minutes')
   const TOTAL_CALORIES = requireType('total-calories')
   const FLOORS = requireType('floors')
+  const HRV = requireType('heart-rate-variability')
+  const SPO2 = requireType('oxygen-saturation')
+  const DAILY_SPO2 = requireType('daily-oxygen-saturation')
+  const SLEEP_TEMPERATURE = requireType('daily-sleep-temperature-derivations')
+  const SLEEP_BREATHING = requireType('respiratory-rate-sleep-summary')
 
   const rand = mulberry32(input.seed ?? DEFAULT_SEED)
+  // The night page's readings (the provider's sleep summary, the night's five-minute heart rate,
+  // HRV and SpO2, its temperature and breathing rate) draw from a second stream of their own. On
+  // `rand` they would shift every draw after the first night, and with it every figure the rest of
+  // this file's tests and the demo's screenshots are pinned against; on their own stream they add
+  // readings without moving one that was already there. Still one fixed seed, so still the same
+  // bytes on every run.
+  const nightRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ NIGHT_STREAM)
   let payloads = 0
 
   const until = input.lastDayUntilMs
@@ -507,6 +543,12 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const restingHrTrendPerDay = range(rand, -0.06, 0.04)
   const hrvBaselineMs = range(rand, 45, 70)
   const respiratoryRateBpm = range(rand, 13.5, 15.5)
+
+  // A night's temperature sits around one person's own baseline, the way a wrist's skin reading
+  // does, and now and then runs warm for a few nights together (a cold coming on, a hot spell)
+  // rather than one warm night appearing alone.
+  const temperatureBaselineCelsius = range(nightRand, 33.6, 34.6)
+  let warmNightsLeft = 0
 
   // floors and total-calories are collected here rather than put() one day at a time, because
   // putRollups above has to see a whole span at once to chunk it against the type's own cap.
@@ -725,8 +767,49 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       endTime: new Date(night.endMs).toISOString(),
       utcOffset: amsterdamOffset(night.startMs),
       stages: stagesFor(rand, night.startMs, night.endMs, night.restless),
+      summary: {
+        minutesToFallAsleep: Math.round(range(nightRand, 5, 25)),
+        minutesAfterWakeUp: Math.round(range(nightRand, 0, 10)),
+        // A restless night wakes more often, inside the same 8 to 18.
+        awakenings: Math.round(night.restless ? range(nightRand, 13, 18) : range(nightRand, 8, 14)),
+      },
     })]
     put(SLEEP, dayStart, dayEnd, intervalDone(night.endMs) ? sleepPoints : [])
+
+    // The night's own readings, fetched over the night's span rather than the day's: a night
+    // straddles midnight, and the day windows above are already one list call each, so a second
+    // call over the same day bounds would read, to the rebuild, as a re-fetch replacing the first.
+    const nightDone = intervalDone(night.endMs)
+    const nightSamples = nightReadingsFor(nightRand, night, restingHrBpm, hrvBaselineMs)
+    const nightPut = (t: DataType, points: unknown[]): void => put(t, night.startMs, night.endMs, nightDone ? points : [])
+    const nightSample = (t: DataType, atMs: number, value: string | number) => samplePoint({
+      payloadKey: t.payloadKey, valuePath: t.valuePath, value,
+      physicalTime: new Date(atMs).toISOString(), utcOffset: amsterdamOffset(atMs),
+    })
+    // The exact hours are left to the hourly day curve, which already has a heart-rate sample there,
+    // so no minute ever holds two.
+    nightPut(HEART_RATE, nightSamples.filter((r) => r.atMs % HOUR_MS !== 0)
+      .map((r) => nightSample(HEART_RATE, r.atMs, String(r.heartRate))))
+    nightPut(HRV, nightSamples.map((r) => nightSample(HRV, r.atMs, r.hrv)))
+    nightPut(SPO2, nightSamples.map((r) => nightSample(SPO2, r.atMs, r.spo2)))
+    // The provider files a night's breathing rate once, as the night ends.
+    nightPut(SLEEP_BREATHING, [nightSample(SLEEP_BREATHING, night.endMs,
+      Number((respiratoryRateToday + range(nightRand, -0.3, 0.3)).toFixed(1)))])
+
+    // The morning's once-a-day figures read off the night that just ended, filed under the day it
+    // ended on like resting heart rate above: SpO2's is that night's own average.
+    const spo2Average = nightSamples.reduce((sum, r) => sum + r.spo2, 0) / nightSamples.length
+    put(DAILY_SPO2, dayStart, dayEnd, [dailyPoint({
+      payloadKey: DAILY_SPO2.payloadKey, valuePath: DAILY_SPO2.valuePath,
+      value: Number(spo2Average.toFixed(1)), date: civilDate,
+    })])
+    if (warmNightsLeft === 0 && nightRand() < 0.04) warmNightsLeft = 2 + Math.floor(nightRand() * 3)
+    const warmth = warmNightsLeft > 0 ? range(nightRand, 0.5, 0.9) : 0
+    if (warmNightsLeft > 0) warmNightsLeft--
+    put(SLEEP_TEMPERATURE, dayStart, dayEnd, [dailyPoint({
+      payloadKey: SLEEP_TEMPERATURE.payloadKey, valuePath: SLEEP_TEMPERATURE.valuePath,
+      value: Number((temperatureBaselineCelsius + range(nightRand, -0.4, 0.4) + warmth).toFixed(2)), date: civilDate,
+    })])
 
     if (workout && workoutKept) {
       put(EXERCISE, dayStart, dayEnd, [exercisePoint({

@@ -520,7 +520,8 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // of them outside a rule about labels being distinguishable and a rule about a delta stating the
   // window it compared.
   it('does not label two different cards with the same name', () => {
-    const labels = [...html.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
+    // A card's label is its heading (Card.tsx); a tile's and a figure's stay spans.
+    const labels = [...html.matchAll(/<(?:span|h2) class="label">([^<]+)<\/(?:span|h2)>/g)].map((m) => m[1])
     expect(labels.length).toBeGreaterThan(0)
     expect(new Set(labels).size).toBe(labels.length)
   })
