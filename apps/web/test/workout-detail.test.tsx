@@ -718,6 +718,13 @@ describe('the workout page\'s more about this workout', () => {
     expect(rowsIn(card).find(([label]) => label === 'Elapsed')?.[2]).toBe('28:04 moving · 2 pauses')
   })
 
+  it('judges elapsed against its own usual when there is no moving time and no pause to set beside it', async () => {
+    const page = workoutPageFixture()
+    const { movingTime: _m, ...figures } = page.figures
+    const card = cardLabelled(await mount({ ...page, figures }), 'More about this workout')!
+    expect(rowsIn(card).find(([label]) => label === 'Elapsed')).toEqual(['Elapsed', '34:00', 'within your usual 27:00 – 35:00'])
+  })
+
   it('counts a swim\'s lengths and names the pool they were swum in', async () => {
     const page = workoutPageFixture()
     const swim: WorkoutPageData = {

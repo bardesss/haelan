@@ -15,11 +15,6 @@ const SHORT_SPANS: ReadonlySet<string> = new Set([
   'hardZoneMinutes', 'activeZoneMinutes',
 ])
 
-// A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading
-// zero on the minutes, an hour digit only once there is one to show. workoutPage.ts's `pace`
-// (seconds per kilometre) and its true durations (`movingTime`, `elapsed`) share this shape; the
-// one sub-second figure that also carries the 'seconds' unit (`groundContact`) reads in
-// milliseconds instead (SMALL_UNITS below).
 // Running form figures stored in a unit far larger than the reading: a ground contact of 0.248 s
 // reads as "248 ms", a vertical oscillation of 0.089 m as "8.9 cm", the way a watch shows both. Keyed
 // on the figure (its `metric` is its WorkoutFigureKey) rather than on the unit, since distance and
@@ -30,7 +25,13 @@ const SMALL_UNITS: Readonly<Record<string, { factor: number, precision: number, 
   verticalOscillation: { factor: 100, precision: 1, unit: 'activity.units.cm' },
 }
 
-function formatElapsed(totalSeconds: number): string {
+// A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading
+// zero on the minutes, an hour digit only once there is one to show. workoutPage.ts's `pace`
+// (seconds per kilometre) and its true durations (`movingTime`, `elapsed`) share this shape; the
+// one sub-second figure that also carries the 'seconds' unit (`groundContact`) reads in
+// milliseconds instead (SMALL_UNITS above).
+// Named apart from charts/elapsed.ts's formatElapsed, which takes milliseconds.
+function formatStopwatch(totalSeconds: number): string {
   const total = Math.round(totalSeconds)
   const hours = Math.floor(total / 3600)
   const minutes = Math.floor((total % 3600) / 60)
@@ -71,7 +72,7 @@ export function formatFigureValue(
     case 'celsius': return `${formatNumber(value, figure.precision, language, absent)} ${t('charts.units.celsius')}`
     case 'count': return formatNumber(value, figure.precision, language, absent)
     // The workout page's own units (workoutPage.ts's FIGURES table).
-    case 'seconds_per_km': return `${formatElapsed(value)} ${t('activity.units.paceSuffix')}`
+    case 'seconds_per_km': return `${formatStopwatch(value)} ${t('activity.units.paceSuffix')}`
     // Stored as metres per second; shown as km/h, a converted unit whose precision is this
     // function's own rather than the figure's stored-unit precision (format.ts's own comment on
     // formatMetricValue explains why a converted value cannot go through the catalogue precision).
@@ -81,7 +82,7 @@ export function formatFigureValue(
     case 'meters': return value >= 1000
       ? `${formatNumber(value / 1000, 2, language, absent)} ${t('activity.units.km')}`
       : `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.meters')}`
-    case 'seconds': return formatElapsed(value)
+    case 'seconds': return formatStopwatch(value)
     case 'trimp': return formatNumber(value, figure.precision, language, absent)
     case 'kcal': return `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.kcalShort')}`
     case 'steps_per_minute': return `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.perMin')}`

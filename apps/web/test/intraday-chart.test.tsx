@@ -462,6 +462,11 @@ describe('IntradayHeartRate, bounded to its session', () => {
     expect(mean.data).toEqual([[10 * 60_000, 150]])
     // 34 minutes is no whole step, so the end is not labelled beside 30:00.
     expect((option.xAxis as { axisLabel: { showMaxLabel: boolean } }).axisLabel.showMaxLabel).toBe(false)
+    // A value axis draws a gridline at every tick unless told otherwise, in echarts' own default
+    // grey; they take the same soft style as the y axis's, not a heavy line every five minutes.
+    const splitLine = (axis: unknown) => (axis as { splitLine?: { lineStyle?: { color?: string } } }).splitLine
+    expect(splitLine(option.xAxis)?.lineStyle?.color).toBeDefined()
+    expect(splitLine(option.xAxis)).toEqual(splitLine(option.yAxis))
   })
 
   it('keeps the pause shading and the pause marks on the elapsed axis too', () => {

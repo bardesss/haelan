@@ -388,6 +388,9 @@ export function IntradayHeartRate({
                 showMaxLabel: interval !== null && elapsedSpan !== null && elapsedSpan % interval === 0,
               },
               axisLine: base.labelledAxis.axisLine,
+              // A value axis, unlike a time one, draws a gridline at every tick by default and in
+              // echarts' own grey: the app's soft split line instead, the one the y axis uses.
+              splitLine: base.splitLine,
             }
           : {
             type: 'time' as const,
