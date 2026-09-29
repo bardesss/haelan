@@ -9,6 +9,22 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.16.0](https://github.com/bardesss/haelan/compare/v2.15.1...v2.16.0) (2026-09-29)
+
+
+### Features
+
+* server reads for the night and workout pages, every figure judged against its usual range ([#400](https://github.com/bardesss/haelan/issues/400)) ([340db40](https://github.com/bardesss/haelan/commit/340db40eed4cea9b8cec1294871e6305c63ae7f8))
+* the night page, every figure against its usual range ([#401](https://github.com/bardesss/haelan/issues/401)) ([ca4a245](https://github.com/bardesss/haelan/commit/ca4a245126fd34160b5d0aacab6fe6bdc6f2fb1d))
+* the workout page, every figure against its usual range ([#402](https://github.com/bardesss/haelan/issues/402)) ([a8afe47](https://github.com/bardesss/haelan/commit/a8afe47a8a955e3763cc5ceb46a6646edf9d3fc8))
+
+
+### Bug Fixes
+
+* durations read "6u 36m" in Dutch ([#408](https://github.com/bardesss/haelan/issues/408)) ([bb005f2](https://github.com/bardesss/haelan/commit/bb005f224f3be891191007cf82e03f5a94e178d1))
+* records read merged workouts, so each event counts once ([#406](https://github.com/bardesss/haelan/issues/406)) ([4f5d2e3](https://github.com/bardesss/haelan/commit/4f5d2e34ba8f6039a081ae327cdec098ed4ac268))
+* workout milestones count merged workouts ([#407](https://github.com/bardesss/haelan/issues/407)) ([e80472d](https://github.com/bardesss/haelan/commit/e80472dda37c51f8ee89c0331b8526dfacbb2816))
+
 ## [2.15.1](https://github.com/bardesss/haelan/compare/v2.15.0...v2.15.1) (2026-09-28)
 
 
