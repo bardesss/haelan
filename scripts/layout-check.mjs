@@ -135,16 +135,17 @@ if (!existsSync(join(DIST, 'index.html'))) {
 // (26, 45 and 55 minutes) answer exactly 1 point, regardless of which session is chosen. Widening
 // that would mean teaching the shared seed generator to sample heart rate more densely during a
 // workout's own hour, which several tests outside this task pin exact counts against (
-// apps/server/test/upgrade-rehearsal.test.ts's `heart_rate: 4 * 24 * SEED_DAYS`, `samples: 2492`,
+// apps/server/test/upgrade-rehearsal.test.ts's per-metric heart_rate count, `samples: 9220`,
 // and friends, hand-verified by running the fixture and reading real row counts back) - a change
 // with a real, measured cost this task's own brief did not ask for, not merely a longer capture.
 // So: not widened. This route's checks below assert the honest, smaller claim - a page carrying
 // one data point does not overflow and its controls are still tappable - the same claim
 // `/nutrition`'s already-empty page settles for, and for the same reason.
 //
-// The night page (`/sleep/night/:localDate`) is not in the same spot: a night spans several hours,
-// so the same hourly grid gives it several points for free - this worktree's own capture answers
-// 7 to 9 points for every single-day night window recorded, a real (if coarse) trace rather than a
+// The night page (`/sleep/night/:localDate`) is not in the same spot: the seed writes heart rate,
+// HRV and SpO2 every five minutes through every seeded night (seed.ts, since the seeded nights
+// gained what the night page shows), so each night's traces are real ones - this worktree's own
+// capture answers roughly 60 to 100 points per metric for each night window recorded, not a
 // single dot. Its checks below are the fuller claim the workout page's cannot honestly make.
 //
 // The two parameterised routes' real ids, read out of the built demo's own capture manifest
@@ -169,13 +170,13 @@ const SESSION_ID = manifestUrls
   .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/sessions\/([0-9a-f]+)$/))
   .find((match) => match !== null)?.[1] ?? null
 
-// A real night's own local date, read off exactly the single-day `{from: localDate, to: localDate}`
-// read NightDetail.tsx's own useNights call makes (its own comment: a Night has no id, only a
-// (localDate, sourceId) pair) - not off a week/month list request, which answers with several
-// nights at once and names none of them in its own URL.
+// A real night's own local date, read off the night page's own single-object read
+// (useNightPage.ts's `GET /p/:personId/night/:localDate`, M10a-2's redesigned page) - not off a
+// week/month list request, which answers with several nights at once and names none of them in its
+// own URL.
 const NIGHT_DATE = manifestUrls
-  .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/sleep\/nights\?from=([^&]+)&to=([^&]+)$/))
-  .find((match) => match !== null && match[1] === match[2])?.[1] ?? null
+  .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/night\/([^/?]+)$/))
+  .find((match) => match !== null)?.[1] ?? null
 
 // A past day the dashboard can open (M9c), read off a captured `/glance?day=` the same way: the
 // latest one, the day before the demo day, so its calendar month is the demo's own and carries
@@ -304,9 +305,17 @@ const ROUTES = RAW_ROUTES.map(resolveRoute)
 // The two routes that open the annotate panel from a control the check can click by name, rather
 // than from a tap on a plotted point. Declared beside ROUTES because the run's closing line counts
 // them; the reasoning for the pair is with the sweep that uses them.
+//
+// `reveal` is an optional selector clicked once before `opener` is located, for an opener a real
+// browser hides until something else opens it first. The night route's own opener sits inside
+// NightAbout's `<details>` (M10a-2 task 7), which the design keeps closed by default and which a
+// real Chromium hides while closed - happy-dom does not, which is exactly why this check exists
+// on top of the vitest suite (see the file's own top comment on why plain unit tests cannot see
+// this). Clicking the `<summary>` opens the fold the same way a reader's own click would. The
+// workout route's annotate button moved into WorkoutAbout's fold the same way (M10a-3).
 const PANEL_OPENERS = [
-  { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button' },
-  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button' },
+  { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button', reveal: '.detail-about summary' },
+  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button', reveal: '.detail-about summary' },
 ]
 
 const server = await startServer()
@@ -412,8 +421,9 @@ try {
   // collapsed, where app.css swaps which edge it opens from. The icon itself is one component,
   // mounted once in the shell, so what differs between those opens is only which chrome renders
   // it and which edge of the rail it opens from, never which page it is on.
-  for (const { route, opener } of PANEL_OPENERS) {
+  for (const { route, opener, reveal } of PANEL_OPENERS) {
     await open(route)
+    if (reveal) await page.locator(reveal).first().click()
     const control = page.locator(opener).first()
     const present = await control.isVisible().catch(() => false)
     check(present, `${route}: no control to open the annotate panel (${opener})`)

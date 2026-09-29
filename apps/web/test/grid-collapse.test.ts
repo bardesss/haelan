@@ -61,7 +61,10 @@ describe('the grid-collapse rule', () => {
     const wrappers = all
       .filter((rule) => /display:\s*contents/.test(rule.body))
       .flatMap((rule) => parts(rule.selector))
-    expect(wrappers.length, 'app.css should still declare display: contents somewhere').toBeGreaterThan(0)
+    // Zero is a real answer, not a sign this check has rotted: Task 5 of M10a-3 removed the last
+    // wrapper (.workout-tiles) along with the rest of the old workout page, the same way M10a-2
+    // task 8 removed the one before it (.night-tiles). The loop below is what still matters - it
+    // stays armed for the next wrapper someone writes, whether that is zero away or one.
 
     // Scoped to the collapse media query's own text before looking for the rule, rather than
     // taking the first `span 12 !important` in the file. There is now a second block that sets

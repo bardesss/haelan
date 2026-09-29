@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { DERIVATION_VERSION, insertSample, schema, shiftLocalDate } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
+import { roundWorkoutFigure } from '../src/routes/v1/shared.ts'
 
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
@@ -48,8 +49,18 @@ function seedNight(h: Harness, localDate: string, asleep: number): void {
 }
 
 /** One exercise session in the attrs shape mapSessions stores, as the core workout-page test seeds one; pace in seconds per km. */
-function seedRun(h: Harness, input: { id: string, sourceId: string, localDate: string, pace: number, personId?: string }): void {
+function seedRun(h: Harness, input: {
+  id: string, sourceId: string, localDate: string, pace: number, personId?: string
+  /** One-kilometre automatic splits, each its active seconds. */
+  splitSeconds?: number[]
+  /** A type other than RUNNING, and any further metricsSummary fields, as the provider stores them. */
+  exerciseType?: string, metrics?: Record<string, unknown>
+}): void {
   const startMs = at(input.localDate, '07:00')
+  const splits = input.splitSeconds?.map((seconds) => ({
+    startTime: null, endTime: null, splitType: 'DISTANCE', activeDuration: `${seconds}s`,
+    metricsSummary: { distanceMillimeters: 1_000_000, averagePaceSecondsPerMeter: seconds / 1000 },
+  })) ?? null
   h.app.haelan.instance.db.insert(schema.sessions).values({
     id: input.id, personId: input.personId ?? 'p1', sourceId: input.sourceId, kind: 'exercise', externalId: input.id,
     startMs, startOffsetMinutes: OFFSET, endMs: startMs + 30 * 60_000, endOffsetMinutes: OFFSET,
@@ -57,8 +68,8 @@ function seedRun(h: Harness, input: { id: string, sourceId: string, localDate: s
     attrs: JSON.stringify({
       type: null, mainSleep: null, stagesStatus: null, summary: null, shortAwakenings: null,
       splitSummaries: null, exerciseEvents: null, displayName: null, notes: null, routeConsentRequired: null,
-      exerciseMetadata: { hasGps: false }, exerciseType: 'RUNNING',
-      metricsSummary: { averagePaceSecondsPerMeter: input.pace / 1000 }, splits: null, activeDuration: null,
+      exerciseMetadata: { hasGps: false }, exerciseType: input.exerciseType ?? 'RUNNING',
+      metricsSummary: { averagePaceSecondsPerMeter: input.pace / 1000, ...input.metrics }, splits, activeDuration: null,
     }),
   }).run()
 }
@@ -252,6 +263,36 @@ describe('GET /workout/:sessionId', () => {
     expect(body.sourceId).toBe('watch')
   })
 
+  // Speed is sent at its figure's two decimals, not whole: 6.543 m/s whole would be 7, a 2 km/h lie.
+  it('sends the previous ride\'s speed at the speed figure\'s precision', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedRun(harness, { id: 'before', sourceId: 'watch', localDate: '2026-09-01', pace: 150, exerciseType: 'BIKING', metrics: { averageSpeedMillimetersPerSecond: 6543 } })
+    seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 140, exerciseType: 'BIKING', metrics: { averageSpeedMillimetersPerSecond: 7000 } })
+    const body = (await get(harness, token, '/workout/subject')).json()
+    expect(body.previous.values.speed).toBe(6.54)
+    expect(body.previous.values.pace).toBe(150)
+  })
+
+  // 330.4 and 320.2 against 300.1 and 290.3 is 30.1 s/km faster, sent as 30; the ceilings are
+  // fractional only to prove they are rounded too.
+  it('sends the split trend and the zone bounds as whole numbers', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 310, splitSeconds: [330.4, 320.2, 300.1, 290.3] })
+    seedDaily(harness, '2026-09-04', 'heart_rate_zone_light_max_bpm', 'last', 113.4)
+    seedDaily(harness, '2026-09-04', 'heart_rate_zone_moderate_max_bpm', 'last', 137)
+    seedDaily(harness, '2026-09-04', 'heart_rate_zone_vigorous_max_bpm', 'last', 161.6)
+    seedDaily(harness, '2026-09-04', 'heart_rate_zone_peak_max_bpm', 'last', 187)
+    const body = (await get(harness, token, '/workout/subject')).json()
+    expect(body.splitTrend).toEqual({ secondHalfFasterBySecondsPerKm: 30 })
+    expect(body.zoneBounds).toEqual({ moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 })
+  })
+
   // An alternate's id is an old link to a workout another source also recorded; the page answers
   // as the merged workout, the same one the list names, rather than 404ing on it.
   it('answers an alternate id with the merged workout it belongs to', async () => {
@@ -264,5 +305,22 @@ describe('GET /workout/:sessionId', () => {
     const response = await get(harness, token, '/workout/phone-run')
     expect(response.statusCode).toBe(200)
     expect(response.json().sessionId).toBe('google-run')
+  })
+})
+
+describe('roundWorkoutFigure', () => {
+  // A point just past the usual's edge before rounding sits on it after: core called it slower than
+  // usual, and the sent pair (320 against a usual up to 320) says within, so the dot is re-judged.
+  it('re-judges each strip point against the rounded usual, as it does the figure', () => {
+    const baseline = { center: 310, low: 300.2, high: 320.3, thin: false }
+    const figure = roundWorkoutFigure({
+      key: 'pace', metric: 'pace', value: 320.4, unit: 'seconds_per_km', precision: 0, direction: 'down',
+      baseline, standing: 'above', judged: 'worse',
+      strip: [
+        { sessionId: 'a', localDate: '2026-09-01', value: 330.2, standing: 'above', judged: 'worse' },
+        { sessionId: 'b', localDate: '2026-09-04', value: 320.4, standing: 'above', judged: 'worse' },
+      ],
+    })
+    expect(figure.strip.map((p) => [p.value, p.standing, p.judged])).toEqual([[330, 'above', 'worse'], [320, 'within', null]])
   })
 })

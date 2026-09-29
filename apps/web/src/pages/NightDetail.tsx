@@ -1,16 +1,18 @@
-import { useMemo } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { useRoute, routeParams, readQuery } from '../router.js'
 import { NIGHT_ROUTE } from '../routes.js'
-import { useNights } from '../data/useNights.js'
-import { nightFor } from '../data/nights.js'
+import { useNightPage } from '../data/useNightPage.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
-import { NightHeader } from './sleep/NightHeader.js'
-import { NightTiles } from './sleep/NightTiles.js'
-import { NightStages } from './sleep/NightStages.js'
-import { NightTraces } from './sleep/NightTraces.js'
-import { NightSessions } from './sleep/NightSessions.js'
+import { NightTop, useOpenNight } from './sleep/night/NightTop.js'
+import { NightHero } from './sleep/night/NightHero.js'
+import { NightMinis } from './sleep/night/NightMinis.js'
+import { NightThrough } from './sleep/night/NightThrough.js'
+import { NightWeek } from './sleep/night/NightWeek.js'
+import { NightMorning } from './sleep/night/NightMorning.js'
+import { NightMore } from './sleep/night/NightMore.js'
+import { NightDay } from './sleep/night/NightDay.js'
+import { NightAbout } from './sleep/night/NightAbout.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -18,14 +20,17 @@ import { EmptyState } from '../components/EmptyState.js'
 import { ApiError } from '../api/client.js'
 
 /**
- * One night, everything recorded about it.
+ * One night, everything recorded about it (M10a): the header row, time asleep against its usual,
+ * the four figures under it, then the sections below, all from one read (useNightPage) that the
+ * server has already judged.
  *
  * Keyed by local date rather than by id, unlike the workout page: a Night has no id at all - it is
  * assembled per (localDate, sourceId) across several sessions - and that asymmetry is a fact about
  * the data rather than an inconsistency to paper over.
  *
- * The reader's source comes from the URL, resolved against the sources this person actually has,
- * the same rule every other page applies: a link can name a source this person does not have, and a
+ * The page's figures are the one night the server picks for the date. The reader's `source` from
+ * the URL still reaches the night traces, resolved against the sources this person actually has,
+ * the rule every other page applies: a link can name a source this person does not have, and a
  * source can be removed after a link was made, and both should read as the all-sources view.
  */
 export function NightDetail() {
@@ -35,60 +40,52 @@ export function NightDetail() {
   const { sources } = useSourceNames()
   const named = readQuery(route.split('?')[1] ?? '').get('source') ?? ALL_SOURCES
   const source = resolveSource(named, [ALL_SOURCES, ...sources.map((s) => s.id)])
-
-  // The all-sources request when `localDate` is not yet known, so useNights builds a real range
-  // object either way (its cache key is fine sharing a key across renders before it ever fires);
-  // `enabled` is the only thing that stops it from firing as `?from=&to=`.
-  const range = { from: localDate ?? '', to: localDate ?? '', source }
-  const query = useNights(range, { enabled: localDate !== undefined })
-  const night = useMemo(
-    () => nightFor(query.data?.items ?? [], source),
-    [query.data, source],
-  )
+  const query = useNightPage(localDate)
+  const openNight = useOpenNight()
   // null, not ALL_SOURCES: useSourceTrace's own chosenSource takes "the reader named no source" as
   // null specifically, and the all-sources sentinel is this page's spelling of that, not a source
   // name a trace could ever pin to.
   const chosenSource = source === ALL_SOURCES ? null : source
 
   if (query.isError) {
-    // Mirrors WorkoutDetail.tsx's own branch, and inert for the same reason (see ErrorState.tsx's
-    // own comment): a real /sleep/nights miss answers 200 with an empty `items` array
-    // (apps/server/src/routes/v1/tier2.ts's own route never throws not_found for a range with no
-    // rows), so `night === null` below is what a real instance's empty range actually reaches.
-    // This branch is live only in the demo, where a manifest miss on this exact {from, to} throws
-    // ApiError('not_found') - reachable a click away from the Sleep list's own default range,
-    // which the capture sweep does not exhaustively cover night by night.
+    // A date with no night answers 404 (routes/v1/detail.ts's no_such_night), as does a demo
+    // manifest miss; both read as "no night recorded" rather than as a failure to retry. The header
+    // stays, titled with the date asked for, so the way back and the list are one tap away.
     const notFound = query.error instanceof ApiError && query.error.kind === 'not_found'
     return (
-      <div className="grid">
-        <Card span={12}>
-          {notFound
-            ? <EmptyState title={t('sleep.night.missingTitle')} detail={t('sleep.night.missingDetail')} />
-            : <ErrorState onRetry={() => void query.refetch()} error={query.error} />}
-        </Card>
+      <div className="detail-page">
+        <NightTop localDate={localDate} />
+        <div className="grid">
+          <Card span={12}>
+            {notFound
+              ? <EmptyState title={t('sleep.night.missingTitle')} detail={t('sleep.night.missingDetail')} />
+              : <ErrorState onRetry={() => void query.refetch()} error={query.error} />}
+          </Card>
+        </div>
       </div>
     )
   }
-  if (query.isPending) return <div className="grid"><Card span={12}><Loading /></Card></div>
-  if (night === null) {
-    return (
-      <div className="grid">
-        <Card span={12}>
-          <EmptyState title={t('sleep.night.missingTitle')} detail={t('sleep.night.missingDetail')} />
-        </Card>
-      </div>
-    )
+  if (query.isPending) {
+    return <div className="detail-page"><NightTop localDate={localDate} /><div className="grid"><Card span={12}><Loading /></Card></div></div>
   }
 
+  const page = query.data
+  // The "About this night" fold at the foot of the page is the pre-M10a session list (task 7
+  // renamed and re-housed it, never rewrote it); it draws from this payload's `night`, so the page
+  // still makes one read for the night either way.
   return (
-    <>
-      <NightHeader night={night} />
+    <div className="detail-page">
+      <NightTop localDate={localDate} page={page} />
       <div className="grid">
-        <NightTiles localDate={night.localDate} source={source} />
-        <NightStages night={night} />
-        <NightTraces night={night} chosenSource={chosenSource} />
-        <NightSessions night={night} />
+        <NightHero asleep={page.figures.asleep} localDate={page.localDate} onOpenNight={openNight} />
+        <NightMinis figures={page.figures} />
+        <NightThrough page={page} chosenSource={chosenSource} />
+        <NightWeek page={page} />
+        <NightMorning page={page} />
+        <NightMore figures={page.figures} />
+        <NightDay day={page.day} log={page.log} />
+        <NightAbout night={page.night} />
       </div>
-    </>
+    </div>
   )
 }

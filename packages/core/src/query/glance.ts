@@ -41,7 +41,11 @@ export interface GlanceBaseline { center: number, low: number, high: number, thi
  * cannot disagree. `band` is null where the day has no baseline at all (and on the recovery index,
  * which has none by design); a thin band is sent with `thin` set, and judges nothing.
  */
-export interface GlanceStripDay { localDate: string, value: number | null, band: GlanceBaseline | null, standing: GlanceStanding | null }
+export interface GlanceStripDay {
+  localDate: string, value: number | null, band: GlanceBaseline | null, standing: GlanceStanding | null
+  /** `standing` read through the metric's direction (judge), so a dot takes the colour its day's verdict line does. */
+  judged: Judged
+}
 
 export interface GlanceFigure {
   metric: string
@@ -59,10 +63,40 @@ export interface GlanceFigure {
   strip: GlanceStripDay[]
   /** Where `value` sits against `baseline`; null when there is nothing honest to say. */
   standing: GlanceStanding | null
+  /** Whether that is better or worse, by the metric's direction (judge); null within, unjudged, or neutral. */
+  judged: Judged
 }
 
 /** Where a figure sits against its usual; the web and the phone both colour by it, so it is decided here once (M9d spec). */
 export type GlanceStanding = 'within' | 'above' | 'below'
+
+export type Judged = 'better' | 'worse' | null
+export type FigureDirection = 'up' | 'down' | 'neutral'
+
+/**
+ * Better or worse, from a standing and the metric's direction: null inside the usual, with no
+ * standing, or for a neutral metric (a bedtime is later or earlier, never better). Defined here,
+ * beside standingOf, since every glance figure and strip day carries it; pageFigure.ts re-exports
+ * it for the detail pages.
+ */
+export function judge(standing: GlanceStanding | null, direction: FigureDirection): Judged {
+  if (standing === null || standing === 'within' || direction === 'neutral') return null
+  return (standing === 'above') === (direction === 'up') ? 'better' : 'worse'
+}
+
+/**
+ * The catalogue metric a figure is described by, for the figures whose own metric is not a
+ * catalogue id. Active minutes is the three activity levels summed, all sharing one precision and
+ * one direction (up), so it reads as one of them does. One map for the judging here and in
+ * pageFigure.ts and for the server's rounding, so the precision a figure is judged at and the one
+ * it is sent at cannot part.
+ */
+export const FIGURE_METRIC_ALIAS: Readonly<Record<string, string>> = { active_minutes: 'active_minutes_light' }
+
+/** A figure's direction by its metric (through FIGURE_METRIC_ALIAS); neutral for one the catalogue does not know. */
+export function figureDirection(metric: string): FigureDirection {
+  return METRICS[FIGURE_METRIC_ALIAS[metric] ?? metric]?.direction ?? 'neutral'
+}
 
 /**
  * Null when there is nothing honest to say: no value, no band, a band too thin to stand on, or a day
@@ -88,12 +122,13 @@ export function standingOf(value: number | null, baseline: GlanceBaseline | null
  */
 function stripOf(
   dates: readonly string[], valueOf: (localDate: string) => number | null,
-  bandOf: (localDate: string) => GlanceBaseline | null, ownDate: string, partial: boolean,
+  bandOf: (localDate: string) => GlanceBaseline | null, ownDate: string, partial: boolean, direction: FigureDirection,
 ): GlanceStripDay[] {
   return dates.map((localDate) => {
     const value = valueOf(localDate)
     const band = bandOf(localDate)
-    return { localDate, value, band, standing: standingOf(value, band, partial && localDate === ownDate) }
+    const standing = standingOf(value, band, partial && localDate === ownDate)
+    return { localDate, value, band, standing, judged: judge(standing, direction) }
   })
 }
 
@@ -198,6 +233,8 @@ export function dailyFigure(
   const bands = new Map([...ctx.q.baselines({ metric: o.metric, agg: o.agg, from: dates[0]!, to: o.on })]
     .map(([date, baseline]) => [date, toGlanceBaseline(baseline)]))
   const band = bands.get(o.on) ?? null
+  const direction = figureDirection(o.metric)
+  const standing = standingOf(onDay?.value ?? null, band, o.partial)
   return {
     metric: o.metric,
     value: onDay?.value ?? null,
@@ -207,8 +244,9 @@ export function dailyFigure(
     asOfMs: onDay === undefined ? null : o.asOfMs,
     partial: o.partial,
     staleSources: staleFeeding(ctx, points.flatMap(sourcesOf)),
-    strip: stripOf(dates, (localDate) => byDate.get(localDate)?.value ?? null, (localDate) => bands.get(localDate) ?? null, o.on, o.partial),
-    standing: standingOf(onDay?.value ?? null, band, o.partial),
+    strip: stripOf(dates, (localDate) => byDate.get(localDate)?.value ?? null, (localDate) => bands.get(localDate) ?? null, o.on, o.partial, direction),
+    standing,
+    judged: judge(standing, direction),
   }
 }
 
@@ -331,6 +369,8 @@ export function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
   const band = bands.get(ctx.today) ?? null
   const value = sums.get(ctx.today) ?? null
   const partial = !ctx.finished
+  const direction = figureDirection('active_minutes')
+  const standing = standingOf(value, band, partial)
   return {
     metric: 'active_minutes',
     value,
@@ -340,8 +380,9 @@ export function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
     asOfMs: value === null ? null : lastSampleMs(ctx, ACTIVE_MINUTE_METRICS),
     partial,
     staleSources: staleFeeding(ctx, feeding),
-    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, (localDate) => bands.get(localDate) ?? null, ctx.today, partial),
-    standing: standingOf(value, band, partial),
+    strip: stripOf(dates, (localDate) => sums.get(localDate) ?? null, (localDate) => bands.get(localDate) ?? null, ctx.today, partial, direction),
+    standing,
+    judged: judge(standing, direction),
   }
 }
 
@@ -479,8 +520,9 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
         return day !== undefined && day.enough ? day.score : null
       // No band on any day: the index is already a distance from the person's own baselines (see
       // above), so there is no usual of it to draw or judge a dot against.
-      }, () => null, ctx.today, false),
+      }, () => null, ctx.today, false, 'neutral'),
       standing: null,
+      judged: null,
     },
     band: scored === null ? null : bandOf(scored.score),
     // Reported only when neither day scored, and then with today's reasons: yesterday's score

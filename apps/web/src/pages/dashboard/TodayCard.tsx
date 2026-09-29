@@ -1,18 +1,20 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useId, useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { IntradayHeartRate } from '../../charts/IntradayHeartRate.js'
 import { Sparkline } from '../../charts/Sparkline.js'
+import { verdictTone } from '../../charts/base.js'
+import { BasisContext } from '../../components/basis.js'
 import type { GlanceDay } from '../../data/useGlance.js'
 import { DashCard, Described, stripBands, useOpensDay } from './cardShared.js'
-import { dayClockMidnightMs, dayStanding, formatFigure, formatLongDate, formatTimeOfDay, nextDayOf, paceKey, recordedDayClock, usualLine } from './glanceText.js'
+import { dayClockMidnightMs, formatFigure, formatLongDate, formatTimeOfDay, nextDayOf, paceKey, recordedDayClock, usualLine } from './glanceText.js'
 import type { DayClock } from './glanceText.js'
 import { TodayWorkouts } from './TodayWorkouts.js'
 
 /**
  * Today as the approved T2 mockup draws it: steps and active minutes side by side, the pace line
- * under them, the seven-day steps strip across the card with the usual shaded behind it and a dot
- * per day, then the heart rate trace in its compact form from local midnight to the last reading,
- * with today's workouts shaded on it, and the workouts themselves.
+ * under the steps it is about, the seven-day steps strip across the card with the usual shaded
+ * behind it and a dot per day, then the heart rate trace in its compact form from local midnight to
+ * the last reading, with today's workouts shaded on it, and the workouts themselves.
  *
  * The pace line takes over from the plain so-far line the moment the server has a verdict: it
  * names which way today is running (ahead, on, behind) as of the last reading it compared, and
@@ -22,9 +24,15 @@ import { TodayWorkouts } from './TodayWorkouts.js'
  * figure in the redesign uses.
  *
  * A finished day (M9c, `finished`) is the same card for a day already over: titled "That day" with
- * its date beside it, the whole day's verdict against the usual whole day in place of a pace ("Above
- * your usual day · usual 6,800 – 10,400"), and the heart rate trace across the whole day, 00:00 to
- * the next midnight, rather than to its last reading.
+ * its date beside it, the whole day's verdict against the usual whole day in place of a pace (only
+ * when the day was outside it, the dashboard's rule), in the words the night page uses for any
+ * figure ("above your usual 6,800 – 10,400", usualLine) and the tone its judgement takes
+ * (verdictTone: more steps green, fewer red), and the heart rate trace across the whole day, 00:00
+ * to the next midnight, rather than to its last reading.
+ *
+ * The line printed under the steps, whichever it is, is also the strip's description, by id, so a
+ * screen reader hears it once, where it is printed, rather than a second hidden sentence. With none
+ * printed, the within sentence stays out of sight as the description, as the night card's does.
  */
 export function TodayCard({ day, span, today, timezone, homeTimezone, finished = false, onOpenDay }: {
   day: GlanceDay, span: 8 | 12, today: string, timezone: string, finished?: boolean
@@ -35,9 +43,12 @@ export function TodayCard({ day, span, today, timezone, homeTimezone, finished =
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const { values, labels, standings, bands } = useMemo(() => ({
+  const lineId = useId()
+  const captionId = useId()
+  const { values, labels, standings, judged, bands } = useMemo(() => ({
     values: day.steps.strip.map((d) => d.value), labels: day.steps.strip.map((d) => d.localDate),
-    standings: day.steps.strip.map((d) => d.standing), bands: stripBands(day.steps.strip),
+    standings: day.steps.strip.map((d) => d.standing), judged: day.steps.strip.map((d) => d.judged),
+    bands: stripBands(day.steps.strip),
   }), [day.steps.strip])
   const band = day.steps.baseline !== null && !day.steps.baseline.thin ? day.steps.baseline : undefined
   const opens = useOpensDay(today, onOpenDay)
@@ -66,17 +77,35 @@ export function TodayCard({ day, span, today, timezone, homeTimezone, finished =
   // far" to be ahead or behind in.
   const pace = finished ? null : day.stepsPace
   const key = paceKey(pace)
-  const verdict = finished ? dayStanding(day.steps, t, language) : null
-  // Above the usual day reads in the pace line's own ahead colour; below stays plain text, as
-  // behind does.
-  const isAbove = verdict?.standing === 'above'
+  // The dashboard prints a verdict only when the figure is outside its usual (PATTERNS.md): a day
+  // the server judged within it, or a finished day it left unjudged, prints nothing, and the within
+  // sentence stays for a screen reader as the strip's description (NightCard's rule). A thin usual
+  // and a running day's so-far line still speak: neither is a verdict. A finished day's verdict
+  // takes its judgement's tone; the pace keeps its own ahead-only green, since a pace is how the
+  // day is running, not a judgement of it.
+  const usual = usualLine(day.steps, t, language)
+  const quiet = day.steps.standing === 'within'
+    || (finished && day.steps.standing === null && day.steps.baseline?.thin !== true)
+  const shown = quiet ? null : usual
+  const tone = finished ? verdictTone(day.steps.judged, day.steps.standing) : null
   const isAhead = pace?.standing === 'ahead'
   // Task 19a's own note: `standing` can be null while the band is present (no verdict before 5% of
   // the usual day), so `key === null` is not "no pace object" - it is "no verdict to word". Either
-  // way the so-far line is what falls back, and only when that itself has something to say: a day
+  // way the usual line is what falls back, and only when that itself has something to say: a day
   // with no baseline at all would otherwise print an empty `<p class="dash-pace">`, which is worse
   // for a screen reader than no paragraph at all.
-  const usual = usualLine(day.steps, t, language)
+  const line = key !== null && pace !== null ? (
+    <p id={lineId} className={isAhead ? 'dash-pace is-ahead' : 'dash-pace'}>
+      <span className="dash-pace-word">{t(key)}</span>{' '}
+      · {t('glance.pace.usualBy', {
+        time: formatTimeOfDay(pace.atMs, language, timezone),
+        value: formatFigure({ ...day.steps, value: pace.center }, language),
+      })}
+    </p>
+  ) : shown !== null ? (
+    <p id={lineId} className={tone === null ? 'dash-pace' : `dash-pace ${tone}`}>{shown}</p>
+  ) : null
+  const hidden = line === null && quiet && usual !== null ? usual : null
   return (
     <DashCard span={span} title={t(finished ? 'glance.today.thatDay' : 'glance.today.title')}
       subtitle={finished ? formatLongDate(today, language) : t('glance.today.subtitle')}
@@ -86,6 +115,7 @@ export function TodayCard({ day, span, today, timezone, homeTimezone, finished =
           <div>
             <span className="label">{t('glance.today.steps')}</span>
             <div className="dash-headline-sm">{formatFigure(day.steps, language) ?? t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</div>
+            {line}
           </div>
           <div>
             <span className="label">{t('glance.today.activeMinutes')}</span>
@@ -95,32 +125,19 @@ export function TodayCard({ day, span, today, timezone, homeTimezone, finished =
             </div>
           </div>
         </div>
-        {verdict !== null ? (
-          <p className={isAbove ? 'dash-pace is-ahead' : 'dash-pace'}>
-            <span className="dash-pace-word">{verdict.word}</span>{' '}
-            · {verdict.range}
-          </p>
-        ) : key !== null && pace !== null ? (
-          <p className={isAhead ? 'dash-pace is-ahead' : 'dash-pace'}>
-            <span className="dash-pace-word">{t(key)}</span>{' '}
-            · {t('glance.pace.usualBy', {
-              time: formatTimeOfDay(pace.atMs, language, timezone),
-              value: formatFigure({ ...day.steps, value: pace.center }, language),
-            })}
-          </p>
-        ) : usual !== null ? (
-          <p className="dash-pace">{usual}</p>
-        ) : null}
       </div>
       {values.filter((v) => v !== null).length > 1 && (
         <div>
-          <Described text={usualLine(day.steps, t, language) ?? t(finished ? 'glance.today.captionFinished' : 'glance.today.caption')} hidden>
+          {/* Described by the line printed above (pace, verdict or so far), by the within sentence out
+              of sight, or with neither by its caption. */}
+          <BasisContext.Provider value={line !== null || hidden !== null ? lineId : captionId}>
             <Sparkline values={values} labels={labels} label={t(finished ? 'glance.today.stripFinished' : 'glance.today.strip')} unit={t('glance.today.steps')}
               metric={day.steps.metric} baseline={band} bands={bands} bandLabels={bandLabels} height={64}
-              dots pointStandings={standings} tableToggle={false} {...opens}
+              dots pointStandings={standings} pointJudged={judged} tableToggle={false} {...opens}
               formatValue={(v, absent) => (v === null ? absent : formatFigure({ ...day.steps, value: v }, language) ?? absent)} />
-          </Described>
-          <p className="dash-caption">{t(finished ? 'glance.today.captionFinished' : 'glance.today.caption')}</p>
+          </BasisContext.Provider>
+          {hidden !== null && <p className="sr-only" id={lineId}>{hidden}</p>}
+          <p id={captionId} className="dash-caption">{t(finished ? 'glance.today.captionFinished' : 'glance.today.caption')}</p>
         </div>
       )}
       {day.heartRate.points.length > 0 && (

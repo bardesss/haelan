@@ -1,6 +1,8 @@
-import type { GlanceFigure, GlanceStanding, GlanceStepsPace } from '../../data/useGlance.js'
+import type { GlanceFigure, GlanceStepsPace } from '../../data/useGlance.js'
 import type { Translate } from '../../format.js'
 import { formatDuration, formatClock, formatMetricValue } from '../../format.js'
+import { METRICS } from '@haelan/core/metrics'
+import { standingShort } from '../../charts/base.js'
 
 // Which of the four printable shapes a figure's number takes. Not read by formatFigure or
 // usualLine as an argument - both take the figure itself and look the metric up. Module-private:
@@ -71,22 +73,15 @@ export function usualLine(figure: GlanceFigure, t: Translate, language: string):
 }
 
 /**
- * A finished day's steps against the whole usual day, as the card prints it: the verdict in words
- * ("Above your usual day") and the range it was judged against ("usual 6,800 – 10,400"). Null when
- * there is no verdict to word - no value, no baseline, a thin one, or the server left `standing`
- * null - and the caller falls back to usualLine, which says the thin case in its own words.
+ * A figure's verdict with its range dropped, for a figure printed inline beside others (the night
+ * card's efficiency, bedtime and wake time): usualLine's own words up to the range ("above your
+ * usual", "boven je gebruikelijke bereik"), a clock time's later or earlier as the night page words
+ * it. standingShort's words, the ones a strip's accessible table prints, so the two cannot disagree.
+ * Null inside the usual, or with no verdict at all, since the dashboard keeps "within" out of sight.
  */
-export function dayStanding(figure: GlanceFigure, t: Translate, language: string): { standing: GlanceStanding, word: string, range: string } | null {
-  if (figure.value === null || figure.baseline === null || figure.baseline.thin || figure.standing === null) return null
-  const standing = figure.standing
-  return {
-    standing,
-    word: t(`glance.today.dayStanding.${standing}`),
-    range: t('glance.today.usualRange', {
-      low: formatValue(figure.baseline.low, figure.metric, language),
-      high: formatValue(figure.baseline.high, figure.metric, language),
-    }),
-  }
+export function usualShort(figure: GlanceFigure, t: Translate): string | null {
+  if (figure.value === null) return null
+  return standingShort(figure.standing, METRICS[figure.metric]?.unit, t) || null
 }
 
 // The day before `today` (a YYYY-MM-DD local date), computed by stepping the UTC calendar date

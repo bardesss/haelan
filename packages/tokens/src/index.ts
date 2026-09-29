@@ -4,7 +4,7 @@ export {
   semantic, resolveSemantic, lookup, THEMES, SEMANTIC_KEYS, SURFACE_KEYS, TEXT_KEYS,
   type Theme, type SemanticToken,
 } from './semantic.js'
-export { chartTokens, resolveChart, STAGE_KEYS, SCALE_KEYS, CHART_KEYS, type ChartToken } from './chart.js'
+export { chartTokens, resolveChart, STAGE_KEYS, ZONE_KEYS, SCALE_KEYS, CHART_KEYS, type ChartToken } from './chart.js'
 export { mapTokens, resolveMap, MAP_KEYS, type MapToken } from './map.js'
 export { emitCss, semanticVar, chartVar, mapVar, themeVarNames } from './emit.js'
 export {

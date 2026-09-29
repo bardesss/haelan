@@ -1,6 +1,7 @@
 import type { ExpressionSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import { mapVar, semanticVar, type MapToken, type SemanticToken } from '@haelan/tokens'
 import type { RoutePoint } from '../../data/useSessions.js'
+import type { RouteMarker } from './WorkoutRoute.js'
 import { loadMapLibre } from './loadMapLibre.js'
 
 // `import type` only, above: erased entirely at compile time, so naming MapLibre's own types here
@@ -151,7 +152,19 @@ const labelText: ExpressionSpecification = ['get', 'name']
  * draws with the first frame the tiles do, and a theme switch that swaps the style (mountBasemap)
  * carries it across with everything else.
  */
-export function basemapStyle(route: readonly RoutePoint[], colors: MapColors): StyleSpecification {
+/** The start and the numbered kilometres as GeoJSON points, `label` empty for the start. */
+function markersGeoJSON(markers: readonly RouteMarker[]) {
+  return {
+    type: 'FeatureCollection' as const,
+    features: markers.map((marker) => ({
+      type: 'Feature' as const,
+      properties: { label: marker.label ?? '' },
+      geometry: { type: 'Point' as const, coordinates: [marker.point.longitude, marker.point.latitude] },
+    })),
+  }
+}
+
+export function basemapStyle(route: readonly RoutePoint[], colors: MapColors, markers: readonly RouteMarker[] = []): StyleSpecification {
   const halo = { 'text-color': colors.label, 'text-halo-color': colors.labelHalo, 'text-halo-width': 1.5 }
   return {
     version: 8,
@@ -159,6 +172,7 @@ export function basemapStyle(route: readonly RoutePoint[], colors: MapColors): S
     sources: {
       openfreemap: { type: 'vector', url: OPENFREEMAP_TILEJSON, attribution: OPENFREEMAP_ATTRIBUTION },
       'workout-route': { type: 'geojson', data: routeGeoJSON(route) },
+      'workout-route-markers': { type: 'geojson', data: markersGeoJSON(markers) },
     },
     layers: [
       { id: 'land', type: 'background', paint: { 'background-color': colors.land } },
@@ -237,6 +251,21 @@ export function basemapStyle(route: readonly RoutePoint[], colors: MapColors): S
           ? { 'line-width': 3 }
           : { 'line-color': colors.route, 'line-width': 3 },
       },
+      // The start as a small dot, each kilometre as a numbered disc, in the route's own colour.
+      {
+        id: 'workout-route-markers', type: 'circle', source: 'workout-route-markers',
+        paint: {
+          'circle-radius': ['case', ['==', ['get', 'label'], ''], 4, 8],
+          'circle-stroke-color': colors.labelHalo, 'circle-stroke-width': 1.5,
+          ...(colors.route !== '' && { 'circle-color': colors.route }),
+        },
+      },
+      {
+        id: 'workout-route-km-labels', type: 'symbol', source: 'workout-route-markers',
+        filter: ['!=', ['get', 'label'], ''],
+        layout: { 'text-field': ['get', 'label'], 'text-font': LABEL_FONT, 'text-size': 10, 'text-allow-overlap': true },
+        paint: { 'text-color': colors.labelHalo },
+      },
     ],
   }
 }
@@ -261,7 +290,7 @@ export interface MountDeps {
  * what actually changes is the paint - the tiles and the route's source are equal and left alone -
  * and a new layer added to basemapStyle rethemes with no second list here to keep in step with it.
  */
-export function mountBasemap(container: HTMLElement, route: readonly RoutePoint[], deps: MountDeps = {}): () => void {
+export function mountBasemap(container: HTMLElement, route: readonly RoutePoint[], deps: MountDeps = {}, markers: readonly RouteMarker[] = []): () => void {
   const root = deps.root ?? document.documentElement
   const load = deps.load ?? loadMapLibre
   let cancelled = false
@@ -274,7 +303,7 @@ export function mountBasemap(container: HTMLElement, route: readonly RoutePoint[
     if (cancelled) return
     const instance = new Map({
       container,
-      style: basemapStyle(route, colors()),
+      style: basemapStyle(route, colors(), markers),
       bounds: routeBounds(route),
       fitBoundsOptions: { padding: 24 },
       // Always spelled out. MapLibre folds the attribution into an icon on any map under 640px
@@ -285,7 +314,7 @@ export function mountBasemap(container: HTMLElement, route: readonly RoutePoint[
     map = instance
     deps.onMap?.(instance)
     const retheme = () => {
-      if (!cancelled) instance.setStyle(basemapStyle(route, colors()))
+      if (!cancelled) instance.setStyle(basemapStyle(route, colors(), markers))
     }
     // The two ways the effective theme changes, watched the way useChart.ts watches them: an
     // explicit choice on the root, and the system preference underneath it.

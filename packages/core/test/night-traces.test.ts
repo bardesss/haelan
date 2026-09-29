@@ -18,7 +18,7 @@ const NIGHT0 = Date.UTC(2026, 8, 5, 22)
 function night(i: number) {
   const startMs = NIGHT0 + i * 24 * H
   return { localDate: `n${i}`, sourceId: 'watch', sessionIds: [], startMs, endMs: startMs + 7 * H,
-    startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [], segments: [], excludedSessions: [] }
+    startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [], segments: [], excludedSessions: [], sessionSpans: [] }
 }
 function hr(atMs: number, bpm: number) {
   insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: atMs, value: bpm })

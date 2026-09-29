@@ -28,8 +28,9 @@ const SERIES = '#000001'
 const PRIMARY = '#000002'
 const NEGATIVE = '#000003'
 const SURFACE = '#000004'
+const POSITIVE = '#000005'
 const OWN: Record<string, string> = {
-  '--chart-series': SERIES, '--text-primary': PRIMARY, '--negative': NEGATIVE, '--surface-card': SURFACE,
+  '--chart-series': SERIES, '--text-primary': PRIMARY, '--negative': NEGATIVE, '--surface-card': SURFACE, '--positive': POSITIVE,
 }
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, OWN[variable] ?? '#000000')
 
@@ -126,6 +127,18 @@ describe('Sparkline dots', () => {
     expect(colours).toEqual([SERIES, SERIES, SERIES, SERIES, null, SERIES, PRIMARY])
   })
 
+  // The dot takes the tone its day's verdict line takes (verdictTone): a judged day its judgement,
+  // green for better and red for worse, and an unjudged day outside its usual (a neutral metric)
+  // the warning colour. Before, the standing alone coloured it, so a better day sat red beside
+  // green words.
+  it('colours a judged day by its judgement, and an unjudged day outside its usual as out', () => {
+    mount(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
+      baseline={{ low: 100, high: 160 }} dots pointStandings={standings}
+      pointJudged={[null, null, 'better', 'worse', null, null, null]} tableToggle={false} />)
+    const colours = seriesOf(lastOption).at(-1)!.data.map((d) => (d === null ? null : (d as { itemStyle: { color: string } }).itemStyle.color))
+    expect(colours).toEqual([SERIES, SERIES, POSITIVE, NEGATIVE, null, SERIES, PRIMARY])
+  })
+
   it('an outside verdict on the latest day wins over its highlight', () => {
     const series = dotOption({ standings: [null, null, null, null, null, null, 'above'] })
     expect((series.data.at(-1) as { itemStyle: { color: string } }).itemStyle.color).toBe(NEGATIVE)
@@ -153,6 +166,18 @@ describe('Sparkline dots', () => {
     // A day with no verdict ('within', or none at all) states nothing about it.
     expect(rows[0]).toBe('')
     expect(rows[5]).toBe('')
+  })
+
+  // The table's words are the verdict line's: a clock time is later or earlier than its usual, a
+  // pace slower or faster, never above or below (standingShort, the one helper both read).
+  it('words a clock time\'s verdict later or earlier, and a pace\'s slower or faster', () => {
+    const noteRows = (host: HTMLElement) => [...host.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td')].at(-1)?.textContent)
+    const clock = mount(<Sparkline values={values} labels={labels} label="bed" unit="bed" metric="sleep_bedtime_minutes"
+      dots pointStandings={standings} tableToggle={false} />)
+    expect(noteRows(clock).slice(2, 4)).toEqual(['later than your usual', 'earlier than your usual'])
+    const pace = mount(<Sparkline values={values} labels={labels} label="pace" unit="pace" metric="steps" standingUnit="seconds_per_km"
+      dots pointStandings={standings} tableToggle={false} />)
+    expect(noteRows(pace).slice(2, 4)).toEqual(['slower than your usual', 'faster than your usual'])
   })
 
   it('says nothing about a verdict when dots are off, even if the caller still passed one', () => {
@@ -197,7 +222,7 @@ describe('Hypnogram, compact', () => {
     const totals = host.querySelectorAll('.hypnogram-totals')
     expect(totals).toHaveLength(1)
     expect(totals[0]!.className).toBe('hypnogram-totals is-compact')
-    expect(totals[0]!.textContent).toBe('Deep 1h 40m · Light 1h 00m · Awake 0h 07m')
+    expect(totals[0]!.textContent).toBe('Deep 1h\u00a040m · Light 1h\u00a000m · Awake 0h\u00a007m')
     expectTableForAssistiveTechOnly(host, 3)
   })
 })

@@ -34,8 +34,8 @@ import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { mergedWorkoutFor, mergeRuleFor, readMergedWorkouts } from './mergedWorkouts.ts'
-import { readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute } from './workoutDerived.ts'
-import type { CardioLoad } from '../api/cardioLoad.ts'
+import { readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute, readWorkoutZoneBounds } from './workoutDerived.ts'
+import type { CardioLoad, ZoneBounds } from '../api/cardioLoad.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
 import type { RoutePoint } from './workoutDerived.ts'
 import { trendOf } from './trend.ts'
@@ -730,6 +730,16 @@ export class PersonQuery {
     const session = this.sessionById(input)
     if (session === null) return null
     return readWorkoutCardioLoad(this.#db, { personId: this.#personId, session })
+  }
+
+  /**
+   * A workout's heart rate zone bounds from the provider's ceilings for its day, the same basis
+   * the Banister load's maximum comes from. Null for an id naming nothing, as cardioLoad answers.
+   */
+  workoutZoneBounds(input: { sessionId: string }): ZoneBounds | null {
+    const session = this.sessionById(input)
+    if (session === null) return null
+    return readWorkoutZoneBounds(this.#db, { personId: this.#personId, session })
   }
 
   /**

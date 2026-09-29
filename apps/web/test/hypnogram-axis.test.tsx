@@ -40,7 +40,7 @@ const SEGMENTS = [
 type Axis = {
   min?: number, max?: number,
   axisTick?: { customValues?: number[] },
-  axisLabel?: { customValues?: number[], formatter?: (v: number) => string },
+  axisLabel?: { customValues?: number[], formatter?: (v: number) => string, hideOverlap?: boolean },
 }
 
 function xAxisOf(startClock: number | null): Axis {
@@ -70,6 +70,13 @@ describe('the hypnogram axis', () => {
     expect(axis.axisLabel!.customValues).toEqual(axis.axisTick!.customValues)
     expect(axis.axisLabel!.customValues!.map((v) => axis.axisLabel!.formatter!(v)))
       .toEqual(['01:00', '02:00', '03:00', '04:00', '05:00', '06:00'])
+  })
+
+  // On a phone the night's seven or eight hour labels ran into each other ("00:0001:00"): the
+  // chart drops a label that would overlap the one before it, so the hours left are spaced by the
+  // width the chart actually has, and still fall on whole hours.
+  it('drops an hour label that would overlap its neighbour, at any width', () => {
+    expect(xAxisOf(40).axisLabel!.hideOverlap).toBe(true)
   })
 
   it('reads a bed time before midnight across it, still on the hour', () => {

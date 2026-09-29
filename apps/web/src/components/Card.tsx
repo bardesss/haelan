@@ -60,7 +60,9 @@ export function Card({ span, label, basis, measured = false, ambient, id, childr
     // whole grid behind a stylesheet rule that a missing class would silently drop.
     <section id={id} className={measured ? 'card card-measured' : 'card'} data-span={span}
       style={{ gridColumn: `span ${span}` }}>
-      {label && <span className="label">{label}</span>}
+      {/* A heading, so a screen reader's list of headings names every card, styled as the small
+          uppercase label (app.css resets a heading's own size and margins on .label). */}
+      {label && <h2 className="label">{label}</h2>}
       {basis && <p className="basis" id={basisId}>{basis}</p>}
       <BasisContext.Provider value={basis ? basisId : undefined}>
         {/* Inside the card rather than around it, so a card whose contents throw keeps its frame,

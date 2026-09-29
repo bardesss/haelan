@@ -26,15 +26,30 @@ describe('the message catalogues', () => {
   // One Dutch word per concept, not three. The moment of waking appeared as "wektijd" on a tile
   // label, "waaktijd" in the schedule basis beside it and "Ontwaakt" in that chart's own column
   // header. "Waaktijd" is the one that had to go regardless of consistency: it reads as time spent
-  // awake, which is not what a bed and wake schedule states. The label/column split that remains
-  // ("Wektijd" against "Ontwaakt") is the same noun-against-verb split the English carries in the
-  // same two places ("Wake time" against "Woke"), so both languages say the same thing twice
-  // rather than one of them saying it three ways.
+  // awake, which is not what a bed and wake schedule states. The redesign's term table
+  // (pages/detail/PATTERNS.md) then settled the rest: the test below pins it.
   it('use one Dutch word for the moment of waking', () => {
     for (const path of paths(nl)) {
       const value = path.split('.').reduce<unknown>((at, key) => (at as Record<string, unknown>)[key], nl)
       expect(String(value).toLowerCase(), path).not.toContain('waaktijd')
     }
+  })
+
+  // The term table in pages/detail/PATTERNS.md: bed and wake are named one way wherever they
+  // appear, a schedule's columns and a hypnogram's bed marker included (Naar bed / Bedtime,
+  // Wakker geworden / Wake time), so a reader never meets "Woke" beside "Wake time".
+  it('name bed and wake by the term table wherever they appear', () => {
+    for (const catalogue of [en, nl]) {
+      const bed = catalogue.glance.sleep.bed
+      const woke = catalogue.glance.sleep.woke
+      expect(catalogue.charts.columns.toBed).toBe(bed)
+      expect(catalogue.charts.columns.woke).toBe(woke)
+      expect(catalogue.common.bedLabel).toBe(`${bed} {{time}}`)
+      expect(catalogue.sleep.night.week.variability.startsWith(`${bed} `)).toBe(true)
+      expect(catalogue.sleep.night.week.variabilityUsual.startsWith(`${bed} `)).toBe(true)
+    }
+    expect([en.glance.sleep.bed, en.glance.sleep.woke, nl.glance.sleep.bed, nl.glance.sleep.woke])
+      .toEqual(['Bedtime', 'Wake time', 'Naar bed', 'Wakker geworden'])
   })
 
   // Keyed on SEED_KINDS rather than on the two catalogues: a seed kind missing from both passes the

@@ -729,7 +729,7 @@ describe('the Sleep page', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
     expect(card?.querySelector('.insight-summary')?.textContent).toBe(
       '1h 10m on average (Aug 1, 2026 to Aug 31, 2026) against 1h 00m on average in the previous period '
-      + '(Jul 1, 2026 to Jul 31, 2026), a change of 10m.',
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 0h 10m.',
     )
     restore()
   })
@@ -749,7 +749,7 @@ describe('the Sleep page', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
     expect(card?.querySelector('.insight-summary')?.textContent).toBe(
       '6h 41m on average (Aug 1, 2026 to Aug 31, 2026) against 6h 48m on average in the previous period '
-      + '(Jul 1, 2026 to Jul 31, 2026), a change of -7m.',
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of -0h 07m.',
     )
     restore()
   })

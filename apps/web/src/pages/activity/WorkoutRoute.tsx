@@ -1,7 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import { Card } from '../../components/Card.js'
-import { formatNumber } from '../../format.js'
 import { useRouteBasemapStatus } from '../../data/useRouteBasemap.js'
 import type { RoutePoint } from '../../data/useSessions.js'
 import { mountBasemap } from './basemap.js'
@@ -28,6 +26,25 @@ export function basemapAllowed(status: { data?: { enabled: boolean }, isFetching
 const VIEW_DIMENSION = 320
 const PADDING = 16
 const POINT_RADIUS = 3
+// A stable empty list for a caller with no kilometres, so the basemap effect below is not re-run
+// on every render by a fresh `[]`.
+const NO_KMS: readonly number[] = Object.freeze([])
+
+/** A marker on the route: the start, or the end of a numbered kilometre. */
+export interface RouteMarker { label: string | null, point: RoutePoint }
+
+/**
+ * Where the route's markers sit: a dot at its first point, and the point recorded nearest in time
+ * to the end of each whole kilometre (the automatic splits' own ends, `kmEndsMs`), numbered from
+ * 1. Nearest in time rather than by distance along the line, since the splits carry a time and
+ * the route's own distances are the phone's, not the watch's.
+ */
+export function routeMarkers(route: readonly RoutePoint[], kmEndsMs: readonly number[]): RouteMarker[] {
+  if (route.length === 0) return []
+  const nearest = (atMs: number): RoutePoint => route.reduce((best, point) =>
+    (Math.abs(point.atMs - atMs) < Math.abs(best.atMs - atMs) ? point : best))
+  return [{ label: null, point: route[0]! }, ...kmEndsMs.map((atMs, i) => ({ label: String(i + 1), point: nearest(atMs) }))]
+}
 
 interface Projected { x: number, y: number }
 
@@ -68,11 +85,13 @@ export function projectRoute(
 }
 
 /**
- * The route card: the trace drawn from the points, and nothing numeric beside it. Fix round 1 on
- * this task removed a distance and an elevation gain computed straight off these points - a second
- * measurement of a fact WorkoutTiles.tsx already states from the provider, a few percent off it for
- * reasons no reader could see, on the same page. One fact, one figure: the provider's, already on
- * the page, consistent with every other tile. This card draws where, not how far or how high.
+ * The drawing itself, no card of its own: a MapLibre basemap under the trace when the instance
+ * allows one, the bare SVG trace otherwise. The workout page's route and kilometres card
+ * (workout/WorkoutMap.tsx, M10a-3) is this function's only caller now, and puts it beside the
+ * kilometre table in a card of its own. This file used to render its own card too (WorkoutRoute,
+ * with nothing numeric beside the trace since fix round 1 on this task removed a distance and an
+ * elevation gain WorkoutTiles.tsx already stated from the provider) until Task 5 of M10a-3 retired
+ * it along with the rest of the old workout page.
  *
  * A basemap under the trace, when the instance-wide setting below is on - off by default, because
  * a route's first and last point is usually this household's own address, and a tile request is
@@ -84,21 +103,11 @@ export function projectRoute(
  * household that opens a workout page, on or off, undoing the whole point of Task 5 drawing the
  * trace by hand so that a household which never turns this on never downloads it.
  *
- * `route` is typed as possibly undefined, not trusted as the always-present array
- * WorkoutSessionDetail declares it: WorkoutSplits.tsx's own comment on `autoSplits`/`laps` gives
- * the reason, and it applies unchanged here - an older cached response or any shape that predates
- * this deploy can simply be missing the field, this app has no error boundary around this section,
- * and an unguarded `.length` on `undefined` would blank the whole page rather than only leave this
- * one card off it.
- *
- * Absent entirely, not an empty map, when the session carries no points - a Google session and a
- * companion session whose route the app could not read both read as "nothing to draw" here, the
- * same absence WorkoutZones and WorkoutTrace already give their own missing data.
+ * Nothing for an empty route.
  */
-export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefined }) {
-  const { t, i18n } = useTranslation()
-  const language = i18n.language
-  const recorded = route ?? []
+export function RouteDrawing({ route, kmEndsMs = NO_KMS }: { route: readonly RoutePoint[], kmEndsMs?: readonly number[] }) {
+  const { t } = useTranslation()
+  const recorded = route
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   // Undefined while the query is in flight, which reads as false below - the same "say nothing
   // rather than guess" the off-by-default setting itself argues for: a card that assumed the
@@ -116,14 +125,15 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
     // see the module comment above for why a static import anywhere else would defeat the setting
     // this effect exists to respect. mountBasemap owns the rest: the library through loadMapLibre,
     // the style in the page's own tokens, and restyling it when the theme changes.
-    return mountBasemap(mapContainerRef.current, recorded)
-  }, [basemapEnabled, recorded])
+    return mountBasemap(mapContainerRef.current, recorded, {}, routeMarkers(recorded, kmEndsMs))
+  }, [basemapEnabled, recorded, kmEndsMs])
 
   if (recorded.length === 0) return null
 
-  const n = (value: number, precision: number) => formatNumber(value, precision, language, '')
   const { points, viewWidth, viewHeight } = projectRoute(recorded)
   const linePoints = points.map((point) => `${point.x},${point.y}`).join(' ')
+  // Projected with the route, so each marker lands on the line it was taken from.
+  const markers = routeMarkers(recorded, kmEndsMs).map((marker) => ({ ...marker, at: points[recorded.indexOf(marker.point)]! }))
 
   // The one sentence a screen reader gets for the drawing below: what the layout check (this
   // app's only browser-level layout coverage) cannot see at all, since it never opens this page's
@@ -132,22 +142,25 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
   // the line itself, and how it looks on a real screen, are not covered anywhere in this suite.
   const description = t('activity.workout.route.description')
 
-  return (
-    <Card span={12} label={t('activity.workout.route.label')}
-      basis={t('activity.workout.route.basis', { count: n(recorded.length, 0) })}>
-      {basemapEnabled ? (
-        // The map itself is built imperatively by the effect above, onto this element once
-        // MapLibre resolves - nothing here names a tile URL or a source, so the off branch below
-        // renders no trace of either.
-        <div className="workout-route-map" ref={mapContainerRef} role="img" aria-label={description} />
-      ) : (
-        <svg className="workout-route-svg" viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-          role="img" aria-label={description}>
-          {points.length === 1
-            ? <circle className="workout-route-point" cx={points[0]!.x} cy={points[0]!.y} r={POINT_RADIUS} />
-            : <polyline className="workout-route-trace" points={linePoints} />}
-        </svg>
-      )}
-    </Card>
+  return basemapEnabled ? (
+    // The map itself is built imperatively by the effect above, onto this element once MapLibre
+    // resolves - nothing here names a tile URL or a source, so the off branch below renders no
+    // trace of either.
+    <div className="workout-route-map" ref={mapContainerRef} role="img" aria-label={description} />
+  ) : (
+    <svg className="workout-route-svg" viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+      role="img" aria-label={description}>
+      {points.length === 1
+        ? <circle className="workout-route-point" cx={points[0]!.x} cy={points[0]!.y} r={POINT_RADIUS} />
+        : <polyline className="workout-route-trace" points={linePoints} />}
+      {points.length > 1 && markers.map(({ label, at }, i) => label === null
+        ? <circle key={i} className="workout-route-start" cx={at.x} cy={at.y} r={POINT_RADIUS + 1} />
+        : (
+          <g key={i} className="workout-route-km">
+            <circle cx={at.x} cy={at.y} r={POINT_RADIUS + 5} />
+            <text x={at.x} y={at.y} textAnchor="middle" dominantBaseline="central">{label}</text>
+          </g>
+        ))}
+    </svg>
   )
 }

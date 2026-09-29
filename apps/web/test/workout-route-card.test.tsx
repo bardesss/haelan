@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// happy-dom only for document.createElement/querySelector on the rendered string; WorkoutRoute's
+// happy-dom only for document.createElement/querySelector on the rendered string; RouteDrawing's
 // own map-mounting effect (Task 6) never runs under renderToStaticMarkup - React does not run
 // effects for a string render - so the off/on markup this file asserts is exactly what a first
 // paint shows before that effect has had a chance to do anything, and no WebGL canvas or echarts
@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
-import { WorkoutRoute, projectRoute, basemapAllowed } from '../src/pages/activity/WorkoutRoute.js'
+import { RouteDrawing, projectRoute, basemapAllowed } from '../src/pages/activity/WorkoutRoute.js'
 import { routeBasemapStatusKey, ROUTE_BASEMAP_FRESHNESS } from '../src/data/useRouteBasemap.js'
 import { createQueryClient } from '../src/api/queryClient.js'
 import { queryKeys } from '../src/api/queryKeys.js'
@@ -21,10 +21,15 @@ import type { RoutePoint } from '../src/data/useSessions.js'
 // polyline even if it did - the same gap that shipped an unassertable filled-day marker and an icon
 // nobody caught rendering at the height of its card. What is asserted below is what a test actually
 // can reach: the accessible description text (the one thing a screen reader gets for the drawing),
-// the card's presence and absence, which of the two states rendered, and the pure projection in
-// isolation. The basemap's style and its theme handling are basemap.test.ts's. The drawn shape's
-// real look on a real screen, and MapLibre's own rendered tiles, are not covered anywhere in this
-// suite.
+// its presence and absence, which of the two states rendered, and the pure projection in isolation.
+// The basemap's style and its theme handling are basemap.test.ts's. The drawn shape's real look on
+// a real screen, and MapLibre's own rendered tiles, are not covered anywhere in this suite.
+//
+// RouteDrawing draws no card of its own (Task 5 of M10a-3 retired the WorkoutRoute component that
+// used to wrap it in one, along with the rest of the old workout page); its caller now is
+// workout/WorkoutMap.tsx, whose own card carries the label and basis this file used to assert on
+// WorkoutRoute directly. workout-detail.test.tsx's "route and kilometres" describe block covers
+// that card-level basis text against a real session; this file is only RouteDrawing in isolation.
 
 function point(overrides: Partial<RoutePoint> = {}): RoutePoint {
   return {
@@ -51,58 +56,36 @@ const SESSION: Session = {
  * case would otherwise share, and reaches no real network to get there. Off unless a case asks
  * otherwise - the default this whole setting is designed around.
  */
-function renderCard(route: readonly RoutePoint[] | undefined, basemapEnabled = false): Element | null {
+function renderDrawing(route: readonly RoutePoint[], basemapEnabled = false): Element | null {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), SESSION)
   client.setQueryData(routeBasemapStatusKey(), { enabled: basemapEnabled })
   const host = document.createElement('div')
   host.innerHTML = renderToStaticMarkup(
     <QueryClientProvider client={client}>
-      <I18nProvider lng="en"><WorkoutRoute route={route} /></I18nProvider>
+      <I18nProvider lng="en"><RouteDrawing route={route} /></I18nProvider>
     </QueryClientProvider>,
   )
   return host.firstElementChild
 }
 
-describe('the route card', () => {
-  it('renders no card at all when the session carries no points', () => {
-    expect(renderCard([])).toBeNull()
+describe('the route drawing', () => {
+  it('draws nothing at all when the route carries no points', () => {
+    expect(renderDrawing([])).toBeNull()
   })
 
-  // WorkoutSplits.tsx's own precedent for autoSplits/laps applies unchanged here: an older cached
-  // response can simply be missing the field, and this app has no error boundary around this
-  // section, so the component must treat `undefined` exactly like an empty array rather than throw.
-  it('renders no card at all when the route field is missing entirely, not just empty', () => {
-    expect(renderCard(undefined)).toBeNull()
-  })
-
-  it('gives the drawing an accessible description, with no distance or elevation figure in it', () => {
-    const card = renderCard([NEAR, FAR])
-    expect(card).not.toBeNull()
-    const svg = card!.querySelector('svg')
-    expect(svg?.getAttribute('role')).toBe('img')
-    expect(svg?.getAttribute('aria-label')).toBe('The route drawn as a line')
+  it('gives the drawing an accessible description', () => {
+    const drawing = renderDrawing([NEAR, FAR])
+    expect(drawing).not.toBeNull()
+    expect(drawing?.tagName.toLowerCase()).toBe('svg')
+    expect(drawing?.getAttribute('role')).toBe('img')
+    expect(drawing?.getAttribute('aria-label')).toBe('The route drawn as a line')
   })
 
   it('draws a single point as a dot, not an invisible one-point line', () => {
-    const card = renderCard([NEAR])
-    expect(card!.querySelector('polyline')).toBeNull()
-    expect(card!.querySelector('circle.workout-route-point')).not.toBeNull()
-  })
-
-  it('states how many points the phone recorded as the card\'s basis', () => {
-    const card = renderCard([NEAR, FAR, point({ latitude: 52.02 })])
-    expect(card!.querySelector('.basis')?.textContent).toBe('every point the phone recorded, 3 in total')
-  })
-
-  // Fix round 1 on this task removed the card's own distance and elevation figures: WorkoutTiles
-  // already states both from the provider, and a second, independently computed number a few
-  // percent off it, labelled the same thing, on the same page, is worse than no second number at
-  // all. Pinned here rather than only in the removal itself, so a later change re-adding a stat
-  // tile to this card has to notice and decide again, not slide it back in unnoticed.
-  it('shows nothing numeric beside the drawing', () => {
-    const card = renderCard([NEAR, FAR])
-    expect(card!.querySelector('.value')).toBeNull()
+    const drawing = renderDrawing([NEAR])
+    expect(drawing?.querySelector('polyline')).toBeNull()
+    expect(drawing?.querySelector('circle.workout-route-point')).not.toBeNull()
   })
 })
 
@@ -164,7 +147,7 @@ describe('projectRoute', () => {
 })
 
 /**
- * The two states the route-basemap setting (About.tsx) puts this card in. Off is the one the
+ * The two states the route-basemap setting (About.tsx) puts this drawing in. Off is the one the
  * whole design rests on, so it is asserted by what is absent from the rendered markup rather than
  * by what the on case adds: no element MapLibre would attach to, and no tile URL in the output.
  * This is a claim about what this render produced, not about the module's own source text - the
@@ -173,11 +156,11 @@ describe('projectRoute', () => {
  */
 describe('the basemap setting', () => {
   it('off: draws the bare trace and nothing a map library could attach to', () => {
-    const card = renderCard([NEAR, FAR], false)
-    expect(card!.querySelector('svg')).not.toBeNull()
-    expect(card!.querySelector('.workout-route-map')).toBeNull()
-    expect(card!.innerHTML).not.toContain('openfreemap')
-    expect(card!.innerHTML).not.toContain('maplibre')
+    const drawing = renderDrawing([NEAR, FAR], false)
+    expect(drawing?.tagName.toLowerCase()).toBe('svg')
+    expect(drawing?.classList.contains('workout-route-map')).toBe(false)
+    expect(drawing?.outerHTML).not.toContain('openfreemap')
+    expect(drawing?.outerHTML).not.toContain('maplibre')
   })
 
   it('on: draws the trace first, and only reaches for a map once the setting is confirmed', () => {
@@ -189,18 +172,17 @@ describe('the basemap setting', () => {
     // setting off: the tab holds the old yes, and without this it would act on it before the
     // refetch could say otherwise. basemapAllowed's own tests below cover the settled case, which
     // a static render cannot reach because it never runs the effect that resolves the query.
-    const card = renderCard([NEAR, FAR], true)
-    expect(card!.querySelector('svg')).not.toBeNull()
-    expect(card!.querySelector('.workout-route-map')).toBeNull()
-    expect(card!.innerHTML).not.toContain('openfreemap')
+    const drawing = renderDrawing([NEAR, FAR], true)
+    expect(drawing?.tagName.toLowerCase()).toBe('svg')
+    expect(drawing?.outerHTML).not.toContain('openfreemap')
   })
 
   it('carries the same accessible description whichever of the two it drew', () => {
     // The description is the only thing a screen reader gets for either rendering, so it must not
     // depend on which one won.
-    const off = renderCard([NEAR, FAR], false)
-    expect(off!.querySelector('svg')?.getAttribute('role')).toBe('img')
-    expect(off!.querySelector('svg')?.getAttribute('aria-label')).toBe('The route drawn as a line')
+    const off = renderDrawing([NEAR, FAR], false)
+    expect(off?.getAttribute('role')).toBe('img')
+    expect(off?.getAttribute('aria-label')).toBe('The route drawn as a line')
   })
 
   it('off stays off while the setting is still loading, not only once it answers false', () => {
@@ -211,10 +193,10 @@ describe('the basemap setting', () => {
     const host = document.createElement('div')
     host.innerHTML = renderToStaticMarkup(
       <QueryClientProvider client={client}>
-        <I18nProvider lng="en"><WorkoutRoute route={[NEAR, FAR]} /></I18nProvider>
+        <I18nProvider lng="en"><RouteDrawing route={[NEAR, FAR]} /></I18nProvider>
       </QueryClientProvider>,
     )
-    expect(host.firstElementChild!.querySelector('.workout-route-map')).toBeNull()
+    expect(host.firstElementChild?.classList.contains('workout-route-map')).toBe(false)
   })
 })
 

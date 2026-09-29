@@ -10,7 +10,7 @@ export const GLANCE_TODAY = '2026-09-23'
 const DATES = ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23']
 
 function strip(values: (number | null)[]): GlanceFigure['strip'] {
-  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null, band: null, standing: null }))
+  return DATES.map((localDate, i) => ({ localDate, value: values[i] ?? null, band: null, standing: null, judged: null }))
 }
 
 /** The day's own quick log (M9c), off the switch by default so no existing glanceBody() caller
@@ -30,7 +30,7 @@ export function glanceLog(overrides?: Partial<GlanceLog>): GlanceLog {
 export function glanceFigure(over: Partial<GlanceFigure> & Pick<GlanceFigure, 'metric'>): GlanceFigure {
   return {
     value: null, unit: 'count', baseline: null, asOfDate: GLANCE_TODAY, asOfMs: null, partial: false,
-    staleSources: [], strip: [], standing: null,
+    staleSources: [], strip: [], standing: null, judged: null,
     ...over,
   }
 }

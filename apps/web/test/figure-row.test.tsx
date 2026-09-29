@@ -19,6 +19,32 @@ describe('FigureRow', () => {
     expect(render(<FigureRow label="a" value="1" verdict="v" judged="better" band={BAND} mark={110} />)).toContain('figure-row-verdict better')
     expect(render(<FigureRow label="a" value="1" verdict="v" judged={null} band={BAND} mark={80} />)).toContain('class="figure-row-verdict"')
   })
+  // The dashboard's rule: judged keeps its colour; a figure judged neither way but outside its
+  // usual takes the "outside usual" mark (is-out), its words and its mark both.
+  it('marks a figure judged neither way but outside its usual as outside it', () => {
+    for (const standing of ['above', 'below'] as const) {
+      const html = render(<FigureRow label="a" value="1" verdict="v" judged={null} standing={standing} band={BAND} mark={120} />)
+      expect(html).toContain('class="figure-row-verdict is-out"')
+      expect(html).toContain('figure-row-mark is-out')
+    }
+    expect(render(<FigureRow label="a" value="1" verdict="v" judged={null} standing="within" band={BAND} mark={80} />))
+      .toContain('class="figure-row-verdict"')
+    expect(render(<FigureRow label="a" value="1" verdict="v" judged="better" standing="above" band={BAND} mark={120} />))
+      .toContain('class="figure-row-verdict better"')
+  })
+  // A value never wraps inside itself, so a long unit ("13.8 breaths/min") ran past its column on a
+  // phone: the unit after the no-break space is set smaller, the dashboard's own "18 min" shape,
+  // and a duration, whose last part is a number, is left whole.
+  it('sets a value\'s unit smaller, and leaves a duration whole', () => {
+    expect(render(<FigureRow label="a" value={'13.8\u00a0breaths/min'} verdict="v" judged={null} band={BAND} mark={64} />))
+      .toContain('<span class="figure-row-value">13.8\u00a0<span class="figure-row-unit">breaths/min</span></span>')
+    expect(render(<FigureRow label="a" value={'1h\u00a004m'} verdict="v" judged={null} band={BAND} mark={64} />))
+      .toContain('<span class="figure-row-value">1h\u00a004m</span>')
+  })
+  it('labels the row with the card label\'s own style', () => {
+    expect(render(<FigureRow label="Deep sleep" value="1" verdict="v" judged={null} band={BAND} mark={64} />))
+      .toContain('class="label figure-row-label"')
+  })
   it('places the band and the mark on the dashboard gauge scale', () => {
     const scale = gaugeScale(BAND)
     const left = (gaugeFraction(BAND.low, scale) * 100).toFixed(1)
@@ -35,17 +61,18 @@ describe('FigureRow', () => {
     expect(html).not.toContain('figure-row-bar')
     expect(html).toContain('>v<')
   })
-  it('wraps a strip in a description carrying the verdict', () => {
+  // The printed verdict is the strip's description, by id: a hidden copy of the same words made a
+  // screen reader say them twice.
+  it('describes a strip by the verdict it prints, once', () => {
     const strip = {
       values: [1, 2, null, 4], labels: ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04'],
       metric: 'weight', unit: 'kg', formatValue: (v: number | null, absent: string) => (v === null ? absent : String(v)),
     }
     const html = render(<FigureRow label="Weight" value="4" verdict="within your usual range" judged={null} band={null} mark={null} strip={strip} />)
-    // echarts never mounts under renderToStaticMarkup, so the canvas host is empty; what static
-    // rendering CAN show is that the verdict text is present as the chart's own description,
-    // reachable through ChartFigure's aria-describedby wiring (Described's own contract).
-    expect(html).toContain('within your usual range')
-    expect(html).toContain('sr-only')
+    const describedBy = /aria-describedby="([^"]+)"/.exec(html)?.[1]
+    expect(describedBy).toBeTruthy()
+    expect(html).toContain(`<span id="${describedBy}" class="figure-row-verdict">within your usual range</span>`)
+    expect(html.split('within your usual range')).toHaveLength(2)
     expect(html).not.toContain('figure-row-bar')
   })
 })
