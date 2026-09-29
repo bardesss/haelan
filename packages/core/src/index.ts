@@ -299,3 +299,10 @@ export type {
 export type { PeriodRange, DateSpan } from './query/periodBounds.ts'
 export { PERIOD_RANGES, periodBounds, stepPeriod, earlierBlocks, weeksIn, yearEarlierDate, daysIn, datesIn } from './query/periodBounds.ts'
 export { toGlanceBaseline } from './query/glance.ts'
+export type {
+  PeriodWindow, PeriodUsual, DayCounts, PeriodStripPoint, PeriodReason, PeriodFigure, PeriodHigh, PeriodChange,
+  PeriodHeader, PeriodFigureInput,
+} from './query/periodFigure.ts'
+export {
+  PERIOD_MIN_PERIODS, PERIOD_MIN_DAYS, blockMean, periodUsual, periodFigureOf, countsOf, highOf, changeOf,
+} from './query/periodFigure.ts'
