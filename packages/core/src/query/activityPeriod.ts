@@ -120,6 +120,13 @@ function typesOf(
   }).sort((a, b) => b.count - a.count || byType(a.type, b.type))
 }
 
+/** The VO2 max trend from the latest reading and the one about three months before it; the route recomputes it from the rounded pair. */
+export function vo2TrendOf(latest: number, earlier: number | null): Vo2Trend['trend'] {
+  // Rounded to the tenth the readings carry, so 31.3 to 32.3 is a rise of one, not of 0.9999999999999964.
+  const diff = earlier === null ? null : Math.round((latest - earlier) * 10) / 10
+  return diff === null ? null : diff >= VO2_TREND_STEP ? 'rising' : diff <= -VO2_TREND_STEP ? 'falling' : 'steady'
+}
+
 function vo2Of(q: PersonQuery, span: DateSpan, lastDay: string, source: string | undefined): Vo2Trend | null {
   for (const metric of VO2_METRICS) {
     const { points } = q.series({ metric, agg: 'last', from: span.from, to: lastDay, source })
@@ -128,12 +135,9 @@ function vo2Of(q: PersonQuery, span: DateSpan, lastDay: string, source: string |
     const cutoff = shiftLocalDate(last.localDate, -VO2_EARLIER_DAYS)
     const before = points.filter((p) => p.localDate <= cutoff)
     const earlier = before[before.length - 1] ?? null
-    // Rounded to the tenth the readings carry, so 31.3 to 32.3 is a rise of one, not of 0.9999999999999964.
-    const diff = earlier === null ? null : Math.round((last.value - earlier.value) * 10) / 10
-    const trend = diff === null ? null : diff >= VO2_TREND_STEP ? 'rising' : diff <= -VO2_TREND_STEP ? 'falling' : 'steady'
     return {
       metric, latest: last.value, latestDate: last.localDate,
-      earlier: earlier?.value ?? null, earlierDate: earlier?.localDate ?? null, trend,
+      earlier: earlier?.value ?? null, earlierDate: earlier?.localDate ?? null, trend: vo2TrendOf(last.value, earlier?.value ?? null),
     }
   }
   return null

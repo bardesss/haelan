@@ -12,6 +12,7 @@ import { registerSourceRoutes } from './sources.ts'
 import { registerAllTimeRoutes } from './allTime.ts'
 import { registerGlanceRoutes } from './glance.ts'
 import { registerDetailRoutes } from './detail.ts'
+import { registerPeriodRoutes } from './period.ts'
 import { registerDataTypeRoutes } from './dataTypes.ts'
 import { registerCompanionRoutes } from './companion.ts'
 
@@ -57,6 +58,7 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
   registerAllTimeRoutes(app)
   registerGlanceRoutes(app)
   registerDetailRoutes(app)
+  registerPeriodRoutes(app)
   registerDataTypeRoutes(app)
   registerCompanionRoutes(app)
 

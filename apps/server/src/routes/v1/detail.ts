@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify'
-import { balanceOf, ConfigError, effectiveTimezone, localDateInZone, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
+import { balanceOf, ConfigError, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
 import type { NightPage, NightTrace, WorkoutPage } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
-  personIdOf, personQueryOf, roundFigure, roundMetricValue, roundMetricValueOrNull, roundPageFigure,
+  personAndToday, personIdOf, personQueryOf, roundFigure, roundMetricValue, roundMetricValueOrNull, roundPageFigure,
   roundWorkoutFigure, sendHashed,
 } from './shared.ts'
 
@@ -148,21 +148,8 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
  * mixes sessions, samples and daily rows, and no single stamp covers them all.
  */
 export function registerDetailRoutes(app: FastifyInstance): void {
-  // The person's own zone decides today, as the glance does (effectiveTimezone follows the phone).
-  // Source names stay on the home zone, as the glance's do.
-  function personAndToday(personId: string) {
-    const person = app.haelan.stores.people.get(personId)
-    // requirePerson has already answered 404 for a person that does not exist before any handler
-    // here runs; this only narrows the type.
-    if (person === null) throw new ConfigError(`no person '${personId}'`)
-    const nowMs = app.haelan.now()
-    const today = localDateInZone(nowMs, effectiveTimezone(person))
-    const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId, person.timezone).map((s) => [s.id, s.name]))
-    return { person, nowMs, today, nameOf: (id: string) => names.get(id) ?? id }
-  }
-
   app.get<{ Params: NightParams }>('/p/:personId/night/:localDate', async (request, reply) => {
-    const { person, nowMs, today, nameOf } = personAndToday(personIdOf(request))
+    const { person, nowMs, today, nameOf } = personAndToday(app, personIdOf(request))
     const { localDate } = request.params
     requireDate('localDate', localDate)
     if (localDate > today) throw new ConfigError(`localDate '${localDate}' is after today '${today}'`)
@@ -179,7 +166,7 @@ export function registerDetailRoutes(app: FastifyInstance): void {
   })
 
   app.get<{ Params: WorkoutParams }>('/p/:personId/workout/:sessionId', async (request, reply) => {
-    const { person, nowMs, today, nameOf } = personAndToday(personIdOf(request))
+    const { person, nowMs, today, nameOf } = personAndToday(app, personIdOf(request))
     const { sessionId } = request.params
     const page = personQueryOf(request).workoutPage({ sessionId, today, nowMs, nameOf })
     if (page === null) {

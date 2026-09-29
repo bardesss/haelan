@@ -59,14 +59,17 @@ function seedSample(h: Harness, input: { personId: string, sourceId: string, val
 // sourceId straight through to the response, which is what the table's markers ride on. The id is
 // derived from personId and kind rather than a module level counter, since personId already makes
 // an owner's row and a leak target's row distinct within one test.
-function seedSession(h: Harness, input: { personId: string, sourceId: string, kind: 'sleep' | 'exercise' }): void {
+// `localDate` moves the session off 2026-08-01 for a read that must see it before the harness's
+// own today (the activity period, M10b).
+function seedSession(h: Harness, input: { personId: string, sourceId: string, kind: 'sleep' | 'exercise', localDate?: string }): void {
   seedSource(h, input.personId, input.sourceId)
   const id = `${input.personId}-${input.kind}-session`
-  const startMs = Date.parse('2026-08-01T09:00:00Z') - OFFSET_MINUTES * 60_000
+  const localDate = input.localDate ?? '2026-08-01'
+  const startMs = Date.parse(`${localDate}T09:00:00Z`) - OFFSET_MINUTES * 60_000
   h.app.haelan.instance.db.insert(schema.sessions).values({
     id, personId: input.personId, sourceId: input.sourceId, kind: input.kind, externalId: id,
     startMs, startOffsetMinutes: OFFSET_MINUTES, endMs: startMs + 3_600_000, endOffsetMinutes: OFFSET_MINUTES,
-    localDate: '2026-08-01', attrs: JSON.stringify({}), rawPayloadId: null,
+    localDate, attrs: JSON.stringify({}), rawPayloadId: null,
   }).run()
 }
 
@@ -88,6 +91,12 @@ function seedNight(h: Harness, input: { personId: string, sourceId: string }): v
     startMs, startOffsetMinutes: OFFSET_MINUTES, endMs, endOffsetMinutes: OFFSET_MINUTES,
     localDate: '2026-02-01', attrs: JSON.stringify({}), rawPayloadId: null,
   }).run()
+}
+
+// seedNight's night, with the time asleep the Sleep overview lists a night by.
+function seedPeriodNight(h: Harness, input: { personId: string, sourceId: string }): void {
+  seedNight(h, input)
+  seedDaily(h, { personId: input.personId, localDate: '2026-02-01', metric: 'sleep_asleep_minutes', value: 420 })
 }
 
 interface RouteCase {
@@ -493,6 +502,26 @@ const ROUTES: readonly RouteCase[] = [
     path: (p) => `/api/v1/p/${p}/workout/${p}-exercise-session`,
     seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'exercise' }),
     seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'exercise' }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  // M10b: the two overview reads. SleepListRow.sourceId and WorkoutListRow.sourceId carry the
+  // needle. A night is listed only once it has a time asleep, so the sleep seed adds that day's.
+  {
+    name: 'sleep/period',
+    template: '/api/v1/p/:personId/sleep/period',
+    path: (p) => `/api/v1/p/${p}/sleep/period?range=month&anchor=2026-02-01`,
+    seedOwn: (h) => seedPeriodNight(h, { personId: 'p1', sourceId: 'own-source-ok' }),
+    seedOther: (h, personId) => seedPeriodNight(h, { personId, sourceId: 'leaked-source-999999' }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
+    name: 'activity/period',
+    template: '/api/v1/p/:personId/activity/period',
+    path: (p) => `/api/v1/p/${p}/activity/period?range=month&anchor=2026-02-01`,
+    seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'exercise', localDate: '2026-02-01' }),
+    seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'exercise', localDate: '2026-02-01' }),
     ownNeedle: 'own-source-ok',
     otherNeedle: 'leaked-source-999999',
   },
