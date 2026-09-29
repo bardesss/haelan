@@ -3,6 +3,9 @@ import type { ColorPath } from './primitives.js'
 
 export const STAGE_KEYS = ['stage-deep', 'stage-light', 'stage-rem', 'stage-awake'] as const
 
+// A workout's heart-rate zones, easy to hard, in the order the zone bar and the trace's bands draw them.
+export const ZONE_KEYS = ['zone-light', 'zone-moderate', 'zone-vigorous', 'zone-peak'] as const
+
 // Low value first; each theme walks the ramp in the opposite direction so "more" moves away from its own card.
 export const SCALE_KEYS = ['scale-1', 'scale-2', 'scale-3', 'scale-4', 'scale-5'] as const
 
@@ -23,6 +26,15 @@ export const chartTokens = {
     // own, so colour here is the redundant channel and not the only one.
     'balance-over': 'blue.500',
     'balance-under': 'amber.500',
+    // A workout's four heart-rate zones, light to peak: pale blue, blue, amber, coral, the approved
+    // mockup's scale from easy to hard. Roles of their own rather than the sleep stages' colours
+    // and --negative they used to borrow: a zone is not a stage, and the borrowed peak (coral.400
+    // beside amber.500) was not separable from vigorous under any dichromacy. The coral is the
+    // other theme's step for that reason (accessibility.test.ts measures every pair).
+    'zone-light': 'blue.100',
+    'zone-moderate': 'blue.500',
+    'zone-vigorous': 'amber.500',
+    'zone-peak': 'coral.700',
     grid: 'slate.925',
     axis: 'slate.500',
     'band-baseline': 'blue.900',
@@ -47,6 +59,10 @@ export const chartTokens = {
     // card in both themes.
     'balance-over': 'blue.600',
     'balance-under': 'amber.700',
+    'zone-light': 'blue.100',
+    'zone-moderate': 'blue.600',
+    'zone-vigorous': 'amber.700',
+    'zone-peak': 'coral.400',
     grid: 'slate.200',
     axis: 'slate.650',
     'band-baseline': 'blue.200',

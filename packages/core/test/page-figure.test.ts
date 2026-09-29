@@ -33,8 +33,9 @@ const GLANCE: GlanceFigure = {
   metric: 'sleep_deep_minutes', value: 64, unit: 'minutes',
   baseline: { center: 85, low: 70, high: 100, thin: false },
   asOfDate: '2026-09-06', asOfMs: 1, partial: false, staleSources: [],
-  strip: [{ localDate: '2026-09-06', value: 64, band: { center: 85, low: 70, high: 100, thin: false }, standing: 'below' }],
+  strip: [{ localDate: '2026-09-06', value: 64, band: { center: 85, low: 70, high: 100, thin: false }, standing: 'below', judged: 'worse' }],
   standing: 'below',
+  judged: 'worse',
 }
 
 describe('pageFigureOf', () => {

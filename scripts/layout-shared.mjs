@@ -114,7 +114,9 @@ export const smallTargets = async (page, root) => {
   const candidates = await page.evaluate(({ root }) => {
     const scope = root === null ? document : document.querySelector(root)
     if (scope === null) return [{ tag: 'missing', cls: root, where: '', w: 0, h: 0, isAnchor: false, inlineDisplay: false, siblingText: '' }]
-    const interactive = 'a[href], button, input, select, textarea, [role="button"]'
+    // `summary` too: a <details> toggle is as much a tap target as a button, and the night page's
+    // About fold shipped a 20px one that nothing here measured.
+    const interactive = 'a[href], button, input, select, textarea, [role="button"], summary'
     return [...scope.querySelectorAll(interactive)]
       .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
       .map((el) => {

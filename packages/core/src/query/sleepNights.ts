@@ -34,6 +34,19 @@ export interface Night {
    * device recorded badly.
    */
   excludedSessions: string[]
+  /**
+   * Every session in `sessionIds` then `excludedSessions`, in that order, with its own span, so a
+   * page listing the recordings can name each one by its clock times rather than by a sync id.
+   */
+  sessionSpans: SessionSpan[]
+}
+
+export interface SessionSpan {
+  id: string
+  startMs: number
+  endMs: number
+  startOffsetMinutes: number
+  endOffsetMinutes: number
 }
 
 /**
@@ -150,6 +163,11 @@ export function readSleepNights(db: DbOrTx, input: {
     else bySource.set(row.sourceId, [row])
   }
 
+  const spanOf = new Map(sessionRows.map((row) => [row.id, {
+    id: row.id, startMs: row.startMs, endMs: row.endMs,
+    startOffsetMinutes: row.startOffsetMinutes, endOffsetMinutes: row.endOffsetMinutes,
+  }]))
+
   const nights: Night[] = []
   for (const bySource of byDate.values()) {
     for (const group of bySource.values()) {
@@ -175,6 +193,7 @@ export function readSleepNights(db: DbOrTx, input: {
       const first = night.find((s) => s.startMs === start)!
       const last = night.find((s) => s.endMs === end)!
       const ids = new Set(night.map((s) => s.id))
+      const excludedSessions = excludedByDate.get(group[0]!.localDate)?.get(group[0]!.sourceId) ?? []
 
       nights.push({
         localDate: group[0]!.localDate,
@@ -188,7 +207,8 @@ export function readSleepNights(db: DbOrTx, input: {
         segments: segmentRows
           .filter((segment) => ids.has(segment.sessionId))
           .map((segment) => ({ stage: segment.stage, startMs: segment.startMs, endMs: segment.endMs })),
-        excludedSessions: excludedByDate.get(group[0]!.localDate)?.get(group[0]!.sourceId) ?? [],
+        excludedSessions,
+        sessionSpans: [...night.map((s) => s.id), ...excludedSessions].map((id) => spanOf.get(id)!),
       })
     }
   }

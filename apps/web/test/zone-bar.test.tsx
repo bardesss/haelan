@@ -9,13 +9,30 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import type { EChartsOption } from 'echarts'
-import { ZoneBar, SESSION_ZONE_KEYS } from '../src/charts/ZoneBar.js'
+import { ZoneBar, SESSION_ZONE_KEYS, ZONE_TOKENS } from '../src/charts/ZoneBar.js'
 import type { ZoneRow } from '../src/charts/ZoneBar.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
 // this, the same reason chart-marks.test.tsx and chart-lifecycle.test.tsx set them.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
+
+/**
+ * Sets custom properties for one test and hands back what undoes it: each property restored to
+ * the value it had before (the file-level stub's, when it set one), or removed when it had none,
+ * so a later test never inherits a value this one invented.
+ */
+function overrideVars(values: Record<string, string>): () => void {
+  const style = document.documentElement.style
+  const before = Object.keys(values).map((variable) => [variable, style.getPropertyValue(variable)] as const)
+  for (const [variable, value] of Object.entries(values)) style.setProperty(variable, value)
+  return () => {
+    for (const [variable, value] of before) {
+      if (value === '') style.removeProperty(variable)
+      else style.setProperty(variable, value)
+    }
+  }
+}
 
 // Five DISTINCT stops, not the uniform '#000000' the loop above leaves every other token at: a
 // test asserting which stop a zone drew in would pass trivially against a ramp where every stop is
@@ -101,6 +118,19 @@ describe('ZoneBar', () => {
     expect(colors).toEqual([STOPS[0], STOPS[1], STOPS[2], STOPS[3]])
   })
 
+  // M10a-3: the workout page's zones card draws four distinct colours, the approved mockup's light
+  // blue, blue, amber and red, from the zone tokens the trace's bands use (ZONE_TOKENS), still by
+  // each zone's own identity rather than its row's position.
+  it('draws each zone in its own zone token when asked for distinct colours', () => {
+    const restore = overrideVars({ '--chart-zone-light': '#0000a1', '--chart-zone-moderate': '#0000a2', '--chart-zone-vigorous': '#0000a3', '--chart-zone-peak': '#0000a4' })
+    try {
+      act(() => { root!.render(<ZoneBar rows={[row('light', 4), row('vigorous', 12), row('peak', 3)]} label="Zones" distinct />) })
+      const option = chartStubs.at(-1)!.setOption.mock.calls[0]![0] as EChartsOption
+      expect((option.series as { itemStyle: { color: string } }[]).map((s) => s.itemStyle.color)).toEqual(['#0000a1', '#0000a3', '#0000a4'])
+      expect(ZONE_TOKENS).toEqual({ light: 'zoneLight', moderate: 'zoneModerate', vigorous: 'zoneVigorous', peak: 'zonePeak' })
+    } finally { restore() }
+  })
+
   // Final review finding: the accessible table's second column was headed "Minutes" while its own
   // cells printed formatDuration's "Xh XXm", never a bare minute count. No I18nProvider (as
   // elsewhere in this app's chart tests), so t() returns the raw key, and the two header/cell
@@ -113,10 +143,20 @@ describe('ZoneBar', () => {
     const headers = [...html.matchAll(/<th scope="col">([^<]*)<\/th>/g)].map((m) => m[1]!)
     expect(headers).toEqual(['activity.workout.zones.column', 'activity.workout.zones.duration'])
     expect(headers).not.toContain('activity.units.minutes')
-    // 70 minutes prints as "1h 10m", never a bare "70". The zone name is the row's own header
-    // cell (ChartFigure.tsx renders column 0 as `<th scope="row">`), duration the one `<td>`.
+    // A zone is minutes, the short-span rule the legend beside it follows ("2 min", never
+    // "0h 02m"), with its unit, never a bare "70". The zone name is the row's own header cell
+    // (ChartFigure.tsx renders column 0 as `<th scope="row">`), duration the one `<td>`.
     expect(html).toContain('<th scope="row">light</th>')
     const cells = [...html.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]!)
-    expect(cells).toEqual(['1h 10m'])
+    expect(cells).toEqual(['70\u00a0activity.units.min'])
+  })
+
+  // One bar needs no scale under it, and its axis's last two ticks ("30" and "31") collided; the
+  // card's own label names it, so the category label repeated it inside the chart.
+  it('draws no axis labels on either axis', () => {
+    act(() => { root!.render(<ZoneBar rows={[row('light', 4), row('peak', 27)]} label="Zones" distinct />) })
+    const option = chartStubs.at(-1)!.setOption.mock.calls[0]![0] as { xAxis: { axisLabel?: { show?: boolean } }, yAxis: { axisLabel?: { show?: boolean } } }
+    expect(option.xAxis.axisLabel?.show).toBe(false)
+    expect(option.yAxis.axisLabel?.show).toBe(false)
   })
 })

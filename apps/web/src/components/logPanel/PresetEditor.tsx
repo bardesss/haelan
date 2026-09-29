@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Icon } from '../icons.js'
-import { SEED_KINDS } from '../../data/eventKinds.js'
+import { SEED_KINDS, kindLabel as sharedKindLabel } from '../../data/eventKinds.js'
 import { MAX_PRESET_LENGTH, MAX_PRESETS, validatePresets } from '@haelan/core/event-kinds'
 import { useSavePresets } from '../../data/useQuickLog.js'
 import { failureText } from './LogPanel.js'
@@ -68,7 +68,7 @@ export function PresetEditor({ kinds: initial, suggestions, onDone, onCancel }: 
     refocus.current = null
   })
 
-  const kindLabel = (kind: string) => SEED_KINDS.includes(kind) ? t(`annotate.event.kinds.${kind}`) : kind
+  const kindLabel = (kind: string) => sharedKindLabel(t, kind)
   const announce = (kind: string, index: number) =>
     setAnnouncement(t('logPanel.edit.moved', { kind: kindLabel(kind), position: index + 1 }))
 

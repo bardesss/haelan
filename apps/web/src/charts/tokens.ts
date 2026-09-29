@@ -21,6 +21,11 @@ const CHART_SOURCES = {
   // readChartTokens throws on a name the stylesheet does not define.
   balanceOver: 'balance-over',
   balanceUnder: 'balance-under',
+  // A workout's four heart-rate zones (ZoneBar and the trace's bands behind the heart rate).
+  zoneLight: 'zone-light',
+  zoneModerate: 'zone-moderate',
+  zoneVigorous: 'zone-vigorous',
+  zonePeak: 'zone-peak',
   band: 'band-baseline',
   excluded: 'state-excluded',
   noData: 'state-no-data',
@@ -36,11 +41,13 @@ const SEMANTIC_SOURCES = {
   muted: 'text-muted',
   surface: 'surface-card',
   // The dashboard strips' day dots (Sparkline's `dots`): the latest day in the primary text colour,
-  // a day the server called outside its usual in the warning colour, the same --negative the
-  // cards' own out-of-range figures use. Semantic rather than new chart roles, because a dot that
-  // disagreed with the figure it stands beside would be a second vocabulary for one verdict.
+  // a day the server judged better in --positive and worse (or outside a neutral usual) in
+  // --negative, the colours the verdict line beside it takes (verdictTone). Semantic rather than
+  // new chart roles, because a dot that disagreed with the figure it stands beside would be a
+  // second vocabulary for one verdict.
   primary: 'text-primary',
   negative: 'negative',
+  positive: 'positive',
 } as const satisfies Record<string, SemanticToken>
 
 export type ChartTokens = Record<keyof typeof CHART_SOURCES | keyof typeof SEMANTIC_SOURCES, string>

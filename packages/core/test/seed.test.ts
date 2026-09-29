@@ -13,6 +13,7 @@ import { openHaelan } from '../src/instance.ts'
 import { PeopleStore } from '../src/store/people.ts'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
 import { MERGED_SOURCE } from '../src/derive/rollup.ts'
+import { PersonQuery } from '../src/query/personQuery.ts'
 
 const END = Date.parse('2026-03-01T00:00:00Z')
 
@@ -165,8 +166,12 @@ describe('seedArchive', () => {
       // include this run's own last day - a day 3 span here never does. That is ordinary
       // sparseness, not the stamping bug, and asserting it away would make this test's pass
       // depend on `days` and the workout schedule lining up rather than on civilDateOf being
-      // correct.
-      const EXCLUDED_SPARSE_METRICS = new Set(['workout_count', 'workout_minutes'])
+      // correct. The three active_minutes_*_peak overlaps are sparse the same way: a day has them
+      // only when a run put minutes into the peak zone, and the run on this span's middle day
+      // (WORKOUT_SCHEDULE opens with one) is not on its last.
+      const EXCLUDED_SPARSE_METRICS = new Set([
+        'workout_count', 'workout_minutes', 'active_minutes_light_peak', 'active_minutes_moderate_peak', 'active_minutes_vigorous_peak',
+      ])
       const newestByMetric = new Map<string, string>()
       for (const row of allRows) {
         if (EXCLUDED_SPARSE_METRICS.has(row.metric)) continue
@@ -193,6 +198,194 @@ describe('seedArchive', () => {
       instance.close()
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  // The demo's night page draws every section only if a seeded night carries what each one reads:
+  // the provider's summary (latency, awakenings), the intraday HRV and SpO2 its traces plot, the
+  // nightly temperature and breathing rate the morning after names. Asserted through nightPage
+  // after a real rebuild, since each of those only exists once the app has derived it.
+  it('gives a seeded night everything the night page shows', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-night-page-'))
+    const instance = openHaelan(dir)
+    try {
+      seedPerson(instance.db, 'p1')
+      const endMs = localMidnightMs('2026-09-07')
+      seedArchive({ archive: instance.archive, personId: 'p1', days: 21, endMs })
+      const report = runRebuild({
+        db: instance.db, archive: instance.archive, peopleStore: new PeopleStore(instance.db),
+        priority: instance.sourcePriority, overrides: instance.overrides, settings: instance.settings, nowMs: endMs,
+      })
+      expect(report.failures).toEqual([])
+      const q = new PersonQuery(instance.db, 'p1')
+      const page = q.nightPage({
+        localDate: '2026-09-06', today: '2026-09-07', nowMs: endMs, nameOf: (id) => id,
+        sleepTargetMinutes: 480, sleepUseBaseline: true,
+      })
+      expect(page).not.toBeNull()
+      const { figures, traces, morning, night } = page!
+      expect(figures.minutesToFallAsleep.value).toBeGreaterThanOrEqual(5)
+      expect(figures.minutesToFallAsleep.value).toBeLessThanOrEqual(25)
+      expect(figures.awakenings.value).toBeGreaterThanOrEqual(8)
+      expect(figures.awakenings.value).toBeLessThanOrEqual(18)
+      expect(figures.minutesAfterWakeUp.value).not.toBeNull()
+      expect(traces.spo2.stat.lowest!.value).toBeGreaterThanOrEqual(93)
+      expect(traces.spo2.stat.highest!.value).toBeLessThanOrEqual(98)
+      expect(traces.hrv.stat.lowest!.value).toBeGreaterThanOrEqual(30)
+      expect(traces.hrv.stat.highest!.value).toBeLessThanOrEqual(70)
+      expect(morning.skinTemperature.value).not.toBeNull()
+      expect(morning.breathing.value).not.toBeNull()
+      expect(morning.spo2.value).not.toBeNull()
+      // Every five minutes through the night, not the hourly day curve alone.
+      const perMetric = (metric: string) => q.intradayWindow({ metric, startMs: night.startMs, endMs: night.endMs, points: 100_000 }).points.length
+      const expected = Math.floor((night.endMs - night.startMs) / 300_000)
+      for (const metric of ['heart_rate', 'hrv', 'spo2']) expect(perMetric(metric), metric).toBeGreaterThanOrEqual(expected - 1)
+    } finally {
+      instance.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  // The demo's workout page draws every section only if a seeded run carries what each one reads:
+  // pace and distance, the automatic kilometre splits, the provider's zone durations and the day's
+  // zone ceilings, the running form figures, and heart rate every minute. Asserted through
+  // workoutPage after a real rebuild, since each only exists once the app has derived it.
+  it('gives a seeded run everything the workout page shows', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-workout-page-'))
+    const instance = openHaelan(dir)
+    try {
+      seedPerson(instance.db, 'p1')
+      const endMs = localMidnightMs('2026-09-07')
+      seedArchive({ archive: instance.archive, personId: 'p1', days: 30, endMs })
+      const report = runRebuild({
+        db: instance.db, archive: instance.archive, peopleStore: new PeopleStore(instance.db),
+        priority: instance.sourcePriority, overrides: instance.overrides, settings: instance.settings, nowMs: endMs,
+      })
+      expect(report.failures).toEqual([])
+      const q = new PersonQuery(instance.db, 'p1')
+      const run = q.sessions({ kind: 'exercise', from: '2026-01-01', to: '2026-09-07', type: 'RUNNING' }).at(-1)
+      expect(run, 'the seed produced no run in thirty days').toBeDefined()
+      const page = q.workoutPage({ sessionId: run!.id, today: '2026-09-07', nowMs: endMs })!
+      expect(page.hero).toBe('pace')
+      expect(page.figures.pace!.value).toBeGreaterThan(270)
+      expect(page.figures.pace!.value).toBeLessThan(400)
+      expect(page.figures.distance!.value).toBeGreaterThan(3000)
+      expect(page.figures.movingTime!.value).toBeLessThanOrEqual(page.figures.elapsed!.value!)
+      for (const key of ['calories', 'steps', 'averageHeartRate', 'elevationGain', 'activeZoneMinutes', 'hardZoneMinutes',
+        'cardioLoad', 'cadence', 'strideLength', 'groundContact', 'verticalOscillation', 'verticalRatio', 'vo2max'] as const) {
+        expect(page.figures[key], key).toBeDefined()
+      }
+      expect(page.splitTrend).not.toBeNull()
+      expect(page.zoneBounds).not.toBeNull()
+      expect(page.zoneBounds!.moderateMin).toBeLessThan(page.zoneBounds!.max)
+      // Heart rate every minute of the workout, not the hourly day curve alone.
+      const minutes = Math.floor((run!.endMs - run!.startMs) / 60_000)
+      const points = q.intradayWindow({ metric: 'heart_rate', startMs: run!.startMs, endMs: run!.endMs, points: 100_000 }).points
+      expect(points.length).toBeGreaterThanOrEqual(minutes - 1)
+    } finally {
+      instance.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  // The demo writes each routed run twice, Google's copy and the phone's, which the app merges on
+  // read. Merged into one session, the run's page finds an earlier run as its previous one rather
+  // than its own second copy, and it has enough runs before it for a usual range. A real rebuild of
+  // three months of every data type, so it gets longer than the default timeout.
+  it('merges the routed demo run into one session whose previous run is an earlier one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-routed-run-'))
+    const instance = openHaelan(dir)
+    try {
+      seedPerson(instance.db, 'p1')
+      const endMs = localMidnightMs('2026-09-07')
+      seedArchive({ archive: instance.archive, personId: 'p1', days: 95, endMs, demoRoute: true })
+      const report = runRebuild({
+        db: instance.db, archive: instance.archive, peopleStore: new PeopleStore(instance.db),
+        priority: instance.sourcePriority, overrides: instance.overrides, settings: instance.settings, nowMs: endMs,
+      })
+      expect(report.failures).toEqual([])
+      const q = new PersonQuery(instance.db, 'p1')
+      const runs = q.sessions({ kind: 'exercise', from: '2026-01-01', to: '2026-09-07', type: 'RUNNING' })
+      const last = runs.at(-1)!
+      expect(runs.filter((run) => run.startMs === last.startMs)).toHaveLength(1)
+      const page = q.workoutPage({ sessionId: last.id, today: '2026-09-07', nowMs: endMs })!
+      expect(page.previous).not.toBeNull()
+      expect(page.previous!.sessionId).not.toBe(last.id)
+      // Nine runs before it in 90 days, and five walks before the last walk: a real usual range
+      // for both, and a full strip for a run.
+      const within90 = (list: typeof runs, subject: (typeof runs)[number]) =>
+        list.filter((s) => s.startMs < subject.startMs && s.startMs >= subject.startMs - 90 * 86_400_000).length
+      expect(within90(runs, last)).toBeGreaterThanOrEqual(9)
+      const walks = q.sessions({ kind: 'exercise', from: '2026-01-01', to: '2026-09-07', type: 'WALKING' })
+      expect(within90(walks, walks.at(-1)!)).toBeGreaterThanOrEqual(5)
+      expect(page.figures.pace!.baseline?.thin).toBe(false)
+      expect(page.figures.pace!.strip.every((point) => point.value !== null)).toBe(true)
+    } finally {
+      instance.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }, 90_000)
+
+  // The same promise at the level of the payloads, over a span long enough to meet every type and
+  // the occasional paused run, so the shapes can be checked for agreeing with themselves.
+  it('writes workouts whose figures agree with themselves', () => {
+    const puts: Array<{ dataType: string, body: string }> = []
+    const archive = { put: (row: { dataType: string, body: string }) => { puts.push(row) } }
+    seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 120, endMs: END, demoRoute: true })
+    type Exercise = Record<string, any>
+    const exercises = puts.filter((p) => p.dataType === 'exercise')
+      .flatMap((p) => (JSON.parse(p.body) as { dataPoints: Array<{ dataSource: { platform: string }, exercise: Exercise }> }).dataPoints)
+    const google = exercises.filter((p) => p.dataSource.platform === 'FITBIT').map((p) => p.exercise)
+    const seconds = (d: string): number => Number(d.slice(0, -1))
+    const types = new Set(google.map((e) => e.exerciseType))
+    for (const type of ['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL']) expect(types.has(type), type).toBe(true)
+    let midPauses = 0
+    for (const e of google) {
+      const startMs = Date.parse(e.interval.startTime)
+      const endMs = Date.parse(e.interval.endTime)
+      const elapsed = (endMs - startMs) / 1000
+      const active = seconds(e.activeDuration)
+      expect(active).toBeLessThanOrEqual(elapsed + 1)
+      const m = e.metricsSummary
+      expect(m.caloriesKcal, e.exerciseType).toBeGreaterThan(0)
+      expect(Number(m.averageHeartRateBeatsPerMinute), e.exerciseType).toBeGreaterThan(60)
+      // The real finish sequence closes every workout: PAUSE and STOP at its end.
+      const events = e.exerciseEvents as Array<{ eventTime: string, exerciseEventType: string }>
+      expect(events.at(-1)!.exerciseEventType).toBe('STOP')
+      expect(Date.parse(events.at(-1)!.eventTime)).toBe(endMs)
+      const pauses = events.filter((ev) => ev.exerciseEventType === 'PAUSE' && Date.parse(ev.eventTime) < endMs - 120_000)
+      midPauses += pauses.length
+      if (e.exerciseType === 'WEIGHTLIFTING') {
+        expect(m.distanceMillimeters).toBeUndefined()
+        continue
+      }
+      const zones = m.heartRateZoneDurations
+      const inZones = ['lightTime', 'moderateTime', 'vigorousTime', 'peakTime'].reduce((sum, k) => sum + seconds(zones[k]), 0)
+      expect(inZones).toBeLessThanOrEqual(active + 60)
+      if (e.exerciseType === 'SWIMMING_POOL') {
+        expect(m.totalSwimLengths * e.exerciseMetadata.poolLengthMillimeters).toBe(m.distanceMillimeters)
+        continue
+      }
+      // Pace and speed are both the distance over the moving time.
+      expect(m.averagePaceSecondsPerMeter * m.distanceMillimeters / 1000).toBeCloseTo(active, -1)
+      expect(m.averageSpeedMillimetersPerSecond * active).toBeCloseTo(m.distanceMillimeters, -4)
+      if (e.exerciseType === 'BIKING') continue
+      const splits = e.splits as Array<{ splitType: string, activeDuration: string, metricsSummary: { distanceMillimeters: number } }>
+      expect(splits.every((s) => s.splitType === 'DISTANCE')).toBe(true)
+      expect(splits.reduce((sum, s) => sum + s.metricsSummary.distanceMillimeters, 0)).toBe(m.distanceMillimeters)
+      expect(splits.reduce((sum, s) => sum + seconds(s.activeDuration), 0)).toBe(active)
+      if (e.exerciseType === 'RUNNING') {
+        expect(m.mobilityMetrics.avgCadenceStepsPerMinute).toBeGreaterThan(150)
+        expect(m.runVo2Max).toBeGreaterThan(35)
+      }
+    }
+    expect(midPauses, 'no run in 120 days paused mid-run').toBeGreaterThan(0)
+    // Routes ride on the phone's own copy of a run, never on Google's, and only on the last few.
+    const routed = exercises.filter((p) => p.exercise.route !== undefined)
+    expect(routed.length).toBeGreaterThan(0)
+    expect(routed.every((p) => p.dataSource.platform === 'HEALTH_CONNECT' && p.exercise.exerciseType === 'RUNNING')).toBe(true)
+    expect(google.every((e) => e.route === undefined)).toBe(true)
+    const runStarts = google.filter((e) => e.exerciseType === 'RUNNING').map((e) => e.interval.startTime as string).sort()
+    expect(routed.map((p) => p.exercise.interval.startTime as string).sort()).toEqual(runStarts.slice(-routed.length))
   })
 
   describe('lastDayUntilMs', () => {

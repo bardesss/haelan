@@ -3,7 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { RECOVERY_HARVEST_EVENT_KIND } from '@haelan/core/recovery-index'
 import { useTranslation } from '../i18n/index.js'
 import type { Translate } from '../format.js'
-import { SEED_KINDS } from './eventKinds.js'
+import { kindLabel as sharedKindLabel } from './eventKinds.js'
 import type { StoredEvent, StoredNote } from './useAnnotations.js'
 import type { MetricAnnotations } from './chartAnnotations.js'
 
@@ -11,8 +11,8 @@ const EMPTY: { date: string; text: string }[] = Object.freeze([]) as never[]
 
 /**
  * A note carries its own free text already; an event carries only a `kind` and an optional
- * `note`. `kind` is translated through the same six annotate.event.kinds keys the panel's own
- * datalist offers (SEED_KINDS, imported rather than copied), and left exactly as the reader typed
+ * `note`. `kind` is translated through eventKinds.ts's shared `kindLabel` (the same six
+ * annotate.event.kinds keys the panel's own datalist offers), and left exactly as the reader typed
  * it otherwise, since a kind past the seed set is their own words, not this project's vocabulary
  * to translate. The event's own note, when present, is appended rather than dropped: it is the one
  * piece of an event a reader actually wrote by hand, same as a note's body.
@@ -26,8 +26,9 @@ const EMPTY: { date: string; text: string }[] = Object.freeze([]) as never[]
  * which "started" corrects without going anywhere near the end day's own calendar arithmetic.
  */
 function eventText(t: Translate, event: StoredEvent): string {
-  const kindLabel = SEED_KINDS.includes(event.kind) ? t(`annotate.event.kinds.${event.kind}`) : event.kind
-  const kind = event.endedAtMs !== null ? t('charts.event.multiDay', { kind: kindLabel }) : kindLabel
+  const kind = event.endedAtMs !== null
+    ? t('charts.event.multiDay', { kind: sharedKindLabel(t, event.kind) })
+    : sharedKindLabel(t, event.kind)
   return event.note ? t('charts.event.withNote', { kind, note: event.note }) : kind
 }
 

@@ -6,13 +6,15 @@ import { ConfigError } from '../errors.ts'
 import type { PersonQuery } from './personQuery.ts'
 import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS } from './intraday.ts'
 import { activeMinutesFigure, contextFor, dailyFigure, standingOf } from './glance.ts'
+import type { GlanceStanding, Judged } from './glance.ts'
 import { judge, pageFigureOf, usualOf } from './pageFigure.ts'
 import type { FigureDirection, PageFigure } from './pageFigure.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
-import type { WorkoutDetail, WorkoutSummary } from '../api/workoutSummary.ts'
+import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
 import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
+import type { ZoneBounds } from '../api/cardioLoad.ts'
 import { compareWorkout, sameTypeWindow } from '../api/workoutComparison.ts'
 import type { WorkoutComparison } from '../api/workoutComparison.ts'
 import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
@@ -28,7 +30,15 @@ export type WorkoutFigureKey = 'pace' | 'speed' | 'distance' | 'movingTime' | 'e
   | 'elevationGain' | 'hardZoneMinutes' | 'cadence' | 'strideLength' | 'groundContact'
   | 'verticalOscillation' | 'verticalRatio' | 'vo2max' | 'swimLengths'
 
-export interface WorkoutStripPoint { sessionId: string, localDate: string, value: number | null }
+/**
+ * One session on a figure's strip, with where it stood against the figure's own usual and that read
+ * through the figure's direction, so its dot takes the tone its verdict line would (verdictTone).
+ * The usual is the one the page judges this workout by, not one of the session's own day: there is
+ * one band behind the whole strip, and a thin one judges no point.
+ */
+export interface WorkoutStripPoint {
+  sessionId: string, localDate: string, value: number | null, standing: GlanceStanding | null, judged: Judged
+}
 export interface WorkoutFigure extends Omit<PageFigure, 'strip'> { key: WorkoutFigureKey, strip: WorkoutStripPoint[] }
 export interface RecordRef { value: number, sessionId: string, localDate: string }
 
@@ -41,10 +51,15 @@ export interface WorkoutPage {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
-  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'distance' | 'averageHeartRate' | 'cardioLoad', number>> } | null
+  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad', number>> } | null
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
+  /** Seconds per km the second half of the automatic splits was faster than the first (negative:
+   *  slower); null below two usable splits. */
+  splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
+  /** Where the heart rate zones above light begin, for the bands behind the trace. */
+  zoneBounds: ZoneBounds | null
 }
 
 export interface WorkoutPageInput { sessionId: string, today: string, nowMs: number, nameOf: (id: string) => string }
@@ -152,12 +167,16 @@ function figuresOf(subject: Reading, window: readonly Reading[]): WorkoutPage['f
     // their history is empty and usualOf answers no band: no verdict is claimed on them.
     const baseline = usualOf(history, WORKOUT_BAND_MIN)
     const standing = standingOf(value, baseline, false)
+    const pointOf = (session: WorkoutSession, v: number | null): WorkoutStripPoint => {
+      const pointStanding = standingOf(v, baseline, false)
+      return { sessionId: session.id, localDate: session.localDate, value: v, standing: pointStanding, judged: judge(pointStanding, spec.direction) }
+    }
     figures[spec.key] = {
       key: spec.key, metric: spec.key, value, unit: spec.unit, precision: spec.precision, direction: spec.direction,
       baseline, standing, judged: judge(standing, spec.direction),
       strip: [
-        ...stripped.map((r) => ({ sessionId: r.session.id, localDate: r.session.localDate, value: spec.of(r) })),
-        { sessionId: subject.session.id, localDate: subject.session.localDate, value },
+        ...stripped.map((r) => pointOf(r.session, spec.of(r))),
+        pointOf(subject.session, value),
       ],
     }
   }
@@ -172,7 +191,9 @@ function heroOf(exerciseType: string | null, figures: WorkoutPage['figures']): W
   return figures.movingTime !== undefined ? 'movingTime' : 'elapsed'
 }
 
-// Answers: the latest earlier session of this type the person did not exclude, however long ago.
+// Answers: the latest earlier session of this type the person did not exclude, however long ago,
+// with the values the comparison table's rows read: speed as well as pace, since a ride's rows follow its hero,
+// and moving and elapsed time, since a time hero leads the table with its own row.
 function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession[]): WorkoutPage['previous'] {
   const earlier = candidates.filter((s) => s.id !== subject.id && !s.excluded && s.startMs < subject.startMs)
   const latest = earlier.reduce<WorkoutSession | null>((best, s) => (best === null || s.startMs > best.startMs ? s : best), null)
@@ -181,7 +202,10 @@ function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession
   const values: NonNullable<WorkoutPage['previous']>['values'] = {}
   const put = (key: keyof typeof values, v: number | null) => { if (v !== null) values[key] = v }
   put('pace', r.summary.paceSecondsPerKm)
+  put('speed', r.detail.averageSpeedMetersPerSecond)
   put('distance', r.summary.distanceMeters)
+  put('movingTime', r.detail.activeDurationSeconds)
+  put('elapsed', (latest.endMs - latest.startMs) / 1000)
   put('averageHeartRate', r.summary.averageHeartRateBpm)
   put('cardioLoad', r.edwards)
   return { sessionId: latest.id, localDate: latest.localDate, values }
@@ -240,6 +264,22 @@ function afterOf(q: PersonQuery, subject: WorkoutSession, input: WorkoutPageInpu
   }
 }
 
+/**
+ * Answers: how much faster the second half of the splits went than the first, in s/km. Halves by
+ * count, the middle split left out of an odd one; each half's pace weighted by distance, so the
+ * short last split a run usually ends on counts for its fifth of a kilometre and not for a whole
+ * one. A split with no pace or no distance says nothing about either half and is skipped.
+ */
+export function splitTrendOf(splits: readonly WorkoutSplit[]): WorkoutPage['splitTrend'] {
+  const usable = splits.flatMap((s) => (s.paceSecondsPerKm === null || s.distanceMeters === null || s.distanceMeters <= 0
+    ? [] : [{ pace: s.paceSecondsPerKm, km: s.distanceMeters / 1000 }]))
+  if (usable.length < 2) return null
+  const half = Math.floor(usable.length / 2)
+  const paceOf = (part: typeof usable) =>
+    part.reduce((sum, s) => sum + s.pace * s.km, 0) / part.reduce((sum, s) => sum + s.km, 0)
+  return { secondHalfFasterBySecondsPerKm: paceOf(usable.slice(0, half)) - paceOf(usable.slice(usable.length - half)) }
+}
+
 export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): WorkoutPage | null {
   const session = q.sessionById({ sessionId: input.sessionId })
   if (session === null || session.kind !== 'exercise') return null
@@ -270,5 +310,7 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     best: bestOf(everSameType),
     day: dayOf(q, session, input),
     after: afterOf(q, session, input),
+    splitTrend: splitTrendOf(subject.detail.autoSplits),
+    zoneBounds: q.workoutZoneBounds({ sessionId: session.id }),
   }
 }
