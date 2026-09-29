@@ -11,6 +11,7 @@ import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
+import { bandFrom } from '../charts/bands.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
@@ -59,19 +60,6 @@ function datesBetween(from: string, to: string): string[] {
     dates.push(new Date(cursor).toISOString().slice(0, 10))
   }
   return dates
-}
-
-function bandFrom(baseline: Baseline | null): { low: number, high: number } | undefined {
-  // Thin stays undefined, not a band drawn thin: a band computed from a handful of readings looks
-  // exactly as authoritative as one computed from sixty days, and thin is the reader's only signal
-  // that it is not. Same reasoning as Recovery.tsx's own bandFrom, page owned rather than shared
-  // for the same reason that file's own comment on datesBetween states. In grams, the stored unit,
-  // the same unit weightTrend and spark.values already stay in below: a chart's y axis is a linear
-  // rescale of whatever unit it is handed, so the band never needs the kilogram conversion the
-  // headline and the insight card apply for display.
-  return baseline !== null && !baseline.thin
-    ? { low: baseline.center - baseline.spread, high: baseline.center + baseline.spread }
-    : undefined
 }
 
 export function Weight() {

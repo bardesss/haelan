@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { DEFAULT_SLEEP_TARGET_MINUTES, METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
+import { balanceZeroLine as zeroLineOf, balanceOf } from '@haelan/core/sleep-balance'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
@@ -19,6 +20,7 @@ import { Sparkline } from '../charts/Sparkline.js'
 import { BalanceBars } from '../charts/BalanceBars.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
+import { bandFrom } from '../charts/bands.js'
 import { localMinutesOf, inWindow, napInWindow, withinSchedule, WIDE_WINDOW } from '../charts/schedule.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
@@ -103,15 +105,6 @@ type Stage = 'deep' | 'light' | 'rem' | 'awake'
 
 const EMPTY_NIGHTS: Night[] = Object.freeze([]) as never[]
 const EMPTY_NAPS: number[] = Object.freeze([]) as never[]
-
-function bandFrom(baseline: Baseline | null): { low: number, high: number } | undefined {
-  // Thin stays undefined, not a band drawn thin: a band computed from three nights looks exactly
-  // as authoritative as one computed from thirty, and thin is the reader's only signal that it is
-  // not. Same reasoning as Recovery.tsx's own bandFrom.
-  return baseline !== null && !baseline.thin
-    ? { low: baseline.center - baseline.spread, high: baseline.center + baseline.spread }
-    : undefined
-}
 
 /**
  * The clause sleep_asleep_minutes' basis line states the deviation through, formatted as a
@@ -429,14 +422,11 @@ export function Sleep() {
   // historicalTo, not controls.to, and the same anchor asleepBaseline above is fetched with: a
   // Month or Year view's calendar end is not the same date as the last day that has actually
   // happened.
-  const balanceZeroLine = useMemo(() => {
-    const baseline = asleepBaseline.data?.baseline ?? null
-    const followBaseline = session.data?.sleepUseBaseline ?? true
-    if (followBaseline && baseline !== null && !baseline.thin) {
-      return { minutes: baseline.center, source: 'baseline' as const }
-    }
-    return { minutes: session.data?.sleepTargetMinutes ?? DEFAULT_SLEEP_TARGET_MINUTES, source: 'target' as const }
-  }, [asleepBaseline.data, session.data?.sleepTargetMinutes, session.data?.sleepUseBaseline])
+  const balanceZeroLine = useMemo(() => zeroLineOf(
+    asleepBaseline.data?.baseline ?? null,
+    session.data?.sleepUseBaseline ?? true,
+    session.data?.sleepTargetMinutes ?? DEFAULT_SLEEP_TARGET_MINUTES,
+  ), [asleepBaseline.data, session.data?.sleepTargetMinutes, session.data?.sleepUseBaseline])
 
   // The signed deviation of each night in the range, dense: a night that reported nothing keeps its
   // position and draws no bar, and an excluded night is the same shape rather than a special case,
@@ -445,10 +435,7 @@ export function Sleep() {
   // neither counts toward the headline or the denominator below: absent is not a number here.
   const balance = useMemo(() => {
     const dense = denseSeries(rangeDates, asleepPoints)
-    return {
-      labels: dense.labels,
-      values: dense.values.map((value) => (value === null ? null : value - balanceZeroLine.minutes)),
-    }
+    return { labels: dense.labels, values: balanceOf(dense.values, balanceZeroLine.minutes).values }
   }, [rangeDates, sumSeries.data, balanceZeroLine.minutes])
 
   // Sum, not mean: the card's own subject is the surplus or deficit over the period, and the basis

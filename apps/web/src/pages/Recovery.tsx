@@ -12,6 +12,7 @@ import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
+import { bandFrom } from '../charts/bands.js'
 import { RecoveryIndexCard } from './recovery/RecoveryIndexCard.js'
 import { HeartRateCard } from './recovery/HeartRateCard.js'
 import { usePageControls } from '../controls/usePageControls.js'
@@ -119,14 +120,6 @@ function datesBetween(from: string, to: string): string[] {
     dates.push(new Date(cursor).toISOString().slice(0, 10))
   }
   return dates
-}
-
-function bandFrom(baseline: Baseline | null): { low: number, high: number } | undefined {
-  // Thin stays undefined, not a band drawn thin: a band computed from three days looks exactly as
-  // authoritative as one computed from thirty, and thin is the reader's only signal that it is not.
-  return baseline !== null && !baseline.thin
-    ? { low: baseline.center - baseline.spread, high: baseline.center + baseline.spread }
-    : undefined
 }
 
 /**

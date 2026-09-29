@@ -118,6 +118,45 @@ function optionForPoints(
   return stub.setOption.mock.calls[0]![0] as EChartsOption
 }
 
+/**
+ * Task 9's own helper, alongside optionForPoints rather than folded into it: this one takes the
+ * session/night-bounding props (`startMs`, `endMs`, `axis`, `usualBand`) that no other test in this
+ * file needs, and optionForPoints' own positional parameters (`eventMarks`, `metric`) are already
+ * order-sensitive enough without adding four more. Session and query-client wiring copied from
+ * optionForPoints on purpose - the two are independent mounts, not a shared fixture, so a change to
+ * one's session shape cannot silently affect the other's assertions.
+ */
+function optionFor(props: {
+  points: IntradayPoint[]
+  startMs?: number
+  endMs?: number
+  axis?: 'clock' | 'elapsed'
+  usualBand?: { low: number, high: number }
+}): EChartsOption {
+  const session: Session = {
+    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', effectiveTimezone: 'UTC', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
+    sleepTargetMinutes: 480,
+    sleepUseBaseline: true,
+    quickLogEnabled: true,
+    connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+  }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), session)
+  client.setQueryData(sourceNamesKey('p1'), { items: [] })
+  act(() => {
+    root!.render(
+      <I18nProvider lng="en">
+        <QueryClientProvider client={client}>
+          <IntradayHeartRate points={props.points} reduction={null} label="Heart rate"
+            startMs={props.startMs} endMs={props.endMs} axis={props.axis} usualBand={props.usualBand} />
+        </QueryClientProvider>
+      </I18nProvider>,
+    )
+  })
+  const stub = chartStubs.at(-1)!
+  return stub.setOption.mock.calls[0]![0] as EChartsOption
+}
+
 const at = (utcMs: number, sourceId: string, mean: number): IntradayPoint =>
   ({ sourceId, utcMs, min: mean - 5, mean, max: mean + 5, n: 1, excluded: false })
 
@@ -357,5 +396,57 @@ describe('the appended events series does not move the per-source series-index l
     expect(watchHtml).toContain('mean 60 bpm')
     expect(phoneHtml).toContain('phone')
     expect(phoneHtml).toContain('mean 100 bpm')
+  })
+})
+
+// Task 9: the bug this task fixes. A workout's session (or a night) has both ends, and a chart
+// bounded only by its own samples spans whatever the samples happen to cover - one reading ten
+// minutes into a 34 minute session drew an axis from 18:00 to 18:00 the next day. Full mode ignored
+// startMs/endMs entirely before this; only compact mode read them.
+describe('IntradayHeartRate, bounded to its session', () => {
+  const START = Date.UTC(2026, 8, 4, 16, 0)
+  const END = START + 34 * 60_000
+  const ONE = [{ sourceId: 'watch', utcMs: START + 10 * 60_000, min: 140, mean: 150, max: 160, n: 1, excluded: false }]
+
+  it('spans the session, not a day, when the session has a single reading', () => {
+    const option = optionFor({ points: ONE, startMs: START, endMs: END, axis: 'elapsed' })
+    expect((option.xAxis as { min: number }).min).toBe(START)
+    expect((option.xAxis as { max: number }).max).toBe(END)
+  })
+
+  it('labels its ticks as time into the session', () => {
+    const option = optionFor({ points: ONE, startMs: START, endMs: END, axis: 'elapsed' })
+    const formatter = (option.xAxis as { axisLabel: { formatter: (v: number) => string } }).axisLabel.formatter
+    expect(formatter(START + 5 * 60_000)).toBe('5:00')
+  })
+
+  it('draws the usual band behind the lines', () => {
+    const option = optionFor({ points: ONE, startMs: START, endMs: END, usualBand: { low: 52, high: 58 } })
+    const band = (option.series as { markArea?: { data: unknown[] } }[])
+      .find((s) => JSON.stringify(s.markArea?.data ?? []).includes('yAxis'))
+    expect(band!.markArea!.data).toEqual([[{ yAxis: 52 }, { yAxis: 58 }]])
+  })
+
+  // Fix round 1 review finding: the accessible table (ChartFigure's own sr-only table) is the only
+  // way this chart's data reaches a screen-reader user. Before this fix its time column called
+  // `clock` unconditionally, so a workout's table read a clock time while the visible axis and
+  // tooltip - both already switched to `tick` - read elapsed. A reader using only the table saw a
+  // different, and wrong, account of when each reading happened.
+  it("reads the table's time column as elapsed on a workout, not a clock time", () => {
+    optionFor({ points: ONE, startMs: START, endMs: END, axis: 'elapsed' })
+    const table = container!.querySelector('table.sr-only')!
+    // ONE's single reading sits ten minutes into the session (START + 10 * 60_000).
+    const firstCell = table.querySelector('tbody tr th')
+    expect(firstCell?.textContent).toBe('10:00')
+  })
+
+  // Minor review finding: 'elapsed' asked for without a `startMs` to measure from has nothing to
+  // read time into, so `tick` falls back to `clock` - untested until now.
+  it('falls back to clock labels when elapsed axis is asked for without a startMs', () => {
+    const option = optionFor({ points: ONE, axis: 'elapsed' })
+    const formatter = (option.xAxis as { axisLabel: { formatter: (v: number) => string } }).axisLabel.formatter
+    // START + 5 minutes, read as a UTC clock time (the session's own effectiveTimezone in this
+    // helper), not '5:00' - there is no session start here for 'elapsed' to measure from.
+    expect(formatter(START + 5 * 60_000)).toBe('16:05')
   })
 })

@@ -5,6 +5,7 @@
 // one is modelled on) gives for its own file. echarts.init itself is mocked below so this file
 // never touches a real canvas.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { Mock } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -25,8 +26,15 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
  * Stands in for the real echarts instance, the same stub workout-trace-card.test.tsx uses, so a
  * card that actually has points to draw does not reach a real canvas.
  */
-function chartStub() {
-  return { on: vi.fn(), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn() }
+interface ChartStub { on: Mock, setOption: Mock, dispose: Mock, resize: Mock }
+
+/** Every chart instance init handed out, so a test can read the option a card drew with. */
+const charts: ChartStub[] = []
+
+function chartStub(): ChartStub {
+  const stub = { on: vi.fn(), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn() }
+  charts.push(stub)
+  return stub
 }
 
 vi.mock('echarts/core', async (importOriginal) => {
@@ -43,6 +51,7 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   requested = []
+  charts.length = 0
 })
 
 afterEach(() => {
@@ -126,6 +135,23 @@ describe('the overnight traces', () => {
       const hr = requested.find((url) => url.includes('metric=heart_rate'))
       expect(hr).toContain(`startMs=${NIGHT.startMs}`)
       expect(hr).toContain(`endMs=${NIGHT.endMs}`)
+    } finally { restore() }
+  })
+
+  // The request above asks for the night's window; this is the chart drawing it. A night whose one
+  // reading falls at 01:00 would otherwise span only that reading, and its axis would not say
+  // where the night began and ended.
+  it('bounds each chart\'s axis to the night itself, not to the readings inside it', async () => {
+    const restore = stub({ 'heart_rate|watch': [point('watch')] })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} />)
+      await flush(client, html)
+      await pumpUntil(() => charts.some((c) => c.setOption.mock.calls.length > 0), 'the heart rate chart to draw')
+      const option = charts.find((c) => c.setOption.mock.calls.length > 0)!.setOption.mock.calls.at(-1)![0] as {
+        xAxis: { min?: number, max?: number }
+      }
+      expect(option.xAxis.min).toBe(NIGHT.startMs)
+      expect(option.xAxis.max).toBe(NIGHT.endMs)
     } finally { restore() }
   })
 
