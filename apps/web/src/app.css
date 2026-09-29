@@ -654,6 +654,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .detail-verdict.better { color: var(--positive); }
 .detail-verdict.worse, .detail-verdict.is-out { color: var(--negative); }
+/* The morning summary's outside figures, named in their verdict tone inside a plain sentence. */
+.night-summary-name.better { color: var(--positive); }
+.night-summary-name.worse, .night-summary-name.is-out { color: var(--negative); }
 /* The figures under the hero, and every other card that is a grid of FigureRows (FigureRows): one
    column per row up to its cap (data-columns, four across a full card, three where a card gives
    them three quarters), two below the grid's collapse width (the GRID_STACK_WIDTH block, for the
@@ -737,6 +740,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-legend-key[data-stage="light"] { background: var(--chart-stage-light); }
 .detail-legend-key[data-stage="rem"] { background: var(--chart-stage-rem); }
 .detail-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
+/* The stage timing rows under that legend: the traces' own gap above them, so a row's label does
+   not sit on the legend's line. */
+.detail-legend + .detail-rows { margin-top: var(--space-3); }
 
 /* NightSessions.tsx's own list, task 7's exclude-per-session card, inside the About fold.
    A plain list rather than a table: each row is a recording plus one control or one status word, not
@@ -1251,6 +1257,7 @@ button.week-bar-slot { cursor: pointer; }
 .figure-row-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
 .figure-row-verdict.better { color: var(--positive); }
 .figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
+.figure-row-note { font-size: var(--font-size-micro); color: var(--text-faint); }
 
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */

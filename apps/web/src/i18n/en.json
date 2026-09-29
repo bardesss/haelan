@@ -871,7 +871,12 @@
       },
       "through": {
         "label": "The night",
-        "share": "{{duration}} · {{percent}} %"
+        "share": "{{duration}} · {{percent}} %",
+        "firstDeep": "First deep sleep",
+        "firstRem": "First REM",
+        "cycles": "Sleep cycles",
+        "afterOnset": "after falling asleep, at {{clock}}",
+        "cycleNote": "one cycle: light, deep and REM, about 90 min"
       },
       "traces": {
         "heart_rate": "Heart rate",
@@ -886,7 +891,8 @@
         "lowest": "lowest {{value}} at {{time}}",
         "highest": "highest {{value}} at {{time}}",
         "caption": "band = your usual range · same time axis as the stages",
-        "hrvChart": "HRV through the night"
+        "hrvChart": "HRV through the night",
+        "dipBelow": "{{dip}} below your resting heart rate"
       },
       "sessions": {
         "excluded": "Excluded",
@@ -906,6 +912,7 @@
         "label": "The morning after",
         "labelDated": "Recovery on {{date}}",
         "restingHeartRate": "Resting heart rate",
+        "heartRateDip": "Sleeping heart-rate dip",
         "hrv": "HRV",
         "hrvChart": "HRV this morning",
         "breathing": "Breathing in sleep",
@@ -919,6 +926,23 @@
           "respiratoryRate": "breathing",
           "sleep": "sleep",
           "bedtime": "bedtime"
+        },
+        "summary": "Overnight {{outside}} of {{of}} outside your usual range:",
+        "summaryAll": "Overnight all {{of}} within your usual range",
+        "dipNote": "lowest {{lowest}} against resting heart rate {{resting}}",
+        "summaryOutside": "{{name}} {{direction}}",
+        "summaryWithin": "{{names}} within",
+        "direction": {
+          "above": "higher",
+          "below": "lower"
+        },
+        "names": {
+          "restingHeartRate": "heart rate",
+          "hrv": "HRV",
+          "heartRateDip": "heart-rate dip",
+          "spo2": "oxygen",
+          "breathing": "breathing",
+          "skinTemperature": "skin temperature"
         }
       },
       "day": {

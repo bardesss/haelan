@@ -50,11 +50,13 @@ const drawsNothing = (trace: Trace) => !trace.isError && !trace.isPending && tra
  * The chart's accessible description is the row's own label and summary, published the way a
  * card publishes its basis line, since a row has no basis line of its own.
  */
-function NightTraceRow({ metric, trace, night, figures }: {
+function NightTraceRow({ metric, trace, night, figures, dip }: {
   metric: TraceMetric
   trace: Trace
   night: Night
   figures: NightTraceFigures | undefined
+  /** The heart-rate dip below the resting rate, worded ("13 %"); a second line under the extreme. */
+  dip: string | null
 }) {
   const { t, i18n } = useTranslation()
   const headId = useId()
@@ -85,6 +87,7 @@ function NightTraceRow({ metric, trace, night, figures }: {
       <div className="night-trace-head" id={headId}>
         <span className="label">{label}</span>
         {summary !== null && <p className="night-trace-summary">{summary}</p>}
+        {dip !== null && <p className="night-trace-summary">{t('sleep.night.traces.dipBelow', { dip })}</p>}
       </div>
       <div className="night-trace-chart">
         {trace.isError ? <ErrorState onRetry={() => trace.refetch()} error={trace.error} />
@@ -116,11 +119,13 @@ function NightTraceRow({ metric, trace, night, figures }: {
  * the calls and the constant in step; night-traces.test.tsx's row count, checked against
  * NIGHT_TRACE_METRICS.length, catches a metric added to one without the other.
  */
-export function NightTraces({ night, chosenSource, traces }: {
+export function NightTraces({ night, chosenSource, traces, heartRateDip = null }: {
   night: Night
   chosenSource: string | null
   /** The night page's own figures for each trace; without them a row is its label and chart. */
   traces?: NightTracesFigures
+  /** The night page's heart-rate dip, already worded; the heart-rate row says it under its lowest. */
+  heartRateDip?: string | null
 }) {
   const { t } = useTranslation()
   const { nameOf } = useSourceNames()
@@ -149,7 +154,8 @@ export function NightTraces({ night, chosenSource, traces }: {
   return (
     <div className="night-traces">
       {reads.map(([metric, trace]) => (
-        <NightTraceRow key={metric} metric={metric} trace={trace} night={night} figures={traces?.[metric]} />
+        <NightTraceRow key={metric} metric={metric} trace={trace} night={night} figures={traces?.[metric]}
+          dip={metric === 'heart_rate' ? heartRateDip : null} />
       ))}
       {fellBack.length > 0 && <p className="night-traces-basis">{fellBack.join(' ')}</p>}
       {anyBand && <p className="dash-caption">{t('sleep.night.traces.caption')}</p>}

@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { FigureRow, FigureRows } from '../../../components/FigureRow.js'
 import type { FigureRowStrip } from '../../../components/FigureRow.js'
 import { ScoreRing } from '../../dashboard/ScoreRing.js'
 import { formatLocalDate, formatSignedNumber } from '../../../format.js'
+import { verdictTone } from '../../../charts/base.js'
 import type { Translate } from '../../../format.js'
 import { usualLine } from '../../dashboard/glanceText.js'
 import type { NightPageData, PageFigure } from '../../../data/useNightPage.js'
@@ -14,13 +16,36 @@ import { deviationVerdictLine, formatFigureValue, stripOf, verdictLine } from '.
 // bar): the spec's and the mockup's own split, resting heart rate, HRV and skin temperature get the
 // former, breathing and oxygen the latter, not "whichever figure happens to carry a strip on the
 // wire".
+// The heart-rate dip closes the rows, the approved mockup's place for it, and draws a bar: the
+// server sends it no strip.
 const ROWS = [
   { key: 'restingHeartRate', withStrip: true },
   { key: 'hrv', withStrip: true },
   { key: 'breathing', withStrip: false },
   { key: 'spo2', withStrip: false },
   { key: 'skinTemperature', withStrip: true },
+  { key: 'heartRateDip', withStrip: false },
 ] as const
+
+// The order the summary names the morning's figures in, the approved mockup's sentence.
+const SUMMARY_ORDER = ['restingHeartRate', 'hrv', 'heartRateDip', 'spo2', 'breathing', 'skinTemperature'] as const
+
+/** Words joined as a list ("a, b and c"), in the catalogue's own "{{rest}} and {{last}}". */
+function listText(words: readonly string[], t: Translate): string {
+  return words.length === 1 ? words[0]! : t('sleep.night.morning.and', { rest: words.slice(0, -1).join(', '), last: words.at(-1)! })
+}
+
+/**
+ * Parts joined as a list ("a, b and c"), by the language's own conjunction rules, so a part can be a
+ * coloured node rather than only a string. English is spelled as en-GB, which leaves out the
+ * serial comma the catalogue's "{{rest}} and {{last}}" does too.
+ */
+function listOf(parts: readonly ReactNode[], language: string): ReactNode[] {
+  const format = new Intl.ListFormat(language === 'en' ? 'en-GB' : language, { type: 'conjunction' })
+  return format.formatToParts(parts.map((_, i) => String(i))).map((part, i) => (
+    <Fragment key={i}>{part.type === 'element' ? parts[Number(part.value)] : part.value}</Fragment>
+  ))
+}
 
 // What the recovery index is made of, in its own words: core's four inputs (hrv, restingHeartRate,
 // respiratoryRate, sleep), with sleep named as the two halves it stands on, duration and bedtime
@@ -38,10 +63,7 @@ function madeOf(missing: readonly string[] | null, t: Translate): string | null 
     .filter(({ input }) => !(missing ?? []).includes(input))
     .flatMap(({ words: keys }) => keys.map((key) => t(`sleep.night.morning.inputs.${key}`)))
   if (words.length === 0) return null
-  const inputs = words.length === 1
-    ? words[0]!
-    : t('sleep.night.morning.and', { rest: words.slice(0, -1).join(', '), last: words.at(-1)! })
-  return t('sleep.night.morning.from', { inputs })
+  return t('sleep.night.morning.from', { inputs: listText(words, t) })
 }
 
 /**
@@ -63,6 +85,15 @@ function madeOf(missing: readonly string[] | null, t: Translate): string | null 
  * Under the ring: the band in words, the index's own usual (the glance's usualLine, the same words
  * the dashboard's recovery card uses), and what the index is made of.
  *
+ * The card opens with the server's count of how many of the morning's judged figures sat outside
+ * their usual (`morningSummary`), then names them: each outside figure with its direction (higher,
+ * lower) in its own verdict tone, then the ones within, plain. The names come from the standings
+ * the server sent with each figure; the web only sorts them into the two lists. The line itself
+ * takes no tone. Left out when nothing was judged, since "0 of 0" says nothing.
+ *
+ * The heart-rate dip is a percent of the resting rate; its note gives the two readings it is taken
+ * from, the night's lowest (the heart-rate trace's) and the resting rate, both as the server sent them.
+ *
  * Absent entirely when the morning has nothing at all - no score and no reading - the same
  * closing-up every other section of this page does when it has nothing to draw (NightHero's own
  * comment on why).
@@ -70,13 +101,13 @@ function madeOf(missing: readonly string[] | null, t: Translate): string | null 
 export function NightMorning({ page }: { page: NightPageData }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const { morning, localDate } = page
+  const { morning, localDate, morningSummary } = page
   const { recovery } = morning
 
   const rows = useMemo(() => {
     const figuresByKey: Record<(typeof ROWS)[number]['key'], PageFigure> = {
       restingHeartRate: morning.restingHeartRate, hrv: morning.hrv, breathing: morning.breathing,
-      spo2: morning.spo2, skinTemperature: morning.skinTemperature,
+      spo2: morning.spo2, skinTemperature: morning.skinTemperature, heartRateDip: morning.heartRateDip,
     }
     return ROWS.flatMap(({ key, withStrip }) => {
       const figure = figuresByKey[key]
@@ -94,6 +125,13 @@ export function NightMorning({ page }: { page: NightPageData }) {
       // description at all, which is not the same fact as "nothing to compare against".
       const verdict = (deviation !== null ? deviationVerdictLine(figure, language, t) : verdictLine(figure, language, t))
         ?? t('glance.usual.none')
+      const lowest = page.traces.heartRate.stat.lowest
+      const note = key === 'heartRateDip' && lowest !== null && morning.restingHeartRate.value !== null
+        ? t('sleep.night.morning.dipNote', {
+          lowest: formatFigureValue(page.traces.heartRate.lowestFigure, lowest.value, language, t),
+          resting: formatFigureValue(morning.restingHeartRate, morning.restingHeartRate.value, language, t),
+        })
+        : undefined
       const drawn = withStrip ? stripOf(figure) : null
       const strip: FigureRowStrip | undefined = drawn === null ? undefined : {
         ...drawn, metric: figure.metric, unit: label,
@@ -101,9 +139,22 @@ export function NightMorning({ page }: { page: NightPageData }) {
         ...(key === 'hrv' && { label: t('sleep.night.morning.hrvChart') }),
         formatValue: (v, absent) => (v === null ? absent : formatFigureValue(figure, v, language, t)),
       }
-      return [{ key, label, value, verdict, figure, strip }]
+      return [{ key, label, value, verdict, figure, strip, note }]
     })
-  }, [morning, language, t])
+  }, [morning, page.traces.heartRate, language, t])
+
+  const summary = useMemo(() => {
+    const judged = SUMMARY_ORDER.map((key) => ({ key, figure: morning[key] })).filter(({ figure }) => figure.standing !== null)
+    const outside = judged.filter(({ figure }) => figure.standing !== 'within').map(({ key, figure }) => (
+      <span key={key} className={['night-summary-name', verdictTone(figure.judged, figure.standing)].filter(Boolean).join(' ')}>
+        {t('sleep.night.morning.summaryOutside', {
+          name: t(`sleep.night.morning.names.${key}`), direction: t(`sleep.night.morning.direction.${figure.standing}`),
+        })}
+      </span>
+    ))
+    const within = judged.filter(({ figure }) => figure.standing === 'within').map(({ key }) => t(`sleep.night.morning.names.${key}`))
+    return { outside, within }
+  }, [morning, t])
 
   const score = recovery.index.value
   if (rows.length === 0 && score === null) return null
@@ -121,6 +172,21 @@ export function NightMorning({ page }: { page: NightPageData }) {
 
   return (
     <Card span={12} label={label}>
+      {morningSummary.of > 0 && (
+        <p className="detail-verdict">
+          {morningSummary.outside === 0
+            ? t('sleep.night.morning.summaryAll', { of: morningSummary.of })
+            : (
+              <>
+                {t('sleep.night.morning.summary', { outside: morningSummary.outside, of: morningSummary.of })}
+                {' '}{listOf(summary.outside, language)}
+                {summary.within.length > 0 && (
+                  <>{' · '}{t('sleep.night.morning.summaryWithin', { names: listText(summary.within, t) })}</>
+                )}
+              </>
+            )}
+        </p>
+      )}
       <div className="night-grp">
         <div className="dash-dial">
           <ScoreRing value={score} size={150} emptyText={t('glance.recovery.notScored')} label={ringLabel} />
@@ -130,9 +196,9 @@ export function NightMorning({ page }: { page: NightPageData }) {
         </div>
         {rows.length > 0 && (
           <FigureRows max={3}>
-            {rows.map(({ key, label: rowLabel, value, verdict, figure, strip }) => (
+            {rows.map(({ key, label: rowLabel, value, verdict, figure, strip, note }) => (
               <FigureRow key={key} label={rowLabel} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
-                band={figure.baseline} mark={figure.value} strip={strip} />
+                band={figure.baseline} mark={figure.value} strip={strip} note={note} />
             ))}
           </FigureRows>
         )}
