@@ -167,6 +167,14 @@ describe('the night page\'s hero', () => {
     expect(host.querySelector('.detail-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
   })
 
+  // F5: every labelled card is a section under its own heading, not a span a screen reader's
+  // heading list skips; the page had one heading (its h1) before.
+  it('names each labelled card with a heading', async () => {
+    const host = await mount(nightPageFixture())
+    expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector(':scope > h2.label')?.textContent).toBe('Time asleep')
+    expect(host.querySelectorAll('.detail-page .card > h2.label').length).toBeGreaterThanOrEqual(5)
+  })
+
   it('is left out when the night has no time asleep', async () => {
     const host = await mount(withBlankFigures(nightPageFixture(), ['asleep']))
     expect(host.querySelector('.detail-hero')).toBeNull()
