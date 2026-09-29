@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/bardesss/haelan/compare/android-v0.7.1...android-v0.8.0) (2026-09-29)
+
+
+### Features
+
+* the night page, every figure against its usual range ([#401](https://github.com/bardesss/haelan/issues/401)) ([ca4a245](https://github.com/bardesss/haelan/commit/ca4a245126fd34160b5d0aacab6fe6bdc6f2fb1d))
+
+
+### Bug Fixes
+
+* durations read "6u 36m" in Dutch ([#408](https://github.com/bardesss/haelan/issues/408)) ([bb005f2](https://github.com/bardesss/haelan/commit/bb005f224f3be891191007cf82e03f5a94e178d1))
+
 ## [0.7.1](https://github.com/bardesss/haelan/compare/android-v0.7.0...android-v0.7.1) (2026-09-28)
 
 
