@@ -9,6 +9,8 @@ import type { NamedSource } from '../store/sourceAliases.ts'
 import type { DefaultName } from '../api/sourceNames.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
 import type { DbOrTx } from '../db/open.ts'
+import { mergeRuleFor, mergeWorkouts } from './mergedWorkouts.ts'
+import { readSessions } from './sessions.ts'
 
 /**
  * Everything the all-time page shows, in one read.
@@ -222,7 +224,7 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
   return {
     span: { from: span.from ?? '', to: span.to ?? '', days: span.days ?? 0 },
     records,
-    sessionRecords: sessionRecordsOf(sessionsForRecords(db, personId, excludedSessions)),
+    sessionRecords: sessionRecordsOf(sessionsForRecords(db, personId)),
     eddington,
     milestones: milestonesOf(db, personId, records, stepDays, excludedSessions),
   }
@@ -272,7 +274,7 @@ function soleSourceOn(
  * that is the request to design against, and it is not this.
  */
 
-/** Session-scope exclusions, read once and shared by the milestones and the session records. */
+/** Session-scope exclusions, for the milestones. The session records take the merge's own. */
 function excludedSessionIds(db: DbOrTx, personId: string): Set<string> {
   return new Set(
     db.all<{ targetKey: string }>(sql`
@@ -282,24 +284,27 @@ function excludedSessionIds(db: DbOrTx, personId: string): Set<string> {
   )
 }
 
-/** Exercise sessions in the shape `sessionRecordsOf` needs; see `sessionForRecords` for the parsing. */
-function sessionsForRecords(
-  db: DbOrTx, personId: string, excluded: ReadonlySet<string>,
-): SessionForRecords[] {
-  const rows = db.all<{ id: string, localDate: string, startMs: number, endMs: number, attrs: string }>(sql`
-    SELECT id, local_date AS localDate, start_ms AS startMs, end_ms AS endMs, attrs
-      FROM sessions
-     WHERE person_id = ${personId} AND kind = 'exercise'
-     ORDER BY start_ms`)
-
-  const out: SessionForRecords[] = []
-  for (const row of rows) {
-    if (excluded.has(row.id)) continue
-    let attrs: unknown = {}
-    try { attrs = JSON.parse(row.attrs) } catch { attrs = {} }
-    out.push(sessionForRecords({ ...row, attrs }))
-  }
-  return out
+/**
+ * Every merged workout this person kept, in the shape `sessionRecordsOf` needs; see
+ * `sessionForRecords` for the parsing.
+ *
+ * Merged, not raw rows, so a run the watch and the phone both recorded is one candidate rather
+ * than two. Read raw, the phone's copy of a run - often a minute longer or a few hundred metres
+ * further - could hold a record the workout page, which reads merged workouts, never shows, under
+ * an id that page answers as an alternate. The merge is mergeWorkouts with the person's own rule,
+ * the one PersonQuery.sessions and the workout page's best read through, over the whole history.
+ *
+ * Exclusion is the merge's: a merged workout is excluded only when every copy was, because a kept
+ * copy always outranks an excluded one. Excluding the watch's copy therefore leaves the phone's
+ * standing as the workout, as it already did when this read raw rows. The one difference from the
+ * raw read is enrichment: an excluded copy can still fill a field the kept primary stored null,
+ * exactly as it does on the workout page, which is the figure a record has to agree with.
+ */
+function sessionsForRecords(db: DbOrTx, personId: string): SessionForRecords[] {
+  const raw = readSessions(db, { personId, kind: 'exercise', from: '0000-01-01', to: '9999-12-31' })
+  return mergeWorkouts(raw, mergeRuleFor(db, personId))
+    .filter((workout) => !workout.excluded)
+    .map(sessionForRecords)
 }
 
 function milestonesOf(
