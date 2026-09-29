@@ -18,6 +18,7 @@ import * as echarts from 'echarts'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
 import { navigate } from '../src/router.js'
+import { PHONE_MEDIA_QUERY } from '../src/ui/breakpoint.js'
 import { pumpUntil } from './flush.js'
 import { NIGHT_DATE, NIGHT_NEXT, NIGHT_PREVIOUS, nightPageFixture, withBlankFigures } from './fixtures/nightPage.js'
 
@@ -98,7 +99,7 @@ const button = (host: ParentNode, label: string) => host.querySelector<HTMLButto
 // Each mini row as [label, value, verdict], read cell by cell rather than as one run of text, so a
 // value that changed format ("94" for "94 %") fails on its own cell.
 function minis(host: ParentNode): string[][] {
-  return [...host.querySelectorAll('.night-minis .figure-row')].map((row) => [
+  return [...host.querySelectorAll('.detail-minis .figure-row')].map((row) => [
     text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '', text(row, '.figure-row-verdict') ?? '',
   ])
 }
@@ -106,9 +107,9 @@ function minis(host: ParentNode): string[][] {
 describe('the night page\'s top', () => {
   it('is titled with the night\'s date and says when it ran and who recorded it', async () => {
     const host = await mount(nightPageFixture())
-    expect(text(host, '.night-page h1')).toBe('Sunday, September 6')
+    expect(text(host, '.detail-page h1')).toBe('Sunday, September 6')
     // Bed and wake are the page's own bedtime and wake time figures, 00:08 and 07:09.
-    expect(text(host, '.night-when')).toBe('Went to bed 00:08 · woke 07:09 · watch')
+    expect(text(host, '.dash-date')).toBe('Went to bed 00:08 · woke 07:09 · watch')
   })
 
   it('steps to the neighbouring nights the payload names', async () => {
@@ -136,29 +137,42 @@ describe('the night page\'s top', () => {
     expect(button(host, 'Previous night')!.disabled).toBe(false)
   })
 
-  it('links back to every night', async () => {
+  // A button in the arrows' own group, the dashboard's Today button's place, so the header row is
+  // one row of like controls rather than two groups that wrap apart on a phone.
+  it('links back to every night from a button in the arrows\' row', async () => {
     const host = await mount(nightPageFixture())
-    const link = [...host.querySelectorAll('a')].find((a) => a.textContent === 'All nights →')
+    const link = host.querySelector<HTMLAnchorElement>('.dash-header .day-nav a.button.day-nav-back')
+    expect(link?.textContent).toBe('All nights')
     expect(link?.getAttribute('href')).toBe('/sleep')
+    expect(link?.parentElement?.querySelectorAll('button.day-nav-btn')).toHaveLength(2)
+  })
+
+  // The same header row the dashboard draws (PageHeader), class for class.
+  it('is the dashboard\'s header row', async () => {
+    const host = await mount(nightPageFixture())
+    const header = host.querySelector('.detail-page > .dash-header')!
+    expect(header.querySelector('.dash-heading > h1.dash-title')?.textContent).toBe('Sunday, September 6')
+    expect(header.querySelector('.dash-heading > p.dash-date')).not.toBeNull()
+    expect(header.querySelector(':scope > .day-nav[role="group"]')?.getAttribute('aria-label')).toBe('Nights')
   })
 })
 
 describe('the night page\'s hero', () => {
   it('leads with the time asleep and where it sits against the usual', async () => {
     const host = await mount(nightPageFixture())
-    expect(host.querySelector('.night-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Time asleep')
-    expect(text(host, '.night-hero-value')).toBe('6h 36m')
-    expect(text(host, '.night-hero-verdict')).toBe('within your usual 5h 06m – 7h 48m')
-    expect(text(host, '.night-hero .dash-caption')).toBe('this night and the six before it')
-    expect(host.querySelector('.night-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
+    expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Time asleep')
+    expect(text(host, '.detail-hero-value')).toBe('6h 36m')
+    expect(text(host, '.detail-verdict')).toBe('within your usual 5h 06m – 7h 48m')
+    expect(text(host, '.detail-hero .dash-caption')).toBe('this night and the six before it')
+    expect(host.querySelector('.detail-hero [role="img"][aria-label="Time asleep"]')).not.toBeNull()
   })
 
   it('is left out when the night has no time asleep', async () => {
     const host = await mount(withBlankFigures(nightPageFixture(), ['asleep']))
-    expect(host.querySelector('.night-hero')).toBeNull()
+    expect(host.querySelector('.detail-hero')).toBeNull()
     expect(host.textContent).not.toContain('Time asleep')
     // The rest of the page still draws.
-    expect(host.querySelector('.night-minis')).not.toBeNull()
+    expect(host.querySelector('.detail-minis')).not.toBeNull()
   })
 
   it('draws no strip for a figure with fewer than two nights to join', async () => {
@@ -166,24 +180,24 @@ describe('the night page\'s hero', () => {
     const asleep = page.figures.asleep
     const lone = { ...asleep, strip: asleep.strip!.map((day, i, all) => (i === all.length - 1 ? day : { ...day, value: null })) }
     const host = await mount({ ...page, figures: { ...page.figures, asleep: lone } })
-    expect(host.querySelector('.night-hero')).not.toBeNull()
-    expect(host.querySelector('.night-hero [role="img"]')).toBeNull()
+    expect(host.querySelector('.detail-hero')).not.toBeNull()
+    expect(host.querySelector('.detail-hero [role="img"]')).toBeNull()
   })
 })
 
 describe('the night page in Dutch', () => {
   it('words the hero and the four figures from the Dutch catalogue', async () => {
     const host = await mount(nightPageFixture(), 'nl')
-    expect(host.querySelector('.night-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Tijd in slaap')
-    expect(text(host, '.night-hero-verdict')).toBe('binnen je gebruikelijke bereik 5h 06m – 7h 48m')
-    expect(text(host, '.night-hero .dash-caption')).toBe('deze nacht en de zes ervoor')
+    expect(host.querySelector('.detail-hero')?.closest('.card')?.querySelector('.label')?.textContent).toBe('Tijd in slaap')
+    expect(text(host, '.detail-verdict')).toBe('binnen je gebruikelijke bereik 5h 06m – 7h 48m')
+    expect(text(host, '.detail-hero .dash-caption')).toBe('deze nacht en de zes ervoor')
     expect(minis(host)).toEqual([
       ['Efficiëntie', '94 %', 'binnen je gebruikelijke bereik 88 % – 96 %'],
       ['Diepe slaap', '1h 04m', 'onder je gebruikelijke bereik 1h 10m – 1h 40m'],
       ['REM', '2h 03m', 'binnen je gebruikelijke bereik 1h 30m – 2h 10m'],
       ['Naar bed', '00:08', 'binnen je gebruikelijke bereik 23:30 – 00:20'],
     ])
-    expect(text(host, '.night-when')).toBe('Naar bed 00:08 · wakker 07:09 · watch')
+    expect(text(host, '.dash-date')).toBe('Naar bed 00:08 · wakker 07:09 · watch')
   })
 
   it('names the hypnogram lanes in Dutch', async () => {
@@ -204,8 +218,8 @@ describe('the night page\'s four figures', () => {
       ['Bedtime', '00:08', 'within your usual 23:30 – 00:20'],
     ])
     // Deep sleep is short, and the server said that is worse; the verdict carries its colour.
-    expect(host.querySelectorAll('.night-minis .figure-row-verdict')[1]?.className).toBe('figure-row-verdict worse')
-    expect(text(host, '.night-minis .dash-caption')).toBe('each line: this night and the six before it · band = your usual range')
+    expect(host.querySelectorAll('.detail-minis .figure-row-verdict')[1]?.className).toBe('figure-row-verdict worse')
+    expect(text(host, '.detail-minis .dash-caption')).toBe('each line: this night and the six before it · band = your usual range')
   })
 
   it('say there is no usual yet for a figure the server sent no usual for', async () => {
@@ -217,7 +231,7 @@ describe('the night page\'s four figures', () => {
   it('colour each strip day dot by where the server said that day stood', async () => {
     const host = await mount(nightPageFixture())
     // Deep sleep's last night (64 minutes) sits below its usual 70-100: its dot takes the warning colour.
-    const chart = host.querySelector<HTMLDivElement>('.night-minis [role="img"][aria-label="Deep sleep"]')!
+    const chart = host.querySelector<HTMLDivElement>('.detail-minis [role="img"][aria-label="Deep sleep"]')!
     const option = echarts.getInstanceByDom(chart)?.getOption() as { series: { data: ({ itemStyle?: { color?: string } } | null)[] }[] }
     const dots = option.series.find((s) => Array.isArray(s.data) && s.data.some((d) => d !== null && typeof d === 'object' && 'itemStyle' in d))!
     expect(dots.data.at(-1)?.itemStyle?.color).toBe(NEGATIVE)
@@ -231,8 +245,8 @@ describe('the night page\'s four figures', () => {
 
   it('leave out the whole card when none of the four has a reading', async () => {
     const host = await mount(withBlankFigures(nightPageFixture(), ['efficiency', 'deep', 'rem', 'bedtime']))
-    expect(host.querySelector('.night-minis')).toBeNull()
-    expect(host.querySelector('.night-hero')).not.toBeNull()
+    expect(host.querySelector('.detail-minis')).toBeNull()
+    expect(host.querySelector('.detail-hero')).not.toBeNull()
     // The card itself, not only its rows: a frame holding just its caption would still take a row.
     expect(host.textContent).not.toContain('each line: this night and the six before it')
   })
@@ -241,11 +255,11 @@ describe('the night page\'s four figures', () => {
 describe('the night page\'s night card', () => {
   it('draws the stages under its own label, with each stage\'s time and share of the night', async () => {
     const host = await mount(nightPageFixture())
-    const card = host.querySelector('.night-legend')?.closest('.card')
+    const card = host.querySelector('.detail-legend')?.closest('.card')
     expect(card?.querySelector('.label')?.textContent).toBe('The night')
     expect(card?.querySelector('[role="img"][aria-label="The night"]')).not.toBeNull()
     // Deep, light and REM carry the server's share of the night; awake is its minutes alone.
-    expect([...host.querySelectorAll('.night-legend li')].map((item) => item.textContent)).toEqual([
+    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual([
       'Deep 1h 04m · 16 %', 'Light 3h 29m · 53 %', 'REM 2h 03m · 31 %', 'Awake 0h 25m',
     ])
     // Naps are the More card's to say, not this one's.
@@ -269,7 +283,7 @@ describe('the night page\'s night card', () => {
   it('says why the awake lane reads lower when the night\'s own figure counts more', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, figures: { ...page.figures, awake: { ...page.figures.awake, value: 40 } } })
-    expect(text(host, '.night-legend + .hypnogram-totals')).toBe('Awake counts the awake stages drawn above and nothing '
+    expect(text(host, '.detail-legend + .hypnogram-totals')).toBe('Awake counts the awake stages drawn above and nothing '
       + 'else. The night\'s own awake minutes also count restless time and the gaps between the night\'s separate '
       + 'pieces, so that figure reads higher.')
   })
@@ -277,7 +291,7 @@ describe('the night page\'s night card', () => {
   it('leaves a stage\'s share off when the server sent none for it', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, stagePercent: { ...page.stagePercent, rem: null } })
-    expect([...host.querySelectorAll('.night-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h 03m')
+    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)[2]).toBe('REM 2h 03m')
   })
 
   // A device that recorded a span but no stages leaves nothing for a hypnogram to draw, and an
@@ -288,7 +302,7 @@ describe('the night page\'s night card', () => {
   it('draws no hypnogram when the night carries no staged segments', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, night: { ...page.night, segments: [] } })
-    expect(host.querySelector('.night-legend')).toBeNull()
+    expect(host.querySelector('.detail-legend')).toBeNull()
     expect(host.querySelector('[role="img"][aria-label="The night"]')).toBeNull()
   })
 
@@ -306,7 +320,7 @@ describe('the night page\'s night card', () => {
         ],
       },
     })
-    expect([...host.querySelectorAll('.night-legend li')].map((item) => item.textContent)).toEqual(['Deep 1h 00m · 16 %'])
+    expect([...host.querySelectorAll('.detail-legend li')].map((item) => item.textContent)).toEqual(['Deep 1h 00m · 16 %'])
   })
 })
 
@@ -316,7 +330,7 @@ describe('the night page\'s week', () => {
     const card = host.querySelector('[aria-label="Sleep schedule"]')?.closest('.card')
     expect(card?.querySelector('.label')?.textContent).toBe('Sleep schedule')
     expect(card?.querySelectorAll('tbody tr')).toHaveLength(7)
-    expect(text(card!, '.night-week-variability')).toBe('Bedtime varied ±28 min this week · usually ±20–35 min')
+    expect(text(card!, '.detail-verdict')).toBe('Bedtime varied ±28 min this week · usually ±20–35 min')
   })
 
   // The bars are the seven nights' bed and wake placed on the chart's own axis: bed shifted past
@@ -474,7 +488,8 @@ describe('the night page\'s morning after', () => {
   it('lays the readings out three across', async () => {
     // Root-relative: happy-dom gives import.meta.url an http scheme, so a URL-relative path cannot be read.
     const css = readFileSync('apps/web/src/app.css', 'utf8')
-    expect(css).toMatch(/\.night-morning-rows \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+    expect(css).toMatch(/\.detail-rows-3 \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+    expect((await mount(nightPageFixture())).querySelector('.night-grp .detail-rows.detail-rows-3')).not.toBeNull()
   })
 
   it('colours the skin temperature strip\'s warm nights by where the server said they stood', async () => {
@@ -615,24 +630,29 @@ describe('the night page\'s day before it', () => {
   it('draws the mood, the chips with their counts, the note, steps, active minutes and the workout', async () => {
     const host = await mount(nightPageFixture())
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
-    expect(card.querySelector('.basis')?.textContent).toBe('Saturday, September 5, the day before this night')
+    // The shared side layout (SideCard): which day in the narrow column, the rows beside it.
+    expect(text(card, '.detail-side > .detail-side-caption')).toBe('Saturday, September 5, the day before this night')
     // The face itself is decorative (aria-hidden): the word beside it is what a screen reader
     // announces, and this asserts the word is present rather than assuming the face's own markup.
-    expect(card.querySelector('.night-day-mood [aria-hidden="true"]')).not.toBeNull()
-    expect(card.querySelector('.night-day-mood-word')?.textContent).toBe('Good')
+    expect(card.querySelector('.day-log-mood [aria-hidden="true"]')).not.toBeNull()
+    expect(card.querySelector('.day-log-mood-word')?.textContent).toBe('Good')
     // The fixture's only counted kind, alcohol, was tapped twice, so its chip carries the count;
     // a chip for a kind tapped once would carry none (the brief's own "count shown when > 1").
-    expect([...card.querySelectorAll('.night-day-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol ×2'])
-    expect(card.querySelector('.night-day-note')?.textContent).toBe('“Birthday, home late.”')
+    expect([...card.querySelectorAll('.day-log-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol ×2'])
+    expect(card.querySelector('.day-log-note')?.textContent).toBe('“Birthday, home late.”')
     const rows = [...card.querySelectorAll('.figure-row')].map((row) => [
       text(row, '.figure-row-label') ?? '', text(row, '.figure-row-value') ?? '',
     ])
     expect(rows[0]).toEqual(['Steps', '11,240'])
     expect(rows[1]).toEqual(['Active minutes', '48 min'])
     expect(text(card, '.figure-row:nth-child(2) .figure-row-verdict')).toBe('within your usual 25 min – 60 min')
-    expect(rows[2]?.[0]).toBe('Training')
-    const workoutLink = card.querySelector<HTMLAnchorElement>('.night-day-workout-link')
-    expect(workoutLink?.textContent).toBe('Biking 52 min')
+    expect(rows).toHaveLength(2)
+    // The workouts are the dashboard's own rows (TodayWorkouts, SessionRow underneath) under this
+    // card's word for them, not a copy borrowing the figure rows' classes.
+    expect(text(card, '.today-workouts > .label')).toBe('Training')
+    const workoutLink = card.querySelector<HTMLAnchorElement>('.today-workouts a.session-row-link')
+    expect(text(workoutLink!, '.session-row-type')).toBe('Biking')
+    expect(text(workoutLink!, '.session-row-duration')).toBe('52 min')
     expect(workoutLink?.getAttribute('href')).toBe('/activity/w1')
   })
 
@@ -653,14 +673,14 @@ describe('the night page\'s day before it', () => {
       },
     })
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
-    expect(card.textContent).toContain('average 131 bpm')
+    expect(text(card, '.session-row-stats')).toBe('131 bpm')
   })
 
   it('shows a chip with no count for a kind tapped only once', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, log: { ...page.log, counts: { alcohol: 1 } } })
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
-    expect([...card.querySelectorAll('.night-day-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol'])
+    expect([...card.querySelectorAll('.day-log-chip')].map((chip) => chip.textContent)).toEqual(['Alcohol'])
   })
 
   it('hides the whole card when the day has no log, no figures and no workout', async () => {
@@ -685,7 +705,7 @@ describe('the night page\'s about fold', () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, night: { ...page.night, sessionIds: ['s1'], excludedSessions: ['s2'] } })
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'About this night')!
-    const details = card.querySelector('details.night-about')
+    const details = card.querySelector('details.detail-about')
     // happy-dom does not hide a closed <details>' own children, so this asserts the `open`
     // attribute itself rather than visibility (this file's own comment on why, task 7's brief).
     expect(details?.hasAttribute('open')).toBe(false)
@@ -693,14 +713,14 @@ describe('the night page\'s about fold', () => {
     expect(details?.querySelectorAll('.night-session')).toHaveLength(2)
     expect(details?.textContent).toContain('1 sleep session excluded from this night')
     // The one line that says what is folded away, in place of the long basis sentence.
-    expect(text(card, '.night-about-line')).toBe('One recording from watch · no naps · exclude or add a note')
+    expect(text(card, '.detail-about-line')).toBe('One recording from watch · no naps · exclude or add a note')
     expect(card.querySelector('.basis')).toBeNull()
   })
 
   it('counts the recordings and the naps in its line', async () => {
     const page = nightPageFixture()
     const host = await mount({ ...page, night: { ...page.night, sessionIds: ['s1', 's2'], naps: [Date.UTC(2026, 8, 6, 12, 30)] } })
-    expect(text(host, '.night-about-line')).toBe('2 recordings from watch · one nap · exclude or add a note')
+    expect(text(host, '.detail-about-line')).toBe('2 recordings from watch · one nap · exclude or add a note')
   })
 })
 
@@ -709,7 +729,7 @@ describe('the night page\'s charts', () => {
   // ring alone carries its whole statement in its own aria-label.
   it('each point at a description that says something', async () => {
     const host = await mount(nightPageFixture())
-    const charts = [...host.querySelectorAll('.night-page [role="img"]')].filter((el) => !el.classList.contains('score-ring'))
+    const charts = [...host.querySelectorAll('.detail-page [role="img"]')].filter((el) => !el.classList.contains('score-ring'))
     expect(charts.length).toBeGreaterThan(0)
     for (const chart of charts) {
       const id = chart.getAttribute('aria-describedby')
@@ -723,13 +743,62 @@ describe('the night page without a night', () => {
   it('says no night was recorded on a date the server has none for', async () => {
     const host = await mount(null)
     expect(host.innerHTML).toContain('No night recorded')
-    expect(host.querySelector('.night-page')).toBeNull()
+    expect(host.querySelector('.detail-hero')).toBeNull()
   })
 
   it('offers a retry, not "no night", when the read fails for any other reason', async () => {
     const host = await mount(null, 'en', { status: 500, body: { error: { code: 'internal', message: 'boom' } } })
     expect(host.innerHTML).not.toContain('No night recorded')
-    expect(host.querySelector('button')?.textContent).toBe('Try again')
-    expect(host.querySelector('.night-page')).toBeNull()
+    expect(host.querySelector('.card button')?.textContent).toBe('Try again')
+    expect(host.querySelector('.detail-hero')).toBeNull()
+  })
+
+  // A missing night is not a dead end: the header is still there, titled with the date asked for,
+  // its arrows disabled (nothing names the neighbours) and the way back to every night live.
+  it('keeps the header, titled with the date asked for, with the way back', async () => {
+    for (const night of [undefined, { status: 500, body: { error: { code: 'internal', message: 'boom' } } }]) {
+      const host = await mount(null, 'en', night)
+      expect(text(host, '.dash-header h1')).toBe('Sunday, September 6')
+      expect(button(host, 'Previous night')!.disabled).toBe(true)
+      expect(button(host, 'Next night')!.disabled).toBe(true)
+      expect(host.querySelector('.dash-header a.day-nav-back')?.getAttribute('href')).toBe('/sleep')
+      expect(host.querySelector('.dash-date')).toBeNull()
+      act(() => { root!.unmount() })
+      root = createRoot(container!)
+      restoreFetch?.()
+    }
+  })
+})
+
+describe('the night page\'s verdict colours', () => {
+  // The dashboard's rule (verdictTone): a bedtime is judged neither way, so outside its usual it
+  // takes the "outside usual" colour and says later or earlier, as the night card does.
+  it('marks a bedtime outside its usual as later than usual, in the outside-usual colour', async () => {
+    const page = nightPageFixture()
+    const bedtime = { ...page.figures.bedtime, value: 50, standing: 'above' as const, judged: null }
+    const host = await mount({ ...page, figures: { ...page.figures, bedtime } })
+    const row = [...host.querySelectorAll('.detail-minis .figure-row')].find((r) => text(r, '.figure-row-label') === 'Bedtime')!
+    expect(text(row, '.figure-row-verdict')).toBe('later than your usual 23:30 – 00:20')
+    expect(row.querySelector('.figure-row-verdict')?.className).toBe('figure-row-verdict is-out')
+  })
+})
+
+describe('the night page on a phone', () => {
+  const realMatchMedia = window.matchMedia.bind(window)
+  beforeEach(() => {
+    window.matchMedia = ((query: string) => {
+      if (query !== PHONE_MEDIA_QUERY) return realMatchMedia(query)
+      return {
+        matches: true, media: query, onchange: null,
+        addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+      } as unknown as MediaQueryList
+    }) as typeof window.matchMedia
+  })
+  afterEach(() => { window.matchMedia = realMatchMedia as typeof window.matchMedia })
+
+  // The dashboard's header rule: the short date, so the title stays on one line beside the buttons.
+  it('titles the night with the short date, as the dashboard titles a past day', async () => {
+    const host = await mount(nightPageFixture())
+    expect(text(host, '.dash-header h1')).toBe('Sun, Sep 6')
   })
 })

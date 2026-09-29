@@ -95,6 +95,31 @@ describe('verdictLine', () => {
       .toBe('below your usual 6h 20m – 7h 00m')
   })
 
+  // A clock time off its usual is later or earlier, the dashboard night card's words for a bedtime
+  // (glance.sleep.bedStanding), not "above" or "below" a range of clock readings.
+  describe('on a clock time', () => {
+    const bed = { center: -5, low: -30, high: 20, thin: false }
+    it('says later or earlier than the usual, in both languages', () => {
+      expect(verdictLine(figure({ unit: 'minutes_from_local_midnight', value: 50, baseline: bed, standing: 'above' }), 'en', t))
+        .toBe('later than your usual 23:30 – 00:20')
+      expect(verdictLine(figure({ unit: 'minutes_from_local_midnight', value: -60, baseline: bed, standing: 'below' }), 'en', t))
+        .toBe('earlier than your usual 23:30 – 00:20')
+      expect(verdictLine(figure({ unit: 'minutes_from_local_midnight', value: 50, baseline: bed, standing: 'above' }), 'nl', tNl))
+        .toBe('later dan je gebruikelijke 23:30 – 00:20')
+      expect(verdictLine(figure({ unit: 'minutes_from_local_midnight', value: -60, baseline: bed, standing: 'below' }), 'nl', tNl))
+        .toBe('eerder dan je gebruikelijke 23:30 – 00:20')
+    })
+    it('still says within when it is inside the usual', () => {
+      expect(verdictLine(figure({ unit: 'minutes_from_local_midnight', value: 8, baseline: bed, standing: 'within' }), 'en', t))
+        .toBe('within your usual 23:30 – 00:20')
+    })
+    it('words a usual of one clock time as that time', () => {
+      const one = { center: 420, low: 420, high: 420, thin: false }
+      expect(verdictLine(figure({ unit: 'minutes_from_local_midnight', value: 450, baseline: one, standing: 'above' }), 'en', t))
+        .toBe('later than your usual 07:00')
+    })
+  })
+
   it('says partial with the formatted center when standing is null but the baseline is not thin', () => {
     expect(verdictLine(figure({ unit: 'minutes', value: 200, baseline, standing: null }), 'en', t))
       .toBe('so far; your usual day 6h 40m')

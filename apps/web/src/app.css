@@ -584,45 +584,70 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    selector to query under. */
 .workout-tiles { display: contents; }
 
-/* --- The night detail page (M10a-2), NightDetail.tsx and its sections: the dashboard's measure,
-   the header row the dashboard's own, the arrows and the way back to every night together on its
-   right, then every card down the grid below it. Grouped in one place (M10a-2 task 8) rather than
-   scattered by the order each section landed in. --- */
-.night-page { max-width: 1200px; margin-inline: auto; }
-.night-top { margin-bottom: var(--space-3); }
-.night-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
-.night-hero { justify-content: space-between; }
-.night-hero-value { font-variant-numeric: tabular-nums; }
-.night-minis { display: flex; flex-direction: column; gap: var(--space-2); }
-.night-top-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
-.night-all { font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; white-space: nowrap; }
-.night-all:hover { text-decoration: underline; }
-.night-hero-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
-.night-hero-verdict.better { color: var(--positive); }
-.night-hero-verdict.worse { color: var(--negative); }
-.night-week-variability { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
-.night-week-variability.better { color: var(--positive); }
-.night-week-variability.worse { color: var(--negative); }
+/* --- The detail pages (M10a): what the night page and the workout page share. The header row is
+   the dashboard's own (PageHeader.tsx: .dash-header and .day-nav), so it is not repeated here;
+   these are the pieces below it that both pages draw, under one set of names so the two cannot
+   drift into two spellings of the same card. --- */
+/* The dashboard's measure: a detail page reads as a composition the way the home screen does. */
+.detail-page { max-width: 1200px; margin-inline: auto; }
+/* A card's label directly over its first row or figure: the label is an inline span, so without
+   this the row's own uppercase label sat flush under it and read as one label doubled. */
+.detail-page .card > .label + :not(.basis), .detail-page .card > .basis + * { margin-top: var(--space-3); }
+/* The hero: the figure in display type and its verdict, the strip beside it (the dashboard's
+   .dash-lead does the layout). */
+.detail-hero { justify-content: space-between; }
+.detail-hero-value { font-variant-numeric: tabular-nums; }
+/* A verdict line under a figure. Coloured the way FigureRow colours its own (verdictTone): judged
+   better or worse, or outside the usual on a figure judged neither way (the dashboard's is-out). */
+.detail-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.detail-verdict.better { color: var(--positive); }
+.detail-verdict.worse, .detail-verdict.is-out { color: var(--negative); }
+/* The figures under the hero, and every other card that is a grid of FigureRows: four across on a
+   wide screen, three where a card gives them three quarters (.detail-rows-3), two below the grid's
+   collapse width (the GRID_STACK_WIDTH block, for the reason given there). */
+.detail-minis { display: flex; flex-direction: column; gap: var(--space-2); }
+.detail-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+.detail-rows-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* SideCard (pages/detail/DayLogBlock.tsx): a narrow column naming the day or night the section is
+   about, the section's rows beside it; stacked below the grid's collapse width. */
+.detail-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
+.detail-side-caption { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+.detail-side-body { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.detail-side-rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+/* A chart's legend: each key in its series' colour, then its words, wrapping onto a second line on
+   a phone. The keys' colours are the caller's (the night's stages, further down). */
+.detail-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); list-style: none; margin: var(--space-2) 0 0; padding: 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.detail-legend li { display: inline-flex; align-items: center; gap: var(--space-1); }
+.detail-legend-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+/* The About fold at the foot of a detail page: one line saying what is behind it, then a
+   disclosure closed by default. Mirrors .status-failure-details' own summary styling
+   (StatusPanel.tsx), the app's other disclosure triangle. */
+.detail-about-line { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
+.detail-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
+.detail-about[open] summary { margin-bottom: var(--space-2); }
+/* A day's quick log (DayLogBlock): the mood face and its word beside the chips, the note under. */
+.day-log { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); }
+.day-log-mood { display: flex; align-items: center; gap: var(--space-2); }
+.day-log-mood-word { font-size: var(--font-size-sm); color: var(--text-secondary); }
+.day-log-chips { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); list-style: none; margin: 0; padding: 0; }
+.day-log-chip {
+  font-size: var(--font-size-xs); color: var(--text-secondary); background: var(--surface-inset);
+  border: 1px solid var(--border-subtle); border-radius: 999px; padding: 2px 10px;
+}
+.day-log-note { flex-basis: 100%; margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); font-style: italic; }
+@media (max-width: 620px) {
+  /* The About fold's toggle is small text; a finger still needs 44px. The summary stays a list
+     item, so it keeps its disclosure triangle (.status-failure-details summary's own reason), and
+     align-content centres the text in the taller block. */
+  .detail-about summary { display: list-item; min-height: 44px; align-content: center; }
+}
+/* --- end detail pages --- */
+
+/* --- The night detail page (M10a-2), NightDetail.tsx: what only the night draws. --- */
 .night-week-total { font-variant-numeric: tabular-nums; }
 .night-week-against { margin: var(--space-1) 0 var(--space-3); font-size: var(--font-size-sm); color: var(--text-secondary); }
 /* Under the balance bars: what each bar is measured against (the mockup's "elke balk: ..."). */
 .night-week-bars-caption { margin-top: var(--space-2); }
-/* Four across on a wide screen, two on a phone, the mockup's two layouts. Shared by NightMinis
-   (the four figures under the hero), NightMorning (the five readings beside the recovery ring)
-   and NightMore (the eight remaining sleep figures): the same grid, drawn three times over. The
-   morning's five sit three across instead, in the three quarters the ring leaves them. */
-.night-minis-rows, .night-morning-rows, .night-more-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
-.night-morning-rows { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 620px) {
-  .night-minis-rows, .night-morning-rows, .night-more-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
-  .night-day-figures { grid-template-columns: repeat(1, minmax(0, 1fr)); gap: var(--space-3); }
-  .night-all { min-height: 44px; display: inline-flex; align-items: center; }
-  /* The About fold's toggle and a workout's link are small text; a finger still needs 44px. The
-     summary stays a list item, so it keeps its disclosure triangle (.status-failure-details
-     summary's own reason), and align-content centres the text in the taller block. */
-  .night-about summary { display: list-item; min-height: 44px; align-content: center; }
-  .night-day-workout-link { min-height: 44px; display: flex; align-items: center; }
-}
 /* Under the recovery ring: the index's usual, then what it is made of. */
 .night-recovery-usual, .night-recovery-from { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); text-align: center; }
 .night-recovery-from { color: var(--text-muted); }
@@ -647,17 +672,13 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* NightTraces.tsx's line under each row's label: the night's extreme and when. */
 .night-trace-summary { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 
-/* NightThrough.tsx's stage legend under the hypnogram: each stage's key in its own lane colour,
-   its time and its share, wrapping onto a second line on a phone. */
-.night-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); list-style: none; margin: var(--space-2) 0 0; padding: 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
-.night-legend li { display: inline-flex; align-items: center; gap: var(--space-1); }
-.night-legend-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-.night-legend-key[data-stage="deep"] { background: var(--chart-stage-deep); }
-.night-legend-key[data-stage="light"] { background: var(--chart-stage-light); }
-.night-legend-key[data-stage="rem"] { background: var(--chart-stage-rem); }
-.night-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
+/* NightThrough.tsx's stage legend (a .detail-legend): each stage's key in its own lane colour. */
+.detail-legend-key[data-stage="deep"] { background: var(--chart-stage-deep); }
+.detail-legend-key[data-stage="light"] { background: var(--chart-stage-light); }
+.detail-legend-key[data-stage="rem"] { background: var(--chart-stage-rem); }
+.detail-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
 
-/* NightSessions.tsx's own list, task 7's exclude-per-session card, last in the night page's grid.
+/* NightSessions.tsx's own list, task 7's exclude-per-session card, inside the About fold.
    A plain list rather than a table: each row is an id plus one control or one status word, not
    values under column headers. .night-session mirrors .night-row's own bottom-border-between-rows
    shape (NightList/NightRow, Sleep.tsx's own list) without reusing that class outright, since this
@@ -675,29 +696,6 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* The status word for a session already in night.excludedSessions - no button beside it, since
    this card offers no second way to un-exclude one (see NightSessions.tsx's own comment on why). */
 .night-session-excluded { font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; }
-
-/* NightAbout.tsx's fold around the list just above: closed by default, so a reader who never
-   excludes a session never sees it open. Mirrors .status-failure-details' own summary styling
-   (StatusPanel.tsx), the app's other disclosure triangle. */
-.night-about-line { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
-.night-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
-.night-about[open] summary { margin-bottom: var(--space-2); }
-
-/* NightDay.tsx's card (M10a-2 task 7): the mood face and its word beside the chips and note, then
-   steps, active minutes and any workout in a row of their own beneath them. */
-.night-day-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); }
-.night-day-mood { display: flex; align-items: center; gap: var(--space-2); }
-.night-day-mood-word { font-size: var(--font-size-sm); color: var(--text-secondary); }
-.night-day-chips { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); list-style: none; margin: 0; padding: 0; }
-.night-day-chip {
-  font-size: var(--font-size-xs); color: var(--text-secondary); background: var(--surface-inset);
-  border: 1px solid var(--border-subtle); border-radius: 999px; padding: 2px 10px;
-}
-.night-day-note { flex-basis: 100%; margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); font-style: italic; }
-.night-day-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
-.night-day-workouts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.night-day-workout-link { display: block; text-decoration: none; }
-.night-day-workout-link:hover { text-decoration: underline; }
 /* --- end night detail page --- */
 
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
@@ -871,8 +869,12 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .day-nav { display: flex; flex-wrap: nowrap; flex-shrink: 0; gap: var(--space-1); }
 /* The previous day's cards, held on screen while the day stepped to loads (useGlance's placeholder). */
 .dashboard-grid-stale { opacity: .6; transition: opacity .15s; }
-.day-nav-btn { min-width: 36px; justify-content: center; }
-.day-nav-today { justify-content: center; }
+/* An explicit height, so a row of arrows alone (a detail page's) is as tall as the dashboard's,
+   where a labelled button beside them set it; the phone block's 44px still wins below 620px. */
+.day-nav-btn { min-width: 36px; min-height: 32px; justify-content: center; }
+.day-nav-today { min-height: 32px; justify-content: center; }
+/* A detail page's way back to its list (DetailNav): a link that is the Today button's twin. */
+.day-nav-back { min-height: 32px; justify-content: center; text-decoration: none; white-space: nowrap; }
 
 /* GlanceCalendar.tsx, the day navigator's calendar (spec M9c, "The calendar (C2)"). The popover is
    fixed and portalled like .status-popover, placed under the button by placementFor through inline
@@ -1163,15 +1165,17 @@ button.week-bar-slot { cursor: pointer; }
 /* FigureRow (M10a): one figure on a detail page against its usual range, shared by the night and
    workout pages. */
 .figure-row { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.figure-row-label { font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+/* The row's label is a .label (FigureRow.tsx), so it takes the card label's own type; this only
+   keeps a label that wraps to two lines ("Actieve minuten") from spreading them apart. */
+.figure-row-label { line-height: var(--leading-tight); }
 .figure-row-value { font-size: var(--font-size-lg); font-weight: var(--weight-semibold); color: var(--text-primary); }
 .figure-row-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-inset); }
 .figure-row-band { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--chart-band-baseline); }
 .figure-row-mark { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text-primary); }
-.figure-row-mark.worse { background: var(--negative); }
+.figure-row-mark.worse, .figure-row-mark.is-out { background: var(--negative); }
 .figure-row-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
 .figure-row-verdict.better { color: var(--positive); }
-.figure-row-verdict.worse { color: var(--negative); }
+.figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
 
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
@@ -1348,7 +1352,12 @@ button.week-bar-slot { cursor: pointer; }
      and more), and the page ran 25px past the viewport. Stacked but still three across is 109px,
      not enough either; two across is 170px. */
   .night-grp { grid-template-columns: minmax(0, 1fr); }
-  .night-grp .night-morning-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Every detail page's rows, for the same reason: between 620px and 900px the minis under the
+     night's hero and "more about the sleep" stayed four across where a phone already had two,
+     and at a 621px window each column came out under 80px, narrower than one uppercase label.
+     The side cards stack their caption over their rows here too. */
+  .detail-rows, .detail-side-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean

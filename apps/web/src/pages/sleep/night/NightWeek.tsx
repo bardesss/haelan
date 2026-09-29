@@ -9,6 +9,7 @@ import { formatDuration, formatNumber, formatSignedDuration } from '../../../for
 import type { GlanceBaseline } from '../../../data/useGlance.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
 import { formatFigureValue } from './figureText.js'
+import { verdictTone } from '../../../components/FigureRow.js'
 
 /**
  * A usual bed or wake range placed in the schedule's frame: shifted by the whole day `anchorRaw`
@@ -81,6 +82,7 @@ export function NightWeek({ page }: { page: NightPageData }) {
   // One line for the week's variability and its usual, the mockup's "Bedtime varied ±28 min this
   // week · usually ±20–35 min": the usual half only when there is a real one to name.
   const variability = figures.bedtimeVariability
+  const variabilityTone = verdictTone(variability.judged, variability.standing)
   const variabilityValue = formatFigureValue(variability, variability.value, language, t)
   const variabilityBand = variability.baseline !== null && !variability.baseline.thin ? variability.baseline : null
   const variabilityLine = variabilityBand === null
@@ -113,7 +115,7 @@ export function NightWeek({ page }: { page: NightPageData }) {
             <SleepSchedule nights={scheduleNights} showNaps={false} label={scheduleLabel} usualBands={usualBands} />
           </BasisContext.Provider>
           <p id={variabilityId}
-            className={variability.judged === null ? 'night-week-variability' : `night-week-variability ${variability.judged}`}>
+            className={variabilityTone === null ? 'detail-verdict' : `detail-verdict ${variabilityTone}`}>
             {variabilityLine}
           </p>
         </Card>

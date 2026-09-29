@@ -314,7 +314,7 @@ const ROUTES = RAW_ROUTES.map(resolveRoute)
 // this). Clicking the `<summary>` opens the fold the same way a reader's own click would.
 const PANEL_OPENERS = [
   { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button' },
-  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button', reveal: '.night-about summary' },
+  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button', reveal: '.detail-about summary' },
 ]
 
 const server = await startServer()

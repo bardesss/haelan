@@ -54,9 +54,9 @@ export function NightMore({ figures }: { figures: NightPageData['figures'] }) {
 
   return (
     <Card span={12} label={t('sleep.night.more.label')}>
-      <div className="night-more-rows">
+      <div className="detail-rows">
         {rows.map(({ key, label, value, verdict, figure }) => (
-          <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged}
+          <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
             band={figure.baseline} mark={figure.value} />
         ))}
       </div>
