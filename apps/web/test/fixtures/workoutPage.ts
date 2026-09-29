@@ -1,6 +1,6 @@
-import type { GlanceBaseline, GlanceStanding } from '../../src/data/useGlance.js'
+import type { GlanceBaseline, GlanceFigure, GlanceStanding } from '../../src/data/useGlance.js'
 import type { PageFigure } from '../../src/data/useNightPage.js'
-import type { WorkoutFigure, WorkoutFigureKey, WorkoutPageData } from '../../src/data/useWorkoutPage.js'
+import type { MinuteSeries, WorkoutFigure, WorkoutFigureKey, WorkoutPageData } from '../../src/data/useWorkoutPage.js'
 import type { WorkoutSessionDetail } from '../../src/data/useSessions.js'
 
 // One whole workout page (GET /p/:personId/workout/:sessionId) in the wire shape the route sends:
@@ -71,6 +71,29 @@ function dayFigure(metric: string, unit: string, direction: PageFigure['directio
   return { metric, value, unit, precision: 0, direction, baseline, standing, judged: judgedOf(standing, direction), strip: null }
 }
 
+/** A glance figure for the morning's recovery, as roundRecovery sends one: judged, no strip needed. */
+function glanceFigure(metric: string, unit: string, value: number, baseline: GlanceBaseline, judged: GlanceFigure['judged']): GlanceFigure {
+  return {
+    metric, value, unit, baseline, asOfDate: WORKOUT_DATE, asOfMs: null, partial: false, staleSources: [], strip: [],
+    standing: standingOf(value, baseline), judged,
+  }
+}
+
+/**
+ * Pace and cadence a minute at a time over the 34-minute run, placed by their own elapsed seconds:
+ * pace (seconds per km) has no minutes 12 and 13, the pause, and cadence starts a minute later, as
+ * wall-clock minutes do on a run that starts part way through one. Neither lines up by index.
+ */
+export const PACE_SERIES: MinuteSeries = {
+  unit: 'seconds_per_km',
+  points: Array.from({ length: 34 }, (_, m) => m).filter((m) => m !== 12 && m !== 13)
+    .map((m) => ({ elapsedSeconds: m * 60, value: m < 12 ? 332 : 318 })),
+}
+export const CADENCE_SERIES: MinuteSeries = {
+  unit: 'steps_per_minute',
+  points: Array.from({ length: 33 }, (_, m) => ({ elapsedSeconds: (m + 1) * 60, value: m < 5 ? 160 : 170 })),
+}
+
 export function workoutPageFixture(): WorkoutPageData {
   return {
     sessionId: WORKOUT_ID,
@@ -124,6 +147,29 @@ export function workoutPageFixture(): WorkoutPageData {
       },
       restingHeartRate: dayFigure('resting_heart_rate', 'bpm', 'down', 55, band(54, 51, 57)),
     },
+    // The mockup's 24 and 41 bpm, rounded as the route sends them: the first within its usual, the
+    // second above it, judged better, since a larger fall is a quicker recovery.
+    heartRateRecovery: {
+      oneMinute: dayFigure('heart_rate_recovery_1min', 'bpm', 'up', 25, band(22, 18, 27)),
+      twoMinutes: dayFigure('heart_rate_recovery_2min', 'bpm', 'up', 41, band(34, 30, 38)),
+    },
+    // The night ending on the workout's own date, and that morning.
+    before: {
+      night: {
+        localDate: WORKOUT_DATE,
+        asleep: dayFigure('sleep_asleep_minutes', 'minutes', 'up', 372, band(400, 330, 470)),
+        deep: dayFigure('sleep_deep_minutes', 'minutes', 'up', 64, band(85, 70, 100)),
+      },
+      recovery: {
+        index: glanceFigure('recovery_index', 'count', 58, band(63, 52, 74), null),
+        band: 'usual', missing: null,
+        restingHeartRate: glanceFigure('resting_heart_rate', 'bpm', 53, band(54, 51, 57), null),
+        hrv: glanceFigure('hrv', 'milliseconds', 41, band(40, 34, 46), null),
+        respiratoryRate: null,
+      },
+      restingHeartRate: dayFigure('resting_heart_rate', 'bpm', 'down', 53, band(54, 51, 57)),
+    },
+    through: { pace: PACE_SERIES, cadence: CADENCE_SERIES },
     // The mockup's negative split, and the provider's zone ceilings for the day.
     splitTrend: { secondHalfFasterBySecondsPerKm: 22 },
     zoneBounds: { moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 },
@@ -160,6 +206,8 @@ export function strengthPageFixture(): WorkoutPageData {
     previous: null,
     best: { fastestKmSeconds: null, furthestMeters: null, longestMs: null },
     splitTrend: null,
+    // No route and no steps from the gym: nothing a minute at a time beside the heart rate.
+    through: { pace: null, cadence: null },
   }
 }
 

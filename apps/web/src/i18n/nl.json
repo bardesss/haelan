@@ -567,11 +567,36 @@
           "pauses_other": "{{count}} pauzes, samen {{duration}}",
           "heartRate": "Hartslag",
           "highest": "hoogste {{value}} na {{time}}",
-          "highestOnly": "hoogste {{value}}"
+          "highestOnly": "hoogste {{value}}",
+          "pace": "Tempo",
+          "cadence": "Cadans",
+          "paceChart": "Tempo door de training",
+          "cadenceChart": "Cadans door de training",
+          "average": "gemiddeld {{value}}",
+          "averageShort": "gem. {{value}}",
+          "smoothed": {
+            "pace": "tempo gladgestreken over drie minuten",
+            "cadence": "cadans gladgestreken over drie minuten",
+            "both": "tempo en cadans gladgestreken over drie minuten"
+          },
+          "noRoute": "zonder route geen tempolijn",
+          "from": {
+            "pace_one": "Het tempo komt uit de tijden van het ene routepunt.",
+            "pace_other": "Het tempo komt uit de tijden van de {{count}} routepunten.",
+            "cadence": "De cadans komt uit de stappen per minuut.",
+            "both_one": "Het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
+            "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+          }
         },
         "zones": {
           "label": "Hartslagzones",
           "hard": "{{value}} intensief of piek"
+        },
+        "recovery": {
+          "label": "Hartslagherstel",
+          "oneMinute": "Daling na 1 minuut",
+          "twoMinutes": "Daling na 2 minuten",
+          "caption": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit tot 10 trainingen van dit type ervoor · band = je gebruikelijke bereik"
         },
         "form": {
           "label": "Loopvorm",
@@ -590,6 +615,14 @@
           "steps": "Stappen",
           "activeMinutes": "Actieve minuten",
           "workouts": "Trainingen"
+        },
+        "before": {
+          "label": "Daarvoor",
+          "caption": "de nacht voor deze training en die ochtend",
+          "asleep": "Tijd in slaap",
+          "recoveryIndex": "Herstelindex",
+          "restingHeartRate": "Rusthartslag",
+          "night": "Bekijk de nacht"
         },
         "after": {
           "label": "Daarna",

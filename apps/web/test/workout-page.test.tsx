@@ -101,7 +101,9 @@ const SPLIT: FilledSplit = {
  */
 function workoutPageFor(url: string) {
   const id = decodeURIComponent(url.split('/workout/')[1]!.split('?')[0]!)
-  return { ...workoutPageFixture(), sessionId: id }
+  // RUN carries no route, so the server would send no pace; nor cadence, so the note under the
+  // trace says only what these tests are about.
+  return { ...workoutPageFixture(), sessionId: id, through: { pace: null, cadence: null } }
 }
 
 function stub(sessions: Record<string, WorkoutSession>): () => void {

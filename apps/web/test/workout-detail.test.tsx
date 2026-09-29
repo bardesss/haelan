@@ -724,7 +724,7 @@ describe('the workout page\'s trace', () => {
     expect(text(card, '.label')).toBe('Through the workout')
     // Label, then the chart, then what the axis is under it: the card's first line is its label.
     expect(card.querySelector('.basis')).toBeNull()
-    expect(text(card, '.workout-through + .dash-caption')).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40')
+    expect(text(card, '.workout-through + .dash-caption')).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40 · pace and cadence smoothed over three minutes')
     expect(text(host, '.workout-through-summary')).toBe('highest 178\u00a0bpm at 26:30')
     const option = optionIn(host, '.workout-through-chart')
     expect(option.xAxis[0]).toMatchObject({ type: 'value', min: 0, max: 34 * 60_000, interval: 5 * 60_000 })
@@ -741,7 +741,7 @@ describe('the workout page\'s trace', () => {
       tracePoints = [reading(minute(10), 150), reading(minute(33), 160)]
       const host = await mount(workoutPageFixture(), withEvents(events))
       const card = host.querySelector('.workout-through')!.closest('.card')!
-      expect(text(card, '.workout-through + .dash-caption')).toBe("on the workout's own clock, 0:00 to 34:00")
+      expect(text(card, '.workout-through + .dash-caption')).toBe("on the workout's own clock, 0:00 to 34:00 · pace and cadence smoothed over three minutes")
       const option = echarts.getInstanceByDom(host.querySelector<HTMLDivElement>('.workout-through-chart [role="img"]')!)!
         .getOption() as { series: { markArea?: { data: { xAxis?: number }[][] }, markLine?: unknown }[] }
       expect(option.series.some((series) => series.markArea?.data[0]?.[0]?.xAxis !== undefined)).toBe(false)
@@ -993,6 +993,212 @@ describe('the workout page\'s afterwards', () => {
     const page = workoutPageFixture()
     const host = await mount({ ...page, after: { night: null, restingHeartRate: null } })
     expect(cardLabelled(host, 'Afterwards')).toBeUndefined()
+  })
+})
+
+describe('the workout page\'s before', () => {
+  it('draws the night before, that morning\'s recovery index and resting heart rate, linked to the night', async () => {
+    const card = cardLabelled(await mount(workoutPageFixture()), 'Before')!
+    expect(text(card, '.detail-side-caption')).toBe('the night before this workout and that morning')
+    // The approved mockup's three: time asleep, the index and resting heart rate; no deep sleep.
+    expect(rowsIn(card)).toEqual([
+      ['Time asleep', '6h\u00a012m', 'within your usual 5h\u00a030m – 7h\u00a050m'],
+      ['Recovery index', '58', 'within your usual 52 – 74'],
+      ['Resting heart rate', '53\u00a0bpm', 'within your usual 51 – 57\u00a0bpm'],
+    ])
+    const link = card.querySelector<HTMLAnchorElement>('a.card-link')
+    expect(link?.textContent).toBe('View the night')
+    expect(link?.getAttribute('href')).toBe('/sleep/night/2026-09-04')
+  })
+
+  it('sits beside Afterwards at half width each, before it, its caption over its rows', async () => {
+    const host = await mount(workoutPageFixture())
+    const before = cardLabelled(host, 'Before')!
+    const after = cardLabelled(host, 'Afterwards')!
+    expect([before.getAttribute('data-span'), after.getAttribute('data-span')]).toEqual(['6', '6'])
+    expect(before.nextElementSibling).toBe(after)
+    expect(before.querySelector('.detail-side')?.className).toBe('detail-side detail-side-stacked')
+    expect(after.querySelector('.detail-side')?.className).toBe('detail-side detail-side-stacked')
+    // A side card on a row of its own keeps the caption beside its rows.
+    expect(cardLabelled(host, 'That day')!.querySelector('.detail-side')?.className).toBe('detail-side')
+  })
+
+  it('leaves out a row without its value, and the link without a night', async () => {
+    const page = workoutPageFixture()
+    const card = cardLabelled(await mount({ ...page, before: { ...page.before, night: null, recovery: null } }), 'Before')!
+    expect(rowsIn(card).map(([label]) => label)).toEqual(['Resting heart rate'])
+    expect(card.querySelector('a.card-link')).toBeNull()
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const night = page.before.night!
+    const noSleep = { ...night, asleep: { ...night.asleep, value: null } }
+    const other = cardLabelled(await mount({ ...page, before: { ...page.before, night: noSleep, restingHeartRate: null } }), 'Before')!
+    expect(rowsIn(other).map(([label]) => label)).toEqual(['Recovery index'])
+    expect(other.querySelector('.detail-side-rows')?.getAttribute('data-columns')).toBe('1')
+  })
+
+  it('is left out with nothing to show, and Afterwards takes the whole row', async () => {
+    const page = workoutPageFixture()
+    const night = page.before.night!
+    const host = await mount({ ...page, before: { night: { ...night, asleep: { ...night.asleep, value: null } }, recovery: null, restingHeartRate: null } })
+    expect(cardLabelled(host, 'Before')).toBeUndefined()
+    expect(cardLabelled(host, 'Afterwards')!.getAttribute('data-span')).toBe('12')
+    expect(cardLabelled(host, 'Afterwards')!.querySelector('.detail-side')?.className).toBe('detail-side')
+  })
+
+  it('takes the whole row itself when there is no Afterwards', async () => {
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, after: { night: null, restingHeartRate: null } })
+    expect(cardLabelled(host, 'Afterwards')).toBeUndefined()
+    expect(cardLabelled(host, 'Before')!.getAttribute('data-span')).toBe('12')
+  })
+
+  it('words the card in Dutch', async () => {
+    const card = cardLabelled(await mount(workoutPageFixture(), workoutSessionFixture(), 'nl'), 'Daarvoor')!
+    expect(text(card, '.detail-side-caption')).toBe('de nacht voor deze training en die ochtend')
+    expect(rowsIn(card).map(([label]) => label)).toEqual(['Tijd in slaap', 'Herstelindex', 'Rusthartslag'])
+    expect(rowsIn(card)[0]?.[1]).toBe('6u\u00a012m')
+    expect(card.querySelector('a.card-link')?.textContent).toBe('Bekijk de nacht')
+  })
+})
+
+describe('the workout page\'s heart-rate recovery', () => {
+  it('reads how far heart rate fell one and two minutes after, each against its usual, under the zones', async () => {
+    const host = await mount(workoutPageFixture(), fullSession())
+    const card = cardLabelled(host, 'Heart-rate recovery')!
+    expect(rowsIn(card)).toEqual([
+      ['Drop after 1 minute', '25\u00a0bpm', 'within your usual 18 – 27\u00a0bpm'],
+      ['Drop after 2 minutes', '41\u00a0bpm', 'above your usual 30 – 38\u00a0bpm'],
+    ])
+    const verdicts = [...card.querySelectorAll('.figure-row-verdict')].map((v) => v.className)
+    expect(verdicts).toEqual(['figure-row-verdict', 'figure-row-verdict better'])
+    expect(card.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('2')
+    expect(text(card, '.detail-rows + .dash-caption')).toBe(
+      'from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it · band = your usual range')
+    // The mockup's place: its own card after the zones, before running form.
+    expect(cardLabelled(host, 'Heart-rate zones')!.nextElementSibling).toBe(card)
+    expect(card.nextElementSibling).toBe(cardLabelled(host, 'Running form'))
+  })
+
+  it('reads the same in Dutch', async () => {
+    const card = cardLabelled(await mount(workoutPageFixture(), workoutSessionFixture(), 'nl'), 'Hartslagherstel')!
+    expect(rowsIn(card)).toEqual([
+      ['Daling na 1 minuut', '25\u00a0bpm', 'binnen je gebruikelijke bereik 18 – 27\u00a0bpm'],
+      ['Daling na 2 minuten', '41\u00a0bpm', 'boven je gebruikelijke bereik 30 – 38\u00a0bpm'],
+    ])
+  })
+
+  it('leaves out the minute without a value, and the card without either', async () => {
+    const page = workoutPageFixture()
+    const recovery = page.heartRateRecovery!
+    const one = cardLabelled(await mount({ ...page, heartRateRecovery: { ...recovery, twoMinutes: { ...recovery.twoMinutes, value: null } } }), 'Heart-rate recovery')!
+    expect(rowsIn(one).map(([label]) => label)).toEqual(['Drop after 1 minute'])
+    expect(one.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('1')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const two = cardLabelled(await mount({ ...page, heartRateRecovery: { ...recovery, oneMinute: { ...recovery.oneMinute, value: null } } }), 'Heart-rate recovery')!
+    expect(rowsIn(two).map(([label]) => label)).toEqual(['Drop after 2 minutes'])
+    expect(two.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('1')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    expect(cardLabelled(await mount({ ...page, heartRateRecovery: null }), 'Heart-rate recovery')).toBeUndefined()
+  })
+})
+
+describe('the workout page\'s pace and cadence', () => {
+  type SeriesOption = {
+    xAxis: { axisLabel: { show?: boolean } }[]
+    yAxis: { inverse?: boolean }[]
+    series: { id?: string, data?: [number, number | null][], markLine?: { data: { yAxis?: number }[], label?: { formatter?: string } } }[]
+  }
+  const charts = (host: ParentNode): SeriesOption[] => [...host.querySelectorAll<HTMLDivElement>('.workout-through-chart [role="img"]')]
+    .map((chart) => echarts.getInstanceByDom(chart)!.getOption() as SeriesOption)
+  const heads = (host: ParentNode) => [...host.querySelectorAll('.workout-through-head')]
+    .map((head) => [text(head, '.label') ?? '', text(head, '.workout-through-summary') ?? null])
+  // The one source's line: its min, range and mean series come first, the mean third.
+  const line = (option: SeriesOption) => option.series[2]!.data!
+  const caption = (host: ParentNode) => text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through + .dash-caption')
+
+  it('draws pace upside down and cadence under the heart rate, each minute at its own elapsed time', async () => {
+    tracePoints = [reading(minute(1), 120), reading(minute(20), 150)]
+    const host = await mount(workoutPageFixture(), fullSession())
+    expect(heads(host)).toEqual([
+      ['Heart rate', 'highest 178\u00a0bpm'],
+      ['Pace', 'average 5:24\u00a0/km'],
+      ['Cadence', 'average 172\u00a0/min'],
+    ])
+    const [heart, pace, cadence] = charts(host)
+    // Only the lowest row labels the time.
+    expect([heart, pace, cadence].map((o) => o!.xAxis[0]!.axisLabel.show)).toEqual([false, false, true])
+    expect(pace!.yAxis[0]!.inverse).toBe(true)
+    expect(cadence!.yAxis[0]!.inverse).toBe(false)
+    // Pace from minute 0, a gap where the pause left minutes 12 and 13 out, then minute 14 on.
+    expect(line(pace!).slice(10, 14)).toEqual([[10 * 60_000, 332], [11 * 60_000, 332], [12 * 60_000, null], [14 * 60_000, 318]])
+    // Cadence starts a minute in: placed by its own seconds, not lined up with pace by index.
+    expect(line(cadence!)[0]).toEqual([60_000, 160])
+    const reference = (o: SeriesOption) => o.series.find((series) => series.id === 'reference')!.markLine!
+    expect([reference(pace!).data[0]!.yAxis, reference(pace!).label!.formatter]).toEqual([324, 'avg 5:24\u00a0/km'])
+    expect([reference(cadence!).data[0]!.yAxis, reference(cadence!).label!.formatter]).toEqual([172, 'avg 172\u00a0/min'])
+    expect(text(host, '.workout-through-note')).toBe('The pace comes from the times of the 4 route points, the cadence from the steps per minute.')
+    // The axis in the stopwatch form, the tooltip and the table in the value's own unit.
+    const paceAxis = (pace as unknown as { yAxis: { axisLabel: { formatter: (v: number) => string } }[] }).yAxis[0]!.axisLabel
+    expect(paceAxis.formatter(330)).toBe('5:30')
+    const tooltip = (o: SeriesOption) => (o as unknown as { tooltip: { formatter: (p: unknown) => string }[] }).tooltip[0]!.formatter
+    expect(tooltip(pace!)([{ seriesIndex: 2, dataIndex: 0 }])).toBe('0:00<br/>5:32 /km')
+    expect(tooltip(cadence!)([{ seriesIndex: 2, dataIndex: 0 }])).toBe('1:00<br/>160 /min')
+    const table = (i: number) => [...host.querySelectorAll('.workout-through-chart')[i]!.querySelectorAll('table tr')]
+      .slice(0, 2).map((row) => [...row.querySelectorAll('th, td')].map((cell) => cell.textContent))
+    expect(table(1)).toEqual([['Time', 'Pace'], ['0:00', '5:32 /km']])
+    expect(table(2)).toEqual([['Time', 'Cadence'], ['1:00', '160 /min']])
+    // Shorter than the heart rate's 170, the rows under it.
+    const heights = [...host.querySelectorAll<HTMLDivElement>('.workout-through-chart [role="img"]')].map((chart) => chart.style.height)
+    expect(heights).toEqual(['170px', '120px', '120px'])
+  })
+
+  it('draws no pace without a route, and says so under a workout that covers a distance', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, through: { ...page.through, pace: null } }, fullSession())
+    expect(heads(host).map(([label]) => label)).toEqual(['Heart rate', 'Cadence'])
+    expect(charts(host).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([false, true])
+    expect(caption(host)).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40 · cadence smoothed over three minutes · no route, no pace line')
+    expect(text(host, '.workout-through-note')).toBe('The cadence comes from the steps per minute.')
+  })
+
+  it('draws no cadence without one, the pace row then labelling the time', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, through: { ...page.through, cadence: null } }, fullSession())
+    expect(heads(host).map(([label]) => label)).toEqual(['Heart rate', 'Pace'])
+    expect(charts(host).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([false, true])
+    expect(caption(host)).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40 · pace smoothed over three minutes')
+    expect(text(host, '.workout-through-note')).toBe('The pace comes from the times of the 4 route points.')
+  })
+
+  it('draws neither for a strength session, whose heart rate labels its own time, with no word about a route', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const host = await mount(strengthPageFixture(), strengthSessionFixture())
+    expect(heads(host).map(([label]) => label)).toEqual(['Heart rate'])
+    expect(charts(host).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([true])
+    expect(caption(host)).toBe('on the workout\'s own clock, 0:00 to 34:00')
+    expect(host.querySelector('.workout-through-note')).toBeNull()
+  })
+
+  it('draws a row without its average line when the page has no figure for it', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const page = workoutPageFixture()
+    const { cadence: _cadence, ...figures } = page.figures
+    const host = await mount({ ...page, figures }, fullSession())
+    expect(heads(host)[2]).toEqual(['Cadence', null])
+    expect(charts(host)[2]!.series.some((series) => series.id === 'reference')).toBe(false)
+  })
+
+  it('words the rows in Dutch', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const host = await mount(workoutPageFixture(), fullSession(), 'nl')
+    expect(heads(host).slice(1)).toEqual([['Tempo', 'gemiddeld 5:24\u00a0/km'], ['Cadans', 'gemiddeld 172\u00a0/min']])
+    expect(caption(host)).toBe('op de tijd van de training zelf, 0:00 tot 34:00 · één pauze van 1:40 · tempo en cadans gladgestreken over drie minuten')
+    expect(text(host, '.workout-through-note')).toBe('Het tempo komt uit de tijden van de 4 routepunten, de cadans uit de stappen per minuut.')
   })
 })
 

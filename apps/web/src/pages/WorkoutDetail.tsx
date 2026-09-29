@@ -19,7 +19,9 @@ import { WorkoutZones } from './activity/workout/WorkoutZones.js'
 import { WorkoutForm } from './activity/workout/WorkoutForm.js'
 import { WorkoutMore } from './activity/workout/WorkoutMore.js'
 import { WorkoutDay } from './activity/workout/WorkoutDay.js'
-import { WorkoutAfter } from './activity/workout/WorkoutAfter.js'
+import { WorkoutAfter, hasAfter } from './activity/workout/WorkoutAfter.js'
+import { WorkoutBefore, hasBefore } from './activity/workout/WorkoutBefore.js'
+import { WorkoutRecovery } from './activity/workout/WorkoutRecovery.js'
 import { WorkoutAbout } from './activity/workout/WorkoutAbout.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -114,6 +116,9 @@ export function WorkoutDetail() {
     : resolveSource(chosenSourceParam, [ALL_SOURCES, ...sources.map((s) => s.id)])
   const chosenSource = resolvedSource === ALL_SOURCES ? null : resolvedSource
   const page = pageQuery.data
+  // Before and after share a row, half each, when both are drawn; either alone takes the whole
+  // row, so no run of cards is left with a hole in it.
+  const sideSpan = hasBefore(page) && hasAfter(page) ? 6 : 12
 
   return (
     <div className="detail-page">
@@ -125,10 +130,12 @@ export function WorkoutDetail() {
         <WorkoutMap session={query.data} page={page} />
         <WorkoutThrough session={query.data} detail={detail} page={page} chosenSource={chosenSource} />
         <WorkoutZones detail={detail} page={page} />
+        <WorkoutRecovery page={page} />
         <WorkoutForm page={page} />
         <WorkoutMore page={page} detail={detail} endMs={query.data.endMs} />
         <WorkoutDay page={page} note={detail.notes} />
-        <WorkoutAfter page={page} />
+        <WorkoutBefore page={page} span={sideSpan} />
+        <WorkoutAfter page={page} span={sideSpan} />
         <WorkoutAbout session={query.data} detail={detail} exerciseType={page.exerciseType} onAnnotate={() => setAnnotating(true)} />
       </div>
       {annotating && (
