@@ -472,6 +472,20 @@ describe('readWorkoutPage: heart-rate recovery', () => {
     expect(heartRateRecovery!.twoMinutes).toMatchObject({ value: 42, standing: 'above', baseline: { center: 32, thin: false } })
   })
 
+  it('judges against the latest ten runs alone, leaving older ones out of the usual', () => {
+    seedRuns(12, { pace: 330 })
+    // The two oldest fell 2 and 58 in the first minute, the ten after them 18 or 22.
+    for (let i = 0; i < 12; i += 1) {
+      const fall = i === 0 ? 2 : i === 1 ? 58 : i % 2 === 0 ? 22 : 18
+      seedRecovery(shiftLocalDate(SUBJECT_DATE, -3 * (12 - i)), [160, 150, 160 - fall, 130])
+    }
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
+    const { oneMinute } = readWorkoutPage(q(), input('subject'))!.heartRateRecovery!
+    expect(oneMinute.baseline!.center).toBe(20)
+    expect(oneMinute.baseline!.high).toBeCloseTo(20 + Math.sqrt(40 / 9), 6)
+  })
+
   it('claims no standing on fewer than five earlier runs with heart rate after them', () => {
     seedRuns(10, { pace: 330 })
     for (let i = 0; i < 4; i += 1) seedRecovery(shiftLocalDate(SUBJECT_DATE, -3 * (10 - i)), [160, 150, 140, 128])
@@ -544,8 +558,9 @@ describe('readWorkoutPage: the morning before', () => {
 })
 
 describe('readWorkoutPage: through the workout', () => {
-  it("draws pace from the route's own timestamps, and nothing without a route", () => {
-    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+  it("draws pace from the route's own timestamps, nothing past the end, and nothing without a route", () => {
+    // Three minutes of fixes on a two-minute run: the recording ran on after the end.
+    seedRun('subject', SUBJECT_DATE, { pace: 300 }, { minutes: 2 })
     seedRun('bare', SUBJECT_DATE, { pace: 300 }, { hhmm: '18:00' })
     const startMs = at(SUBJECT_DATE, '07:00')
     const metresPerDegree = (6_371_000 * Math.PI) / 180
@@ -555,7 +570,7 @@ describe('readWorkoutPage: through the workout', () => {
       altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
     }))).run()
     const { pace } = readWorkoutPage(q(), input('subject'))!.through
-    expect(pace!.points.map((p) => p.elapsedSeconds)).toEqual([0, 60, 120])
+    expect(pace!.points.map((p) => p.elapsedSeconds)).toEqual([0, 60])
     expect(pace!.points[0]!.value).toBeCloseTo(1000 / 3, 1)
     expect(readWorkoutPage(q(), input('bare'))!.through.pace).toBeNull()
   })

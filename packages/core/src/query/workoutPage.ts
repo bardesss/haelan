@@ -199,7 +199,7 @@ function throughOf(q: PersonQuery, session: WorkoutSession): WorkoutPage['throug
       .points.flatMap((p) => (p.excluded || p.mean === null ? [] : [{ utcMs: p.utcMs, value: p.mean * p.n }])),
     session.startMs, session.endMs,
   )
-  return { pace: paceSeries(route, session.startMs), cadence }
+  return { pace: paceSeries(route, session.startMs, session.endMs), cadence }
 }
 
 // Answers: every session of this type up to a date. A type outside EXERCISE_TYPES is

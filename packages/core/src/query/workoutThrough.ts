@@ -43,8 +43,9 @@ function smoothed(byMinute: ReadonlyMap<number, number>, unit: string): MinuteSe
  * minute boundary counts in both minutes for its share. A minute the fixes only partly span (the
  * last one, or one side of a dropout) is read over the seconds they do span, the 50 m scaled to
  * match, rather than as a whole minute that went slowly. Null too when no minute qualifies.
+ * Fixes outside [startMs, endMs) count for nothing, so pace never runs past the trace's own axis.
  */
-export function paceSeries(route: readonly { atMs: number, latitude: number, longitude: number }[], startMs: number): MinuteSeries | null {
+export function paceSeries(route: readonly { atMs: number, latitude: number, longitude: number }[], startMs: number, endMs: number): MinuteSeries | null {
   const fixes = [...route].sort((a, b) => a.atMs - b.atMs)
   const metres = new Map<number, number>()
   const covered = new Map<number, number>()
@@ -54,10 +55,11 @@ export function paceSeries(route: readonly { atMs: number, latitude: number, lon
     const span = b.atMs - a.atMs
     if (span <= 0) continue
     const distance = haversineMetres(a, b)
+    const until = Math.min(b.atMs, endMs)
     let from = Math.max(a.atMs, startMs)
-    while (from < b.atMs) {
+    while (from < until) {
       const minute = Math.floor((from - startMs) / MINUTE_MS)
-      const to = Math.min(b.atMs, startMs + (minute + 1) * MINUTE_MS)
+      const to = Math.min(until, startMs + (minute + 1) * MINUTE_MS)
       metres.set(minute, (metres.get(minute) ?? 0) + distance * ((to - from) / span))
       covered.set(minute, (covered.get(minute) ?? 0) + (to - from) / 1000)
       from = to
@@ -79,9 +81,15 @@ export function paceSeries(route: readonly { atMs: number, latitude: number, lon
  * Steps are stored as provider intervals keyed by their start, the end dropped at mapping, so a row
  * is a minute's steps only when the rows come a minute apart or closer. Rows longer than that are
  * refused outright rather than spread: where the interval ended is not stored.
+ *
+ * Minutes are wall-clock minutes, elapsed counted from the minute the workout started in: the
+ * window read keys a minute of several rows on the minute's start and a minute of one row on the
+ * row's own instant, so only the minute floor puts both in the same bucket. A row counts when its
+ * minute is the start's minute or later and it came before the end.
  */
 export function cadenceSeries(rows: readonly { utcMs: number, value: number }[], startMs: number, endMs: number): MinuteSeries | null {
-  const inside = rows.filter((r) => r.utcMs >= startMs && r.utcMs < endMs).sort((a, b) => a.utcMs - b.utcMs)
+  const startMinute = Math.floor(startMs / MINUTE_MS)
+  const inside = rows.filter((r) => Math.floor(r.utcMs / MINUTE_MS) >= startMinute && r.utcMs < endMs).sort((a, b) => a.utcMs - b.utcMs)
   if (inside.length < 2) return null
   const spacings = inside.slice(1).map((r, i) => r.utcMs - inside[i]!.utcMs).sort((a, b) => a - b)
   const mid = Math.floor(spacings.length / 2)
@@ -89,7 +97,7 @@ export function cadenceSeries(rows: readonly { utcMs: number, value: number }[],
   if (median > CADENCE_MAX_SPACING_MS) return null
   const steps = new Map<number, number>()
   for (const r of inside) {
-    const minute = Math.floor((r.utcMs - startMs) / MINUTE_MS)
+    const minute = Math.floor(r.utcMs / MINUTE_MS) - startMinute
     steps.set(minute, (steps.get(minute) ?? 0) + r.value)
   }
   return smoothed(steps, 'steps_per_minute')
