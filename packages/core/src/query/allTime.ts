@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { eddingtonOf } from '../api/eddington.ts'
 import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
-import { sessionRecordsOf } from '../api/sessionRecords.ts'
+import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
 import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
 import type { NamedSource } from '../store/sourceAliases.ts'
@@ -282,13 +282,7 @@ function excludedSessionIds(db: DbOrTx, personId: string): Set<string> {
   )
 }
 
-/**
- * Exercise sessions in the shape `sessionRecordsOf` needs, with the payload parsing kept here.
- *
- * `attrs` is JSON this process wrote but a mapper's shape rather than a schema, so every read
- * below is defensive: a session with no metricsSummary, no splits, or a split that is not a
- * kilometre is ordinary rather than broken.
- */
+/** Exercise sessions in the shape `sessionRecordsOf` needs; see `sessionForRecords` for the parsing. */
 function sessionsForRecords(
   db: DbOrTx, personId: string, excluded: ReadonlySet<string>,
 ): SessionForRecords[] {
@@ -301,34 +295,9 @@ function sessionsForRecords(
   const out: SessionForRecords[] = []
   for (const row of rows) {
     if (excluded.has(row.id)) continue
-
-    let attrs: Record<string, unknown> = {}
-    try { attrs = JSON.parse(row.attrs) as Record<string, unknown> } catch { attrs = {} }
-
-    const summary = attrs['metricsSummary'] as { distanceMillimeters?: unknown } | undefined
-    const distance = typeof summary?.distanceMillimeters === 'number' && summary.distanceMillimeters > 0
-      ? summary.distanceMillimeters
-      : null
-
-    // Exactly one kilometre, so every candidate is the same distance: a 400m lap would win a
-    // "fastest split" every time by being shorter rather than quicker.
-    const kilometreSeconds: number[] = []
-    for (const split of (attrs['splits'] as unknown[] | undefined) ?? []) {
-      const s = split as { splitType?: unknown, activeDuration?: unknown, metricsSummary?: { distanceMillimeters?: unknown } }
-      if (s.splitType !== 'DISTANCE') continue
-      if (s.metricsSummary?.distanceMillimeters !== 1_000_000) continue
-      const seconds = Number.parseFloat(String(s.activeDuration ?? '').replace(/s$/, ''))
-      if (Number.isFinite(seconds) && seconds > 0) kilometreSeconds.push(seconds)
-    }
-
-    out.push({
-      sessionId: row.id,
-      localDate: row.localDate,
-      exerciseType: typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null,
-      durationMs: row.endMs - row.startMs,
-      distanceMm: distance,
-      kilometreSeconds,
-    })
+    let attrs: unknown = {}
+    try { attrs = JSON.parse(row.attrs) } catch { attrs = {} }
+    out.push(sessionForRecords({ ...row, attrs }))
   }
   return out
 }

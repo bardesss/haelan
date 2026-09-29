@@ -4,62 +4,11 @@ import {
   judgeCalendarDay, readGlanceCalendarRaw,
 } from '@haelan/core'
 import type {
-  Glance, GlanceBaseline, GlanceCalendar, GlanceFigure, GlanceStepsPace, GlanceWeekFigure, RawCalendarDay,
+  Glance, GlanceCalendar, GlanceStepsPace, GlanceWeekFigure, RawCalendarDay,
 } from '@haelan/core'
-import { personQueryOf, roundMetricValue, roundMetricValueOrNull, sendHashed } from './shared.ts'
+import { personQueryOf, roundBand, roundFigure, roundMetricValue, roundMetricValueOrNull, ROUNDED_AS, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
-
-/**
- * The catalogue metric a figure is rounded as, for the figures whose own metric is not a
- * catalogue id. Active minutes is the three activity levels summed, all minutes metrics sharing
- * one precision, so it rounds as one of them does. The recovery index is absent on purpose: it is
- * already an integer, and roundMetricValue passes a metric the catalogue does not know through
- * unchanged, so it needs no entry and no second rounding rule.
- */
-const ROUNDED_AS: Readonly<Record<string, string>> = { active_minutes: 'active_minutes_light' }
-
-/** Rounds a band's three numbers to `metric`'s catalogue precision: a figure's own band, each strip day's, and each calendar day's alike. */
-function roundBand(metric: string, band: GlanceBaseline | null): GlanceBaseline | null {
-  return band === null ? null : {
-    ...band,
-    center: roundMetricValue(metric, band.center),
-    low: roundMetricValue(metric, band.low),
-    high: roundMetricValue(metric, band.high),
-  }
-}
-
-/**
- * A figure's value, band and strip, each to its metric's catalogue precision, with every verdict
- * recomputed from those same rounded numbers (Task 19a): `standingOf` runs on unrounded values in
- * core, so a value that only clears its baseline's high before rounding (or only after) would
- * otherwise disagree with the band a reader is actually shown, e.g. "60 bpm, above your usual
- * 52 - 60". One rule (`standingOf`), reapplied here at the wire's own precision; core's callers
- * (MCP and others) keep the unrounded figure, so their own comparisons stay internally consistent.
- */
-function roundFigure(figure: GlanceFigure): GlanceFigure {
-  const metric = ROUNDED_AS[figure.metric] ?? figure.metric
-  const band = roundBand(metric, figure.baseline)
-  const value = roundMetricValueOrNull(metric, figure.value)
-  // The figure's own day is always the strip's last entry (stripDates ends on `on`); `partial`
-  // never applies to an earlier, already-finished day in the same strip (glance.ts's stripOf).
-  const ownDate = figure.strip.at(-1)?.localDate ?? null
-  return {
-    ...figure,
-    value,
-    baseline: band,
-    // Each strip day against its own day's band (glance.ts's stripOf), rounded by the same rule as
-    // the figure's: the last day's band is the figure's own, so its dot and the headline agree, and
-    // every earlier dot agrees with the day it opens and with that day's calendar dot, which
-    // /glance/calendar re-judges from its own rounded numbers the same way.
-    strip: figure.strip.map((day) => {
-      const dayValue = roundMetricValueOrNull(metric, day.value)
-      const dayBand = roundBand(metric, day.band)
-      return { ...day, value: dayValue, band: dayBand, standing: standingOf(dayValue, dayBand, figure.partial && day.localDate === ownDate) }
-    }),
-    standing: standingOf(value, band, figure.partial),
-  }
-}
 
 /**
  * The pace band and its own count, each to steps precision, with `standing` recomputed from those

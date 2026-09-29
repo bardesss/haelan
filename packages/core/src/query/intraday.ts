@@ -27,6 +27,21 @@ import type { Thinned } from './downsample.ts'
  * person to need it will be standing in one of those two files.
  */
 
+/**
+ * The widest span `intradayWindow` will read.
+ *
+ * 48 rather than 24 because the two questions the window exists for both cross a midnight: a night
+ * runs 23:15 to 07:02, and a caller asking for "yesterday and today" of a person in a different
+ * zone is not making a mistake. It is the number M8's design chose independently for the same
+ * function, and taking that one rather than picking a second means the HTTP route and the tool
+ * surface cannot come to disagree about what is too much to ask for. Here rather than beside
+ * `PersonQuery.intradayWindow`, which enforces it, so the readers that must stay inside it (a
+ * workout's highest heart rate, a night's trace) can skip a span before asking rather than throw.
+ */
+export const INTRADAY_WINDOW_MAX_HOURS = 48
+
+export const INTRADAY_WINDOW_MAX_MS = INTRADAY_WINDOW_MAX_HOURS * 3_600_000
+
 const MINUTE_MS = 60_000
 const DEFAULT_POINTS = 500
 

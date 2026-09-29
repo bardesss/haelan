@@ -80,8 +80,11 @@ function NightTrace({ metric, night, chosenSource }: {
     <div className="night-trace">
       <Card span={12} label={label} basis={basis}>
         {/* Read in the offset the night began under, so its clock times are the night's own. */}
+        {/* Bounds the axis to the night itself, not just whatever the trace's own samples cover
+            (Task 9's fix) - clock time, not elapsed: unlike a workout's own duration, a night's
+            reader wants to see when in the night something happened, on the clock. */}
         <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={label} metric={metric}
-          offsetMinutes={night.startOffsetMinutes} />
+          offsetMinutes={night.startOffsetMinutes} startMs={night.startMs} endMs={night.endMs} />
       </Card>
     </div>
   )

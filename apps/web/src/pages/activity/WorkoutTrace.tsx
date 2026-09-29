@@ -76,6 +76,10 @@ export function WorkoutTrace({ session, detail, chosenSource }: {
         eventMarks={marks}
         // Read in the offset the workout started under, the same clock its header prints.
         offsetMinutes={session.startOffsetMinutes}
+        // Bounds the axis to the session itself, not just whatever the trace's own samples cover
+        // (Task 9's fix), on time into the session rather than a clock time: a workout that crosses
+        // midnight should still read 0:00 to its own duration.
+        startMs={session.startMs} endMs={session.endMs} axis="elapsed"
       />
     </Card>
   )

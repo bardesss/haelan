@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import { ConfigError, metricSpec, PersonQuery, requireDate } from '@haelan/core'
-import type { SeriesResult } from '@haelan/core'
+import { ConfigError, FIGURE_METRIC_ALIAS, judge, metricSpec, PersonQuery, requireDate, standingOf } from '@haelan/core'
+import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
 
 interface PersonParams { personId: string }
@@ -160,6 +160,129 @@ export function roundSeriesResult(metric: string, result: SeriesResult): SeriesR
   return {
     ...result,
     points: result.points.map((point) => ({ ...point, value: roundMetricValue(metric, point.value) })),
+  }
+}
+
+/**
+ * The catalogue metric a figure is rounded as, for the figures whose own metric is not a
+ * catalogue id: core's FIGURE_METRIC_ALIAS, the same map pageFigureOf judges by, so a figure is
+ * never judged as one metric and rounded as another. The recovery index is absent on purpose: it
+ * is already an integer, and roundMetricValue passes a metric the catalogue does not know through
+ * unchanged, so it needs no entry and no second rounding rule.
+ */
+export const ROUNDED_AS: Readonly<Record<string, string>> = FIGURE_METRIC_ALIAS
+
+/** Rounds a band's three numbers to `metric`'s catalogue precision: a figure's own band, each strip day's, and each calendar day's alike. */
+export function roundBand(metric: string, band: GlanceBaseline | null): GlanceBaseline | null {
+  return band === null ? null : {
+    ...band,
+    center: roundMetricValue(metric, band.center),
+    low: roundMetricValue(metric, band.low),
+    high: roundMetricValue(metric, band.high),
+  }
+}
+
+/**
+ * Moved here from glance.ts (M10a) so the night page can round its recovery figures by the same
+ * rule the glance does.
+ *
+ * A figure's value, band and strip, each to its metric's catalogue precision, with every verdict
+ * recomputed from those same rounded numbers (Task 19a): `standingOf` runs on unrounded values in
+ * core, so a value that only clears its baseline's high before rounding (or only after) would
+ * otherwise disagree with the band a reader is actually shown, e.g. "60 bpm, above your usual
+ * 52 - 60". One rule (`standingOf`), reapplied here at the wire's own precision; core's callers
+ * (MCP and others) keep the unrounded figure, so their own comparisons stay internally consistent.
+ */
+export function roundFigure(figure: GlanceFigure): GlanceFigure {
+  const metric = ROUNDED_AS[figure.metric] ?? figure.metric
+  const band = roundBand(metric, figure.baseline)
+  const value = roundMetricValueOrNull(metric, figure.value)
+  // The figure's own day is always the strip's last entry (stripDates ends on `on`); `partial`
+  // never applies to an earlier, already-finished day in the same strip (glance.ts's stripOf).
+  const ownDate = figure.strip.at(-1)?.localDate ?? null
+  return {
+    ...figure,
+    value,
+    baseline: band,
+    // Each strip day against its own day's band (glance.ts's stripOf), rounded by the same rule as
+    // the figure's: the last day's band is the figure's own, so its dot and the headline agree, and
+    // every earlier dot agrees with the day it opens and with that day's calendar dot, which
+    // /glance/calendar re-judges from its own rounded numbers the same way.
+    strip: figure.strip.map((day) => {
+      const dayValue = roundMetricValueOrNull(metric, day.value)
+      const dayBand = roundBand(metric, day.band)
+      return { ...day, value: dayValue, band: dayBand, standing: standingOf(dayValue, dayBand, figure.partial && day.localDate === ownDate) }
+    }),
+    standing: standingOf(value, band, figure.partial),
+  }
+}
+
+/** `value` to `precision` decimals, the same toFixed rule roundMetricValue applies with a catalogue precision. */
+function roundTo(precision: number, value: number): number {
+  return Number(value.toFixed(precision))
+}
+
+function roundToOrNull(precision: number, value: number | null): number | null {
+  return value === null ? null : roundTo(precision, value)
+}
+
+function roundBandTo(precision: number, band: GlanceBaseline | null): GlanceBaseline | null {
+  return band === null ? null : {
+    ...band, center: roundTo(precision, band.center), low: roundTo(precision, band.low), high: roundTo(precision, band.high),
+  }
+}
+
+/**
+ * The verdict a rounded value and band support. Kept null where core said null: rounding never
+ * turns a value or a band null or a band thin, so core's null means one of those or a partial day
+ * (the workout page's own day's steps while that day is still running), which a PageFigure does
+ * not carry for this to recompute. Otherwise `standingOf` on the rounded pair, partial false.
+ */
+function standingAfterRounding(
+  before: GlanceStanding | null, value: number | null, band: GlanceBaseline | null,
+): GlanceStanding | null {
+  return before === null ? null : standingOf(value, band, false)
+}
+
+/**
+ * A detail page's figure at its own `precision`, never METRICS[figure.metric]'s: the night page's
+ * summary figures (sleep_latency_minutes and the rest) are not catalogue metrics, and a workout
+ * figure's metric is its key ('pace'). Standing and then `judged` are recomputed from the rounded
+ * value and band, in the order roundFigure uses, so "400, below your usual 400" cannot be sent.
+ * Each strip day is rounded and re-judged against its own rounded band the same way.
+ */
+export function roundPageFigure(figure: PageFigure): PageFigure {
+  const { precision } = figure
+  const value = roundToOrNull(precision, figure.value)
+  const baseline = roundBandTo(precision, figure.baseline)
+  const standing = standingAfterRounding(figure.standing, value, baseline)
+  return {
+    ...figure,
+    value,
+    baseline,
+    standing,
+    judged: judge(standing, figure.direction),
+    strip: figure.strip === null ? null : figure.strip.map((day) => {
+      const dayValue = roundToOrNull(precision, day.value)
+      const dayBand = roundBandTo(precision, day.band)
+      return { ...day, value: dayValue, band: dayBand, standing: standingAfterRounding(day.standing, dayValue, dayBand) }
+    }),
+  }
+}
+
+/** roundPageFigure's rule for a workout figure, whose strip is earlier sessions' bare values with no band or verdict of their own. */
+export function roundWorkoutFigure(figure: WorkoutFigure): WorkoutFigure {
+  const { precision } = figure
+  const value = roundToOrNull(precision, figure.value)
+  const baseline = roundBandTo(precision, figure.baseline)
+  const standing = standingAfterRounding(figure.standing, value, baseline)
+  return {
+    ...figure,
+    value,
+    baseline,
+    standing,
+    judged: judge(standing, figure.direction),
+    strip: figure.strip.map((point) => ({ ...point, value: roundToOrNull(precision, point.value) })),
   }
 }
 

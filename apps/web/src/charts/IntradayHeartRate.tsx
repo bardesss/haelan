@@ -12,6 +12,7 @@ import type { IntradayPoint, IntradayResult } from '../data/useIntraday.js'
 import { useSession } from '../auth/session.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { METRICS } from '@haelan/core/metrics'
+import { formatElapsed } from './elapsed.js'
 
 // This component's name predates M8c: it was heart-rate-only until the night page reused it for
 // spo2 and hrv (NightTraces.tsx), the same three - and only three - metrics
@@ -71,17 +72,39 @@ type Props = {
    */
   compact?: boolean
   /**
-   * Compact only: where the x axis starts, as an instant - the local midnight of the day drawn, in
-   * the person's zone, so the trace's whole width is the day so far (the axis ends at the last
-   * reading). Unset, the axis fits the readings themselves.
+   * Where the x axis starts, as an instant - the local midnight of the day drawn in compact mode,
+   * or a workout's or night's own start in full mode, so a session with one reading ten minutes in
+   * still draws an axis the width of the session rather than whatever its samples happen to cover
+   * (the bug this prop's full-mode reading fixes: a single reading at 18:10 in a session running
+   * 18:00-18:34 used to draw an axis from that reading's own minute to the same clock time the next
+   * day). Unset, the axis fits the readings themselves.
    */
   startMs?: number
   /**
-   * Compact only: where the x axis ends, as an instant - the next local midnight on a finished day,
-   * so the trace's width is the whole day (00:00 to 24:00) whenever its last reading came. Unset,
-   * the axis ends at the last reading: the day so far.
+   * Where the x axis ends, as an instant - the next local midnight on a finished day in compact
+   * mode, or a workout's or night's own end in full mode. Unset, the axis ends at the last reading
+   * (compact mode: the day so far; full mode: unchanged from before this prop applied to it).
    */
   endMs?: number
+  /**
+   * Full mode only: how the axis labels and the tooltip read time. 'elapsed' reads time into the
+   * session (`formatElapsed(utcMs - startMs)`) rather than a clock time - a workout's own choice,
+   * since a session that crosses midnight should still read 0:00 to 0:34, not 23:58 to 00:32.
+   * 'elapsed' without `startMs` falls back to clock labels, the same as the default: there is
+   * nothing to measure elapsed time from. Compact mode never shows axis labels or a tooltip, so this
+   * has nothing to affect there.
+   */
+  axis?: 'clock' | 'elapsed'
+  /**
+   * A shaded y range drawn behind the lines, the same visual device `spans` uses on the x axis
+   * (WorkoutTrace.tsx and NightTraces.tsx do not pass this yet; a future caller supplies a person's
+   * usual range for the metric). Unset by default, which draws exactly what the chart drew before
+   * this existed. A caller that does pass one must memoise it: like `eventMarks` and `spans` above,
+   * this object sits in `build`'s own dependency list, and a fresh `{low, high}` literal on every
+   * render would dispose and reinitialise the chart every time (chart-lifecycle.test.tsx's own
+   * case for eventMarks, the same failure mode).
+   */
+  usualBand?: { low: number, high: number }
   /**
    * Intervals shaded behind the trace, each a start and an end the caller has both of: today's
    * workouts on the dashboard, whose sessions carry both ends (unlike `eventMarks` above, which has
@@ -184,6 +207,7 @@ const COMPACT_HEIGHT = 84
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
   compact = false, startMs, endMs, spans = NO_SPANS, offsetMinutes = null, timeZone,
+  axis = 'clock', usualBand,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -197,6 +221,14 @@ export function IntradayHeartRate({
   const clock = useCallback((utcMs: number) => offsetMinutes === null
     ? timeOfDay(utcMs, timezone, i18n.language)
     : formatRecordedClock(utcMs, offsetMinutes), [offsetMinutes, timezone, i18n.language])
+
+  // The axis labels' and the tooltip's shared reading of time, so a workout's tooltip never says a
+  // clock time while its axis says elapsed (or the reverse). Falls back to `clock` whenever
+  // `axis` is left at its default, or when 'elapsed' is asked for without a `startMs` to measure
+  // from - there is no session start to read time into.
+  const tick = useCallback((utcMs: number) => axis === 'elapsed' && startMs !== undefined
+    ? formatElapsed(utcMs - startMs)
+    : clock(utcMs), [axis, startMs, clock])
 
   // Read once per render, not per formatMetricValue call: METRICS[metric] is the same lookup
   // formatMetricValue itself does internally for precision, and translating a unit key is not free
@@ -271,7 +303,7 @@ export function IntradayHeartRate({
               const mean = formatMetricValue(point.mean, metric, i18n.language, '')
               const min = formatMetricValue(point.min, metric, i18n.language, '')
               const max = formatMetricValue(point.max, metric, i18n.language, '')
-              return tip`${clock(point.utcMs)} ${nameOf(point.sourceId)}`
+              return tip`${tick(point.utcMs)} ${nameOf(point.sourceId)}`
                 + tip`<br/>${t('charts.hrTooltip.mean', { value: mean, unit })}`
                 + tip`<br/>${t('charts.hrTooltip.range', { min, max, unit })}`
             })
@@ -284,7 +316,15 @@ export function IntradayHeartRate({
             ...(startMs !== undefined && { min: startMs }), ...(lastMs !== null && { max: lastMs }) }
         : {
             type: 'time' as const,
-            axisLabel: { ...base.axisLabel, formatter: (value: number) => clock(value) },
+            // Bounds the axis to the session or night itself, not just whatever `points` happen to
+            // cover: a single reading ten minutes into a 34 minute session used to draw an axis
+            // spanning that minute to the same clock time the next day. `max` stays tied to `endMs`
+            // specifically (not `lastMs`, which falls back to the last reading) so a full-mode
+            // caller that passes neither, like HeartRateCard, still gets an axis fit to its data,
+            // unchanged from before this existed.
+            ...(startMs !== undefined && { min: startMs }),
+            ...(lastMs !== null && endMs !== undefined && { max: lastMs }),
+            axisLabel: { ...base.axisLabel, formatter: (value: number) => tick(value) },
             axisLine: base.labelledAxis.axisLine,
           },
       yAxis: compact
@@ -351,9 +391,25 @@ export function IntradayHeartRate({
             data: spans.map((span) => [{ xAxis: span.startMs }, { xAxis: span.endMs }] as [{ xAxis: number }, { xAxis: number }]),
           },
         }]),
+        // Last of all, for the same series-index-stability reason as the events and spans series
+        // above: pointsBySeriesIndex and excludedBySeriesIndex count from the front (3i+2), so
+        // nothing appended after them can shift either lookup.
+        ...(usualBand === undefined ? [] : [{
+          type: 'line' as const,
+          // Behind both the trace (z 2) and the spans shading (z 1): the usual range is context for
+          // the reading, not something that should sit on top of a span that already marks a
+          // stretch as set apart.
+          z: 0,
+          data: [],
+          markArea: {
+            silent: true,
+            itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
+            data: [[{ yAxis: usualBand.low }, { yAxis: usualBand.high }] as [{ yAxis: number }, { yAxis: number }]],
+          },
+        }]),
       ],
     }
-  }, [series, pointsBySeriesIndex, clock, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, lastMs, spans])
+  }, [series, pointsBySeriesIndex, tick, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, endMs, lastMs, spans, axis, usualBand])
 
   // Shared by onClick and describe below, so the annotate control acts on precisely the point a
   // click would have opened rather than on a second reading of the same event.
@@ -373,11 +429,13 @@ export function IntradayHeartRate({
   // A time of day rather than a date: this chart draws one day, and the point a reader tapped is a
   // minute inside it. The source is left out on purpose - two sources reporting the same minute
   // are two points, but the panel this opens is about the reading, and the card already names
-  // which sources it drew.
+  // which sources it drew. Reads `tick`, not `clock`, for the same reason the axis labels and the
+  // tooltip do: a workout's announce must say what its axis says (elapsed), not a clock time it
+  // draws nowhere else on the chart.
   const describe = useCallback((event: ECElementEvent) => {
     const point = pointAt(event)
-    return point === undefined ? undefined : clock(point.utcMs)
-  }, [pointAt, clock])
+    return point === undefined ? undefined : tick(point.utcMs)
+  }, [pointAt, tick])
 
   // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
   // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
@@ -396,10 +454,15 @@ export function IntradayHeartRate({
         // (whose reason reaches this chart's own annotations prop on the day_metric charts), a
         // sample override's reason lives with the row itself, on the corrections list
         // (Settings' own OverrideList), not threaded through readIntraday onto each point.
+        //
+        // The time cell reads `tick`, not `clock`: this table is the only way the data reaches a
+        // screen-reader user (ChartFigure's own sr-only table), so on a workout (axis='elapsed') it
+        // must read the same elapsed time the visible axis and tooltip do, not a clock time drawn
+        // nowhere else on the chart. Fix round 1 review finding.
         rows: points.map((p) => {
           const absent = t('charts.absence.noReading')
           return [
-            clock(p.utcMs),
+            tick(p.utcMs),
             nameOf(p.sourceId),
             formatMetricValue(p.min, metric, i18n.language, absent),
             formatMetricValue(p.mean, metric, i18n.language, absent),

@@ -7,9 +7,9 @@
  * supports all three: measured over 201 exercise sessions, 264 minutes, 12.85 km, and 5:08 drawn
  * from 263 one-kilometre splits.
  *
- * Pure, in `api/` beside the other three, so the arithmetic is testable without a database. The
- * reader's job is to parse `sessions.attrs` into the shape below and to drop excluded sessions
- * before calling this; see `query/allTime.ts`.
+ * Pure, in `api/` beside the other three, so the arithmetic is testable without a database. A
+ * reader parses each session through `sessionForRecords` below and drops excluded sessions before
+ * calling this; see `query/allTime.ts` and `query/workoutPage.ts`.
  */
 
 export interface SessionForRecords {
@@ -83,4 +83,48 @@ export function sessionRecordsOf(sessions: readonly SessionForRecords[]): Sessio
     : Math.min(...s.kilometreSeconds)), (a, b) => a < b)
 
   return records
+}
+
+/**
+ * One exercise session in the shape `sessionRecordsOf` needs, with the payload parsing kept here so
+ * the Records page and the workout page's best cannot come to disagree about what a record is.
+ *
+ * `attrs` is JSON this process wrote but a mapper's shape rather than a schema, so every read
+ * below is defensive: a session with no metricsSummary, no splits, or a split that is not a
+ * kilometre is ordinary rather than broken. A zero distance and a zero-second split are dropped:
+ * neither is a distance or a kilometre anybody ran.
+ */
+export function sessionForRecords(session: {
+  id: string, localDate: string, startMs: number, endMs: number, attrs: unknown
+}): SessionForRecords {
+  const attrs = typeof session.attrs === 'object' && session.attrs !== null && !Array.isArray(session.attrs)
+    ? session.attrs as Record<string, unknown>
+    : {}
+
+  const summary = attrs['metricsSummary'] as { distanceMillimeters?: unknown } | null | undefined
+  const distance = typeof summary?.distanceMillimeters === 'number' && summary.distanceMillimeters > 0
+    ? summary.distanceMillimeters
+    : null
+
+  // Exactly one kilometre, so every candidate is the same distance: a 400m lap would win a
+  // "fastest split" every time by being shorter rather than quicker.
+  const kilometreSeconds: number[] = []
+  const splits = Array.isArray(attrs['splits']) ? attrs['splits'] as unknown[] : []
+  for (const split of splits) {
+    const s = split as { splitType?: unknown, activeDuration?: unknown, metricsSummary?: { distanceMillimeters?: unknown } } | null
+    if (s === null || typeof s !== 'object') continue
+    if (s.splitType !== 'DISTANCE') continue
+    if (s.metricsSummary?.distanceMillimeters !== 1_000_000) continue
+    const seconds = Number.parseFloat(String(s.activeDuration ?? '').replace(/s$/, ''))
+    if (Number.isFinite(seconds) && seconds > 0) kilometreSeconds.push(seconds)
+  }
+
+  return {
+    sessionId: session.id,
+    localDate: session.localDate,
+    exerciseType: typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null,
+    durationMs: session.endMs - session.startMs,
+    distanceMm: distance,
+    kilometreSeconds,
+  }
 }

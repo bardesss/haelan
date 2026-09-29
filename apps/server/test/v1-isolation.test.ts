@@ -477,6 +477,25 @@ const ROUTES: readonly RouteCase[] = [
     ownNeedle: '2026-01-11',
     otherNeedle: '2026-01-22',
   },
+  // M10a: the two detail pages. NightPage.sourceId and WorkoutPage.sourceId carry the needle.
+  {
+    name: 'night/:localDate',
+    template: '/api/v1/p/:personId/night/:localDate',
+    path: (p) => `/api/v1/p/${p}/night/2026-02-01`,
+    seedOwn: (h) => seedNight(h, { personId: 'p1', sourceId: 'own-source-ok' }),
+    seedOther: (h, personId) => seedNight(h, { personId, sourceId: 'leaked-source-999999' }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
+    name: 'workout/:sessionId',
+    template: '/api/v1/p/:personId/workout/:sessionId',
+    path: (p) => `/api/v1/p/${p}/workout/${p}-exercise-session`,
+    seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'exercise' }),
+    seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'exercise' }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
