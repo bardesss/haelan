@@ -35,7 +35,7 @@ import { useActivityLabel, useActivityName } from './activity/period/labels.js'
 import { ActivityHeatmapCard } from './activity/period/ActivityHeatmapCard.js'
 import { ActivityIntensity, hasIntensity } from './activity/period/ActivityIntensity.js'
 import { ActivityZoneMinutes, hasZoneMinutes, ZONE_MINUTES_METRIC } from './activity/period/ActivityZoneMinutes.js'
-import { ActivityHeartZones, heartZoneRows } from './activity/period/ActivityHeartZones.js'
+import { ActivityHeartZones, hasHeartZones } from './activity/period/ActivityHeartZones.js'
 import { ActivityWorkouts } from './activity/period/ActivityWorkouts.js'
 import { ActivityTypes, hasTypes } from './activity/period/ActivityTypes.js'
 import { ActivityMore } from './activity/period/ActivityMore.js'
@@ -171,7 +171,7 @@ export function Activity() {
   // Two half cards share a row; either alone takes the whole of it, and the list expanded takes a row
   // of its own, its partner widening with it, so no hole opens (PATTERNS.md's "Overview pages").
   const zonesShown = hasZoneMinutes(data.zoneMinutes)
-  const heartShown = heartZoneRows(data.heartRateZones, () => '').length > 0
+  const heartShown = hasHeartZones(data.heartRateZones, data.maxHeartRate)
   const zoneSpan = zonesShown && heartShown ? 6 : 12
   const listShown = data.workouts.length > 0
   const typesShown = hasTypes(data.types, data.cardioLoad, data.vo2max)
@@ -201,7 +201,7 @@ export function Activity() {
           <ActivityZoneMinutes zones={data.zoneMinutes} total={data.more.find((figure) => figure.metric === ZONE_MINUTES_METRIC) ?? null}
             range={data.period.range} span={zoneSpan} />
         )}
-        {heartShown && <ActivityHeartZones zones={data.heartRateZones} range={data.period.range} span={zoneSpan} />}
+        {heartShown && <ActivityHeartZones zones={data.heartRateZones} maxHeartRate={data.maxHeartRate} range={data.period.range} span={zoneSpan} />}
         {listShown && (
           <ActivityWorkouts key={periodKey} workouts={data.workouts} types={data.types} workoutCount={data.workoutCount}
             workoutTime={data.more.find((figure) => figure.metric === WORKOUT_TIME) ?? null}

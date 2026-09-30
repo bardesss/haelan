@@ -5,7 +5,7 @@ import { FigureRow, FigureRows } from '../../components/FigureRow.js'
 import type { FigureRowStrip } from '../../components/FigureRow.js'
 import type { PeriodFigure } from '../../data/periodTypes.js'
 import { formatFigureValue } from '../detail/figureText.js'
-import { dayCountsLine, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine } from '../detail/periodText.js'
+import { asPrinted, dayCountsLine, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine } from '../detail/periodText.js'
 import type { CountNoun } from '../detail/periodText.js'
 
 const SEPARATOR = ' · '
@@ -60,9 +60,11 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
     const parts = own !== null ? [own] : under !== null ? [under] : [dayCountsLine(figure, noun, t)].filter((part) => part !== null)
     const note = parts.length === 0 ? undefined : parts.join(SEPARATOR)
     // A per-period figure prints its count (periodValueLine), so its mark sits on that count: on a
-    // running period the pace would put the mark beside a different number.
-    const mark = figure.per === 'period' && figure.total !== null ? figure.total : figure.value
-    return [{ key: figure.metric, label, value, verdict, note, figure, strip, mark }]
+    // running period the pace would put the mark beside a different number. A total's mark, band and
+    // tone are its total's, against the usual for a total (asPrinted).
+    const judged = asPrinted(figure)
+    const mark = figure.per === 'period' && figure.total !== null ? figure.total : judged.value
+    return [{ key: figure.metric, label, value, verdict, note, figure: judged, strip, mark }]
   }), [figures, labelOf, noun, bars, deviation, noteOf, language, t])
   if (rows.length === 0 && (children === undefined || children === null || children === false)) return null
 

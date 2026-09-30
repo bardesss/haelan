@@ -35,25 +35,32 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   if (figure.reason === 'no-data') return null
   if (figure.reason === 'too-few-days') return t('period.reason.tooFewDays')
   if (figure.reason === 'thin-usual') return t('glance.usual.thin')
-  // A per-period figure the server left unjudged with a usual to judge by is a running period: its
-  // count so far beside a whole period's usual ("so far; usual 1 - 5 a month"), no verdict.
-  if (figure.per === 'period' && figure.standing === null && figure.value !== null && figure.usual !== null && !figure.usual.thin) {
-    const { low, high } = formatFigureRange(figure, figure.usual.low, figure.usual.high, language, t)
+  const judged = asPrinted(figure)
+  const whole = judged !== figure
+  // A per-period figure or a total the server left unjudged with a usual to judge by is a running
+  // period: its count or total so far beside a whole period's usual ("so far; usual 1 - 5 a
+  // month"), no verdict.
+  if ((figure.per === 'period' || whole) && judged.standing === null && judged.value !== null && judged.usual !== null && !judged.usual.thin) {
+    const { low, high } = formatFigureRange(judged, judged.usual.low, judged.usual.high, language, t)
     // A usual with no width is one value; "0 - 0" reads as a typo for it (as in verdictLine).
-    const single = formatFigureValue(figure, figure.usual.low, language, t) === high
+    const single = formatFigureValue(judged, judged.usual.low, language, t) === high
     const soFar = single
-      ? t(`period.soFarSingle.${figure.usual.window.unit}`, { value: high })
-      : t(`period.soFar.${figure.usual.window.unit}`, { low, high })
-    return o.window === true ? `${soFar} ${windowPhrase(figure.usual.window, t)}` : soFar
+      ? t(`period.soFarSingle.${judged.usual.window.unit}`, { value: high })
+      : t(`period.soFar.${judged.usual.window.unit}`, { low, high })
+    return o.window === true ? `${soFar} ${windowPhrase(judged.usual.window, t)}` : soFar
   }
-  const line = verdictLine({ ...figure, baseline: figure.usual }, language, t)
-  if (line === null || figure.usual === null) return line
+  const line = verdictLine({ ...judged, baseline: judged.usual }, language, t)
+  if (line === null || judged.usual === null) return line
+  const { unit } = judged.usual.window
+  // A total's range is a whole period's total, and says so ("880 - 1,150 for a month"); the window
+  // phrase names the period's length itself ("for a month, last 12 months"), so with it no more.
+  if (whole) return `${line} ${o.window === true ? windowPhrase(judged.usual.window, t) : t(`period.for.${unit}`)}`
   // A per-period figure's range is a whole period's worth ("1 - 5 a month"), and a per-week
   // figure's a week's worth ("190 - 280 min per week"), and each says so.
-  const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${figure.usual.window.unit}`)}`
+  const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${unit}`)}`
     : figure.per === 'week' ? `${line} ${t('period.per.week')}` : line
   if (o.window !== true) return verdict
-  return `${verdict} ${windowPhrase(figure.usual.window, t)}`
+  return `${verdict} ${windowPhrase(judged.usual.window, t)}`
 }
 
 // A day above or below its usual, in the words its unit reads in: a clock time is later or earlier
@@ -235,10 +242,22 @@ export function latestBand(points: readonly PeriodStripPoint[] | undefined): Per
 }
 
 // The figures printed as the period's total, by name: the spec's "Distance, floors and elevation show
-// the period total", and the Activity mockup's active zone minutes and workout time. The server sends
-// a total for every summed metric (time asleep among them), so a total on the wire is not by itself a
-// reason to print one.
-export const PERIOD_TOTAL_METRICS: readonly string[] = ['distance', 'floors', 'altitude_gain', 'active_zone_minutes', 'workout_minutes']
+// the period total", and the Activity mockup's active zone minutes, workout time and time in the hard
+// heart-rate zones. The server sends a total for every summed metric (time asleep among them), so a
+// total on the wire is not by itself a reason to print one.
+export const PERIOD_TOTAL_METRICS: readonly string[] = [
+  'distance', 'floors', 'altitude_gain', 'active_zone_minutes', 'workout_minutes', 'hard_zone_minutes',
+]
+
+/**
+ * The figure as the page judges what it prints: a total (PERIOD_TOTAL_METRICS) with a usual for its
+ * total is that total against it ("880 - 1,150 for a month"), the server's `totalStanding` its
+ * verdict, tone and bar; anything else is the figure itself, its average against its usual.
+ */
+export function asPrinted(figure: PeriodFigure): PeriodFigure {
+  if (figure.total === null || figure.usualTotal === null || !PERIOD_TOTAL_METRICS.includes(figure.metric)) return figure
+  return { ...figure, value: figure.total, usual: figure.usualTotal, standing: figure.totalStanding, judged: figure.totalJudged }
+}
 
 /**
  * The figure's value: for a total (PERIOD_TOTAL_METRICS), the period's total, with its average per day

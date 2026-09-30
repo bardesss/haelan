@@ -77,6 +77,8 @@ const typeRows = (): string[][] => [...cardFor('By type')!.querySelectorAll('.ac
   ['.activity-type-name', '.activity-type-amount', '.activity-type-verdict'].map((cell) => row.querySelector(cell)?.textContent ?? ''))
 const rowNamed = (card: string, label: string): Element | undefined => [...cardFor(card)!.querySelectorAll('.figure-row')]
   .find((row) => row.querySelector('.figure-row-label')?.textContent === label)
+const minisRow = (label: string): Element | undefined => [...container!.querySelectorAll('.detail-minis .figure-row')]
+  .find((row) => row.querySelector('.figure-row-label')?.textContent === label)
 const workoutRows = (): NodeListOf<Element> => cardFor('Workouts')!.querySelectorAll('.session-row')
 const showAll = (): HTMLButtonElement => cardFor('Workouts')!.querySelector<HTMLButtonElement>('.period-list-toggle')!
 
@@ -230,10 +232,27 @@ describe('the Activity page: the figures', () => {
     expect(active.querySelector('.figure-row-verdict')?.textContent).toBe(`within your usual 1,497 – 1,506${NB}min per week`)
     const distance = [...minis.querySelectorAll('.figure-row')][1]!
     expect(distance.querySelector('.figure-row-value')?.textContent).toBe(`147${NB}km`)
+    // A total is judged as a total, against the usual for a month's total, and says so.
+    expect(distance.querySelector('.figure-row-verdict')?.textContent).toBe(`within your usual 146 – 152${NB}km for a month`)
     // A total's note is its average alone, with no day counts.
     expect(distance.querySelector('.figure-row-note')?.textContent).toBe(`5.3${NB}km per day on average`)
     expect(minis.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
       .toBe('each line: every day this month, active minutes too · distance and floors add up the period · band = your usual range')
+  })
+
+  it("says a running period's total is so far, beside a whole month's usual for it", async () => {
+    const figures = ACTIVITY_PERIOD_MONTH.figures.map((f) => (f.metric === 'distance' ? { ...f, totalStanding: null, totalJudged: null } : f))
+    await renderAt(MONTH_URL, { period: month({ figures }) })
+    expect(minisRow('Distance')!.querySelector('.figure-row-verdict')?.textContent)
+      .toBe(`so far; usual 146 – 152${NB}km a month`)
+  })
+
+  it("takes a total's tone from its total's verdict, not from its average's", async () => {
+    const more = ACTIVITY_PERIOD_MONTH.more.map((f) => (f.metric === 'altitude_gain' ? { ...f, standing: 'within' as const, judged: null } : f))
+    await renderAt(MONTH_URL, { period: month({ more }) })
+    const verdict = rowNamed('More about moving', 'Elevation gain')!.querySelector('.figure-row-verdict')!
+    expect(verdict.textContent).toBe(`below your usual 522 – 551${NB}m for a month`)
+    expect(verdict.className).toBe('figure-row-verdict worse')
   })
 
   it('leaves out the four figures when none has a value', async () => {
@@ -251,6 +270,8 @@ describe('the Activity page: the figures', () => {
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH }, 'nl')
     expect(cardFor('Stappen, gemiddeld per dag')!.querySelector('.detail-verdict')?.textContent)
       .toBe('binnen je gebruikelijke bereik 7.912 – 8.037 voor een maand, afgelopen 12 maanden')
+    expect(minisRow('Afstand')!.querySelector('.figure-row-verdict')?.textContent)
+      .toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor een maand`)
     expect(rowNamed('Meer over bewegen', 'Trainingstijd')!.querySelector('.figure-row-value')?.textContent).toBe(`16u${NB}01m`)
     expect(text()).toContain('gebruikelijk')
   })
@@ -298,20 +319,51 @@ describe('the Activity page: sections', () => {
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
     const azm = cardFor('Active Zone Minutes')!
     expect(azm.querySelector('.dash-headline')?.textContent).toBe(`685${NB}min`)
-    expect(azm.querySelector('.detail-verdict')?.textContent).toBe(`within your usual 24 – 25${NB}min`)
+    expect(azm.querySelector('.detail-verdict')?.textContent).toBe(`within your usual 684 – 714${NB}min for a month`)
     expect([...azm.querySelectorAll('.detail-legend li')].map((li) => li.textContent)).toEqual(['Fat burn 429', 'Cardio 205', 'Peak 51'])
     const zones = cardFor('Heart-rate zones')!
-    // 295 vigorous and 41 peak minutes.
     expect(zones.querySelector('.dash-headline')?.textContent).toBe(`5h${NB}36m`)
-    expect(zones.querySelector('.workout-hero-line')?.textContent).toBe('vigorous or peak')
+    expect(zones.querySelector('.workout-hero-line')?.textContent)
+      .toBe(`vigorous or peak · within your usual 5h${NB}28m – 5h${NB}46m for a month`)
     expect([...zones.querySelectorAll('.detail-legend li')].map((li) => li.textContent))
       .toEqual([`Light 107h${NB}01m`, `Moderate 18h${NB}01m`, `Vigorous 4h${NB}55m`, `Peak 41${NB}min`])
     expect(zones.querySelector('div[role="img"]')).not.toBeNull()
   })
 
+  it("prints the server's hard-zone total, never the zones' own sum, with its total's tone", async () => {
+    const hard = { ...ACTIVITY_PERIOD_MONTH.heartRateZones.hard, total: 400, totalStanding: 'above' as const, totalJudged: 'better' as const }
+    await renderAt(MONTH_URL, { period: month({ heartRateZones: { ...ACTIVITY_PERIOD_MONTH.heartRateZones, hard } }) })
+    const zones = cardFor('Heart-rate zones')!
+    expect(zones.querySelector('.dash-headline')?.textContent).toBe(`6h${NB}40m`)
+    const verdict = zones.querySelector('.workout-hero-line .detail-verdict')!
+    expect(verdict.textContent).toBe(`above your usual 5h${NB}28m – 5h${NB}46m for a month`)
+    expect(verdict.className).toBe('detail-verdict better')
+  })
+
+  it("rows the day's highest heart rate in the heart-rate zones, in both languages", async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const row = rowNamed('Heart-rate zones', 'Highest heart rate, per day')!
+    expect(row.querySelector('.figure-row-value')?.textContent).toBe(`164${NB}bpm`)
+    expect(row.querySelector('.figure-row-verdict')?.textContent).toBe(`within your usual 163 – 165${NB}bpm`)
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH }, 'nl')
+    const nl = rowNamed('Hartslagzones', 'Hoogste hartslag, per dag')!
+    expect(nl.querySelector('.figure-row-verdict')?.textContent).toBe(`binnen je gebruikelijke bereik 163 – 165${NB}bpm`)
+  })
+
+  it('keeps the heart-rate card for the highest heart rate alone, with no zones', async () => {
+    const none = { light: null, moderate: null, vigorous: null, peak: null, hard: null }
+    await renderAt(MONTH_URL, { period: month({ heartRateZones: none }) })
+    const zones = cardFor('Heart-rate zones')!
+    expect(zones.querySelector('.dash-headline')).toBeNull()
+    expect(zones.querySelector('div[role="img"]')).toBeNull()
+    expect(rowNamed('Heart-rate zones', 'Highest heart rate, per day')).toBeDefined()
+  })
+
   it.each<[string, string, Partial<ActivityPeriodData>]>([
     ['Active Zone Minutes', 'Heart-rate zones', { zoneMinutes: { fatBurn: null, cardio: null, peak: null } }],
-    ['Heart-rate zones', 'Active Zone Minutes', { heartRateZones: { light: null, moderate: null, vigorous: null, peak: null, hard: null } }],
+    ['Heart-rate zones', 'Active Zone Minutes', { heartRateZones: { light: null, moderate: null, vigorous: null, peak: null, hard: null }, maxHeartRate: null }],
     ['Workouts', 'By type', { workouts: [] }],
     ['By type', 'Workouts', { types: [], cardioLoad: null, vo2max: null }],
   ])('leaves out %s when its data is absent, and %s takes the whole row', async (gone, partner, patch) => {

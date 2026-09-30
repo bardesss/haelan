@@ -1846,6 +1846,12 @@
       "quarter": "per 3 maanden",
       "year": "per jaar"
     },
+    "for": {
+      "week": "voor een week",
+      "month": "voor een maand",
+      "quarter": "voor 3 maanden",
+      "year": "voor een jaar"
+    },
     "soFar": {
       "week": "tot nu toe; gebruikelijk {{low}} – {{high}} per week",
       "month": "tot nu toe; gebruikelijk {{low}} – {{high}} per maand",

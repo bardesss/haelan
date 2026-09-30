@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  dayCountsLine, emphasise, monthName, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
+  asPrinted, dayCountsLine, emphasise, monthName, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
   thisPeriod, windowPhrase,
 } from '../src/pages/detail/periodText.js'
 import type { PeriodChange, PeriodFigure, PeriodStripPoint, PeriodWindow } from '../src/data/periodTypes.js'
@@ -152,6 +152,54 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine(naps, 'en', t, { window: true })).toBe('so far; usual 0 a month for a month, last 12 months')
     const year = { ...naps, usual: { ...naps.usual!, window: { unit: 'year' as const, count: 1, from: '2025-01-01', to: '2025-12-31' } } }
     expect(periodVerdictLine(year, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 0 per jaar')
+  })
+
+  it("judges a total by its total against the usual for a whole period's, and says the range is a period's", () => {
+    // 146 km against a usual total of 146 - 152 km; the average's own verdict would be 'below'.
+    const distance = figure({
+      metric: 'distance', unit: 'millimeters', value: 5_000_000, total: 146_000_000, standing: 'below', judged: 'worse',
+      usual: { center: 5_300_000, low: 5_200_000, high: 5_400_000, thin: false, window: MONTH, periods: 12 },
+      usualTotal: { center: 149_000_000, low: 146_000_000, high: 152_000_000, thin: false, window: MONTH, periods: 12 },
+      totalStanding: 'within', totalJudged: null,
+    })
+    expect(periodVerdictLine(distance, 'en', t)).toBe(`within your usual 146 – 152${NB}km for a month`)
+    expect(periodVerdictLine(distance, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor een maand`)
+    // The window phrase names the length itself.
+    expect(periodVerdictLine(distance, 'en', t, { window: true })).toBe(`within your usual 146 – 152${NB}km for a month, last 12 months`)
+    const year = { ...distance, usualTotal: { ...distance.usualTotal!, window: { unit: 'year' as const, count: 1, from: '2025-01-01', to: '2025-12-31' } } }
+    expect(periodVerdictLine(year, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor een jaar`)
+    const week = { ...distance, usualTotal: { ...distance.usualTotal!, window: { unit: 'week' as const, count: 12, from: '2026-05-04', to: '2026-07-26' } } }
+    expect(periodVerdictLine(week, 'en', t)).toBe(`within your usual 146 – 152${NB}km for a week`)
+    const quarter = { ...distance, usualTotal: { ...distance.usualTotal!, window: { unit: 'quarter' as const, count: 4, from: '2025-07-01', to: '2026-06-30' } } }
+    expect(periodVerdictLine(quarter, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor 3 maanden`)
+  })
+
+  it("words a running period's total as so far beside the usual for a whole period's", () => {
+    const distance = figure({
+      metric: 'distance', unit: 'millimeters', value: 5_000_000, total: 80_000_000, standing: 'within',
+      usualTotal: { center: 149_000_000, low: 146_000_000, high: 152_000_000, thin: false, window: MONTH, periods: 12 },
+      totalStanding: null, totalJudged: null,
+    })
+    expect(periodVerdictLine(distance, 'en', t)).toBe(`so far; usual 146 – 152${NB}km a month`)
+    expect(periodVerdictLine(distance, 'nl', tNl)).toBe(`tot nu toe; gebruikelijk 146 – 152${NB}km per maand`)
+  })
+
+  it('judges a figure the page prints as an average by its average, whatever usual for a total it carries', () => {
+    const energy = figure({
+      metric: 'active_energy', unit: 'kcal', value: 500, total: 15_000, standing: 'within',
+      usual: { center: 500, low: 480, high: 520, thin: false, window: MONTH, periods: 12 },
+      usualTotal: { center: 15_000, low: 20_000, high: 21_000, thin: false, window: MONTH, periods: 12 },
+      totalStanding: 'below', totalJudged: 'worse',
+    })
+    expect(asPrinted(energy)).toBe(energy)
+    expect(periodVerdictLine(energy, 'en', t)).toBe(`within your usual 480 – 520${NB}kcal`)
+    // A total without a usual for its total keeps its average's verdict too.
+    const floors = figure({
+      metric: 'floors', unit: 'count', value: 10, total: 300, standing: 'within',
+      usual: { center: 10, low: 9, high: 11, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(asPrinted(floors)).toBe(floors)
+    expect(periodVerdictLine(floors, 'en', t)).toBe('within your usual 9 – 11')
   })
 
   it('prints a reason the same with the window asked for', () => {

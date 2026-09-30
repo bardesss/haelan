@@ -17,12 +17,13 @@ const LABEL_KEYS: Readonly<Record<string, string>> = {
   altitude_gain: 'activity.workout.page.figures.elevationGain',
   sedentary_minutes: 'activity.period.sedentary',
   cardio_load_edwards: 'activity.workout.page.figures.cardioLoad',
+  max_heart_rate: 'activity.workout.page.figures.highestHeartRate',
 }
 
 // The averages a row's label says it is an average of, the approved mockup's "Actieve minuten, per
 // week" and "Actieve energie, per dag"; a total (distance, floors, climb, workout time) says nothing.
 const PER_WEEK: ReadonlySet<string> = new Set(['active_minutes'])
-const PER_DAY: ReadonlySet<string> = new Set(['active_energy', 'total_calories', 'sedentary_minutes', 'cardio_load_edwards'])
+const PER_DAY: ReadonlySet<string> = new Set(['active_energy', 'total_calories', 'sedentary_minutes', 'cardio_load_edwards', 'max_heart_rate'])
 
 /** A figure's plain name (the point panel's), stable per language; the metric id for one it does not know. */
 export function useActivityName(): (metric: string) => string {

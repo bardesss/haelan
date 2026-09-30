@@ -1846,6 +1846,12 @@
       "quarter": "per 3 months",
       "year": "per year"
     },
+    "for": {
+      "week": "for a week",
+      "month": "for a month",
+      "quarter": "for 3 months",
+      "year": "for a year"
+    },
     "soFar": {
       "week": "so far; usual {{low}} – {{high}} a week",
       "month": "so far; usual {{low}} – {{high}} a month",

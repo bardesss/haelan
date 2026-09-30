@@ -9,7 +9,7 @@ import { periodAxisLabels } from '../../../charts/barAxis.js'
 import type { ChartTokens } from '../../../charts/tokens.js'
 import type { ActivityPeriodData, PeriodFigure, PeriodRange } from '../../../data/periodTypes.js'
 import { formatFigureValue } from '../../detail/figureText.js'
-import { periodValueLine, periodVerdictLine, thisPeriod } from '../../detail/periodText.js'
+import { asPrinted, periodValueLine, periodVerdictLine, thisPeriod } from '../../detail/periodText.js'
 
 type Zone = 'fatBurn' | 'cardio' | 'peak'
 // The approved mockup's blue, amber and red: the heart-rate zones' own moderate, vigorous and peak
@@ -32,8 +32,8 @@ export function hasZoneMinutes(zones: ActivityPeriodData['zoneMinutes']): boolea
 
 /**
  * "Actieve zoneminuten", the approved mockup's card of its own: the period's total in display type
- * with the verdict on it (the server's `active_zone_minutes`, judged as its average per day, which
- * the line under the total names), each day's fat burn, cardio and peak minutes as one stacked bar
+ * with the verdict on it (the server's `active_zone_minutes`: its total against the usual for a
+ * period's total, "880 - 1,150 for a month"), the line under the total its average per day, each day's fat burn, cardio and peak minutes as one stacked bar
  * (each week's on 3 months and Year), a legend with each zone's period total, and a caption.
  */
 export function ActivityZoneMinutes({ zones, total, range, span }: {
@@ -61,7 +61,8 @@ export function ActivityZoneMinutes({ zones, total, range, span }: {
   const weekly = present[0]!.figure.weekly !== null
   const lead = total === null || total.value === null ? null : periodValueLine(total, language, t)
   const verdict = total === null ? null : periodVerdictLine(total, language, t)
-  const tone = total === null ? null : verdictTone(total.judged, total.standing)
+  const judged = total === null ? null : asPrinted(total)
+  const tone = judged === null ? null : verdictTone(judged.judged, judged.standing)
   return (
     <Card span={span} label={label}>
       {lead !== null && (
