@@ -821,9 +821,9 @@ describe('the workout page\'s fastest efforts', () => {
     const card = cardLabelled(await mount(workoutPageFixture(), fullSession()), 'Fastest efforts')!
     expect(efforts(card)).toEqual([
       ['Distance', 'Time', 'Where', 'Your best'],
-      ['1 km', '4:56', '3.40 – 4.40 km', '4:50 · June'],
-      ['1 mile', '7:59', '3.20 – 4.81 km', '7:51 · June'],
-      ['5 km', '26:42 ✦', '150 m – 5.15 km', 'this workout'],
+      ['1 km', '4:56', '3.4 – 4.4 km', '4:50 · June'],
+      ['1 mile', '7:59', '3.2 – 4.8 km', '7:51 · June'],
+      ['5 km', '26:42 ✦', '0.2 – 5.2 km', 'this workout'],
     ])
     // The where column is the one a phone drops.
     expect(card.querySelectorAll('.workout-efforts-where')).toHaveLength(4)
@@ -877,9 +877,9 @@ describe('the workout page\'s fastest efforts', () => {
     const card = cardLabelled(await mount(workoutPageFixture(), fullSession(), 'nl'), 'Snelste stukken')!
     expect(efforts(card)).toEqual([
       ['Afstand', 'Tijd', 'Waar', 'Je beste'],
-      ['1 km', '4:56', '3,40 – 4,40 km', '4:50 · juni'],
-      ['1 mijl', '7:59', '3,20 – 4,81 km', '7:51 · juni'],
-      ['5 km', '26:42 ✦', '150 m – 5,15 km', 'deze training'],
+      ['1 km', '4:56', '3,4 – 4,4 km', '4:50 · juni'],
+      ['1 mijl', '7:59', '3,2 – 4,8 km', '7:51 · juni'],
+      ['5 km', '26:42 ✦', '0,2 – 5,2 km', 'deze training'],
     ])
     expect(text(card, '.workout-hero-line')).toBe('✦ je snelste 5 km ooit, 12 s sneller dan in augustus')
     expect(text(card, '.workout-compared-footnote')).toBe('uit de afstand langs de gps-route · telt mee in Records')

@@ -227,7 +227,7 @@ export function workoutPageFixture(): WorkoutPageData {
         previousBest: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
       },
       fiveK: {
-        seconds: 1602, fromMeters: 150, isBest: true,
+        seconds: 1602, fromMeters: 180, isBest: true,
         best: { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE },
         previousBest: { value: 1614, sessionId: 'run-august', localDate: '2026-08-15' },
       },

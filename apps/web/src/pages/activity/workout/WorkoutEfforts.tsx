@@ -4,15 +4,17 @@ import { Card } from '../../../components/Card.js'
 import { Link } from '../../../router.js'
 import type { EffortKey, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { EFFORT_DISTANCES } from '@haelan/core/fastest-efforts'
-import { formatFigureRange, formatStopwatch } from '../../detail/figureText.js'
+import { formatStopwatch } from '../../detail/figureText.js'
+import { formatNumber } from '../../../format.js'
 import { bestMonth } from './workoutText.js'
 
 // The mockup's rows, shortest first.
 const EFFORTS: readonly EffortKey[] = ['km', 'mile', 'fiveK']
 // The quiet good-day mark (PATTERNS.md): after the value in the table, before the words under it.
 const MARK = '✦'
-// Where a stretch lay, worded as the page words a distance (kilometres past four digits of metres).
-const ALONG = { value: null, unit: 'meters', metric: 'distance', precision: 0 } as const
+// Where a stretch lay, as the mockup words it: kilometres at one decimal at both ends, even one that
+// starts under a kilometre ("0.2 – 5.2 km"), so the two ends always read in one unit.
+const ALONG_DECIMALS = 1
 
 /**
  * "Fastest efforts" (the mockup's "Snelste stukken"), beside the same route under the route card:
@@ -42,8 +44,8 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
     })
   }
   const whereOf = (key: EffortKey, fromMeters: number) => {
-    const { low, high } = formatFigureRange(ALONG, fromMeters, fromMeters + EFFORT_DISTANCES[key], language, t)
-    return `${low} – ${high}`
+    const km = (meters: number) => formatNumber(meters / 1000, ALONG_DECIMALS, language, t('common.absent'))
+    return `${km(fromMeters)} – ${km(fromMeters + EFFORT_DISTANCES[key])}\u00a0${t('activity.units.km')}`
   }
   // "12 s faster than in August": seconds under a minute, a stopwatch past one; the plain line when
   // there was no best before this one, or the two print the same.
