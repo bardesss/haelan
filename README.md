@@ -48,7 +48,7 @@ catching them is a standing part of how the project is built rather than a past 
 <!-- screenshots:start -->
 ![The Hælan dashboard, a Log button beside the day arrows in its header: last night's time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today's steps with their pace against your usual, active minutes, heart rate and workouts, beside the week's totals and averages.](assets/screenshots/dashboard.png)
 
-![The Activity page for a month: the day's average steps against the usual for a month, with how many days were usual, fewer or more and the busiest day, above active minutes per week, distance, floors and active energy, each against its own usual.](assets/screenshots/activity.png)
+![The Activity page for a month: the month's average daily steps against the usual for a month, with how many days were usual, fewer or more and the busiest day, above active minutes per week, distance, floors and active energy, each against its own usual.](assets/screenshots/activity.png)
 
 <sub>Dashboard and Activity above; [Quick logging](assets/screenshots/log-panel.png),
 [Sleep](assets/screenshots/sleep.png), [Recovery](assets/screenshots/recovery.png) and
@@ -73,12 +73,13 @@ intraday chart, a weight trend, and period-over-period insight cards that withho
 with its own reason, when the data behind them is thin.
 
 Sleep and Activity read a week, a month, three months or a year as a period. Each figure is the
-period's average, or its total where a sum means something, set against the usual for a period of
-that length, with the verdict in words: how many days were usual, lower or higher, the longest
-night or busiest day, and the change against the period before. On three months and a year the
-strips draw one point per week. Sleep adds the stages and their shares, the schedule with weekday
-against weekend, the sleep balance and the mornings after; Activity adds the intensity split, zone
-minutes, the workouts with each type's count against its usual, cardio load and the VO2 max trend.
+period's average, or its total where a sum means something, set against its usual, with the verdict
+in words: how many days were usual, lower or higher, the longest night or busiest day, and the
+change against the period before. On three months and a year the strips draw one point per week.
+Sleep adds the stages and their shares, the schedule with weekday against weekend, the sleep balance
+and the mornings after; Activity adds a heatmap of each day's steps on three months and a year, the
+intensity split, zone minutes, the workouts with each type's count against its usual, cardio load
+and the VO2 max trend.
 
 A night's page sets time asleep, efficiency, deep sleep, REM and bedtime against their usual ranges,
 and draws the stages on one time axis with the heart rate, HRV and SpO2 traces. It says when the
@@ -111,9 +112,11 @@ A reading is shown against your own usual, because "96 bpm" carries no informati
 "1.4 standard deviations above your baseline" does. On the dashboard and a night's page that is
 your own last 60 days, and the recovery index keeps its 60 day baseline wherever it appears. A
 workout stands against earlier workouts of the same type. The Sleep and Activity pages compare a
-period with periods of the same length: a month with the twelve months before it, a week with the
-twelve weeks before, and an earlier period counts only when most of its days have data. A baseline
-computed from too few days is flagged as thin rather than quietly presented as one.
+period with the ones before it: a month with the twelve months before it, a week with the twelve
+weeks before, three months with the four quarters before them, and a year with the previous year's
+four quarters, since one year has no spread of its own. An earlier period counts only when at least
+half of its days have data. A baseline computed from too few days is flagged as thin rather than
+quietly presented as one.
 
 ### 📝 Context a stateless dashboard cannot have
 

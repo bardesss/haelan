@@ -41,7 +41,7 @@ export const SCREENSHOTS = [
   {
     file: 'activity.png',
     title: 'Activity',
-    alt: 'The Activity page for a month: the day\'s average steps against the usual for a month, with how many days were usual, fewer or more and the busiest day, above active minutes per week, distance, floors and active energy, each against its own usual.',
+    alt: 'The Activity page for a month: the month\'s average daily steps against the usual for a month, with how many days were usual, fewer or more and the busiest day, above active minutes per week, distance, floors and active energy, each against its own usual.',
     role: 'gallery',
     readme: 'inline',
   },
