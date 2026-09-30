@@ -748,7 +748,7 @@ describe('the workout page\'s same route', () => {
     const page = workoutPageFixture()
     const same = page.sameRoute!
     const card = cardLabelled(await mount({
-      ...page, sameRoute: { ...same, count: 1, since: '2025-11-02', time: { ...same.time, key: 'elapsed', metric: 'elapsed' } },
+      ...page, sameRoute: { ...same, times: 2, since: '2025-11-02', time: { ...same.time, key: 'elapsed', metric: 'elapsed' } },
     }, fullSession()), 'This route')!
     // Another year's month carries its year.
     expect(text(card, '.detail-side-caption')).toBe('2 times on this route since November 2025')

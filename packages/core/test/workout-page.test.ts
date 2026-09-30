@@ -667,7 +667,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { moving: 540 })
     seedRoute('subject', SUBJECT_DATE)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
-    expect(sameRoute!.count).toBe(11)
+    expect(sameRoute!.times).toBe(12)
     expect(sameRoute!.time).toMatchObject({ value: 540, unit: 'seconds', direction: 'down', standing: 'below', judged: 'better' })
     expect(sameRoute!.time.baseline!.thin).toBe(false)
     expect(sameRoute!.time.baseline!.center).toBeCloseTo(600 + 10 / 11)
@@ -691,7 +691,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { moving: 540, pace: 280 })
     seedRoute('subject', SUBJECT_DATE)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
-    expect(sameRoute!.count).toBe(7)
+    expect(sameRoute!.times).toBe(8)
     // The oldest of the seven the count is of.
     expect(sameRoute!.since).toBe(shiftLocalDate(SUBJECT_DATE, -21))
     expect(sameRoute!.pace).toMatchObject({ key: 'pace', unit: 'seconds_per_km', direction: 'down', value: 280, standing: 'below', judged: 'better' })
@@ -713,7 +713,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { moving: 540 })
     seedRoute('subject', SUBJECT_DATE)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
-    expect(sameRoute!.count).toBe(4)
+    expect(sameRoute!.times).toBe(5)
     expect(sameRoute!.time.baseline!.thin).toBe(true)
     expect(sameRoute!.time.standing).toBeNull()
     expect(sameRoute!.time.strip.map((p) => p.sessionId)).toEqual(['route-0', 'route-1', 'route-2', 'route-3', 'subject'])
@@ -742,7 +742,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRoute('subject', SUBJECT_DATE)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
     expect(sameRoute!.time).toMatchObject({ key: 'movingTime', metric: 'movingTime', value: 540 })
-    expect(sameRoute!.count).toBe(1)
+    expect(sameRoute!.times).toBe(2)
     expect(sameRoute!.time.strip.map((p) => p.sessionId)).toEqual(['timed', 'subject'])
     expect(sameRoute!.previous).toMatchObject({ sessionId: 'timed', seconds: 600 })
   })
@@ -774,7 +774,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { moving: 540 })
     seedLoop('subject', SUBJECT_DATE, false)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
-    expect(sameRoute!.count).toBe(1)
+    expect(sameRoute!.times).toBe(2)
     expect(sameRoute!.previous).toMatchObject({ sessionId: 'same-way' })
   })
 

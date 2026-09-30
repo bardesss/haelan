@@ -31,7 +31,7 @@ export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
   const { t, i18n } = useTranslation()
   const same = page.sameRoute
   if (same === null) return null
-  const { time, pace, previous, count, since } = same
+  const { time, pace, previous, times, since } = same
   const drawn = [time, ...(pace === null ? [] : [pace])].flatMap((figure) => {
     const strip = workoutStripOf(figure)
     return strip === null ? [] : [strip]
@@ -47,9 +47,9 @@ export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
   const opens = { current: page.sessionId, onOpen: onOpenWorkout }
   return (
     <Card span={span} label={t('activity.workout.page.sameRoute.label')}>
-      {/* This workout counted in: "6 times on this route since May". */}
+      {/* The server's count, this workout already in it: "6 times on this route since May". */}
       <p className="detail-side-caption workout-route-lead">
-        {t('activity.workout.page.sameRoute.count', { count: count + 1, month: bestMonth(since, page.localDate, i18n.language) })}
+        {t('activity.workout.page.sameRoute.count', { count: times, month: bestMonth(since, page.localDate, i18n.language) })}
       </p>
       <FigureRows>
         {pace !== null && <WorkoutFigureRow figure={pace} label={t('activity.workout.page.figures.pace')} withStrip inverse opens={opens} />}

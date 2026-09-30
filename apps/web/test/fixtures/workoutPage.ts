@@ -96,9 +96,9 @@ export const CADENCE_SERIES: MinuteSeries = {
   points: Array.from({ length: 33 }, (_, m) => ({ elapsedSeconds: (m + 1) * 60, value: m < 5 ? 160 : 170 })),
 }
 
-/** The earlier runs on the same loop: eleven in all, so the strip (the latest nine and this one)
- *  holds fewer than the count. */
-export const ROUTE_COUNT = 11
+/** The times on the same loop, this run counted in: eleven earlier ones, so the strip (the latest
+ *  nine and this one) holds fewer than the count. */
+export const ROUTE_TIMES = 12
 export const ROUTE_PREVIOUS_ID = 'loop-8'
 /** The oldest of the eleven, in May: before the strip's first date. */
 export const ROUTE_SINCE = '2026-05-17'
@@ -122,7 +122,7 @@ function sameRouteFixture(): NonNullable<WorkoutPageData['sameRoute']> {
     ...f, strip: f.strip.map((point, i) => (i === f.strip.length - 1 ? point : { ...point, sessionId: `loop-${i}` })),
   })
   return {
-    count: ROUTE_COUNT,
+    times: ROUTE_TIMES,
     since: ROUTE_SINCE,
     time: loop(time),
     pace: loop(pace),

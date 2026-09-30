@@ -101,11 +101,11 @@ export interface WorkoutPageData {
   /** This workout's time against the earlier times on the same route (workoutPage.ts's
    *  sameRouteOf): `time` is judged like any figure, lower being better, under the key it was
    *  compared on ('movingTime', or 'elapsed' when this workout recorded no moving time); `pace`
-   *  the same against the earlier paces on the route, null without a pace of its own; `count` is
-   *  the earlier workouts on the route, `since` the date of the oldest of them, `previous` the
+   *  the same against the earlier paces on the route, null without a pace of its own; `times` is
+   *  how many times the route was done, this workout counted in, `since` the date of the oldest earlier one, `previous` the
    *  latest, its time in whole seconds. Null without a route or with no earlier workout on it. */
   sameRoute: {
-    count: number, since: string, time: WorkoutFigure, pace: WorkoutFigure | null
+    times: number, since: string, time: WorkoutFigure, pace: WorkoutFigure | null
     previous: { sessionId: string, localDate: string, seconds: number } | null
   } | null
   /** The fastest kilometre, mile and 5 km inside a run's route, in whole seconds, each beside the

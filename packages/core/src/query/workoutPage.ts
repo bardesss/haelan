@@ -81,11 +81,12 @@ export interface WorkoutPage {
   zoneBounds: ZoneBounds | null
   /**
    * This workout's time against the earlier times on the same route (routeMatch.ts), lower being
-   * better; null without a route or with no earlier workout on it. `count` is the earlier ones.
+   * better; null without a route or with no earlier workout on it. `times` is how many times the
+   * route was done, this workout counted in, as the caption says it.
    */
   sameRoute: {
-    count: number
-    /** The date of the oldest of the `count` earlier workouts on the route. */
+    times: number
+    /** The date of the oldest of the earlier workouts on the route. */
     since: string
     time: WorkoutFigure
     /** This workout's pace against the earlier paces on the route (every match that has one); null without a pace of its own. */
@@ -93,7 +94,8 @@ export interface WorkoutPage {
     previous: { sessionId: string, localDate: string, seconds: number } | null
   } | null
   /**
-   * The fastest kilometre, mile and 5 km inside the route, each beside the Records best of the type
+   * The fastest kilometre, mile and 5 km inside the route (the kilometre a split when a split beat
+   * the GPS, as Records takes it), each beside the Records best of the type
    * up to today (as `best` reads it) and the best set before this workout (`previousBest`, what a
    * new best beat); `fromMeters` is how far along the route the stretch began. Null for a distance
    * the route is shorter than, and null altogether without a route.
@@ -335,7 +337,7 @@ function sameRouteOf(
     [...matches.slice(0, WORKOUT_STRIP - 1).reverse(), { session: subject.session, value }],
   )
   return {
-    count: matches.length, since: oldest.session.localDate, time, pace: routePaceOf(subject, valued),
+    times: matches.length + 1, since: oldest.session.localDate, time, pace: routePaceOf(subject, valued),
     previous: { sessionId: latest.session.id, localDate: latest.session.localDate, seconds: latest.value },
   }
 }
