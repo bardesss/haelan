@@ -725,38 +725,57 @@ function efforts(card: ParentNode): string[][] {
 }
 
 describe('the workout page\'s same route', () => {
-  it('sets this time against the earlier times on the route, with a way to the previous one', async () => {
+  it('sets this pace and time against the earlier ones on the route, with a way to the previous one', async () => {
     const card = cardLabelled(await mount(workoutPageFixture(), fullSession()), 'This route')!
-    expect(text(card, '.detail-side-caption')).toBe('11 earlier times on this route')
-    // Labelled from its key, and worded as a time is on a course: less of it is faster.
-    expect(rowsIn(card)).toEqual([['Moving time', '28:04', 'faster than your usual 28:20 – 30:00']])
-    expect(card.querySelector('.figure-row-verdict')?.className).toBe('figure-row-verdict better')
-    // Counted off the strip, which holds the latest nine, not off the eleven.
+    // This workout counted in, since the month of the oldest time on the route.
+    expect(text(card, '.detail-side-caption')).toBe('12 times on this route since May')
+    // The time labelled from its key, and worded as a time is on a course: less of it is faster.
+    expect(rowsIn(card)).toEqual([
+      ['Pace', '5:24 /km', 'faster than your usual 5:29 – 5:43 /km'],
+      ['Moving time', '28:04', 'faster than your usual 28:20 – 30:00'],
+    ])
+    expect([...card.querySelectorAll('.figure-row-verdict')].map((v) => v.className))
+      .toEqual(['figure-row-verdict better', 'figure-row-verdict better'])
+    expect(card.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('2')
     expect(text(card, '.detail-rows + .dash-caption')).toBe(
-      'this workout and the 9 before it on this route · matched by start, finish, direction and distance · higher = faster · band = your usual range')
+      'each line: every time on this route, oldest left · matched by start, finish, direction and distance · higher = faster · band = your usual range')
     const link = card.querySelector<HTMLAnchorElement>('a.card-link')
     expect(link?.textContent).toBe('View the previous time, Sep 1')
     expect(link?.getAttribute('href')).toBe('/activity/loop-8')
   })
 
-  it('labels an elapsed time as elapsed, and one earlier time in the singular', async () => {
+  it('labels an elapsed time as elapsed, and counts one earlier time with this one', async () => {
     const page = workoutPageFixture()
     const same = page.sameRoute!
     const card = cardLabelled(await mount({
-      ...page, sameRoute: { ...same, count: 1, time: { ...same.time, key: 'elapsed', metric: 'elapsed' } },
+      ...page, sameRoute: { ...same, count: 1, since: '2025-11-02', time: { ...same.time, key: 'elapsed', metric: 'elapsed' } },
     }, fullSession()), 'This route')!
-    expect(text(card, '.detail-side-caption')).toBe('1 earlier time on this route')
-    expect(rowsIn(card).map(([label]) => label)).toEqual(['Elapsed'])
+    // Another year's month carries its year.
+    expect(text(card, '.detail-side-caption')).toBe('2 times on this route since November 2025')
+    expect(rowsIn(card).map(([label]) => label)).toEqual(['Pace', 'Elapsed'])
   })
 
-  it('names no band over a thin usual on the route', async () => {
+  it('draws the time alone without a pace on the route', async () => {
+    const page = workoutPageFixture()
+    const card = cardLabelled(await mount({ ...page, sameRoute: { ...page.sameRoute!, pace: null } }, fullSession()), 'This route')!
+    expect(rowsIn(card).map(([label]) => label)).toEqual(['Moving time'])
+    expect(card.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('1')
+  })
+
+  it('names no band when neither row draws one', async () => {
     const page = workoutPageFixture()
     const same = page.sameRoute!
-    const card = cardLabelled(await mount({
-      ...page, sameRoute: { ...same, time: { ...same.time, baseline: { ...same.time.baseline!, thin: true }, standing: null, judged: null } },
+    const thin = (f: typeof same.time) => ({ ...f, baseline: { ...f.baseline!, thin: true }, standing: null, judged: null })
+    const both = cardLabelled(await mount({
+      ...page, sameRoute: { ...same, time: thin(same.time), pace: thin(same.pace!) },
     }, fullSession()), 'This route')!
-    expect(text(card, '.detail-rows + .dash-caption')).toBe(
-      'this workout and the 9 before it on this route · matched by start, finish, direction and distance · higher = faster')
+    expect(text(both, '.detail-rows + .dash-caption')).toBe(
+      'each line: every time on this route, oldest left · matched by start, finish, direction and distance · higher = faster')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    // One row's band is enough to name it.
+    const one = cardLabelled(await mount({ ...page, sameRoute: { ...same, time: thin(same.time) } }, fullSession()), 'This route')!
+    expect(text(one, '.detail-rows + .dash-caption')).toContain(' · band = your usual range')
   })
 
   it('draws no link without a previous time', async () => {
@@ -786,24 +805,30 @@ describe('the workout page\'s same route', () => {
 
   it('reads the same in Dutch', async () => {
     const card = cardLabelled(await mount(workoutPageFixture(), fullSession(), 'nl'), 'Deze route')!
-    expect(text(card, '.detail-side-caption')).toBe('11 eerdere keren op deze route')
-    expect(rowsIn(card)).toEqual([['Tijd in beweging', '28:04', 'sneller dan je gebruikelijke 28:20 – 30:00']])
+    expect(text(card, '.detail-side-caption')).toBe('12 keer op deze route sinds mei')
+    expect(rowsIn(card)).toEqual([
+      ['Tempo', '5:24 /km', 'sneller dan je gebruikelijke 5:29 – 5:43 /km'],
+      ['Tijd in beweging', '28:04', 'sneller dan je gebruikelijke 28:20 – 30:00'],
+    ])
     expect(text(card, '.detail-rows + .dash-caption')).toBe(
-      'deze training en de 9 ervoor op deze route · herkend aan start, einde, richting en afstand · hoger = sneller · band = je gebruikelijke bereik')
+      'elk lijntje: elke keer op deze route, oudste links · herkend aan start, einde, richting en afstand · hoger = sneller · band = je gebruikelijke bereik')
     expect(card.querySelector('a.card-link')?.textContent).toBe('Bekijk de vorige keer, 1 sep')
   })
 })
 
 describe('the workout page\'s fastest efforts', () => {
-  it('times the fastest kilometre, mile and 5 km beside each best, marking the one that is this run\'s', async () => {
+  it('times the fastest kilometre, mile and 5 km, where each lay, beside each best, marking the one that is this run\'s', async () => {
     const card = cardLabelled(await mount(workoutPageFixture(), fullSession()), 'Fastest efforts')!
     expect(efforts(card)).toEqual([
-      ['Distance', 'Time', 'Your best'],
-      ['1 km', '4:56', '4:50 · June'],
-      ['1 mile', '7:59', '7:51 · June'],
-      ['5 km', '26:42 ✦', 'this workout'],
+      ['Distance', 'Time', 'Where', 'Your best'],
+      ['1 km', '4:56', '3.40 – 4.40 km', '4:50 · June'],
+      ['1 mile', '7:59', '3.20 – 4.81 km', '7:51 · June'],
+      ['5 km', '26:42 ✦', '150 m – 5.15 km', 'this workout'],
     ])
-    expect([...card.querySelectorAll('.workout-hero-line')].map((line) => line.textContent)).toEqual(['✦ your fastest 5 km ever'])
+    // The where column is the one a phone drops.
+    expect(card.querySelectorAll('.workout-efforts-where')).toHaveLength(4)
+    expect([...card.querySelectorAll('.workout-hero-line')].map((line) => line.textContent))
+      .toEqual(['✦ your fastest 5 km ever, 12 s faster than in August'])
     expect(text(card, '.workout-compared-footnote')).toBe('from the distance along the GPS route · counts towards Records')
     const link = card.querySelector<HTMLAnchorElement>('a.card-link')
     expect(link?.textContent).toBe('View records')
@@ -818,14 +843,28 @@ describe('the workout page\'s fastest efforts', () => {
     expect(card.textContent).not.toContain('✦')
   })
 
-  it('names every best of this run\'s, and a best it has no record for as absent', async () => {
+  it('names every best of this run\'s, by a stopwatch past a minute, and without a margin with no best before it', async () => {
     const page = workoutPageFixture()
-    const mine = { value: 296, sessionId: WORKOUT_ID, localDate: '2026-09-04' }
+    const mine = (value: number) => ({ value, sessionId: WORKOUT_ID, localDate: '2026-09-04' })
     const card = cardLabelled(await mount({
-      ...page, efforts: { km: { seconds: 296, best: mine, isBest: true }, mile: { seconds: 479, best: null, isBest: false }, fiveK: null },
+      ...page,
+      efforts: {
+        km: { seconds: 296, fromMeters: 0, best: mine(296), previousBest: null, isBest: true },
+        mile: { seconds: 479, fromMeters: 0, best: null, previousBest: null, isBest: false },
+        fiveK: { seconds: 1602, fromMeters: 0, best: mine(1602), previousBest: { value: 1667, sessionId: 'old', localDate: '2025-10-01' }, isBest: true },
+      },
     }, fullSession()), 'Fastest efforts')!
-    expect(efforts(card).slice(1)).toEqual([['1 km', '4:56 ✦', 'this workout'], ['1 mile', '7:59', '—']])
-    expect([...card.querySelectorAll('.workout-hero-line')].map((line) => line.textContent)).toEqual(['✦ your fastest 1 km ever'])
+    expect(efforts(card).slice(1).map((row) => [row[0], row[1], row[3]]))
+      .toEqual([['1 km', '4:56 ✦', 'this workout'], ['1 mile', '7:59', '—'], ['5 km', '26:42 ✦', 'this workout']])
+    expect([...card.querySelectorAll('.workout-hero-line')].map((line) => line.textContent))
+      .toEqual(['✦ your fastest 1 km ever', '✦ your fastest 5 km ever, 1:05 faster than in October 2025'])
+  })
+
+  it('says no margin over a best before it that prints the same', async () => {
+    const page = workoutPageFixture()
+    const fiveK = { ...page.efforts!.fiveK!, previousBest: { value: 1602, sessionId: 'old', localDate: '2026-08-15' } }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, fiveK } }, fullSession()), 'Fastest efforts')!
+    expect(text(card, '.workout-hero-line')).toBe('✦ your fastest 5 km ever')
   })
 
   it('is left out when no distance fits inside the route', async () => {
@@ -837,12 +876,12 @@ describe('the workout page\'s fastest efforts', () => {
   it('reads the same in Dutch', async () => {
     const card = cardLabelled(await mount(workoutPageFixture(), fullSession(), 'nl'), 'Snelste stukken')!
     expect(efforts(card)).toEqual([
-      ['Afstand', 'Tijd', 'Je beste'],
-      ['1 km', '4:56', '4:50 · juni'],
-      ['1 mijl', '7:59', '7:51 · juni'],
-      ['5 km', '26:42 ✦', 'deze training'],
+      ['Afstand', 'Tijd', 'Waar', 'Je beste'],
+      ['1 km', '4:56', '3,40 – 4,40 km', '4:50 · juni'],
+      ['1 mijl', '7:59', '3,20 – 4,81 km', '7:51 · juni'],
+      ['5 km', '26:42 ✦', '150 m – 5,15 km', 'deze training'],
     ])
-    expect(text(card, '.workout-hero-line')).toBe('✦ je snelste 5 km ooit')
+    expect(text(card, '.workout-hero-line')).toBe('✦ je snelste 5 km ooit, 12 s sneller dan in augustus')
     expect(text(card, '.workout-compared-footnote')).toBe('uit de afstand langs de gps-route · telt mee in Records')
     expect(card.querySelector('a.card-link')?.textContent).toBe('Bekijk records')
   })

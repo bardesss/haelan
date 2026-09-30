@@ -100,6 +100,8 @@ export const CADENCE_SERIES: MinuteSeries = {
  *  holds fewer than the count. */
 export const ROUTE_COUNT = 11
 export const ROUTE_PREVIOUS_ID = 'loop-8'
+/** The oldest of the eleven, in May: before the strip's first date. */
+export const ROUTE_SINCE = '2026-05-17'
 
 /**
  * The time on the same loop as roundWorkoutPage sends it: moving time, judged against the earlier
@@ -111,10 +113,19 @@ function sameRouteFixture(): NonNullable<WorkoutPageData['sameRoute']> {
     key: 'movingTime', unit: 'seconds', direction: 'down', value: 1684, baseline: band(1740, 1700, 1800),
     strip: [1810, 1790, 1765, 1750, 1760, 1732, 1745, 1720, 1712, 1684],
   })
-  const strip = time.strip.map((point, i) => (i === time.strip.length - 1 ? point : { ...point, sessionId: `loop-${i}` }))
+  // 5:24 /km under the loop's usual 5:29 - 5:43, so faster, judged better.
+  const pace = figure({
+    key: 'pace', unit: 'seconds_per_km', direction: 'down', value: 324, baseline: band(336, 329, 343),
+    strip: [344, 341, 339, 338, 336, 333, 335, 331, 330, 324],
+  })
+  const loop = (f: WorkoutFigure): WorkoutFigure => ({
+    ...f, strip: f.strip.map((point, i) => (i === f.strip.length - 1 ? point : { ...point, sessionId: `loop-${i}` })),
+  })
   return {
     count: ROUTE_COUNT,
-    time: { ...time, strip },
+    since: ROUTE_SINCE,
+    time: loop(time),
+    pace: loop(pace),
     previous: { sessionId: ROUTE_PREVIOUS_ID, localDate: STRIP_DATES[8]!, seconds: 1712 },
   }
 }
@@ -200,12 +211,25 @@ export function workoutPageFixture(): WorkoutPageData {
     splitTrend: { secondHalfFasterBySecondsPerKm: 22 },
     zoneBounds: { moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 },
     sameRoute: sameRouteFixture(),
-    // The fastest stretches inside the run, whole seconds: the kilometre and the mile short of the
-    // June bests, the 5 km this run's own, so its best is this workout.
+    // The fastest stretches inside the run, whole seconds, each starting whole metres in: the
+    // kilometre and the mile short of the June bests, the 5 km this run's own, 12 s quicker than
+    // the August best it beat.
     efforts: {
-      km: { seconds: 296, best: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' }, isBest: false },
-      mile: { seconds: 479, best: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' }, isBest: false },
-      fiveK: { seconds: 1602, best: { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE }, isBest: true },
+      km: {
+        seconds: 296, fromMeters: 3400, isBest: false,
+        best: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
+        previousBest: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
+      },
+      mile: {
+        seconds: 479, fromMeters: 3200, isBest: false,
+        best: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
+        previousBest: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
+      },
+      fiveK: {
+        seconds: 1602, fromMeters: 150, isBest: true,
+        best: { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE },
+        previousBest: { value: 1614, sessionId: 'run-august', localDate: '2026-08-15' },
+      },
     },
     log: {
       presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'],

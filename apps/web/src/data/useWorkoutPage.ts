@@ -60,8 +60,10 @@ export interface RecordRef { value: number, sessionId: string, localDate: string
 /** The three distances a run's fastest efforts are read over (fastestEfforts.ts's EffortKey). */
 export type EffortKey = 'km' | 'mile' | 'fiveK'
 
-/** One fastest effort beside the Records best of its kind (workoutPage.ts's efforts entry). */
-export interface WorkoutEffort { seconds: number, best: RecordRef | null, isBest: boolean }
+/** One fastest effort beside the Records best of its kind and the best before this workout
+ *  (workoutPage.ts's efforts entry): whole seconds, and whole metres along the route to where the
+ *  stretch began. */
+export interface WorkoutEffort { seconds: number, fromMeters: number, best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean }
 
 export interface WorkoutPageData {
   sessionId: string
@@ -96,10 +98,14 @@ export interface WorkoutPageData {
   zoneBounds: { moderateMin: number, vigorousMin: number, peakMin: number, max: number } | null
   /** This workout's time against the earlier times on the same route (workoutPage.ts's
    *  sameRouteOf): `time` is judged like any figure, lower being better, under the key it was
-   *  compared on ('movingTime', or 'elapsed' when this workout recorded no moving time); `count`
-   *  is the earlier workouts on the route, `previous` the latest of them, its time in whole
-   *  seconds. Null without a route or with no earlier workout on it. */
-  sameRoute: { count: number, time: WorkoutFigure, previous: { sessionId: string, localDate: string, seconds: number } | null } | null
+   *  compared on ('movingTime', or 'elapsed' when this workout recorded no moving time); `pace`
+   *  the same against the earlier paces on the route, null without a pace of its own; `count` is
+   *  the earlier workouts on the route, `since` the date of the oldest of them, `previous` the
+   *  latest, its time in whole seconds. Null without a route or with no earlier workout on it. */
+  sameRoute: {
+    count: number, since: string, time: WorkoutFigure, pace: WorkoutFigure | null
+    previous: { sessionId: string, localDate: string, seconds: number } | null
+  } | null
   /** The fastest kilometre, mile and 5 km inside a run's route, in whole seconds, each beside the
    *  type's Records best (`isBest` when that best is this workout); null for a distance the route
    *  is shorter than, and null altogether without a route or for any type but a run. */

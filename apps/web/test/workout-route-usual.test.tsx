@@ -8,10 +8,13 @@ import { ROUTE_PREVIOUS_ID, WORKOUT_ID, workoutPageFixture } from './fixtures/wo
 
 // The route strip's props, read as workout-hero.test.tsx reads the hero's: echarts never mounts
 // under static rendering, and what the card hands the chart is the whole question.
+// The last strip drawn is the time's; every strip drawn, in order, is `drawnProps`.
 let sparklineProps: ComponentProps<typeof Sparkline> | null = null
+let drawnProps: ComponentProps<typeof Sparkline>[] = []
 vi.mock('../src/charts/Sparkline.js', () => ({
   Sparkline: (props: ComponentProps<typeof Sparkline>) => {
     sparklineProps = props
+    drawnProps.push(props)
     return null
   },
 }))
@@ -21,7 +24,18 @@ const render = (onOpenWorkout?: (sessionId: string) => void) => renderToStaticMa
 )
 
 describe('the same route\'s strip', () => {
-  beforeEach(() => { sparklineProps = null })
+  beforeEach(() => { sparklineProps = null; drawnProps = [] })
+
+  it('draws the pace on the route first, upside down too, its dots opening their workouts', () => {
+    const open = vi.fn()
+    render(open)
+    expect(drawnProps.map((p) => p.label)).toEqual(['Pace', 'Moving time'])
+    const pace = drawnProps[0]!
+    expect(pace.values).toEqual([344, 341, 339, 338, 336, 333, 335, 331, 330, 324])
+    expect(pace.inverse).toBe(true)
+    pace.onPointClick!(pace.pointIds![0]!)
+    expect(open.mock.calls).toEqual([['loop-0']])
+  })
 
   it('draws the times on the route, a lower one higher, over the usual on the route', () => {
     render()

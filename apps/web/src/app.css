@@ -634,6 +634,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
      sideways; the hero and the rows above it already say the usual. The caption's and the
      footnote's words about them (.workout-compared-wide) go with them. */
   .workout-compared-best, .workout-compared-usual, .workout-compared-wide { display: none; }
+  /* Where in the run each fastest stretch lay goes too; the time and the best are what it is for. */
+  .workout-efforts-where { display: none; }
   .workout-map[data-both="true"], .workout-zones { grid-template-columns: minmax(0, 1fr); }
   .workout-through { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 }

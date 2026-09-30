@@ -7,19 +7,20 @@ import { formatShortDate } from '../../../format.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { workoutStripOf } from '../../detail/figureText.js'
 import { WorkoutFigureRow } from './WorkoutFigureRow.js'
-import { workoutPath } from './workoutText.js'
+import { bestMonth, workoutPath } from './workoutText.js'
 
 /**
- * "This route" (the mockup's "Deze route"), beside the fastest efforts under the route card: this
- * workout's time against the earlier times on the same route, as the server matched and judged
- * it (workoutPage.ts's sameRouteOf). The row is labelled from the key the time was compared on,
- * moving or elapsed, and its verdict worded slower or faster, since less time on the same course
- * is the quicker run. The strip draws the latest times on the route, a lower one higher as the
- * hero draws a pace, each dot opening its workout; then a way to the latest earlier one.
+ * "This route" (the mockup's "Deze route"), beside the fastest efforts under the route card: how
+ * many times the route has been run since the oldest time on it, then this workout's pace and
+ * time against the earlier ones on it, as the server matched and judged them (workoutPage.ts's
+ * sameRouteOf). The time row is labelled from the key it was compared on, moving or elapsed, and
+ * its verdict worded slower or faster, since less time on the same course is the quicker run.
+ * Each strip draws the latest readings on the route, a lower one higher as the hero draws a pace,
+ * each dot opening its workout; then a way to the latest earlier one.
  *
- * Left out when the server sends no same route: no route, or no earlier workout on it. The
- * approved mockup also names the route and its length, draws a pace row beside the time and says
- * how many times since when; the payload carries none of those, so none is drawn.
+ * Left out when the server sends no same route: no route, or no earlier workout on it; the pace
+ * row without a pace. The approved mockup also names the route and its length, and a line under
+ * each row; the payload carries none of those, so none is drawn.
  */
 export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
   page: WorkoutPageData
@@ -30,21 +31,29 @@ export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
   const { t, i18n } = useTranslation()
   const same = page.sameRoute
   if (same === null) return null
-  const { time, previous, count } = same
-  // Counted off the strip itself, which holds the latest times only, never off `count`.
-  const drawn = workoutStripOf(time)
+  const { time, pace, previous, count, since } = same
+  const drawn = [time, ...(pace === null ? [] : [pace])].flatMap((figure) => {
+    const strip = workoutStripOf(figure)
+    return strip === null ? [] : [strip]
+  })
+  // The mockup's words, with the upside-down line said as the hero says it and the band named only
+  // where one is drawn.
   const caption = [
-    ...(drawn === null ? [] : [t('activity.workout.page.sameRoute.strip', { count: drawn.values.length - 1 })]),
+    ...(drawn.length === 0 ? [] : [t('activity.workout.page.sameRoute.strip')]),
     t('activity.workout.page.sameRoute.matched'),
-    ...(drawn === null ? [] : [t('activity.workout.page.higherFaster')]),
-    ...(drawn?.bands !== undefined ? [t('activity.workout.page.stripBand')] : []),
+    ...(drawn.length === 0 ? [] : [t('activity.workout.page.higherFaster')]),
+    ...(drawn.some((strip) => strip.bands !== undefined) ? [t('activity.workout.page.stripBand')] : []),
   ].join(' · ')
+  const opens = { current: page.sessionId, onOpen: onOpenWorkout }
   return (
     <Card span={span} label={t('activity.workout.page.sameRoute.label')}>
-      <p className="detail-side-caption">{t('activity.workout.page.sameRoute.count', { count })}</p>
+      {/* This workout counted in: "6 times on this route since May". */}
+      <p className="detail-side-caption">
+        {t('activity.workout.page.sameRoute.count', { count: count + 1, month: bestMonth(since, page.localDate, i18n.language) })}
+      </p>
       <FigureRows>
-        <WorkoutFigureRow figure={time} label={t(`activity.workout.page.figures.${time.key}`)} withStrip words="pace" inverse
-          opens={{ current: page.sessionId, onOpen: onOpenWorkout }} />
+        {pace !== null && <WorkoutFigureRow figure={pace} label={t('activity.workout.page.figures.pace')} withStrip inverse opens={opens} />}
+        <WorkoutFigureRow figure={time} label={t(`activity.workout.page.figures.${time.key}`)} withStrip words="pace" inverse opens={opens} />
       </FigureRows>
       <p className="dash-caption">{caption}</p>
       {previous !== null && (

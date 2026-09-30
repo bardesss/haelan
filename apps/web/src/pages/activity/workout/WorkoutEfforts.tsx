@@ -3,25 +3,28 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { Link } from '../../../router.js'
 import type { EffortKey, WorkoutPageData } from '../../../data/useWorkoutPage.js'
-import { formatStopwatch } from '../../detail/figureText.js'
+import { EFFORT_DISTANCES } from '@haelan/core/fastest-efforts'
+import { formatFigureRange, formatStopwatch } from '../../detail/figureText.js'
 import { bestMonth } from './workoutText.js'
 
 // The mockup's rows, shortest first.
 const EFFORTS: readonly EffortKey[] = ['km', 'mile', 'fiveK']
 // The quiet good-day mark (PATTERNS.md): after the value in the table, before the words under it.
 const MARK = '✦'
+// Where a stretch lay, worded as the page words a distance (kilometres past four digits of metres).
+const ALONG = { value: null, unit: 'meters', metric: 'distance', precision: 0 } as const
 
 /**
  * "Fastest efforts" (the mockup's "Snelste stukken"), beside the same route under the route card:
  * the fastest kilometre, mile and 5 km inside the run, read off its GPS route by the server, each
- * beside the Records best of its kind with the month it was set. A best that is this run's own
- * reads "this workout", its time is marked ✦, and a line under the table says it is the fastest
- * ever. Three narrow columns, so the table fits a phone's card without scrolling sideways.
+ * with where along the run it lay and beside the Records best of its kind with the month it was
+ * set. A best that is this run's own reads "this workout", its time is marked ✦, and a line under
+ * the table says it is the fastest ever and, with a best before it, by how much it beat that one.
+ * On a phone the where column goes, as the mockup has it, so the table fits its card without
+ * scrolling sideways.
  *
  * A distance the route is shorter than is left out, and the card with none left, as it is for
- * any workout the server reads no efforts off (anything but a run, or one without a route). The
- * approved mockup also says where in the run each stretch lay and by how much a new best beat
- * the old one; the payload carries neither, so neither is drawn.
+ * any workout the server reads no efforts off (anything but a run, or one without a route).
  */
 export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 | 12 }): ReactNode {
   const { t, i18n } = useTranslation()
@@ -38,6 +41,21 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
       value: formatStopwatch(best.value), month: bestMonth(best.localDate, page.localDate, language),
     })
   }
+  const whereOf = (key: EffortKey, fromMeters: number) => {
+    const { low, high } = formatFigureRange(ALONG, fromMeters, fromMeters + EFFORT_DISTANCES[key], language, t)
+    return `${low} – ${high}`
+  }
+  // "12 s faster than in August": seconds under a minute, a stopwatch past one; the plain line when
+  // there was no best before this one, or the two print the same.
+  const bestLine = ({ distance, effort }: typeof rows[number]) => {
+    const before = effort.previousBest
+    const delta = before === null ? 0 : Math.round(before.value) - Math.round(effort.seconds)
+    if (before === null || delta <= 0) return t('activity.workout.page.efforts.fastest', { distance })
+    return t('activity.workout.page.efforts.fastestBy', {
+      distance, month: bestMonth(before.localDate, page.localDate, language),
+      delta: delta < 60 ? t('activity.workout.page.efforts.seconds', { value: delta }) : formatStopwatch(delta),
+    })
+  }
   return (
     <Card span={span} label={t('activity.workout.page.efforts.label')}>
       <div className="table-scroll">
@@ -47,6 +65,7 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
             <tr>
               <th scope="col">{t('activity.workout.page.efforts.distance')}</th>
               <th scope="col">{t('activity.workout.page.efforts.time')}</th>
+              <th scope="col" className="workout-efforts-where">{t('activity.workout.page.efforts.where')}</th>
               <th scope="col">{t('activity.workout.page.efforts.best')}</th>
             </tr>
           </thead>
@@ -59,14 +78,15 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
                   {/* The line under the table says what the mark means; a screen reader hears it there. */}
                   {effort.isBest && <> <span aria-hidden="true">{MARK}</span></>}
                 </td>
+                <td className="workout-efforts-where">{whereOf(key, effort.fromMeters)}</td>
                 <td>{bestOf(effort)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {rows.filter(({ effort }) => effort.isBest).map(({ key, distance }) => (
-        <p key={key} className="workout-hero-line">{`${MARK} ${t('activity.workout.page.efforts.fastest', { distance })}`}</p>
+      {rows.filter(({ effort }) => effort.isBest).map((row) => (
+        <p key={row.key} className="workout-hero-line">{`${MARK} ${bestLine(row)}`}</p>
       ))}
       <p className="dash-caption workout-compared-footnote">{t('activity.workout.page.efforts.caption')}</p>
       <Link to="/records" className="card-link">{t('activity.workout.page.efforts.view')}</Link>
