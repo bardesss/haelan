@@ -95,6 +95,16 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine(f, 'nl', tNl, { window: true })).toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een jaar, uit 2025`)
   })
 
+  it("says a per-week figure's range is a week's worth", () => {
+    const active = figure({
+      metric: 'active_minutes', per: 'week', value: 230,
+      usual: { center: 235, low: 190, high: 280, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(active, 'en', t)).toBe(`within your usual 190 – 280${NB}min per week`)
+    expect(periodVerdictLine(active, 'nl', tNl, { window: true }))
+      .toBe(`binnen je gebruikelijke bereik 190 – 280${NB}min per week voor een maand, afgelopen 12 maanden`)
+  })
+
   it("says a per-period figure's range is a period's worth, before the window", () => {
     const naps = figure({
       metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 3, total: 3,
@@ -186,6 +196,17 @@ describe('standoutLines', () => {
     const nl = standoutLines({ ...o, language: 'nl', t: tNl })
     expect(plain(nl)).toEqual([`je langste: 8u${NB}21m op zo 23 aug ✦`, `+0u${NB}23m tegenover juli`])
     expect(strong(nl)).toEqual([[`8u${NB}21m`], [`+0u${NB}23m`]])
+  })
+
+  it('says a change is a day\'s worth with perDay, against the month before and a year earlier', () => {
+    const steps = figure({ metric: 'steps', unit: 'count', value: 8241 })
+    const o = {
+      figure: steps, high: null, previous: { from: '2026-08-01', to: '2026-08-31', value: 7629, delta: 612 },
+      yearEarlier: { from: '2025-09-01', to: '2025-09-30', value: 7900, delta: 341 }, highWord: 'busiest' as const, perDay: true,
+    }
+    expect(plain(standoutLines({ ...o, language: 'en', t }))).toEqual(['+612 a day against August', '+341 a day against last year'])
+    expect(plain(standoutLines({ ...o, language: 'nl', t: tNl }))).toEqual(['+612 per dag tegenover augustus', '+341 per dag tegenover vorig jaar'])
+    expect(plain(standoutLines({ ...o, perDay: false, language: 'en', t }))).toEqual(['+612 against August', '+341 against last year'])
   })
 
   it('leaves the ✦ off a high that is not good', () => {
@@ -294,8 +315,8 @@ describe('periodStripOf', () => {
 describe('periodValueLine', () => {
   it('prints a total with its per-day average under it', () => {
     const f = figure({ metric: 'distance', unit: 'meters', precision: 0, value: 5200, total: 156000 })
-    expect(periodValueLine(f, 'en', t)).toEqual({ value: `156.00${NB}km`, under: `5.20${NB}km per day` })
-    expect(periodValueLine(f, 'nl', tNl)).toEqual({ value: `156,00${NB}km`, under: `5,20${NB}km per dag` })
+    expect(periodValueLine(f, 'en', t)).toEqual({ value: `156.00${NB}km`, under: `5.20${NB}km per day on average` })
+    expect(periodValueLine(f, 'nl', tNl)).toEqual({ value: `156,00${NB}km`, under: `5,20${NB}km per dag gemiddeld` })
   })
 
   it('prints the sleep hero\'s average, not the total the server also sends', () => {

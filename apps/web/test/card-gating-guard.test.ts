@@ -41,14 +41,15 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 // error/loading branch around that one read.
 //
 // Sleep.tsx joined them in M10b for the same reason as the Dashboard: the overview reads one
-// judged payload (/sleep/period), not series points, and gates the page once around it.
-const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx', 'Sleep.tsx'])
+// judged payload (/sleep/period), not series points, and gates the page once around it. Activity.tsx
+// followed it in the same milestone, over /activity/period.
+const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx', 'Sleep.tsx', 'Activity.tsx'])
 
 // What this actually checks, read honestly: not "no card hand rolls gating" (it is file
 // granularity, so a page hand rolling two of its eight cards and routing the other six through
 // MetricCard still passes), but "no page hand rolls every card and says nothing about the shared
-// component existing." Activity.tsx passes because most of its cards route through MetricCard;
-// the hand rolled cards beside those are not individually checked against it. A true per card
+// component existing." Recovery.tsx and Health.tsx pass because most of their cards route through
+// MetricCard; the hand rolled cards beside those are not individually checked against it. A true per card
 // guard needs to attribute a given ErrorState/Loading/emptyState occurrence to the JSX block it
 // sits in, which needs more than a whole file regex; this is the cheap version, and its name and this comment describe what it is.
 describe('pages are not entirely hand rolled and silent about MetricCard', () => {
@@ -73,7 +74,8 @@ describe('pages are not entirely hand rolled and silent about MetricCard', () =>
   // trigger matched nothing on any real page would still show every case green. This is what
   // actually proves HAND_ROLLED_GATING fires on a real page rather than only in a regex someone
   // wrote and never ran. The old Dashboard's sleep stages card was that page until M9b, Sleep.tsx
-  // until M10b; Activity.tsx, checked above rather than excused, is it now.
+  // and Activity.tsx until M10b; the pages checked above rather than excused (Recovery, Health) are
+  // it now.
   it('the gating trigger actually fires on at least one real page', () => {
     expect(withGating.length).toBeGreaterThan(0)
   })

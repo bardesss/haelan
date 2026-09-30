@@ -21,7 +21,7 @@ const NBSP = '\u00a0'
 const SHORT_SPANS: ReadonlySet<string> = new Set([
   'active_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability',
   'sleep_first_deep_minutes',
-  'hardZoneMinutes', 'activeZoneMinutes',
+  'hardZoneMinutes', 'activeZoneMinutes', 'active_zone_minutes',
 ])
 
 /** Whether a minutes figure reads in minutes ("12 min") rather than as a duration (SHORT_SPANS above). */
@@ -106,6 +106,15 @@ function figureValueText(
       ? `${formatNumber(value / 1000, 2, language, absent)} ${t('activity.units.km')}`
       : `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.meters')}`
     case 'seconds': return formatStopwatch(value)
+    // The period reads' stored distances (METRICS: distance and altitude_gain in millimetres): a climb
+    // in whole metres, a distance in kilometres, to one decimal below a hundred ("6.1 km", "41.8
+    // km") and whole above ("183 km", "2,084 km"), the approved Activity mockup's. Converted units,
+    // so their own precision rather than the stored unit's.
+    case 'millimeters': {
+      if (figure.metric === 'altitude_gain') return `${formatNumber(value / 1000, 0, language, absent)} ${t('activity.units.meters')}`
+      const km = value / 1_000_000
+      return `${formatNumber(km, Math.abs(km) < 100 ? 1 : 0, language, absent)} ${t('activity.units.km')}`
+    }
     case 'trimp': return formatNumber(value, figure.precision, language, absent)
     case 'kcal': return `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.kcalShort')}`
     case 'steps_per_minute': return `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.perMin')}`

@@ -1,510 +1,215 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { METRICS } from '@haelan/core/metrics'
-import type { DailyAgg } from '@haelan/core/metrics'
-import type { Polarity } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
+import { navigate, withQuery } from '../router.js'
 import { Card } from '../components/Card.js'
-import { CardGrid } from '../components/CardGrid.js'
-import { StatTile } from '../components/StatTile.js'
-import { MetricCard } from '../components/MetricCard.js'
-import { ChartNote } from '../components/ChartNote.js'
-import { InsightCard } from '../components/InsightCard.js'
-import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
+import { ErrorState } from '../components/ErrorState.js'
+import { EmptyState } from '../components/EmptyState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { PageHeader } from '../components/PageHeader.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
-import { Sparkline } from '../charts/Sparkline.js'
-import { DailyBars } from '../charts/DailyBars.js'
-import { StackedDailyBars } from '../charts/StackedDailyBars.js'
-import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
-import { SessionList } from './activity/SessionList.js'
-import { bandSeries } from './activity/bandSeries.js'
-import { TrainingLoadCard } from './activity/TrainingLoadCard.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
-import { denseSeries, useSeries } from '../data/useSeries.js'
-import type { SeriesPoint } from '../data/useSeries.js'
-import { useInsight } from '../data/useInsight.js'
-import { useAnnotations } from '../data/useAnnotations.js'
-import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
-import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
-import { useMetricGroups } from '../data/useMetricGroups.js'
+import { useActivityPeriod } from '../data/usePeriodRead.js'
+import type { PeriodFigure, PeriodStripPoint } from '../data/periodTypes.js'
+import { useSourceNames } from '../data/useSourceNames.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
-import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
+import { exportPathFor } from '../data/pageShell.js'
+import { formatLocalDateRange, formatLongWeekdayDate } from '../format.js'
+import { formatFigureValue } from './detail/figureText.js'
+import { pointVerdictWords, standoutLines, thisPeriod } from './detail/periodText.js'
+import { verdictTone } from '../charts/base.js'
+import { PeriodHero } from './period/PeriodHero.js'
+import { PeriodFigureRows } from './period/PeriodFigureRows.js'
+import { PointPanel } from './period/PointPanel.js'
+import type { PointPanelRow } from './period/PointPanel.js'
+import { LIST_VISIBLE } from './period/ExpandableList.js'
+import { periodLine } from './period/periodLine.js'
+import { useActivityLabel, useActivityName } from './activity/period/labels.js'
+import { ActivityHeatmapCard } from './activity/period/ActivityHeatmapCard.js'
+import { ActivityIntensity, hasIntensity } from './activity/period/ActivityIntensity.js'
+import { ActivityZoneMinutes, hasZoneMinutes, ZONE_MINUTES_METRIC } from './activity/period/ActivityZoneMinutes.js'
+import { ActivityHeartZones, heartZoneRows } from './activity/period/ActivityHeartZones.js'
+import { ActivityWorkouts } from './activity/period/ActivityWorkouts.js'
+import { ActivityTypes, hasTypes } from './activity/period/ActivityTypes.js'
+import { ActivityMore } from './activity/period/ActivityMore.js'
 
-// Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
-// taken on faith from the brief that named them: steps, distance, floors, total_calories,
-// active_energy and the six active-minute/active-zone-minute sub-dimension metrics are all TOTAL
-// (aggs: ['sum']), as is workout_minutes; workout_count is the one metric on this page whose only
-// aggregate is `count`.
-// Two aggs, two requests, the same REQUESTS/under('agg') shape Dashboard.tsx and Recovery.tsx
-// already use, so a pairing the catalogue cannot answer drops out of the wire list rather than
-// 500ing every card riding along with it (see under()'s own comment on Dashboard.tsx for why).
-//
-// floors and total_calories carry the reason Task 1 of this milestone existed: both are written
-// only as `provider` rows (Google reconciles them itself; there is no per-source sample underneath
-// either for a merge to work from), so both have zero rows under `merged`. This page reaches them
-// correctly for the same reason every other card here does and nothing here does specially: it
-// never names a source of its own, and usePageControls/resolveSource default to ALL_SOURCES, whose
-// sourceParam omits the `source` query parameter entirely. Naming a literal source (merged or
-// otherwise) here would ask for rows that were never written, exactly the defect Task 1 closed.
-export const REQUESTS = {
-  sum: [
-    'steps', 'distance', 'floors', 'total_calories', 'active_energy',
-    'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
-    'active_minutes_light_peak', 'active_minutes_moderate_peak', 'active_minutes_vigorous_peak',
-    'active_zone_minutes_fat_burn', 'active_zone_minutes_cardio', 'active_zone_minutes_peak',
-    'workout_minutes',
-  ],
-  count: ['workout_count'],
-} as const satisfies Partial<Record<DailyAgg, readonly string[]>>
+// The daily rollups the export downloads: the page's summed activity figures, those the catalogue sums.
+const EXPORT_METRICS = [
+  'steps', 'distance', 'floors', 'total_calories', 'active_energy',
+  'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
+  'active_zone_minutes_fat_burn', 'active_zone_minutes_cardio', 'active_zone_minutes_peak',
+  'workout_minutes',
+].filter((metric) => METRICS[metric]?.aggs.includes('sum') ?? false)
 
-function under(agg: keyof typeof REQUESTS): string[] {
-  return REQUESTS[agg].filter((metric) => METRICS[metric]?.aggs.includes(agg) ?? false)
-}
+// Compare with last year reads steps alone: the hero's strip is the one line it overlays.
+const STEPS = 'steps'
+const LAST_YEAR_GROUPS: readonly MetricGroup[] = [{ agg: 'sum', metrics: [STEPS] }]
+const NO_DATES: string[] = Object.freeze([]) as never[]
+// The figures a day's panel lists under its steps, the brief's: active minutes and distance.
+const PANEL_METRICS: readonly string[] = ['active_minutes', 'distance']
+const WORKOUT_TIME = 'workout_minutes'
 
-const SUM_METRICS = under('sum')
-const COUNT_METRICS = under('count')
-
-const GROUPS: readonly MetricGroup[] = [
-  { agg: 'sum', metrics: SUM_METRICS, covers: REQUESTS.sum },
-  { agg: 'count', metrics: COUNT_METRICS, covers: REQUESTS.count },
-]
+/** The dashboard on a day: the Day tab's page, and a day point's. */
+const dayHref = (localDate: string) => withQuery('/', { day: localDate })
 
 /**
- * The cards that draw a labelled bar chart rather than a sparkline.
+ * The Activity overview (M10b): the period's steps against the usual for a period that long, what
+ * stood out, the four figures under it, then (on 3 months and Year) every day's steps as a
+ * heatmap, the active minutes by intensity, the zone minutes beside the heart-rate zones, the
+ * workouts beside their types, and the rest. One read (/activity/period) the server has already
+ * judged, rounded and trimmed; the page only words and draws it (PATTERNS.md's "Overview pages").
+ * /series is asked only for the comparison with last year, while it is on.
  *
- * A named list the page owns, not a rule derived from the catalogue. Every metric declared `sum`
- * would promote roughly thirteen cards at once and decide for pages nobody has looked at; this is
- * two cards, chosen and reviewable. Both are device-reported daily quantities that vary day to
- * day, and a bar reads as "this much, that day" where a line implies something continuous between
- * the points that a daily total is not.
+ * The Day tab is no period: it opens the dashboard on that day. The dashboard reads no source, so
+ * none is carried.
  *
- * Exported for its own test: a list a test keeps a copy of is a list that stops matching the page.
+ * The source is resolved against the sources this person has before anything is asked (the rule
+ * every page keeps): the server answers an unknown one with a 400, and a stale link should read as
+ * all sources, not as an error.
  */
-export const BAR_METRICS = new Set(['distance', 'floors'])
-
-/**
- * The smallest step each promoted card's own formatter can tell apart, handed straight to
- * DailyBars' `minInterval` prop. See that prop's own doc comment for why this lives with the
- * caller rather than being derived inside the chart from `METRICS[metric].precision`: floors'
- * shared formatter (formatMetricValue's catalogue default) has no fractional floor to print, so a
- * tick step finer than 1 draws several gridlines all labelled the same whole number -- measured on
- * this branch's own review as "0 | 0 | 0 | 1 | 1 | 1" at a small range. distance's kilometre
- * formatter (one decimal, converted from the stored millimetres) needs no floor, and the
- * catalogue's own stored-unit precision for distance (0, in millimetres) would give the wrong
- * answer if applied here, which is exactly why this is a value the page states rather than one the
- * chart looks up.
- */
-const BAR_MIN_INTERVAL: Partial<Record<string, number>> = { floors: 1 }
-
-const values = (points: SeriesPoint[]): number[] =>
-  points.map((p) => p.value).filter((v): v is number => v !== null)
-
-const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0)
-
-// Every calendar date from `from` to `to`, inclusive. /series drops a day entirely rather than
-// sending a null row for it, so the heatmap, which plots by array position, needs this to rebuild
-// the full calendar and place an absence dot where a source is silent rather than quietly shrink
-// its own grid to only the days that reported. Byte identical to Dashboard.tsx's own copy, which
-// this replaces there: the heatmap card moves here in this task and brings its denominator with it.
-function datesBetween(from: string, to: string): string[] {
-  const dates: string[] = []
-  const end = Date.parse(`${to}T00:00:00Z`)
-  for (let cursor = Date.parse(`${from}T00:00:00Z`); cursor <= end; cursor += 86_400_000) {
-    dates.push(new Date(cursor).toISOString().slice(0, 10))
-  }
-  return dates
-}
-
 export function Activity() {
   const { t, i18n } = useTranslation()
+  const language = i18n.language
   const session = useSession()
   const controls = usePageControls()
-  const period = `${controls.from} ${t('common.to')} ${controls.to}`
-
-  // Pinned to the all sources sentinel for the same reason as every sibling page: a per source
-  // rollup carries no sourceMix (only a merged row does), so reading the selector's own options off
-  // a request scoped to whatever the reader picked would go empty the moment a device filter became
-  // active and silently strand them on it.
-  const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'sum')
-  const sources = distinctSources([sourceEnumeration])
+  const { sources: named, nameOf } = useSourceNames()
+  const sources = useMemo(() => named.map((source) => source.id), [named])
   const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
-  const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
+  const range = { from: controls.from, to: controls.to, source }
+  const isDay = controls.tab === 'day'
 
-  // The day and metric a chart's own click named, or null when no panel is open. Same single slot
-  // Dashboard.tsx's own copy of this state uses, and the same reason: only one panel is ever open.
+  const dayTarget = isDay ? dayHref(controls.anchor) : null
+  useEffect(() => {
+    if (dayTarget !== null) navigate(dayTarget, { replace: true })
+  }, [dayTarget])
+
+  const query = useActivityPeriod({ range: controls.tab, anchor: controls.anchor, source })
+  const data = query.data
+
   const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
-  const overridesQuery = useAnnotations(range)
-  // Grouped once per render of the overrides list, not once per card: see chartAnnotations.ts's
-  // own comment on why Map.get keeps every chart's annotations/excluded arrays stable across a
-  // render that did not change the overrides list.
-  const overridesByMetricMap = useMemo(
-    () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
-    [overridesQuery.overrides.data],
-  )
-  // Notes and events, day level rather than metric scoped, reaching every card on this page alike:
-  // see useDayAnnotations' own comment for why both memos live there now, not copied per page.
-  const { dayAnnotations, dayAnnotationsByMetric } =
-    useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
 
-  const metricGroups = useMetricGroups(GROUPS, range)
-  const sumSeries = metricGroups.queryForAgg('sum')
+  const heroDates = useMemo(() => data?.hero.daily.map((point) => point.from) ?? NO_DATES, [data])
+  // Ended at historicalTo: a month six days old is set against the same six days a year earlier.
+  // Asked on Week and Month only: on 3 months and Year the strip is weekly and draws no overlay.
+  const overlaid = controls.tab === 'week' || controls.tab === 'month'
+  const lastYear = useLastYear(LAST_YEAR_GROUPS, { ...range, to: controls.historicalTo }, heroDates, controls.compareYear === true && overlaid)
 
-  // The one insight card the brief's own table gives this page: steps at the sum agg the heatmap
-  // above already requests (REQUESTS.sum). /insights is its own, unbatched request, unlike
-  // /series, so this is one call added on top of the two agg groups above, not multiplied against
-  // any card on the page. `to` is historicalTo, not controls.to: see Dashboard.tsx's own
-  // insightRange comment for why a period whose calendar end has not happened yet must not be
-  // counted into periodDays.
-  const stepsInsight = useInsight('steps', 'sum', { from: controls.from, to: controls.historicalTo }, source)
+  // The list's expansion belongs to the period it was opened in: a new period opens collapsed.
+  const periodKey = `${controls.tab}:${controls.from}:${source}`
+  const [expandedFor, setExpandedFor] = useState<string | null>(null)
+  const expanded = expandedFor === periodKey
+  const toggle = useCallback(() => setExpandedFor((open) => (open === periodKey ? null : periodKey)), [periodKey])
 
+  const labelOf = useActivityLabel()
+  const nameOfMetric = useActivityName()
   const personId = session.data?.personId
-  const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
+  const exportPath = personId !== undefined ? exportPathFor(personId, EXPORT_METRICS, 'sum', range) : undefined
+  const sourceName = source === ALL_SOURCES ? t('controlRow.sourceAll') : nameOf(source)
+  const openDay = useCallback((localDate: string) => navigate(dayHref(localDate)), [])
 
-  // Every calendar day in the range, the axis the sparklines and bar charts below are built along
-  // as well as the denominator every basis line counts against. Declared ahead of them rather than
-  // after, which is where it used to sit, because they are built against it now.
-  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
-  // The same groups over the same days a year earlier, asked for only while the comparison is on.
-  // Ended at historicalTo, not the period's end: a month six days old is set against the same six
-  // days a year earlier, never against the whole of last year's month.
-  const lastYear = useLastYear(GROUPS, { ...range, to: controls.historicalTo }, rangeDates, controls.compareYear === true)
+  const header = (
+    <>
+      <PageHeader title={t('activity.title')} line={periodLine(controls.from, controls.to, sourceName, language)} />
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} yearCompare />
+    </>
+  )
+  // A detail page's root (PATTERNS.md's page shell), for its card-label gap and width, in every state.
+  const alone = (body: ReactNode) => <div className="detail-page">{header}<div className="grid"><Card span={12}>{body}</Card></div></div>
 
-  // Stable array identities for the reason every sibling page's own copy of this memo states:
-  // useChart keys its rebuild on `build`, itself a useCallback over `values`, so a freshly
-  // constructed array on every render disposes and reinitialises the chart.
-  const sparklines = useMemo(() => {
-    const out = new Map<string, { values: (number | null)[], labels: string[] }>()
-    for (const metric of [...SUM_METRICS, ...COUNT_METRICS]) {
-      const points = metricGroups.pointsOf(metric)
-      // denseSeries, not points.map: /series omits a day nothing reported, and an applied
-      // exclusion is exactly such a day (deriveDay deletes the excluded metric's daily row).
-      // Handed the points array directly, a sparkline had no position for that day at all, so its
-      // excluded mark, the reason beside it and its accessible table row all vanished the moment
-      // the exclusion took effect. Dense over the range the reader asked for, the same shape the
-      // heart rate range chart and the heatmap have always been handed, the gap is a position
-      // that can be marked.
-      out.set(metric, denseSeries(rangeDates, points))
-    }
-    return out
-    // sumSeries and the count query are what pointsOf actually reads for these metrics; metricGroups
-    // itself is rebuilt every render and is not worth tracking.
-  }, [rangeDates, sumSeries.data, metricGroups.queryForAgg('count').data])
-
-  // Literal t() calls, one per band, rather than a template built from `key`: catalogue-usage.test.ts's
-  // own isReferenced can only tell a dynamic lookup from an orphan key when the fixed part of the
-  // template sits immediately before the interpolated segment (ControlRow's own
-  // `controlRow.ranges.${key}` is its one example), and "band" plus a capitalised `key` does not
-  // fit that shape. Four literal keys are also just as many keys as the four bands, so nothing is
-  // lost by naming them instead of computing them.
-  const bandName = (key: string): string => {
-    switch (key) {
-      case 'light': return t('activity.activityBands.bandLight')
-      case 'moderate': return t('activity.activityBands.bandModerate')
-      case 'vigorous': return t('activity.activityBands.bandVigorous')
-      default: return t('activity.activityBands.bandPeak')
-    }
+  if (isDay) return <div className="detail-page">{header}</div>
+  if (query.isError) return alone(<ErrorState onRetry={() => void query.refetch()} error={query.error} />)
+  if (data === undefined) return alone(<Loading />)
+  if (data.hero.days === 0 && data.workouts.length === 0) {
+    return alone(<EmptyState title={t('activity.sessions.emptyPeriodTitle')} detail={t('activity.sessions.emptyPeriodDetail')} />)
   }
 
-  // Stable array identity, for the reason the sparklines memo just above states: useChart keys its
-  // rebuild on `build`, so a freshly constructed array every render disposes and reinitialises the
-  // chart. Keyed on sparklines, which is itself memoised.
-  const bands = useMemo(() => bandSeries(sparklines, bandName), [sparklines, t])
+  const { hero } = data
+  const weekly = hero.weekly !== null
+  const period = thisPeriod(data.period.range, t)
 
-  // The same reported/total shape every basis line on this page states, hand built because this
-  // card is a bare Card rather than a MetricCard: reported counts the days active_minutes_light
-  // itself answered, the same metric StackedDailyBars' own `metric` prop formats by, and total is
-  // every calendar day in range, the same denominator every other basis line here uses.
-  const bandsBasis = t('activity.activityBands.basis', {
-    reported: metricGroups.pointsOf('active_minutes_light').length,
-    total: rangeDates.length,
+  // A point's row: its figure's value and that point's own verdict, in its tone (the server's).
+  const rowOf = (figure: PeriodFigure, point: PeriodStripPoint): PointPanelRow => ({
+    label: nameOfMetric(figure.metric), value: formatFigureValue(figure, point.value, language, t),
+    verdict: pointVerdictWords(point.standing, figure.unit, t), tone: verdictTone(point.judged, point.standing),
   })
 
-  // Daily steps heatmap, moved here from Dashboard.tsx rather than copied: same dense-by-date
-  // treatment (a day nothing reported still gets a calendar cell, drawn as an absence dot, instead
-  // of silently compressing the grid), same dense denominator (every calendar day in range, not
-  // just the days that reported), and the same reason it stays outside MetricCard confirmed twice
-  // over Task 5's own review: it draws its own absence dot per day instead of a full-card empty
-  // state, which MetricCard's emptyStateFor gate would add on top of a chart that has always drawn.
-  const stepsPoints = metricGroups.pointsOf('steps')
-  const heatmapDays = useMemo(() => {
-    const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
-    return rangeDates.map((date) => {
-      const point = stepsByDate.get(date)
-      return {
-        date, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null,
-        steps: point?.value ?? null,
-        worn: point !== undefined && (wornOn('steps', point) ?? true),
-      }
-    })
-  }, [rangeDates, stepsPoints])
-  const maxSteps = Math.max(0, ...values(stepsPoints))
-  // Nothing is stated while the request is in flight: heatmapDays is dense from the moment the page
-  // mounts, so counting it before anything has settled would read "0 of 31 days", a specific false
-  // claim rather than a vacuous one.
-  const stepsQuery = metricGroups.queryFor('steps')
-  const stepsOverrides = annotationsFor(overridesByMetricMap, 'steps')
-  const stepsAnnotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'steps')
-
-  // The same split MetricCard makes for every other card on this page, made by hand because this
-  // card draws an absence dot per day rather than a full-card empty state and so stays outside it.
-  // Getting it wrong here is what the old wording did: it counted only wornOn === true against
-  // every calendar day in range and called the difference "not worn", while the chart's own
-  // accessible table read "no reading" for those same days on the stated grounds that absence names
-  // no cause (ActivityHeatmap.tsx). Reported against total is the claim the data supports; the wear
-  // count is a separate clause over the days that actually answered the question.
-  const stepsBasis = (): string | undefined => {
-    if (stepsQuery.isError || stepsQuery.isPending) return undefined
-    // A settled but empty period is neither pending nor errored, so without this it rendered
-    // "0 of 31 days, 0 to 0 steps": a count of nothing, plus a colour domain claimed from no
-    // readings at all.
-    if (stepsPoints.length === 0) return t('activity.dailySteps.basisNoData', { total: rangeDates.length })
-    const answers = stepsPoints.map((point) => wornOn('steps', point))
-    const stated = {
-      reported: stepsPoints.length, total: rangeDates.length,
-      maxSteps: formatMetricValue(maxSteps, 'steps', i18n.language, ''),
+  // A day's panel: its steps, active minutes and distance from the figures' own daily points, each
+  // with that day's verdict, the way to the day on the dashboard, and the day-metric exclude and
+  // annotate on steps, which closes the panel as the AnnotatePanel opens. A week's: that week's
+  // steps alone, and nowhere to go (the other figures carry only their weeks on these ranges).
+  const panel = (point: PeriodStripPoint, close: () => void) => {
+    const steps = rowOf(hero, point)
+    if (weekly) {
+      return <PointPanel title={formatLocalDateRange(point.from, point.to, language)} rows={[steps]} open={null} onAnnotate={null} onClose={close} />
     }
-    return coverageIsWearSignal('steps')
-      ? t('activity.dailySteps.basisWorn', { ...stated, count: answers.filter((w) => w === false).length })
-      : t('activity.dailySteps.basis', stated)
-  }
-
-  // Every tile on this page shares one shape, sparkline or bar chart alike: a metric, a sum over
-  // the period, and a basis line stating how many of the range's calendar days answered.
-  // Parameterised on
-  // basisWornKey rather than always deriving it from basisKey, the same choice Recovery.tsx's own
-  // card() makes, because MetricCard picks between the two by the metric's own coverage signal
-  // (coverageIsWearSignal) and not every metric here carries one: steps, distance and
-  // active_energy are continuously sampled (packages/core/src/api/catalogue.ts tier 'intraday')
-  // and do, while floors and total_calories are daily-tier provider rollups and do not, and the
-  // six sub-dimension metrics and the two workout metrics reach false the same way (see
-  // coverageSignal.ts's own comment). A metric with no wear signal never reaches basisWornKey, so passing it the same
-  // string as basisKey (rather than inventing an unreachable second template) is what
-  // Dashboard.tsx's sleep schedule card already does for the same reason.
-  const card = (
-    metric: string, span: number, labelKey: string, basisKey: string, basisWornKey: string,
-    chartLabelKey: string, unitKey: string, shortUnitKey: string | undefined, polarity: Polarity,
-    // Defaults to the catalogue's own precision for `metric`, read through formatMetricValue, so
-    // an ordinary TOTAL card (steps, floors, workouts, ...) needs no format argument of its own
-    // and cannot drift from METRICS[metric].precision the way this page's old per-card groupNumber
-    // calls could. Only distance overrides this: it converts millimeters to kilometers before
-    // display, and formatMetricValue must never see a value already converted out of the
-    // catalogue's stored unit (format.ts's own comment on formatNumber says why), so that one call
-    // site hands in its own formatter instead of taking the default.
-    format: (total: number) => string = (total) => formatMetricValue(total, metric, i18n.language, ''),
-    // The chart's own accessible table cell -- Sparkline's `formatValue` prop for every card but
-    // distance and floors, DailyBars' prop of the same name for those two -- separately from
-    // `format` above: `format` runs once on the period's own total, `sparkFormat` runs once per day
-    // on `spark.values`, which stay in the metric's stored unit regardless of what `format`
-    // displays (Sparkline's own `metric` prop comment explains why neither chart itself converts).
-    // Undefined for every card but distance, which otherwise repeats the exact defect an M3e review
-    // caught: a table cell reading raw millimeters beside a "Distance in kilometers" column header,
-    // while the headline above it already converted. Both charts fall back to
-    // formatMetricValue(v, metric, ...) when this is omitted, the same default `format` above takes.
-    sparkFormat?: (value: number | null, absent: string) => string,
-  ) => {
-    const points = metricGroups.pointsOf(metric)
-    const total = sum(values(points))
-    const spark = sparklines.get(metric)!
-    const { excluded } = annotationsFor(overridesByMetricMap, metric)
-    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
+    const rows = [steps, ...PANEL_METRICS.flatMap((metric) => {
+      const figure = data.figures.find((f) => f.metric === metric)
+      const own = figure?.daily.find((p) => p.from === point.from)
+      return figure === undefined || own === undefined || own.value === null ? [] : [rowOf(figure, own)]
+    })]
     return (
-      <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
-        oneDayRange={controls.tab === 'day'}
-        basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
-        {(basis, oneDayRange) => (
-          <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
-            basis={basis} delta={deltaFor(t, metric, values(points), polarity)}
-            lastYear={lastYear.summarise(metric, (earlier) => format(sum(values(earlier))))}>
-            {oneDayRange ? <ChartNote /> : BAR_METRICS.has(metric) ? (
-              <DailyBars values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
-                label={t(chartLabelKey, { period })} unit={t(unitKey)}
-                // The short unit names the value axis ("km", "floors"), falling back to the long
-                // column header rather than to an empty string: every metric in BAR_METRICS has a
-                // short unit today, and a future promotion without one should draw a clumsy axis
-                // name a reader can see rather than an unnamed axis nobody notices.
-                axisUnit={t(shortUnitKey ?? unitKey)} minInterval={BAR_MIN_INTERVAL[metric]}
-                annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
-            ) : (
-              <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
-                lastYear={lastYear.alignedOf(metric)}
-                label={t(chartLabelKey, { period })} unit={t(unitKey)}
-                annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
-            )}
-          </StatTile>
-        )}
-      </MetricCard>
+      <PointPanel title={formatLongWeekdayDate(point.from, language)} rows={rows}
+        open={{ to: dayHref(point.from), text: t('activity.period.openDay') }}
+        onAnnotate={() => { close(); setAnnotateTarget({ scope: 'day_metric', localDate: point.from, metric: STEPS }) }}
+        onClose={close} />
     )
   }
 
+  const standout = standoutLines({
+    figure: hero, high: data.high, previous: data.previous, yearEarlier: controls.compareYear === true ? data.yearEarlier : null,
+    highWord: 'busiest', language, t, perDay: true,
+  })
+
+  // Two half cards share a row; either alone takes the whole of it, and the list expanded takes a row
+  // of its own, its partner widening with it, so no hole opens (PATTERNS.md's "Overview pages").
+  const zonesShown = hasZoneMinutes(data.zoneMinutes)
+  const heartShown = heartZoneRows(data.heartRateZones, () => '').length > 0
+  const zoneSpan = zonesShown && heartShown ? 6 : 12
+  const listShown = data.workouts.length > 0
+  const typesShown = hasTypes(data.types, data.cardioLoad, data.vo2max)
+  const listOpen = expanded && data.workouts.length > LIST_VISIBLE
+  const workoutSpan = listShown && typesShown && !listOpen ? 6 : 12
+  const figuresShown = data.figures.some((figure) => figure.value !== null)
+
   return (
-    <>
-      <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote yearCompare />
-      <CardGrid>
-        <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
-          {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} error={stepsQuery.error} />
-            : stepsQuery.isPending ? <Loading /> : (
-            <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })}
-              annotations={stepsAnnotations} excluded={stepsOverrides.excluded}
-              onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'steps' })} />
-          )}
-        </Card>
-
-        <Card span={12} label={t('activity.activityBands.label')} basis={bandsBasis}>
-          <StackedDailyBars series={bands} labels={rangeDates} metric="active_minutes_light"
-            label={t('activity.activityBands.chartLabel', { period })}
-            unit={t('activity.units.minutes')} axisUnit={t('activity.units.min')} />
-        </Card>
-
-        {/* The two charts above, then the sessions, then the tiles. Reusing this same ControlRow
-            rather than a rail item of its own (nine unlabelled icons already proved to be too many
-            three days before this task started): the range and the source picker both apply to
-            this section without being rebuilt, since SessionList queries from the same `resolved`
-            the cards do. The export does not: exportPathFor builds a daily rollup download over
-            SUM_METRICS and knows nothing about sessions, so the link beside these controls will
-            not carry the rows below them.
-
-            It sat at the foot of the page until this change, behind fourteen aggregate tiles. The
-            workouts are what a reader came for, and three screens of active-zone-minute averages
-            in front of them is the wrong order to read this page in. */}
-        <Card span={12} label={t('activity.sessions.label')}>
-          <SessionList controls={resolved} />
-        </Card>
-
-        {card('distance', 6, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
-          'activity.distance.chartLabel', 'activity.units.distance', 'activity.units.km', 'higher-is-better',
-          // distance is stored in millimeters (METRICS.distance, precision 0); this card displays
-          // the period's total as kilometers with one decimal, a precision the catalogue's own
-          // field describes a different unit than, so it cannot answer this card's question (the
-          // audit's own finding #9). Converted here and handed to formatNumber directly with its
-          // own precision, never to formatMetricValue, which would apply millimeters' precision 0
-          // to a kilometers value and print "5" instead of "5.2" (see formatNumber's own comment
-          // in format.ts for why formatMetricValue has no parameter that could do this by accident).
-          (total) => formatNumber(total / 1_000_000, 1, i18n.language, ''),
-          // The Sparkline's own accessible table cell, same conversion applied per day rather than
-          // to the period total: without this, the table sat behind formatMetricValue's default
-          // (metric 'distance', catalogue precision 0, millimeters) and printed the raw per-day
-          // millimeter reading ("5,234,567") under a column header reading "Distance in
-          // kilometers" -- correct for precision, wrong for unit, and exactly what an M3e review
-          // caught. `v === null` first: a day with no reading stays a day with no reading, not
-          // `null / 1_000_000` becoming 0 and reading as a real zero-kilometer day.
-          (v, absent) => formatNumber(v === null ? null : v / 1_000_000, 1, i18n.language, absent))}
-        {card('floors', 6, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
-          'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort', 'higher-is-better')}
-        {card('total_calories', 4, 'activity.totalCalories.label', 'activity.totalCalories.basis', 'activity.totalCalories.basis',
-          'activity.totalCalories.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}
-        {card('active_energy', 4, 'activity.activeEnergy.label', 'activity.activeEnergy.basis', 'activity.activeEnergy.basisWorn',
-          'activity.activeEnergy.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}
-
-        {/* Third in the row with total calories and active energy, which is where it belongs on
-            both counts. All three are what the effort cost, where the four tiles under them count
-            how the time was spent - and it closes that row exactly, leaving the three activity
-            levels a row of their own and the zone minutes card a row of its own. It sat last on
-            the page until this change, alone in a row at a third of the width.
-
-            `controls.to` rather than the whole range: this card is 7 days against 28 by the
-            metric's own definition, so the range picker moves only which day it is asked about,
-            never the width of either window. See useTrainingLoad for why that has to stay true. */}
-        <TrainingLoadCard on={controls.to} source={source} span={4} />
-
-        {card('active_minutes_light', 4, 'activity.activeMinutesLight.label', 'activity.activeMinutesLight.basis', 'activity.activeMinutesLight.basis',
-          'activity.activeMinutesLight.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
-        {card('active_minutes_moderate', 4, 'activity.activeMinutesModerate.label', 'activity.activeMinutesModerate.basis', 'activity.activeMinutesModerate.basis',
-          'activity.activeMinutesModerate.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
-        {card('active_minutes_vigorous', 4, 'activity.activeMinutesVigorous.label', 'activity.activeMinutesVigorous.basis', 'activity.activeMinutesVigorous.basis',
-          'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
-
-        {/* One card for the three, where there used to be three cards.
-            They are labelled AZM rather than minutes, unlike the activity levels above, because
-            the number is a score: a cardio or peak minute is worth two. Measured in
-            probe/findings/activity-minute-overlap.md; see the note in metrics.ts.
-
-            The three are sub-dimensions of one quantity, and three separate cards said so nowhere
-            - each repeated "Active Zone Minutes" in its own label and its own basis line, and the
-            grid scattered them across two rows with unrelated tiles between. One card names the
-            quantity once, states the doubling once, and puts the three figures side by side where
-            they can be compared, which is the only way anybody reads them.
-
-            What this gives up, stated rather than glossed: each had a sparkline, so the daily
-            shape of peak minutes and the tap target that annotates a day are both gone for these
-            three. That is the trade for the density, and it is reversible - the metrics, their
-            series and their chart labels all still exist.
-
-            Gated by hand rather than through MetricCard, the same as the two chart cards above and
-            for the same reason: MetricCard gates one metric and its points, and this card holds
-            three. All three ride the one `sum` request, so one query answers for the card. */}
-        {(() => {
-          const azmQuery = metricGroups.queryFor('active_zone_minutes_fat_burn')
-          const zones = [
-            { metric: 'active_zone_minutes_fat_burn', nameKey: 'activity.activeZoneMinutes.fatBurn' },
-            { metric: 'active_zone_minutes_cardio', nameKey: 'activity.activeZoneMinutes.cardio' },
-            { metric: 'active_zone_minutes_peak', nameKey: 'activity.activeZoneMinutes.peak' },
-          ].map(({ metric, nameKey }) => {
-            const points = values(metricGroups.pointsOf(metric))
-            return { metric, nameKey, points, delta: deltaFor(t, metric, points, 'higher-is-better') }
-          })
-
-          // The card's own coverage, and nothing about the deltas: each badge carries its own
-          // "change is the mean of..." sentence as its tooltip and its spoken text (StatTile), so
-          // three tiles no longer need their shared sentence handed up to the card to avoid saying
-          // it three times in print.
-          const azmBasis = t('activity.activeZoneMinutes.basis', { total: rangeDates.length })
-
-          return (
-            <Card span={12} label={t('activity.activeZoneMinutes.label')} basis={azmBasis}>
-              {azmQuery.isError ? <ErrorState onRetry={() => void azmQuery.refetch()} error={azmQuery.error} />
-                : azmQuery.isPending ? <Loading /> : (
-                <div className="zone-tiles">
-                  {/* The wrapper is load bearing, exactly as WorkoutDynamics.tsx's own comment
-                      says: StatTile is a fragment - a header, a value and a basis as three
-                      siblings, with the box left to its caller - so three tiles dropped bare into
-                      a grid are nine grid items, and the browser lays label, value and label out
-                      across one row. Measured here before the wrapper went back in: the three
-                      figures came out as two rows of mismatched halves. */}
-                  {zones.map(({ metric, nameKey, points, delta }) => (
-                    <div key={metric} className="workout-dynamic-tile">
-                      <StatTile label={t(nameKey)}
-                        value={formatMetricValue(sum(points), metric, i18n.language, '')}
-                        unit={t('activity.units.activeZoneMinutesShort')}
-                        delta={delta} />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-          )
-        })()}
-
-        {card('workout_count', 4, 'activity.workoutCount.label', 'activity.workoutCount.basis', 'activity.workoutCount.basis',
-          'activity.workoutCount.chartLabel', 'activity.units.workouts', 'activity.units.workoutsShort', 'neutral')}
-        {card('workout_minutes', 4, 'activity.workoutMinutes.label', 'activity.workoutMinutes.basis', 'activity.workoutMinutes.basis',
-          'activity.workoutMinutes.chartLabel', 'activity.units.minutes', 'activity.units.min', 'neutral')}
-
-        {/* label is its own catalogue string, not activity.dailySteps.label reused: a second card
-            sharing "Daily steps" would make a label lookup by exact text ambiguous, the same
-            collision Dashboard.tsx's own comment on INSIGHTS explains at more length. No
-            formatValue: this page prints no steps total anywhere, on a tile or otherwise (the
-            daily steps card is a heatmap in a hand rolled Card, not a StatTile with its own `unit`
-            prop), so there is no sibling display carrying a unit for this card to match, unlike
-            the other four detail pages' insight cards. The one steps figure this page does format,
-            the heatmap basis line's own maxSteps (stepsBasis above), already calls
-            formatMetricValue(v, 'steps', i18n.language, '') with no unit appended either, the
-            exact call InsightCard's own default makes without a formatValue override. */}
-        <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
-          label={t('activity.insights.steps')} polarity="higher-is-better" />
-
-      </CardGrid>
+    <div className="detail-page">
+      {header}
+      <div className="grid">
+        <PeriodHero label={t('activity.period.hero')} figure={hero} noun="day" standout={standout}
+          caption={weekly ? t('activity.period.caption.weekly', { count: hero.weekly!.length }) : t('activity.period.caption.daily', { period })}
+          hint={t(weekly ? 'activity.period.hint.weekly' : 'activity.period.hint.daily')}
+          lastYear={lastYear.alignedOf(STEPS)} panel={panel} />
+        {figuresShown && (
+          <Card span={12}>
+            <div className="detail-minis">
+              <PeriodFigureRows figures={data.figures} labelOf={labelOf} noun="day" />
+            </div>
+            <p className="dash-caption">{weekly ? t('activity.period.lines.weekly') : t('activity.period.lines.daily', { period })}</p>
+          </Card>
+        )}
+        <ActivityHeatmapCard steps={hero} range={data.period.range} onOpenDay={openDay} />
+        {hasIntensity(data.intensity) && <ActivityIntensity intensity={data.intensity} range={data.period.range} />}
+        {zonesShown && (
+          <ActivityZoneMinutes zones={data.zoneMinutes} total={data.more.find((figure) => figure.metric === ZONE_MINUTES_METRIC) ?? null}
+            range={data.period.range} span={zoneSpan} />
+        )}
+        {heartShown && <ActivityHeartZones zones={data.heartRateZones} range={data.period.range} span={zoneSpan} />}
+        {listShown && (
+          <ActivityWorkouts key={periodKey} workouts={data.workouts} types={data.types} workoutCount={data.workoutCount}
+            workoutTime={data.more.find((figure) => figure.metric === WORKOUT_TIME) ?? null}
+            range={data.period.range} span={workoutSpan} expanded={expanded} onToggle={toggle} />
+        )}
+        {typesShown && <ActivityTypes types={data.types} cardioLoad={data.cardioLoad} vo2max={data.vo2max} range={data.period.range} span={workoutSpan} />}
+        <ActivityMore figures={data.more} workoutCount={data.workoutCount} />
+      </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
-    </>
+    </div>
   )
 }

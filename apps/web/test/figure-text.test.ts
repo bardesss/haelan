@@ -196,7 +196,7 @@ describe('verdictLine', () => {
 
 describe('short spans', () => {
   // A few minutes read as minutes, not as a duration with an empty hour in front of it.
-  for (const metric of ['active_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability']) {
+  for (const metric of ['active_minutes', 'active_zone_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability']) {
     it(`formats ${metric} as plain minutes`, () => {
       expect(formatFigureValue(figure({ metric, unit: 'minutes' }), 12, 'en', t)).toBe('12\u00a0min')
       expect(formatFigureValue(figure({ metric, unit: 'minutes' }), 69, 'nl', tNl)).toBe('69\u00a0min')
@@ -205,6 +205,21 @@ describe('short spans', () => {
 
   it('keeps a long span a duration', () => {
     expect(formatFigureValue(figure({ metric: 'sleep_awake_minutes', unit: 'minutes' }), 25, 'en', t)).toBe('0h\u00a025m')
+  })
+})
+
+describe('a stored millimetre distance', () => {
+  // The period reads' distance and climb (METRICS stores both in millimetres).
+  it('reads a distance in kilometres, one decimal below a hundred and whole above', () => {
+    const distance = figure({ metric: 'distance', unit: 'millimeters' })
+    expect(formatFigureValue(distance, 6_140_000, 'en', t)).toBe('6.1 km')
+    expect(formatFigureValue(distance, 41_800_000, 'nl', tNl)).toBe('41,8 km')
+    expect(formatFigureValue(distance, 183_400_000, 'en', t)).toBe('183 km')
+    expect(formatFigureValue(distance, 2_084_000_000, 'nl', tNl)).toBe('2.084 km')
+  })
+
+  it('reads a climb in whole metres', () => {
+    expect(formatFigureValue(figure({ metric: 'altitude_gain', unit: 'millimeters' }), 420_400, 'en', t)).toBe('420 m')
   })
 })
 

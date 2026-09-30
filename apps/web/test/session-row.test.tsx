@@ -199,6 +199,11 @@ describe('SessionRowView', () => {
     expect(view({ distanceMeters: 5000 })).toContain('<div class="session-row-detail">5,0 km</div>')
   })
 
+  it('heads the second line with its date when dated, and alone when it has nothing else', () => {
+    expect(view({ distanceMeters: 5000, dated: true })).toContain('<div class="session-row-detail">do 3 sep · 5,0 km</div>')
+    expect(view({ dated: true })).toContain('<div class="session-row-detail">do 3 sep</div>')
+  })
+
   it('renders a row without a duration, with no duration span and no zero', () => {
     const html = view({ durationSeconds: null })
     expect(html).toContain('session-row-type')

@@ -1,5 +1,5 @@
 import { useTranslation } from '../../i18n/index.js'
-import { formatNumber, formatSessionDateHeading } from '../../format.js'
+import { formatNumber, formatSessionDateHeading, formatWeekdayDate } from '../../format.js'
 import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
@@ -70,6 +70,9 @@ export interface SessionRowViewProps {
   localDate: string
   paceSecondsPerKm?: number | null
   elevationGainMeters?: number | null
+  /** The date at the head of the second line ("Wed, Sep 30 · 8.7 km"), for a list with no date
+   *  headings of its own (the Activity overview's workouts, the approved mockup's). */
+  dated?: boolean
 }
 
 /** The row, from flat props, for callers that hold a summary and not a merged session. */
@@ -108,6 +111,7 @@ export function SessionRowView(props: SessionRowViewProps) {
   // heart rate already on the first line, so leaving both off keeps this line reserved for what a
   // reader actually came to a workout row to see (fix round 1 review).
   const detail = [
+    props.dated === true ? formatWeekdayDate(localDate, language) : null,
     distanceMeters === null ? null
       : `${formatNumber(distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
     paceSecondsPerKm === null ? null

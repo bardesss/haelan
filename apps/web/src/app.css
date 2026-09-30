@@ -822,6 +822,28 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-legend-key[data-schedule="weekend"] { background: var(--chart-stage-rem); }
 .detail-legend-key[data-schedule="out"] { background: var(--negative); border-radius: 50%; }
 .detail-legend-key[data-schedule="usual"] { background: var(--chart-band-baseline); }
+/* The Activity page's legends (activity/period): the intensity bands in the activity steps, and the
+   zone minutes in the heart-rate zones that earn them (fat burn moderate, cardio vigorous, peak). */
+.detail-legend-key[data-activity="light"] { background: var(--chart-activity-light); }
+.detail-legend-key[data-activity="moderate"] { background: var(--chart-activity-moderate); }
+.detail-legend-key[data-activity="vigorous"] { background: var(--chart-activity-vigorous); }
+.detail-legend-key[data-azm="fatBurn"] { background: var(--chart-zone-moderate); }
+.detail-legend-key[data-azm="cardio"] { background: var(--chart-zone-vigorous); }
+.detail-legend-key[data-azm="peak"] { background: var(--chart-zone-peak); }
+/* A half card's own figure in display type over its chart (the zone minutes, the heart-rate zones). */
+.activity-card-lead { margin-bottom: var(--space-3); }
+.activity-card-lead .detail-verdict { margin-top: var(--space-1); }
+/* The workouts' type chips, over the expanded list. */
+.activity-workout-filter { margin-bottom: var(--space-2); }
+/* "Per soort": a row per type, its icon, name and amount on one line, its verdict under the name. */
+.activity-types { list-style: none; margin: var(--space-1) 0 var(--space-3); padding: 0; }
+.activity-type { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
+.activity-type:last-child { border-bottom: 0; }
+.activity-type-name { font-weight: var(--weight-bold); min-width: 0; }
+.activity-type-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.activity-type-verdict { grid-column: 2 / 4; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.activity-type-verdict.better { color: var(--positive); }
+.activity-type-verdict.worse, .activity-type-verdict.is-out { color: var(--negative); }
 /* The schedule's two sentences, the card's first lines, the chart under them. */
 .schedule-sentences { margin-bottom: var(--space-2); }
 .schedule-sentences > p { margin: 0; }

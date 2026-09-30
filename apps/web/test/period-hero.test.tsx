@@ -95,7 +95,7 @@ describe('PeriodHero', () => {
     const distance = { ...SLEEP_PERIOD_MONTH.hero, metric: 'distance', unit: 'meters', value: 5200, total: 156000 }
     mount(hero(distance, { standout: [] }))
     expect(container.querySelector('.detail-hero-value')?.textContent).toBe(`156.00${NB}km`)
-    expect(lines()[0]).toBe(`5.20${NB}km per day`)
+    expect(lines()[0]).toBe(`5.20${NB}km per day on average`)
   })
 
   it('draws the strip of its days, each over its own usual, labelling the latest day\'s', () => {

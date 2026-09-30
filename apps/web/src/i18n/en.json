@@ -312,17 +312,12 @@
   "activity": {
     "title": "Activity",
     "units": {
-      "distance": "Distance in kilometers",
       "km": "km",
-      "floors": "Floors climbed",
       "floorsShort": "floors",
-      "kcal": "Kilocalories",
       "kcalShort": "kcal",
       "minutes": "Minutes",
       "min": "min",
       "activeZoneMinutesShort": "AZM",
-      "workouts": "Workouts",
-      "workoutsShort": "workouts",
       "bpm": "bpm",
       "paceSuffix": "/km",
       "elevationGainShort": "m gained",
@@ -333,81 +328,26 @@
       "kmh": "km/h",
       "perMin": "/min"
     },
-    "insights": {
-      "steps": "Steps, this period against the last"
-    },
-    "dailySteps": {
-      "label": "Daily steps",
-      "basis": "calendar heatmap, {{reported}} of {{total}} days, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
-      "basisWorn_one": "calendar heatmap, {{reported}} of {{total}} days, {{count}} day not worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
-      "basisWorn_other": "calendar heatmap, {{reported}} of {{total}} days, {{count}} days not worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
-      "basisNoData": "calendar heatmap, no readings in these {{total}} days, every day carries an absence dot",
-      "chartLabel": "Steps per day through {{period}}"
-    },
     "distance": {
-      "label": "Distance",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "basisWorn_one": "sum, {{reported}} of {{total}} days, {{count}} day not worn",
-      "basisWorn_other": "sum, {{reported}} of {{total}} days, {{count}} days not worn",
-      "chartLabel": "Daily distance through {{period}}"
-    },
-    "floors": {
-      "label": "Floors climbed",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily floors climbed through {{period}}"
+      "label": "Distance"
     },
     "totalCalories": {
-      "label": "Total calories",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily total calories through {{period}}"
+      "label": "Total calories"
     },
     "activeEnergy": {
-      "label": "Active energy",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "basisWorn_one": "sum, {{reported}} of {{total}} days, {{count}} day not worn",
-      "basisWorn_other": "sum, {{reported}} of {{total}} days, {{count}} days not worn",
-      "chartLabel": "Daily active energy through {{period}}"
-    },
-    "activeMinutesLight": {
-      "label": "Light activity",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily light activity minutes through {{period}}"
-    },
-    "activeMinutesModerate": {
-      "label": "Moderate activity",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily moderate activity minutes through {{period}}"
-    },
-    "activeMinutesVigorous": {
-      "label": "Vigorous activity",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily vigorous activity minutes through {{period}}"
+      "label": "Active energy"
     },
     "activityBands": {
       "label": "Active minutes by intensity",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily active minutes by intensity through {{period}}",
       "bandLight": "Light",
       "bandModerate": "Moderate",
-      "bandVigorous": "Vigorous",
-      "bandPeak": "Peak"
+      "bandVigorous": "Vigorous"
     },
     "activeZoneMinutes": {
       "label": "Active Zone Minutes",
-      "basis": "sum over {{total}} days; a cardio or peak minute counts twice",
       "fatBurn": "Fat burn",
       "cardio": "Cardio",
       "peak": "Peak"
-    },
-    "workoutCount": {
-      "label": "Workouts",
-      "basis": "count, one per workout however many devices recorded it, {{reported}} of {{total}} days",
-      "chartLabel": "Daily workout count through {{period}}"
-    },
-    "workoutMinutes": {
-      "label": "Workout minutes",
-      "basis": "sum, one per workout however many devices recorded it, {{reported}} of {{total}} days",
-      "chartLabel": "Daily workout minutes through {{period}}"
     },
     "exerciseTypes": {
       "CARDIO_WORKOUT": "Cardio workout",
@@ -426,7 +366,6 @@
       "unknown": "Unknown"
     },
     "sessions": {
-      "label": "Sessions",
       "count_one": "{{count}} recorded session in this period",
       "count_other": "{{count}} recorded sessions in this period",
       "countFiltered": "{{shown}} of {{total}} recorded sessions in this period",
@@ -617,6 +556,73 @@
       "ratio": "{{ratio}}x your usual",
       "noUsual": "No usual load to compare against yet.",
       "target": "Usual week: {{target}}"
+    },
+    "period": {
+      "hero": "Steps, average per day",
+      "caption": {
+        "daily": "every day {{period}}",
+        "weekly_one": "each point is a week, the average of its days · {{count}} week",
+        "weekly_other": "each point is a week, the average of its days · {{count}} weeks"
+      },
+      "hint": {
+        "daily": "tap a day for the figures",
+        "weekly": "tap a week for the figures"
+      },
+      "openDay": "View day",
+      "perDay": "{{label}}, per day",
+      "perWeek": "{{label}}, per week",
+      "workoutTime": "Workout time",
+      "sedentary": "Sedentary",
+      "lines": {
+        "daily": "each line: every day {{period}}, active minutes too · distance and floors add up the period · band = your usual range",
+        "weekly": "each line: every week, the average of its days · distance and floors add up the period · band = your usual range"
+      },
+      "intensity": {
+        "daily": "every day {{period}} · minutes per band of movement, from your steps",
+        "weekly": "every week, as a day's average · minutes per band of movement, from your steps"
+      },
+      "zoneMinutes": {
+        "daily": "every day {{period}} · a cardio or peak minute counts twice",
+        "weekly": "every week, as a day's average · a cardio or peak minute counts twice"
+      },
+      "zones": {
+        "hard": "vigorous or peak",
+        "caption": "time in each zone over {{period}}, from your heart rate through the whole day"
+      },
+      "workouts": {
+        "label": "Workouts",
+        "caption_one": "newest first · {{count}} workout {{period}}, {{duration}} together · excluded workouts do not count",
+        "caption_other": "newest first · {{count}} workouts {{period}}, {{duration}} together · excluded workouts do not count",
+        "captionNoTime_one": "newest first · {{count}} workout {{period}} · excluded workouts do not count",
+        "captionNoTime_other": "newest first · {{count}} workouts {{period}} · excluded workouts do not count",
+        "showAll_one": "Show {{count}} workout",
+        "showAll_other": "Show all {{count}} workouts",
+        "filter": "Workout type",
+        "all": "All {{count}}",
+        "typeCount": "{{type}} {{count}}",
+        "count_one": "{{count}} workout",
+        "count_other": "{{count}} workouts"
+      },
+      "types": {
+        "label": "By type",
+        "times": "{{count}} ×",
+        "caption": {
+          "week": "this week · against your usual week",
+          "month": "this month · against your usual month",
+          "3months": "these 3 months · against your usual 3 months",
+          "year": "this year · against your usual year"
+        }
+      },
+      "vo2": {
+        "rising": "rising · was {{earlier}} in {{month}}",
+        "falling": "falling · was {{earlier}} in {{month}}",
+        "steady": "steady at {{latest}}"
+      },
+      "heatmap": {
+        "label": "Steps per day",
+        "caption": "every day {{period}} · a square per day, a column per week · tap a day to open it"
+      },
+      "more": "More about moving"
     }
   },
   "charts": {
@@ -1810,12 +1816,14 @@
       "longest": "longest: {{value}} on {{date}}",
       "busiest": "busiest: {{value}} on {{date}}",
       "previous": "{{delta}} against {{period}}",
+      "previousPerDay": "{{delta}} a day against {{period}}",
       "yearEarlier": "{{delta}} against last year",
+      "yearEarlierPerDay": "{{delta}} a day against last year",
       "weekBefore": "the week before",
       "quarterBefore": "the 3 months before"
     },
     "value": {
-      "perDay": "{{value}} per day"
+      "perDay": "{{value}} per day on average"
     },
     "list": {
       "showAll": "Show all {{count}}",

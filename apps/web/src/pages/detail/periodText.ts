@@ -37,8 +37,10 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   if (figure.reason === 'thin-usual') return t('glance.usual.thin')
   const line = verdictLine({ ...figure, baseline: figure.usual }, language, t)
   if (line === null || figure.usual === null) return line
-  // A per-period figure's range is a whole period's worth ("1 - 5 a month"), and says so.
-  const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${figure.usual.window.unit}`)}` : line
+  // A per-period figure's range is a whole period's worth ("1 - 5 a month"), and a per-week
+  // figure's a week's worth ("190 - 280 min per week"), and each says so.
+  const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${figure.usual.window.unit}`)}`
+    : figure.per === 'week' ? `${line} ${t('period.per.week')}` : line
   if (o.window !== true) return verdict
   return `${verdict} ${windowPhrase(figure.usual.window, t)}`
 }
@@ -150,8 +152,12 @@ export function plainText(line: Emphasised): string {
 export function standoutLines(o: {
   figure: PeriodFigure, high: PeriodHigh | null, previous: PeriodChange, yearEarlier: PeriodChange | null,
   highWord: 'longest' | 'busiest', language: string, t: Translate,
+  /** Whether a change is a day's worth, and says so ("+612 a day against August"): an average per day
+   *  of a figure a reader adds up (steps), where a night's average reads as a night's without it. */
+  perDay?: boolean,
 }): Emphasised[] {
   const { figure, high, previous, yearEarlier, language, t } = o
+  const perDay = o.perDay === true
   const lines: Emphasised[] = []
   if (high !== null) {
     const date = formatWeekdayDate(high.localDate, language)
@@ -159,14 +165,14 @@ export function standoutLines(o: {
     lines.push(high.good ? [...line, { text: ' ✦', strong: false }] : line)
   }
   if (hasChange(previous)) {
-    lines.push(emphasise(t, 'period.standout.previous', {
+    lines.push(emphasise(t, perDay ? 'period.standout.previousPerDay' : 'period.standout.previous', {
       delta: changeText(figure, previous, language, t), period: previousName(previous, language, t),
     }, ['delta']))
   }
   // On the year range the period before is the previous calendar year, and so is the same period a
   // year earlier: one change, said once.
   if (hasChange(yearEarlier) && !(yearEarlier.from === previous.from && yearEarlier.to === previous.to)) {
-    lines.push(emphasise(t, 'period.standout.yearEarlier', { delta: changeText(figure, yearEarlier, language, t) }, ['delta']))
+    lines.push(emphasise(t, perDay ? 'period.standout.yearEarlierPerDay' : 'period.standout.yearEarlier', { delta: changeText(figure, yearEarlier, language, t) }, ['delta']))
   }
   return lines
 }
@@ -209,9 +215,10 @@ export function latestBand(points: readonly PeriodStripPoint[] | undefined): Per
 }
 
 // The figures printed as the period's total, by name: the spec's "Distance, floors and elevation show
-// the period total". The server sends a total for every summed metric (time asleep among them), so a
-// total on the wire is not by itself a reason to print one.
-export const PERIOD_TOTAL_METRICS: readonly string[] = ['distance', 'floors', 'altitude_gain']
+// the period total", and the Activity mockup's active zone minutes and workout time. The server sends
+// a total for every summed metric (time asleep among them), so a total on the wire is not by itself a
+// reason to print one.
+export const PERIOD_TOTAL_METRICS: readonly string[] = ['distance', 'floors', 'altitude_gain', 'active_zone_minutes', 'workout_minutes']
 
 /**
  * The figure's value: for a total (PERIOD_TOTAL_METRICS), the period's total, with its average per day

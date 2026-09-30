@@ -8,6 +8,7 @@ import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { SLEEP_PERIOD_YEAR } from './fixtures/sleepPeriod.js'
+import { ACTIVITY_PERIOD_YEAR } from './fixtures/activityPeriod.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -83,6 +84,7 @@ beforeAll(() => {
     }
     if (url.includes('/intraday')) return json({ points: [], reduction: null })
     if (url.includes('/sleep/period')) return json(SLEEP_PERIOD_YEAR)
+    if (url.includes('/activity/period')) return json(ACTIVITY_PERIOD_YEAR)
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/insights')) return json(insightBody(url))
     if (url.includes('/trend')) return json({ points: [] })
@@ -110,9 +112,9 @@ async function settled(Page: () => ReactNode, path: string): Promise<HTMLDivElem
 }
 
 // The last column is the paragraphs the control row carries: the trend note on every page whose
-// tiles draw change badges, and none on Sleep, whose overview draws none (M10b).
+// tiles draw change badges, and none on Sleep and Activity, whose overviews draw none (M10b).
 describe.each([
-  ['Activity', Activity, '/activity', ['control-row-note']],
+  ['Activity', Activity, '/activity', []],
   ['Recovery', Recovery, '/recovery', ['control-row-note']],
   ['Sleep', Sleep, '/sleep', []],
   ['Health', Health, '/health', ['control-row-note']],

@@ -1,599 +1,448 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
-import { queryKeys } from '../src/api/queryKeys.js'
-import type { Session } from '../src/auth/session.js'
-import { Activity, BAR_METRICS } from '../src/pages/Activity.js'
+import { Activity } from '../src/pages/Activity.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import type { Insight } from '../src/data/useInsight.js'
+import type { ActivityPeriodData, TypeTotal } from '../src/data/periodTypes.js'
+import { ACTIVITY_PERIOD_EMPTY, ACTIVITY_PERIOD_MONTH, ACTIVITY_PERIOD_YEAR } from './fixtures/activityPeriod.js'
+import { withQuery } from './sleepPageStub.js'
+import { stubActivity } from './activityPageStub.js'
+import type { ActivityStub } from './activityPageStub.js'
 import { flush } from './flush.js'
-import { seriesPoint, PROVIDER_METRICS, insightBody } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 
-// Sparkline and ActivityHeatmap draw for real here, and echarts.init's effect throws "missing
-// chart token" without this, the same reason every other page test file needs it.
+// The hero's and the figure rows' strips, stubbed so a test can read what each was handed and click
+// a dot the way the chart would (sleep-page.test.tsx's own idiom). Keyed by the chart's label.
+type SparklineProps = { label: string, values: (number | null)[], lastYear?: (number | null)[], onPointClick?: (label: string) => void }
+const { sparklines } = vi.hoisted(() => ({ sparklines: new Map<string, SparklineProps>() }))
+vi.mock('../src/charts/Sparkline.js', () => ({
+  Sparkline: (props: SparklineProps) => {
+    sparklines.set(props.label, props)
+    return <div data-sparkline={props.label} />
+  },
+}))
+
+// The bars, the zone bar and the heatmap draw for real, and echarts.init throws "missing chart
+// token" without these.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+let restore: () => void = () => {}
 
 beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  window.history.replaceState(null, '', '/activity')
+  sparklines.clear()
 })
 
 afterEach(() => {
   act(() => { root?.unmount() })
+  restore()
+  restore = () => {}
   container?.remove()
   container = null
   root = null
 })
 
-function mount(node: ReactNode): void {
-  act(() => { root?.render(node) })
+// The no-break space formatFigureValue joins a value's parts with.
+const NB = ' '
+const MONTH_URL = '/activity?range=month&on=2026-08-15'
+const YEAR_URL = '/activity?range=year&on=2025-06-01'
+const HERO = 'Steps, average per day'
+
+/** Mounts the page at `path` over `stub`, settled; returns every URL it asked for. */
+async function renderAt(path: string, stub: ActivityStub, lng = 'en'): Promise<string[]> {
+  window.history.replaceState(null, '', path)
+  const urls: string[] = []
+  restore()
+  restore = stubActivity(urls, stub)
+  const { client, tree } = withQuery(<Activity />)
+  act(() => { root?.render(<I18nProvider lng={lng}>{tree}</I18nProvider>) })
+  await flush(client, () => container!.innerHTML)
+  return urls
 }
 
-const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
-  sleepTargetMinutes: 480,
-  sleepUseBaseline: true,
-  quickLogEnabled: true,
-  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
-}
+const cardFor = (label: string): HTMLElement | undefined => [...container!.querySelectorAll<HTMLElement>('section.card')]
+  .find((card) => card.querySelector(':scope > .label')?.textContent === label)
+const text = (): string => container!.textContent ?? ''
+const heroLines = (): string[] => [...cardFor(HERO)!.querySelectorAll('.workout-hero-line')].map((line) => line.textContent ?? '')
+const heroBold = (): string[] => [...cardFor(HERO)!.querySelectorAll('.workout-hero-line strong')].map((line) => line.textContent ?? '')
+const month = (patch: Partial<ActivityPeriodData>): ActivityPeriodData => ({ ...ACTIVITY_PERIOD_MONTH, ...patch })
+const typeRows = (): string[][] => [...cardFor('By type')!.querySelectorAll('.activity-type')].map((row) =>
+  ['.activity-type-name', '.activity-type-amount', '.activity-type-verdict'].map((cell) => row.querySelector(cell)?.textContent ?? ''))
+const rowNamed = (card: string, label: string): Element | undefined => [...cardFor(card)!.querySelectorAll('.figure-row')]
+  .find((row) => row.querySelector('.figure-row-label')?.textContent === label)
+const workoutRows = (): NodeListOf<Element> => cardFor('Workouts')!.querySelectorAll('.session-row')
+const showAll = (): HTMLButtonElement => cardFor('Workouts')!.querySelector<HTMLButtonElement>('.period-list-toggle')!
 
-// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
-// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
-// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
-const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+// Enough workouts that the list has a "Show all": the fixture's ten, and five more copies of the
+// newest, each its own id.
+const MANY = [
+  ...ACTIVITY_PERIOD_MONTH.workouts,
+  ...[1, 2, 3, 4, 5].map((n) => ({ ...ACTIVITY_PERIOD_MONTH.workouts[0]!, id: `w-extra-${n}` })),
+]
+const types = (patch: Partial<TypeTotal>): TypeTotal[] => ACTIVITY_PERIOD_MONTH.types.map((type) => ({ ...type, ...patch }))
 
-function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  client.setQueryData(queryKeys.session(), PERSON)
-  return { client, tree: <QueryClientProvider client={client}>{node}</QueryClientProvider> }
-}
-
-/**
- * Answers every route Activity calls. /series behaves the way the real store does for the two
- * provider-only metrics rather than handing back the same canned point regardless of source:
- * packages/core/test/person-query.test.ts's own "returns only merged rows when merged is named"
- * pins that an explicit `source` filters to rows carrying that exact value, and floors and
- * total_calories are written only as `provider` rows (0 of 211 and 0 of 731 merged in the live
- * database Task 1's brief measured), so a call that names any explicit source gets nothing back
- * for either. A stub that answered them the same regardless of source could not tell "this page
- * omits the parameter" apart from "the parameter happens not to matter here", which is the whole
- * point of the first test below.
- */
-function stubActivity(urls: string[], insightOverrides: Partial<Insight> = {}): () => void {
-  const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    urls.push(url)
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-    if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/series')) {
-      const params = new URLSearchParams(url.split('?')[1] ?? '')
-      const metrics = params.getAll('metric')
-      const explicitSource = params.get('source')
-      const body: Record<string, unknown> = {}
-      for (const metric of metrics) {
-        const isProvider = PROVIDER_METRICS.has(metric)
-        body[metric] = {
-          points: isProvider && explicitSource !== null ? []
-            : [seriesPoint(metric, '2026-08-15', 60, isProvider ? { source: 'provider' } : {})],
-          reduction: null,
-        }
-      }
-      return json(body)
-    }
-    if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
-    // One real exercise session, not the catch-all's {}: SessionList reads /sessions too now
-    // (Task 5), and an unanswered {} reads as items: undefined, an empty period, and the section
-    // draws its own EmptyState -- exactly the class of failure this file's "draws provider rows
-    // rather than calling them unworn" test exists to catch, just from a different card.
-    if (url.includes('/sessions')) {
-      return json({
-        items: [{
-          id: 's1', sourceId: 'watch', startMs: Date.UTC(2026, 7, 15, 8, 0), endMs: Date.UTC(2026, 7, 15, 8, 30),
-          startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-15',
-          attrs: { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 250 } },
-        }],
-        cursor: null,
-      })
-    }
-    if (url.includes('/api/sync/status')) {
-      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
-    }
-    return json({})
-  }) as typeof fetch
-  return () => { globalThis.fetch = original }
-}
-
-/**
- * The same routes, but with the steps series dictated point by point and every other metric empty.
- * The heatmap card's basis is the one claim on this page whose numerator, denominator and wear
- * clause are three different counts, and stubActivity's uniform "one worn point per metric" cannot
- * tell them apart: reported and worn are both 1 under it, so a card that swapped one for the other
- * reads identically. Rows go through metricCoverage.ts's seriesPoint, so they carry every field
- * a real /series row does.
- */
-function stubSteps(points: readonly { localDate: string, value: number, coverage: number | null }[]): () => void {
-  const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-    if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/series')) {
-      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
-      return json(Object.fromEntries(metrics.map((metric) => [metric, {
-        points: metric === 'steps'
-          ? points.map((p) => seriesPoint(metric, p.localDate, p.value, { coverage: p.coverage }))
-          : [],
-        reduction: null,
-      }])))
-    }
-    if (url.includes('/insights')) return json(insightBody(url))
-    if (url.includes('/api/sync/status')) {
-      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
-    }
-    return json({})
-  }) as typeof fetch
-  return () => { globalThis.fetch = original }
-}
-
-/**
- * Same routes as stubActivity, but every metric named in `overrides` answers that value instead
- * of the uniform 60, and every other metric still gets 60 (steps' own coverage/source shape,
- * since none of the tests below read the heatmap). Used by the precision/grouping tests below,
- * which need distance and floors to carry values a shared "60 everywhere" stub cannot tell apart:
- * a millimeter total that does not divide evenly into kilometers, and a four figure floors total
- * (thousands grouping).
- */
-function stubActivityValues(overrides: Record<string, number>): () => void {
-  const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-    if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/series')) {
-      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
-      const body: Record<string, unknown> = {}
-      for (const metric of metrics) {
-        body[metric] = { points: [seriesPoint(metric, '2026-08-15', overrides[metric] ?? 60)], reduction: null }
-      }
-      return json(body)
-    }
-    if (url.includes('/insights')) return json(insightBody(url))
-    if (url.includes('/api/sync/status')) {
-      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
-    }
-    return json({})
-  }) as typeof fetch
-  return () => { globalThis.fetch = original }
-}
-
-/**
- * The finding this stub exists for: the workout count tile and the session list beneath it read
- * two different things, a derived daily total with an exclusion already applied and a raw session
- * list this reader marks rather than drops, and only a fixture where the two actually disagree
- * proves they still agree on purpose (R1's own rule: two workouts counted above three listed, one
- * of them struck through). Three sessions, one excluded; workout_count answers 2, the same total
- * deriveExerciseDay would have written with the excluded session already subtracted.
- */
-function stubActivityExcludedWorkout(): () => void {
-  const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(input)
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-    if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/series')) {
-      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
-      const body: Record<string, unknown> = {}
-      for (const metric of metrics) {
-        const value = metric === 'workout_count' ? 2 : 60
-        body[metric] = { points: [seriesPoint(metric, '2026-08-15', value)], reduction: null }
-      }
-      return json(body)
-    }
-    if (url.includes('/insights')) return json(insightBody(url))
-    if (url.includes('/sessions')) {
-      return json({
-        items: [
-          {
-            id: 's1', sourceId: 'watch', startMs: Date.UTC(2026, 7, 3, 8, 0), endMs: Date.UTC(2026, 7, 3, 8, 30),
-            startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-03',
-            attrs: { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 250 } },
-            excluded: false, excludeReason: null,
-          },
-          {
-            id: 's2', sourceId: 'watch', startMs: Date.UTC(2026, 7, 5, 8, 0), endMs: Date.UTC(2026, 7, 5, 8, 30),
-            startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-05',
-            attrs: { exerciseType: 'CYCLING', metricsSummary: { caloriesKcal: 400 } },
-            excluded: true, excludeReason: 'strap fell off',
-          },
-          {
-            id: 's3', sourceId: 'watch', startMs: Date.UTC(2026, 7, 7, 8, 0), endMs: Date.UTC(2026, 7, 7, 8, 30),
-            startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-07',
-            attrs: { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 300 } },
-            excluded: false, excludeReason: null,
-          },
-        ],
-        cursor: null,
-      })
-    }
-    if (url.includes('/api/sync/status')) {
-      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
-    }
-    return json({})
-  }) as typeof fetch
-  return () => { globalThis.fetch = original }
-}
-
-describe('the Activity page', () => {
-  // The two provider only metrics are the reason Task 1 of this milestone exists. If the request
-  // carried a source parameter at all, both would come back empty here (see stubActivity's own
-  // comment on why), which is the defect that milestone closed: usePageControls and resolveSource
-  // default to the all sources sentinel, and sourceParam omits the parameter for it.
-  it('asks for floors and total_calories with no source parameter', async () => {
-    const urls: string[] = []
-    const restore = stubActivity(urls)
-    const { client, tree } = withQuery(<Activity />)
-    mount(tree)
-    await flush(client, () => container!.innerHTML)
-    const series = urls.filter((u) => u.includes('/series'))
-    expect(series.join()).toContain('metric=floors')
-    expect(series.join()).toContain('metric=total_calories')
-    for (const url of series) expect(url).not.toContain('source=')
-    restore()
+describe('the Activity page: header and requests', () => {
+  it('names the period and the source in the header line, in both languages', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(container!.querySelector('h1')?.textContent).toBe('Activity')
+    expect(container!.querySelector('.dash-date')?.textContent).toBe('Aug 1 – 31, 2026 · All sources')
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH }, 'nl')
+    expect(container!.querySelector('.dash-date')?.textContent).toBe('1 – 31 aug 2026 · Alle bronnen')
   })
 
-  // Drawn, not merely absent from the not-worn branch: the failure this page exists to avoid is
-  // an empty state (of any kind) standing in for real data, and "not_worn does not appear" alone
-  // would not catch a regression that swapped it for no_data instead. floors' coverage is neither
-  // once-a-day (1/24) nor null: it is a daily-tier provider rollup, and coverageIsMeaningful only
-  // ever says true for a continuously sampled (intraday) metric, so its wear branch can never fire
-  // regardless of the coverage number a stub hands it; drawing the real value is the assertion
-  // that actually exercises the card.
-  it('draws provider rows rather than calling them unworn', async () => {
-    const restore = stubActivity([])
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    expect(container!.textContent).not.toContain('Device not worn')
-    expect(container!.textContent).toContain('Floors climbed')
-    expect(container!.textContent).toContain('Total calories')
+  it('names a picked source, and asks for it', async () => {
+    const urls = await renderAt(`${MONTH_URL}&source=watch`, { period: ACTIVITY_PERIOD_MONTH })
+    expect(container!.querySelector('.dash-date')?.textContent).toBe('Aug 1 – 31, 2026 · My watch')
+    expect(urls.some((url) => url.includes('/activity/period') && url.includes('source=watch'))).toBe(true)
+  })
+
+  it('exports the period\'s summed activity rollups', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const exported = new URLSearchParams(container!.querySelector('a[href*="/export?"]')!.getAttribute('href')!.split('?')[1])
+    expect(exported.getAll('metric')).toContain('steps')
+    expect([exported.get('agg'), exported.get('from'), exported.get('to')]).toEqual(['sum', '2026-08-01', '2026-08-31'])
+  })
+
+  // The page stays mounted once the URL moves (no router swaps it for the dashboard), so it goes on
+  // to read the URL's defaults; what it must never do is ask for a period on that day.
+  it('opens the dashboard on that day for the Day tab, dropping the source, and asks for no period', async () => {
+    const urls = await renderAt('/activity?range=day&on=2026-08-15&source=watch', { period: ACTIVITY_PERIOD_MONTH })
+    expect(window.location.pathname).toBe('/')
+    expect(window.location.search).toBe('?day=2026-08-15')
+    expect(urls.filter((url) => url.includes('/activity/period') && url.includes('anchor=2026-08-15'))).toEqual([])
+  })
+
+  it('makes one period read per mount, and asks nothing from /series or /insights', async () => {
+    const urls = await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(urls.filter((url) => url.includes('/activity/period'))).toHaveLength(1)
+    expect(urls.filter((url) => url.includes('/series') || url.includes('/insights'))).toEqual([])
+  })
+
+  it('keeps the header over an error, and over an empty period says there are no activities', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH, status: 400 })
+    expect(container!.querySelector('h1')?.textContent).toBe('Activity')
+    expect(container!.querySelector('.controls')).not.toBeNull()
+    expect(cardFor(HERO)).toBeUndefined()
+    expect(container!.querySelector('.empty .button')?.textContent).toBe('Try again')
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_EMPTY })
+    expect(container!.querySelector('h1')?.textContent).toBe('Activity')
+    expect(container!.querySelector('.empty')?.textContent).toContain('No activities recorded in this period.')
+    expect(container!.querySelectorAll('section.card')).toHaveLength(1)
+  })
+
+  // A period with no steps but a workout still has something to show.
+  it('draws the workouts of a period with no steps', async () => {
+    await renderAt(MONTH_URL, { period: { ...ACTIVITY_PERIOD_EMPTY, workouts: ACTIVITY_PERIOD_MONTH.workouts } })
     expect(container!.querySelector('.empty')).toBeNull()
-    restore()
+    expect(cardFor('Workouts')).toBeDefined()
   })
 
-  // Not "one request per card": /series takes one agg and one range for a whole call, so cards
-  // sharing both ride together. Two aggs on this page (sum and count, workout_count being the one
-  // metric whose only aggregate is count) over the page's range, plus the training load card,
-  // whose 28 day window is fixed by ACWR's own definition and so cannot ride with a range the
-  // reader picks. Batching is still what this asserts: no two requests may share an agg AND a
-  // range, which is the property that breaks the moment a card starts fetching for itself.
-  it('batches by agg and range, so no two requests ask the same question', async () => {
-    const urls: string[] = []
-    const restore = stubActivity(urls)
-    const { client, tree } = withQuery(<Activity />)
-    mount(tree)
-    await flush(client, () => container!.innerHTML)
-    const series = urls.filter((u) => u.includes('/series'))
-    const questions = new Set(series.map((u) => {
-      const params = new URLSearchParams(u.split('?')[1] ?? '')
-      return `${params.get('agg')}|${params.get('from')}|${params.get('to')}`
-    }))
-    expect(series).toHaveLength(questions.size)
-    restore()
+  it('carries no percentage change, no insight card, no percentage note and none of the old tiles', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(container!.querySelector('.delta')).toBeNull()
+    expect(container!.querySelector('.insight-summary')).toBeNull()
+    expect(container!.querySelector('.control-row-note')).toBeNull()
+    expect(container!.querySelector('.zone-tiles')).toBeNull()
+    expect(cardFor('Training load')).toBeUndefined()
+    expect(text()).not.toMatch(/[+\-−]\d+(?:[.,]\d+)?\s?%/)
+  })
+})
+
+describe('the Activity page: the hero', () => {
+  it('leads with the steps per day against the usual for a month, the day counts and what stood out', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const hero = cardFor(HERO)!
+    expect(hero.querySelector('.detail-hero-value')?.textContent).toBe('7,932')
+    expect(hero.querySelector('.detail-verdict')?.textContent).toBe('within your usual 7,912 – 8,037 for a month, last 12 months')
+    expect(heroLines()).toEqual(['15 of 28 days usual · 6 higher · 7 lower', 'busiest: 10,700 on Sun, Aug 23 ✦', '-32 a day against July'])
+    expect(heroBold()).toEqual(['10,700', '-32'])
+    expect(hero.querySelector('.period-hero-captions')?.textContent).toBe('every day this monthtap a day for the figures')
   })
 
-  // The heatmap's own dense denominator, carried over from dashboard-cards.test.tsx's equivalent
-  // check when the card moved here: /series omits a day with no row entirely, so points.length is
-  // "days that reported", and a month missing most of its days must not read "1 of 1 days".
-  it('states the heatmap total against every calendar day in range, not just the days that reported', async () => {
-    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
-    const restore = stubActivity([])
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const match = container!.textContent!.match(/calendar heatmap, (\d+) of (\d+) days/)
-    expect(match).not.toBeNull()
-    expect(Number(match![2])).toBeGreaterThan(1)
-    restore()
-  })
-
-  // The numerator, which the denominator test above never looks at. It read "days worn" against a
-  // dense calendar denominator, so a month with one reporting day claimed thirty days not worn
-  // while ActivityHeatmap's own accessible table called those same days "no reading" on the stated
-  // grounds that an absent row names no cause. One card, two contradictory claims about the same
-  // thirty days. The numerator is now what the chart itself can defend, the days that reported,
-  // with the wear count in its own clause over those days alone.
-  it('counts the days that reported, and keeps not worn to a clause about them', async () => {
-    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
-    // Two steps days out of a thirty one day August, and deliberately only one of them worn: with
-    // a stub where every reporting day is also a worn day, the reported and worn numerators are
-    // the same number and the old wording would pass this unchanged. NOT_WORN_MAX_COVERAGE is an
-    // hour and the comparison is strict, so 1/24 is the not worn day.
-    const restore = stubSteps([
-      { localDate: '2026-08-15', value: 4000, coverage: 0.9 },
-      { localDate: '2026-08-16', value: 30, coverage: 1 / 24 },
+  it('says the change against last year with the comparison on, and overlays last year\'s steps', async () => {
+    const urls = await renderAt(`${MONTH_URL}&compare=year`, {
+      period: ACTIVITY_PERIOD_MONTH,
+      series: () => ({ steps: { points: [seriesPoint('steps', '2025-08-05', 6400)], reduction: null } }),
+    })
+    expect(heroLines()).toEqual([
+      '15 of 28 days usual · 6 higher · 7 lower', 'busiest: 10,700 on Sun, Aug 23 ✦', '-32 a day against July', '-75 a day against last year',
     ])
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const text = container!.textContent!
-    expect(text).toContain('calendar heatmap, 2 of 31 days, 1 day not worn')
-    // The worn numerator specifically, which for this stub is 1 against the same denominator.
-    // "1 of 31 days worn" was the earlier form of this assertion and could not fail, since the
-    // trailing "worn" left neither catalogue; this names a string the defect really would produce.
-    expect(text).not.toContain('calendar heatmap, 1 of 31 days')
-    restore()
+    const asked = urls.filter((url) => url.includes('/series'))
+    expect(asked).toHaveLength(1)
+    expect(new URLSearchParams(asked[0]!.split('?')[1]).getAll('metric')).toEqual(['steps'])
+    const lastYear = sparklines.get(HERO)!.lastYear!
+    expect(lastYear[4]).toBe(6400)
+    expect(lastYear).toHaveLength(ACTIVITY_PERIOD_MONTH.hero.daily.length)
   })
 
-  // A period with no steps at all is neither pending nor errored, so the basis rendered anyway:
-  // "0 of 31 days worn, 0 to 0 steps", a specific false claim about the person's month plus a
-  // colour domain read off no readings whatever. The chart still draws its thirty one absence
-  // dots, so the card is not empty; only the counting clause has nothing to stand on.
-  it('states no readings rather than a count and a colour domain for an empty period', async () => {
-    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
-    const restore = stubSteps([])
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const text = container!.textContent!
-    expect(text).toContain('calendar heatmap, no readings in these 31 days')
-    expect(text).not.toContain('0 to 0 steps')
-    expect(text).not.toMatch(/calendar heatmap, 0 of/)
-    restore()
+  it('draws weekly points on a year, says so, and asks no /series with the comparison on', async () => {
+    const urls = await renderAt(`${YEAR_URL}&compare=year`, { period: ACTIVITY_PERIOD_YEAR })
+    expect(sparklines.get(HERO)!.values).toHaveLength(ACTIVITY_PERIOD_YEAR.hero.weekly!.length)
+    expect(cardFor(HERO)!.querySelector('.period-hero-captions')?.textContent)
+      .toBe(`each point is a week, the average of its days · ${ACTIVITY_PERIOD_YEAR.hero.weekly!.length} weekstap a week for the figures`)
+    expect(urls.filter((url) => url.includes('/series'))).toEqual([])
   })
 
-  // Carried over from pages.test.tsx's own "states the heatmap colour domain" assertion, which
-  // the previous round deleted without replacing: that assertion pinned two claims the denominator
-  // test above does not touch at all, the maxSteps interpolation and the static "stronger colour"
-  // copy, and a broken interpolation or a dropped clause would have passed every other test in
-  // this file. stubActivity answers every metric with a single point at value 60, so 60 is both
-  // the sum and the maximum steps reads for the one day it reports.
-  it('states the heatmap colour domain from the steps it actually drew', async () => {
-    const restore = stubActivity([])
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    expect(container!.textContent).toContain('0 to 60 steps')
-    expect(container!.textContent).toContain('stronger colour is more steps')
-    restore()
+  it('opens a day\'s panel with its steps, active minutes and distance, the day, and the annotate on steps', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    act(() => { sparklines.get(HERO)!.onPointClick!('2026-08-01') })
+    const panel = container!.querySelector('.point-panel')!
+    expect(panel.querySelector('.point-panel-title')?.textContent).toBe('Saturday, August 1')
+    const labels = [...panel.querySelectorAll('.point-panel-row dt')].map((cell) => cell.textContent)
+    expect(labels).toEqual(['Steps', 'Active minutes', 'Distance'])
+    expect(panel.querySelector('.point-panel-value')?.textContent).toBe('8,600')
+    expect(panel.querySelector('a.card-link')?.getAttribute('href')).toBe('/?day=2026-08-01')
+    expect(panel.querySelector('a.card-link')?.textContent).toBe('View day')
+    act(() => { panel.querySelector<HTMLButtonElement>('.point-panel-actions .button')!.click() })
+    expect(container!.querySelector('.point-panel')).toBeNull()
+    expect(document.querySelector('.annotate-panel')).not.toBeNull()
   })
 
-  // Finding #9 of the precision audit: distance is stored in millimeters (METRICS.distance,
-  // precision 0) and this card displays kilometers with one decimal, a precision the catalogue's
-  // own field cannot answer because it names a different unit than the one on screen. The card
-  // used to hardcode `(total / 1_000_000).toFixed(1)`; it now goes through formatNumber directly
-  // with an explicit precision of 1, never through formatMetricValue (which would read millimeters'
-  // own precision 0 and drop the decimal). 5,234,567 mm is chosen so millimeters-to-kilometers does
-  // not divide evenly, which a broken conversion or a wrong precision would show up in immediately.
-  //
-  // toBe, not toContain: a prefix match here would stay green if precision drifted the other way
-  // too (a forced precision+2 renders "5.235 km", and "5.2" is still a substring of "5.235").
-  // Confirmed by reverting the distance card back to `formatMetricValue(total, 'distance', ...)`
-  // (the accidental path this design exists to close, which never divides by a million at all):
-  // that failed with "Received: 5,234,567 km" where it expects "5.2 km".
-  it('converts distance from stored millimeters to displayed kilometers at its own precision', async () => {
-    const restore = stubActivityValues({ distance: 5_234_567 })
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Distance')
-    expect(card?.querySelector('.value')?.textContent).toBe('5.2 km')
-    restore()
+  it('opens a week\'s panel on a year with its steps alone and nowhere to go', async () => {
+    await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR })
+    const week = ACTIVITY_PERIOD_YEAR.hero.weekly![3]!
+    act(() => { sparklines.get(HERO)!.onPointClick!(week.from) })
+    const panel = container!.querySelector('.point-panel')!
+    expect([...panel.querySelectorAll('.point-panel-row dt')].map((cell) => cell.textContent)).toEqual(['Steps'])
+    expect(panel.querySelector('a.card-link')).toBeNull()
+  })
+})
+
+describe('the Activity page: the figures', () => {
+  it('labels each average by what it is an average of, and prints the totals with their day\'s average', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const minis = container!.querySelector('.detail-minis')!
+    const labels = [...minis.querySelectorAll('.figure-row-label')].map((label) => label.textContent)
+    expect(labels).toEqual(['Active minutes, per week', 'Distance', 'floors', 'Active energy, per day'])
+    const active = [...minis.querySelectorAll('.figure-row')][0]!
+    expect(active.querySelector('.figure-row-value')?.textContent).toBe(`1,502${NB}min`)
+    expect(active.querySelector('.figure-row-verdict')?.textContent).toBe(`within your usual 1,497 – 1,506${NB}min per week`)
+    const distance = [...minis.querySelectorAll('.figure-row')][1]!
+    expect(distance.querySelector('.figure-row-value')?.textContent).toBe(`147${NB}km`)
+    // A total's note is its average alone, with no day counts.
+    expect(distance.querySelector('.figure-row-note')?.textContent).toBe(`5.3${NB}km per day on average`)
+    expect(minis.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('each line: every day this month, active minutes too · distance and floors add up the period · band = your usual range')
   })
 
-  // M3e review's own finding: the headline above converts millimeters to kilometers, but the
-  // Sparkline beside it used to be hand formatMetricValue('distance', ...) by default, which reads
-  // METRICS.distance's own stored-unit precision (0, millimeters) and printed the raw per-day
-  // reading ("5,234,567") in its accessible table, under a column header (activity.units.distance)
-  // that reads "Distance in kilometers". A sighted reader saw the correct "5.2 km" headline while a
-  // screen reader landing on the sparkline's own table got a number six figures longer, under a
-  // header naming a unit that number was never in. The card now draws a DailyBars rather than a
-  // Sparkline (this milestone's own promotion), whose table is built the same way off the same
-  // dense series, so the defect and the fix both still apply. range/on pinned to the stub's own
-  // date so that dense series actually carries a row for it, rather than depending on whatever
-  // "this month" resolves to on the machine running the test.
-  it('shows the distance bar chart\'s table in kilometers too, not the raw stored millimeters', async () => {
-    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
-    const restore = stubActivityValues({ distance: 5_234_567 })
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Distance')
-    const rowMatch = card?.innerHTML.match(/<tr><th scope="row">2026-08-15<\/th>[\s\S]*?<\/tr>/)
-    expect(rowMatch, card?.innerHTML ?? 'no Distance card found').toBeTruthy()
-    expect(rowMatch![0]).toContain('<td>5.2</td>')
-    expect(rowMatch![0]).not.toContain('5234567')
-    expect(rowMatch![0]).not.toContain('5,234,567')
-    restore()
+  it('leaves out the four figures when none has a value', async () => {
+    await renderAt(MONTH_URL, { period: month({ figures: ACTIVITY_PERIOD_MONTH.figures.map((f) => ({ ...f, value: null })) }) })
+    expect(container!.querySelector('.detail-minis')).toBeNull()
   })
 
-  // The refactor this task is for on the other nine cards: Activity's own local groupNumber (a
-  // byte-identical copy of Dashboard.tsx's) is gone, replaced by formatMetricValue reading
-  // METRICS[metric].precision through card()'s own default formatter. A four figure floors total
-  // is what tells the old ungrouped code and the new grouped code apart.
-  //
-  // toBe, not toContain: "12,345" is a substring of "12,345.00" too, which a dropped
-  // minimumFractionDigits/maximumFractionDigits pin would still render. Confirmed by reverting
-  // card()'s default formatter to `String(total)`: that failed with "Received: 12345" where it
-  // expects "12,345 floors".
-  it('groups a four figure floors total per language, through the shared formatter', async () => {
-    const restore = stubActivityValues({ floors: 12345 })
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Floors climbed')
-    expect(card?.querySelector('.value')?.textContent).toBe('12,345 floors')
-    restore()
+  it('says the figures\' lines are weekly on a year', async () => {
+    await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR })
+    expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('each line: every week, the average of its days · distance and floors add up the period · band = your usual range')
   })
 
-  // 290 rows spanning 2026-05-08 to 2026-09-02 in the live database, and no page drew a single one
-  // of them before this task. active_energy rides the same sum request steps and total_calories
-  // already make, so the only new thing to prove is that a card exists and reads its own metric.
-  it('shows active energy, which no page claimed before', async () => {
-    const restore = stubActivityValues({ active_energy: 512 })
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Active energy')
-    expect(card?.querySelector('.value')?.textContent).toBe('512 kcal')
-    restore()
+  it('prints Dutch in the usual words and durations', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH }, 'nl')
+    expect(cardFor('Stappen, gemiddeld per dag')!.querySelector('.detail-verdict')?.textContent)
+      .toBe('binnen je gebruikelijke bereik 7.912 – 8.037 voor een maand, afgelopen 12 maanden')
+    expect(rowNamed('Meer over bewegen', 'Trainingstijd')!.querySelector('.figure-row-value')?.textContent).toBe(`16u${NB}01m`)
+    expect(text()).toContain('gebruikelijk')
   })
+})
 
-  // The other half of pages.test.tsx's own language parity check that the heatmap's move left
-  // uncovered: ActivityHeatmap is the only chart anywhere in this app that renders a weekday
-  // column, so with it gone from Dashboard, translating that column into Dutch was exercised
-  // nowhere at all once the heatmap-specific pages.test.tsx assertion was removed.
-  it('translates the heatmap weekday column into Dutch', async () => {
-    const restore = stubActivity([])
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    expect(container!.innerHTML).toContain('Weekdag')
-    expect(container!.innerHTML).not.toContain('>Weekday<')
-    restore()
-  })
-
-  // Task 4's own insight card. No formatValue on this one, unlike its siblings on Sleep, Recovery,
-  // Health and Weight: this page prints no steps total anywhere on a tile carrying a unit (the
-  // daily steps card is a heatmap in a hand rolled Card, not a StatTile), so there is no unit or
-  // duration gap for a formatter to close the way there is on the other four pages. The assertion
-  // below still expects "8,342", grouped by locale: that is InsightCard's own default
-  // (formatMetricValue with no formatValue override) behaving the same as every other numeric
-  // card on this page, and grouping is not what this test pins. What it pins is the one thing that
-  // differs from the other four insight cards: no unit suffix appended.
-  it('states the steps insight as a plain number, with no unit suffix', async () => {
-    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
-    const restore = stubActivity([], { current: 8342, previous: 7910, delta: 432 })
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Steps, this period against the last')
-    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
-      '8,342 on average (Aug 1, 2026 to Aug 31, 2026) against 7,910 on average in the previous period '
-      + '(Jul 1, 2026 to Jul 31, 2026), a change of 432.',
-    )
-    restore()
-  })
-
-  // Vary the fixture rather than reusing the same complete body every test in this file: a
-  // suppressed response (current/previous/delta all null) is a null field this card has to gate on
-  // rather than reach formatMetricValue with, which a fixture carrying only complete bodies could
-  // never catch. The gate now removes the whole card instead of swapping in an empty state, so the
-  // absent .card element is both halves of the claim: nothing was formatted, and nothing was drawn.
-  // This is a thin-days suppression specifically; thin-coverage is the deliberate exception that
-  // keeps its card, pinned separately in insight-card.test.tsx.
-  it('hides the steps insight card on a thin-days suppression', async () => {
-    const restore = stubActivity([], { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null })
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Steps, this period against the last')
-    expect(card).toBeUndefined()
-    restore()
-  })
-
-  // The one wiring claim this file's own tests do not otherwise pin: /insights takes one metric
-  // and one agg per call, distinct from the two /series requests (sum, count) this page already
-  // issues, so the steps insight is a third request rather than a card riding along on the sum
-  // group's own response.
-  // Finding 2 of the second pass review: session-list-excluded.test.tsx mounts SessionList alone,
-  // so nothing rendered the whole Activity page with an excluded session and read the workout
-  // count tile beside it. The disagreement is the feature, not a bug the two queries happen to
-  // share: this is the one test where they sit on the page together and are asserted together.
-  it('shows the excluded session struck through in the list, beside a count that already excludes it', async () => {
-    const restore = stubActivityExcludedWorkout()
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Workouts')
-    expect(card?.querySelector('.value')?.textContent).toBe('2 workouts')
-    // Newest first (SessionList's own order): s3 (Aug 7), s2 (Aug 5, excluded), s1 (Aug 3).
-    const rows = [...container!.querySelectorAll('.session-row')].map((r) => r.className)
-    expect(rows).toEqual(['session-row', 'session-row session-row-excluded', 'session-row'])
-    const reasons = [...container!.querySelectorAll('.session-row-excluded-reason')].map((r) => r.textContent)
-    expect(reasons).toEqual(['Excluded: strap fell off'])
-    restore()
-  })
-
-  it('asks for the steps insight at agg sum, separately from the sum series request', async () => {
-    const urls: string[] = []
-    const restore = stubActivity(urls)
-    const { client, tree } = withQuery(<Activity />)
-    mount(tree)
-    await flush(client, () => container!.innerHTML)
-    const insightCalls = urls.filter((u) => u.includes('/insights'))
-    expect(insightCalls).toHaveLength(1)
-    const params = new URL(insightCalls[0]!, 'http://x').searchParams
-    expect(params.get('metric')).toBe('steps')
-    expect(params.get('agg')).toBe('sum')
-    restore()
-  })
-
-  // The named list the design calls for, asserted against the page's own export rather than a copy
-  // of it: a test carrying its own list would keep passing after someone edited the page's.
-  it('draws a bar chart for exactly the promoted metrics', () => {
-    expect([...BAR_METRICS]).toEqual(['distance', 'floors'])
-  })
-
-  // The whole-branch review's own finding: the test above checks the CONTENTS of an exported
-  // constant, not that Activity.tsx:276's ternary actually reads it to choose what to draw.
-  // Deleting that ternary (or reverting both cards' span back to 4) left the rest of this suite
-  // green. This test mounts the real page and reads something only DailyBars produces, so it
-  // cannot pass the same way: `useChart`'s own inline host height (130 for DailyBars, 34 for
-  // Sparkline -- useChart.ts's returned `style`) and the `span 6` on the two promoted cards'
-  // `.card` element (Card.tsx), against a card that stayed a Sparkline at span 4.
-  //
-  // Confirmed by removing the ternary at Activity.tsx:276 (`BAR_METRICS.has(metric) ? <DailyBars
-  // .../> : <Sparkline .../>` collapsed to always `<Sparkline .../>`) and watching this test fail:
-  // "expected '34px' to be '130px'" on the Distance assertion, restored afterwards.
-  it('draws a DailyBars host, not a Sparkline one, on the promoted distance and floors cards', async () => {
-    const restore = stubActivity([])
-    const { client, tree } = withQuery(<Activity />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const cardFor = (label: string): HTMLElement => {
-      const card = [...container!.querySelectorAll('.card')]
-        .find((c) => c.querySelector('.label')?.textContent === label)
-      if (!card) throw new Error(`no card for ${label}`)
-      return card as HTMLElement
+describe('the Activity page: sections', () => {
+  it('draws every section from the month fixture, and no heatmap on a month', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    for (const label of [HERO, 'Active minutes by intensity', 'Active Zone Minutes', 'Heart-rate zones', 'Workouts', 'By type', 'More about moving']) {
+      expect(cardFor(label), label).toBeDefined()
     }
-    const hostHeightOf = (card: HTMLElement): string =>
-      (card.querySelector('[role="img"]') as HTMLElement | null)?.style.height ?? ''
+    expect(cardFor('Steps per day')).toBeUndefined()
+    for (const label of ['Active Zone Minutes', 'Heart-rate zones', 'Workouts', 'By type']) expect(cardFor(label)!.dataset.span, label).toBe('6')
+  })
 
-    const distanceCard = cardFor('Distance')
-    const floorsCard = cardFor('Floors climbed')
-    const activeEnergyCard = cardFor('Active energy')
+  it('draws the heatmap of every day on a year, and a day opens the dashboard on it', async () => {
+    await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR })
+    const card = cardFor('Steps per day')!
+    expect(card.querySelector('div[role="img"][aria-label="Steps per day"]')).not.toBeNull()
+    expect(card.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('every day this year · a square per day, a column per week · tap a day to open it')
+  })
 
-    expect(hostHeightOf(distanceCard)).toBe('130px')
-    expect(hostHeightOf(floorsCard)).toBe('130px')
-    // The control: a card BAR_METRICS does not name, still drawing the 34px Sparkline it always
-    // has, so this test would fail the same way if DailyBars' host were simply always 130px tall.
-    expect(hostHeightOf(activeEnergyCard)).toBe('34px')
+  it('draws the heatmap on 3 months too', async () => {
+    await renderAt('/activity?range=3months&on=2025-06-01', { period: { ...ACTIVITY_PERIOD_YEAR, period: { ...ACTIVITY_PERIOD_YEAR.period, range: '3months' } } })
+    expect(cardFor('Steps per day')).toBeDefined()
+  })
 
-    expect(distanceCard.style.gridColumn).toBe('span 6')
-    expect(floorsCard.style.gridColumn).toBe('span 6')
-    expect(activeEnergyCard.style.gridColumn).toBe('span 4')
-    restore()
+  it('stacks the active minutes by intensity, with each band\'s total and what a bar is', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const card = cardFor('Active minutes by intensity')!
+    expect([...card.querySelectorAll('.detail-legend li')].map((li) => li.textContent))
+      .toEqual([`Light 5,021${NB}min`, `Moderate 766${NB}min`, `Vigorous 219${NB}min`])
+    expect([...card.querySelectorAll('.detail-legend-key')].map((key) => (key as HTMLElement).dataset.activity)).toEqual(['light', 'moderate', 'vigorous'])
+    expect(card.querySelector(':scope > .dash-caption')?.textContent).toBe('every day this month · minutes per band of movement, from your steps')
+  })
+
+  it('says a bar is a week\'s daily average on a year', async () => {
+    await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR })
+    expect(cardFor('Active minutes by intensity')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('every week, as a day\'s average · minutes per band of movement, from your steps')
+  })
+
+  it('leads the zone minutes with their total and verdict, and the heart-rate zones with the time vigorous or peak', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const azm = cardFor('Active Zone Minutes')!
+    expect(azm.querySelector('.dash-headline')?.textContent).toBe(`685${NB}min`)
+    expect(azm.querySelector('.detail-verdict')?.textContent).toBe(`within your usual 24 – 25${NB}min`)
+    expect([...azm.querySelectorAll('.detail-legend li')].map((li) => li.textContent)).toEqual(['Fat burn 429', 'Cardio 205', 'Peak 51'])
+    const zones = cardFor('Heart-rate zones')!
+    // 295 vigorous and 41 peak minutes.
+    expect(zones.querySelector('.dash-headline')?.textContent).toBe(`5h${NB}36m`)
+    expect(zones.querySelector('.workout-hero-line')?.textContent).toBe('vigorous or peak')
+    expect([...zones.querySelectorAll('.detail-legend li')].map((li) => li.textContent))
+      .toEqual([`Light 107h${NB}01m`, `Moderate 18h${NB}01m`, `Vigorous 4h${NB}55m`, `Peak 41${NB}min`])
+    expect(zones.querySelector('div[role="img"]')).not.toBeNull()
+  })
+
+  it.each<[string, string, Partial<ActivityPeriodData>]>([
+    ['Active Zone Minutes', 'Heart-rate zones', { zoneMinutes: { fatBurn: null, cardio: null, peak: null } }],
+    ['Heart-rate zones', 'Active Zone Minutes', { heartRateZones: { light: null, moderate: null, vigorous: null, peak: null } }],
+    ['Workouts', 'By type', { workouts: [] }],
+    ['By type', 'Workouts', { types: [], cardioLoad: null, vo2max: null }],
+  ])('leaves out %s when its data is absent, and %s takes the whole row', async (gone, partner, patch) => {
+    await renderAt(MONTH_URL, { period: month(patch) })
+    expect(cardFor(gone)).toBeUndefined()
+    expect(cardFor(partner)!.dataset.span).toBe('12')
+  })
+
+  it.each<[string, Partial<ActivityPeriodData>]>([
+    ['Active minutes by intensity', { intensity: { light: null, moderate: null, vigorous: null } }],
+    ['More about moving', { more: [] }],
+  ])('leaves out %s when its data is absent', async (gone, patch) => {
+    await renderAt(MONTH_URL, { period: month(patch) })
+    expect(cardFor(gone)).toBeUndefined()
+  })
+
+  it('keeps the zone minutes out of More about moving, and names the workouts under workout time', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const labels = [...cardFor('More about moving')!.querySelectorAll('.figure-row-label')].map((label) => label.textContent)
+    expect(labels).toEqual(['Total calories, per day', 'Workout time', 'Elevation gain', 'Sedentary, per day'])
+    expect(rowNamed('More about moving', 'Workout time')!.querySelector('.figure-row-note')?.textContent).toBe(`0h${NB}34m per day on average · 9 workouts`)
+    expect(rowNamed('More about moving', 'Elevation gain')!.querySelector('.figure-row-value')?.textContent).toBe(`521${NB}m`)
+  })
+})
+
+describe('the Activity page: the workouts', () => {
+  it('lists the newest first with their date, under the server\'s count and the period\'s workout time', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    const card = cardFor('Workouts')!
+    expect(card.querySelector('.dash-caption')?.textContent)
+      .toBe(`newest first · 9 workouts this month, 16h${NB}01m together · excluded workouts do not count`)
+    expect(workoutRows()).toHaveLength(7)
+    expect(workoutRows()[0]!.querySelector('.session-row-detail')?.textContent).toMatch(/^Sat, Aug 29 · /)
+    expect(showAll().textContent).toBe('Show all 10 workouts')
+    expect(card.querySelector('.activity-workout-filter')).toBeNull()
+  })
+
+  it('takes a row of its own when expanded, the types widening with it', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    act(() => { showAll().click() })
+    expect(workoutRows()).toHaveLength(ACTIVITY_PERIOD_MONTH.workouts.length)
+    expect(cardFor('Workouts')!.dataset.span).toBe('12')
+    expect(cardFor('By type')!.dataset.span).toBe('12')
+    // A month's list is not grouped.
+    expect(cardFor('Workouts')!.querySelector('.period-list-heading')).toBeNull()
+  })
+
+  it('filters the expanded list by type, counted as the server counts, and clears it on closing', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    act(() => { showAll().click() })
+    const chips = () => [...cardFor('Workouts')!.querySelectorAll<HTMLButtonElement>('.activity-workout-filter .segment')]
+    expect(chips().map((chip) => chip.textContent)).toEqual(['All 9', 'Biking 3', 'Running 3', 'Walking 3'])
+    expect(chips()[0]!.getAttribute('aria-pressed')).toBe('true')
+    act(() => { chips()[2]!.click() })
+    const running = ACTIVITY_PERIOD_MONTH.workouts.filter((w) => w.type === 'RUNNING')
+    expect(workoutRows()).toHaveLength(running.length)
+    for (const row of workoutRows()) expect(row.querySelector('.session-row-type')?.textContent).toBe('Running')
+    // Fewer than seven, and still open, with its way closed.
+    expect(showAll().textContent).toBe('Show fewer')
+    act(() => { showAll().click() })
+    expect(cardFor('Workouts')!.querySelector('.activity-workout-filter')).toBeNull()
+    expect(workoutRows()).toHaveLength(7)
+  })
+
+  it('groups the list by month on a year, collapsed as well', async () => {
+    await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR })
+    const headings = [...cardFor('Workouts')!.querySelectorAll('.period-list-name')].map((name) => name.textContent)
+    expect(headings[0]).toBe('December')
+  })
+
+  it('opens collapsed again in a new period', async () => {
+    await renderAt(MONTH_URL, { period: month({ workouts: MANY }) })
+    act(() => { showAll().click() })
+    expect(workoutRows()).toHaveLength(MANY.length)
+    // The stub answers every period with the same body, so only the period key tells them apart.
+    act(() => { container!.querySelector<HTMLButtonElement>('button[aria-label="Previous period"]')!.click() })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(new URLSearchParams(window.location.search).get('on')).not.toBe('2026-08-15')
+    expect(workoutRows()).toHaveLength(7)
+  })
+})
+
+describe('the Activity page: by type', () => {
+  it('counts each type against its usual for a month, with its distance', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(cardFor('By type')!.querySelector('.dash-caption')?.textContent).toBe('this month · against your usual month')
+    expect(typeRows()).toEqual([
+      ['Biking', `3${NB}× · 12.0${NB}km`, 'within your usual 2 – 3'],
+      ['Running', `3${NB}× · 10.2${NB}km`, 'within your usual 2 – 3'],
+      ['Walking', `3${NB}× · 11.4${NB}km`, 'within your usual 2 – 3'],
+    ])
+  })
+
+  it('colours a count outside its usual as out, judged neither way', async () => {
+    await renderAt(MONTH_URL, { period: month({ types: types({ standing: 'above' }) }) })
+    const verdict = cardFor('By type')!.querySelector('.activity-type-verdict')!
+    expect(verdict.textContent).toBe('above your usual 2 – 3')
+    expect(verdict.className).toBe('activity-type-verdict is-out')
+  })
+
+  it('gives no verdict while the period is running, or on a thin usual, and says when there is no usual', async () => {
+    const [first, second, third] = ACTIVITY_PERIOD_MONTH.types
+    await renderAt(MONTH_URL, {
+      period: month({ types: [{ ...first!, standing: null }, { ...second!, usualCount: { ...second!.usualCount!, thin: true } }, { ...third!, usualCount: null, standing: null }] }),
+    })
+    expect(typeRows().map((row) => row[2])).toEqual(['', '', 'no usual yet'])
+  })
+
+  it('prints a type\'s time where it has no distance', async () => {
+    await renderAt(MONTH_URL, { period: month({ types: [{ ...ACTIVITY_PERIOD_MONTH.types[0]!, type: 'WEIGHTLIFTING', distanceMeters: null, seconds: 3240 }] }) })
+    expect(typeRows()[0]!.slice(0, 2)).toEqual(['Weightlifting', `3${NB}× · 54${NB}min`])
+  })
+
+  it('shows the cardio load against its usual, and the VO₂max with its trend, in both languages', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(rowNamed('By type', 'Cardio load, per day')!.querySelector('.figure-row-value')?.textContent).toBe('69')
+    const vo2 = rowNamed('By type', 'VO₂max')!
+    expect(vo2.querySelector('.figure-row-value')?.textContent).toBe('42.5')
+    expect(vo2.querySelector('.figure-row-verdict')?.textContent).toBe('rising · was 40 in May')
+    expect(vo2.querySelector('.figure-row-note')?.textContent).toBe('VO2 max (daily)')
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH }, 'nl')
+    expect(rowNamed('Per soort', 'VO₂max')!.querySelector('.figure-row-verdict')?.textContent).toBe('stijgend · was 40 in mei')
+  })
+
+  it.each<[string, Partial<ActivityPeriodData['vo2max'] & object>, string]>([
+    ['falling', { trend: 'falling', latest: 38, earlier: 40 }, 'falling · was 40 in May'],
+    ['steady', { trend: 'steady', latest: 42, earlier: 42 }, 'steady at 42'],
+  ])('words a %s VO₂max', async (_, patch, words) => {
+    await renderAt(MONTH_URL, { period: month({ vo2max: { ...ACTIVITY_PERIOD_MONTH.vo2max!, ...patch } }) })
+    expect(rowNamed('By type', 'VO₂max')!.querySelector('.figure-row-verdict')?.textContent).toBe(words)
   })
 })
