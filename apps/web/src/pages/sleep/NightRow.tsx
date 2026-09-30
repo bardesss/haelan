@@ -1,9 +1,9 @@
+import { useCallback } from 'react'
 import { useTranslation } from '../../i18n/index.js'
-import { Link } from '../../router.js'
-import { formatDuration, formatClock, formatSessionDateHeading } from '../../format.js'
-import { localMinutesOf, inWindow, WIDE_WINDOW } from '../../charts/schedule.js'
-import { useSourceNames } from '../../data/useSourceNames.js'
-import type { Night } from '../../data/useNights.js'
+import { Link, readQuery, useRoute, withQuery } from '../../router.js'
+import { formatDuration, formatClock, formatWeekdayDate } from '../../format.js'
+import { standingShort, verdictTone } from '../../charts/base.js'
+import type { SleepListRow } from '../../data/periodTypes.js'
 
 /** One spelling of the path, shared by the row that links there and the tests that assert it. */
 export function nightPath(localDate: string): string {
@@ -11,48 +11,49 @@ export function nightPath(localDate: string): string {
 }
 
 /**
- * A night's own row: the date, who recorded it, how long it ran, and bed to wake.
- *
- * The span is the night's own `startMs`/`endMs`, which readSleepNights sets to bedtime and wake
- * through assembleNights - an afternoon nap on the same date sits in `naps` rather than inside the
- * span, so this duration is time in bed for the night rather than the distance between the day's
- * first and last sleep instants. Time asleep is a derived metric and deliberately not shown here:
- * the list has no /series request of its own, and a row inventing one from the segments would be
- * this surface computing a figure derive/sleep.ts already owns.
+ * A night's page as a link from wherever the reader is, keeping the `source` their URL names: the
+ * night page's traces still honour it, and moving to a night should not drop a choice the reader
+ * made. Every way onward to a night goes through this (the night page's arrows and strip, the Sleep
+ * page's list, point panel and Day tab).
  */
-export function NightRow({ night }: { night: Night }) {
-  const { t, i18n } = useTranslation()
-  const { nameOf } = useSourceNames()
-  const language = i18n.language
+export function useNightHref(): (localDate: string) => string {
+  const route = useRoute()
+  const source = readQuery(route.split('?')[1] ?? '').get('source')
+  return useCallback((localDate: string) => withQuery(nightPath(localDate), { source }), [source])
+}
 
-  const minutes = Math.round((night.endMs - night.startMs) / 60_000)
-  const bedMinutes = inWindow(
-    localMinutesOf(night.localDate, night.startMs, night.startOffsetMinutes), WIDE_WINDOW)
-  const wakeMinutes = inWindow(
-    localMinutesOf(night.localDate, night.endMs, night.endOffsetMinutes), WIDE_WINDOW)
+/**
+ * A night's own row in the Sleep page's list, linking to its night page, in the approved mockup's
+ * order: the date, the time asleep, a dot in the tone of the server's verdict on that night
+ * (verdictTone, plain when usual), bed to wake ("23:06 – 06:57"), and ✦ for a good night
+ * (PATTERNS.md's good-day mark), with "your longest" beside it on the night that is the period's
+ * high (`longest`, the server's `high`). Every figure is the period read's own
+ * (SleepListRow), so the row prints what the hero and its strip print for the same night. The dot's
+ * standing is said in words for a screen reader, since a colour alone says nothing there.
+ */
+export function NightRow({ night, longest = false }: { night: SleepListRow, longest?: boolean }) {
+  const { t, i18n } = useTranslation()
+  const language = i18n.language
+  const nightHref = useNightHref()
+  const tone = verdictTone(night.judged, night.standing)
+  const standing = standingShort(night.standing ?? undefined, 'minutes', t)
+  const { bedtimeMinutes: bed, waketimeMinutes: wake } = night
 
   return (
-    <Link to={nightPath(night.localDate)} className="night-row-link">
+    <Link to={nightHref(night.localDate)} className="night-row-link">
       <div className="night-row">
         <div className="night-row-main">
-          <span className="night-row-primary">
-            {/* Visible, and the row's first column. It used to be an sr-only span, because the
-                date lived in a heading above the row and a screen reader arriving here by arrow
-                key had no guarantee it had heard that heading. The date is in the row now, so the
-                guarantee is structural and a second copy would read it out twice. */}
-            <span className="night-row-date">{formatSessionDateHeading(night.localDate, language)}</span>
-            <span className="night-row-duration">{formatDuration(minutes, language)}</span>
-            <span className="night-row-source">{nameOf(night.sourceId)}</span>
+          <span className="night-row-date">{formatWeekdayDate(night.localDate, language)}</span>
+          <span className="night-row-duration">
+            {night.asleepMinutes === null ? t('common.absent') : formatDuration(night.asleepMinutes, language)}
           </span>
+          <span className={tone === null ? 'night-row-dot' : `night-row-dot ${tone}`} aria-hidden="true" />
+          {standing !== '' && <span className="sr-only">{standing}</span>}
           <span className="night-row-clock">
-            {t('sleep.nights.clock', { bed: formatClock(bedMinutes), wake: formatClock(wakeMinutes) })}
+            {bed !== null && wake !== null && t('sleep.nights.clock', { bed: formatClock(bed), wake: formatClock(wake) })}
           </span>
+          {night.good && <span className="night-row-good">{longest ? `✦ ${t('sleep.nights.longest')}` : '✦'}</span>}
         </div>
-        {night.excludedSessions.length > 0 && (
-          <div className="night-row-excluded">
-            {t('sleep.nights.excluded', { count: night.excludedSessions.length })}
-          </div>
-        )}
       </div>
     </Link>
   )

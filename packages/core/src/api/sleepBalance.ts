@@ -1,6 +1,6 @@
 // The sleep balance: each night signed against a zero line that is the person's usual when they
-// follow it and it is not thin, their target otherwise. Moved here from Sleep.tsx so the Sleep page
-// and the night page state the same balance. Absent nights stay absent: a night that reported
+// follow it and it is not thin, their target otherwise. One rule for the Sleep period read and the
+// night page, so the two state the same balance. Absent nights stay absent: a night that reported
 // nothing is not a night of exactly no surplus.
 export interface ZeroLine { minutes: number, source: 'baseline' | 'target' }
 

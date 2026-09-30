@@ -1,14 +1,17 @@
 import type { ChartTokens } from './tokens.js'
 
-export type Night = { date: string; bed: number | null; wake: number | null; naps: number[] }
+// `weekend` and `bedOut` are a per-night variant the Sleep page's schedule draws (the approved
+// mockup's): a weekend night in the lighter step of the same family, and a bedtime the server judged
+// outside its usual marked with a dot at the bed end. Left out, a night draws as it always has.
+export type Night = { date: string; bed: number | null; wake: number | null; naps: number[]; weekend?: boolean; bedOut?: boolean }
 
 export type NightMark =
   | { kind: 'no-data'; color: string }
-  | { kind: 'span'; bed: number; wake: number; color: string }
+  | { kind: 'span'; bed: number; wake: number; color: string; bedOut: boolean }
 
 export function nightMark(night: Night, t: ChartTokens): NightMark {
   if (night.bed === null || night.wake === null) return { kind: 'no-data', color: t.noData }
-  return { kind: 'span', bed: night.bed, wake: night.wake, color: t.stageLight }
+  return { kind: 'span', bed: night.bed, wake: night.wake, color: night.weekend === true ? t.stageRem : t.stageLight, bedOut: night.bedOut === true }
 }
 
 // Noon to noon: shifted rather than widened, so naps at 13:00 fit without compressing the sleep
@@ -99,10 +102,10 @@ export function fitWindow(
 }
 
 // A further noon two days on rather than one: wide enough that a night running past the default
-// window's own noon sits inside it instead of on its edge or past it. Sleep.tsx's own schedule
-// card passes this; Dashboard's stays on DEFAULT_WINDOW. Exported here rather than declared on the
-// page that uses it, once schedule-marks.test.ts needed the same numbers to pin the no-data dot's
-// clearance under it too.
+// window's own noon sits inside it instead of on its edge or past it. Both schedule charts place
+// their nights in it (the Sleep page's SleepScheduleCard and the night page's NightWeek), and the
+// night page's hypnogram bed label reads through it. Exported here rather than declared on a page,
+// once schedule-marks.test.ts needed the same numbers to pin the no-data dot's clearance under it too.
 export const WIDE_WINDOW = { min: AXIS_MIN, max: AXIS_MIN + 36 * 60 }
 
 // 60 minutes below the top of whichever window is in force, not a fixed point tied to the default
@@ -151,8 +154,8 @@ export const NO_DATA_Y = noDataYFor(DEFAULT_WINDOW)
 // Minutes from the local midnight of `localDate`, negative before it: the convention
 // packages/core/src/derive/localDay.ts sets and sleep_bedtime_minutes/sleep_waketime_minutes are
 // stored in ("an 23:30 bedtime is -30", packages/core/src/derive/metrics.ts). Also how a caller
-// reading /sleep/nights directly (Sleep.tsx's own hypnogram bed label) derives the same figure
-// from a Night's timestamps, which carry no pre-computed minutes value of their own.
+// reading /sleep/nights directly (NightThrough's hypnogram bed label, the schedule's naps)
+// derives the same figure from a Night's timestamps, which carry no pre-computed minutes value of their own.
 export function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number): number {
   const wall = utcMs + offsetMinutes * 60_000
   return Math.round((wall - Date.parse(`${localDate}T00:00:00Z`)) / 60_000)
@@ -165,6 +168,26 @@ export function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: 
 // pair goes through, and does not call this on the wake side (see its own comment for why).
 export function inWindow(minutes: number, window: { min: number, max: number }): number {
   return minutes < window.min ? minutes + 1440 : minutes
+}
+
+/**
+ * A usual bed or wake range placed in the schedule's frame: shifted by the whole day `anchorRaw`
+ * would be shifted by (inWindow's rule), then kept its own width, so a range straddling midnight
+ * stays one span. Null for a thin or absent usual, which draws no band (FigureRow's rule for a bar).
+ *
+ * A wake range is anchored on the usual bedtime rather than on itself: a wake time is placed as its
+ * night's bed plus the night's length (withinSchedule), so it moves by whatever day its bedtime
+ * moved by, and a wake range shifted on its own terms would land a day away from the bars it
+ * describes. 1440 stands in with no usual bedtime to anchor on, the shift every night that ended
+ * this morning takes anyway (napInWindow's same fallback). Shared by the night page's week and the
+ * Sleep page's schedule.
+ */
+export function placedUsualBand(
+  baseline: { low: number, high: number, thin: boolean } | null, anchorRaw: number | null,
+): { low: number, high: number } | null {
+  if (baseline === null || baseline.thin) return null
+  const shift = anchorRaw === null ? 1440 : inWindow(anchorRaw, WIDE_WINDOW) - anchorRaw
+  return { low: baseline.low + shift, high: baseline.high + shift }
 }
 
 /**
