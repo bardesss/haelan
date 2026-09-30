@@ -4,7 +4,7 @@ import type { Translate } from '../../format.js'
 import { directionWords, standingShort } from '../../charts/base.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
 import { stripBands } from '../dashboard/cardShared.js'
-import { deviationVerdictLine, formatFigureDifference, formatFigureValue, isShortSpan, verdictLine } from './figureText.js'
+import { deviationVerdictLine, formatFigureDifference, formatFigureRange, formatFigureValue, isShortSpan, verdictLine } from './figureText.js'
 
 // The words of an overview page (Sleep, Activity) over the /period read: PATTERNS.md's "Overview
 // pages" section, beside this file. The server has already judged every figure, counted its days and
@@ -35,6 +35,13 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   if (figure.reason === 'no-data') return null
   if (figure.reason === 'too-few-days') return t('period.reason.tooFewDays')
   if (figure.reason === 'thin-usual') return t('glance.usual.thin')
+  // A per-period figure the server left unjudged with a usual to judge by is a running period: its
+  // count so far beside a whole period's usual ("so far; usual 1 - 5 a month"), no verdict.
+  if (figure.per === 'period' && figure.standing === null && figure.value !== null && figure.usual !== null && !figure.usual.thin) {
+    const { low, high } = formatFigureRange(figure, figure.usual.low, figure.usual.high, language, t)
+    const soFar = t(`period.soFar.${figure.usual.window.unit}`, { low, high })
+    return o.window === true ? `${soFar} ${windowPhrase(figure.usual.window, t)}` : soFar
+  }
   const line = verdictLine({ ...figure, baseline: figure.usual }, language, t)
   if (line === null || figure.usual === null) return line
   // A per-period figure's range is a whole period's worth ("1 - 5 a month"), and says so.
@@ -215,8 +222,8 @@ export const PERIOD_TOTAL_METRICS: readonly string[] = ['distance', 'floors', 'a
 
 /**
  * The figure's value: for a total (PERIOD_TOTAL_METRICS), the period's total, with its average per day
- * in the line under it; for a per-period figure (the nap count), the period's total alone, since its
- * verdict already reads a period's worth; otherwise the average alone (per night, per day, or per
+ * in the line under it; for a per-period figure (the nap count), the period's total alone (its count
+ * so far while the period runs, which the server leaves unjudged); otherwise the average alone (per night, per day, or per
  * week), whether or not the server sent a total.
  */
 export function periodValueLine(figure: PeriodFigure, language: string, t: Translate): { value: string, under: string | null } {

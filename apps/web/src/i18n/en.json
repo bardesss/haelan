@@ -1838,6 +1838,12 @@
       "quarter": "per 3 months",
       "year": "per year"
     },
+    "soFar": {
+      "week": "so far; usual {{low}} – {{high}} a week",
+      "month": "so far; usual {{low}} – {{high}} a month",
+      "quarter": "so far; usual {{low}} – {{high}} per 3 months",
+      "year": "so far; usual {{low}} – {{high}} a year"
+    },
     "panel": {
       "within": "within your usual",
       "close": "Close"

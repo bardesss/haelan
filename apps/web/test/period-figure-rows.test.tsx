@@ -94,6 +94,14 @@ describe('PeriodFigureRows', () => {
     expect(strip.formatValue(null, '-')).toBe('-')
   })
 
+  it("marks a per-period figure's count, the number it prints, not its pace", () => {
+    // A running month: three naps so far, a pace of 4.2, left unjudged by the server.
+    const naps = { ...deep, metric: 'sleep_nap_count', unit: 'count', precision: 0, per: 'period' as const, value: 4.2, total: 3, standing: null, judged: null }
+    render([naps])
+    expect(rowProps[0]!.value).toBe('3')
+    expect(rowProps[0]!.mark).toBe(3)
+  })
+
   it('draws the bar alone with `bars`', () => {
     render([rem], { bars: true })
     expect(rowProps[0]!.strip).toBeUndefined()
