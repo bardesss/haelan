@@ -303,6 +303,7 @@ export type {
   PeriodWindow, PeriodUsual, DayCounts, PeriodStripPoint, PeriodReason, PeriodFigure, PeriodHigh, PeriodChange, PeriodHeader,
 } from './query/periodFigure.ts'
 export { countsOf, highOf } from './query/periodFigure.ts'
-export type { SleepPeriod, SleepListRow, ScheduleSides, ScheduleSide } from './query/sleepPeriod.ts'
+export type { SleepPeriod, SleepListRow, ScheduleSides, ScheduleSide, BalanceWeek, NightMonth } from './query/sleepPeriod.ts'
+export { balanceWeeks, isWeekendMorning, nightMonths } from './query/sleepPeriod.ts'
 export type { ActivityPeriod, WorkoutListRow, TypeTotal, Vo2Trend } from './query/activityPeriod.ts'
 export { vo2TrendOf } from './query/activityPeriod.ts'

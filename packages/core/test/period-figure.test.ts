@@ -141,6 +141,26 @@ describe('periodFigureOf', () => {
     expect(first.band!.center).toBeCloseTo(monday.reduce((s, d) => s + ramp(d), 0) / monday.length)
     expect(first.band!.thin).toBe(false)
   })
+  it('per period scales value and usual to the whole period, a running one included, but not the total', () => {
+    // One a fortnight: the 1st and the 15th of every month.
+    const values = fill('2025-01-01', '2026-09-30', (d) => (d.endsWith('-01') || d.endsWith('-15') ? 1 : 0))
+    const f = periodFigureOf({ ...base, metric: 'sleep_nap_count', per: 'period', range: 'month', anchor: '2026-09-15', lastDay: '2026-09-20', values, dailyBands: new Map() })
+    expect(f.per).toBe('period')
+    // Two in the twenty days so far is a pace of three over September's thirty.
+    expect(f.value).toBeCloseTo(3)
+    expect(f.total).toBe(2)
+    // Two in each earlier month, each month's mean taken over September's thirty days.
+    const thirty = periodUsual(values, 'month', periodBounds('month', '2026-09-15'), 30)!
+    expect(f.usual!.center).toBeCloseTo(thirty.center)
+    expect(f.daily[0]!.value).toBe(1)
+  })
+  it("scales a per-period figure's weekly points by seven, a week's worth", () => {
+    const values = fill('2025-01-01', '2026-09-30', () => 1)
+    const f = periodFigureOf({ ...base, metric: 'sleep_nap_count', per: 'period', range: '3months', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: new Map() })
+    expect(f.value).toBeCloseTo(92)
+    expect(f.weekly![1]!.value).toBeCloseTo(7)
+    expect(f.weekly![1]!.band!.center).toBeCloseTo(7)
+  })
   it('scales weekly values and bands by seven for a per-week figure', () => {
     const values = fill('2025-01-01', '2026-09-30', () => 30)
     const f = periodFigureOf({ ...base, metric: 'active_minutes', per: 'week', range: '3months', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: new Map() })
