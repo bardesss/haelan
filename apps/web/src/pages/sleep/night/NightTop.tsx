@@ -1,11 +1,11 @@
 import { useCallback } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { formatClock } from '../../../format.js'
-import { navigate, readQuery, useRoute, withQuery } from '../../../router.js'
+import { navigate } from '../../../router.js'
 import { useSourceNames } from '../../../data/useSourceNames.js'
 import { DetailNav, PageHeader, useHeaderDate } from '../../../components/PageHeader.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { nightPath } from '../NightRow.js'
+import { useNightHref } from '../NightRow.js'
 
 /**
  * Opens another night's page, keeping the reader's `source` from the URL: the night page's own
@@ -14,11 +14,8 @@ import { nightPath } from '../NightRow.js'
  * The header's arrows and the hero strip's dots both go through this.
  */
 export function useOpenNight(): (localDate: string) => void {
-  const route = useRoute()
-  const source = readQuery(route.split('?')[1] ?? '').get('source')
-  return useCallback((target: string) => {
-    navigate(withQuery(nightPath(target), { source }))
-  }, [source])
+  const nightHref = useNightHref()
+  return useCallback((target: string) => { navigate(nightHref(target)) }, [nightHref])
 }
 
 /**

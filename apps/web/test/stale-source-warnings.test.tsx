@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
+import { SLEEP_PERIOD_YEAR } from './fixtures/sleepPeriod.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -81,6 +82,7 @@ beforeAll(() => {
       return json(body)
     }
     if (url.includes('/intraday')) return json({ points: [], reduction: null })
+    if (url.includes('/sleep/period')) return json(SLEEP_PERIOD_YEAR)
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/insights')) return json(insightBody(url))
     if (url.includes('/trend')) return json({ points: [] })
@@ -107,13 +109,15 @@ async function settled(Page: () => ReactNode, path: string): Promise<HTMLDivElem
   return snapshot
 }
 
+// The last column is the paragraphs the control row carries: the trend note on every page whose
+// tiles draw change badges, and none on Sleep, whose overview draws none (M10b).
 describe.each([
-  ['Activity', Activity, '/activity'],
-  ['Recovery', Recovery, '/recovery'],
-  ['Sleep', Sleep, '/sleep'],
-  ['Health', Health, '/health'],
-  ['Weight', Weight, '/weight'],
-] as const)('%s, with a source that went quiet inside the range', (_name, Page, path) => {
+  ['Activity', Activity, '/activity', ['control-row-note']],
+  ['Recovery', Recovery, '/recovery', ['control-row-note']],
+  ['Sleep', Sleep, '/sleep', []],
+  ['Health', Health, '/health', ['control-row-note']],
+  ['Weight', Weight, '/weight', ['control-row-note']],
+] as const)('%s, with a source that went quiet inside the range', (_name, Page, path, notes) => {
   let page: HTMLDivElement
   beforeAll(async () => { page = await settled(Page, path) })
 
@@ -129,9 +133,9 @@ describe.each([
   })
 
   it('says nothing about it under the control row', () => {
-    // The row's only paragraph is the trend note every one of these pages asks for.
+    // The row's only paragraph is the trend note, on the pages that ask for one.
     const controls = page.querySelector('.controls')!
-    expect([...controls.querySelectorAll('p')].map((p) => p.className)).toEqual(['control-row-note'])
+    expect([...controls.querySelectorAll('p')].map((p) => p.className)).toEqual(notes)
     expect(page.textContent).not.toMatch(/stopped reporting|has not reported/i)
   })
 })

@@ -24,6 +24,11 @@ const SHORT_SPANS: ReadonlySet<string> = new Set([
   'hardZoneMinutes', 'activeZoneMinutes',
 ])
 
+/** Whether a minutes figure reads in minutes ("12 min") rather than as a duration (SHORT_SPANS above). */
+export function isShortSpan(metric: string): boolean {
+  return SHORT_SPANS.has(metric)
+}
+
 // Running form figures stored in a unit far larger than the reading: a ground contact of 0.248 s
 // reads as "248 ms", a vertical oscillation of 0.089 m as "8.9 cm", the way a watch shows both. Keyed
 // on the figure (its `metric` is its WorkoutFigureKey) rather than on the unit, since distance and
@@ -79,7 +84,7 @@ function figureValueText(
   const small = SMALL_UNITS[figure.metric]
   if (small !== undefined) return `${formatNumber(value * small.factor, small.precision, language, absent)} ${t(small.unit)}`
   switch (figure.unit) {
-    case 'minutes': return SHORT_SPANS.has(figure.metric)
+    case 'minutes': return isShortSpan(figure.metric)
       ? `${formatNumber(value, 0, language, absent)} ${t('activity.units.min')}`
       : formatDuration(value, language)
     case 'minutes_from_local_midnight': return formatClock(value)
@@ -130,6 +135,23 @@ export function formatFigureRange(
   const to = formatFigureValue(figure, high, language, t)
   const unit = unitOf(to)
   return { low: unit !== null && unitOf(from) === unit ? from.slice(0, -(unit.length + 1)) : from, high: to }
+}
+
+/**
+ * The bedtime variability as a sentence, the night page's and the Sleep page's one wording for it
+ * ("Bedtime varied ±34 min this month · your usual ±20 – 40 min"): the figure's value, then its
+ * usual in formatFigureRange's form where there is a real one to name (not thin, not missing). The
+ * caller names its two keys, the plain sentence and the one with the usual, and any words they add
+ * (`params`, a period the sentence names).
+ */
+export function variedLine(
+  figure: Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'>, usual: { low: number, high: number, thin: boolean } | null,
+  keys: { plain: string, usual: string }, language: string, t: Translate, params: Record<string, string> = {},
+): string {
+  const value = formatFigureValue(figure, figure.value, language, t)
+  if (usual === null || usual.thin) return t(keys.plain, { ...params, value })
+  const { low, high } = formatFigureRange(figure, usual.low, usual.high, language, t)
+  return t(keys.usual, { ...params, value, low, high })
 }
 
 /**

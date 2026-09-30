@@ -22,9 +22,10 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
   label: string
   showNaps?: boolean
   // Usual bed and wake ranges shaded across the whole chart, already placed in the same frame as
-  // the nights' own bed and wake (the caller's job, as placing the nights is). Left out by the
-  // Sleep page; the night page passes its bedtime and wake time usuals, and none when either is
-  // thin, the rule every usual band on that page keeps. Memoise it: it reaches the chart build.
+  // the nights' own bed and wake (the caller's job, as placing the nights is; placedUsualBand in
+  // schedule.ts does it for both callers). The night page passes its bedtime and wake time usuals,
+  // the Sleep page its latest night's, and neither one that is thin, the rule every usual band
+  // keeps. Memoise it: it reaches the chart build.
   usualBands?: readonly { low: number, high: number }[]
   // Named axisWindow, not window: a plain `window` parameter shadows the DOM global, which this
   // file does not use today but a future edit here easily might reach for without noticing the
@@ -35,7 +36,7 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
   // afternoon nap had to span 36 hours, and a 36 hour axis prints noon and midnight twice each,
   // which read as a clock that had lost its place. Fitted, an ordinary range spans well under a
   // day and no label repeats. The caller still places its nights in whatever frame it likes
-  // (Sleep.tsx uses WIDE_WINDOW, so nothing is refused); this only chooses how much of that frame
+  // (both use WIDE_WINDOW, so nothing is refused); this only chooses how much of that frame
   // to draw.
   axisWindow?: { min: number, max: number }
 }) {
@@ -89,16 +90,24 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
             }
             const top = api.coord([api.value(0), mark.bed])
             const bottom = api.coord([api.value(0), mark.wake])
-            return {
-              type: 'line',
+            const span = {
+              type: 'line' as const,
               shape: { x1: top[0] ?? 0, y1: top[1] ?? 0, x2: bottom[0] ?? 0, y2: bottom[1] ?? 0 },
-              style: { stroke: mark.color, lineWidth: STROKE.nightSpan, lineCap: 'round' },
+              style: { stroke: mark.color, lineWidth: STROKE.nightSpan, lineCap: 'round' as const },
             }
+            if (!mark.bedOut) return span
+            // A bedtime outside its usual: a dot at the bed end, in the verdict's warning tone.
+            return { type: 'group' as const, children: [span, {
+              type: 'circle' as const,
+              shape: { cx: top[0] ?? 0, cy: top[1] ?? 0, r: SYMBOL.bedOut },
+              style: { fill: tokens.negative },
+            }] }
           },
           encode: { x: 0 },
-          // Each night's placed bed and wake ride along with its index, so the series data states
-          // what is drawn (renderItem itself reads the night from `nights`).
-          data: nights.map((n, i) => [i, n.bed, n.wake]),
+          // Each night's placed bed and wake ride along with its index, then whether it is a weekend
+          // night and whether its bedtime is dotted (1 or 0), so the series data states what is drawn
+          // (renderItem itself reads the night from `nights`).
+          data: nights.map((n, i) => [i, n.bed, n.wake, n.weekend === true ? 1 : 0, n.bedOut === true ? 1 : 0]),
           ...(usualBands.length > 0 && { markArea: { silent: true,
             itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
             data: usualBands.map((b) => [{ yAxis: b.low }, { yAxis: b.high }]) } }) },
@@ -112,8 +121,8 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow, usua
       ],
     }
     // axisWindow.min/max rather than axisWindow itself: this chart's own default is a module level
-    // constant so it never churns, but a caller building its own window prop (Sleep.tsx passes a
-    // module level constant of its own, for the same reason) should not have to guarantee object
+    // constant so it never churns, but a caller building its own window prop should not have to
+    // guarantee object
     // identity across renders just to avoid disposing and rebuilding this chart every commit, the
     // defect useChart.ts's own doc comment already names for a freshly constructed array.
   }, [nights, showNaps, resolvedWindow.min, resolvedWindow.max, usualBands, t])

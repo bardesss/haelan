@@ -59,7 +59,7 @@ export function readPeriodSeries(
 
 export interface CatalogueFigureInput {
   metric: string, agg: string, range: PeriodRange, anchor: string, bounds: DateSpan, span: DateSpan, lastDay: string
-  source?: string, per?: 'day' | 'week', additive?: boolean
+  source?: string, per?: 'day' | 'week' | 'period', additive?: boolean
 }
 
 /** A catalogue metric's figure and the series it was made from, for a caller that needs the values again. */
@@ -78,7 +78,7 @@ export function catalogueRead(q: PersonQuery, o: CatalogueFigureInput): { figure
 export interface ValuesFigureInput {
   metric: string, unit: string, precision: number, direction: FigureDirection
   range: PeriodRange, anchor: string, bounds: DateSpan, lastDay: string
-  values: ReadonlyMap<string, number>, per?: 'day' | 'week', additive: boolean
+  values: ReadonlyMap<string, number>, per?: 'day' | 'week' | 'period', additive: boolean
   /** Every day's band; by default banded in memory from `values`, as `baselines` would. */
   dailyBands?: ReadonlyMap<string, Baseline | null>
 }

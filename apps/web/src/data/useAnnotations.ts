@@ -260,6 +260,12 @@ function invalidateAffected(queryClient: QueryClient, personId: string, result: 
   // a reload, and a past day's cards kept the old figure until the glance aged out.
   invalidateResource(queryClient, personId, 'glance')
   invalidateResource(queryClient, personId, 'glance-calendar')
+  // The period reads and the night page are keyed by a range name, an anchor or a night, never a
+  // from/to pair, so overlapsAffected cannot see them either: without these an excluded night kept
+  // its place in the Sleep page's hero, counts and list until the read aged out.
+  invalidateResource(queryClient, personId, 'sleep-period')
+  invalidateResource(queryClient, personId, 'activity-period')
+  invalidateResource(queryClient, personId, 'night')
 }
 
 /** notes and events carry no drain and no applied field: a write to either takes effect the

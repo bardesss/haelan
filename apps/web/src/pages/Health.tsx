@@ -217,8 +217,7 @@ export function Health() {
 
   // The milestone's own deliverable ("SpO2 with interval and count", spec section 4): the day's
   // reading count belongs in the basis line, not only in the tooltip and the accessible table it
-  // already reached. Summed across the displayed range, the same "total across days" shape
-  // Sleep.tsx's own napCountTotal takes for its per-period count.
+  // already reached. Summed across the displayed range: a total across days, not a mean.
   //
   // Resolved to its own pluralised phrase here, before it ever reaches MetricCard, rather than
   // handed over as a bare number under the name `count`: MetricCard's wear branch always fires for

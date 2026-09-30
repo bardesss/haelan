@@ -60,9 +60,10 @@ export function DashCard({ span, title, subtitle, link, className, children }: {
  * A strip's per-day bands as Sparkline's `bands` draws them: each day's own usual, the one its dot
  * is judged against, or null where that day has none or only a thin one (which judges nothing, so
  * shading it would claim a usual the verdict does not stand on). Undefined when no day has a band
- * at all, so a strip with nothing to shade draws no band series.
+ * at all, so a strip with nothing to shade draws no band series. Takes only the band, so an
+ * overview page's period points (periodText.ts's periodStripOf) shade the same way.
  */
-export function stripBands(strip: readonly GlanceStripDay[]): ({ low: number, high: number } | null)[] | undefined {
+export function stripBands(strip: readonly Pick<GlanceStripDay, 'band'>[]): ({ low: number, high: number } | null)[] | undefined {
   const bands = strip.map((d) => (d.band !== null && !d.band.thin ? { low: d.band.low, high: d.band.high } : null))
   return bands.some((b) => b !== null) ? bands : undefined
 }

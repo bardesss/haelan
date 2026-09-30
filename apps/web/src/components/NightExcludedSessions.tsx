@@ -2,14 +2,13 @@ import { useTranslation } from '../i18n/index.js'
 
 /**
  * The line beneath a drawn hypnogram saying a sleep session was thrown out of the night it draws.
- * Dashboard.tsx and Sleep.tsx both build their hypnogram from the same useNights row
- * (packages/core/src/query/sleepNights.ts assembles a night from the applied session set and
- * reports what it excluded alongside it), so a night an exclusion shortened needs the same
- * explanation on both pages, not a second copy of this paragraph one page's edit could leave the
- * other still drawing an unexplained short night.
+ * The night page's About fold (NightAbout) says it under the night's sessions; the night comes
+ * from packages/core/src/query/sleepNights.ts, which assembles it from the applied session set and
+ * reports what it excluded alongside it, so a night an exclusion shortened is never left
+ * unexplained. One component, so a second copy of this paragraph cannot drift.
  *
- * `count` rather than the excluded ids themselves: both call sites already reduce to
- * `lastNight.excludedSessions.length`, and this component's only job is the zero/nonzero branch
+ * `count` rather than the excluded ids themselves: the call site already reduces to the night's
+ * `excludedSessions.length`, and this component's only job is the zero/nonzero branch
  * and the plural, neither of which needs the ids.
  */
 export function NightExcludedSessions({ count }: { count: number }) {

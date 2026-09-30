@@ -46,3 +46,41 @@ export function barDateLabels(dates: readonly string[]): string[] {
   const spansMonths = new Set(dates.map((date) => date.slice(0, 7))).size > 1
   return dates.map((date) => (spansMonths ? date.slice(5) : date.slice(8)))
 }
+
+/** An overview chart's own x labels: one per point, and which of them are printed. */
+export interface PeriodAxis { data: string[], shown: boolean[] }
+
+/**
+ * The x labels of an overview page's bar charts (the stages, the balance), by the range, as the
+ * approved mockups print them: a week's weekdays ("ma di wo"), a month's day numbers every seventh
+ * day ("1 8 15 22 29"), and on 3 months and Year, whose points are weeks, each month's name under
+ * the first week that starts in it ("jan feb mrt"). The tooltip and the table keep the full dates.
+ * Memoise it: it reaches the chart build.
+ */
+export function periodAxisLabels(dates: readonly string[], range: 'week' | 'month' | '3months' | 'year', language: string): PeriodAxis {
+  const at = (date: string) => Date.parse(`${date}T00:00:00Z`)
+  if (range === 'week') {
+    const weekday = new Intl.DateTimeFormat(language, { weekday: 'short', timeZone: 'UTC' })
+    return { data: dates.map((date) => weekday.format(at(date))), shown: dates.map(() => true) }
+  }
+  if (range === 'month') {
+    const day = (date: string) => Number(date.slice(8, 10))
+    return { data: dates.map((date) => String(day(date))), shown: dates.map((date) => (day(date) - 1) % 7 === 0) }
+  }
+  const month = new Intl.DateTimeFormat(language, { month: 'short', timeZone: 'UTC' })
+  return {
+    data: dates.map((date) => month.format(at(date))),
+    shown: dates.map((date, i) => i === 0 || date.slice(0, 7) !== dates[i - 1]!.slice(0, 7)),
+  }
+}
+
+/**
+ * The top of a value axis ticked every `step`: the data's own maximum when it passes a step by a
+ * quarter of one or less, so a night of 8h 05m keeps an axis ending just over "8h" rather than one
+ * running on to an empty "12h"; the next whole step otherwise. Never below one step.
+ */
+export function stepAxisMax(max: number, step: number): number {
+  const top = Math.max(1, Math.ceil(max / step)) * step
+  const below = top - step
+  return below > 0 && max - below <= step / 4 ? max : top
+}

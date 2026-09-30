@@ -39,16 +39,18 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 // Dashboard.tsx joined them in M9b, when it became the glance: its figures come from one payload,
 // not from series points, so there is no MetricCard to gate, and its gating is the page-level
 // error/loading branch around that one read.
-const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx'])
+//
+// Sleep.tsx joined them in M10b for the same reason as the Dashboard: the overview reads one
+// judged payload (/sleep/period), not series points, and gates the page once around it.
+const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx', 'Sleep.tsx'])
 
 // What this actually checks, read honestly: not "no card hand rolls gating" (it is file
 // granularity, so a page hand rolling two of its eight cards and routing the other six through
 // MetricCard still passes), but "no page hand rolls every card and says nothing about the shared
-// component existing." Sleep.tsx and Activity.tsx pass because most of their cards route through
-// MetricCard; the hand rolled cards beside those are not individually checked against it. A true
-// per card guard needs to attribute a given
-// ErrorState/Loading/emptyState occurrence to the JSX block it sits in, which needs more than a
-// whole file regex; this is the cheap version, and its name and this comment describe what it is.
+// component existing." Activity.tsx passes because most of its cards route through MetricCard;
+// the hand rolled cards beside those are not individually checked against it. A true per card
+// guard needs to attribute a given ErrorState/Loading/emptyState occurrence to the JSX block it
+// sits in, which needs more than a whole file regex; this is the cheap version, and its name and this comment describe what it is.
 describe('pages are not entirely hand rolled and silent about MetricCard', () => {
   const pages = readdirSync('apps/web/src/pages').filter((f) => f.endsWith('.tsx'))
   const sources = new Map(pages.map((page) => [page, readFileSync(`apps/web/src/pages/${page}`, 'utf8')]))
@@ -70,8 +72,8 @@ describe('pages are not entirely hand rolled and silent about MetricCard', () =>
   // reports as passed without its own expect ever running, so a version of this file where the
   // trigger matched nothing on any real page would still show every case green. This is what
   // actually proves HAND_ROLLED_GATING fires on a real page rather than only in a regex someone
-  // wrote and never ran. The old Dashboard's sleep stages card was that page until M9b; Sleep.tsx
-  // and Activity.tsx, both checked above rather than excused, are it now.
+  // wrote and never ran. The old Dashboard's sleep stages card was that page until M9b, Sleep.tsx
+  // until M10b; Activity.tsx, checked above rather than excused, is it now.
   it('the gating trigger actually fires on at least one real page', () => {
     expect(withGating.length).toBeGreaterThan(0)
   })

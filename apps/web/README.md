@@ -46,7 +46,8 @@ the same one. Add to that layer rather than defining inputs a second time beside
 
 - `Dashboard` (`src/pages/Dashboard.tsx`): the glance, three cards answering last night,
   recovery and today so far from one read of `/glance`, with no control row.
-- `Sleep` (`src/pages/Sleep.tsx`): day view of last night plus the month's sleep schedule.
+- `Sleep` (`src/pages/Sleep.tsx`): the sleep overview for a week, month, three months or year:
+  time asleep against its usual, the stages, the schedule, the balance and the nights list.
 
 Both are wired up behind the sidebar in `src/main.tsx`, with a theme switch left for manual
 review: in a browser console, `document.documentElement.dataset.theme = 'light'` should update

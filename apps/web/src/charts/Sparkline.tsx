@@ -20,8 +20,9 @@ const EMPTY = Object.freeze([]) as never[]
 
 // The dashboard's day dots (`dots` below): the latest day larger than the rest, both sizes in
 // pixels as echarts takes them, and the latest dot's rim in the card's own colour so it reads as
-// lifted off the line rather than sitting on it.
-const DOT = { day: 6, latest: 11, rim: 2 } as const
+// lifted off the line rather than sitting on it. `ring` is how far a good day's ring stands out from
+// its dot on each side (pointMarks).
+const DOT = { day: 6, latest: 11, rim: 2, ring: 4 } as const
 
 // The gap, in pixels, between the band label's own right edge and the plot area it sits left of
 // (`grid.left` below is set to the label's own width plus this): with none, a label right at the
@@ -100,7 +101,7 @@ export type { PointJudged, PointStanding } from './base.js'
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
-  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, opensDay, bands, pointIds,
+  onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, pointMarks = EMPTY, opensDay, bands, pointIds,
   inverse = false, standingUnit,
 }: {
   // The unit code the values are in, which picks the words a day's verdict takes in the table
@@ -209,6 +210,11 @@ export function Sparkline({
   // standings without judgements colours every day outside its usual as out.
   pointStandings?: readonly PointStanding[]
   pointJudged?: readonly PointJudged[]
+  // One mark per entry of `values`, for an overview page's hero strip (PATTERNS.md's "Overview
+  // pages"): a good day ('good', the server's judged better on the hero figure) gets a ring around
+  // its dot, the one quiet good-day mark a strip draws. Ignored without `dots`; undefined, every
+  // other caller, draws no ring at all.
+  pointMarks?: readonly ('good' | undefined)[]
   // Draws the y axis upside down, for a figure where less is better (a pace): the workout hero's
   // strip then puts a faster run higher, as a speed strip would. Its caption has to say so.
   inverse?: boolean
@@ -304,6 +310,11 @@ export function Sparkline({
     return Math.ceil(width) + BAND_LABEL_GAP
   }, [bandLabels, baseline])
 
+  // With dots, the margin a day at the strip's edge needs to be drawn whole: half the latest dot, and
+  // its ring's width beyond that when a good day may carry one (pointMarks).
+  const ringed = dots && pointMarks.some((mark) => mark === 'good')
+  const edge = DOT.latest / 2 + (ringed ? DOT.ring : 0)
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     // Room on the left for the band's own edge labels, anchored at the first day so the low label
     // never sits beside today's (latest) dot at the right end, where a reader would misread it as
@@ -316,7 +327,7 @@ export function Sparkline({
     // a margin of half the latest dot on every other side, so a day at the strip's edge or its
     // extreme is drawn whole rather than clipped by the grid.
     grid: dots
-      ? { left: bandLabels && baseline ? bandLabelMargin : DOT.latest / 2, right: DOT.latest / 2, top: DOT.latest / 2, bottom: DOT.latest / 2 }
+      ? { left: bandLabels && baseline ? bandLabelMargin : edge, right: edge, top: edge, bottom: edge }
       : { left: bandLabels && baseline ? bandLabelMargin : 0, right: 0, top: 4, bottom: 4 },
     tooltip: {
       ...chartBase(tokens).tooltip,
@@ -362,6 +373,15 @@ export function Sparkline({
       // exists, not a fact about whether the metric is taken by hand.
       ...(hasTrend ? [{ type: 'line' as const, data: trend, showSymbol: false, smooth: true,
         connectNulls: true, lineStyle: { width: STROKE.sparkline, color: tokens.seriesAlt } }] : []),
+      // The good days' rings, a hollow circle a little wider than the dot it sits around, drawn before
+      // the reading series so the dot lands inside it. Silent, so a click or a hover still reaches the
+      // dot beneath: the ring marks a day, it is not a point of its own.
+      ...(ringed ? [{ type: 'line' as const, silent: true, showSymbol: true,
+        symbol: 'circle', lineStyle: { opacity: 0 }, connectNulls: false,
+        data: values.map((v, i) => (v === null || pointMarks[i] !== 'good' ? null : {
+          value: v, symbolSize: (i === latest ? DOT.latest : DOT.day) + 2 * DOT.ring,
+          itemStyle: { color: 'transparent', borderColor: tokens.positive, borderWidth: DOT.rim },
+        })) }] : []),
       { type: 'line' as const,
         data: dots
           ? values.map((v, i) => {
@@ -457,7 +477,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, pointJudged, latest, bands, inverse])
+  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, pointJudged, pointMarks, ringed, edge, latest, bands, inverse])
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current

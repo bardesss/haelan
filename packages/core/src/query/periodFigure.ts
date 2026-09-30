@@ -3,7 +3,7 @@ import { INSIGHT_MIN_DAY_FRACTION } from './insights.ts'
 import { judge, standingOf, toGlanceBaseline } from './glance.ts'
 import type { FigureDirection, GlanceBaseline, GlanceStanding, Judged } from './glance.ts'
 import { usualOf } from './pageFigure.ts'
-import { datesIn, earlierBlocks, minDate, periodBounds, weeksIn } from './periodBounds.ts'
+import { datesIn, daysIn, earlierBlocks, minDate, periodBounds, weeksIn } from './periodBounds.ts'
 import type { DateSpan, PeriodRange } from './periodBounds.ts'
 
 /**
@@ -33,7 +33,11 @@ export interface PeriodStripPoint {
 export type PeriodReason = 'no-data' | 'too-few-days' | 'thin-usual' | null
 export interface PeriodFigure {
   metric: string, unit: string, precision: number, direction: FigureDirection
-  per: 'day' | 'week'
+  /**
+   * What the value and usual are an average of: a day, a week (seven days' worth), or the whole
+   * period (the period's days' worth, a count the page prints as its total, "3 naps, 1 - 5 a month").
+   */
+  per: 'day' | 'week' | 'period'
   value: number | null
   total: number | null
   days: number
@@ -58,7 +62,7 @@ export interface PeriodFigureInput {
   lastDay: string
   values: ReadonlyMap<string, number>
   dailyBands: ReadonlyMap<string, Baseline | null>
-  per?: 'day' | 'week'
+  per?: 'day' | 'week' | 'period'
   additive: boolean
 }
 
@@ -116,8 +120,12 @@ export function changeOf(
 export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
   const { range, values, lastDay, direction } = input
   const per = input.per ?? 'day'
-  const scale = per === 'week' ? 7 : 1
   const bounds = periodBounds(range, input.anchor)
+  // A per-period figure is scaled to the whole period, running or not, so a running month's usual
+  // and value are a whole month's worth; it is judged only once the month is over.
+  const scale = per === 'week' ? 7 : per === 'period' ? daysIn(bounds) : 1
+  // A week point is a week's worth: a per-period figure's week is its own period of a week.
+  const weekScale = per === 'day' ? 1 : 7
   const end = minDate(bounds.to, lastDay)
   const running = end < bounds.to
   const dates = end < bounds.from ? [] : datesIn({ from: bounds.from, to: end })
@@ -134,7 +142,9 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
   if (days === 0) reason = 'no-data'
   else if (running && days < PERIOD_MIN_DAYS) reason = 'too-few-days'
   else {
-    standing = standingOf(value, usual, false)
+    // A per-period figure is not judged while its period runs: its pace would be judged, and the
+    // page prints the count so far, so a verdict could not agree with the number beside it.
+    standing = standingOf(value, usual, per === 'period' && running)
     reason = usual === null || usual.thin ? 'thin-usual' : null
   }
 
@@ -155,9 +165,9 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
     weekly = dates.length === 0 ? [] : weeksIn({ from: bounds.from, to: end }).map((week) => {
       const { mean, days: n } = blockMean(values, week, lastDay)
       // The full Monday-Sunday week holding the point, so earlierBlocks gives the twelve weeks before it.
-      const own = periodUsual(values, 'week', periodBounds('week', week.from), scale)
+      const own = periodUsual(values, 'week', periodBounds('week', week.from), weekScale)
       const band: GlanceBaseline | null = own === null ? null : { center: own.center, low: own.low, high: own.high, thin: own.thin }
-      return point(week, mean === null ? null : mean * scale, band, n)
+      return point(week, mean === null ? null : mean * weekScale, band, n)
     })
   }
 

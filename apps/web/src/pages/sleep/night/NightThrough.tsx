@@ -28,7 +28,7 @@ const LEGEND: Stage[] = ['deep', 'light', 'rem', 'awake']
  *
  * The segments are raw milliseconds from the night's start, rounded once by stageTotals rather than
  * per boundary: rounding each boundary first compounds into minutes of drift against
- * derive/sleep.ts's own single-rounded figure (Sleep.tsx's comment on the same conversion). The
+ * derive/sleep.ts's own single-rounded figure (Hypnogram's comment on its `segments` prop). The
  * shares are the server's (`stagePercent`), never divided out here; awake has none, since the
  * server gives the three sleep stages a share of the sleep and awake is not part of it. A stage the
  * server sent no share for reads its minutes alone.

@@ -3,10 +3,10 @@ import type { Stage } from '../fixtures/july.js'
 import { ALL_SOURCES } from '../controls/source.js'
 import { oneNightPerDate } from '@haelan/core/nights'
 
-// oneNightPerDate and stageOf lived, byte-identical, in Dashboard.tsx and Sleep.tsx, one copy
-// each. The night detail page is a third caller, and a third copy is what made the duplication
+// oneNightPerDate and stageOf lived, byte-identical, in Dashboard.tsx and the old Sleep page, one
+// copy each. The night detail page was a third caller, and a third copy is what made the duplication
 // worth ending rather than repeating: both moved here verbatim from Dashboard.tsx. stageOf still
-// lives here; oneNightPerDate has since moved on to @haelan/core/nights (see the re-export below),
+// lives here, for the dashboard's night card and the night page; oneNightPerDate has since moved on to @haelan/core/nights (see the re-export below),
 // and this file only passes it through.
 
 // packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGES recognise six stage values

@@ -33,6 +33,15 @@ describe('night mark selection', () => {
     }
   })
 
+  it('draws a weekend night in the lighter step of the same family, and carries a bedtime outside its usual', () => {
+    const weekend = nightMark({ date: '2026-08-15', bed: 23 * 60, wake: 30 * 60, naps: [], weekend: true, bedOut: true }, tokens)
+    expect(weekend.color).toBe(tokens.stageRem)
+    expect(weekend.kind === 'span' && weekend.bedOut).toBe(true)
+    const weekday = nightMark({ date: '2026-08-17', bed: 23 * 60, wake: 30 * 60, naps: [], weekend: false }, tokens)
+    expect(weekday.color).toBe(tokens.stageLight)
+    expect(weekday.kind === 'span' && weekday.bedOut).toBe(false)
+  })
+
   it('never uses the same colour for a no-data night and a complete night', () => {
     const noData = nightMark({ date: '2026-07-05', bed: null, wake: null, naps: [] }, tokens)
     const span = nightMark({ date: '2026-07-07', bed: 23 * 60, wake: 30 * 60, naps: [] }, tokens)

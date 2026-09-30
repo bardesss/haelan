@@ -95,3 +95,22 @@ it('carries a null through as a gap rather than a zero', () => {
   const option = mount({ series: [{ key: 'light', name: 'Light', values: [null, 5] }] })
   expect(option.series[0]!.data).toEqual([null, 5])
 })
+
+it('names the value axis in the stored unit by default', () => {
+  const option = mount() as unknown as { yAxis: { name?: string, interval?: number, axisLabel: { formatter: (v: number) => string } } }
+  expect(option.yAxis.name).toBe('min')
+  expect(option.yAxis.interval).toBeUndefined()
+})
+
+it('takes a caller\'s own ticks and labels, and then prints no axis name', () => {
+  const valueAxis = { interval: 240, format: (minutes: number) => `${minutes / 60}h` }
+  const option = mount({ valueAxis }) as unknown as { yAxis: { name?: string, interval?: number, axisLabel: { formatter: (v: number) => string } } }
+  expect(option.yAxis.name).toBeUndefined()
+  expect(option.yAxis.interval).toBe(240)
+  expect(option.yAxis.axisLabel.formatter(480)).toBe('8h')
+  // The axis ends on the data's own step (stepAxisMax), never on echarts' own round number past it.
+  const max = (option.yAxis as unknown as { max: (extent: { max: number }) => number }).max
+  expect([max({ max: 530 }), max({ max: 480 }), max({ max: 0 }), max({ max: 700 })]).toEqual([530, 480, 240, 720])
+  // An axis ending between two steps labels only the steps.
+  expect(option.yAxis.axisLabel.formatter(530)).toBe('')
+})

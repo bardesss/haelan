@@ -5,7 +5,7 @@ import { daily, sources, sessions, sessionSegments } from '../src/db/schema/inde
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { shiftLocalDate } from '../src/derive/localDay.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { readSleepPeriod } from '../src/query/sleepPeriod.ts'
+import { balanceWeeks, isWeekendMorning as coreIsWeekendMorning, readSleepPeriod } from '../src/query/sleepPeriod.ts'
 import type { SleepPeriodInput } from '../src/query/sleepPeriod.ts'
 import { readPeriodSeries, readSpan } from '../src/query/periodRead.ts'
 import { datesIn, periodBounds, yearEarlierDate } from '../src/query/periodBounds.ts'
@@ -151,6 +151,62 @@ describe('readSleepPeriod', () => {
     expect(sides.weekday!.nights).toBe(21)
   })
 
+  it('flags each night of the list by the same rule: Saturday and Sunday mornings', () => {
+    seedNights()
+    const { nights } = readSleepPeriod(q(), input({ range: 'month', anchor: '2026-08-15' }))
+    const flag = (date: string) => nights.find((n) => n.localDate === date)!.weekend
+    // 1 August 2026 is a Saturday.
+    expect(['2026-08-01', '2026-08-02', '2026-08-03', '2026-08-07', '2026-08-08'].map(flag)).toEqual([true, true, false, false, true])
+    expect(nights.filter((n) => n.weekend)).toHaveLength(10)
+    expect([coreIsWeekendMorning('2026-08-01'), coreIsWeekendMorning('2026-08-03')]).toEqual([true, false])
+  })
+
+  it('counts naps over the whole period, their total and their minutes beside them', () => {
+    seedNights()
+    const napDay = (d: string) => d.endsWith('-01') || d.endsWith('-15')
+    seedSeries('sleep_nap_count', 'count', (d) => (napDay(d) ? 1 : 0))
+    seedSeries('sleep_nap_minutes', 'sum', (d) => (napDay(d) ? 25 : 0))
+    const month = readSleepPeriod(q(), input({ range: 'month', anchor: '2026-08-15' }))
+    expect(month.more.slice(-2).map((f) => f.metric)).toEqual(['sleep_nap_count', 'sleep_nap_minutes'])
+    const count = month.more.find((f) => f.metric === 'sleep_nap_count')!
+    expect(count).toMatchObject({ per: 'period', total: 2, days: 31 })
+    expect(count.value).toBeCloseTo(2, 9)
+    expect(month.more.find((f) => f.metric === 'sleep_nap_minutes')!.total).toBe(50)
+    // Twenty nights of September so far hold two naps, a pace of three over its thirty.
+    const running = readSleepPeriod(q(), input({ range: 'month', anchor: '2026-09-05' }))
+    expect(running.more.find((f) => f.metric === 'sleep_nap_count')!.value).toBeCloseTo(3, 9)
+  })
+
+  it('adds up the balance a week at a time, each week clipped to the period', () => {
+    seedNights()
+    const { balance } = readSleepPeriod(q(), input({ range: 'month', anchor: '2026-08-15' }))
+    const weekly = balance!.weekly
+    // August 2026 opens on a Saturday and closes on a Monday.
+    expect(weekly.map((w) => [w.from, w.to])).toEqual([
+      ['2026-08-01', '2026-08-02'], ['2026-08-03', '2026-08-09'], ['2026-08-10', '2026-08-16'],
+      ['2026-08-17', '2026-08-23'], ['2026-08-24', '2026-08-30'], ['2026-08-31', '2026-08-31'],
+    ])
+    expect(weekly[0]!.value).toBeCloseTo(balance!.values[0]! + balance!.values[1]!, 9)
+    expect(weekly.reduce((s, w) => s + w.value!, 0)).toBeCloseTo(balance!.total, 9)
+  })
+
+  it('sends a week without a night as null, not as a balanced week', () => {
+    expect(balanceWeeks(['2026-08-01', '2026-08-02', '2026-08-03'], [null, null, 5])).toEqual([
+      { from: '2026-08-01', to: '2026-08-02', value: null }, { from: '2026-08-03', to: '2026-08-03', value: 5 },
+    ])
+    expect(balanceWeeks([], [])).toEqual([])
+  })
+
+  it('summarises the nights a month at a time, newest first', () => {
+    seedNights()
+    const { months } = readSleepPeriod(q(), input({ range: 'year', anchor: '2025-12-15' }))
+    // The series starts on 18 July 2025.
+    expect(months.map((m) => [m.month, m.nights])).toEqual([
+      ['2025-12', 31], ['2025-11', 30], ['2025-10', 31], ['2025-09', 30], ['2025-08', 31], ['2025-07', 14],
+    ])
+    expect(months[0]!.asleepMinutes).toBeCloseTo(monthMean('2025-12', asleepOf), 9)
+  })
+
   it('leaves a side out below two nights', () => {
     seedNights()
     // The week of 14 September, read on its Saturday: one weekend morning so far.
@@ -198,6 +254,7 @@ describe('readSleepPeriod', () => {
     expect(page.more).toEqual([])
     expect(page.balance).toBeNull()
     expect(page.nights).toEqual([])
+    expect(page.months).toEqual([])
     expect(page.stages).toMatchObject({ deep: null, light: null, rem: null, awake: null, shares: null })
     expect(page.schedule).toMatchObject({ bedtime: null, waketime: null, variability: null })
   })

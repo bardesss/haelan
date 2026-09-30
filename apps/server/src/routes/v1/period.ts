@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { balanceOf, countsOf, highOf, judge, standingOf, vo2TrendOf } from '@haelan/core'
+import { balanceOf, balanceWeeks, countsOf, highOf, judge, nightMonths, standingOf, vo2TrendOf } from '@haelan/core'
 import type { ActivityPeriod, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, SleepPeriod } from '@haelan/core'
 import {
   personAndToday, personIdOf, personQueryOf, requireString, roundBandTo, roundMetricValue, roundTo, roundToOrNull, sendHashed,
@@ -54,8 +54,10 @@ function roundChange(change: PeriodChange, hero: PeriodFigure): PeriodChange {
 
 /**
  * The Sleep overview at the wire's precision. Every figure goes through roundPeriodFigure; the
- * numbers taken from the hero (the longest night, the changes, the balance and the nights list)
- * are taken again from the rounded hero, so none of them can disagree with a dot the page draws.
+ * numbers taken from the hero (the longest night, the changes, the balance and its weeks, the nights
+ * list and its months) are taken again from the rounded hero, so none of them can disagree with a
+ * dot the page draws. A month's mean is rounded as the hero is; a night's weekend flag is a date's,
+ * which rounding cannot touch.
  */
 export function roundSleepPeriod(p: SleepPeriod): SleepPeriod {
   const hero = roundPeriodFigure(p.hero)
@@ -75,7 +77,10 @@ export function roundSleepPeriod(p: SleepPeriod): SleepPeriod {
   if (p.balance !== null) {
     const zeroMinutes = roundMetricValue('sleep_asleep_minutes', p.balance.zeroLine.minutes)
     const balanced = balanceOf(hero.daily.map((d) => d.value), zeroMinutes)
-    balance = { zeroLine: { ...p.balance.zeroLine, minutes: zeroMinutes }, values: balanced.values, total: balanced.total }
+    balance = {
+      zeroLine: { ...p.balance.zeroLine, minutes: zeroMinutes }, values: balanced.values, total: balanced.total,
+      weekly: balanceWeeks(hero.daily.map((d) => d.from), balanced.values),
+    }
   }
   return {
     ...p,
@@ -110,6 +115,7 @@ export function roundSleepPeriod(p: SleepPeriod): SleepPeriod {
         good: judged === 'better',
       }
     }),
+    months: nightMonths(hero.daily).map((m) => ({ ...m, asleepMinutes: roundToOrNull(hero.precision, m.asleepMinutes) })),
   }
 }
 

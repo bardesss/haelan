@@ -10,7 +10,7 @@ import type { Baseline } from './baseline.ts'
 import type { SleepSummary } from '../api/sleepSummary.ts'
 import { readRecoveryInput } from './recoveryInput.ts'
 import { summaryOf } from './nightPage.ts'
-import { minDate, periodBounds } from './periodBounds.ts'
+import { minDate, periodBounds, weeksIn } from './periodBounds.ts'
 import type { PeriodRange } from './periodBounds.ts'
 import { highOf } from './periodFigure.ts'
 import type { PeriodChange, PeriodFigure, PeriodHeader, PeriodHigh, PeriodStripPoint } from './periodFigure.ts'
@@ -24,7 +24,13 @@ export interface SleepListRow {
   localDate: string, sourceId: string
   asleepMinutes: number | null, bedtimeMinutes: number | null, waketimeMinutes: number | null
   standing: GlanceStanding | null, judged: Judged, good: boolean
+  /** Filed under a Saturday or Sunday morning (isWeekendMorning). */
+  weekend: boolean
 }
+/** A Monday-to-Sunday week of the balance (clipped to the period): its nights' signed minutes added up, null with none. */
+export interface BalanceWeek { from: string, to: string, value: number | null }
+/** A calendar month of the period's nights: how many have a time asleep, and their mean. */
+export interface NightMonth { month: string, nights: number, asleepMinutes: number | null }
 export interface ScheduleSide { bedtimeMinutes: number, waketimeMinutes: number, nights: number }
 export interface ScheduleSides { weekday: ScheduleSide | null, weekend: ScheduleSide | null }
 export interface SleepPeriod {
@@ -44,13 +50,16 @@ export interface SleepPeriod {
     shares: { deep: number, light: number, rem: number, awake: number } | null
   }
   schedule: { bedtime: PeriodFigure | null, waketime: PeriodFigure | null, variability: PeriodFigure | null, sides: ScheduleSides }
-  balance: { zeroLine: ZeroLine, values: (number | null)[], total: number } | null
+  /** `values` a night each, as hero.daily; `weekly` a week each, drawn on 3 months and a year. */
+  balance: { zeroLine: ZeroLine, values: (number | null)[], total: number, weekly: BalanceWeek[] } | null
   /** Recovery index, resting heart rate, HRV, breathing, SpO2, skin temperature, those with days. */
   mornings: PeriodFigure[]
   /** Light, awake, in bed, wake time, latency, awakenings, after-wake, naps, those with days. */
   more: PeriodFigure[]
   /** Newest first, every night of the period that has a time asleep. */
   nights: SleepListRow[]
+  /** Newest first, a month each that has a night in `nights`: the list's month headers on 3 months and a year. */
+  months: NightMonth[]
 }
 
 const SIDE_MIN_NIGHTS = 2
@@ -62,8 +71,40 @@ function sideOf(nights: readonly { bed: number, wake: number }[]): ScheduleSide 
   return { bedtimeMinutes: mean(nights.map((n) => n.bed)), waketimeMinutes: mean(nights.map((n) => n.wake)), nights: nights.length }
 }
 
-// Answers: weekday against weekend nights. A night is filed under the morning it ended (metrics.ts),
-// so Saturday and Sunday mornings are the weekend: the nights of Friday and Saturday.
+/**
+ * Whether a night is a weekend night. A night is filed under the morning it ended (metrics.ts), so
+ * Saturday and Sunday mornings are the weekend: the nights of Friday and Saturday.
+ */
+export function isWeekendMorning(localDate: string): boolean {
+  const day = new Date(`${localDate}T00:00:00Z`).getUTCDay()
+  return day === 0 || day === 6
+}
+
+/** Each week's nights added up, from a night's signed balance per date (hero.daily's dates, balanceOf's values). */
+export function balanceWeeks(dates: readonly string[], values: readonly (number | null)[]): BalanceWeek[] {
+  if (dates.length === 0) return []
+  const by = new Map(dates.map((date, i) => [date, values[i] ?? null]))
+  return weeksIn({ from: dates[0]!, to: dates[dates.length - 1]! }).map((week) => {
+    let value: number | null = null
+    for (const [date, v] of by) if (date >= week.from && date <= week.to && v !== null) value = (value ?? 0) + v
+    return { ...week, value }
+  })
+}
+
+/** The nights of each calendar month, newest first, from the hero's daily points. */
+export function nightMonths(daily: readonly PeriodStripPoint[]): NightMonth[] {
+  const by = new Map<string, number[]>()
+  for (const p of daily) {
+    if (p.value === null) continue
+    const month = p.from.slice(0, 7)
+    by.set(month, [...(by.get(month) ?? []), p.value])
+  }
+  return [...by].reverse().map(([month, values]) => ({
+    month, nights: values.length, asleepMinutes: values.reduce((s, v) => s + v, 0) / values.length,
+  }))
+}
+
+// Answers: weekday against weekend nights (isWeekendMorning).
 function sidesOf(bedtime: readonly PeriodStripPoint[], waketime: readonly PeriodStripPoint[]): ScheduleSides {
   const wakeBy = new Map(waketime.map((p) => [p.from, p.value]))
   const weekday: { bed: number, wake: number }[] = []
@@ -71,8 +112,7 @@ function sidesOf(bedtime: readonly PeriodStripPoint[], waketime: readonly Period
   for (const p of bedtime) {
     const wake = wakeBy.get(p.from)
     if (p.value === null || wake === null || wake === undefined) continue
-    const day = new Date(`${p.from}T00:00:00Z`).getUTCDay()
-    ;(day === 0 || day === 6 ? weekend : weekday).push({ bed: p.value, wake })
+    ;(isWeekendMorning(p.from) ? weekend : weekday).push({ bed: p.value, wake })
   }
   return { weekday: sideOf(weekday), weekend: sideOf(weekend) }
 }
@@ -149,6 +189,7 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
     standing: p.standing,
     judged: p.judged,
     good: p.judged === 'better',
+    weekend: isWeekendMorning(p.from),
   }))
 
   return {
@@ -162,7 +203,9 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
       bedtime: orNull(bedtime), waketime: orNull(waketime), variability: orNull(variability),
       sides: sidesOf(bedtime.daily, waketime.daily),
     },
-    balance: hero.days === 0 ? null : { zeroLine, values: balanced.values, total: balanced.total },
+    balance: hero.days === 0 ? null : {
+      zeroLine, values: balanced.values, total: balanced.total, weekly: balanceWeeks(hero.daily.map((d) => d.from), balanced.values),
+    },
     mornings: [
       recovery,
       figure('resting_heart_rate', 'last'),
@@ -176,8 +219,12 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
       derived('sleep_latency_minutes', { unit: 'minutes', precision: 0, direction: 'down' }, summaryValues('minutesToFallAsleep')),
       derived('sleep_awakenings', { unit: 'count', precision: 0, direction: 'down' }, summaryValues('awakenings')),
       derived('sleep_after_wake_minutes', { unit: 'minutes', precision: 0, direction: 'neutral' }, summaryValues('minutesAfterWakeUp')),
+      // Naps are counted over the whole period ("3 naps, 1 - 5 a month"): a nap a month is a
+      // fraction a night, which no count can print. Their minutes stay, for the count's line.
+      catalogueRead(q, { ...base, metric: 'sleep_nap_count', agg: 'count', per: 'period', additive: true }).figure,
       figure('sleep_nap_minutes', 'sum'),
     ].filter(shown),
     nights,
+    months: nightMonths(hero.daily),
   }
 }

@@ -154,9 +154,9 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     // Deliberately not rounded, unlike every other body in this file. center and spread are not
     // themselves a number a reader ever sees: three separate call sites compute
     // `low = center - spread` and `high = center + spread` from these exact raw fields first --
-    // Recovery.tsx's baselineNote and bandFrom, Sleep.tsx's own baselineNote (which formats the
-    // result through formatDuration, not formatMetricValue: this is a minutes scale, not every
-    // caller's the same formatter), and Dashboard.tsx's heartRateBand -- and only then format
+    // Recovery.tsx's baselineNote and bandFrom, and the other pages' bands (the Sleep page read
+    // this through its own baselineNote until M10b moved it to /sleep/period, whose usuals the
+    // period route rounds itself) -- and only then format
     // whatever low/high came out of that arithmetic. Rounding center and spread here first would
     // make that subtraction the difference of two already-rounded numbers rather than of the real
     // ones, which can move the displayed band edge by a whole unit of precision from what the

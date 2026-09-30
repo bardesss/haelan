@@ -7,7 +7,8 @@ import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatMetricValue } from '../format.js'
-import { barLabelInterval, barDateLabels } from './barAxis.js'
+import { barLabelInterval, barDateLabels, stepAxisMax } from './barAxis.js'
+import type { PeriodAxis } from './barAxis.js'
 import { dayTooltip } from './dayTooltip.js'
 
 // Same stable-identity idiom DailyBars' own EMPTY carries: a frozen array literal built once,
@@ -25,8 +26,9 @@ const STACK_ID = 'bands'
 /** One band of a stacked day: `key` identifies it for a caller (a metric id, typically); `name` is
  *  its accessible label (the legend, the table column header, the tooltip line); `values` is dense
  *  over `labels` the same way DailyBars' own `values` prop is -- one entry per calendar day, null
- *  where nothing was reported. */
-export interface BandSeries { key: string, name: string, values: (number | null)[] }
+ *  where nothing was reported. `token` colours the band where it has a colour of its own (a sleep
+ *  stage); without one the bands take the scale's stops in order. */
+export interface BandSeries { key: string, name: string, values: (number | null)[], token?: keyof ChartTokens }
 
 // A negative band is not a reading: it is the visible signature of the consuming page's own
 // subtraction going wrong (an activity-band value computed as one running total minus the bands
@@ -56,7 +58,7 @@ function clampBand(values: readonly (number | null)[]): (number | null)[] {
  * not invent the wiring.
  */
 export function StackedDailyBars({
-  series, labels, label, unit, axisUnit, metric, height = 130,
+  series, labels, label, unit, axisUnit, metric, height = 130, valueAxis, axis,
 }: {
   series: readonly BandSeries[]
   labels: string[]
@@ -69,6 +71,13 @@ export function StackedDailyBars({
   // `metric` prop: this chart never converts.
   metric: string
   height?: number
+  /** The value axis's own ticks, for a caller whose readers count in a larger unit than the stored
+   *  one (the sleep stages' minutes read in hours, "0h 4h 8h"): the step between ticks, in the stored
+   *  unit, and each tick's label. The labels then say the unit, so `axisUnit` is not printed. Keep it
+   *  stable (a module constant or memoised): it reaches the chart build. */
+  valueAxis?: { interval: number, format: (value: number) => string }
+  /** The x labels an overview page prints (periodAxisLabels), in place of the dates; stable, as valueAxis. */
+  axis?: PeriodAxis
 }) {
   const { t, i18n } = useTranslation()
 
@@ -129,9 +138,9 @@ export function StackedDailyBars({
       },
       xAxis: {
         type: 'category' as const,
-        data: barDateLabels(labels),
+        data: axis?.data ?? barDateLabels(labels),
         ...base.labelledAxis,
-        axisLabel: { ...base.axisLabel, interval: barLabelInterval(labels.length) },
+        axisLabel: { ...base.axisLabel, interval: axis === undefined ? barLabelInterval(labels.length) : (index: number) => axis.shown[index] === true },
       },
       yAxis: {
         type: 'value' as const,
@@ -139,10 +148,18 @@ export function StackedDailyBars({
         // axis that does not start at zero misstates every band's share of the column, not only the
         // total's ratio between two days DailyBars' own comment on this same line describes.
         min: 0,
-        name: axisUnit,
-        nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize },
+        ...(valueAxis === undefined
+          ? { name: axisUnit, nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize } }
+          // The top on the data's own step (stepAxisMax), or echarts ends the axis on its own round
+          // number ("10h" over "8h" on a four-hour step).
+          : { interval: valueAxis.interval, max: (extent: { max: number }) => stepAxisMax(extent.max, valueAxis.interval) }),
         splitLine: base.splitLine,
-        axisLabel: { ...base.axisLabel, formatter: (value: number) => format(value, '') },
+        // Only a whole step is labelled: an axis ending on the data's own maximum ends between two.
+        axisLabel: {
+          ...base.axisLabel,
+          formatter: valueAxis === undefined ? ((value: number) => format(value, ''))
+            : (value: number) => (value % valueAxis.interval === 0 ? valueAxis.format(value) : ''),
+        },
       },
       series: clamped.map((band, index) => ({
         type: 'bar' as const,
@@ -150,10 +167,10 @@ export function StackedDailyBars({
         stack: STACK_ID,
         name: band.name,
         data: band.values,
-        itemStyle: { color: stops[index % stops.length] },
+        itemStyle: { color: band.token !== undefined ? tokens[band.token] : stops[index % stops.length] },
       })),
     }
-  }, [clamped, labels, axisUnit, metric, i18n.language, marks, t])
+  }, [clamped, labels, axisUnit, valueAxis, axis, metric, i18n.language, marks, t])
 
   const { host, style } = useChart(build, height)
 
