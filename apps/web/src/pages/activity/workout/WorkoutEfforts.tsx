@@ -48,7 +48,10 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
     return `${km(fromMeters)} – ${km(fromMeters + EFFORT_DISTANCES[key])}\u00a0${t('activity.units.km')}`
   }
   // "12 s faster than in August": seconds under a minute, a stopwatch past one; the plain line when
-  // there was no best before this one, or the two print the same.
+  // there was no best before this one, or the two print the same. Not formatFigureDifference: that
+  // prints a signed difference for a table cell ("+0:12", "-1:05"), and this line says the direction
+  // in words and wants the mockup's "12 s" under a minute. The margin is taken between the two
+  // times as printed, the way WorkoutHero's previousLine takes its "12 s/km faster".
   const bestLine = ({ distance, effort }: typeof rows[number]) => {
     const before = effort.previousBest
     const delta = before === null ? 0 : Math.round(before.value) - Math.round(effort.seconds)
