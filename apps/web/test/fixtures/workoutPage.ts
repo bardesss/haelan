@@ -96,6 +96,29 @@ export const CADENCE_SERIES: MinuteSeries = {
   points: Array.from({ length: 33 }, (_, m) => ({ elapsedSeconds: (m + 1) * 60, value: m < 5 ? 160 : 170 })),
 }
 
+/** The earlier runs on the same loop: eleven in all, so the strip (the latest nine and this one)
+ *  holds fewer than the count. */
+export const ROUTE_COUNT = 11
+export const ROUTE_PREVIOUS_ID = 'loop-8'
+
+/**
+ * The time on the same loop as roundWorkoutPage sends it: moving time, judged against the earlier
+ * times on the loop, lower being better. 28:04 under the usual 28:20 - 30:00, so faster, judged
+ * better. Its strip's sessions are the loop's own, not the type's.
+ */
+function sameRouteFixture(): NonNullable<WorkoutPageData['sameRoute']> {
+  const time = figure({
+    key: 'movingTime', unit: 'seconds', direction: 'down', value: 1684, baseline: band(1740, 1700, 1800),
+    strip: [1810, 1790, 1765, 1750, 1760, 1732, 1745, 1720, 1712, 1684],
+  })
+  const strip = time.strip.map((point, i) => (i === time.strip.length - 1 ? point : { ...point, sessionId: `loop-${i}` }))
+  return {
+    count: ROUTE_COUNT,
+    time: { ...time, strip },
+    previous: { sessionId: ROUTE_PREVIOUS_ID, localDate: STRIP_DATES[8]!, seconds: 1712 },
+  }
+}
+
 export function workoutPageFixture(): WorkoutPageData {
   return {
     sessionId: WORKOUT_ID,
@@ -176,6 +199,14 @@ export function workoutPageFixture(): WorkoutPageData {
     // The mockup's negative split, and the provider's zone ceilings for the day.
     splitTrend: { secondHalfFasterBySecondsPerKm: 22 },
     zoneBounds: { moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 },
+    sameRoute: sameRouteFixture(),
+    // The fastest stretches inside the run, whole seconds: the kilometre and the mile short of the
+    // June bests, the 5 km this run's own, so its best is this workout.
+    efforts: {
+      km: { seconds: 296, best: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' }, isBest: false },
+      mile: { seconds: 479, best: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' }, isBest: false },
+      fiveK: { seconds: 1602, best: { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE }, isBest: true },
+    },
     log: {
       presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'],
       mood: 5,
@@ -211,6 +242,9 @@ export function strengthPageFixture(): WorkoutPageData {
     splitTrend: null,
     // No route and no steps from the gym: nothing a minute at a time beside the heart rate.
     through: { pace: null, cadence: null },
+    // No route, so no loop to set it against and no stretch to time.
+    sameRoute: null,
+    efforts: null,
   }
 }
 

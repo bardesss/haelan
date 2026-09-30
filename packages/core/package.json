@@ -22,7 +22,8 @@
     "./source-cadence": "./src/api/sourceCadence.ts",
     "./nights": "./src/api/nights.ts",
     "./event-kinds": "./src/api/eventKinds.ts",
-    "./status-panel": "./src/api/statusPanel.ts"
+    "./status-panel": "./src/api/statusPanel.ts",
+    "./fastest-efforts": "./src/api/fastestEfforts.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"

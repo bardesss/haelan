@@ -581,9 +581,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* The ranking, the previous workout and the best under the hero's verdict: one quiet line each. */
 .workout-hero-line { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .workout-hero-rank, .workout-hero-previous, .workout-hero-best { font-variant-numeric: tabular-nums; }
-/* The compared-with table: .override-table's rows, with this workout's own column the bold one
+/* The compared-with table, and the fastest efforts beside the same route: .override-table's rows, with this workout's own column the bold one
    and each difference beside its reading in the plain colour unless the figure has a direction. */
-.workout-compared td { font-variant-numeric: tabular-nums; }
+.workout-compared td, .workout-efforts td { font-variant-numeric: tabular-nums; }
 .workout-compared-this { font-weight: var(--weight-bold); }
 /* The previous workout's column head is a way to it: a .card-link, set on the head's own line. */
 .workout-compared thead .card-link { margin: 0; }
