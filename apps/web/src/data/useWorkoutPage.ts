@@ -76,6 +76,8 @@ export interface WorkoutPageData {
   heartRateRecovery: {
     oneMinute: PageFigure, twoMinutes: PageFigure
     readings: { endBpm: number, oneMinuteBpm: number | null, twoMinutesBpm: number | null }
+    /** Earlier workouts of the type the usual is built from (up to ten). */
+    history: number
   } | null
   /** The night ending on the workout's own date and that morning's recovery; null for each with no value. */
   before: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, recovery: GlanceRecovery | null, restingHeartRate: PageFigure | null }

@@ -19,7 +19,7 @@ export function WorkoutRecovery({ page }: { page: WorkoutPageData }): ReactNode 
   // Null from the server exactly when neither minute has a value.
   const recovery = page.heartRateRecovery
   if (recovery === null) return null
-  const { oneMinute, twoMinutes, readings } = recovery
+  const { oneMinute, twoMinutes, readings, history } = recovery
   // The unit once, after the second reading, the way a range is written ("from 146 to 122 bpm").
   const between = (after: number | null) => {
     if (after === null) return undefined
@@ -28,7 +28,7 @@ export function WorkoutRecovery({ page }: { page: WorkoutPageData }): ReactNode 
   }
   // The band is named only when a row draws one: a thin usual draws no bar (FigureRow).
   const drawsBand = [oneMinute, twoMinutes].some((f) => f.value !== null && f.baseline !== null && !f.baseline.thin)
-  const caption = [t('activity.workout.page.recovery.caption'), ...(drawsBand ? [t('activity.workout.page.stripBand')] : [])].join(' · ')
+  const caption = [t('activity.workout.page.recovery.caption', { count: history }), ...(drawsBand ? [t('activity.workout.page.stripBand')] : [])].join(' · ')
   return (
     <Card span={12} label={t('activity.workout.page.recovery.label')}>
       <FigureRows>

@@ -605,7 +605,8 @@
           "oneMinute": "Daling na 1 minuut",
           "twoMinutes": "Daling na 2 minuten",
           "between": "van {{from}} naar {{to}}",
-          "caption": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit tot 10 trainingen van dit type ervoor"
+          "caption_one": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} training van dit type ervoor",
+          "caption_other": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} trainingen van dit type ervoor"
         },
         "form": {
           "label": "Loopvorm",

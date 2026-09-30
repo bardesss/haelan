@@ -180,6 +180,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
       oneMinute: roundPageFigure(heartRateRecovery.oneMinute), twoMinutes: roundPageFigure(heartRateRecovery.twoMinutes),
       // Already whole bpm: core rounds each minute before taking the fall between them.
       readings: heartRateRecovery.readings,
+      history: heartRateRecovery.history,
     },
     through: { pace: roundPaceSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
     // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.

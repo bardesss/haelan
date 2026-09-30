@@ -472,6 +472,7 @@ describe('readWorkoutPage: heart-rate recovery', () => {
     expect(heartRateRecovery!.twoMinutes).toMatchObject({ value: 42, standing: 'above', baseline: { center: 32, thin: false } })
     // The minute means each fall is taken between: the last full minute, then each minute after.
     expect(heartRateRecovery!.readings).toEqual({ endBpm: 160, oneMinuteBpm: 135, twoMinutesBpm: 118 })
+    expect(heartRateRecovery!.history).toBe(10)
   })
 
   it('judges against the latest ten runs alone, leaving older ones out of the usual', () => {
@@ -483,7 +484,9 @@ describe('readWorkoutPage: heart-rate recovery', () => {
     }
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
-    const { oneMinute } = readWorkoutPage(q(), input('subject'))!.heartRateRecovery!
+    const { oneMinute, history } = readWorkoutPage(q(), input('subject'))!.heartRateRecovery!
+    // Twelve earlier runs, ten of them read.
+    expect(history).toBe(10)
     expect(oneMinute.baseline!.center).toBe(20)
     expect(oneMinute.baseline!.high).toBeCloseTo(20 + Math.sqrt(40 / 9), 6)
   })
@@ -494,6 +497,8 @@ describe('readWorkoutPage: heart-rate recovery', () => {
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
     expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery!.oneMinute).toMatchObject({ value: 25, standing: null, baseline: { thin: true } })
+    // Ten earlier runs, four with heart rate after them: the usual is built from four.
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery!.history).toBe(4)
   })
 
   it('reads the minutes around the minute the run ended in, when it ended part way through one', () => {
