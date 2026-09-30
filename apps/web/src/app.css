@@ -1341,7 +1341,6 @@ button.week-bar-slot { cursor: pointer; }
 .figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
 /* A line under the verdict that is not one (FigureRow's note): smaller and fainter than the verdict, never its tone. */
 .figure-row-note { font-size: var(--font-size-micro); color: var(--text-faint); }
-
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
