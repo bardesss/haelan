@@ -548,39 +548,62 @@ The recovery index for each day in a date range, oldest first - the same number 
 
 ### explain
 
-Walks one chain for a question and stops at the first link that accounts for it, so an agent does not have to stitch the other tools together and keep looking after the first sufficient answer. `kind: empty` asks why `metric` has no reading on `localDate`. The links are walked in this order: a reading is there after all (`thinBaseline` when its baseline is too thin to judge it against, `present` otherwise); the metric was excluded by hand that day; a sleep session that would have been that day's night was excluded; the night is filed under the next morning, the one it ended on; the `source` asked for has no row but the day does; nothing has ever reported the metric; the day is before its first reading; the day is after its last; no headline reading arrived that day at all; and last, other readings arrived but this one did not. `stoppedAt` names the link that answered and `walked` every link checked on the way, so there is nothing further to walk. `finding` is one sentence about the data, never a claim about the person's health, and `evidence` carries the readings behind it; a field a link never reached is null. A thin baseline is low confidence, not evidence of nothing, and a `filled` reading is an intraday average, not a measurement - say so in words.
+Walks one chain for a question and stops at the first link that accounts for it, so an agent does not have to stitch the other tools together and keep looking after the first sufficient answer. `stoppedAt` names the link that answered and `walked` every link checked on the way, so there is nothing further to walk. `finding` is one sentence about the data - an association with how the day was lived at most, never a cause, advice, a readiness verdict or a claim about the person's health - and `evidence` carries the numbers behind it, under the kind asked; a field a link never reached is null.
+
+`kind: empty` asks why `metric` has no reading on `localDate`. The links, in order: a reading is there after all (`thinBaseline` when its baseline is too thin to judge it against, `present` otherwise); the metric was excluded by hand that day; a sleep session that would have been that day's night was excluded; the night is filed under the next morning, the one it ended on; the `source` asked for has no row but the day does; nothing has ever reported the metric; the day is before its first reading; the day is after its last; no headline reading arrived that day at all; and last, other readings arrived but this one did not. A thin baseline is low confidence, not evidence of nothing, and a `filled` reading is an intraday average, not a measurement - say so in words.
+
+`kind: recovery` asks what the recovery index on `localDate` stands on - the same number recovery_index answers. The links, in order: `withheld`, a day that could not be scored, which is not a low score; `hrvFilledToday`, the day's own HRV is an intraday average, so the score is not a measurement throughout; `usual`, the score sits within this person's own normal; and `carriedBy`, the input that moved the score furthest in its own direction, with any that pulled the other way. An input's points are its share of the distance from 50 and do not add up to it when the inputs disagreed. An absent input, sleep on half its evidence and filled HRV inside the baseline are stated in the finding whichever link answers. `band` is distance from this person's own normal, not a readiness verdict. `metric`, `agg` and `source` are refused for this kind.
 
 **Input**
 
-- **kind** ('empty')
-- **metric** (string)
+- **kind** ('empty' | 'recovery')
 - **localDate** (string) — YYYY-MM-DD
-- **agg** (string, optional) — Omitted, the metric's own default aggregate, the one get_daily uses.
+- **metric** (string, optional) — Required for `empty`, refused for `recovery`.
+- **agg** (string, optional) — `empty` only. Omitted, the metric's own default aggregate, the one get_daily uses.
 - **source** (string, optional) — A source id from describe_person to read one device on its own, or `merged` for only the days this app reconciled itself, or `provider` for only the days Google had already reconciled. Omitted answers the day rather than one device: the merged row where there is one, the provider row where there is not.
 
 **Output**
 
-- **kind** ('empty')
+- **kind** ('empty' | 'recovery')
 - **finding** (string)
-- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay')
-- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay')
+- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy')
+- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy')
 - **evidence** (object)
-  - **metric** (string)
-  - **agg** (string)
-  - **localDate** (string)
-  - **source** (string, nullable) — The `source` asked for, or null for the day itself.
-  - **value** (number, nullable)
-  - **coverage** (number, nullable)
-  - **filled** (boolean, nullable) — True when this reading is the day's intraday average standing in for the daily name, not the device's own daily summary. Say so in words; do not state it as a measurement.
-  - **baseline** (object, nullable) — The reading's own baseline, the days before `localDate`. Only read when there was a reading. Thin is low confidence, not evidence of nothing.
-    - **center** (number)
-    - **spread** (number)
-    - **n** (number)
-    - **thin** (boolean)
-  - **excludedMetrics** (array of string, nullable) — Every metric excluded by hand on `localDate`.
-  - **excludedSleepSessions** (array of string, nullable) — Sleep sessions filed under `localDate` that were excluded by hand and would otherwise have been part of its night. An excluded nap is not listed.
-  - **nightFiledUnder** (string, nullable) — The morning a night that began on the evening of `localDate` is filed under.
-  - **daySource** (string, nullable) — Who answered the day when the `source` asked for did not: `merged` or `provider`.
-  - **lastReportedBefore** (string, nullable)
-  - **firstReportedAfter** (string, nullable)
-  - **dayHasOtherData** (boolean, nullable) — Whether any of the day's headline readings (steps, sleep, resting heart rate, HRV, active minutes, heart rate) arrived on `localDate`.
+  - **empty** (object, nullable)
+    - **metric** (string)
+    - **agg** (string)
+    - **localDate** (string)
+    - **source** (string, nullable) — The `source` asked for, or null for the day itself.
+    - **value** (number, nullable)
+    - **coverage** (number, nullable)
+    - **filled** (boolean, nullable) — True when this reading is the day's intraday average standing in for the daily name, not the device's own daily summary. Say so in words; do not state it as a measurement.
+    - **baseline** (object, nullable) — The reading's own baseline, the days before `localDate`. Only read when there was a reading. Thin is low confidence, not evidence of nothing.
+      - **center** (number)
+      - **spread** (number)
+      - **n** (number)
+      - **thin** (boolean)
+    - **excludedMetrics** (array of string, nullable) — Every metric excluded by hand on `localDate`.
+    - **excludedSleepSessions** (array of string, nullable) — Sleep sessions filed under `localDate` that were excluded by hand and would otherwise have been part of its night. An excluded nap is not listed.
+    - **nightFiledUnder** (string, nullable) — The morning a night that began on the evening of `localDate` is filed under.
+    - **daySource** (string, nullable) — Who answered the day when the `source` asked for did not: `merged` or `provider`.
+    - **lastReportedBefore** (string, nullable)
+    - **firstReportedAfter** (string, nullable)
+    - **dayHasOtherData** (boolean, nullable) — Whether any of the day's headline readings (steps, sleep, resting heart rate, HRV, active minutes, heart rate) arrived on `localDate`.
+  - **recovery** (object, nullable)
+    - **localDate** (string)
+    - **enough** (boolean)
+    - **missing** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable)
+    - **score** (number, nullable)
+    - **band** ('low' | 'below' | 'usual' | 'above' | 'high', nullable)
+    - **inputs** (array of object, nullable) — The same inputs recovery_index answers. `points` is signed: positive lifted the score, negative lowered it. They do not add up to the distance between `score` and 50 on a day the inputs disagreed, and none of them is a total.
+      - **key** ('hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate')
+      - **weight** (number)
+      - **points** (number)
+    - **degraded** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable)
+    - **reducedWeight** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable)
+    - **dayHrvFilled** (boolean, nullable) — True when the day's own HRV reading is its intraday average standing in for the daily reading. Null when the day has none.
+    - **hrvFilled** (object) — How many of the daily HRV readings behind this score (the day's own plus its 60-day baseline) were filled in from an intraday average, out of how many were used.
+      - **filled** (number)
+      - **of** (number)
+    - **carriedBy** ('hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — The input that moved the score furthest in its own direction.
+    - **pulledAgainst** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Inputs that moved the score the other way.
