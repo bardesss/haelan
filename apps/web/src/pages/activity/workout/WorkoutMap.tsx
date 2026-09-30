@@ -8,7 +8,7 @@ import type { WorkoutSessionDetail } from '../../../data/useSessions.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { RouteDrawing } from '../WorkoutRoute.js'
 import { formatPace } from '../pace.js'
-import { formatFigureValue } from '../../detail/figureText.js'
+import { figureAs, formatFigureValue } from '../../detail/figureText.js'
 import { elevationProfile } from './workoutText.js'
 
 // The elevation profile's own box, in view units; the SVG stretches it to the card's width.
@@ -21,7 +21,7 @@ const WHOLE_KM_METRES = 950
 const BAR_FLOOR = 0.4
 
 // A ride's split speed, the figure unit its speed is judged in, printed in km/h (formatFigureValue).
-const SPEED = { metric: 'speed', value: null, unit: 'meters_per_second', precision: 2 }
+const SPEED = figureAs('speed', 'meters_per_second', 2)
 
 /**
  * Each split's bar length as a share of the row: the fastest kilometre fills it, the slowest gets

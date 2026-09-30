@@ -10,14 +10,14 @@ import { Link } from '../router.js'
 import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 import { exerciseTypeLabel } from '../data/exerciseTypeLabel.js'
 import { CATEGORY_ICONS } from './activity/SessionRow.js'
-import { sessionRateText, swimDistanceText, valueAs } from './activity/categoryText.js'
+import { sessionRateText, swimDistanceText } from './activity/categoryText.js'
 import { workoutPath } from './activity/workout/workoutText.js'
 import { useAllTime } from '../data/useAllTime.js'
 import { sourceLabel } from '../data/useSourceNames.js'
 import { useSession } from '../auth/session.js'
 import { localToday } from '../controls/range.js'
 import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/useAllTime.js'
-import { formatFigureValue } from './detail/figureText.js'
+import { figureAs, formatFigureValue } from './detail/figureText.js'
 
 /**
  * What only the whole archive can answer.
@@ -112,10 +112,13 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
         )}
 
         {/* A card per category that holds a record, labelled by the category with its glyph: a
-            ride never sits in a run's list. Half width each, a uniform run; a lone one takes the
-            row (PATTERNS.md's span rule), since nothing pairs with it. */}
-        {groups.map(({ category, records }) => (
-          <Card key={category} span={groups.length === 1 ? 12 : 6} label={t(`records.categories.${category}`)}
+            ride never sits in a run's list. Half width, two to a row; a card left alone in its row
+            (the last of an odd count, or the only one) takes the whole row, so the category cards
+            end on a full row and Eddington and milestones below still pair (PATTERNS.md's span
+            rule: a lone card spans the full width). */}
+        {groups.map(({ category, records }, i) => (
+          <Card key={category} span={i === groups.length - 1 && groups.length % 2 === 1 ? 12 : 6}
+            label={t(`records.categories.${category}`)}
             labelIcon={(
               <span className="session-row-icon card-label-icon" data-category={category} aria-hidden="true">
                 <Icon name={CATEGORY_ICONS[category]} />
@@ -206,7 +209,7 @@ function RecordRow({ record, t, language }: {
  * a speed on a bike ("km/u" in Dutch). A run's kilometre is its pace alone, as it always read.
  */
 function sessionValue(record: SessionRecord, language: string, t: Translate): string {
-  const value = (metric: string, unit: string, v: number) => formatFigureValue(valueAs(metric, unit), v, language, t)
+  const value = (metric: string, unit: string, v: number) => formatFigureValue(figureAs(metric, unit), v, language, t)
   if (record.kind === 'longest') return value('longest', 'minutes', record.value / 60_000)
   if (record.kind === 'furthest') {
     return record.category === 'swim' ? swimDistanceText(record.value, language, t) : value('distance', 'meters', record.value)
@@ -220,13 +223,6 @@ function sessionValue(record: SessionRecord, language: string, t: Translate): st
   if (meters === undefined || record.value <= 0) return time
   const rate = sessionRateText(record.category, record.value / (meters / 1000), language, t)
   return rate === null ? time : `${time} · ${rate}`
-}
-
-/** The record's name, in the category's words where it has its own ("Longest ride", "Langste rit"). */
-function sessionRecordName(record: SessionRecord, t: Translate): string {
-  if (record.kind === 'longest') return t(`records.sessions.longestOf.${record.category}`)
-  if (record.kind === 'furthest') return t(`records.sessions.furthestOf.${record.category}`)
-  return t(`records.sessions.${record.kind}`)
 }
 
 function SessionRecordRow({ record, t, language }: {
@@ -243,7 +239,9 @@ function SessionRecordRow({ record, t, language }: {
     // does (workoutPath), rather than a link buried in one cell.
     <li className="record-row record-row-linked" data-record={record.kind} data-category={record.category}>
       <Link to={workoutPath(record.sessionId)} className="record-row-link">
-        <span className="record-metric">{sessionRecordName(record, t)}</span>
+        {/* The same words in every category ("Langste", "Snelste 5 km"): the card's label already
+            names the sport. */}
+        <span className="record-metric">{t(`records.sessions.${record.kind}`)}</span>
         <span className="record-value">{sessionValue(record, language, t)}</span>
         <span className="record-date">{onDate(record.localDate, language)}</span>
         {/* Empty rather than omitted when there is nothing to add, for the same reason RecordRow's

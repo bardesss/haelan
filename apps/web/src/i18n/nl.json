@@ -1678,21 +1678,8 @@
       "other": "Overig"
     },
     "sessions": {
-      "longestOf": {
-        "run": "Langste loop",
-        "ride": "Langste rit",
-        "walk": "Langste wandeling",
-        "swim": "Langste zwemtraining",
-        "strength": "Langste sessie",
-        "cardio": "Langste sessie",
-        "other": "Langste sessie"
-      },
-      "furthestOf": {
-        "run": "Verste loop",
-        "ride": "Verste rit",
-        "walk": "Verste wandeling",
-        "swim": "Verste zwemtraining"
-      },
+      "longest": "Langste",
+      "furthest": "Verste",
       "most-climb": "Meeste klim",
       "fastest-1k": "Snelste kilometer",
       "fastest-mile": "Snelste mijl",

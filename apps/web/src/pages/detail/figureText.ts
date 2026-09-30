@@ -64,6 +64,16 @@ export function formatStopwatch(totalSeconds: number): string {
 }
 
 /**
+ * A value that is not one of a page's figures, named the way formatFigureValue knows it: its unit,
+ * a metric where the unit alone does not say how it reads (a swim's distance in whole metres), and
+ * the stored unit's precision. The one shape for it: the Records page, the session rows and the
+ * kilometre table's speed all build theirs here.
+ */
+export function figureAs(metric: string, unit: string, precision = 0): Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'> {
+  return { metric, unit, precision, value: null }
+}
+
+/**
  * A figure's own value, or any other number measured in the same unit (its baseline's low, high or
  * center), worded the way that unit reads: a duration for minutes, a clock time for a clock offset,
  * a catalogue-precision number with the unit's own suffix for everything else the server judges by.

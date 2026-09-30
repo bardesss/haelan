@@ -1678,21 +1678,8 @@
       "other": "Other"
     },
     "sessions": {
-      "longestOf": {
-        "run": "Longest run",
-        "ride": "Longest ride",
-        "walk": "Longest walk",
-        "swim": "Longest swim",
-        "strength": "Longest session",
-        "cardio": "Longest session",
-        "other": "Longest session"
-      },
-      "furthestOf": {
-        "run": "Furthest run",
-        "ride": "Furthest ride",
-        "walk": "Furthest walk",
-        "swim": "Furthest swim"
-      },
+      "longest": "Longest",
+      "furthest": "Furthest",
       "most-climb": "Most climb",
       "fastest-1k": "Fastest kilometre",
       "fastest-mile": "Fastest mile",

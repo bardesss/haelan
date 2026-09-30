@@ -1,13 +1,7 @@
 import { rateOf } from '@haelan/core/exercise-category'
 import type { ExerciseCategory } from '@haelan/core/exercise-category'
 import type { Translate } from '../../format.js'
-import { formatFigureValue } from '../detail/figureText.js'
-
-/**
- * A value outside a workout page's figures, named the way formatFigureValue knows it: its unit, and
- * a metric where the unit alone does not say how it reads (a swim's distance in whole metres).
- */
-export const valueAs = (metric: string, unit: string) => ({ metric, unit, precision: 0, value: null })
+import { figureAs, formatFigureValue } from '../detail/figureText.js'
 
 
 /**
@@ -22,14 +16,14 @@ export function sessionRateText(
 ): string | null {
   if (paceSecondsPerKm === null || paceSecondsPerKm <= 0) return null
   switch (rateOf(category)) {
-    case 'pace': return formatFigureValue(valueAs('pace', 'seconds_per_km'), paceSecondsPerKm, language, t)
-    case 'speed': return formatFigureValue(valueAs('speed', 'meters_per_second'), 1000 / paceSecondsPerKm, language, t)
-    case 'swimPace': return formatFigureValue(valueAs('swimPace', 'seconds_per_100m'), paceSecondsPerKm / 10, language, t)
+    case 'pace': return formatFigureValue(figureAs('pace', 'seconds_per_km'), paceSecondsPerKm, language, t)
+    case 'speed': return formatFigureValue(figureAs('speed', 'meters_per_second'), 1000 / paceSecondsPerKm, language, t)
+    case 'swimPace': return formatFigureValue(figureAs('swimPace', 'seconds_per_100m'), paceSecondsPerKm / 10, language, t)
     default: return null
   }
 }
 
 /** A swim's distance, in whole metres however far it went ("1,500 m"): a pool counts in metres. */
 export function swimDistanceText(meters: number, language: string, t: Translate): string {
-  return formatFigureValue(valueAs('swimDistance', 'meters'), meters, language, t)
+  return formatFigureValue(figureAs('swimDistance', 'meters'), meters, language, t)
 }
