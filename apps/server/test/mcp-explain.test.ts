@@ -53,13 +53,17 @@ describe('explain, kind empty', () => {
     }).run()
   }
 
+  // Answers with `evidence` narrowed to the empty kind's own object, having checked the other is null.
   function explain(args: { metric: string, localDate?: string, agg?: string, source?: string }): Answer {
-    const answer = explainTool.run(q, { kind: 'empty', localDate: D, ...args }) as Answer
-    expect(answer.kind).toBe('empty')
-    expect(answer.finding).not.toMatch(CLAIM_WORDS)
+    const raw = explainTool.run(q, { kind: 'empty', localDate: D, ...args }) as Omit<Answer, 'evidence'> & {
+      evidence: { empty: Record<string, unknown>, recovery: unknown }
+    }
+    expect(raw.kind).toBe('empty')
+    expect(raw.evidence.recovery).toBeNull()
+    expect(raw.finding).not.toMatch(CLAIM_WORDS)
     // The walk stops where it says it stopped: the last link walked is the one that answered.
-    expect(answer.walked.at(-1)).toBe(answer.stoppedAt)
-    return answer
+    expect(raw.walked.at(-1)).toBe(raw.stoppedAt)
+    return { ...raw, evidence: raw.evidence.empty }
   }
 
   it('stops at present when there is a reading with a baseline to stand on', () => {
