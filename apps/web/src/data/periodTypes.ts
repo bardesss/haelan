@@ -1,4 +1,4 @@
-// Mirrors the wire shape of packages/core/src/query/periodFigure.ts and sleepPeriod.ts, after
+// Mirrors the wire shape of packages/core/src/query/periodFigure.ts, sleepPeriod.ts and activityPeriod.ts, after
 // apps/server/src/routes/v1/period.ts rounds, re-judges and trims it, field for field rather than
 // imported: @haelan/core's root export pulls in better-sqlite3 and drizzle, which have no business in
 // a browser bundle (the precedent is useNightPage.ts).
@@ -98,4 +98,57 @@ export interface SleepPeriodData {
   mornings: PeriodFigure[]
   more: PeriodFigure[]
   nights: SleepListRow[]
+}
+
+export interface WorkoutListRow {
+  id: string
+  sourceId: string
+  localDate: string
+  startMs: number
+  endMs: number
+  type: string | null
+  durationSeconds: number | null
+  distanceMeters: number | null
+  caloriesKcal: number | null
+  averageHeartRateBpm: number | null
+  excluded: boolean
+}
+
+export interface TypeTotal {
+  type: string | null
+  count: number
+  seconds: number
+  distanceMeters: number | null
+  /** Fractional: each earlier block is scaled to the period's length. */
+  usualCount: PeriodUsual | null
+  standing: GlanceStanding | null
+}
+
+export interface Vo2Trend {
+  metric: string
+  latest: number
+  latestDate: string
+  earlier: number | null
+  earlierDate: string | null
+  trend: 'rising' | 'falling' | 'steady' | null
+}
+
+export interface ActivityPeriodData {
+  period: PeriodHeader
+  /** Steps, per day. */
+  hero: PeriodFigure
+  high: PeriodHigh | null
+  previous: PeriodChange
+  yearEarlier: PeriodChange
+  workoutCount: number
+  figures: PeriodFigure[]
+  intensity: { light: PeriodFigure | null, moderate: PeriodFigure | null, vigorous: PeriodFigure | null }
+  zoneMinutes: { fatBurn: PeriodFigure | null, cardio: PeriodFigure | null, peak: PeriodFigure | null }
+  heartRateZones: { light: PeriodFigure | null, moderate: PeriodFigure | null, vigorous: PeriodFigure | null, peak: PeriodFigure | null }
+  /** Newest first, every workout of the period, excluded ones included. */
+  workouts: WorkoutListRow[]
+  types: TypeTotal[]
+  cardioLoad: PeriodFigure | null
+  vo2max: Vo2Trend | null
+  more: PeriodFigure[]
 }
