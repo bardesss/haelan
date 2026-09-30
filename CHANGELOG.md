@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.17.0](https://github.com/bardesss/haelan/compare/v2.16.0...v2.17.0) (2026-09-30)
+
+
+### Features
+
+* heart-rate recovery, the morning before, pace and cadence on the workout page ([#415](https://github.com/bardesss/haelan/issues/415)) ([74189bc](https://github.com/bardesss/haelan/commit/74189bc455a3815cc9bdcf579fb8f490359b0154))
+* same-route times, fastest efforts and GPS records ([#417](https://github.com/bardesss/haelan/issues/417)) ([264d5a0](https://github.com/bardesss/haelan/commit/264d5a00febc0743ca83b570bff3d44c93e1fedf))
+* sleep and activity period reads ([#410](https://github.com/bardesss/haelan/issues/410)) ([fbdc9c7](https://github.com/bardesss/haelan/commit/fbdc9c7a0150f705d649af9b61a80b6a5fb96b80))
+* stage timing, sleeping heart-rate dip and a morning summary on the night page ([#413](https://github.com/bardesss/haelan/issues/413)) ([1a88a53](https://github.com/bardesss/haelan/commit/1a88a5379130460f996295c519fcc1887ec23065))
+* the Activity page, redesigned around the period's usual ([#416](https://github.com/bardesss/haelan/issues/416)) ([890ea07](https://github.com/bardesss/haelan/commit/890ea07e2462605cbd583133cb2226e4842921b7))
+* the Sleep page, redesigned around the period's usual ([#414](https://github.com/bardesss/haelan/issues/414)) ([acbd7b3](https://github.com/bardesss/haelan/commit/acbd7b398d1efdb2adaa7149bd632b354b704287))
+
 ## [2.16.0](https://github.com/bardesss/haelan/compare/v2.15.1...v2.16.0) (2026-09-29)
 
 
