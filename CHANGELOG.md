@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.18.0](https://github.com/bardesss/haelan/compare/v2.17.0...v2.18.0) (2026-09-30)
+
+
+### Features
+
+* explain, one chain that stops at the first account of an empty reading ([#418](https://github.com/bardesss/haelan/issues/418)) ([07f8f47](https://github.com/bardesss/haelan/commit/07f8f47b67a884490b6b113398e983ef70b90213))
+* explain's comparison kind, a suppressed comparison is not enough data ([#423](https://github.com/bardesss/haelan/issues/423)) ([8f179f2](https://github.com/bardesss/haelan/commit/8f179f22c4dd8232c79ad267c5a6ee91a2a749d1)), closes [#412](https://github.com/bardesss/haelan/issues/412)
+* explain's day kind, what sits away from usual and what was lived beside it ([#422](https://github.com/bardesss/haelan/issues/422)) ([baa249e](https://github.com/bardesss/haelan/commit/baa249e579311ad84b5c8e9a97cca77524cdf42f))
+* explain's recovery kind, what the recovery index on one day stands on ([#420](https://github.com/bardesss/haelan/issues/420)) ([9afb099](https://github.com/bardesss/haelan/commit/9afb099c92434ff05c4c77d6bada2c508880b63c))
+* explain's workout kind, what stands out about one session ([#421](https://github.com/bardesss/haelan/issues/421)) ([0069111](https://github.com/bardesss/haelan/commit/0069111d1f8f3c59eff2fce3729831d62500a434))
+* records and workout figures per sport ([#424](https://github.com/bardesss/haelan/issues/424)) ([f8ce39c](https://github.com/bardesss/haelan/commit/f8ce39c2db206d076b6c9e2d6569b737b5e1e2d6))
+
 ## [2.17.0](https://github.com/bardesss/haelan/compare/v2.16.0...v2.17.0) (2026-09-30)
 
 
