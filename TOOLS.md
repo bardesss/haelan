@@ -558,22 +558,26 @@ Walks one chain for a question and stops at the first link that accounts for it,
 
 `kind: day` asks what on the finished day `localDate` sits away from this person's own usual, and what was lived beside it - the same readings and 60-day usual ranges the app's dashboard draws for that day. It needs `today`, which must be after `localDate`: a day still running is not judged against whole days. The gates come first and stop the walk, because the data cannot carry an interpretation of such a day: `dayEmpty`, nothing arrived; `sourceStopped`, a source feeding the day had stopped before it, judged as of the day itself; `hrvFilled`, the day's own HRV is an intraday average; `thinBaselines`, no reading has enough history to judge; then `nothingAway`, every reading sits within its usual. Otherwise the first reading away from its usual, looked for in a fixed order (resting heart rate, HRV, breathing rate, sleep, steps, active minutes), is reported beside the first lived factor away from its own usual, in a fixed order per reading: `shortNight`, `lateBedtime` and `heavyYesterday` (the day before's vigorous minutes) for a body reading on its worse side, `lateBedtime` for a short night, `workoutThatDay` for more movement, and `loggedEvent` for every reading; `noLivedFactor` when none was. A lived factor is an association reported beside the reading, never the reason for it, and the finding says so.
 
+`kind: comparison` asks what the mean of `metric` from `from` to `to` against the equal period before it can say - the same comparison compare_periods answers. The links, in order: `thinDays` and `thinCoverage`, compare_periods' two refusals, each read as not enough data and never as no change; `spreadUnknown`, no usual day-to-day spread thick enough to set the difference against, so it is reported and not judged; `withinSpread`, the difference is smaller than this person's own day-to-day spread for the metric, so the periods read alike; and `moved`, it is larger. The spread is the baseline get_baselines answers as of `from`. Filled days in either period are stated in the finding whichever link answers.
+
 **Input**
 
-- **kind** ('empty' | 'recovery' | 'workout' | 'day')
+- **kind** ('empty' | 'recovery' | 'workout' | 'day' | 'comparison')
 - **localDate** (string, optional) — YYYY-MM-DD. Required for `empty`, `recovery` and `day`, refused for `workout`.
 - **today** (string, optional) — YYYY-MM-DD, today in the person's own zone. Required for `day`, refused otherwise: a day is only explained once it is over.
+- **from** (string, optional) — YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.
+- **to** (string, optional) — YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.
 - **sessionId** (string, optional) — An exercise session id from get_workouts. Required for `workout`, refused otherwise.
-- **metric** (string, optional) — Required for `empty`, refused otherwise.
-- **agg** (string, optional) — `empty` only. Omitted, the metric's own default aggregate, the one get_daily uses.
+- **metric** (string, optional) — Required for `empty` and `comparison`, refused otherwise.
+- **agg** (string, optional) — `empty` and `comparison` only. Omitted, the metric's own default aggregate, the one get_daily uses.
 - **source** (string, optional) — A source id from describe_person to read one device on its own, or `merged` for only the days this app reconciled itself, or `provider` for only the days Google had already reconciled. Omitted answers the day rather than one device: the merged row where there is one, the provider row where there is not.
 
 **Output**
 
-- **kind** ('empty' | 'recovery' | 'workout' | 'day')
+- **kind** ('empty' | 'recovery' | 'workout' | 'day' | 'comparison')
 - **finding** (string)
-- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual' | 'dayEmpty' | 'sourceStopped' | 'hrvFilled' | 'thinBaselines' | 'nothingAway' | 'shortNight' | 'lateBedtime' | 'heavyYesterday' | 'workoutThatDay' | 'loggedEvent' | 'noLivedFactor')
-- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual' | 'dayEmpty' | 'sourceStopped' | 'hrvFilled' | 'thinBaselines' | 'nothingAway' | 'shortNight' | 'lateBedtime' | 'heavyYesterday' | 'workoutThatDay' | 'loggedEvent' | 'noLivedFactor')
+- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual' | 'dayEmpty' | 'sourceStopped' | 'hrvFilled' | 'thinBaselines' | 'nothingAway' | 'shortNight' | 'lateBedtime' | 'heavyYesterday' | 'workoutThatDay' | 'loggedEvent' | 'noLivedFactor' | 'thinDays' | 'thinCoverage' | 'spreadUnknown' | 'withinSpread' | 'moved')
+- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual' | 'dayEmpty' | 'sourceStopped' | 'hrvFilled' | 'thinBaselines' | 'nothingAway' | 'shortNight' | 'lateBedtime' | 'heavyYesterday' | 'workoutThatDay' | 'loggedEvent' | 'noLivedFactor' | 'thinDays' | 'thinCoverage' | 'spreadUnknown' | 'withinSpread' | 'moved')
 - **evidence** (object)
   - **empty** (object, nullable)
     - **metric** (string)
@@ -664,3 +668,30 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **sessionId** (string)
       - **exerciseType** (string, nullable)
     - **eventIds** (array of string, nullable) — Events logged on the day or the day before; read them with get_events.
+  - **comparison** (object, nullable)
+    - **metric** (string)
+    - **agg** (string)
+    - **source** (string, nullable)
+    - **from** (string)
+    - **to** (string)
+    - **previousFrom** (string)
+    - **previousTo** (string)
+    - **current** (number, nullable)
+    - **previous** (number, nullable)
+    - **delta** (number, nullable)
+    - **periodDays** (number)
+    - **currentDays** (number)
+    - **previousDays** (number)
+    - **currentCoverage** (number, nullable)
+    - **previousCoverage** (number, nullable)
+    - **reason** ('thin-days' | 'thin-coverage', nullable)
+    - **currentFilledDays** (object)
+      - **filled** (number)
+      - **of** (number)
+    - **previousFilledDays** (object)
+      - **filled** (number)
+      - **of** (number)
+    - **spread** (object, nullable) — The person's own day-to-day spread for the metric, from the 60 days before `from`. Only read past the gates.
+      - **spread** (number)
+      - **n** (number)
+      - **thin** (boolean)
