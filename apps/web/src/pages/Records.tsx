@@ -10,7 +10,7 @@ import { Link } from '../router.js'
 import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 import { exerciseTypeLabel } from '../data/exerciseTypeLabel.js'
 import { CATEGORY_ICONS } from './activity/SessionRow.js'
-import { sessionRateText, swimDistanceText } from './activity/categoryText.js'
+import { distanceText, sessionRateText } from './activity/categoryText.js'
 import { workoutPath } from './activity/workout/workoutText.js'
 import { useAllTime } from '../data/useAllTime.js'
 import { sourceLabel } from '../data/useSourceNames.js'
@@ -212,7 +212,7 @@ function sessionValue(record: SessionRecord, language: string, t: Translate): st
   const value = (metric: string, unit: string, v: number) => formatFigureValue(figureAs(metric, unit), v, language, t)
   if (record.kind === 'longest') return value('longest', 'minutes', record.value / 60_000)
   if (record.kind === 'furthest') {
-    return record.category === 'swim' ? swimDistanceText(record.value, language, t) : value('distance', 'meters', record.value)
+    return distanceText(record.category, record.value, language, t)
   }
   if (record.kind === 'most-climb') return value('climb', 'meters', record.value)
   if (record.category === 'run' && record.kind === 'fastest-1k') return value('pace', 'seconds_per_km', record.value)

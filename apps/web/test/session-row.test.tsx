@@ -82,8 +82,8 @@ describe('SessionRow', () => {
   // this work; a template string with toFixed would read 8.5 on a Dutch page.
   it('formats numbers in the page locale', () => {
     const html = render(run({ exerciseType: 'RUNNING', metricsSummary: { distanceMillimeters: 8488286 } }))
-    expect(html).toContain('8,49')
-    expect(html).not.toContain('8.49')
+    expect(html).toContain('8,5')
+    expect(html).not.toContain('8.5')
   })
 
   // 170 of the 182 declared types are unseeded, and a row must stay readable for all of them.
@@ -128,7 +128,7 @@ describe('how a row separates its figures', () => {
       exerciseType: 'RUNNING',
       metricsSummary: { distanceMillimeters: 4_000_000, elevationGainMillimeters: 30_000 },
     }))
-    expect(html).toContain('<div class="session-row-detail">4,00\u00a0km · 30\u00a0m\u00a0omhoog</div>')
+    expect(html).toContain('<div class="session-row-detail">4,0\u00a0km · 30\u00a0m\u00a0omhoog</div>')
   })
 })
 
@@ -197,13 +197,13 @@ describe('SessionRowView', () => {
   })
 
   it('shows the distance when there is one', () => {
-    // Two decimals, as the workout page and Records print a session's distance.
-    expect(view({ distanceMeters: 5000 })).toContain('<div class="session-row-detail">5,00\u00a0km</div>')
+    // One decimal, as Records and the Activity page's per-type totals print a distance.
+    expect(view({ distanceMeters: 5000 })).toContain('<div class="session-row-detail">5,0\u00a0km</div>')
     expect(view({ distanceMeters: 420 })).toContain('<div class="session-row-detail">420\u00a0m</div>')
   })
 
   it('heads the second line with its date when dated, and alone when it has nothing else', () => {
-    expect(view({ distanceMeters: 5000, dated: true })).toContain('<div class="session-row-detail">do 3 sep · 5,00\u00a0km</div>')
+    expect(view({ distanceMeters: 5000, dated: true })).toContain('<div class="session-row-detail">do 3 sep · 5,0\u00a0km</div>')
     expect(view({ dated: true })).toContain('<div class="session-row-detail">do 3 sep</div>')
   })
 
@@ -216,13 +216,13 @@ describe('SessionRowView', () => {
     }
 
     it('reads a run and a walk as a pace per kilometre', () => {
-      expect(detail('RUNNING', { distanceMeters: 5000, paceSecondsPerKm: 324 })).toBe('5,00\u00a0km · 5:24\u00a0/km')
+      expect(detail('RUNNING', { distanceMeters: 5000, paceSecondsPerKm: 324 })).toBe('5,0\u00a0km · 5:24\u00a0/km')
       expect(detail('HIKING', { paceSecondsPerKm: 720 })).toBe('12:00\u00a0/km')
     })
 
     it('reads a ride as the speed core sends, in km/u in Dutch, never as a pace', () => {
       // 8.33 m/s is 30 km an hour.
-      expect(detail('BIKING', { distanceMeters: 30_000, paceSecondsPerKm: 120, speedMetersPerSecond: 8.33 })).toBe('30,00\u00a0km · 30,0\u00a0km/u')
+      expect(detail('BIKING', { distanceMeters: 30_000, paceSecondsPerKm: 120, speedMetersPerSecond: 8.33 })).toBe('30,0\u00a0km · 30,0\u00a0km/u')
       const english = renderToStaticMarkup(
         <I18nProvider lng="en">
           <SessionRowView id="s1" type="SPINNING" startMs={0} durationSeconds={3600} distanceMeters={null} caloriesKcal={null}

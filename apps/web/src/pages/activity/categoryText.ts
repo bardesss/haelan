@@ -31,3 +31,17 @@ export function sessionRateText(
 export function swimDistanceText(meters: number, language: string, t: Translate): string {
   return formatFigureValue(figureAs('swimDistance', 'meters'), meters, language, t)
 }
+
+/**
+ * A distance as every list reads one, a session's or a total alike: a swim's in whole metres, any
+ * other in km to one decimal below 100 and whole above ("8.5 km", "183 km", formatFigureValue's
+ * rule for a day's or a period's distance), under a kilometre in metres. The Activity page's rows and per-type totals and the
+ * Records page all print through this, so one distance never reads two ways on one screen. The
+ * workout page, about one session, keeps its two decimals.
+ */
+export function distanceText(category: ExerciseCategory | null, meters: number, language: string, t: Translate): string {
+  if (category === 'swim') return swimDistanceText(meters, language, t)
+  // Under a kilometre in whole metres ("800 m"), as formatFigureValue's metres read.
+  if (meters < 1000) return formatFigureValue(figureAs('distance', 'meters'), meters, language, t)
+  return formatFigureValue(figureAs('distance', 'millimeters'), meters * 1000, language, t)
+}

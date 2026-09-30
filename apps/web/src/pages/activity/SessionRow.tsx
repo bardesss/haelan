@@ -7,8 +7,8 @@ import { exerciseCategory } from '@haelan/core/exercise-category'
 import type { ExerciseCategory } from '@haelan/core/exercise-category'
 import { Icon } from '../../components/icons.js'
 import { Link } from '../../router.js'
-import { sessionRateText, swimDistanceText } from './categoryText.js'
-import { figureAs, formatFigureValue, noBreak } from '../detail/figureText.js'
+import { distanceText, sessionRateText } from './categoryText.js'
+import { noBreak } from '../detail/figureText.js'
 import { workoutPath } from './workout/workoutText.js'
 
 /**
@@ -116,11 +116,8 @@ export function SessionRowView(props: SessionRowViewProps) {
   // reader actually came to a workout row to see (fix round 1 review).
   const detail = [
     props.dated === true ? formatWeekdayDate(localDate, language) : null,
-    // A session's distance as the workout page and Records print it (formatFigureValue: two
-    // decimals in km, metres under one), so one distance never reads two ways between them.
-    distanceMeters === null ? null
-      : category === 'swim' ? swimDistanceText(distanceMeters, language, t)
-        : formatFigureValue(figureAs('distance', 'meters'), distanceMeters, language, t),
+    // As Records and the per-type totals beside the Activity list print a distance (distanceText).
+    distanceMeters === null ? null : distanceText(category, distanceMeters, language, t),
     // The rate the category reads (a ride's speed, a swim's time per 100 m), never a pace per
     // kilometre on a sport that is not on foot; nothing for one with no rate.
     sessionRateText(category, { paceSecondsPerKm, speedMetersPerSecond }, language, t),

@@ -12,7 +12,7 @@ import { verdictLine } from '../../detail/figureText.js'
 import { monthName } from '../../detail/periodText.js'
 import { PeriodFigureRows } from '../../period/PeriodFigureRows.js'
 import { CATEGORY_ICONS } from '../SessionRow.js'
-import { swimDistanceText } from '../categoryText.js'
+import { distanceText } from '../categoryText.js'
 import { minutesText, useActivityLabel } from './labels.js'
 
 const NBSP = ' '
@@ -42,12 +42,9 @@ function typeVerdict(type: TypeTotal, language: string, t: Translate): string | 
 // "5 × · 32.4 km", a swim's in metres ("3 × · 4,500 m"), or the type's time where it has no
 // distance ("1 × · 54 min").
 function typeAmount(type: TypeTotal, language: string, t: Translate): string {
-  const absent = t('common.absent')
   const amount = type.distanceMeters === null
     ? minutesText(type.seconds / 60, language, t)
-    : exerciseCategory(type.type) === 'swim'
-      ? swimDistanceText(type.distanceMeters, language, t)
-      : `${formatNumber(type.distanceMeters / 1000, 1, language, absent)}${NBSP}${t('activity.units.km')}`
+    : distanceText(exerciseCategory(type.type), type.distanceMeters, language, t)
   return `${t('activity.period.types.times', { count: type.count }).replace(' ', NBSP)}${SEPARATOR}${amount}`
 }
 

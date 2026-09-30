@@ -497,14 +497,14 @@ describe('the Activity page: the workouts', () => {
 
   it("prints a workout's pace and climb on its row", async () => {
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
-    expect(workoutRows()[0]!.querySelector('.session-row-detail')?.textContent).toBe(`Sat, Aug 29 · 3.00${NB}km · 9:00${NB}/km · 25${NB}m${NB}gained`)
+    expect(workoutRows()[0]!.querySelector('.session-row-detail')?.textContent).toBe(`Sat, Aug 29 · 3.0${NB}km · 9:00${NB}/km · 25${NB}m${NB}gained`)
   })
 
   it("prints a ride's speed on its row, in km/u in Dutch, and never its pace", async () => {
     const [first, ...rest] = ACTIVITY_PERIOD_MONTH.workouts
     // A ride with no device pace: the row prints the speed core sends, 8.33 m/s being 30 km an hour.
     await renderAt(MONTH_URL, { period: month({ workouts: [{ ...first!, type: 'BIKING', paceSecondsPerKm: null, speedMetersPerSecond: 8.33 }, ...rest] }) }, 'nl')
-    expect(cardFor('Trainingen')!.querySelector('.session-row-detail')?.textContent).toBe(`za 29 aug · 3,00${NB}km · 30,0${NB}km/u · 25${NB}m${NB}omhoog`)
+    expect(cardFor('Trainingen')!.querySelector('.session-row-detail')?.textContent).toBe(`za 29 aug · 3,0${NB}km · 30,0${NB}km/u · 25${NB}m${NB}omhoog`)
   })
 
   it('opens collapsed again in a new period', async () => {

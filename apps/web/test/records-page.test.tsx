@@ -165,7 +165,7 @@ describe('the all-time page', () => {
     expect(text("[data-record='longest'] .record-value")).toBe(`4h${NB}24m`)
     expect(text("[data-record='furthest'] .record-metric")).toBe('Furthest')
     // Whole metres, read as the workout page reads a distance.
-    expect(text("[data-record='furthest'] .record-value")).toBe(`12.85${NB}km`)
+    expect(text("[data-record='furthest'] .record-value")).toBe(`12.9${NB}km`)
     // 308.5s rounds to 5:09, not down to 5:08. A record must never render faster than it was
     // run, so the half-second goes against the runner rather than for them.
     expect(text("[data-record='fastest-1k'] .record-value")).toBe(`5:09${NB}/km`)
@@ -286,7 +286,7 @@ describe('the all-time page', () => {
     expect(names).toEqual([
       'Langste', 'Verste', 'Langste', 'Verste', 'Langste', 'Verste', 'Langste', 'Verste', 'Langste',
     ])
-    expect(text("[data-category='ride'][data-record='furthest'] .record-value")).toBe(`52,30${NB}km`)
+    expect(text("[data-category='ride'][data-record='furthest'] .record-value")).toBe(`52,3${NB}km`)
     // Under a kilometre a distance reads in metres; a swim's always does.
     expect(text("[data-category='walk'][data-record='furthest'] .record-value")).toBe(`800${NB}m`)
     expect(text("[data-category='swim'][data-record='furthest'] .record-value")).toBe(`1.500${NB}m`)
