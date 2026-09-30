@@ -67,6 +67,8 @@ export interface WorkoutPage {
   heartRateRecovery: {
     oneMinute: PageFigure, twoMinutes: PageFigure
     readings: { endBpm: number, oneMinuteBpm: number | null, twoMinutesBpm: number | null }
+    /** How many earlier workouts of the type have a fall in either minute: what the usual is built from. */
+    history: number
   } | null
   /** The night ending on the workout's own date and that morning's recovery; null for each with no value. */
   before: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, recovery: GlanceRecovery | null, restingHeartRate: PageFigure | null }
@@ -225,6 +227,7 @@ function heartRateRecoveryOf(q: PersonQuery, subject: WorkoutSession, window: re
     // A fall has a value only with the last minute's, so `last` is there whenever either is, and a
     // reading after the end has a value exactly when its fall does.
     readings: { endBpm: own.last!, oneMinuteBpm: own.afterOne, twoMinutesBpm: own.afterTwo },
+    history: earlier.filter((r) => r.one !== null || r.two !== null).length,
   }
 }
 

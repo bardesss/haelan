@@ -675,6 +675,11 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    would, not the whole card: a strip and a verdict stretched to 1200px read as a chart of their
    own. One of two below 900px (the collapse block), the whole card on a phone. */
 .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - 2 * var(--space-4)) / 3)); }
+/* A half card (an overview page's schedule beside its list) is already a third of a wide row or
+   less, so a lone row there takes the card, not a third of it (a sixth of the page, its verdict
+   wrapping a word a line). Below the collapse width the card spans the row, so the collapse and
+   phone blocks give it back the lone row's usual half and whole. */
+.card[data-span="6"] .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
 /* SideCard (pages/detail/DayLogBlock.tsx): a narrow column naming the day or night the section is
    about, the section's rows beside it; stacked below the grid's collapse width. */
 .detail-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
@@ -694,6 +699,74 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-about-line { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
 .detail-about summary { color: var(--text-secondary); cursor: pointer; font-size: var(--font-size-sm); }
 .detail-about[open] summary { margin-bottom: var(--space-2); }
+/* The overview pages' shared pieces (pages/period/, PATTERNS.md's "Overview pages"). The hero's
+   strip anchors the small panel a tapped point opens (PointPanel): under the strip, over the cards
+   below it, card surface and a border and no shadow, as .cal-popover. */
+.period-hero-strip { position: relative; }
+/* Under the strip: what its points are, and on the right what a tap on one does. A phone draws its
+   own tap control under the strip (Sparkline's), so the hint gives way to it there. */
+.period-hero-captions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--space-3); }
+.period-hero-hint { font-style: italic; margin-left: auto; }
+.period-hero-panel { position: absolute; top: 100%; right: 0; z-index: 30; width: min(24rem, 100%); margin-top: var(--space-1); }
+.point-panel {
+  box-sizing: border-box; padding: var(--space-3); background: var(--surface-card); color: var(--text-primary);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+}
+/* The title and the panel's own close, the subtitle under them, then a row a figure: its name, its
+   value bold, and that point's verdict in its tone (the verdict line's colours). */
+.point-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.point-panel-title { margin: 0; font-size: var(--font-size-sm); font-weight: var(--weight-bold); }
+.point-panel-close {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: calc(-1 * var(--space-1));
+  padding: 0; border: 0; border-radius: var(--radius-md); background: none; color: var(--text-secondary); font-size: var(--font-size-md); cursor: pointer;
+}
+.point-panel-close:hover { background: var(--surface-hover); color: var(--text-primary); }
+.point-panel-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+.point-panel-subtitle { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.point-panel-rows { margin: var(--space-2) 0 0; display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: baseline; }
+.point-panel-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; }
+.point-panel-row dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.point-panel-row dd { margin: 0; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.point-panel-value { font-weight: var(--weight-bold); }
+.point-panel-row .point-panel-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
+.point-panel-verdict.better { color: var(--positive); }
+.point-panel-verdict.worse, .point-panel-verdict.is-out { color: var(--negative); }
+.point-panel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); }
+.point-panel-actions .card-link { margin: 0; }
+/* On a phone the panel is a sheet along the bottom edge (the approved mockup's, .cal-sheet's
+   edges): anchored under the strip it ran past the fold and over the next card. Still non-modal, so
+   a press outside closes it as before; its two ways onward stack, each a 44px target. */
+@media (max-width: 620px) {
+  .period-hero-hint { display: none; }
+  .period-hero-panel { position: fixed; top: auto; right: 0; bottom: 0; left: 0; width: auto; margin: 0; z-index: 40; }
+  .period-hero-panel .point-panel {
+    max-height: 85dvh; overflow-y: auto; padding: var(--space-4);
+    border-width: 1px 0 0; border-radius: var(--radius-md) var(--radius-md) 0 0;
+  }
+  .point-panel-actions { flex-direction: column; align-items: stretch; }
+  .point-panel-actions .card-link, .point-panel-actions .button { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+  .point-panel-close { width: 44px; height: 44px; margin: calc(-1 * var(--space-2)); }
+}
+/* A list (ExpandableList): the first seven, then every item flowing into columns of at least
+   18rem, a month's heading kept with its first item; one column on a phone. */
+/* The list's items across the card, its toggle at its own width under them. */
+.period-list { display: flex; flex-direction: column; align-items: flex-start; }
+.period-list-items { align-self: stretch; min-width: 0; }
+.period-list-expanded { columns: 3 18rem; column-gap: var(--space-4); }
+/* A group's heading, the year mockup's month header: its name bold on the left, a quiet summary on
+   the right, a rule under both. */
+.period-list-heading {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 var(--space-3);
+  margin: var(--space-3) 0 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-sm); color: var(--text-primary); break-after: avoid;
+}
+.period-list-name { margin: 0; font-size: inherit; font-weight: var(--weight-bold); }
+.period-list-aside { font-size: var(--font-size-xs); color: var(--text-secondary); }
+.period-list-group:first-child .period-list-heading { margin-top: 0; }
+.period-list-toggle { margin-top: var(--space-3); }
+@media (max-width: 620px) {
+  .period-list-expanded { columns: 1; }
+}
 /* A day's quick log (DayLogBlock): the mood face and its word beside the chips, the note under. */
 .day-log { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-4); }
 .day-log-mood { display: flex; align-items: center; gap: var(--space-2); }
@@ -749,11 +822,20 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 /* The stage timing rows under that legend: the traces' own gap above them, so a row's label does
    not sit on the legend's line. */
 .detail-legend + .detail-rows { margin-top: var(--space-3); }
+/* The Sleep page's schedule legend (SleepScheduleCard): its keys in the colours SleepSchedule draws
+   (a weekday span, a weekend span, the bedtime-outside-its-usual dot, the usual band). */
+.detail-legend-key[data-schedule="weekday"] { background: var(--chart-stage-light); }
+.detail-legend-key[data-schedule="weekend"] { background: var(--chart-stage-rem); }
+.detail-legend-key[data-schedule="out"] { background: var(--negative); border-radius: 50%; }
+.detail-legend-key[data-schedule="usual"] { background: var(--chart-band-baseline); }
+/* The schedule's two sentences, the card's first lines, the chart under them. */
+.schedule-sentences { margin-bottom: var(--space-2); }
+.schedule-sentences > p { margin: 0; }
 
 /* NightSessions.tsx's own list, task 7's exclude-per-session card, inside the About fold.
    A plain list rather than a table: each row is a recording plus one control or one status word, not
    values under column headers. .night-session mirrors .night-row's own bottom-border-between-rows
-   shape (NightList/NightRow, Sleep.tsx's own list) without reusing that class outright, since this
+   shape (NightRow, the Sleep page's list) without reusing that class outright, since this
    row carries a button or a status span where that one carries a link to a whole other page. */
 .night-sessions { list-style: none; margin: 0; padding: 0; }
 .night-session {
@@ -1263,8 +1345,8 @@ button.week-bar-slot { cursor: pointer; }
 .figure-row-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
 .figure-row-verdict.better { color: var(--positive); }
 .figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
+/* A line under the verdict that is not one (FigureRow's note): smaller and fainter than the verdict, never its tone. */
 .figure-row-note { font-size: var(--font-size-micro); color: var(--text-faint); }
-
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
@@ -1449,11 +1531,11 @@ button.week-bar-slot { cursor: pointer; }
   .detail-rows, .detail-side-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .detail-rows[data-columns], .detail-side-rows[data-columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-rows[data-columns="1"], .detail-side-rows[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-  .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - var(--space-3)) / 2)); }
+  .detail-rows[data-columns="1"], .card[data-span="6"] .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, calc((100% - var(--space-3)) / 2)); }
   .detail-side { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 }
 @media (max-width: 620px) {
-  .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
+  .detail-rows[data-columns="1"], .card[data-span="6"] .detail-rows[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The band between the collapse above and a window wide enough for twelve columns to mean
@@ -1885,31 +1967,26 @@ button.week-bar-slot { cursor: pointer; }
    heading is a flex container: its own font-size sets nothing here beyond what these two say. */
 .session-date-label { font-size: var(--font-size-sm); }
 
-/* NightList.tsx/NightRow.tsx: the night list Sleep gains in M8c, mirroring SessionList/SessionRow
-   above one date at a time rather than one session at a time. .night-list and .night-groups carry
-   the same min-width: 0 and column-of-groups shape as their session-list counterparts, for the
-   same reasons (a row's flex children need room to shrink; the gap between groups is what
-   separates one night's row from the next now that nothing else does). */
-.night-list { min-width: 0; }
-.night-list-header { display: flex; align-items: baseline; justify-content: space-between; }
-.night-list-count { color: var(--text-secondary); font-size: var(--font-size-sm); }
-/* No gap between rows any more: the group gap existed to separate one date's group from the next,
-   and with the date inside the row there are no groups - the rows' own bottom borders separate
-   them, the same way .record-row's do. */
-.night-groups { display: flex; flex-direction: column; }
-/* The date, now the row's own first column rather than a heading above a group of one. */
-.night-row-date { color: var(--text-secondary); font-weight: var(--weight-medium); min-width: 11rem; }
+/* NightRow.tsx: a night in the Sleep page's list (M10b; M8c's list before it), one row per night
+   with the date as its first column; the rows' own bottom borders separate them, as .record-row's do. */
+.night-row-date { color: var(--text-secondary); font-weight: var(--weight-medium); min-width: 6.5rem; }
 .night-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
 .night-row:last-child { border-bottom: 0; }
-.night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); min-width: 0; flex-wrap: wrap; }
-.night-row-duration { color: var(--text-primary); font-weight: var(--weight-medium); }
-.night-row-source { color: var(--text-secondary); font-size: var(--font-size-xs); }
-.night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.night-row-excluded { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); }
+/* One line in the mockup's order, date · time asleep · dot · bed to wake · ✦, each column a fixed
+   width so they line up down the list; the ✦ and its words wrap under the rest where the row runs out. */
+.night-row-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+.night-row-duration { color: var(--text-primary); font-weight: var(--weight-bold); min-width: 4.5rem; }
+.night-list-caption { margin: 0 0 var(--space-1); }
+/* The night's verdict as a dot, in verdictTone's colours: plain when usual. */
+.night-row-dot { align-self: center; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-muted); }
+.night-row-dot.better { background: var(--positive); }
+.night-row-dot.worse, .night-row-dot.is-out { background: var(--negative); }
+/* The good-night mark (PATTERNS.md): quiet, in the positive tone, never a badge. */
+.night-row-good { color: var(--positive); }
+.night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 6.5rem; }
 /* Copied from .session-row-link's own hover/focus rules, unchanged, so the two lists behave
    identically under a keyboard: same surface-hover on hover, same inward focus ring. */
-.night-row-link { display: block; color: inherit; text-decoration: none; }
+.night-row-link { display: block; color: inherit; text-decoration: none; break-inside: avoid; }
 .night-row-link:hover .night-row { background: var(--surface-hover); }
 .night-row-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
@@ -2123,12 +2200,12 @@ button.week-bar-slot { cursor: pointer; }
   .member-identity { flex: 1; min-width: 120px; }
   .member-activity { flex-basis: 100%; }
 
-  /* The date takes 11rem on a wide screen so the duration beside it lines up down the list. At
-     375px that width, plus the duration, the source and the clock, came to 406px in a 375px
-     viewport - which layout:check caught and nothing local could, since Playwright will not
-     install on this machine. The alignment it buys is worth nothing on a phone, so the date gives
-     the width back and takes a line of its own. */
-  .night-row-date { min-width: 0; flex-basis: 100%; }
+  /* The date takes 6.5rem on a wide screen so the duration beside it lines up down the list. On a
+     phone the columns narrow to the short date ("wo 30 sep") and duration, so date, time asleep,
+     dot and clock still share a line at 375px, the mockup's; the ✦ wraps under them. */
+  .night-row-date { min-width: 4.75rem; }
+  .night-row-duration { min-width: 3.75rem; }
+  .night-row-clock { min-width: 0; }
 
   .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 

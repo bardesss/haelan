@@ -87,8 +87,8 @@ export function clockHours(startMinute: number, endMinute: number): number[] {
 }
 
 export function Hypnogram({ segments, startLabel, label, startClock, totals: showTotals = true, compact = false, tall = false }: {
-  // startMs/endMs: raw milliseconds from the night's own start, not pre-rounded minutes. Sleep.tsx
-  // and Dashboard.tsx used to round each boundary to a whole minute before building this prop; that
+  // startMs/endMs: raw milliseconds from the night's own start, not pre-rounded minutes. The old
+  // Sleep page and Dashboard.tsx used to round each boundary to a whole minute before building this prop; that
   // rounding now happens only here, per displayed value (the axis, a table cell), never before a
   // sum. Two boundaries that round the same way individually can still each carry their own +0 or
   // +0.5 minute of error, and summing rounded boundaries instead of summing the raw span they
@@ -239,7 +239,7 @@ export function Hypnogram({ segments, startLabel, label, startClock, totals: sho
           ]),
         }} />
       {/* Empty totals is a classic (ASLEEP/RESTLESS-only) night, which carries no DEEP/LIGHT/REM
-          segment at all: both callers' own stageOf (Sleep.tsx, Dashboard.tsx) already drop those
+          segment at all: every caller's stageOf (NightCard.tsx, NightThrough.tsx) already drops those
           two stages before this component ever sees them, so an empty `segments` here means no
           staging happened, not that staging happened and found nothing. A blank row or three
           invented zeros would claim a measurement that was never taken, so this states the

@@ -1256,7 +1256,7 @@ describe('the workout page\'s heart-rate recovery', () => {
     expect(verdicts).toEqual(['figure-row-verdict', 'figure-row-verdict better'])
     expect(card.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('2')
     expect(text(card, '.detail-rows + .dash-caption')).toBe(
-      'from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it · band = your usual range')
+      'from your heart rate in the minutes after you stopped · usual from 10 workouts of this type before it · band = your usual range')
     // The mockup's place: its own card after the zones, before running form.
     expect(cardLabelled(host, 'Heart-rate zones')!.nextElementSibling).toBe(card)
     expect(card.nextElementSibling).toBe(cardLabelled(host, 'Running form'))
@@ -1269,6 +1269,17 @@ describe('the workout page\'s heart-rate recovery', () => {
       ['Daling na 2 minuten', '41\u00a0bpm', 'boven je gebruikelijke bereik 30 – 38\u00a0bpm'],
     ])
     expect(text(card, '.figure-row-note')).toBe('van 146 naar 121\u00a0bpm')
+    expect(text(card, '.detail-rows + .dash-caption')).toContain('gebruikelijk uit 10 trainingen van dit type ervoor')
+  })
+
+  it('names how many earlier workouts the usual is built from, in the singular for one', async () => {
+    const page = workoutPageFixture()
+    const one = cardLabelled(await mount({ ...page, heartRateRecovery: { ...page.heartRateRecovery!, history: 1 } }), 'Heart-rate recovery')!
+    expect(text(one, '.detail-rows + .dash-caption')).toContain('usual from 1 workout of this type before it')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const nl = cardLabelled(await mount({ ...page, heartRateRecovery: { ...page.heartRateRecovery!, history: 1 } }, workoutSessionFixture(), 'nl'), 'Hartslagherstel')!
+    expect(text(nl, '.detail-rows + .dash-caption')).toContain('gebruikelijk uit 1 training van dit type ervoor')
   })
 
   it('leaves out the minute without a value, and the card without either', async () => {
@@ -1301,7 +1312,7 @@ describe('the workout page\'s heart-rate recovery', () => {
       ...page, heartRateRecovery: { ...recovery, oneMinute: thin(recovery.oneMinute), twoMinutes: thin(recovery.twoMinutes) },
     }), 'Heart-rate recovery')!
     expect(text(both, '.detail-rows + .dash-caption')).toBe(
-      'from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it')
+      'from your heart rate in the minutes after you stopped · usual from 10 workouts of this type before it')
     act(() => { root!.unmount() })
     root = createRoot(container!)
     // The two-minute row's band would count, but the row is not drawn without its value.
@@ -1309,7 +1320,7 @@ describe('the workout page\'s heart-rate recovery', () => {
       ...page, heartRateRecovery: { ...recovery, oneMinute: thin(recovery.oneMinute), twoMinutes: { ...recovery.twoMinutes, value: null } },
     }), 'Heart-rate recovery')!
     expect(text(lone, '.detail-rows + .dash-caption')).toBe(
-      'from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it')
+      'from your heart rate in the minutes after you stopped · usual from 10 workouts of this type before it')
   })
 })
 
@@ -1399,11 +1410,19 @@ describe('the workout page\'s pace and cadence', () => {
   it('draws no pace without a route, and says so under a workout that covers a distance', async () => {
     tracePoints = [reading(minute(1), 120)]
     const page = workoutPageFixture()
-    const host = await mount({ ...page, through: { ...page.through, pace: null } }, fullSession())
+    const host = await mount({ ...page, through: { ...page.through, pace: null } }, { ...fullSession(), route: [] })
     expect(heads(host).map(([label]) => label)).toEqual(['Heart rate', 'Cadence'])
     expect(charts(host).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([false, true])
-    expect(caption(host)).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40 · cadence smoothed over three minutes · no route, no pace line')
+    expect(caption(host)).toBe("on the workout's own clock, 0:00 to 34:00 · one pause of 1:40 · cadence smoothed over three minutes · no route, no pace line")
     expect(text(host, '.workout-through-note')).toBe('The cadence comes from the steps per minute.')
+  })
+
+  it('does not blame a missing route when the route is there but gives no pace', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, through: { ...page.through, pace: null } }, fullSession())
+    expect(heads(host).map(([label]) => label)).toEqual(['Heart rate', 'Cadence'])
+    expect(caption(host)).toBe("on the workout's own clock, 0:00 to 34:00 · one pause of 1:40 · cadence smoothed over three minutes")
   })
 
   it('draws no cadence without one, the pace row then labelling the time', async () => {

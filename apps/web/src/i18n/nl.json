@@ -166,7 +166,6 @@
     "annotate": "Uitsluiten of een notitie toevoegen",
     "to": "tot en met",
     "loading": "Laden",
-    "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}",
     "absent": "—"
   },
@@ -630,7 +629,8 @@
           "oneMinute": "Daling na 1 minuut",
           "twoMinutes": "Daling na 2 minuten",
           "between": "van {{from}} naar {{to}}",
-          "caption": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit tot 10 trainingen van dit type ervoor"
+          "caption_one": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} training van dit type ervoor",
+          "caption_other": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} trainingen van dit type ervoor"
         },
         "form": {
           "label": "Loopvorm",
@@ -787,107 +787,29 @@
       "rem": "REM",
       "awake": "Wakker"
     },
-    "baselineNote": {
-      "pending": "de baseline wordt nog geladen",
-      "unknown": "de baseline kon niet worden gelezen, dus er wordt geen vergelijking getoond",
-      "none": "nog geen baseline om mee te vergelijken",
-      "thin": "de baseline uit de 60 nachten vóór {{on}} is te dun om mee te vergelijken",
-      "below": "↓ onder de baseline van {{low}} tot {{high}}",
-      "above": "↑ boven de baseline van {{low}} tot {{high}}",
-      "within": "→ binnen de baseline van {{low}} tot {{high}}"
-    },
     "balance": {
-      "label": "Slaapbalans",
-      "basisTarget": "{{reported}} van {{total}} nachten, {{perNight}} per nacht, tegen je doel van {{target}}",
-      "basisBaseline": "{{reported}} van {{total}} nachten, {{perNight}} per nacht, tegen je gebruikelijke {{target}}, 60 dagen voor {{on}}",
-      "chartLabel": "Slaapbalans per nacht in {{period}}",
       "columnUnit": "Minuten over of onder"
     },
     "units": {
-      "minutes": "Minuten",
-      "percent": "Percentage",
-      "percentShort": "%",
-      "minutesFromMidnight": "Minuten vanaf middernacht",
-      "naps": "Dutjes",
-      "napsShort": "dutjes"
-    },
-    "insights": {
-      "asleepMinutes": "Tijd in slaap, deze periode tegenover de vorige"
-    },
-    "asleepMinutes": {
-      "label": "Tijd in slaap",
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten; {{note}}",
-      "chartLabel": "Tijd in slaap per nacht in {{period}}"
-    },
-    "deepMinutes": {
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "Diepe slaap per nacht in {{period}}"
-    },
-    "lightMinutes": {
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "Lichte slaap per nacht in {{period}}"
-    },
-    "remMinutes": {
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "REM-slaap per nacht in {{period}}"
-    },
-    "awakeMinutes": {
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "Tijd wakker per nacht in {{period}}"
-    },
-    "inBedMinutes": {
-      "label": "Tijd in bed",
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "Tijd in bed per nacht in {{period}}"
-    },
-    "efficiency": {
-      "label": "Slaapefficiëntie",
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "Slaapefficiëntie per nacht in {{period}}"
-    },
-    "bedtimeMinutes": {
-      "label": "Bedtijd",
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "Bedtijd per nacht in {{period}}"
-    },
-    "waketimeMinutes": {
-      "label": "Wektijd",
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "chartLabel": "Wektijd per nacht in {{period}}"
-    },
-    "napCount": {
-      "label": "Dutjes",
-      "basis_one": "{{count}} dutje, {{reported}} van {{total}} nachten",
-      "basis_other": "{{count}} dutjes, {{reported}} van {{total}} nachten",
-      "chartLabel": "Dutjes per nacht in {{period}}"
-    },
-    "napMinutes": {
-      "label": "Dutjesduur",
-      "basis": "som, {{reported}} van {{total}} nachten",
-      "chartLabel": "Dutjesduur per nacht in {{period}}"
+      "minutes": "Minuten"
     },
     "sleepStages": {
-      "label": "Slaapfasen",
-      "basis": "meest recente nacht, {{date}}",
-      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}",
       "nightExcludedSessions_one": "{{count}} slaapsessie van deze nacht uitgesloten",
       "nightExcludedSessions_other": "{{count}} slaapsessies van deze nacht uitgesloten"
     },
-    "sleepSchedule": {
-      "label": "Slaapschema",
-      "basis_one": "bedtijd en wektijd, {{count}} nacht",
-      "basis_other": "bedtijd en wektijd, {{count}} nachten"
-    },
     "nights": {
       "label": "Nachten",
-      "count_one": "{{count}} geregistreerde nacht in deze periode",
-      "count_other": "{{count}} geregistreerde nachten in deze periode",
-      "basis": "één rij per datum, waarbij de langste opname wint als twee apparaten dezelfde nacht rapporteerden",
-      "clock": "{{bed}} tot {{wake}}",
-      "excluded_one": "{{count}} sessie uitgesloten",
-      "excluded_other": "{{count}} sessies uitgesloten",
+      "clock": "{{bed}} – {{wake}}",
       "emptyTitle": "Geen nachten in deze periode",
-      "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt."
+      "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt.",
+      "caption": "de nieuwste eerst · de stip is de verdict van die nacht",
+      "longest": "je langste",
+      "showAll_one": "Toon alle {{count}} nacht",
+      "showAll_other": "Toon alle {{count}} nachten",
+      "monthSummary_one": "1 nacht · gem. {{average}}",
+      "monthSummary_other": "{{count}} nachten · gem. {{average}}",
+      "monthNights_one": "1 nacht",
+      "monthNights_other": "{{count}} nachten"
     },
     "night": {
       "when": "Naar bed {{bed}} · wakker geworden {{wake}} · {{source}}",
@@ -1042,6 +964,60 @@
         "minutesAfterWakeUp": "Na wakker in bed",
         "naps": "Dutjes",
         "napsNone": "geen"
+      }
+    },
+    "openNight": "Bekijk nacht",
+    "period": {
+      "caption": {
+        "daily": "elke nacht {{period}}",
+        "weekly": "elke week, als gemiddelde"
+      },
+      "stages": {
+        "label": "De nachten",
+        "caption": "fasen per nacht {{period}} · gemiddeld per nacht in de legenda",
+        "captionWeekly": "fasen per nacht, gemiddeld per week · gemiddeld per nacht in de legenda"
+      },
+      "variability": "Variatie in bedtijd",
+      "sides": "In het weekend {{bed}} naar bed en {{wake}} wakker",
+      "shift": {
+        "later": "{{value}} later",
+        "earlier": "{{value}} eerder",
+        "same": "op dezelfde tijd"
+      },
+      "mornings": "De ochtenden",
+      "scheduleCaption": "naar bed en wakker, elke nacht {{period}}",
+      "hero": {
+        "label": "Tijd in slaap, gemiddeld per nacht"
+      },
+      "hint": {
+        "daily": "tik op een nacht voor de cijfers",
+        "weekly": "tik op een week voor de cijfers"
+      },
+      "lines": {
+        "nights": "elk lijntje: elke nacht {{period}} · band = je gebruikelijke bereik",
+        "mornings": "elk lijntje: elke ochtend {{period}} · band = je gebruikelijke bereik",
+        "weeklyNights": "elk lijntje: elke week, het gemiddelde van haar nachten · band = je gebruikelijke bereik",
+        "weeklyMornings": "elk lijntje: elke week, het gemiddelde van die ochtenden · band = je gebruikelijke bereik"
+      },
+      "varied": "Naar bed varieerde ±{{value}} {{period}}",
+      "variedUsual": "Naar bed varieerde ±{{value}} {{period}} · je gebruikelijke ±{{low}} – {{high}}",
+      "legend": {
+        "weekday": "doordeweeks",
+        "weekend": "weekend",
+        "out": "naar bed buiten je gebruikelijke",
+        "usual": "je gebruikelijke tijden"
+      },
+      "balanceAgainstBaseline_one": "ten opzichte van je gebruikelijke {{usual}}, over {{count}} nacht",
+      "balanceAgainstBaseline_other": "ten opzichte van je gebruikelijke {{usual}}, over {{count}} nachten",
+      "balanceAgainstTarget_one": "ten opzichte van je doel van {{target}}, over {{count}} nacht",
+      "balanceAgainstTarget_other": "ten opzichte van je doel van {{target}}, over {{count}} nachten",
+      "naps_one": "1 dutje, samen {{minutes}}",
+      "naps_other": "{{count}} dutjes, samen {{minutes}}",
+      "barsWeeklyBaseline": "elke balk: die week opgeteld, tegenover je gebruikelijke",
+      "barsWeeklyTarget": "elke balk: die week opgeteld, tegenover je doel",
+      "panel": {
+        "bed": "naar bed {{time}}",
+        "wake": "wakker geworden {{time}}"
       }
     }
   },
@@ -1872,6 +1848,81 @@
         "below": "minder stappen dan gebruikelijk",
         "none": "stappen niet beoordeeld"
       }
+    }
+  },
+  "period": {
+    "window": {
+      "week": "voor een week, afgelopen {{count}} weken",
+      "month": "voor een maand, afgelopen {{count}} maanden",
+      "quarter": "voor 3 maanden, afgelopen {{count}} periodes van 3 maanden",
+      "year": "voor een jaar, uit {{year}}"
+    },
+    "reason": {
+      "tooFewDays": "nog te weinig dagen voor een oordeel"
+    },
+    "counts": {
+      "usualNights_one": "{{within}} van {{count}} nacht gebruikelijk",
+      "usualNights_other": "{{within}} van {{count}} nachten gebruikelijk",
+      "usualDays_one": "{{within}} van {{count}} dag gebruikelijk",
+      "usualDays_other": "{{within}} van {{count}} dagen gebruikelijk",
+      "longer": "{{count}} langer",
+      "shorter": "{{count}} korter",
+      "later": "{{count}} later",
+      "earlier": "{{count}} eerder",
+      "higher": "{{count}} hoger",
+      "lower": "{{count}} lager",
+      "usualMornings_one": "{{within}} van {{count}} ochtend gebruikelijk",
+      "usualMornings_other": "{{within}} van {{count}} ochtenden gebruikelijk",
+      "usual_one": "{{within}} van {{count}} gebruikelijk",
+      "usual_other": "{{within}} van {{count}} gebruikelijk"
+    },
+    "standout": {
+      "longest": "je langste: {{value}} op {{date}}",
+      "busiest": "je drukste: {{value}} op {{date}}",
+      "previous": "{{delta}} tegenover {{period}}",
+      "yearEarlier": "{{delta}} tegenover vorig jaar",
+      "weekBefore": "de week ervoor",
+      "quarterBefore": "de 3 maanden ervoor"
+    },
+    "value": {
+      "perDay": "{{value}} per dag"
+    },
+    "list": {
+      "showAll": "Toon alle {{count}}",
+      "showFewer": "Toon minder"
+    },
+    "tap": {
+      "tail": "Toon de cijfers",
+      "idle": "Tik op een punt voor de cijfers",
+      "named": "Cijfers van {{date}}"
+    },
+    "this": {
+      "week": "deze week",
+      "month": "deze maand",
+      "3months": "deze 3 maanden",
+      "year": "dit jaar"
+    },
+    "per": {
+      "week": "per week",
+      "month": "per maand",
+      "quarter": "per 3 maanden",
+      "year": "per jaar"
+    },
+    "soFar": {
+      "week": "tot nu toe; gebruikelijk {{low}} – {{high}} per week",
+      "month": "tot nu toe; gebruikelijk {{low}} – {{high}} per maand",
+      "quarter": "tot nu toe; gebruikelijk {{low}} – {{high}} per 3 maanden",
+      "year": "tot nu toe; gebruikelijk {{low}} – {{high}} per jaar"
+    },
+    "soFarSingle": {
+      "week": "tot nu toe; gebruikelijk {{value}} per week",
+      "month": "tot nu toe; gebruikelijk {{value}} per maand",
+      "quarter": "tot nu toe; gebruikelijk {{value}} per 3 maanden",
+      "year": "tot nu toe; gebruikelijk {{value}} per jaar"
+    },
+    "panel": {
+      "within": "binnen je gebruikelijke bereik",
+      "close": "Sluiten"
     }
   }
 }

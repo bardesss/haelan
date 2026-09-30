@@ -137,13 +137,16 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
   // stays for a pace or a cadence, and is absent, not an empty chart, with none of the three.
   const hasTrace = trace.points.length > 0
   if (!hasTrace && both === null) return null
+  // A response cached from before a field existed can lack `route`.
+  const routePoints = (session.route as WorkoutSessionDetail['route'] | undefined)?.length ?? 0
   const pausedMs = pauses.spans.reduce((sum, span) => sum + span.endMs - span.startMs, 0)
   const basis = [
     t('activity.workout.page.through.basis', { end: formatElapsed(session.endMs - session.startMs) }),
     ...(pauses.spans.length === 0 ? [] : [t('activity.workout.page.through.pauses', { count: pauses.spans.length, duration: formatElapsed(pausedMs) })]),
     ...(both === null ? [] : [t(`activity.workout.page.through.smoothed.${both}`)]),
-    // Only a workout that covers a distance has a pace to miss.
-    ...(pace === null && page.figures.distance !== undefined ? [t('activity.workout.page.through.noRoute')] : []),
+    // Only a workout that covers a distance and has no route points is missing its pace for want of
+    // a route; a route whose minutes all fail the pace rules says nothing here.
+    ...(pace === null && page.figures.distance !== undefined && routePoints === 0 ? [t('activity.workout.page.through.noRoute')] : []),
   ].join(' · ')
 
   // The highest reading is the server's figure; when in the workout it came is read off the trace.
@@ -167,7 +170,6 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
   // its continuation, joined by the note's own semicolon ("…are the readings; the pace comes …"),
   // since the note ends without a full stop. A response cached from before a field existed can
   // lack `route` (the same shape WorkoutSplits survives).
-  const routePoints = (session.route as WorkoutSessionDetail['route'] | undefined)?.length ?? 0
   const seriesFrom = both === null ? null
     : t(`activity.workout.page.through.${note === null ? 'from' : 'fromAfter'}.${both}`, { count: routePoints })
   const noteLine = note === null ? seriesFrom : seriesFrom === null ? note : `${note}; ${seriesFrom}`

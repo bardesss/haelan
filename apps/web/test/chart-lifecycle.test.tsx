@@ -11,6 +11,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
+import { SLEEP_PERIOD_MONTH } from './fixtures/sleepPeriod.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -245,11 +246,9 @@ function chartRoots(): (Element | null)[] {
 }
 
 /**
- * The Sleep page's own routes, for the balance card's case below.
- *
- * sleep_asleep_minutes answers every day in the week with a real value, so the balance card has a
- * bar for each and its `values` array is a real one rather than seven nulls. Everything else
- * answers what the eleven tiles and the two summary cards need to stay out of an empty state.
+ * The Sleep page's own routes, for the balance card's case below: the period read answers the
+ * synthetic month fixture (M10b), whose every section has something to draw, and /sleep/nights the
+ * one night the schedule's naps are read from.
  */
 function stubSleepFetch(): () => void {
   const original = globalThis.fetch
@@ -282,6 +281,7 @@ function stubSleepFetch(): () => void {
       }
       return json(body)
     }
+    if (url.includes('/sleep/period')) return json(SLEEP_PERIOD_MONTH)
     if (url.includes('/sleep/nights')) {
       const start = Date.parse('2026-08-12T22:00:00Z')
       return json({
@@ -525,11 +525,10 @@ describe('the charts across a rerender', () => {
     restore()
   })
 
-  // The sleep balance card's own case, on the page none of the four above mounts. It is the chart
-  // in this app with the most identity to lose: its `values` are a subtraction the page performs
-  // over `denseSeries` output, so a `balance` memo keyed on anything that changes per render (or no
-  // memo at all) disposes and re-initialises the chart on every commit, and the `marks` array
-  // `dayMarks` returns would go with it.
+  // The Sleep overview's own case, on the page none of the four above mounts: the balance bars, the
+  // stages, the schedule and every strip read arrays off the period read or a memo over it, so a
+  // prop rebuilt every render (the list of hero dates, a stage's series, the schedule's nights, the
+  // excluded dates) disposes and re-initialises its chart on every commit.
   it('are not disposed and re-initialised on the sleep page either, where the balance card lives', async () => {
     const restore = stubSleepFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
@@ -542,16 +541,15 @@ describe('the charts across a rerender', () => {
     act(() => { root!.render(tree(<Sleep />)) })
     await flush(client, () => container!.innerHTML)
 
-    // The balance chart is on the page at all, so the case cannot pass by measuring a page that
-    // rendered nothing to dispose: the hypnogram, the schedule chart and the eleven sparklines ride
-    // along, and the count is asserted below so a card that quietly stopped drawing is a failure
-    // here rather than a smaller number quietly passing.
-    const chartHosts = [...container!.querySelectorAll('div[role="img"]')]
-    expect(chartHosts.some((host) => (host.getAttribute('aria-label') ?? '').startsWith('Nightly sleep balance')))
-      .toBe(true)
+    // Every chart is on the page, so the case cannot pass by measuring a page that rendered nothing
+    // to dispose: the hero's strip, the four figures', the stages, the schedule, the balance and
+    // the mornings' strips. Eleven: the bedtime variability is a sentence now, with no strip.
+    for (const label of ['Time asleep, average per night', 'The nights', 'Sleep schedule', 'Sleep balance', 'Resting heart rate']) {
+      expect(container!.querySelector(`div[role="img"][aria-label="${label}"]`), label).not.toBeNull()
+    }
 
     const before = chartRoots()
-    expect(before.length).toBeGreaterThan(2)
+    expect(before).toHaveLength(11)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled

@@ -46,7 +46,7 @@ describe('stageTotals', () => {
 // on translated copy a locale file is free to reword.
 describe('Hypnogram', () => {
   it('renders an explicit not-staged state for a classic night, rather than a blank row or zeros', () => {
-    // A classic night's segments never reach Hypnogram at all: Sleep.tsx's own stageOf drops
+    // A classic night's segments never reach Hypnogram at all: its callers' stageOf drops
     // ASLEEP/RESTLESS, leaving an empty segments array, which is exactly what stageTotals answers
     // for a night with no DEEP/LIGHT/REM segments (see stageTotals' own "empty list" test above).
     const html = renderToStaticMarkup(
@@ -103,16 +103,14 @@ describe('Hypnogram', () => {
     expect(totalsRowText(html)).toBe('sleep.stage.light 0h 30m.')
   })
 
-  // Review round 1's own Critical: Sleep.tsx and Dashboard.tsx used to round each segment
+  // Review round 1's own Critical: the old Sleep page and Dashboard.tsx used to round each segment
   // boundary to a whole minute before Hypnogram ever saw it, so a stage's total was built from
   // rounded boundaries rather than from the real spans they measured. That is no longer possible
   // to reproduce by driving Hypnogram directly, because its own `segments` prop now carries raw
-  // milliseconds and neither page rounds before handing them over (see Sleep.tsx's and
-  // Dashboard.tsx's own comments on hypnogramSegments) -- this pins that Hypnogram, fed the exact
-  // half-minute-boundary shape the provider sends, reports the true total rather than a rounded
-  // one, which is the property that made the old call-site rounding invisible from here. The
-  // end-to-end regression, which drives the actual pre-rounding call site and fails against it,
-  // lives in sleep-page.test.tsx's "totals a night built from half minute segment boundaries..."
+  // milliseconds and no caller rounds before handing them over (see NightCard.tsx's
+  // hypnogramSegments) -- this pins that Hypnogram, fed the exact half-minute-boundary shape the
+  // provider sends, reports the true total rather than a rounded one, which is the property that
+  // made the old call-site rounding invisible from here.
   it('totals a night built from half minute boundaries to its true duration, not a rounded one', () => {
     // Ten segments of 90 seconds each, alternating LIGHT/DEEP, boundaries at 0, 1.5, 3, 4.5 ...
     // minutes: every boundary sits on the provider's own 30 second grid, the shape a real night's

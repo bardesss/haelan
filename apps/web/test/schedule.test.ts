@@ -281,17 +281,18 @@ describe('axisTickInterval', () => {
 // names the page it is about, so a failure still says which file is wrong.
 describe('every SleepSchedule caller goes through this module', () => {
   it('imports the schedule arithmetic in every page that renders the chart, rather than redeclaring it', () => {
+    // Every page file, however deep: since M10b both callers sit below pages/ (the night page's
+    // week, and the Sleep overview's schedule card).
     const dir = 'apps/web/src/pages'
-    const sources = readdirSync(dir)
+    const sources = (readdirSync(dir, { recursive: true }) as string[])
       .filter((file) => file.endsWith('.tsx'))
       .map((file) => [file, readFileSync(`${dir}/${file}`, 'utf8')] as const)
     const callers = sources.filter(([, source]) => /<SleepSchedule[\s>]/.test(source))
-    // At least one, so the sweep cannot pass by matching nothing: a regex that stopped matching
-    // would otherwise look like agreement. It was more than one until M9b, when the Dashboard's
-    // copy of the sleep schedule card left with the old page and Sleep.tsx became the only caller.
-    expect(callers.length).toBeGreaterThanOrEqual(1)
+    // Both, so the sweep cannot pass by matching nothing: a regex that stopped matching would
+    // otherwise look like agreement.
+    expect(callers.length).toBeGreaterThanOrEqual(2)
     for (const [page, source] of callers) {
-      expect(source, page).toMatch(/from '\.\.\/charts\/schedule\.js'/)
+      expect(source, page).toMatch(/from '(?:\.\.\/)+charts\/schedule\.js'/)
       // A local declaration of any of the three, not a mere mention: the names appear in prose in
       // several of these files, and a comment naming withinSchedule proves nothing either way.
       expect(source, page).not.toMatch(/(?:function|const)\s+(?:localMinutesOf|inWindow|withinSchedule)\b/)

@@ -255,8 +255,8 @@ describe('GET /insights rounds current, previous and delta to the metric\'s own 
 })
 
 describe('GET /baselines leaves center and spread at full precision', () => {
-  // Deliberate: Recovery.tsx and Sleep.tsx compute low = center - spread and high = center +
-  // spread from these two raw fields before formatting either bound, so rounding them here would
+  // Deliberate: the pages reading /baselines (Recovery.tsx among them) compute low = center - spread
+  // and high = center + spread from these two raw fields before formatting either bound, so rounding them here would
   // change what those pages draw rather than just how many decimals a JSON viewer sees. steps has
   // catalogue precision 0; three days whose sum does not divide evenly proves this response is not
   // silently rounding to that precision the way every other route in this file now does.

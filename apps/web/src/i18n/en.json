@@ -166,7 +166,6 @@
     "annotate": "Exclude or add a note",
     "to": "to",
     "loading": "Loading",
-    "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
     "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}",
     "absent": "—"
   },
@@ -630,7 +629,8 @@
           "oneMinute": "Drop after 1 minute",
           "twoMinutes": "Drop after 2 minutes",
           "between": "from {{from}} to {{to}}",
-          "caption": "from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it"
+          "caption_one": "from your heart rate in the minutes after you stopped · usual from {{count}} workout of this type before it",
+          "caption_other": "from your heart rate in the minutes after you stopped · usual from {{count}} workouts of this type before it"
         },
         "form": {
           "label": "Running form",
@@ -787,107 +787,29 @@
       "rem": "REM",
       "awake": "Awake"
     },
-    "baselineNote": {
-      "pending": "the baseline is still loading",
-      "unknown": "the baseline could not be read, so no comparison is shown",
-      "none": "no baseline yet to compare against",
-      "thin": "the baseline from the 60 nights before {{on}} is too thin to compare against",
-      "below": "↓ below the {{low}} to {{high}} baseline",
-      "above": "↑ above the {{low}} to {{high}} baseline",
-      "within": "→ within the {{low}} to {{high}} baseline"
-    },
     "balance": {
-      "label": "Sleep Balance",
-      "basisTarget": "{{reported}} of {{total}} nights, {{perNight}} a night, against your {{target}} target",
-      "basisBaseline": "{{reported}} of {{total}} nights, {{perNight}} a night, against your usual {{target}}, 60 days before {{on}}",
-      "chartLabel": "Nightly sleep balance through {{period}}",
       "columnUnit": "Minutes over or under"
     },
     "units": {
-      "minutes": "Minutes",
-      "percent": "Percent",
-      "percentShort": "%",
-      "minutesFromMidnight": "Minutes from midnight",
-      "naps": "Naps",
-      "napsShort": "naps"
-    },
-    "insights": {
-      "asleepMinutes": "Time asleep, this period against the last"
-    },
-    "asleepMinutes": {
-      "label": "Time asleep",
-      "basis": "mean, {{reported}} of {{total}} nights; {{note}}",
-      "chartLabel": "Nightly time asleep through {{period}}"
-    },
-    "deepMinutes": {
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly deep sleep through {{period}}"
-    },
-    "lightMinutes": {
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly light sleep through {{period}}"
-    },
-    "remMinutes": {
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly REM sleep through {{period}}"
-    },
-    "awakeMinutes": {
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly time awake through {{period}}"
-    },
-    "inBedMinutes": {
-      "label": "Time in bed",
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly time in bed through {{period}}"
-    },
-    "efficiency": {
-      "label": "Sleep efficiency",
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly sleep efficiency through {{period}}"
-    },
-    "bedtimeMinutes": {
-      "label": "Bedtime",
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly bedtime through {{period}}"
-    },
-    "waketimeMinutes": {
-      "label": "Wake time",
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly wake time through {{period}}"
-    },
-    "napCount": {
-      "label": "Naps",
-      "basis_one": "{{count}} nap, {{reported}} of {{total}} nights",
-      "basis_other": "{{count}} naps, {{reported}} of {{total}} nights",
-      "chartLabel": "Naps per night through {{period}}"
-    },
-    "napMinutes": {
-      "label": "Nap time",
-      "basis": "sum, {{reported}} of {{total}} nights",
-      "chartLabel": "Nightly nap time through {{period}}"
+      "minutes": "Minutes"
     },
     "sleepStages": {
-      "label": "Sleep stages",
-      "basis": "most recent night, {{date}}",
-      "chartLabel": "Sleep stages through the night of {{date}}",
       "nightExcludedSessions_one": "{{count}} sleep session excluded from this night",
       "nightExcludedSessions_other": "{{count}} sleep sessions excluded from this night"
     },
-    "sleepSchedule": {
-      "label": "Sleep schedule",
-      "basis_one": "bed and wake time, {{count}} night",
-      "basis_other": "bed and wake time, {{count}} nights"
-    },
     "nights": {
       "label": "Nights",
-      "count_one": "{{count}} recorded night in this period",
-      "count_other": "{{count}} recorded nights in this period",
-      "basis": "one row per date, the longer recording winning when two devices reported the same night",
-      "clock": "{{bed}} to {{wake}}",
-      "excluded_one": "{{count}} session excluded",
-      "excluded_other": "{{count}} sessions excluded",
+      "clock": "{{bed}} – {{wake}}",
       "emptyTitle": "No nights in this period",
-      "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet."
+      "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet.",
+      "caption": "newest first · the dot is that night's verdict",
+      "longest": "your longest",
+      "showAll_one": "Show all {{count}} night",
+      "showAll_other": "Show all {{count}} nights",
+      "monthSummary_one": "1 night · avg. {{average}}",
+      "monthSummary_other": "{{count}} nights · avg. {{average}}",
+      "monthNights_one": "1 night",
+      "monthNights_other": "{{count}} nights"
     },
     "night": {
       "when": "Bedtime {{bed}} · wake time {{wake}} · {{source}}",
@@ -1042,6 +964,60 @@
         "minutesAfterWakeUp": "Minutes after waking",
         "naps": "Naps",
         "napsNone": "none"
+      }
+    },
+    "openNight": "View night",
+    "period": {
+      "caption": {
+        "daily": "every night {{period}}",
+        "weekly": "every week, as its average"
+      },
+      "stages": {
+        "label": "The nights",
+        "caption": "stages per night {{period}} · average per night in the legend",
+        "captionWeekly": "stages per night, averaged per week · average per night in the legend"
+      },
+      "variability": "Bedtime variability",
+      "sides": "At the weekend {{bed}} to bed and {{wake}} up",
+      "shift": {
+        "later": "{{value}} later",
+        "earlier": "{{value}} earlier",
+        "same": "at the same time"
+      },
+      "mornings": "The mornings",
+      "scheduleCaption": "bedtime and wake time, every night {{period}}",
+      "hero": {
+        "label": "Time asleep, average per night"
+      },
+      "hint": {
+        "daily": "tap a night for the figures",
+        "weekly": "tap a week for the figures"
+      },
+      "lines": {
+        "nights": "each line: every night {{period}} · band = your usual range",
+        "mornings": "each line: every morning {{period}} · band = your usual range",
+        "weeklyNights": "each line: every week, the average of its nights · band = your usual range",
+        "weeklyMornings": "each line: every week, the average of its mornings · band = your usual range"
+      },
+      "varied": "Bedtime varied ±{{value}} {{period}}",
+      "variedUsual": "Bedtime varied ±{{value}} {{period}} · your usual ±{{low}} – {{high}}",
+      "legend": {
+        "weekday": "weekdays",
+        "weekend": "weekend",
+        "out": "bedtime outside your usual",
+        "usual": "your usual times"
+      },
+      "balanceAgainstBaseline_one": "against your usual {{usual}}, over {{count}} night",
+      "balanceAgainstBaseline_other": "against your usual {{usual}}, over {{count}} nights",
+      "balanceAgainstTarget_one": "against your target of {{target}}, over {{count}} night",
+      "balanceAgainstTarget_other": "against your target of {{target}}, over {{count}} nights",
+      "naps_one": "1 nap, {{minutes}} together",
+      "naps_other": "{{count}} naps, {{minutes}} together",
+      "barsWeeklyBaseline": "each bar: that week added up, against your usual",
+      "barsWeeklyTarget": "each bar: that week added up, against your target",
+      "panel": {
+        "bed": "bedtime {{time}}",
+        "wake": "wake time {{time}}"
       }
     }
   },
@@ -1872,6 +1848,81 @@
         "below": "steps below your usual",
         "none": "steps not judged"
       }
+    }
+  },
+  "period": {
+    "window": {
+      "week": "for a week, last {{count}} weeks",
+      "month": "for a month, last {{count}} months",
+      "quarter": "for 3 months, last {{count}} periods of 3 months",
+      "year": "for a year, from {{year}}"
+    },
+    "reason": {
+      "tooFewDays": "too few days so far for a verdict"
+    },
+    "counts": {
+      "usualNights_one": "{{within}} of {{count}} night usual",
+      "usualNights_other": "{{within}} of {{count}} nights usual",
+      "usualDays_one": "{{within}} of {{count}} day usual",
+      "usualDays_other": "{{within}} of {{count}} days usual",
+      "longer": "{{count}} longer",
+      "shorter": "{{count}} shorter",
+      "later": "{{count}} later",
+      "earlier": "{{count}} earlier",
+      "higher": "{{count}} higher",
+      "lower": "{{count}} lower",
+      "usualMornings_one": "{{within}} of {{count}} morning usual",
+      "usualMornings_other": "{{within}} of {{count}} mornings usual",
+      "usual_one": "{{within}} of {{count}} usual",
+      "usual_other": "{{within}} of {{count}} usual"
+    },
+    "standout": {
+      "longest": "longest: {{value}} on {{date}}",
+      "busiest": "busiest: {{value}} on {{date}}",
+      "previous": "{{delta}} against {{period}}",
+      "yearEarlier": "{{delta}} against last year",
+      "weekBefore": "the week before",
+      "quarterBefore": "the 3 months before"
+    },
+    "value": {
+      "perDay": "{{value}} per day"
+    },
+    "list": {
+      "showAll": "Show all {{count}}",
+      "showFewer": "Show fewer"
+    },
+    "tap": {
+      "tail": "Show its figures",
+      "idle": "Tap a point for its figures",
+      "named": "Figures for {{date}}"
+    },
+    "this": {
+      "week": "this week",
+      "month": "this month",
+      "3months": "these 3 months",
+      "year": "this year"
+    },
+    "per": {
+      "week": "per week",
+      "month": "per month",
+      "quarter": "per 3 months",
+      "year": "per year"
+    },
+    "soFar": {
+      "week": "so far; usual {{low}} – {{high}} a week",
+      "month": "so far; usual {{low}} – {{high}} a month",
+      "quarter": "so far; usual {{low}} – {{high}} per 3 months",
+      "year": "so far; usual {{low}} – {{high}} a year"
+    },
+    "soFarSingle": {
+      "week": "so far; usual {{value}} a week",
+      "month": "so far; usual {{value}} a month",
+      "quarter": "so far; usual {{value}} per 3 months",
+      "year": "so far; usual {{value}} a year"
+    },
+    "panel": {
+      "within": "within your usual",
+      "close": "Close"
     }
   }
 }

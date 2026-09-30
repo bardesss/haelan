@@ -189,6 +189,7 @@ export function workoutPageFixture(): WorkoutPageData {
       oneMinute: dayFigure('heart_rate_recovery_1min', 'bpm', 'up', 25, band(22, 18, 27)),
       twoMinutes: dayFigure('heart_rate_recovery_2min', 'bpm', 'up', 41, band(34, 30, 38)),
       readings: { endBpm: 146, oneMinuteBpm: 121, twoMinutesBpm: 105 },
+      history: 10,
     },
     // The night ending on the workout's own date, and that morning.
     before: {

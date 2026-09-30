@@ -192,6 +192,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
       oneMinute: roundPageFigure(heartRateRecovery.oneMinute), twoMinutes: roundPageFigure(heartRateRecovery.twoMinutes),
       // Already whole bpm: core rounds each minute before taking the fall between them.
       readings: heartRateRecovery.readings,
+      history: heartRateRecovery.history,
     },
     // The course time as a figure, the previous time and every effort in whole seconds, as pace is.
     sameRoute: sameRoute === null ? null : {

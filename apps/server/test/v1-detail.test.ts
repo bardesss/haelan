@@ -393,6 +393,7 @@ describe('GET /workout/:sessionId', () => {
     const { heartRateRecovery } = (await get(harness, token, '/workout/subject')).json()
     expect(heartRateRecovery.oneMinute).toMatchObject({ value: 21, baseline: { center: 20, low: 20, high: 21 }, standing: 'within', judged: null })
     expect(heartRateRecovery.twoMinutes).toMatchObject({ value: 40, baseline: { center: 32 }, standing: 'above', judged: 'better' })
+    expect(heartRateRecovery.history).toBe(5)
   })
 
   it('sends the readings a recovery falls between in whole bpm, and none for a minute without one', async () => {
