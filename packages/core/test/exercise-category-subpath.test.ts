@@ -16,7 +16,7 @@ describe('the @haelan/core/exercise-category subpath', () => {
 
   it('imports nothing and re-exports nothing', () => {
     const code = read('../src/api/exerciseCategory.ts')
-    expect(code).not.toMatch(/^\s*import\s/m)
+    expect(code, 'no import of any form, dynamic included').not.toMatch(/\bimport\b/)
     expect(code).not.toMatch(/\bfrom\s*['"]/)
     expect(code).not.toMatch(/\brequire\s*\(/)
   })

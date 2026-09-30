@@ -10,28 +10,45 @@ describe('the exercise category map', () => {
     for (const type of EXERCISE_TYPES) expect(EXERCISE_CATEGORIES, type).toContain(exerciseCategory(type))
   })
 
-  // The sports and activities that are deliberately `other`. A value the API adds and nobody
-  // classifies falls through to `other` too, so this pins how many values are placed: adding an
-  // enum value without deciding on its category changes neither number and is caught by the
-  // per-type table below only for the placed ones, so keep both in step with enums.ts.
-  it('places a pinned number of enum values in a category other than other', () => {
-    const placed = EXERCISE_TYPES.filter((t) => exerciseCategory(t) !== 'other')
-    expect(placed.length).toBe(EXERCISE_TYPES.length - 127)
+  // Every member of every non-other category, named. Moving a type to the wrong category, or
+  // adding or dropping one, fails here with the type's name; every other enum value must be other.
+  const MEMBERS: Record<string, readonly string[]> = {
+    run: ['INCLINE_RUN', 'RUNNING', 'TRACK_AND_FIELD', 'TRAIL_RUN', 'TREADMILL'],
+    walk: [
+      'BACKPACKING', 'HIKING', 'INCLINE_WALK', 'NORDIC_WALKING', 'POWER_WALKING', 'RUCKING',
+      'STROLLER_WALK', 'TREADMILL_WALK', 'WALKING', 'WALK_WITH_WEIGHTS',
+    ],
+    ride: [
+      'ASSAULT_BIKE', 'BIKING', 'ELECTRIC_BIKE', 'HAND_CYCLING', 'MOUNTAIN_BIKE', 'OUTDOOR_BIKE',
+      'SPINNING', 'STATIONARY_BIKE',
+    ],
+    swim: ['SWIMMING', 'SWIMMING_OPEN_WATER', 'SWIMMING_POOL'],
+    strength: [
+      'BODY_WEIGHT', 'CALISTHENICS', 'CORE_TRAINING', 'FREE_WEIGHTS', 'FUNCTIONAL_STRENGTH_TRAINING',
+      'POWERLIFTING', 'RESISTANCE_BANDS', 'STRENGTH_TRAINING', 'TRX', 'WEIGHTLIFTING',
+      'WEIGHT_MACHINES', 'WEIGHTS',
+    ],
+    cardio: [
+      'AEROBIC_WORKOUT', 'BOOTCAMP', 'CARDIO_SCULPT', 'CARDIO_WORKOUT', 'CIRCUIT_TRAINING',
+      'CROSSFIT', 'CROSS_TRAINING', 'ELLIPTICAL', 'HIIT', 'INTERVAL_WORKOUT', 'JUMPING_ROPE',
+      'ROWING', 'ROWING_MACHINE', 'STAIRCLIMBER', 'STEP_TRAINING', 'TABATA_WORKOUT', 'WORKOUT',
+    ],
+  }
+
+  it.each(Object.entries(MEMBERS))('%s holds exactly its listed types', (category, members) => {
+    const actual = EXERCISE_TYPES.filter((t) => exerciseCategory(t) === category).sort()
+    expect(actual).toEqual([...members].sort())
   })
 
-  it.each([
-    ['RUNNING', 'run'], ['TREADMILL', 'run'], ['TRAIL_RUN', 'run'], ['INCLINE_RUN', 'run'], ['TRACK_AND_FIELD', 'run'],
-    ['WALKING', 'walk'], ['HIKING', 'walk'], ['STROLLER_WALK', 'walk'], ['TREADMILL_WALK', 'walk'],
-    ['INCLINE_WALK', 'walk'], ['NORDIC_WALKING', 'walk'], ['POWER_WALKING', 'walk'],
-    ['WALK_WITH_WEIGHTS', 'walk'], ['RUCKING', 'walk'], ['BACKPACKING', 'walk'],
-    ['BIKING', 'ride'], ['OUTDOOR_BIKE', 'ride'], ['MOUNTAIN_BIKE', 'ride'], ['ELECTRIC_BIKE', 'ride'],
-    ['STATIONARY_BIKE', 'ride'], ['SPINNING', 'ride'], ['ASSAULT_BIKE', 'ride'], ['HAND_CYCLING', 'ride'],
-    ['SWIMMING', 'swim'], ['SWIMMING_POOL', 'swim'], ['SWIMMING_OPEN_WATER', 'swim'],
-    ['WEIGHTLIFTING', 'strength'], ['STRENGTH_TRAINING', 'strength'], ['POWERLIFTING', 'strength'],
-    ['CARDIO_WORKOUT', 'cardio'], ['WORKOUT', 'cardio'], ['ELLIPTICAL', 'cardio'], ['ROWING', 'cardio'],
-    ['HIIT', 'cardio'], ['HOUSEHOLD_CHORES', 'other'], ['CROSS_COUNTRY_SKI', 'other'],
-  ] as const)('reads %s as %s', (type, category) => {
-    expect(exerciseCategory(type)).toBe(category)
+  it('maps every enum value outside those lists to other', () => {
+    const listed = new Set(Object.values(MEMBERS).flat())
+    for (const t of EXERCISE_TYPES) {
+      if (!listed.has(t)) expect(exerciseCategory(t), t).toBe('other')
+    }
+  })
+
+  it('lists only types the enum declares', () => {
+    for (const t of Object.values(MEMBERS).flat()) expect(EXERCISE_TYPES, t).toContain(t)
   })
 
   it('does not know the two names the old web map invented', () => {
