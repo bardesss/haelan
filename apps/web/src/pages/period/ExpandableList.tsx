@@ -2,6 +2,9 @@ import { Fragment } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 
+/** How many items a list shows before "Show all"; a page sizing the list's card by it reads this. */
+export const LIST_VISIBLE = 7
+
 /**
  * An overview page's list (nights, workouts), PATTERNS.md's "Overview pages": the first `visible`
  * items, most recent first as the caller orders them, and a "Show all N" button when there are
@@ -14,9 +17,6 @@ import { useTranslation } from '../../i18n/index.js'
  * The page owns `expanded`, since the list's card takes its own full-width row when it opens and
  * the card beside it widens with it.
  */
-/** How many items a list shows before "Show all"; a page sizing the list's card by it reads this. */
-export const LIST_VISIBLE = 7
-
 export function ExpandableList<T>({
   items, keyOf, render, groupOf, groupLabel, groupAside, groupCollapsed = false, expanded, onToggle, visible = LIST_VISIBLE, showAll,
 }: {

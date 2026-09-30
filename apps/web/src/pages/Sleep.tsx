@@ -53,6 +53,9 @@ const LAST_YEAR_GROUPS: readonly MetricGroup[] = [{ agg: 'sum', metrics: ['sleep
 const ASLEEP = 'sleep_asleep_minutes'
 const NO_DATES: string[] = Object.freeze([]) as never[]
 
+// The figures a night's panel lists under its time asleep, the mockup's: efficiency, deep sleep, bedtime.
+const PANEL_METRICS: readonly string[] = ['sleep_efficiency', 'sleep_deep_minutes', 'sleep_bedtime_minutes']
+
 /**
  * The Sleep overview (M10b): the period's time asleep against the usual for a period that long,
  * what stood out, the four figures under it, then the nights' stages, the schedule beside the list
@@ -67,9 +70,6 @@ const NO_DATES: string[] = Object.freeze([]) as never[]
  * every page keeps): the server answers an unknown one with a 400, and a stale link should read as
  * all sources, not as an error.
  */
-// The figures a night's panel lists under its time asleep, the mockup's: efficiency, deep sleep, bedtime.
-const PANEL_METRICS: readonly string[] = ['sleep_efficiency', 'sleep_deep_minutes', 'sleep_bedtime_minutes']
-
 export function Sleep() {
   const { t, i18n } = useTranslation()
   const language = i18n.language
