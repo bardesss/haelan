@@ -444,11 +444,12 @@ describe('the charts across a rerender', () => {
     const before = chartRoots()
     // The hero's pace strip and the four figures' strips (M10a: each a Sparkline whose arrays and
     // formatter come out of a memo on the payload), then the zone bar (a light and a peak zone
-    // recorded), the heart rate trace (the pinned source answers real points) and VO2max's strip in
-    // More about this workout: eight charts on this fixture, none absent.
+    // recorded), the heart rate trace (the pinned source answers real points) with the pace and
+    // cadence rows under it (M10b: each a memo on the payload's series), and VO2max's strip in
+    // More about this workout: ten charts on this fixture, none absent.
     expect(container!.querySelector('.detail-hero [role="img"][aria-label="Pace"]')).not.toBeNull()
     expect(container!.querySelectorAll('.detail-minis [role="img"]')).toHaveLength(4)
-    expect(before).toHaveLength(8)
+    expect(before).toHaveLength(10)
     expect(before.every((node) => node !== null)).toBe(true)
 
     // A second render of the same component with the same client: every query is already settled

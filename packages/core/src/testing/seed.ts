@@ -288,6 +288,27 @@ function exercisePoint(o: {
 // NIGHT_STREAM below: the workouts' figures, their minute-by-minute heart rate and the day's zone
 // ceilings are added without moving a single draw on `rand`.
 const WORKOUT_STREAM = 0x776f726b
+// Seeds the stream the minutes after each workout draw from (see recoveryFor), so adding them
+// moved no draw on the workout stream either, and no figure a workout already had.
+const RECOVERY_STREAM = 0x72656376
+// The minutes of heart rate written after each workout's end, for the page's heart-rate recovery.
+const RECOVERY_MINUTES = 3
+
+/**
+ * Heart rate for the minutes after a workout: one reading a minute from the minute after the end's
+ * own minute (the one the workout's trace ends on), falling from the workout's last reading
+ * towards resting. How quickly it falls is drawn per workout, so the recovery figures have a usual
+ * with some spread to judge against. Always three draws plus one, kept or not, so the stream never
+ * depends on which workouts a cutoff keeps.
+ */
+function recoveryFor(rr: () => number, o: { endMs: number, lastBpm: number, restingBpm: number }): Array<{ atMs: number, bpm: number }> {
+  const endMinuteMs = Math.floor(o.endMs / 60_000) * 60_000
+  const rate = range(rr, 0.18, 0.38)
+  return Array.from({ length: RECOVERY_MINUTES }, (_, k) => {
+    const bpm = o.restingBpm + (o.lastBpm - o.restingBpm) * Math.exp(-rate * (k + 1)) + range(rr, -1.5, 1.5)
+    return { atMs: endMinuteMs + (k + 1) * 60_000, bpm: Math.round(bpm) }
+  })
+}
 
 // How many of the most recent runs carry a route, when the caller asked for routes at all. Bounded
 // by the demo capture's size ceiling (scripts/capture-demo.mjs's MAX_CAPTURE_BYTES): a route costs
@@ -727,6 +748,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   // The workout page's readings (every figure the provider files on a workout, its heart rate a
   // minute at a time, the day's zone ceilings) draw from a third stream, for the same reason.
   const workoutRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ WORKOUT_STREAM)
+  const recoveryRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ RECOVERY_STREAM)
   // One person, so one heart rate ceiling and one fitness level for the whole span.
   const maxBpm = range(workoutRand, 182, 194)
   const vo2Base = range(workoutRand, 42, 46)
@@ -1078,8 +1100,10 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     })
     // The exact hours are left to the hourly day curve, which already has a heart-rate sample there,
     // so no minute ever holds two. So are a morning workout's minutes, when one starts before the
-    // night's own end: the workout's readings (below) are the ones a moving body gives.
-    const duringWorkout = (atMs: number): boolean => workout !== null && atMs >= workout.startMs && atMs <= workout.endMs
+    // night's own end: the workout's readings (below) are the ones a moving body gives, and so are
+    // the minutes after it, which recoveryFor writes.
+    const duringWorkout = (atMs: number): boolean => workout !== null && atMs >= workout.startMs
+      && atMs <= Math.floor(workout.endMs / 60_000) * 60_000 + RECOVERY_MINUTES * 60_000
     nightPut(HEART_RATE, nightSamples.filter((r) => r.atMs % HOUR_MS !== 0 && !duringWorkout(r.atMs))
       .map((r) => nightSample(HEART_RATE, r.atMs, String(r.heartRate))))
     nightPut(HRV, nightSamples.map((r) => nightSample(HRV, r.atMs, r.hrv)))
@@ -1111,6 +1135,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         startBpm: workoutStartBpm, restingBpm: restingHrBpm, maxBpm, ceilings, runIndex, vo2Base,
       })
       if (workout.exerciseType === 'RUNNING') runIndex++
+      const after = recoveryFor(recoveryRand, { endMs: workout.endMs, lastBpm: reading.heartRate.at(-1)!.bpm, restingBpm: restingHrBpm })
       if (workoutKept) {
         const name = `users/me/dataTypes/exercise/dataPoints/seed-${i}`
         put(EXERCISE, dayStart, dayEnd, [exercisePoint({
@@ -1121,9 +1146,14 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
           exerciseType: workout.exerciseType,
           detail: reading.detail,
         })])
-        // Fetched over the workout's own span, like a night's readings over the night's, so it is
-        // not read as a re-fetch of the day's hourly curve.
-        put(HEART_RATE, workout.startMs, workout.endMs, reading.heartRate.map((r) => samplePoint({
+        // Fetched over the workout's own span and the minutes after it, like a night's readings
+        // over the night's, so it is not read as a re-fetch of the day's hourly curve. The window's
+        // end is exclusive, so it runs a minute past the last reading, and stops at a cutoff that
+        // falls inside those minutes, as the readings do.
+        const afterKept = after.filter((r) => sampleDone(r.atMs))
+        const lastAfterMs = afterKept.at(-1)?.atMs
+        const windowEndMs = lastAfterMs === undefined ? workout.endMs : Math.min(lastAfterMs + 60_000, cutoff ?? Infinity)
+        put(HEART_RATE, workout.startMs, windowEndMs, [...reading.heartRate, ...afterKept].map((r) => samplePoint({
           payloadKey: HEART_RATE.payloadKey, valuePath: HEART_RATE.valuePath, value: String(r.bpm),
           physicalTime: new Date(r.atMs).toISOString(), utcOffset: amsterdamOffset(r.atMs),
         })))

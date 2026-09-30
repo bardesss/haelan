@@ -54,7 +54,9 @@ Every redesigned page is built from the pieces below. A section that looks like 
 ## Cards
 
 - A detail card is `Card span={12} label=…`; its label renders as an `h2` styled as `.label`. A dashboard card is `DashCard` (a title, a muted subtitle, a `.card-link`).
-- A side section (the day before a night; a workout's day of, afterwards and running form) is a `SideCard` whose caption names the relation ("{date}, de dag van deze training"), its rows in `FigureRows side`.
+- A side section (the day before a night; a workout's day of, before (Daarvoor), afterwards and running form) is a `SideCard` whose caption names the relation ("{date}, de dag van deze training"), its rows in `FigureRows side`.
+- Two side cards in a run pair at half width (`SideCard span={6}`), the caption stacked over the rows; when one is missing the other returns to the full row (DayLogBlock, WorkoutDetail).
+- Charts stacked on one time axis label the time on the lowest row only, and share one card-level "Cijfers tonen" / "Show numbers" control for every table (`ChartFigure`'s `tableShown` and `tableId`); a lone chart keeps its own.
 - A way onward inside a card is a `.card-link` worded "Bekijk …" / "View …", never an arrow glyph.
 - A table never scrolls sideways on a phone: it drops the columns the rest of the page already says (the workout's usual and best), and its caption and footnote drop their words about those columns with them (`.workout-compared-wide`). A caption or footnote names only columns that are there.
 - A table's last row draws no rule under any cell, its row header included.

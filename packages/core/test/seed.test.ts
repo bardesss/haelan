@@ -281,6 +281,12 @@ describe('seedArchive', () => {
       const minutes = Math.floor((run!.endMs - run!.startMs) / 60_000)
       const points = q.intradayWindow({ metric: 'heart_rate', startMs: run!.startMs, endMs: run!.endMs, points: 100_000 }).points
       expect(points.length).toBeGreaterThanOrEqual(minutes - 1)
+      // And a reading each of the three minutes after it, falling, for the heart-rate recovery.
+      const endMinute = Math.floor(run!.endMs / 60_000) * 60_000
+      const after = q.intradayWindow({ metric: 'heart_rate', startMs: endMinute + 60_000, endMs: endMinute + 4 * 60_000, points: 100_000 }).points
+      expect(after.map((p) => p.utcMs)).toEqual([1, 2, 3].map((k) => endMinute + k * 60_000))
+      expect(page.heartRateRecovery!.oneMinute.value).toBeGreaterThan(0)
+      expect(page.heartRateRecovery!.twoMinutes.value).toBeGreaterThan(page.heartRateRecovery!.oneMinute.value!)
     } finally {
       instance.close()
       rmSync(dir, { recursive: true, force: true })
@@ -319,6 +325,10 @@ describe('seedArchive', () => {
       expect(within90(walks, walks.at(-1)!)).toBeGreaterThanOrEqual(5)
       expect(page.figures.pace!.baseline?.thin).toBe(false)
       expect(page.figures.pace!.strip.every((point) => point.value !== null)).toBe(true)
+      // Every run recovers at its own rate, so the recovery's usual has a spread to judge against.
+      const recoveryUsual = page.heartRateRecovery!.oneMinute.baseline!
+      expect(recoveryUsual.thin).toBe(false)
+      expect(recoveryUsual.high - recoveryUsual.low).toBeGreaterThan(2)
     } finally {
       instance.close()
       rmSync(dir, { recursive: true, force: true })
@@ -387,6 +397,28 @@ describe('seedArchive', () => {
     const runStarts = google.filter((e) => e.exerciseType === 'RUNNING').map((e) => e.interval.startTime as string).sort()
     expect(routed.map((p) => p.exercise.interval.startTime as string).sort()).toEqual(runStarts.slice(-routed.length))
   })
+
+  // The hourly day curve, the night's readings, a workout's own and the minutes after it are four
+  // writers of one heart-rate series, each told to stay out of the others' minutes. Two readings in
+  // one minute would be averaged into one stored row, so a recovery minute a night reading shared
+  // would read a fall that neither gave. Over the demo's own length, so every morning workout the
+  // demo draws is met.
+  it('never writes two heart-rate readings into one minute, over the demo\'s year', () => {
+    const minutes = new Map<number, number>()
+    const archive = {
+      put: (row: { dataType: string, body: string }) => {
+        if (row.dataType !== 'heart-rate') return
+        for (const m of row.body.matchAll(/"physicalTime":"([^"]+)"/g)) {
+          const minute = Math.floor(Date.parse(m[1]!) / 60_000)
+          minutes.set(minute, (minutes.get(minute) ?? 0) + 1)
+        }
+      },
+    }
+    seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 365, endMs: END, demoRoute: true })
+    expect(minutes.size).toBeGreaterThan(0)
+    const doubled = [...minutes].filter(([, n]) => n > 1).map(([minute]) => new Date(minute * 60_000).toISOString())
+    expect(doubled).toEqual([])
+  }, 60_000)
 
   describe('lastDayUntilMs', () => {
     // A stand-in archive that keeps every put in order, so two runs can be compared put by put.

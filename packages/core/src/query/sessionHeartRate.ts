@@ -38,7 +38,7 @@ export interface SessionHeartRate {
 // Number.MAX_SAFE_INTEGER: readWindow divides this by the number of sources present, and dividing
 // MAX_SAFE_INTEGER loses precision for no reason. A 48 hour window (personQuery's own cap) holds
 // 2,880 minutes.
-const NO_THINNING = 1_000_000
+export const NO_THINNING = 1_000_000
 
 export function readSessionHeartRateMinutes(db: DbOrTx, input: {
   personId: string

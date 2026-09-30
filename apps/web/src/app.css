@@ -612,6 +612,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-through { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: var(--space-3); align-items: center; }
 .workout-through-head, .workout-through-chart { min-width: 0; }
 .workout-through-summary { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+/* The one show-numbers control for the stacked charts, where each chart's own would sit. */
+.workout-through-toggle { display: flex; justify-content: flex-end; }
 .workout-through-note { margin: var(--space-2) 0 0; font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-tight); }
 /* WorkoutZones.tsx: the verdict on the left, the bar and its legend (a .detail-legend) on the right. */
 .workout-zones { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
@@ -682,6 +684,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-side-caption { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .detail-side-body { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .detail-side-rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+/* Half a row (SideCard span 6): the caption over the rows, as below 900px. */
+.detail-side-stacked { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 /* A chart's legend: each key in its series' colour, then its words, wrapping onto a second line on
    a phone. The keys' colours are the caller's (the night's stages, further down). */
 .detail-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); list-style: none; margin: var(--space-2) 0 0; padding: 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
