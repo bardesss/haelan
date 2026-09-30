@@ -56,13 +56,15 @@ export function FigureRows({ max, side = false, children }: { max?: 1 | 2 | 3 | 
  * `judged` leaves plain (verdictTone). The verdict line is the strip's description by id, the same
  * wiring Card gives its basis line, so a screen reader hears the verdict once, where it is printed,
  * rather than once there and again from a hidden copy.
+ *
+ * `note` is a plain line under the verdict saying what the figure is or where it came from ("after
+ * falling asleep, at 23:01"); it never takes the verdict's tone, since it judges nothing.
  */
 export function FigureRow({ label, value, verdict, judged, standing, band, mark, strip, note }: {
   label: string, value: string, verdict: string, judged: 'better' | 'worse' | null
-  /** A plain line under the verdict saying what the value is made of ("from 146 to 122 bpm"). */
-  note?: string
   standing?: 'within' | 'above' | 'below' | null
   band: { center: number, low: number, high: number, thin: boolean } | null, mark: number | null, strip?: FigureRowStrip
+  note?: string
 }) {
   const verdictId = useId()
   const scale = band === null || band.thin ? null : gaugeScale(band)

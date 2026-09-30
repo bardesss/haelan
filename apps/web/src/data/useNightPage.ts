@@ -45,6 +45,9 @@ export interface NightTrace { metric: string, stat: NightTraceStat, lowestFigure
 /** The zero line a night's balance is signed against (packages/core/src/api/sleepBalance.ts's ZeroLine). */
 export interface NightZeroLine { minutes: number, source: 'baseline' | 'target' }
 
+/** packages/core/src/query/nightPage.ts's MorningSummary. */
+export interface MorningSummary { outside: number, of: number }
+
 export interface NightPageData {
   localDate: string
   sourceId: string
@@ -60,6 +63,13 @@ export interface NightPageData {
   stagePercent: { deep: number | null, light: number | null, rem: number | null }
   balance: { zeroLine: NightZeroLine, nights: { localDate: string, difference: number | null }[], total: number }
   traces: { heartRate: NightTrace, hrv: NightTrace, spo2: NightTrace }
+  /**
+   * How long after falling asleep the first deep and REM sleep began, and how many REM episodes;
+   * with the instants the first deep and REM segment began. Null on a classic night.
+   */
+  stageTiming: { firstDeep: PageFigure, firstRem: PageFigure, cycles: PageFigure, firstDeepAtMs: number | null, firstRemAtMs: number | null }
+  /** Of the morning's judged figures, how many sat outside their usual (the server's count). */
+  morningSummary: MorningSummary
   morning: {
     recovery: GlanceRecovery
     restingHeartRate: PageFigure
@@ -68,6 +78,8 @@ export interface NightPageData {
     spo2: PageFigure
     skinTemperature: PageFigure
     skinTemperatureDeviation: number | null
+    /** How far the heart rate fell below the morning's resting rate while asleep, in percent of the resting rate. */
+    heartRateDip: PageFigure
   }
   day: { localDate: string, steps: PageFigure, activeMinutes: PageFigure, workouts: WorkoutSession[] }
   /** The quick log for the day this night belongs to (routes/v1/detail.ts: the day before `localDate`). */
