@@ -535,12 +535,12 @@ describe('the Activity page: by type', () => {
     ])
   })
 
-  it('gives no verdict while the period is running, or on a thin usual, and says when there is no usual', async () => {
+  it('gives no verdict while the period is running, says a thin usual is thin, and says when there is no usual', async () => {
     const [first, second, third] = ACTIVITY_PERIOD_MONTH.types
     await renderAt(MONTH_URL, {
       period: month({ types: [{ ...first!, standing: null }, { ...second!, usualCount: { ...second!.usualCount!, thin: true } }, { ...third!, usualCount: null, standing: null }] }),
     })
-    expect(typeRows().map((row) => row[2])).toEqual(['', '', 'no usual yet'])
+    expect(typeRows().map((row) => row[2])).toEqual(['', 'not enough history for a usual yet', 'no usual yet'])
   })
 
   it('prints a type\'s time where it has no distance', async () => {

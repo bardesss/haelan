@@ -57,16 +57,21 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   if (whole) return `${line} ${o.window === true ? windowPhrase(judged.usual.window, t) : t(`period.for.${unit}`)}`
   // A per-period figure's range is a whole period's worth ("1 - 5 a month"), and a per-week
   // figure's a week's worth ("190 - 280 min per week"), and each says so.
+  // A total with no usual of its own (a finished period short of days) prints its total beside its
+  // average's verdict, and that range is per day.
   const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${unit}`)}`
-    : figure.per === 'week' ? `${line} ${t('period.per.week')}` : line
+    : figure.per === 'week' ? `${line} ${t('period.per.week')}`
+      : figure.total !== null && PERIOD_TOTAL_METRICS.includes(figure.metric) ? `${line} ${t('period.per.day')}` : line
   if (o.window !== true) return verdict
   return `${verdict} ${windowPhrase(judged.usual.window, t)}`
 }
 
 // A day above or below its usual, in the words its unit reads in: a clock time is later or earlier
 // (directionWords, the verdict's own rule), a duration longer or shorter, anything else higher or lower.
-function sideWords(unit: string): { above: string, below: string } {
+function sideWords(unit: string, metric: string): { above: string, below: string } {
   if (directionWords(unit) === 'clock') return { above: 'later', below: 'earlier' }
+  // Active minutes are an amount of movement, not a length of time: more and fewer.
+  if (metric === 'active_minutes') return { above: 'more', below: 'fewer' }
   if (unit === 'minutes') return { above: 'longer', below: 'shorter' }
   return { above: 'higher', below: 'lower' }
 }
@@ -93,7 +98,7 @@ export function dayCountsLine(figure: PeriodFigure, noun: CountNoun, t: Translat
   // counts every day unjudged, and says nothing here either.
   if (within + above + below === 0) return null
   const count = within + above + below + unjudged
-  const words = sideWords(figure.unit)
+  const words = sideWords(figure.unit, figure.metric)
   const parts = [t(`period.counts.${COUNT_KEYS[noun]}`, { within, count })]
   if (above > 0) parts.push(t(`period.counts.${words.above}`, { count: above }))
   if (below > 0) parts.push(t(`period.counts.${words.below}`, { count: below }))

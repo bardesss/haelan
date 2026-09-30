@@ -174,6 +174,16 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine(quarter, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor 3 maanden`)
   })
 
+  it("says the range is per day where a finished period's total has no usual of its own", () => {
+    // usualTotal null: the total is printed beside the average's verdict and range.
+    const distance = figure({
+      metric: 'distance', unit: 'millimeters', value: 6_100_000, total: 183_000_000, standing: 'below', judged: 'worse',
+      usual: { center: 6_100_000, low: 5_800_000, high: 6_400_000, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(distance, 'en', t)).toBe(`below your usual 5.8 – 6.4${NB}km per day`)
+    expect(periodVerdictLine(distance, 'nl', tNl)).toBe(`onder je gebruikelijke bereik 5,8 – 6,4${NB}km per dag`)
+  })
+
   it("words a running period's total as so far beside the usual for a whole period's", () => {
     const distance = figure({
       metric: 'distance', unit: 'millimeters', value: 5_000_000, total: 80_000_000, standing: 'within',
@@ -199,7 +209,7 @@ describe('periodVerdictLine', () => {
       usual: { center: 10, low: 9, high: 11, thin: false, window: MONTH, periods: 12 },
     })
     expect(asPrinted(floors)).toBe(floors)
-    expect(periodVerdictLine(floors, 'en', t)).toBe('within your usual 9 – 11')
+    expect(periodVerdictLine(floors, 'en', t)).toBe('within your usual 9 – 11 per day')
   })
 
   it('prints a reason the same with the window asked for', () => {
@@ -215,6 +225,12 @@ describe('periodVerdictLine', () => {
 })
 
 describe('dayCountsLine', () => {
+  it("counts active minutes' days as more and fewer, where sleep minutes are longer and shorter", () => {
+    const f = figure({ metric: 'active_minutes', counts: { within: 24, above: 3, below: 2, unjudged: 1 } })
+    expect(dayCountsLine(f, 'day', t)).toBe('24 of 30 days usual · 3 more · 2 fewer')
+    expect(dayCountsLine(f, 'day', tNl)).toBe('24 van 30 dagen gebruikelijk · 3 meer · 2 minder')
+  })
+
   it('counts a minutes figure\'s nights as longer and shorter', () => {
     const f = figure({ counts: { within: 24, above: 3, below: 2, unjudged: 1 } })
     expect(dayCountsLine(f, 'night', t)).toBe('24 of 30 nights usual · 3 longer · 2 shorter')

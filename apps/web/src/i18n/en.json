@@ -1827,6 +1827,8 @@
       "usualDays_other": "{{within}} of {{count}} days usual",
       "longer": "{{count}} longer",
       "shorter": "{{count}} shorter",
+      "more": "{{count}} more",
+      "fewer": "{{count}} fewer",
       "later": "{{count}} later",
       "earlier": "{{count}} earlier",
       "higher": "{{count}} higher",
@@ -1865,6 +1867,7 @@
       "year": "this year"
     },
     "per": {
+      "day": "per day",
       "week": "per week",
       "month": "per month",
       "quarter": "per 3 months",

@@ -18,10 +18,10 @@ import { workoutPath } from './workout/workoutText.js'
  * carries only the fields THIS session has, built as an array and joined so a field the session
  * never recorded is left out of the sentence rather than printed as an empty slot.
  *
- * The date is not on that first line: SessionList groups rows by localDate and prints the date
- * once as a heading above each run of same-day rows, so a row repeating it would say it twice. It
- * still names its own date, in the `sr-only` span below, because a screen reader landing on one
- * row by arrow-key browsing has no guarantee it heard the heading first.
+ * The date is not on that first line unless `dated` asks for it (the Activity page's list, whose
+ * rows span days and print it on the row itself). Otherwise a caller's own heading carries it, and
+ * the row still names its own date in the `sr-only` span below, because a screen reader landing on
+ * one row by arrow-key browsing has no guarantee it heard the heading first.
  *
  * `session-row` on the root is load bearing beyond this file: the next task's list counts rows
  * with `container.querySelectorAll('.session-row')`, so it has to be there even though nothing in
@@ -66,7 +66,7 @@ export interface SessionRowViewProps {
   averageHeartRateBpm: number | null
   excluded: boolean
   excludeReason?: string | null
-  /** The person's own day for the row, the same one SessionList's heading groups by. */
+  /** The person's own day for the row, the same one a caller's date heading groups by. */
   localDate: string
   paceSecondsPerKm?: number | null
   elevationGainMeters?: number | null
@@ -85,7 +85,7 @@ export function SessionRowView(props: SessionRowViewProps) {
   const excludeReason = props.excludeReason ?? null
   const { localDate } = props
 
-  // The same call SessionList's own heading makes for this session's group, reused here rather
+  // The same call a caller's date heading makes for a session's group, reused here rather
   // than reformatted, so the sr-only date below can never read a different day than the heading
   // a sighted reader sees above it.
   const dateHeading = formatSessionDateHeading(localDate, language)

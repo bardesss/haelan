@@ -1827,6 +1827,8 @@
       "usualDays_other": "{{within}} van {{count}} dagen gebruikelijk",
       "longer": "{{count}} langer",
       "shorter": "{{count}} korter",
+      "more": "{{count}} meer",
+      "fewer": "{{count}} minder",
       "later": "{{count}} later",
       "earlier": "{{count}} eerder",
       "higher": "{{count}} hoger",
@@ -1865,6 +1867,7 @@
       "year": "dit jaar"
     },
     "per": {
+      "day": "per dag",
       "week": "per week",
       "month": "per maand",
       "quarter": "per 3 maanden",

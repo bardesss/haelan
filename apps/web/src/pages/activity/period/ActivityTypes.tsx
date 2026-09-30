@@ -25,12 +25,13 @@ export function hasTypes(types: TypeTotal[], cardioLoad: PeriodFigure | null, vo
 /**
  * A type's count against its usual count for a period this long, in the verdict catalogue's words
  * ("above your usual 3 – 4"), or "no usual yet" without one. Nothing where the server did not
- * judge it (a running period, or a thin usual). The server judges more of a type than usual the
+ * judge it (a running period); a thin usual says so, as the figure rows do. The server judges more of a type than usual the
  * better side (`judged`), so above reads green and below red (verdictTone), the approved mockup's.
  */
 function typeVerdict(type: TypeTotal, language: string, t: Translate): string | null {
   if (type.usualCount === null) return t('glance.usual.none')
-  if (type.usualCount.thin || type.standing === null) return null
+  if (type.usualCount.thin) return t('glance.usual.thin')
+  if (type.standing === null) return null
   return verdictLine({
     metric: 'workout_count', unit: 'count', precision: 0, direction: 'neutral', judged: null,
     value: type.count, baseline: type.usualCount, standing: type.standing,
