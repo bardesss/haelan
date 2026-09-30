@@ -63,6 +63,9 @@ import { fileURLToPath } from 'node:url'
  * workout page filled from the phone's samples): 817 files, 9 134 975 bytes (8.7 MB), 58% of the
  * ceiling below.
  *
+ * Re-measured 2026-09-30 after the fill was bounded (the week's and month's Activity rows filled,
+ * the totals never): 817 files, 9 140 311 bytes (8.7 MB), 58% of the ceiling below.
+ *
  * MAX_CAPTURE_BYTES is roughly 1.5x the 2026-09-23 measurement (10 446 037 * 1.5 = 15 669 055.5, rounded
  * up): a ceiling that catches a runaway (a route that starts recording every source separately,
  * say, or a metric catalogue that grows sharply), not one that trips on the ordinary growth a new
