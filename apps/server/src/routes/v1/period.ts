@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { balanceOf, balanceWeeks, countsOf, highOf, judge, nightMonths, standingOf, vo2TrendOf } from '@haelan/core'
+import { balanceOf, balanceWeeks, countsOf, highOf, judge, nightMonths, standingOf, TYPE_COUNT_DIRECTION, vo2TrendOf, workoutMonths } from '@haelan/core'
 import type { ActivityPeriod, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, SleepPeriod } from '@haelan/core'
 import {
   personAndToday, personIdOf, personQueryOf, requireString, roundBandTo, roundMetricValue, roundTo, roundToOrNull, sendHashed,
@@ -19,7 +19,7 @@ function roundPoint(precision: number, direction: PeriodFigure['direction'], poi
 
 /**
  * A period figure at its own precision, with every verdict taken again from the rounded numbers,
- * the rule roundPageFigure follows: the value, total and usual, then each daily and weekly point
+ * the rule roundPageFigure follows: the value, total and usual, the total against its own usual, then each daily and weekly point
  * against its own rounded band. The counts are recomputed from the rounded daily points last, so
  * "12 within" always matches the dots the page draws. `reason` stays: rounding never turns a
  * non-null band null, so it cannot change why a figure is or is not judged.
@@ -29,12 +29,18 @@ export function roundPeriodFigure(f: PeriodFigure): PeriodFigure {
   const value = roundToOrNull(precision, f.value)
   const usual = roundBandTo(precision, f.usual)
   const standing = standingAfterRounding(f.standing, value, usual)
+  const total = roundToOrNull(precision, f.total)
+  const usualTotal = roundBandTo(precision, f.usualTotal)
+  const totalStanding = standingAfterRounding(f.totalStanding, total, usualTotal)
   const daily = f.daily.map((p) => roundPoint(precision, direction, p))
   return {
     ...f,
     value,
-    total: roundToOrNull(precision, f.total),
+    total,
     usual,
+    usualTotal,
+    totalStanding,
+    totalJudged: judge(totalStanding, direction),
     standing,
     judged: judge(standing, direction),
     daily,
@@ -121,7 +127,8 @@ export function roundSleepPeriod(p: SleepPeriod): SleepPeriod {
 
 /**
  * The Activity overview at the wire's precision, by the Sleep rule for its figures. Workouts are
- * whole seconds, metres, kcal and bpm. A type's usual count is fractional (each earlier block is
+ * whole seconds, metres, kcal, bpm and seconds per km, and the month headers are summed again from
+ * the rounded rows, so a header's time is the sum of the times its rows print. A type's usual count is fractional (each earlier block is
  * scaled to the period's length), so it is sent to a tenth and the type's standing is taken again
  * from that rounded band. VO2 max goes to the tenth its readings carry, with its trend recomputed
  * from the two numbers sent.
@@ -129,6 +136,15 @@ export function roundSleepPeriod(p: SleepPeriod): SleepPeriod {
 export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
   const hero = roundPeriodFigure(p.hero)
   const { vo2max } = p
+  const workouts = p.workouts.map((w) => ({
+    ...w,
+    durationSeconds: roundToOrNull(0, w.durationSeconds),
+    distanceMeters: roundToOrNull(0, w.distanceMeters),
+    caloriesKcal: roundToOrNull(0, w.caloriesKcal),
+    averageHeartRateBpm: roundToOrNull(0, w.averageHeartRateBpm),
+    paceSecondsPerKm: roundToOrNull(0, w.paceSecondsPerKm),
+    elevationGainMeters: roundToOrNull(0, w.elevationGainMeters),
+  }))
   return {
     ...p,
     hero,
@@ -145,22 +161,21 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
     heartRateZones: {
       light: roundOrNull(p.heartRateZones.light), moderate: roundOrNull(p.heartRateZones.moderate),
       vigorous: roundOrNull(p.heartRateZones.vigorous), peak: roundOrNull(p.heartRateZones.peak),
+      hard: roundOrNull(p.heartRateZones.hard),
     },
-    workouts: p.workouts.map((w) => ({
-      ...w,
-      durationSeconds: roundToOrNull(0, w.durationSeconds),
-      distanceMeters: roundToOrNull(0, w.distanceMeters),
-      caloriesKcal: roundToOrNull(0, w.caloriesKcal),
-      averageHeartRateBpm: roundToOrNull(0, w.averageHeartRateBpm),
-    })),
+    maxHeartRate: roundOrNull(p.maxHeartRate),
+    workouts,
+    workoutMonths: workoutMonths(workouts),
     types: p.types.map((t) => {
       const usualCount = roundBandTo(1, t.usualCount)
+      const standing = standingOf(t.count, usualCount, p.period.partial)
       return {
         ...t,
         seconds: roundTo(0, t.seconds),
         distanceMeters: roundToOrNull(0, t.distanceMeters),
         usualCount,
-        standing: standingOf(t.count, usualCount, p.period.partial),
+        standing,
+        judged: judge(standing, TYPE_COUNT_DIRECTION),
       }
     }),
     cardioLoad: roundOrNull(p.cardioLoad),

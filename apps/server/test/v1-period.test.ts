@@ -211,6 +211,7 @@ function figure(over: Partial<PeriodFigure> = {}): PeriodFigure {
   return {
     metric: 'sleep_asleep_minutes', unit: 'minutes', precision: 0, direction: 'up', per: 'day',
     value: 400.4, total: 2802.8, days: 7, usual: { ...band(400.2, 399.8, 400.3), window: WINDOW, periods: 12 },
+    usualTotal: null, totalStanding: null, totalJudged: null,
     standing: 'above', judged: 'better', reason: null, counts: { within: 0, above: 1, below: 1, unjudged: 0 },
     daily: [
       point('2026-08-31', 400.4, band(400, 400, 400), 'above', 'better'),
@@ -233,6 +234,22 @@ describe('roundPeriodFigure', () => {
     expect(rounded.daily.map((p) => [p.value, p.standing, p.judged])).toEqual([[400, 'within', null], [380, 'below', 'worse']])
     expect(rounded.weekly!.map((p) => [p.value, p.standing, p.judged])).toEqual([[400, 'within', null]])
     expect(rounded.counts).toEqual({ within: 1, above: 0, below: 1, unjudged: 0 })
+  })
+
+  it('rounds the usual of the total and judges the rounded total against it again', () => {
+    const rounded = roundPeriodFigure(figure({
+      usualTotal: { ...band(2700, 2600.2, 2802.6), window: WINDOW, periods: 12 }, totalStanding: 'above', totalJudged: 'better',
+    }))
+    // 2802.8 is above 2802.6, but 2803 is not above the 2803 the page prints.
+    expect(rounded.usualTotal).toEqual({ center: 2700, low: 2600, high: 2803, thin: false, window: WINDOW, periods: 12 })
+    expect([rounded.totalStanding, rounded.totalJudged]).toEqual(['within', null])
+  })
+
+  it("keeps a running period's total unjudged", () => {
+    const rounded = roundPeriodFigure(figure({
+      usualTotal: { ...band(2000, 1900, 2100), window: WINDOW, periods: 12 }, totalStanding: null, totalJudged: null,
+    }))
+    expect([rounded.totalStanding, rounded.totalJudged]).toEqual([null, null])
   })
 
   it('keeps a standing core left null, and the reason with it', () => {
@@ -326,7 +343,8 @@ describe('roundActivityPeriod', () => {
       previous: { from: '2026-08-24', to: '2026-08-30', value: null, delta: null },
       yearEarlier: { from: '2025-08-31', to: '2025-09-06', value: null, delta: null },
       workoutCount: 2, figures: [], intensity: none, zoneMinutes: { fatBurn: null, cardio: null, peak: null },
-      heartRateZones: { ...none, peak: null }, workouts: [], types: [], cardioLoad: null, vo2max: null, more: [],
+      heartRateZones: { ...none, peak: null, hard: null }, maxHeartRate: null, workouts: [], workoutMonths: [], types: [],
+      cardioLoad: null, vo2max: null, more: [],
       ...over,
     }
   }
@@ -335,17 +353,20 @@ describe('roundActivityPeriod', () => {
     const rounded = roundActivityPeriod(activity({
       workouts: [{
         id: 'w', sourceId: 'watch', localDate: '2026-09-01', startMs: 0, endMs: 1_800_000, type: 'RUNNING',
-        durationSeconds: 1800.4, distanceMeters: 5012.6, caloriesKcal: 300.4, averageHeartRateBpm: 141.6, excluded: false,
+        durationSeconds: 1800.4, distanceMeters: 5012.6, caloriesKcal: 300.4, averageHeartRateBpm: 141.6,
+        paceSecondsPerKm: 318.6, elevationGainMeters: 57.5, excluded: false,
       }],
       types: [{
         type: 'RUNNING', count: 2, seconds: 3600.4, distanceMeters: 10000.6,
-        usualCount: { ...band(1.8, 1.66, 1.96), window: WINDOW, periods: 12 }, standing: 'above',
+        usualCount: { ...band(1.8, 1.66, 1.96), window: WINDOW, periods: 12 }, standing: 'above', judged: 'better',
       }],
     }))
-    expect(rounded.workouts[0]).toMatchObject({ durationSeconds: 1800, distanceMeters: 5013, caloriesKcal: 300, averageHeartRateBpm: 142 })
+    expect(rounded.workouts[0]).toMatchObject({
+      durationSeconds: 1800, distanceMeters: 5013, caloriesKcal: 300, averageHeartRateBpm: 142, paceSecondsPerKm: 319, elevationGainMeters: 58,
+    })
     // 2 is above 1.96 but not above the 2.0 the page prints.
     expect(rounded.types[0]).toMatchObject({
-      seconds: 3600, distanceMeters: 10001, usualCount: { center: 1.8, low: 1.7, high: 2, window: WINDOW, periods: 12 }, standing: 'within',
+      seconds: 3600, distanceMeters: 10001, usualCount: { center: 1.8, low: 1.7, high: 2, window: WINDOW, periods: 12 }, standing: 'within', judged: null,
     })
     expect(rounded.high).toEqual({ localDate: '2026-08-31', value: 400, good: false })
   })
@@ -353,9 +374,41 @@ describe('roundActivityPeriod', () => {
   it('leaves a running period\'s type counts unjudged', () => {
     const rounded = roundActivityPeriod(activity({
       period: { ...HEADER, partial: true },
-      types: [{ type: 'RUNNING', count: 5, seconds: 0, distanceMeters: null, usualCount: { ...band(1, 1, 1), window: WINDOW, periods: 12 }, standing: null }],
+      types: [{ type: 'RUNNING', count: 5, seconds: 0, distanceMeters: null, usualCount: { ...band(1, 1, 1), window: WINDOW, periods: 12 }, standing: null, judged: null }],
     }))
     expect(rounded.types[0]!.standing).toBeNull()
+  })
+
+  it("judges a type's count with more as the better side", () => {
+    const rounded = roundActivityPeriod(activity({
+      types: [
+        { type: 'RUNNING', count: 5, seconds: 0, distanceMeters: null, usualCount: { ...band(3, 2.5, 3.5), window: WINDOW, periods: 12 }, standing: 'above', judged: 'better' },
+        { type: 'WALKING', count: 1, seconds: 0, distanceMeters: null, usualCount: { ...band(3, 2.5, 3.5), window: WINDOW, periods: 12 }, standing: 'below', judged: 'worse' },
+      ],
+    }))
+    expect(rounded.types.map((t) => [t.standing, t.judged])).toEqual([['above', 'better'], ['below', 'worse']])
+  })
+
+  it('rounds the hard zones and the highest heart rate as figures', () => {
+    const rounded = roundActivityPeriod(activity({
+      heartRateZones: { light: null, moderate: null, vigorous: null, peak: null, hard: figure({ metric: 'hard_zone_minutes' }) },
+      maxHeartRate: figure({ metric: 'max_heart_rate', unit: 'bpm', total: null }),
+    }))
+    expect(rounded.heartRateZones.hard).toMatchObject({ value: 400, total: 2803, standing: 'within' })
+    expect(rounded.maxHeartRate).toMatchObject({ value: 400, standing: 'within' })
+  })
+
+  it("sums each month's header again from the rounded rows, leaving an excluded workout out", () => {
+    const row = (id: string, localDate: string, durationSeconds: number, excluded = false) => ({
+      id, sourceId: 'watch', localDate, startMs: 0, endMs: 0, type: 'RUNNING', durationSeconds, distanceMeters: null,
+      caloriesKcal: null, averageHeartRateBpm: null, paceSecondsPerKm: null, elevationGainMeters: null, excluded,
+    })
+    const rounded = roundActivityPeriod(activity({
+      workouts: [row('c', '2026-09-02', 600.4), row('b', '2026-09-01', 600.4), row('x', '2026-09-01', 900, true), row('a', '2026-08-31', 1200.6)],
+      workoutMonths: [{ month: '2026-09', count: 3, seconds: 2101.8 }, { month: '2026-08', count: 1, seconds: 1200.6 }],
+    }))
+    // 600 and 600 printed are 1200, though 600.4 twice is 1200.8.
+    expect(rounded.workoutMonths).toEqual([{ month: '2026-09', count: 2, seconds: 1200 }, { month: '2026-08', count: 1, seconds: 1201 }])
   })
 
   it('sends VO2 max to a tenth and takes its trend again from the two tenths sent', () => {
