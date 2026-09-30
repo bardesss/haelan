@@ -162,6 +162,7 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
   if (!hasTrace && both === null) return null
   // A response cached from before a field existed can lack `route`.
   const routePoints = (session.route as WorkoutSessionDetail['route'] | undefined)?.length ?? 0
+  const lineRate = rateOf(exerciseCategory(page.exerciseType))
   const pausedMs = pauses.spans.reduce((sum, span) => sum + span.endMs - span.startMs, 0)
   const basis = [
     t('activity.workout.page.through.basis', { end: formatElapsed(session.endMs - session.startMs) }),
@@ -169,9 +170,10 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     ...(both === null ? [] : [t(`activity.workout.page.through.smoothed.${both}`)]),
     // Only a workout that covers a distance and has no route points is missing its pace for want of
     // a route; a route whose minutes all fail the pace rules says nothing here.
-    // Worded for the line the category would draw: a ride's speed, anything else's pace.
-    ...(rate === null && page.figures.distance !== undefined && routePoints === 0
-      ? [t(rateOf(exerciseCategory(page.exerciseType)) === 'speed' ? 'activity.workout.page.through.noRouteSpeed' : 'activity.workout.page.through.noRoute')]
+    // Worded for the line the category would draw: a ride's speed, anything else's pace. Never for
+    // a swim: a pool has no route to lack, so saying one is missing reads as a fault.
+    ...(rate === null && page.figures.distance !== undefined && routePoints === 0 && lineRate !== 'swimPace'
+      ? [t(lineRate === 'speed' ? 'activity.workout.page.through.noRouteSpeed' : 'activity.workout.page.through.noRoute')]
       : []),
   ].join(' · ')
 

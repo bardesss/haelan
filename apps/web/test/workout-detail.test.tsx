@@ -1646,6 +1646,14 @@ describe('the workout page per sport', () => {
     expect(caption).not.toContain('pace')
   })
 
+  it('says nothing of a missing route under a swim, which a pool never has', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const host = await mount(swimPageFixture(), { ...workoutSessionFixture(), attrs: { exerciseType: 'SWIMMING_POOL', activeDuration: '1875s' }, route: [] }, 'nl')
+    const caption = text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through ~ .dash-caption')
+    expect(caption).toContain('0:00')
+    expect(caption).not.toContain('zonder route')
+  })
+
   it('reads the same ride in Dutch, in km/u', async () => {
     const host = await mount(ridePageFixture(), rideSessionFixture(), 'nl')
     expect(heroLabel(host)).toBe('Snelheid')
