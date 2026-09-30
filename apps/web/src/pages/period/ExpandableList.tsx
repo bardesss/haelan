@@ -62,10 +62,10 @@ export function ExpandableList<T>({
 
 function Heading({ name, aside }: { name: string, aside: string | null }) {
   return (
-    <h3 className="period-list-heading">
-      <span className="period-list-name">{name}</span>
+    <div className="period-list-heading">
+      <h3 className="period-list-name">{name}</h3>
       {aside !== null && <span className="period-list-aside">{aside}</span>}
-    </h3>
+    </div>
   )
 }
 

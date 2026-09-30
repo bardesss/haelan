@@ -718,7 +718,7 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .point-panel-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
 .point-panel-subtitle { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
 .point-panel-rows { margin: var(--space-2) 0 0; display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: baseline; }
-.point-panel-row { display: contents; font-size: var(--font-size-sm); }
+.point-panel-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; }
 .point-panel-row dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .point-panel-row dd { margin: 0; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
 .point-panel-value { font-weight: var(--weight-bold); }
@@ -752,9 +752,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .period-list-heading {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 var(--space-3);
   margin: var(--space-3) 0 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--border-subtle);
-  font-size: var(--font-size-sm); font-weight: inherit; color: var(--text-primary); break-after: avoid;
+  font-size: var(--font-size-sm); color: var(--text-primary); break-after: avoid;
 }
-.period-list-name { font-weight: var(--weight-bold); }
+.period-list-name { margin: 0; font-size: inherit; font-weight: var(--weight-bold); }
 .period-list-aside { font-size: var(--font-size-xs); color: var(--text-secondary); }
 .period-list-group:first-child .period-list-heading { margin-top: 0; }
 .period-list-toggle { margin-top: var(--space-3); }
