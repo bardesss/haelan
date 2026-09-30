@@ -99,6 +99,14 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
     }
   })
 
+  // WCAG 1.4.11: the lightest step sits on the card in a stacked bar, so all three clear 3:1 against
+  // it. Measured: dark 3.62 / 8.67 / 14.60, light 3.25 / 8.20 / 18.75 (light / moderate / vigorous).
+  it('draws the activity intensity steps at 3:1 or better against the card', () => {
+    for (const k of ACTIVITY_KEYS) {
+      expect(contrast(chart[k], s['surface-card']), k).toBeGreaterThanOrEqual(3)
+    }
+  })
+
   it.each(CVD_KINDS)('keeps the activity intensity steps separable under %s', (kind) => {
     for (const [a, b] of pairs(activity.map((hex) => simulate(kind, hex)))) {
       expect(deltaE(a, b), `${a} vs ${b} under ${kind}`).toBeGreaterThanOrEqual(MIN_SIMULATED)

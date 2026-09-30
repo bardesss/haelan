@@ -66,8 +66,8 @@ export interface SessionRowViewProps {
   averageHeartRateBpm: number | null
   excluded: boolean
   excludeReason?: string | null
-  /** The row's own day; without it the UTC day of startMs, which can differ from the person's. */
-  localDate?: string
+  /** The person's own day for the row, the same one SessionList's heading groups by. */
+  localDate: string
   paceSecondsPerKm?: number | null
   elevationGainMeters?: number | null
 }
@@ -80,15 +80,14 @@ export function SessionRowView(props: SessionRowViewProps) {
   const paceSecondsPerKm = props.paceSecondsPerKm ?? null
   const elevationGainMeters = props.elevationGainMeters ?? null
   const excludeReason = props.excludeReason ?? null
-  const localDate = props.localDate ?? new Date(props.startMs).toISOString().slice(0, 10)
-  const summary = { exerciseType: props.type }
+  const { localDate } = props
 
   // The same call SessionList's own heading makes for this session's group, reused here rather
   // than reformatted, so the sr-only date below can never read a different day than the heading
   // a sighted reader sees above it.
   const dateHeading = formatSessionDateHeading(localDate, language)
-  const typeText = exerciseTypeLabel(t, summary.exerciseType)
-  const category = exerciseCategory(summary.exerciseType)
+  const typeText = exerciseTypeLabel(t, props.type)
+  const category = exerciseCategory(props.type)
   // Not read off metricsSummary: every session has a start and an end, so a duration derived from
   // them is never one of the fields this row has to omit.
   const durationMinutes = props.durationSeconds === null ? null : Math.round(props.durationSeconds / 60)
@@ -190,4 +189,3 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
     />
   )
 }
-

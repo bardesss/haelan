@@ -196,7 +196,14 @@ describe('SessionRowView', () => {
   })
 
   it('shows the distance when there is one', () => {
-    expect(view({ distanceMeters: 5000 })).toContain('session-row-detail')
+    expect(view({ distanceMeters: 5000 })).toContain('<div class="session-row-detail">5,0 km</div>')
+  })
+
+  it('renders a row without a duration, with no duration span and no zero', () => {
+    const html = view({ durationSeconds: null })
+    expect(html).toContain('session-row-type')
+    expect(html).not.toContain('session-row-duration')
+    expect(html).not.toContain('0 min')
   })
 
   it('strikes an excluded row and names the reason, or a bare Excluded without one', () => {
