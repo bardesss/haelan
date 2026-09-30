@@ -518,7 +518,7 @@ export function Sparkline({
           // chart without a trend grows an empty column.
           columns: [t('charts.columns.date'), unit, ...(hasTrend ? [t('charts.columns.trend')] : []),
             ...(comparing ? [t('charts.columns.lastYear')] : []), t('charts.columns.note')],
-          // dayTableRows (base.ts): shared with DailyBars' own accessible table, which needs
+          // dayTableRows (base.ts): shared with the bar charts' accessible tables, which need
           // neither the trend column nor the episodic filter, so both default off there.
           rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend,
             lastYear: comparing ? lastYear : undefined, standings: dots ? pointStandings : undefined,

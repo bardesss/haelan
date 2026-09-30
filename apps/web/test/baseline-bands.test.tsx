@@ -10,6 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
 import { Activity } from '../src/pages/Activity.js'
+import { ACTIVITY_PERIOD_MONTH } from './fixtures/activityPeriod.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { flush } from './flush.js'
@@ -127,11 +128,9 @@ function stubWeight(baseline: BaselineStub): () => void {
 }
 
 /**
- * Same shape as activity.test.tsx's own stubActivity, minus the provider-source distinction that
- * file's tests need and this one does not: every metric answers one worn point. Activity.tsx
- * never calls useBaseline (see this file's own "draws no band" test below for why), so unlike
- * stubHealth/stubWeight above this stub does not need a `baseline` parameter to vary; a `/baselines`
- * call from this page would itself be the defect the last test below checks for.
+ * The Activity overview's routes (M10b): its one period read answers the synthetic month fixture,
+ * whose every point carries its own usual from the server. Activity.tsx never calls useBaseline, so
+ * a `/baselines` call from this page would itself be the defect the last test below checks for.
  */
 function stubActivity(urls: string[] = []): () => void {
   const original = globalThis.fetch
@@ -141,14 +140,8 @@ function stubActivity(urls: string[] = []): () => void {
     const json = (body: unknown) =>
       new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/series')) {
-      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
-      const body: Record<string, unknown> = {}
-      for (const metric of metrics) body[metric] = { points: [seriesPoint(metric, '2026-08-14', 6000)], reduction: null }
-      return json(body)
-    }
-    if (url.includes('/insights')) return json(insightBody(url))
-    if (url.includes('/sessions')) return json({ items: [], cursor: null })
+    if (url.includes('/activity/period')) return json(ACTIVITY_PERIOD_MONTH)
+    if (url.includes('/overrides') || url.includes('/notes') || url.includes('/events')) return json({ items: [] })
     if (url.includes('/api/sync/status')) {
       return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
     }
@@ -244,23 +237,19 @@ describe('baseline bands on the charts that gained one this task', () => {
     restore()
   })
 
-  // Activity's steps do not get a band, and this pins why rather than leaving the omission
-  // silent: the only chart this page draws steps on is ActivityHeatmap, a calendar of two category
-  // axes (week, weekday) coloured by value, not a line on a value axis. The one band mechanism
-  // this codebase has (an echarts markArea drawn against a y position, Sparkline and
-  // HeartRateRange's shared `baseline` prop) has no equivalent on those axes, the same absence
-  // Spo2Range already carries for its own min/mean/max chart. Adding one here would mean inventing
-  // a second way to draw or suppress a band, which the brief this task follows rules out, so this
-  // chart is left exactly as it draws today: no `/baselines` request at all, and no marker in its
-  // output either.
-  it('never requests a baseline or draws a band for steps, which has no chart that can hold one', async () => {
+  // Activity's steps draw their band from the period read (M10b), which carries each day's own
+  // usual, the way every overview strip does; the page asks no `/baselines` of its own. It used to
+  // draw steps on the heatmap alone, which has no axis a band could sit on, and asked none then either.
+  it('draws the steps band from the period read, and requests no baseline', async () => {
     const urls: string[] = []
     const restore = stubActivity(urls)
     const { client, tree } = withQuery(<Activity />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
     expect(urls.some((u) => u.includes('/baselines'))).toBe(false)
-    expect(container!.querySelector('[data-baseline-band]')).toBeNull()
+    expect(urls.some((u) => u.includes('/activity/period'))).toBe(true)
+    const hero = [...container!.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'Steps, average per day')
+    expect(hero?.querySelector('[data-baseline-band]')).not.toBeNull()
     restore()
   })
 })

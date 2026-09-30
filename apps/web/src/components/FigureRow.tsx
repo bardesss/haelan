@@ -62,7 +62,8 @@ export function FigureRows({ max, side = false, children }: { max?: 1 | 2 | 3 | 
  * takes the verdict's tone, since it judges nothing.
  */
 export function FigureRow({ label, value, verdict, judged, standing, band, mark, strip, note }: {
-  label: string, value: string, verdict: string, judged: 'better' | 'worse' | null
+  /** Null for a row with nothing to say against a usual (a VO₂max with no trend): no verdict line is drawn. */
+  label: string, value: string, verdict: string | null, judged: 'better' | 'worse' | null
   standing?: 'within' | 'above' | 'below' | null
   band: { center: number, low: number, high: number, thin: boolean } | null, mark: number | null, strip?: FigureRowStrip
   note?: string
@@ -80,7 +81,7 @@ export function FigureRow({ label, value, verdict, judged, standing, band, mark,
       <span className="label figure-row-label">{label}</span>
       <span className="figure-row-value">{parts.number}{parts.unit !== null && <span className="figure-row-unit">{parts.unit}</span>}</span>
       {strip !== undefined ? (
-        <BasisContext.Provider value={verdictId}>
+        <BasisContext.Provider value={verdict === null ? undefined : verdictId}>
           <Sparkline values={strip.values} labels={strip.labels} label={strip.label ?? label} unit={strip.unit} metric={strip.metric}
             formatValue={strip.formatValue} bands={strip.bands} pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} height={30} dots tableToggle={false} />
         </BasisContext.Provider>
@@ -90,7 +91,7 @@ export function FigureRow({ label, value, verdict, judged, standing, band, mark,
           {mark !== null && <span className={marked ? `figure-row-mark ${tone}` : 'figure-row-mark'} style={{ left: pct(gaugeFraction(mark, scale)) }} />}
         </div>
       )}
-      <span id={verdictId} className={tone === null ? 'figure-row-verdict' : `figure-row-verdict ${tone}`}>{verdict}</span>
+      {verdict !== null && <span id={verdictId} className={tone === null ? 'figure-row-verdict' : `figure-row-verdict ${tone}`}>{verdict}</span>}
       {note !== undefined && <span className="figure-row-note">{note}</span>}
     </div>
   )

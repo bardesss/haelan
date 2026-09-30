@@ -23,10 +23,9 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 
 // Pages with a real reason to hand roll every bit of gating and never mention MetricCard: each
 // wraps exactly one query over a resource that carries no metric and no points, so there is
-// nothing for MetricCard's own `metric`/`points` contract to gate. SessionList.tsx is in the same
-// position and is simply never seen here, since it lives one directory down in pages/activity/ and
-// this guard only reads pages/ itself; WorkoutDetail.tsx (M8b) and NightDetail.tsx (M8c, gated on
-// useNights rather than a metric and its points, the same shape) cannot borrow that same exemption
+// nothing for MetricCard's own `metric`/`points` contract to gate. WorkoutDetail.tsx (M8b) and
+// NightDetail.tsx (M8c, gated on useNights rather than a metric and its points, the same shape)
+// are in that position, and are excused by name.
 // Records.tsx (M6c) joins them for the reason the paragraph above states rather than a new one:
 // it wraps exactly one query over a payload that carries no metric and no points - a span, a
 // record per metric, an integer and a list of dated milestones - so MetricCard's own
@@ -41,14 +40,15 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 // error/loading branch around that one read.
 //
 // Sleep.tsx joined them in M10b for the same reason as the Dashboard: the overview reads one
-// judged payload (/sleep/period), not series points, and gates the page once around it.
-const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx', 'Sleep.tsx'])
+// judged payload (/sleep/period), not series points, and gates the page once around it. Activity.tsx
+// followed it in the same milestone, over /activity/period.
+const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx', 'Sleep.tsx', 'Activity.tsx'])
 
 // What this actually checks, read honestly: not "no card hand rolls gating" (it is file
 // granularity, so a page hand rolling two of its eight cards and routing the other six through
 // MetricCard still passes), but "no page hand rolls every card and says nothing about the shared
-// component existing." Activity.tsx passes because most of its cards route through MetricCard;
-// the hand rolled cards beside those are not individually checked against it. A true per card
+// component existing." Recovery.tsx and Health.tsx pass because most of their cards route through
+// MetricCard; the hand rolled cards beside those are not individually checked against it. A true per card
 // guard needs to attribute a given ErrorState/Loading/emptyState occurrence to the JSX block it
 // sits in, which needs more than a whole file regex; this is the cheap version, and its name and this comment describe what it is.
 describe('pages are not entirely hand rolled and silent about MetricCard', () => {
@@ -73,7 +73,8 @@ describe('pages are not entirely hand rolled and silent about MetricCard', () =>
   // trigger matched nothing on any real page would still show every case green. This is what
   // actually proves HAND_ROLLED_GATING fires on a real page rather than only in a regex someone
   // wrote and never ran. The old Dashboard's sleep stages card was that page until M9b, Sleep.tsx
-  // until M10b; Activity.tsx, checked above rather than excused, is it now.
+  // and Activity.tsx until M10b; the pages checked above rather than excused (Recovery, Health) are
+  // it now.
   it('the gating trigger actually fires on at least one real page', () => {
     expect(withGating.length).toBeGreaterThan(0)
   })

@@ -6,6 +6,10 @@ export const STAGE_KEYS = ['stage-deep', 'stage-light', 'stage-rem', 'stage-awak
 // A workout's heart-rate zones, easy to hard, in the order the zone bar and the trace's bands draw them.
 export const ZONE_KEYS = ['zone-light', 'zone-moderate', 'zone-vigorous', 'zone-peak'] as const
 
+// The activity page's daily bars, light to vigorous minutes. A mint family, so the three steps read
+// as one measure and stay apart from the zones' blue-amber-coral.
+export const ACTIVITY_KEYS = ['activity-light', 'activity-moderate', 'activity-vigorous'] as const
+
 // Low value first; each theme walks the ramp in the opposite direction so "more" moves away from its own card.
 export const SCALE_KEYS = ['scale-1', 'scale-2', 'scale-3', 'scale-4', 'scale-5'] as const
 
@@ -35,6 +39,9 @@ export const chartTokens = {
     'zone-moderate': 'blue.500',
     'zone-vigorous': 'amber.500',
     'zone-peak': 'coral.700',
+    'activity-light': 'mint.600',
+    'activity-moderate': 'mint.400',
+    'activity-vigorous': 'mint.100',
     grid: 'slate.925',
     axis: 'slate.500',
     'band-baseline': 'blue.900',
@@ -63,6 +70,9 @@ export const chartTokens = {
     'zone-moderate': 'blue.600',
     'zone-vigorous': 'amber.700',
     'zone-peak': 'coral.400',
+    'activity-light': 'mint.500',
+    'activity-moderate': 'mint.800',
+    'activity-vigorous': 'mint.975',
     grid: 'slate.200',
     axis: 'slate.650',
     'band-baseline': 'blue.200',

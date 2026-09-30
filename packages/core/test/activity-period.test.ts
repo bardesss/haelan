@@ -33,11 +33,11 @@ const input = (o: Partial<ActivityPeriodInput> & Pick<ActivityPeriodInput, 'rang
 /** A hundred steps either way on alternate days, so every usual has a spread. */
 const jitter = (date: string) => (Number(date.slice(8, 10)) % 2 === 0 ? 100 : -100)
 
-function seedSeries(metric: string, value: (date: string) => number | null, o: { from?: string, to?: string } = {}) {
+function seedSeries(metric: string, value: (date: string) => number | null, o: { from?: string, to?: string, agg?: string } = {}) {
   const rows = datesIn({ from: o.from ?? FIRST, to: o.to ?? TODAY }).flatMap((localDate) => {
     const v = value(localDate)
     return v === null ? [] : [{
-      personId: 'p1', localDate, metric, agg: 'sum', source: 'merged', value: v, coverage: 1,
+      personId: 'p1', localDate, metric, agg: o.agg ?? 'sum', source: 'merged', value: v, coverage: 1,
       sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
     }]
   })
@@ -71,7 +71,9 @@ function attrsOf(fields: Record<string, unknown>): Record<string, unknown> {
   }
 }
 
-function seedWorkout(localDate: string, type: string | null, o: { sourceId?: string, hour?: string, distanceMm?: number, excluded?: boolean } = {}) {
+function seedWorkout(localDate: string, type: string | null, o: {
+  sourceId?: string, hour?: string, distanceMm?: number, excluded?: boolean, extra?: Record<string, unknown>
+} = {}) {
   const sourceId = o.sourceId ?? 'watch'
   const id = `${sourceId}-${type ?? 'untyped'}-${localDate}-${o.hour ?? '07'}`
   const startMs = Date.parse(`${localDate}T${o.hour ?? '07'}:00:00Z`) - OFFSET * 60_000
@@ -80,7 +82,9 @@ function seedWorkout(localDate: string, type: string | null, o: { sourceId?: str
     startMs, startOffsetMinutes: OFFSET, endMs: startMs + 40 * 60_000, endOffsetMinutes: OFFSET, localDate, rawPayloadId: null,
     attrs: JSON.stringify(attrsOf({
       exerciseType: type, activeDuration: '1800s',
-      metricsSummary: o.distanceMm === undefined ? { caloriesKcal: 300 } : { caloriesKcal: 300, distanceMillimeters: o.distanceMm },
+      metricsSummary: {
+        caloriesKcal: 300, ...(o.distanceMm === undefined ? {} : { distanceMillimeters: o.distanceMm }), ...o.extra,
+      },
     })),
   }).run()
   if (o.excluded) {
@@ -278,7 +282,7 @@ describe('readActivityPeriod', () => {
     seedSeries('active_zone_minutes_fat_burn', () => 5)
     seedSeries('active_zone_minutes_cardio', () => 3)
     const page = readActivityPeriod(q(), input(AUGUST))
-    expect(page.heartRateZones).toEqual({ light: null, moderate: null, vigorous: null, peak: null })
+    expect(page.heartRateZones).toEqual({ light: null, moderate: null, vigorous: null, peak: null, hard: null })
     expect(page.zoneMinutes.peak).toBeNull()
     expect(page.zoneMinutes.cardio?.value).toBe(3)
     expect(page.cardioLoad).toBeNull()
@@ -316,6 +320,78 @@ describe('readActivityPeriod', () => {
     seedWorkout('2026-08-04', 'CYCLING', { sourceId: 'b' })
     const page = readActivityPeriod(q(), input({ ...AUGUST, source: 'b' }))
     expect(page.workouts.map((w) => [w.type, w.sourceId])).toEqual([['CYCLING', 'b']])
+  })
+
+  it("sums the vigorous and peak zones a day as the heart-rate card's lead, judged as a figure of its own", () => {
+    seedDays()
+    seedSeries('time_in_heart_rate_zone_light_minutes', () => 200)
+    seedSeries('time_in_heart_rate_zone_vigorous_minutes', () => 8)
+    seedSeries('time_in_heart_rate_zone_peak_minutes', (d) => (d === '2026-08-05' ? null : 3))
+    const { hard } = readActivityPeriod(q(), input(AUGUST)).heartRateZones
+    // A day without peak minutes still counts its vigorous ones; the light zone is not among them.
+    expect(hard).toMatchObject({ metric: 'hard_zone_minutes', unit: 'minutes', direction: 'up', per: 'day', days: 31, total: 11 * 31 - 3 })
+    expect(hard!.daily.find((d) => d.from === '2026-08-05')!.value).toBe(8)
+    expect(hard!.usual).toMatchObject({ periods: 11 })
+  })
+
+  it('has no hard-zone lead without vigorous or peak minutes', () => {
+    seedDays()
+    seedSeries('time_in_heart_rate_zone_light_minutes', () => 200)
+    expect(readActivityPeriod(q(), input(AUGUST)).heartRateZones.hard).toBeNull()
+  })
+
+  it("reads each day's highest heart rate as a figure judged without a direction", () => {
+    seedDays()
+    seedSeries('heart_rate', (d) => (Number(d.slice(8, 10)) % 2 === 0 ? 170 : 160), { agg: 'max' })
+    seedSeries('heart_rate', () => 70, { agg: 'mean' })
+    const page = readActivityPeriod(q(), input(AUGUST))
+    expect(page.maxHeartRate).toMatchObject({ metric: 'max_heart_rate', unit: 'bpm', direction: 'neutral', total: null, days: 31 })
+    // Fifteen even dates at 170 and sixteen odd at 160, never the mean's 70.
+    expect(page.maxHeartRate!.value).toBeCloseTo((15 * 170 + 16 * 160) / 31, 9)
+    expect(page.maxHeartRate!.usual).toMatchObject({ periods: 11, thin: false })
+  })
+
+  it('has no highest heart rate without one', () => {
+    seedDays()
+    expect(readActivityPeriod(q(), input(AUGUST)).maxHeartRate).toBeNull()
+  })
+
+  it("carries each workout's pace and climb", () => {
+    seedDays()
+    seedWorkout('2026-08-03', 'RUNNING', { distanceMm: 5_000_000, extra: { averagePaceSecondsPerMeter: 0.318, elevationGainMillimeters: 58_000 } })
+    seedWorkout('2026-08-04', 'WALKING')
+    const { workouts } = readActivityPeriod(q(), input(AUGUST))
+    expect(workouts[1]!.paceSecondsPerKm).toBeCloseTo(318, 9)
+    expect(workouts[1]!.elevationGainMeters).toBe(58)
+    expect(workouts[0]).toMatchObject({ paceSecondsPerKm: null, elevationGainMeters: null })
+  })
+
+  it("counts each month's workouts and their time, newest first, the excluded ones left out", () => {
+    seedDays()
+    seedWorkout('2026-07-02', 'RUNNING')
+    seedWorkout('2026-08-03', 'RUNNING')
+    seedWorkout('2026-08-20', 'WALKING')
+    seedWorkout('2026-08-24', 'RUNNING', { excluded: true })
+    seedWorkout('2026-09-01', 'RUNNING', { excluded: true })
+    const page = readActivityPeriod(q(), input({ range: '3months', anchor: '2026-08-15' }))
+    expect(page.workoutMonths).toEqual([{ month: '2026-08', count: 2, seconds: 3600 }, { month: '2026-07', count: 1, seconds: 1800 }])
+  })
+
+  it("judges a type's count with more as the better side", () => {
+    seedDays()
+    seedAugustWorkouts()
+    const { types } = readActivityPeriod(q(), input(AUGUST))
+    expect(types.map((t) => [t.type, t.standing, t.judged])).toEqual([['RUNNING', 'above', 'better'], ['WALKING', 'above', 'better']])
+  })
+
+  it("sends a total's usual as the earlier months' totals, scaled to the month read, and judges the total by it", () => {
+    seedDays()
+    const distance = readActivityPeriod(q(), input(AUGUST)).figures.find((f) => f.metric === 'distance')!
+    // 6 km every day: each earlier month's total, scaled to 31 days, is 31 days of it.
+    expect(distance.usualTotal).toMatchObject({ periods: 11, thin: false })
+    expect(distance.usualTotal!.center).toBeCloseTo(31 * 6_000_000, 3)
+    expect(distance.total).toBe(31 * 6_000_000)
+    expect(distance.totalStanding).toBe('within')
   })
 
   it('reads each metric once and the workouts twice, never a day at a time', () => {

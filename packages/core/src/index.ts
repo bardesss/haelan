@@ -306,5 +306,5 @@ export type {
 export { countsOf, highOf } from './query/periodFigure.ts'
 export type { SleepPeriod, SleepListRow, ScheduleSides, ScheduleSide, BalanceWeek, NightMonth } from './query/sleepPeriod.ts'
 export { balanceWeeks, isWeekendMorning, nightMonths } from './query/sleepPeriod.ts'
-export type { ActivityPeriod, WorkoutListRow, TypeTotal, Vo2Trend } from './query/activityPeriod.ts'
-export { vo2TrendOf } from './query/activityPeriod.ts'
+export type { ActivityPeriod, WorkoutListRow, WorkoutMonth, TypeTotal, Vo2Trend } from './query/activityPeriod.ts'
+export { vo2TrendOf, workoutMonths, TYPE_COUNT_DIRECTION } from './query/activityPeriod.ts'

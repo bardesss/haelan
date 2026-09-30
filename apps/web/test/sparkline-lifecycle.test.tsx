@@ -8,7 +8,6 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import { Sparkline } from '../src/charts/Sparkline.js'
-import { DailyBars } from '../src/charts/DailyBars.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
@@ -61,12 +60,8 @@ const labels = ['2026-08-10', '2026-08-11', '2026-08-12']
 // only assert by keeping the literal identical to Sparkline.tsx's own.
 const FONT_FAMILY_FALLBACK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 
-// A fresh arrow every call, which is exactly what Activity.tsx:303 (its Sparkline call site) and
-// Weight.tsx:250 hand this component: `sparkFormat` is a parameter of a card() helper invoked
-// inline during render, so its identity changes on every render even though its behaviour never
-// does. Activity.tsx has a second call site, at line 293, handing the identical fresh arrow to
-// DailyBars instead -- the "a daily bars chart across a rerender" block below pins the same
-// property for that chart.
+// A fresh arrow every call, the shape a caller building its formatter inline during render hands
+// this component: its identity changes on every render even though its behaviour never does.
 const freshFormatValue = () => (v: number | null, absent: string) => v === null ? absent : String(v)
 
 function render() {
@@ -119,31 +114,6 @@ describe('a sparkline across a rerender', () => {
       )
     })
     expect(dispose).toHaveBeenCalled()
-  })
-})
-
-function renderBars() {
-  act(() => {
-    root!.render(
-      <I18nProvider lng="en">
-        <DailyBars values={values} labels={labels} metric="distance" unit="Distance in kilometers"
-          axisUnit="km" label="distance, august 2026" formatValue={freshFormatValue()} />
-      </I18nProvider>,
-    )
-  })
-}
-
-describe('a daily bars chart across a rerender', () => {
-  // The same design, and the same defect, as the Sparkline guard above: DailyBars.tsx:109's value
-  // axis reads `formatValue` through tooltipRef rather than through `build`'s own dependency
-  // array, for the identical reason (Activity.tsx's distance and floors cards hand it a fresh
-  // arrow every render, from the same `sparkFormat` parameter of card()). Nothing had rerendered a
-  // DailyBars before this test, so nothing had proven that design actually held for this chart.
-  it('is not disposed when the caller passes a new formatValue identity', () => {
-    renderBars()
-    dispose.mockClear()
-    renderBars()
-    expect(dispose).not.toHaveBeenCalled()
   })
 })
 

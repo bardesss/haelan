@@ -56,8 +56,7 @@ export function usualComparison(
  * The copy carries no sigma and no verdict. The z-score decided whether to speak; what gets said
  * is the plain difference in the metric's own unit, because "2.3 standard deviations below" is
  * jargon in a household app and "80 min below your 60-day average" is the same fact. No colour
- * either, for the reason TrainingLoadCard gives about its own figure: a personal archive is not
- * licensed to tell somebody that a low number is bad.
+ * either: a personal archive is not licensed to tell somebody that a low number is bad.
  */
 export function AgainstUsualNote({ value, baseline, metric, unit }: {
   value: number | null

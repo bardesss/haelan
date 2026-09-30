@@ -312,102 +312,41 @@
   "activity": {
     "title": "Activiteit",
     "units": {
-      "distance": "Afstand in kilometers",
       "km": "km",
-      "floors": "Beklommen verdiepingen",
       "floorsShort": "verdiepingen",
-      "kcal": "Kilocalorieën",
       "kcalShort": "kcal",
       "minutes": "Minuten",
       "min": "min",
       "activeZoneMinutesShort": "AZM",
-      "workouts": "Work-outs",
-      "workoutsShort": "work-outs",
       "bpm": "bpm",
       "paceSuffix": "/km",
       "elevationGainShort": "m omhoog",
       "meters": "m",
       "ms": "ms",
       "cm": "cm",
-      "trimp": "TRIMP",
       "kmh": "km/h",
       "perMin": "/min"
     },
-    "insights": {
-      "steps": "Stappen, deze periode tegenover de vorige"
-    },
-    "dailySteps": {
-      "label": "Dagelijkse stappen",
-      "basis": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
-      "basisWorn_one": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
-      "basisWorn_other": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
-      "basisNoData": "kalenderwarmtekaart, geen metingen in deze {{total}} dagen, elke dag heeft een afwezigheidsstip",
-      "chartLabel": "Stappen per dag in {{period}}"
-    },
     "distance": {
-      "label": "Afstand",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse afstand in {{period}}"
-    },
-    "floors": {
-      "label": "Beklommen verdiepingen",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijks beklommen verdiepingen in {{period}}"
+      "label": "Afstand"
     },
     "totalCalories": {
-      "label": "Totale calorieën",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse totale calorieën in {{period}}"
+      "label": "Totale calorieën"
     },
     "activeEnergy": {
-      "label": "Actieve energie",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse actieve energie in {{period}}"
-    },
-    "activeMinutesLight": {
-      "label": "Lichte activiteit",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse minuten lichte activiteit in {{period}}"
-    },
-    "activeMinutesModerate": {
-      "label": "Matige activiteit",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse minuten matige activiteit in {{period}}"
-    },
-    "activeMinutesVigorous": {
-      "label": "Intensieve activiteit",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse minuten intensieve activiteit in {{period}}"
+      "label": "Actieve energie"
     },
     "activityBands": {
       "label": "Actieve minuten per intensiteit",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse actieve minuten per intensiteit in {{period}}",
       "bandLight": "Licht",
       "bandModerate": "Gemiddeld",
-      "bandVigorous": "Intensief",
-      "bandPeak": "Piek"
+      "bandVigorous": "Intensief"
     },
     "activeZoneMinutes": {
       "label": "Actieve zoneminuten",
-      "basis": "som over {{total}} dagen; een cardio- of piekminuut telt dubbel",
       "fatBurn": "Vetverbranding",
       "cardio": "Cardio",
       "peak": "Piek"
-    },
-    "workoutCount": {
-      "label": "Work-outs",
-      "basis": "aantal, één per work-out ongeacht hoeveel apparaten die registreerden, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijks aantal work-outs in {{period}}"
-    },
-    "workoutMinutes": {
-      "label": "Work-outminuten",
-      "basis": "som, één per work-out ongeacht hoeveel apparaten die registreerden, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse work-outminuten in {{period}}"
     },
     "exerciseTypes": {
       "CARDIO_WORKOUT": "Cardiotraining",
@@ -426,19 +365,8 @@
       "unknown": "Onbekend"
     },
     "sessions": {
-      "label": "Sessies",
-      "count_one": "{{count}} geregistreerde sessie in deze periode",
-      "count_other": "{{count}} geregistreerde sessies in deze periode",
-      "countFiltered": "{{shown}} van de {{total}} geregistreerde sessies in deze periode",
-      "daySummary_one": "{{count}} sessie · {{duration}}",
-      "daySummary_other": "{{count}} sessies · {{duration}}",
-      "basis": "Eén rij per work-out. Een work-out die twee apparaten registreerden, staat er één keer in, zoals de tegel Work-outs hem telt.",
-      "filterLabel": "Filter op type",
-      "allTypes": "Alle types",
       "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",
       "emptyPeriodDetail": "Er is nog niets gesynchroniseerd voor deze datums.",
-      "emptyFilteredTitle": "Geen {{type}} sessies in deze periode.",
-      "emptyFilteredDetail": "Kies een ander type om de rest van de sessies in deze periode te zien.",
       "excluded": "Uitgesloten: {{reason}}",
       "excludedNoReason": "Uitgesloten"
     },
@@ -652,14 +580,73 @@
         }
       }
     },
-    "trainingLoad": {
-      "label": "Trainingsbelasting",
-      "basis": "laatste {{acuteDays}} dagen tegenover de {{chronicDays}} ervoor, {{worn}} dagen gedragen",
-      "basisNotEnough": "vereist {{needed}} gedragen dagen van {{total}}, en heeft er {{worn}}",
-      "notEnough": "Nog niet genoeg gedragen dagen om een week met een maand te vergelijken.",
-      "ratio": "{{ratio}}x je gebruikelijke",
-      "noUsual": "Nog geen gebruikelijke belasting om mee te vergelijken.",
-      "target": "Gebruikelijke week: {{target}}"
+    "period": {
+      "hero": "Stappen, gemiddeld per dag",
+      "caption": {
+        "daily": "elke dag {{period}}",
+        "weekly_one": "elk punt is een week, het gemiddelde van haar dagen · {{count}} week",
+        "weekly_other": "elk punt is een week, het gemiddelde van haar dagen · {{count}} weken"
+      },
+      "hint": {
+        "daily": "tik op een dag voor de cijfers",
+        "weekly": "tik op een week voor de cijfers"
+      },
+      "openDay": "Bekijk dag",
+      "perDay": "{{label}}, per dag",
+      "perWeek": "{{label}}, per week",
+      "workoutTime": "Trainingstijd",
+      "sedentary": "Stilgezeten",
+      "lines": {
+        "daily": "elk lijntje: elke dag {{period}}, ook actieve minuten · afstand en verdiepingen tellen de periode op · band = je gebruikelijke bereik",
+        "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · afstand en verdiepingen tellen de periode op · band = je gebruikelijke bereik"
+      },
+      "intensity": {
+        "daily": "elke dag {{period}} · minuten per band van beweging, uit je stappen",
+        "weekly": "elke week, als gemiddelde per dag · minuten per band van beweging, uit je stappen"
+      },
+      "zoneMinutes": {
+        "daily": "elke dag {{period}} · een cardio- of piekminuut telt dubbel",
+        "weekly": "elke week, als gemiddelde per dag · een cardio- of piekminuut telt dubbel"
+      },
+      "zones": {
+        "hard": "intensief of piek",
+        "caption": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag"
+      },
+      "workouts": {
+        "label": "Trainingen",
+        "caption_one": "de nieuwste eerst · {{count}} training {{period}}, samen {{duration}} · uitgesloten trainingen tellen niet mee",
+        "caption_other": "de nieuwste eerst · {{count}} trainingen {{period}}, samen {{duration}} · uitgesloten trainingen tellen niet mee",
+        "captionNoTime_one": "de nieuwste eerst · {{count}} training {{period}} · uitgesloten trainingen tellen niet mee",
+        "captionNoTime_other": "de nieuwste eerst · {{count}} trainingen {{period}} · uitgesloten trainingen tellen niet mee",
+        "showAll_one": "Toon {{count}} training",
+        "showAll_other": "Toon alle {{count}} trainingen",
+        "filter": "Soort training",
+        "all": "Alle {{count}}",
+        "typeCount": "{{type}} {{count}}",
+        "count_one": "{{count}} training",
+        "count_other": "{{count}} trainingen"
+      },
+      "types": {
+        "label": "Per soort",
+        "times": "{{count}} ×",
+        "caption": {
+          "week": "deze week · tegenover je gebruikelijke week",
+          "month": "deze maand · tegenover je gebruikelijke maand",
+          "3months": "deze 3 maanden · tegenover je gebruikelijke 3 maanden",
+          "year": "dit jaar · tegenover je gebruikelijke jaar"
+        }
+      },
+      "vo2": {
+        "rising": "stijgend · was {{earlier}} in {{month}}",
+        "falling": "dalend · was {{earlier}} in {{month}}",
+        "steady": "stabiel op {{latest}}"
+      },
+      "heatmap": {
+        "label": "Stappen per dag",
+        "caption": "elke dag {{period}} · een vakje per dag, een kolom per week · tik op een dag om hem te openen",
+        "captionGood": "elke dag {{period}} · een vakje per dag, een kolom per week · ✦ je drukste dag · tik op een dag om hem te openen"
+      },
+      "more": "Meer over bewegen"
     }
   },
   "charts": {
@@ -1840,6 +1827,8 @@
       "usualDays_other": "{{within}} van {{count}} dagen gebruikelijk",
       "longer": "{{count}} langer",
       "shorter": "{{count}} korter",
+      "more": "{{count}} meer",
+      "fewer": "{{count}} minder",
       "later": "{{count}} later",
       "earlier": "{{count}} eerder",
       "higher": "{{count}} hoger",
@@ -1853,12 +1842,14 @@
       "longest": "je langste: {{value}} op {{date}}",
       "busiest": "je drukste: {{value}} op {{date}}",
       "previous": "{{delta}} tegenover {{period}}",
+      "previousPerDay": "{{delta}} per dag tegenover {{period}}",
       "yearEarlier": "{{delta}} tegenover vorig jaar",
+      "yearEarlierPerDay": "{{delta}} per dag tegenover vorig jaar",
       "weekBefore": "de week ervoor",
       "quarterBefore": "de 3 maanden ervoor"
     },
     "value": {
-      "perDay": "{{value}} per dag"
+      "perDay": "{{value}} per dag gemiddeld"
     },
     "list": {
       "showAll": "Toon alle {{count}}",
@@ -1876,10 +1867,17 @@
       "year": "dit jaar"
     },
     "per": {
+      "day": "per dag",
       "week": "per week",
       "month": "per maand",
       "quarter": "per 3 maanden",
       "year": "per jaar"
+    },
+    "for": {
+      "week": "voor een week",
+      "month": "voor een maand",
+      "quarter": "voor 3 maanden",
+      "year": "voor een jaar"
     },
     "soFar": {
       "week": "tot nu toe; gebruikelijk {{low}} – {{high}} per week",

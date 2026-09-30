@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockMean, periodUsual, periodFigureOf, countsOf, highOf, changeOf, PERIOD_MIN_PERIODS } from '../src/query/periodFigure.ts'
+import { blockMean, periodTotalUsual, periodUsual, periodFigureOf, countsOf, highOf, changeOf, PERIOD_MIN_PERIODS } from '../src/query/periodFigure.ts'
 import { periodBounds, datesIn } from '../src/query/periodBounds.ts'
 import type { Baseline } from '../src/query/baseline.ts'
 
@@ -45,6 +45,34 @@ describe('periodUsual', () => {
   })
   it('is null with no earlier month counting', () => {
     expect(periodUsual(new Map(), 'month', bounds, 1)).toBeNull()
+  })
+})
+
+describe('periodTotalUsual', () => {
+  const bounds = periodBounds('month', '2026-09-15')
+  it("is the earlier months' sums, each scaled to the period's length", () => {
+    // 10 a day: a 31-day month sums 310 and a 30-day one 300, and both scale to September's 300.
+    const values = fill('2025-09-01', '2026-08-31', () => 10)
+    const usual = periodTotalUsual(values, 'month', bounds)!
+    expect(usual.center).toBeCloseTo(300, 9)
+    expect(usual.low).toBeCloseTo(300, 9)
+    expect(usual).toMatchObject({ periods: 12, thin: false, window: { unit: 'month', count: 12, from: '2025-09-01', to: '2026-08-31' } })
+  })
+  it('sums a month the usual counts over the days it has, scaled by its length, not its days with a value', () => {
+    // Every month full at 10 a day, but August 2026 with its last eight days missing (74% present).
+    const values = fill('2025-09-01', '2026-08-31', (date) => (date >= '2026-08-24' ? null : 10))
+    const usual = periodTotalUsual(values, 'month', bounds)!
+    expect(usual.periods).toBe(12)
+    expect(usual.center).toBeCloseTo((11 * 300 + 230 * 30 / 31) / 12, 9)
+  })
+  it('leaves out a month the usual leaves out, so it is thin when the usual is', () => {
+    const values = fill('2026-02-01', '2026-08-31', () => 10) // 7 months
+    values.set('2026-01-15', 10) // one day of January: not a month with 70% of its days
+    expect(periodTotalUsual(values, 'month', bounds)).toMatchObject({ periods: 7, thin: true })
+    expect(periodUsual(values, 'month', bounds, 1)).toMatchObject({ periods: 7, thin: true })
+  })
+  it('is null with no earlier month counting', () => {
+    expect(periodTotalUsual(new Map(), 'month', bounds)).toBeNull()
   })
 })
 
@@ -100,9 +128,43 @@ describe('periodFigureOf', () => {
     expect(f.days).toBe(0)
     expect(f.reason).toBe('no-data')
   })
-  it('a non-additive figure has no total', () => {
+  it('a non-additive figure has no total, and no usual for one', () => {
     const values = new Map(history); values.set('2026-09-01', 9000)
-    expect(periodFigureOf({ ...base, additive: false, range: 'month', anchor: '2026-09-15', lastDay: '2026-10-01', values, dailyBands: bands }).total).toBeNull()
+    const f = periodFigureOf({ ...base, additive: false, range: 'month', anchor: '2026-09-15', lastDay: '2026-10-01', values, dailyBands: bands })
+    expect([f.total, f.usualTotal, f.totalStanding, f.totalJudged]).toEqual([null, null, null, null])
+  })
+  it("judges a finished period's total against the usual for its total", () => {
+    const values = new Map(history)
+    datesIn({ from: '2026-09-01', to: '2026-09-30' }).forEach((d) => values.set(d, 12000))
+    const f = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands })
+    expect(f.usualTotal).toMatchObject({ periods: 12, thin: false })
+    expect(f.usualTotal!.high).toBeLessThan(f.total!)
+    expect([f.totalStanding, f.totalJudged]).toEqual(['above', 'better'])
+  })
+  it("leaves a finished period's total without a usual, and unjudged, when under 70% of its days carry a value", () => {
+    const values = new Map(history)
+    datesIn({ from: '2026-09-01', to: '2026-09-20' }).forEach((d) => values.set(d, 8500))
+    const f = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands })
+    // Only because days are missing would it read below: 20 days' sum against whole months'.
+    expect(f.total).toBeLessThan(periodTotalUsual(values, 'month', periodBounds('month', '2026-09-15'))!.low)
+    expect([f.usualTotal, f.totalStanding, f.totalJudged]).toEqual([null, null, null])
+    expect(f.standing).toBe('within')
+    // While it runs, the same days keep the usual for "so far", unjudged.
+    const running = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-29', values, dailyBands: bands })
+    expect(running.usualTotal).not.toBeNull()
+    expect(running.totalStanding).toBeNull()
+    // At exactly 70% the total is judged: 21 of 30 days.
+    values.set('2026-09-21', 8500)
+    const at = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands })
+    expect([at.totalStanding, at.totalJudged]).toEqual(['below', 'worse'])
+  })
+  it("leaves a running period's total unjudged, however far past the usual it is", () => {
+    const values = new Map(history)
+    datesIn({ from: '2026-09-01', to: '2026-09-20' }).forEach((d) => values.set(d, 40000))
+    const f = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-20', values, dailyBands: bands })
+    expect(f.total).toBeGreaterThan(f.usualTotal!.high)
+    expect([f.totalStanding, f.totalJudged]).toEqual([null, null])
+    expect(f.standing).toBe('above')
   })
   it('per week multiplies value and usual by seven, but not the total', () => {
     const values = fill('2025-09-01', '2026-09-30', () => 30)

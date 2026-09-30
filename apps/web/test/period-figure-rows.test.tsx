@@ -74,11 +74,11 @@ describe('PeriodFigureRows', () => {
     expect(rowProps[0]!.note).toBeUndefined()
   })
 
-  it('leads a total\'s note with its average per day', () => {
+  it('gives a total\'s note its average per day alone, without the day counts', () => {
     const distance = { ...deep, metric: 'distance', unit: 'meters', value: 5200, total: 156000 }
     render([distance])
     expect(rowProps[0]!.value).toBe(`156.00${NB}km`)
-    expect(rowProps[0]!.note).toBe(`5.20${NB}km per day · 17 of 28 nights usual · 6 higher · 5 lower`)
+    expect(rowProps[0]!.note).toBe(`5.20${NB}km per day on average`)
     expect(rowProps[0]!.verdict).not.toContain('per day')
   })
 
@@ -102,6 +102,18 @@ describe('PeriodFigureRows', () => {
     expect(rowProps[0]!.mark).toBe(3)
   })
 
+  it("bars, marks and tones a total by its total against the usual for a period's total", () => {
+    const usualTotal = { center: 520_000, low: 500_000, high: 540_000, thin: false, window: deep.usual!.window, periods: 12 }
+    const climb = {
+      ...rem, metric: 'altitude_gain', unit: 'millimeters', value: 18_000, total: 560_000, standing: 'within' as const, judged: null,
+      usualTotal, totalStanding: 'above' as const, totalJudged: 'better' as const,
+    }
+    render([climb], { bars: true })
+    expect(rowProps[0]!.band).toBe(usualTotal)
+    expect(rowProps[0]!.mark).toBe(560_000)
+    expect([rowProps[0]!.standing, rowProps[0]!.judged]).toEqual(['above', 'better'])
+  })
+
   it('draws the bar alone with `bars`', () => {
     render([rem], { bars: true })
     expect(rowProps[0]!.strip).toBeUndefined()
@@ -117,6 +129,13 @@ describe('PeriodFigureRows', () => {
     expect(render([{ ...deep, value: null }])).toBe('')
     expect(render([])).toBe('')
     expect(rowsProps).toBeNull()
+  })
+
+  it('puts the caller\'s own rows after its own, in the same grid, and draws them with no figure left', () => {
+    const html = render([efficiency], { children: <p className="own">own row</p> })
+    expect(rowProps.map((row) => row.label)).toEqual(['Efficiency'])
+    expect(html).toBe('<div class="rows"><p class="own">own row</p></div>')
+    expect(render([], { children: <p className="own">own row</p> })).toBe('<div class="rows"><p class="own">own row</p></div>')
   })
 
   it('hands its grid the cap and the side flag', () => {

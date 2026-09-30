@@ -12,6 +12,7 @@ import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { SLEEP_PERIOD_MONTH } from './fixtures/sleepPeriod.js'
+import { ACTIVITY_PERIOD_MONTH } from './fixtures/activityPeriod.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
 import { Nutrition } from '../src/pages/Nutrition.js'
@@ -114,6 +115,9 @@ const DASHBOARD_ROUTE = '/'
 // None of that existed in the render this file used to assert against, which resolved nothing.
 const DAYS = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13']
 const UNWORN_DAY = '2026-08-11'
+// The metrics whose UNWORN_DAY sits at that coverage floor. Emptied for one Health render below, so
+// the wear clause's plural ("0 days not worn") has a card to be read off as well as its singular.
+const UNWORN = { metrics: new Set(['heart_rate', 'spo2']) }
 // The Day tab, anchored on the last of DAYS' own four dates so the stub's /series (filtered to
 // the requested from/to, see stubFetch's own comment) answers with real data for it rather than
 // an empty range that would leave every assertion below indistinguishable from a genuinely quiet
@@ -177,11 +181,11 @@ function stubFetch(
             .map(({ date, i }) => seriesPoint(
               metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
               {
-                // The one day heart rate and steps are at the derivation's coverage floor, which is
+                // The one day heart rate and oxygen are at the derivation's coverage floor, which is
                 // what gives the wear clause a singular to render (see the unworn day assertions
-                // below). Steps joined in M9b: the heart rate tile whose basis carried the clause
-                // left with the old Dashboard, and Activity's steps heatmap carries it now.
-                ...((metric === 'heart_rate' || metric === 'steps') && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
+                // below). Oxygen since M10b: the Activity steps heatmap that carried the clause
+                // after M9b went with the Activity overview, and Health's oxygen range carries it now.
+                ...(UNWORN.metrics.has(metric) && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
                 sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
                 // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
                 // M3b added the column), and this is the one stub that exercises that half.
@@ -210,6 +214,8 @@ function stubFetch(
     // The Sleep overview's one read (M10b): its own synthetic fixture rather than DAYS, the way the
     // glance below has its own. A month's body answers the week asked for; nothing here reads its range.
     if (url.includes('/sleep/period')) return json(SLEEP_PERIOD_MONTH)
+    // The Activity overview's one read (M10b), the same way.
+    if (url.includes('/activity/period')) return json(ACTIVITY_PERIOD_MONTH)
     if (url.includes('/sleep/nights')) {
       const start = Date.parse('2026-08-12T23:00:00Z')
       return json({
@@ -351,11 +357,17 @@ const pages = {
   // cards' worth of coverage.
   Account: await settledAccount('en'),
 }
-// Recovery and Activity rather than the Dashboard this used to settle in Dutch: Recovery carries the
+// Recovery and Health rather than the Dashboard this used to settle in Dutch: Recovery carries the
 // heart rate range chart whose table states absence (it moved there from the Dashboard), and
-// Activity the steps heatmap whose basis carries the wear clause in both its forms.
+// Health the oxygen range whose basis carries the wear clause (Activity's steps heatmap did until
+// the Activity overview, M10b). Health again with no day at the coverage floor, for the clause's
+// plural, which no other card on these pages can print.
 const recoveryNl = await settledRecovery('nl')
-const activityNl = await settledActivity('nl')
+const healthNl = await settledHealth('nl')
+UNWORN.metrics.delete('spo2')
+const healthAllWorn = await settledHealth('en')
+const healthAllWornNl = await settledHealth('nl')
+UNWORN.metrics.add('spo2')
 // Settled inside the same stub window as `pages`/`recoveryNl` above, rather than inside an `it`
 // after `restore()` runs below: every other settledPage call in this file happens while stubFetch
 // is installed, and the Day tab tests want the same real, resolved render those already get, not
@@ -366,8 +378,8 @@ const glance = await settledPage(Dashboard, DASHBOARD_ROUTE, 'en')
 restore()
 
 // Whether a page carries at least one dense, by-position chart that draws an explicit absence
-// mark for a calendar day nothing answered (Recovery's HeartRateRange, Activity's own steps
-// heatmap). Recovery is true since M9b, when the heart rate range card moved there from the
+// mark for a calendar day nothing answered (Recovery's HeartRateRange; on Activity since M10b the
+// intensity and zone minute bars, whose tables row every day of the period's read). Recovery is true since M9b, when the heart rate range card moved there from the
 // Dashboard; what follows about its Sparklines is still true of those three cards. An ordinary Sparkline, which is every per-metric tile chart on Recovery and Sleep,
 // builds its accessible table straight from the points a query actually returned (SeriesPoint.value
 // is never null, so there is no gap value to render a word for; see useSeries.ts's own comment),
@@ -429,11 +441,12 @@ const IS_CHART_PAGE: Record<string, boolean> = {
   Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
-// Whether a chart page draws change badges. Sleep stopped in M10b: an overview page leads with the
-// period against its usual and says the change against the period before in words, and every
-// first-half/second-half percentage went (sleep-page.test.tsx holds it to drawing none).
+// Whether a chart page draws change badges. Sleep and Activity stopped in M10b: an overview page
+// leads with the period against its usual and says the change against the period before in words,
+// and every first-half/second-half percentage went (sleep-page.test.tsx and activity.test.tsx hold
+// each to drawing none).
 const HAS_DELTAS: Record<string, boolean> = {
-  Activity: true, Recovery: true, Sleep: false, Health: true, Weight: true,
+  Activity: false, Recovery: true, Sleep: false, Health: true, Weight: true,
   Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
@@ -666,11 +679,12 @@ describe('chart tables follow the active language', () => {
   // coverage, once Sleep left this file's static-render harness (see the comment above `pages`).
 })
 
-// These ran against the old Dashboard's tiles until M9b. Activity carries the same shapes now: its
-// cards count against the same stubbed week, its steps heatmap's basis carries the wear clause over
-// a steps day at the coverage floor, and its other wear-signal cards carry the plural "0 days".
+// These ran against the old Dashboard's tiles until M9b, then Activity's until its overview (M10b)
+// left the series for one judged read. Health carries the same shapes now: its cards count against
+// the same stubbed week, and its oxygen range's basis carries the wear clause over an oxygen day at
+// the coverage floor (and, settled with none there, the plural "0 days").
 describe('the wear clause', () => {
-  const html = pages.Activity
+  const html = pages.Health
 
   it('counts the basis against every calendar day in the period, not the days that answered', () => {
     // The stubbed week is seven calendar days and DAYS answers four of them, so every card reads
@@ -692,20 +706,19 @@ describe('the wear clause', () => {
   })
 
   // The wear clause was structurally always zero until the coverage fix, so it only ever rendered
-  // its plural and nothing noticed it had no singular. The stubbed week reaches both in one
-  // render on Activity: steps has exactly one day at the derivation's coverage floor (the steps
-  // heatmap's singular), and Activity's other wear-signal card has no metric at the floor (its
-  // plural "0 days").
+  // its plural and nothing noticed it had no singular. Oxygen has exactly one day at the
+  // derivation's coverage floor in the stubbed week (the singular), and none in the second render
+  // (the plural "0 days").
   it('counts one unworn day in the singular and none in the plural', () => {
     expect(html).toContain('1 day not worn')
     expect(html).not.toContain('1 days not worn')
-    expect(html).toContain('0 days not worn')
+    expect(healthAllWorn).toContain('0 days not worn')
   })
 
   it('picks the Dutch singular and plural too, not one form for both', () => {
-    expect(activityNl).toContain('1 dag niet gedragen')
-    expect(activityNl).not.toContain('1 dagen niet gedragen')
-    expect(activityNl).toContain('0 dagen niet gedragen')
+    expect(healthNl).toContain('1 dag niet gedragen')
+    expect(healthNl).not.toContain('1 dagen niet gedragen')
+    expect(healthAllWornNl).toContain('0 dagen niet gedragen')
   })
 
 })

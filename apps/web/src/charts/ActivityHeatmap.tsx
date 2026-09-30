@@ -54,7 +54,7 @@ export function heatmapClickDate(
 // chart-lifecycle.test.tsx guards against.
 const EMPTY = Object.freeze([]) as never[]
 
-export function ActivityHeatmap({ days, max, label, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
+export function ActivityHeatmap({ days, max, label, annotations = EMPTY, excluded = EMPTY, good = null, onPointClick }: {
   days: DayRow[]
   max: number
   label: string
@@ -64,6 +64,8 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
   // below) has to exist regardless: a card can mount before its overrides query has answered.
   annotations?: { date: string; text: string }[]
   excluded?: string[]
+  /** A good day (the overview's ✦, PATTERNS.md): ringed on the canvas, ✦ in its table row. */
+  good?: string | null
   onPointClick?: (localDate: string) => void
 }) {
   const { t, i18n } = useTranslation()
@@ -101,6 +103,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
     })
     // Absence gets its own mark: an unpainted cell would be indistinguishable from the bottom of the scale.
     const absent = cells.flatMap((c, i) => (days[i]?.steps === null ? [[c.week, c.weekday]] : []))
+    const ringed = cells.filter((c) => c.date === good).map((c) => [c.week, c.weekday])
     return {
       grid: base.grid({ left: 30, top: 10, bottom: 20 }),
       tooltip: {
@@ -164,6 +167,8 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
       },
       yAxis: {
         type: 'category' as const, data: weekdayLabels,
+        // Monday on top, as a calendar reads (the approved mockup's); a category axis runs upward otherwise.
+        inverse: true,
         axisLabel: base.axisLabel, ...base.hiddenAxis,
       },
       // seriesIndex: visualMap applies to every series by default and would repaint the absence dots too.
@@ -212,9 +217,16 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
           itemStyle: { color: tokens.noData },
           data: absent,
         },
+        // The good day's ring, the strip's own quiet mark (Sparkline's pointMarks): a hollow square
+        // round its cell, silent so a click still reaches the cell beneath.
+        ...(ringed.length === 0 ? [] : [{
+          type: 'scatter' as const, silent: true, symbol: 'rect', symbolSize: SYMBOL.noData * 4,
+          itemStyle: { color: 'transparent', borderColor: tokens.positive, borderWidth: 2 },
+          data: ringed,
+        }]),
       ],
     }
-  }, [cells, days, weeks, max, weekdayLabels, marks, excluded, t, i18n.language])
+  }, [cells, days, weeks, max, weekdayLabels, marks, excluded, good, t, i18n.language])
 
   const markDates = useMemo(() => marks.map((mark) => mark.date), [marks])
   const onClick = useCallback((event: ECElementEvent) => {
@@ -257,7 +269,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
           // closes.
           return [c.date, weekdayLabels[c.weekday] ?? '',
             formatMetricValue(days[i]?.steps ?? null, 'steps', i18n.language, absent),
-            [isExcluded ? t('charts.absence.excluded') : '',
+            [isExcluded ? t('charts.absence.excluded') : '', c.date === good ? '✦' : '',
               // filter, not find: several annotations (an override reason, a note, an event) can
               // land on the same date now that day level marks join the per-metric ones, and a
               // single find() here would silently show only the first and drop the rest.
