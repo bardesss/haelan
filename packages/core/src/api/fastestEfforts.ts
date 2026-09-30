@@ -7,6 +7,13 @@ import { haversineMeters } from '../query/workoutThrough.ts'
 export const EFFORT_DISTANCES = { km: 1000, mile: 1609.344, fiveK: 5000 } as const
 export type EffortKey = keyof typeof EFFORT_DISTANCES
 
+/**
+ * The fastest leg between two fixes that still counts as running, in m/s (36 km/h, past any
+ * sprint). A phone's first fixes, and now and then one mid-run, jump by tens or hundreds of metres
+ * in a second or two; a leg faster than this is one of those jumps.
+ */
+export const MAX_LEG_METRES_PER_SECOND = 10
+
 /** One fastest effort: its seconds, and how far into the route (metres along it) it began. */
 export interface Effort { seconds: number, fromMeters: number }
 
@@ -24,7 +31,13 @@ export interface Effort { seconds: number, fromMeters: number }
 export function fastestEffortsAlong(points: readonly { atMs: number, latitude: number, longitude: number }[]): Record<EffortKey, Effort | null> {
   const fixes = [...points].sort((a, b) => a.atMs - b.atMs)
   const cumulative = [0]
-  for (let i = 1; i < fixes.length; i += 1) cumulative.push(cumulative[i - 1]! + haversineMeters(fixes[i - 1]!, fixes[i]!))
+  for (let i = 1; i < fixes.length; i += 1) {
+    const metres = haversineMeters(fixes[i - 1]!, fixes[i]!)
+    const seconds = (fixes[i]!.atMs - fixes[i - 1]!.atMs) / 1000
+    // A leg quicker than anybody runs is the GPS jumping, not the runner: counted, it would cover
+    // part of a window for free and could set a record no later run can beat. It adds no distance.
+    cumulative.push(cumulative[i - 1]! + (metres > MAX_LEG_METRES_PER_SECOND * seconds ? 0 : metres))
+  }
   const effort = (distance: number): Effort | null => {
     let best: Effort | null = null
     let start = 0

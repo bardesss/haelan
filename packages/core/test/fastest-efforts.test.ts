@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EFFORT_DISTANCES, fastestEfforts, fastestEffortsAlong } from '../src/api/fastestEfforts.ts'
+import { EFFORT_DISTANCES, MAX_LEG_METRES_PER_SECOND, fastestEfforts, fastestEffortsAlong } from '../src/api/fastestEfforts.ts'
 
 const METRES_PER_DEGREE = (6_371_000 * Math.PI) / 180
 const START = Date.parse('2026-09-01T07:00:00Z')
@@ -45,6 +45,20 @@ describe('fastestEfforts', () => {
     const even = fastestEffortsAlong(run([{ speed: 3, fixes: 200 }]))
     expect(even.fiveK?.fromMeters).toBeCloseTo(10, 1)
     expect(fastestEffortsAlong(run([{ speed: 3, fixes: 30 }]))).toEqual({ km: null, mile: null, fiveK: null })
+  })
+
+  it('counts no distance for a leg faster than anybody runs, so a GPS jump sets no record', () => {
+    // 3 km at 3 m/s, a fix one second later 300 m further on, then 3 km more at 3 m/s from there.
+    // Counted, the jump makes a kilometre of 700 m run plus one second: about 234 s.
+    const before = run([{ speed: 3, fixes: 100 }])
+    const last = before.at(-1)!
+    const jumped = { atMs: last.atMs + 1000, latitude: last.latitude + 300 / METRES_PER_DEGREE, longitude: 5 }
+    const after = run([{ speed: 3, fixes: 100 }]).slice(1).map((p) => ({
+      atMs: p.atMs - START + jumped.atMs, latitude: p.latitude - 52 + jumped.latitude, longitude: 5,
+    }))
+    const efforts = fastestEfforts([...before, jumped, ...after])
+    expect(efforts.km).toBeCloseTo(1000 / 3, 1)
+    expect(MAX_LEG_METRES_PER_SECOND).toBe(10)
   })
 
   it('reads the fixes in time order, whatever order they arrive in', () => {
