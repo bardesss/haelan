@@ -487,6 +487,34 @@
           "slower": "tweede helft {{value}} s/km langzamer",
           "same": "beide helften even snel"
         },
+        "sameRoute": {
+          "label": "Deze route",
+          "count_one": "{{count}} keer op deze route sinds {{month}}",
+          "count_other": "{{count}} keer op deze route sinds {{month}}",
+          "strip": "elk lijntje: elke keer op deze route, oudste links",
+          "matched": "herkend aan start, einde, richting en afstand",
+          "view": "Bekijk de vorige keer, {{date}}"
+        },
+        "efforts": {
+          "label": "Snelste stukken",
+          "tableCaption": "De snelste stukken binnen deze training, naast je beste",
+          "distance": "Afstand",
+          "time": "Tijd",
+          "where": "Waar",
+          "best": "Je beste",
+          "km": "1 km",
+          "mile": "1 mijl",
+          "fiveK": "5 km",
+          "thisWorkout": "deze training",
+          "fastest": "je snelste {{distance}} ooit",
+          "fastestBy": "je snelste {{distance}} ooit, {{delta}} sneller dan in {{month}}",
+          "seconds": "{{value}} s",
+          "caption": "uit de afstand langs de gps-route · telt mee in Records",
+          "captionSplit": "{{distance}}: de split van je horloge",
+          "captionRestGps": "de rest uit de afstand langs de gps-route",
+          "captionRecords": "telt mee in Records",
+          "view": "Bekijk records"
+        },
         "through": {
           "label": "Door de training",
           "basis": "op de tijd van de training zelf, 0:00 tot {{end}}",
@@ -1624,7 +1652,9 @@
       "basis": "Gelezen uit de trainingen zelf, niet uit een dag vol trainingen.",
       "longest": "Langste sessie",
       "furthest": "Verste sessie",
-      "fastest-km": "Snelste kilometer"
+      "fastest-km": "Snelste kilometer",
+      "fastest-mile": "Snelste mijl",
+      "fastest-5k": "Snelste 5 km"
     }
   },
   "recoveryIndex": {

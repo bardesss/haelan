@@ -14,8 +14,8 @@ const PACE_GAP_METRES = 50
 /** Steps rows spaced further apart than this each cover several minutes, and no per-minute cadence can be read off them. */
 const CADENCE_MAX_SPACING_MS = 60_000
 
-// Answers: the great-circle distance between two fixes, in metres.
-function haversineMetres(a: { latitude: number, longitude: number }, b: { latitude: number, longitude: number }): number {
+/** The great-circle distance between two fixes, in metres. Shared with route matching and fastest efforts. */
+export function haversineMeters(a: { latitude: number, longitude: number }, b: { latitude: number, longitude: number }): number {
   const rad = Math.PI / 180
   const dLat = (b.latitude - a.latitude) * rad
   const dLon = (b.longitude - a.longitude) * rad
@@ -61,7 +61,7 @@ export function paceSeries(route: readonly { atMs: number, latitude: number, lon
     const b = fixes[i]!
     const span = b.atMs - a.atMs
     if (span <= 0) continue
-    const distance = haversineMetres(a, b)
+    const distance = haversineMeters(a, b)
     // Slower than the gap's own rate is standing still: a pause the phone logged as one long
     // stretch, which spread evenly would read as a slow minute on either side of it.
     if (distance < PACE_GAP_METRES * (span / MINUTE_MS)) continue

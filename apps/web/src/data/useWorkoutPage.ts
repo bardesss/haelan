@@ -57,6 +57,15 @@ export interface PaceSeries extends MinuteSeries { fastest: { secondsPerKm: numb
 
 export interface RecordRef { value: number, sessionId: string, localDate: string }
 
+/** The three distances a run's fastest efforts are read over (fastestEfforts.ts's EffortKey). */
+export type EffortKey = 'km' | 'mile' | 'fiveK'
+
+/** One fastest effort beside the Records best of its kind and the best before this workout
+ *  (workoutPage.ts's efforts entry): whole seconds, and whole metres along the route to where the
+ *  stretch began. */
+/** One fastest effort; `source` is where its time came from: the GPS route, or for a kilometre the watch's own split when that was quicker (workoutPage.ts's EffortSource). */
+export interface WorkoutEffort { seconds: number, fromMeters: number, source: 'gps' | 'split', best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean }
+
 export interface WorkoutPageData {
   sessionId: string
   sourceId: string
@@ -90,6 +99,20 @@ export interface WorkoutPageData {
   /** Where each heart rate zone above light begins, in whole bpm, from the provider's ceilings for
    *  the day (cardioLoad.ts's ZoneBounds); light has no floor to send. */
   zoneBounds: { moderateMin: number, vigorousMin: number, peakMin: number, max: number } | null
+  /** This workout's time against the earlier times on the same route (workoutPage.ts's
+   *  sameRouteOf): `time` is judged like any figure, lower being better, under the key it was
+   *  compared on ('movingTime', or 'elapsed' when this workout recorded no moving time); `pace`
+   *  the same against the earlier paces on the route, null without a pace of its own; `times` is
+   *  how many times the route was done, this workout counted in, `since` the date of the oldest earlier one, `previous` the
+   *  latest, its time in whole seconds. Null without a route or with no earlier workout on it. */
+  sameRoute: {
+    times: number, since: string, time: WorkoutFigure, pace: WorkoutFigure | null
+    previous: { sessionId: string, localDate: string, seconds: number } | null
+  } | null
+  /** The fastest kilometre, mile and 5 km inside a run's route, in whole seconds, each beside the
+   *  type's Records best (`isBest` when that best is this workout); null for a distance the route
+   *  is shorter than, and null altogether without a route or for any type but a run. */
+  efforts: Record<EffortKey, WorkoutEffort | null> | null
   /** The quick log for the day this workout was done on (routes/v1/detail.ts: the workout's own localDate). */
   log: DayLog
 }

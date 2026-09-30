@@ -1,4 +1,5 @@
 import { useTranslation } from '../i18n/index.js'
+import { EFFORT_DISTANCES } from '@haelan/core/fastest-efforts'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -8,6 +9,7 @@ import { sourceLabel } from '../data/useSourceNames.js'
 import { useSession } from '../auth/session.js'
 import { localToday } from '../controls/range.js'
 import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/useAllTime.js'
+import { formatStopwatch } from './detail/figureText.js'
 
 /**
  * What only the whole archive can answer.
@@ -183,8 +185,16 @@ function sessionValue(record: SessionRecord, language: string): string {
   if (record.kind === 'furthest') {
     return `${formatNumber(record.value / 1_000_000, 1, language, '')} km`
   }
+  // The mile and the 5 km off a run's GPS route: the stopwatch time, then its pace a kilometre.
+  const km = EFFORT_KM[record.kind]
+  if (km !== undefined) return `${formatStopwatch(record.value)} · ${formatStopwatch(record.value / km)} / km`
   const seconds = Math.round(record.value)
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} / km`
+}
+
+// How many kilometres each GPS effort record is run over, from the distances core reads them over.
+const EFFORT_KM: Partial<Record<SessionRecord['kind'], number>> = {
+  'fastest-mile': EFFORT_DISTANCES.mile / 1000, 'fastest-5k': EFFORT_DISTANCES.fiveK / 1000,
 }
 
 function SessionRecordRow({ record, t, language }: {

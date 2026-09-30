@@ -128,6 +128,17 @@ function roundMinuteSeries<T extends MinuteSeries>(series: T | null): T | null {
   return series === null ? null : { ...series, points: series.points.map((p) => ({ ...p, value: Number(p.value.toFixed(0)) })) }
 }
 
+/** One fastest effort in whole seconds and whole metres. */
+function roundEffort(effort: NonNullable<WorkoutPage['efforts']>['km']): NonNullable<WorkoutPage['efforts']>['km'] {
+  return effort === null ? null : {
+    ...effort,
+    seconds: Number(effort.seconds.toFixed(0)),
+    // Whole metres along the route, as a distance figure is sent.
+    fromMeters: Number(effort.fromMeters.toFixed(0)),
+    // `best` and `previousBest` are Records values, already whole seconds from core (sessionRecords.ts).
+  }
+}
+
 /** Pace's series as roundMinuteSeries sends it, its fastest minute whole seconds per km, as its point is. */
 function roundPaceSeries(series: PaceSeries | null): PaceSeries | null {
   const rounded = roundMinuteSeries(series)
@@ -151,7 +162,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
   }
   const whole = (value: number) => Number(value.toFixed(0))
   const ref = (r: WorkoutPage['best']['fastestKmSeconds']) => (r === null ? null : { ...r, value: whole(r.value) })
-  const { previous, after, before, heartRateRecovery, through, splitTrend, zoneBounds } = page
+  const { previous, after, before, heartRateRecovery, through, splitTrend, zoneBounds, sameRoute, efforts } = page
   return {
     ...page,
     figures,
@@ -181,6 +192,16 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
       // Already whole bpm: core rounds each minute before taking the fall between them.
       readings: heartRateRecovery.readings,
       history: heartRateRecovery.history,
+    },
+    // The course time as a figure, the previous time and every effort in whole seconds, as pace is.
+    sameRoute: sameRoute === null ? null : {
+      ...sameRoute,
+      time: roundWorkoutFigure(sameRoute.time),
+      pace: sameRoute.pace === null ? null : roundWorkoutFigure(sameRoute.pace),
+      previous: sameRoute.previous === null ? null : { ...sameRoute.previous, seconds: whole(sameRoute.previous.seconds) },
+    },
+    efforts: efforts === null ? null : {
+      km: roundEffort(efforts.km), mile: roundEffort(efforts.mile), fiveK: roundEffort(efforts.fiveK),
     },
     through: { pace: roundPaceSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
     // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.

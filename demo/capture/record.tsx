@@ -31,7 +31,7 @@ import { CHART_VARS } from '../../apps/web/src/charts/tokens.js'
 import { DEMO_CLOCK_MS } from '../../apps/web/src/demo/instant.js'
 import { flush } from '../../apps/web/test/flush.js'
 import { startCaptureServer } from './server.js'
-import { sliceToFirstDay, unreachableDays, unreachableWorkouts } from './slice.js'
+import { sliceToFirstDay, unreachableDays, unreachableRouteWorkouts, unreachableWorkouts } from './slice.js'
 import { compactRecorded } from './compact.js'
 import type { CaptureServer } from './server.js'
 import { writeCapture } from '../../scripts/capture-demo.mjs'
@@ -401,6 +401,15 @@ describe('the capture sweep', () => {
     for (const id of [...pastWorkouts].sort()) {
       if (!mountedSessions.has(id)) await mount(WORKOUT_ROUTE.replace(':sessionId', id))
     }
+    // And a run's same-route card opens the earlier runs on its route, by its link to the previous
+    // time and by each dot on its strips; those can lie months before anything above mounted. A few
+    // passes, since a page mounted here has a same-route card of its own; a page that never records
+    // is left to the check below rather than retried for ever.
+    for (let pass = 0; pass < 5; pass += 1) {
+      const missing = unreachableRouteWorkouts(server.recorded)
+      if (missing.length === 0) break
+      for (const { id } of missing) await mount(WORKOUT_ROUTE.replace(':sessionId', id))
+    }
 
     // The demo's archive begins on its first captured day (slice.ts's own comment says why the
     // captured JSON is trimmed rather than the server bounded).
@@ -422,6 +431,7 @@ describe('the capture sweep', () => {
     }
     expect(unreachableDays(server.recorded, DEMO_DATE), 'days the dashboard opens that the demo cannot answer').toEqual([])
     expect(unreachableWorkouts(server.recorded), 'workouts a glance lists that the demo cannot open').toEqual([])
+    expect(unreachableRouteWorkouts(server.recorded), 'workouts a same-route card opens that the demo cannot open').toEqual([])
 
     // The manifest itself still has to be non-empty (writeCapture's own refusal), which is a
     // stricter, whole-sweep fact that every per-mount landing check above cannot by itself
