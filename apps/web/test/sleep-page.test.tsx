@@ -423,12 +423,21 @@ describe('the Sleep page: the hero\'s point panel', () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
     act(() => { sparklines.get(HERO)!.onPointClick!('2026-08-31') })
     const panel = container!.querySelector('.point-panel')!
-    expect(panel.querySelector('.point-panel-title')?.textContent).toBe('Aug 31, 2026')
-    expect([...panel.querySelectorAll('.point-panel-row')].map((row) => row.textContent))
-      .toEqual(['Time asleep7h 18m', 'Bedtime22:44', 'Wake time06:32'])
+    expect(panel.querySelector('.point-panel-title')?.textContent).toBe('Monday, August 31')
+    expect(panel.querySelector('.point-panel-subtitle')?.textContent).toBe('bedtime 22:44 · wake time 06:32')
+    // The mockup's rows, each with that night's own verdict; REM is left to the night page.
+    const cells = (row: Element) => [...row.children].map((cell) => cell.textContent)
+    expect([...panel.querySelectorAll('.point-panel-row')].map(cells)).toEqual([
+      ['Time asleep', `7h${NB}18m`, 'above your usual'],
+      ['Efficiency', `93${NB}%`, 'within your usual'],
+      ['Deep sleep', `1h${NB}15m`, 'above your usual'],
+      ['Bedtime', '22:44', 'earlier than your usual'],
+    ])
+    expect([...panel.querySelectorAll('.point-panel-verdict')].map((v) => v.className))
+      .toEqual(['point-panel-verdict better', 'point-panel-verdict', 'point-panel-verdict better', 'point-panel-verdict is-out'])
     expect(panel.querySelector('a')?.getAttribute('href')).toBe(nightPath('2026-08-31'))
     expect(panel.querySelector('a')?.textContent).toBe('View night')
-    act(() => { panel.querySelector<HTMLButtonElement>('button')!.click() })
+    act(() => { panel.querySelector<HTMLButtonElement>('.point-panel-actions button')!.click() })
     expect(container!.querySelector('.point-panel')).toBeNull()
     expect(document.querySelector('.annotate-panel')).not.toBeNull()
   })
@@ -441,7 +450,20 @@ describe('the Sleep page: the hero\'s point panel', () => {
     expect(panel.querySelectorAll('.point-panel-row')).toHaveLength(1)
     expect(panel.querySelector('.point-panel-row dt')?.textContent).toBe('Time asleep')
     expect(panel.querySelector('a')).toBeNull()
-    expect(panel.querySelector('button')).toBeNull()
+    expect(panel.querySelector('.point-panel-actions')).toBeNull()
+    act(() => { panel.querySelector<HTMLButtonElement>('.point-panel-close')!.click() })
+    expect(container!.querySelector('.point-panel')).toBeNull()
+  })
+
+  it('titles and words a night\'s panel in Dutch', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    act(() => { sparklines.get('Tijd in slaap, gemiddeld per nacht')!.onPointClick!('2026-08-31') })
+    const panel = container!.querySelector('.point-panel')!
+    expect(panel.querySelector('.point-panel-title')?.textContent).toBe('maandag 31 augustus')
+    expect(panel.querySelector('.point-panel-subtitle')?.textContent).toBe('naar bed 22:44 · wakker geworden 06:32')
+    expect([...panel.querySelectorAll('.point-panel-verdict')].map((v) => v.textContent))
+      .toEqual(['boven je gebruikelijke bereik', 'binnen je gebruikelijke bereik', 'boven je gebruikelijke bereik', 'eerder dan je gebruikelijke tijd'])
+    expect(panel.querySelector('.point-panel-close')?.getAttribute('aria-label')).toBe('Sluiten')
   })
 })
 

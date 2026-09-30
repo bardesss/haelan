@@ -701,16 +701,30 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    own tap control under the strip (Sparkline's), so the hint gives way to it there. */
 .period-hero-captions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--space-3); }
 .period-hero-hint { font-style: italic; margin-left: auto; }
-.period-hero-panel { position: absolute; top: 100%; right: 0; z-index: 30; width: min(20rem, 100%); margin-top: var(--space-1); }
+.period-hero-panel { position: absolute; top: 100%; right: 0; z-index: 30; width: min(24rem, 100%); margin-top: var(--space-1); }
 .point-panel {
   box-sizing: border-box; padding: var(--space-3); background: var(--surface-card); color: var(--text-primary);
   border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
 }
-.point-panel-title { margin: 0; font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
-.point-panel-rows { margin: var(--space-2) 0 0; display: grid; gap: var(--space-1); }
-.point-panel-row { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-sm); }
-.point-panel-row dt { color: var(--text-secondary); }
-.point-panel-row dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* The title and the panel's own close, the subtitle under them, then a row a figure: its name, its
+   value bold, and that point's verdict in its tone (the verdict line's colours). */
+.point-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.point-panel-title { margin: 0; font-size: var(--font-size-sm); font-weight: var(--weight-bold); }
+.point-panel-close {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: calc(-1 * var(--space-1));
+  padding: 0; border: 0; border-radius: var(--radius-md); background: none; color: var(--text-secondary); font-size: var(--font-size-md); cursor: pointer;
+}
+.point-panel-close:hover { background: var(--surface-hover); color: var(--text-primary); }
+.point-panel-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+.point-panel-subtitle { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.point-panel-rows { margin: var(--space-2) 0 0; display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: baseline; }
+.point-panel-row { display: contents; font-size: var(--font-size-sm); }
+.point-panel-row dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.point-panel-row dd { margin: 0; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.point-panel-value { font-weight: var(--weight-bold); }
+.point-panel-row .point-panel-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
+.point-panel-verdict.better { color: var(--positive); }
+.point-panel-verdict.worse, .point-panel-verdict.is-out { color: var(--negative); }
 .point-panel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); }
 .point-panel-actions .card-link { margin: 0; }
 /* On a phone the panel is a sheet along the bottom edge (the approved mockup's, .cal-sheet's
@@ -720,11 +734,12 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
   .period-hero-hint { display: none; }
   .period-hero-panel { position: fixed; top: auto; right: 0; bottom: 0; left: 0; width: auto; margin: 0; z-index: 40; }
   .period-hero-panel .point-panel {
-    max-height: 85dvh; overflow-y: auto;
+    max-height: 85dvh; overflow-y: auto; padding: var(--space-4);
     border-width: 1px 0 0; border-radius: var(--radius-md) var(--radius-md) 0 0;
   }
   .point-panel-actions { flex-direction: column; align-items: stretch; }
   .point-panel-actions .card-link, .point-panel-actions .button { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+  .point-panel-close { width: 44px; height: 44px; margin: calc(-1 * var(--space-2)); }
 }
 /* A list (ExpandableList): the first seven, then every item flowing into columns of at least
    18rem, a month's heading kept with its first item; one column on a phone. */

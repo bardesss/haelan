@@ -946,7 +946,11 @@
       "naps_one": "1 nap, {{minutes}} together",
       "naps_other": "{{count}} naps, {{minutes}} together",
       "barsWeeklyBaseline": "each bar: that week added up, against your usual",
-      "barsWeeklyTarget": "each bar: that week added up, against your target"
+      "barsWeeklyTarget": "each bar: that week added up, against your target",
+      "panel": {
+        "bed": "bedtime {{time}}",
+        "wake": "wake time {{time}}"
+      }
     }
   },
   "setup": {
@@ -1833,6 +1837,10 @@
       "month": "per month",
       "quarter": "per 3 months",
       "year": "per year"
+    },
+    "panel": {
+      "within": "within your usual",
+      "close": "Close"
     }
   }
 }

@@ -946,7 +946,11 @@
       "naps_one": "1 dutje, samen {{minutes}}",
       "naps_other": "{{count}} dutjes, samen {{minutes}}",
       "barsWeeklyBaseline": "elke balk: die week opgeteld, tegenover je gebruikelijke",
-      "barsWeeklyTarget": "elke balk: die week opgeteld, tegenover je doel"
+      "barsWeeklyTarget": "elke balk: die week opgeteld, tegenover je doel",
+      "panel": {
+        "bed": "naar bed {{time}}",
+        "wake": "wakker geworden {{time}}"
+      }
     }
   },
   "setup": {
@@ -1833,6 +1837,10 @@
       "month": "per maand",
       "quarter": "per 3 maanden",
       "year": "per jaar"
+    },
+    "panel": {
+      "within": "binnen je gebruikelijke bereik",
+      "close": "Sluiten"
     }
   }
 }

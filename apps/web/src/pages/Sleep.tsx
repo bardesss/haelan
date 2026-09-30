@@ -15,19 +15,21 @@ import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { useSleepPeriod } from '../data/useSleepPeriod.js'
-import type { PeriodStripPoint } from '../data/periodTypes.js'
+import type { PeriodFigure, PeriodStripPoint } from '../data/periodTypes.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { annotationsFor, overridesByMetric } from '../data/chartAnnotations.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { exportPathFor } from '../data/pageShell.js'
-import { formatClock, formatLocalDate, formatLocalDateRange } from '../format.js'
+import { formatClock, formatLocalDateRange, formatLongWeekdayDate } from '../format.js'
 import { formatFigureValue } from './detail/figureText.js'
-import { standoutLines, thisPeriod } from './detail/periodText.js'
+import { pointVerdictWords, standoutLines, thisPeriod } from './detail/periodText.js'
+import { verdictTone } from '../charts/base.js'
 import { PeriodHero } from './period/PeriodHero.js'
 import { PeriodFigureRows } from './period/PeriodFigureRows.js'
 import { PointPanel } from './period/PointPanel.js'
+import type { PointPanelRow } from './period/PointPanel.js'
 import { LIST_VISIBLE } from './period/ExpandableList.js'
 import { periodLine } from './period/periodLine.js'
 import { useNightHref } from './sleep/NightRow.js'
@@ -64,6 +66,9 @@ const NO_DATES: string[] = Object.freeze([]) as never[]
  * every page keeps): the server answers an unknown one with a 400, and a stale link should read as
  * all sources, not as an error.
  */
+// The figures a night's panel lists under its time asleep, the mockup's: efficiency, deep sleep, bedtime.
+const PANEL_METRICS: readonly string[] = ['sleep_efficiency', 'sleep_deep_minutes', 'sleep_bedtime_minutes']
+
 export function Sleep() {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -129,20 +134,33 @@ export function Sleep() {
   const period = thisPeriod(data.period.range, t)
   const nightOn = new Map(data.nights.map((night) => [night.localDate, night]))
 
-  // A day's panel: that night's time asleep, bed and wake, the way to its page, and the day-metric
-  // exclude and annotate, which closes the panel as the AnnotatePanel opens. A week's: that week's
-  // time asleep alone, and nowhere to go (the other figures carry only their weeks on these ranges).
+  // A point's row: its figure's value and that point's own verdict, in its tone (the server's).
+  const rowOf = (figure: PeriodFigure, point: PeriodStripPoint): PointPanelRow => ({
+    label: labelOf(figure.metric), value: formatFigureValue(figure, point.value, language, t),
+    verdict: pointVerdictWords(point.standing, figure.unit, t), tone: verdictTone(point.judged, point.standing),
+  })
+
+  // A day's panel, the approved mockup's: the night's bed and wake under its date, then its time
+  // asleep, efficiency, deep sleep and bedtime, each with that night's verdict, the way to its page,
+  // and the day-metric exclude and annotate, which closes the panel as the AnnotatePanel opens. A
+  // week's: that week's time asleep alone, and nowhere to go (the other figures carry only their
+  // weeks on these ranges).
   const panel = (point: PeriodStripPoint, close: () => void) => {
-    const asleep = { label: t('sleep.night.hero.label'), value: formatFigureValue(hero, point.value, language, t) }
+    const asleep = { ...rowOf(hero, point), label: t('sleep.night.hero.label') }
     if (weekly) {
       return <PointPanel title={formatLocalDateRange(point.from, point.to, language)} rows={[asleep]} open={null} onAnnotate={null} onClose={close} />
     }
     const night = nightOn.get(point.from)
-    const rows = [asleep]
-    if (night?.bedtimeMinutes != null) rows.push({ label: t('sleep.night.minis.bedtime'), value: formatClock(night.bedtimeMinutes) })
-    if (night?.waketimeMinutes != null) rows.push({ label: t('sleep.night.more.waketime'), value: formatClock(night.waketimeMinutes) })
+    const times = [
+      night?.bedtimeMinutes == null ? null : t('sleep.period.panel.bed', { time: formatClock(night.bedtimeMinutes) }),
+      night?.waketimeMinutes == null ? null : t('sleep.period.panel.wake', { time: formatClock(night.waketimeMinutes) }),
+    ].filter((part) => part !== null)
+    const rows = [asleep, ...data.figures.filter((figure) => PANEL_METRICS.includes(figure.metric)).flatMap((figure) => {
+      const own = figure.daily.find((p) => p.from === point.from)
+      return own === undefined || own.value === null ? [] : [rowOf(figure, own)]
+    })]
     return (
-      <PointPanel title={formatLocalDate(point.from, language)} rows={rows}
+      <PointPanel title={formatLongWeekdayDate(point.from, language)} subtitle={times.length === 0 ? null : times.join(' · ')} rows={rows}
         open={{ to: nightHref(point.from), text: t('sleep.openNight') }}
         onAnnotate={() => { close(); setAnnotateTarget({ scope: 'day_metric', localDate: point.from, metric: ASLEEP }) }}
         onClose={close} />

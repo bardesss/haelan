@@ -1,7 +1,7 @@
 import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodRange, PeriodStripPoint, PeriodWindow } from '../../data/periodTypes.js'
 import { formatSignedDuration, formatSignedNumber, formatWeekdayDate } from '../../format.js'
 import type { Translate } from '../../format.js'
-import { directionWords } from '../../charts/base.js'
+import { directionWords, standingShort } from '../../charts/base.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
 import { stripBands } from '../dashboard/cardShared.js'
 import { deviationVerdictLine, formatFigureDifference, formatFigureValue, isShortSpan, verdictLine } from './figureText.js'
@@ -55,6 +55,16 @@ function sideWords(unit: string): { above: string, below: string } {
 // all where a card of one kind of day says it once for every row ("26 of 30 usual").
 const COUNT_KEYS = { night: 'usualNights', day: 'usualDays', morning: 'usualMornings', none: 'usual' } as const
 export type CountNoun = keyof typeof COUNT_KEYS
+
+/**
+ * One point's verdict in words, without its range, as the point panel lists it beside the value:
+ * standingShort's words outside the usual ("below your usual", "later than your usual"), "within
+ * your usual" inside it, and nothing for a point the server did not judge.
+ */
+export function pointVerdictWords(standing: PeriodStripPoint['standing'], unit: string, t: Translate): string {
+  if (standing === 'within') return t('period.panel.within')
+  return standing === null ? '' : standingShort(standing, unit, t)
+}
 
 /** "24 of 30 nights usual · 3 longer · 3 shorter"; null when no day was counted, or none judged. */
 export function dayCountsLine(figure: PeriodFigure, noun: CountNoun, t: Translate): string | null {
