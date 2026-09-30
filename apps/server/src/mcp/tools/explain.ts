@@ -8,6 +8,7 @@ import { EMPTY_EVIDENCE, EMPTY_LINKS, walkEmpty } from './explainEmpty.ts'
 import { RECOVERY_EVIDENCE, RECOVERY_LINKS, walkRecovery } from './explainRecovery.ts'
 import { WORKOUT_EVIDENCE, WORKOUT_LINKS, walkWorkout } from './explainWorkout.ts'
 import { DAY_EVIDENCE, DAY_LINKS, walkDay } from './explainDay.ts'
+import { COMPARISON_EVIDENCE, COMPARISON_LINKS, walkComparison } from './explainComparison.ts'
 
 /**
  * `explain` (issue 412): one chain per kind, walked in order, that stops at the first link
@@ -21,10 +22,10 @@ import { DAY_EVIDENCE, DAY_LINKS, walkDay } from './explainDay.ts'
  * serves `stoppedAt` and `walked` for all of them.
  */
 
-const LINKS = [...EMPTY_LINKS, ...RECOVERY_LINKS, ...WORKOUT_LINKS, ...DAY_LINKS] as const
+const LINKS = [...EMPTY_LINKS, ...RECOVERY_LINKS, ...WORKOUT_LINKS, ...DAY_LINKS, ...COMPARISON_LINKS] as const
 
-type Kind = 'empty' | 'recovery' | 'workout' | 'day'
-type Argument = 'localDate' | 'today' | 'sessionId' | 'metric' | 'agg' | 'source'
+type Kind = 'empty' | 'recovery' | 'workout' | 'day' | 'comparison'
+type Argument = 'localDate' | 'today' | 'from' | 'to' | 'sessionId' | 'metric' | 'agg' | 'source'
 
 // Which arguments each kind reads. Anything else is refused rather than ignored: an argument that
 // silently changed nothing would read as an answer about it - a `source` on the recovery index,
@@ -34,6 +35,7 @@ const TAKES: Readonly<Record<Kind, { needs: readonly Argument[], may: readonly A
   recovery: { needs: ['localDate'], may: [] },
   workout: { needs: ['sessionId'], may: [] },
   day: { needs: ['localDate', 'today'], may: [] },
+  comparison: { needs: ['metric', 'from', 'to'], may: ['agg', 'source'] },
 }
 
 function requireArguments(kind: Kind, args: Partial<Record<Argument, string>>): void {
@@ -98,23 +100,33 @@ export const explainTool = defineTool({
     + 'body reading on its worse side, `lateBedtime` for a short night, `workoutThatDay` for more '
     + 'movement, and `loggedEvent` for every reading; `noLivedFactor` when none was. A lived factor '
     + 'is an association reported beside the reading, never the reason for it, and the finding says '
-    + 'so.',
+    + 'so.\n\n'
+    + '`kind: comparison` asks what the mean of `metric` from `from` to `to` against the equal period '
+    + 'before it can say - the same comparison compare_periods answers. The links, in order: '
+    + '`thinDays` and `thinCoverage`, compare_periods\' two refusals, each read as not enough data and '
+    + 'never as no change; `spreadUnknown`, no usual day-to-day spread thick enough to set the '
+    + 'difference against, so it is reported and not judged; `withinSpread`, the difference is '
+    + 'smaller than this person\'s own day-to-day spread for the metric, so the periods read alike; '
+    + 'and `moved`, it is larger. The spread is the baseline get_baselines answers as of `from`. '
+    + 'Filled days in either period are stated in the finding whichever link answers.',
   inputSchema: {
-    kind: z.enum(['empty', 'recovery', 'workout', 'day']),
+    kind: z.enum(['empty', 'recovery', 'workout', 'day', 'comparison']),
     localDate: z.string().optional().describe('YYYY-MM-DD. Required for `empty`, `recovery` and `day`, refused for `workout`.'),
     today: z.string().optional().describe(
       'YYYY-MM-DD, today in the person\'s own zone. Required for `day`, refused otherwise: a day is only '
       + 'explained once it is over.',
     ),
+    from: z.string().optional().describe('YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.'),
+    to: z.string().optional().describe('YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.'),
     sessionId: z.string().optional().describe('An exercise session id from get_workouts. Required for `workout`, refused otherwise.'),
-    metric: z.string().optional().describe('Required for `empty`, refused otherwise.'),
+    metric: z.string().optional().describe('Required for `empty` and `comparison`, refused otherwise.'),
     agg: z.string().optional().describe(
-      '`empty` only. Omitted, the metric\'s own default aggregate, the one get_daily uses.',
+      '`empty` and `comparison` only. Omitted, the metric\'s own default aggregate, the one get_daily uses.',
     ),
     source: DAILY_SOURCE,
   },
   outputSchema: {
-    kind: z.enum(['empty', 'recovery', 'workout', 'day']),
+    kind: z.enum(['empty', 'recovery', 'workout', 'day', 'comparison']),
     finding: z.string(),
     stoppedAt: z.enum(LINKS),
     walked: z.array(z.enum(LINKS)),
@@ -123,12 +135,13 @@ export const explainTool = defineTool({
       recovery: RECOVERY_EVIDENCE.nullable(),
       workout: WORKOUT_EVIDENCE.nullable(),
       day: DAY_EVIDENCE.nullable(),
+      comparison: COMPARISON_EVIDENCE.nullable(),
     }),
   },
   run: (q, args) => {
     const { kind, ...rest } = args
     requireArguments(kind, rest)
-    const none = { empty: null, recovery: null, workout: null, day: null }
+    const none = { empty: null, recovery: null, workout: null, day: null, comparison: null }
 
     if (kind === 'recovery') {
       const { evidence, ...walk } = walkRecovery(q, args.localDate!)
@@ -148,6 +161,10 @@ export const explainTool = defineTool({
     // An unknown metric is refused by series()'s own requireMetricAndAgg on the first read, the
     // same way get_daily lets it be, so the empty agg below never reaches an answer.
     const agg = args.agg ?? (spec === undefined ? '' : defaultAggFor(spec))
+    if (kind === 'comparison') {
+      const { evidence, ...walk } = walkComparison(q, { metric, agg, from: args.from!, to: args.to!, source: args.source })
+      return { kind, ...walk, evidence: { ...none, comparison: evidence } }
+    }
     const { evidence, ...walk } = walkEmpty(q, { metric, agg, localDate: args.localDate!, source: args.source })
     return { kind, ...walk, evidence: { ...none, empty: evidence } }
   },
