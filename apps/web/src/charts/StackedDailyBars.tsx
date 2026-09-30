@@ -147,7 +147,9 @@ export function StackedDailyBars({
         min: 0,
         ...(valueAxis === undefined
           ? { name: axisUnit, nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize } }
-          : { interval: valueAxis.interval }),
+          // The top tick on the step too, or echarts ends the axis on its own round number ("10h"
+          // over "8h" on a four-hour step).
+          : { interval: valueAxis.interval, max: (extent: { max: number }) => Math.max(1, Math.ceil(extent.max / valueAxis.interval)) * valueAxis.interval }),
         splitLine: base.splitLine,
         axisLabel: { ...base.axisLabel, formatter: valueAxis?.format ?? ((value: number) => format(value, '')) },
       },

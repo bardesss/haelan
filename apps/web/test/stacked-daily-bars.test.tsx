@@ -108,4 +108,7 @@ it('takes a caller\'s own ticks and labels, and then prints no axis name', () =>
   expect(option.yAxis.name).toBeUndefined()
   expect(option.yAxis.interval).toBe(240)
   expect(option.yAxis.axisLabel.formatter(480)).toBe('8h')
+  // The axis ends on a step, never on echarts' own round number past the tallest bar.
+  const max = (option.yAxis as unknown as { max: (extent: { max: number }) => number }).max
+  expect([max({ max: 530 }), max({ max: 480 }), max({ max: 0 })]).toEqual([720, 480, 240])
 })
