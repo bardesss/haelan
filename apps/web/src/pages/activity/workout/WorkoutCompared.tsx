@@ -23,10 +23,11 @@ const rowsFor = (hero: string): readonly Row[] => {
 // kilometre; an elapsed row's best the longest session. The furthest is a distance like the row.
 // Records keeps no best heart rate or load, which would not be a best if it did.
 function bestOf(page: WorkoutPageData, key: Row): { ref: RecordRef, value: number, words: string } | null {
-  const { fastestKmSeconds, furthestMeters, longestMs } = page.best
-  if (key === 'pace' && fastestKmSeconds !== null) return { ref: fastestKmSeconds, value: fastestKmSeconds.value, words: 'bestFastestKm' }
-  if (key === 'distance' && furthestMeters !== null) return { ref: furthestMeters, value: furthestMeters.value, words: 'bestValue' }
-  if (key === 'elapsed' && longestMs !== null) return { ref: longestMs, value: longestMs.value / 1000, words: 'bestLongest' }
+  const fastestKm = page.best['fastest-1k'] ?? null
+  const { furthest, longest } = page.best
+  if (key === 'pace' && fastestKm !== null) return { ref: fastestKm, value: fastestKm.value, words: 'bestFastestKm' }
+  if (key === 'distance' && furthest !== null) return { ref: furthest, value: furthest.value, words: 'bestValue' }
+  if (key === 'elapsed' && longest !== null) return { ref: longest, value: longest.value / 1000, words: 'bestLongest' }
   return null
 }
 

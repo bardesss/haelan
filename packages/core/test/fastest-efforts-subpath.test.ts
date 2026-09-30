@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { EFFORT_DISTANCES, fastestEfforts } from '../src/api/fastestEfforts.ts'
+import { EFFORT_DISTANCES_BY_CATEGORY, fastestEfforts } from '../src/api/fastestEfforts.ts'
 
-// The browser-safe entry point the Records page reads EFFORT_DISTANCES through (M10b PR 6).
+// The browser-safe entry point the Records page reads EFFORT_DISTANCES_BY_CATEGORY through (M10b PR 6).
 // apps/web cannot depend on the barrel (it pulls better-sqlite3 and drizzle into a browser bundle).
 // Unlike workout-comparison, this module reaches into query/, where nearly every module imports
 // the database: it borrows haversineMeters from workoutThrough.ts, which today imports nothing.
@@ -42,7 +42,7 @@ describe('the @haelan/core/fastest-efforts subpath', () => {
   })
 
   it('is a pure function of its arguments', () => {
-    expect(Object.keys(EFFORT_DISTANCES)).toEqual(['km', 'mile', 'fiveK'])
-    expect(fastestEfforts([])).toEqual(fastestEfforts([]))
+    expect(Object.keys(EFFORT_DISTANCES_BY_CATEGORY)).toEqual(['run', 'ride'])
+    expect(fastestEfforts([], 'run')).toEqual(fastestEfforts([], 'run'))
   })
 })

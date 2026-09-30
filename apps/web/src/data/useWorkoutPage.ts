@@ -7,6 +7,7 @@ import type { PageFigure } from './useNightPage.js'
 import type { DayLog } from './useNightPage.js'
 import type { GlanceRecovery, GlanceStanding } from './useGlance.js'
 import type { WorkoutSession } from './useSessions.js'
+import type { SessionRecordKind } from './useAllTime.js'
 
 // Mirrors the wire shape of packages/core/src/query/workoutPage.ts's WorkoutPage, after
 // apps/server/src/routes/v1/detail.ts rounds it and adds `log`, field for field rather than
@@ -57,8 +58,8 @@ export interface PaceSeries extends MinuteSeries { fastest: { secondsPerKm: numb
 
 export interface RecordRef { value: number, sessionId: string, localDate: string }
 
-/** The three distances a run's fastest efforts are read over (fastestEfforts.ts's EffortKey). */
-export type EffortKey = 'km' | 'mile' | 'fiveK'
+/** A distance a category's fastest efforts are read over (fastestEfforts.ts's EFFORT_DISTANCES_BY_CATEGORY keys, e.g. '1k' or '20k'). */
+export type EffortKey = string
 
 /** One fastest effort beside the Records best of its kind and the best before this workout
  *  (workoutPage.ts's efforts entry): whole seconds, and whole metres along the route to where the
@@ -76,7 +77,10 @@ export interface WorkoutPageData {
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
   previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad', number>> } | null
-  best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
+  /** The category's Records bests (workoutPage.ts's best): one per kind the category keeps, null
+   *  where none is held; `longest`, `furthest` and `most-climb` always present. Milliseconds for
+   *  `longest`, whole metres for `furthest` and `most-climb`, whole seconds for each `fastest-*`. */
+  best: Partial<Record<SessionRecordKind, RecordRef | null>> & Record<'longest' | 'furthest' | 'most-climb', RecordRef | null>
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
   /** How far heart rate fell one and two minutes after the end, in whole bpm, each judged against
@@ -109,9 +113,11 @@ export interface WorkoutPageData {
     times: number, since: string, time: WorkoutFigure, pace: WorkoutFigure | null
     previous: { sessionId: string, localDate: string, seconds: number } | null
   } | null
-  /** The fastest kilometre, mile and 5 km inside a run's route, in whole seconds, each beside the
-   *  type's Records best (`isBest` when that best is this workout); null for a distance the route
-   *  is shorter than, and null altogether without a route or for any type but a run. */
+  /** The fastest stretch over each of the category's effort distances inside the route (a run's
+   *  1 km to marathon, a ride's 20 to 100 km), keyed by distance, in whole seconds, each beside the
+   *  category's Records best (`isBest` when that best is this workout); null for a distance the
+   *  route is shorter than, and null altogether without a route, for a category with no distances,
+   *  or for a type that holds no speed record. */
   efforts: Record<EffortKey, WorkoutEffort | null> | null
   /** The quick log for the day this workout was done on (routes/v1/detail.ts: the workout's own localDate). */
   log: DayLog

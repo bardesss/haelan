@@ -44,14 +44,15 @@ function previousLine(page: WorkoutPageData, hero: WorkoutFigure, language: stri
  * since Records keeps no fastest speed; the comparison table's distance row still carries the furthest.
  */
 function bestLine(page: WorkoutPageData, hero: WorkoutFigure, language: string, t: Translate): string | null {
-  if (hero.key === 'pace' && page.best.fastestKmSeconds !== null) {
-    const { value, localDate } = page.best.fastestKmSeconds
+  const fastestKm = page.best['fastest-1k'] ?? null
+  if (hero.key === 'pace' && fastestKm !== null) {
+    const { value, localDate } = fastestKm
     return t('activity.workout.page.bestFastestKm', {
       value: formatFigureValue(hero, value, language, t), month: bestMonth(localDate, page.localDate, language),
     })
   }
-  if (hero.key === 'elapsed' && page.best.longestMs !== null) {
-    const { value, localDate } = page.best.longestMs
+  if (hero.key === 'elapsed' && page.best.longest !== null) {
+    const { value, localDate } = page.best.longest
     return t('activity.workout.page.bestLongest', {
       value: formatFigureValue(hero, value / 1000, language, t), month: bestMonth(localDate, page.localDate, language),
     })

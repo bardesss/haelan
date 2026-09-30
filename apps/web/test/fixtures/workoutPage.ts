@@ -166,9 +166,13 @@ export function workoutPageFixture(): WorkoutPageData {
     },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { pace: 336, distance: 5000, averageHeartRate: 153, cardioLoad: 62 } },
     best: {
-      fastestKmSeconds: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
-      furthestMeters: { value: 10400, sessionId: 'run-may', localDate: '2026-05-10' },
-      longestMs: { value: 3_904_000, sessionId: 'run-may', localDate: '2026-05-10' },
+      longest: { value: 3_904_000, sessionId: 'run-may', localDate: '2026-05-10' },
+      furthest: { value: 10400, sessionId: 'run-may', localDate: '2026-05-10' },
+      'most-climb': null,
+      'fastest-1k': { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
+      'fastest-mile': { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
+      'fastest-5k': { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE },
+      'fastest-10k': null, 'fastest-half': null, 'fastest-marathon': null,
     },
     day: {
       steps: dayFigure('steps', 'count', 'up', 12880, band(8250, 6000, 10500)),
@@ -216,7 +220,7 @@ export function workoutPageFixture(): WorkoutPageData {
     // kilometre and the mile short of the June bests, the 5 km this run's own, 12 s quicker than
     // the August best it beat.
     efforts: {
-      km: {
+      '1k': {
         seconds: 296, fromMeters: 3400, source: 'gps', isBest: false,
         best: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
         previousBest: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
@@ -226,11 +230,12 @@ export function workoutPageFixture(): WorkoutPageData {
         best: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
         previousBest: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
       },
-      fiveK: {
+      '5k': {
         seconds: 1602, fromMeters: 180, source: 'gps', isBest: true,
         best: { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE },
         previousBest: { value: 1614, sessionId: 'run-august', localDate: '2026-08-15' },
       },
+      '10k': null, half: null, marathon: null,
     },
     log: {
       presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'],
@@ -263,7 +268,7 @@ export function strengthPageFixture(): WorkoutPageData {
     },
     comparison: { exerciseType: 'WEIGHTLIFTING', of: 0, reason: 'too-few', pace: null, heartRate: null, distance: null, cardioLoad: null },
     previous: null,
-    best: { fastestKmSeconds: null, furthestMeters: null, longestMs: null },
+    best: { longest: null, furthest: null, 'most-climb': null },
     splitTrend: null,
     // No route and no steps from the gym: nothing a minute at a time beside the heart rate.
     through: { pace: null, cadence: null },

@@ -129,7 +129,9 @@ function roundMinuteSeries<T extends MinuteSeries>(series: T | null): T | null {
 }
 
 /** One fastest effort in whole seconds and whole metres. */
-function roundEffort(effort: NonNullable<WorkoutPage['efforts']>['km']): NonNullable<WorkoutPage['efforts']>['km'] {
+type WorkoutEffort = NonNullable<WorkoutPage['efforts']>[string]
+
+function roundEffort(effort: WorkoutEffort): WorkoutEffort {
   return effort === null ? null : {
     ...effort,
     seconds: Number(effort.seconds.toFixed(0)),
@@ -161,7 +163,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     if (figure !== undefined) figures[key as keyof WorkoutPage['figures']] = roundWorkoutFigure(figure)
   }
   const whole = (value: number) => Number(value.toFixed(0))
-  const ref = (r: WorkoutPage['best']['fastestKmSeconds']) => (r === null ? null : { ...r, value: whole(r.value) })
+  const ref = (r: WorkoutPage['best']['longest']) => (r === null ? null : { ...r, value: whole(r.value) })
   const { previous, after, before, heartRateRecovery, through, splitTrend, zoneBounds, sameRoute, efforts } = page
   return {
     ...page,
@@ -172,11 +174,9 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
         key, key === 'speed' ? Number(value.toFixed(figures.speed?.precision ?? 2)) : whole(value),
       ])),
     },
-    best: {
-      fastestKmSeconds: ref(page.best.fastestKmSeconds),
-      furthestMeters: ref(page.best.furthestMeters),
-      longestMs: ref(page.best.longestMs),
-    },
+    // Every best of the category whole: seconds for a time, metres for a distance or a climb,
+    // milliseconds for the longest. Core picked each holder on these same whole values.
+    best: Object.fromEntries(Object.entries(page.best).map(([kind, r]) => [kind, ref(r)])) as WorkoutPage['best'],
     day: { ...page.day, steps: roundPageFigure(page.day.steps), activeMinutes: roundPageFigure(page.day.activeMinutes) },
     after: {
       night: roundWorkoutNight(after.night),
@@ -200,9 +200,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
       pace: sameRoute.pace === null ? null : roundWorkoutFigure(sameRoute.pace),
       previous: sameRoute.previous === null ? null : { ...sameRoute.previous, seconds: whole(sameRoute.previous.seconds) },
     },
-    efforts: efforts === null ? null : {
-      km: roundEffort(efforts.km), mile: roundEffort(efforts.mile), fiveK: roundEffort(efforts.fiveK),
-    },
+    efforts: efforts === null ? null : Object.fromEntries(Object.entries(efforts).map(([key, effort]) => [key, roundEffort(effort)])),
     through: { pace: roundPaceSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
     // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.
     splitTrend: splitTrend === null ? null : { secondHalfFasterBySecondsPerKm: whole(splitTrend.secondHalfFasterBySecondsPerKm) },

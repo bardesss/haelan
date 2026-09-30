@@ -1,5 +1,6 @@
 import { useTranslation } from '../i18n/index.js'
-import { EFFORT_DISTANCES } from '@haelan/core/fastest-efforts'
+import { effortDistancesOf } from '@haelan/core/fastest-efforts'
+import { rateOf } from '@haelan/core/exercise-category'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -95,7 +96,7 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
           <Card span={12} label={t('records.sessions.label')} basis={t('records.sessions.basis')}>
             <ul className="record-list list-measured">
               {all.sessionRecords.map((record) => (
-                <SessionRecordRow key={record.kind} record={record} t={t} language={language} />
+                <SessionRecordRow key={`${record.category}:${record.kind}`} record={record} t={t} language={language} />
               ))}
             </ul>
           </Card>
@@ -173,28 +174,33 @@ function RecordRow({ record, t, language }: {
 /**
  * A session record's value, in the unit that record is measured in.
  *
- * Three units for three records, which is why this is a switch rather than one formatter: a
- * duration reads as hours and minutes, a distance as kilometres, and a pace as minutes and
- * seconds per kilometre. Rendering any of them as a bare number would be technically true and
- * useless.
+ * A unit per kind, which is why this is a switch rather than one formatter: a duration reads as
+ * hours and minutes, a distance as kilometres, a climb as metres, and a fastest time as its
+ * stopwatch with the rate its category reads (a pace a kilometre on foot, a speed on a bike).
+ * Rendering any of them as a bare number would be technically true and useless.
  */
 function sessionValue(record: SessionRecord, language: string): string {
   if (record.kind === 'longest') {
     return formatDuration(record.value / 60_000, language)
   }
   if (record.kind === 'furthest') {
-    return `${formatNumber(record.value / 1_000_000, 1, language, '')} km`
+    return `${formatNumber(record.value / 1000, 1, language, '')} km`
   }
-  // The mile and the 5 km off a run's GPS route: the stopwatch time, then its pace a kilometre.
-  const km = EFFORT_KM[record.kind]
-  if (km !== undefined) return `${formatStopwatch(record.value)} · ${formatStopwatch(record.value / km)} / km`
-  const seconds = Math.round(record.value)
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} / km`
-}
-
-// How many kilometres each GPS effort record is run over, from the distances core reads them over.
-const EFFORT_KM: Partial<Record<SessionRecord['kind'], number>> = {
-  'fastest-mile': EFFORT_DISTANCES.mile / 1000, 'fastest-5k': EFFORT_DISTANCES.fiveK / 1000,
+  if (record.kind === 'most-climb') {
+    return `${formatNumber(record.value, 0, language, '')} m`
+  }
+  // A run's kilometre is its pace, as it always read.
+  if (record.category === 'run' && record.kind === 'fastest-1k') return `${formatStopwatch(record.value)} / km`
+  // Every other distance off the GPS route: the stopwatch time, then its rate. The distance is the
+  // one core reads the effort over, through the shared map.
+  const key = record.kind.slice('fastest-'.length)
+  const meters = effortDistancesOf(record.category).find((d) => d.key === key)?.meters
+  if (meters === undefined || record.value <= 0) return formatStopwatch(record.value)
+  const km = meters / 1000
+  if (rateOf(record.category) === 'speed') {
+    return `${formatStopwatch(record.value)} · ${formatNumber(km / (record.value / 3600), 1, language, '')} km/h`
+  }
+  return `${formatStopwatch(record.value)} · ${formatStopwatch(record.value / km)} / km`
 }
 
 function SessionRecordRow({ record, t, language }: {
@@ -204,7 +210,7 @@ function SessionRecordRow({ record, t, language }: {
     // No class of its own: it shares .record-row's layout deliberately, because the two
     // lists answer the same question at different grains and should not look like two
     // features. `data-record` is the seam a test needs, and it carries the kind anyway.
-    <li className="record-row" data-record={record.kind}>
+    <li className="record-row" data-record={record.kind} data-category={record.category}>
       <span className="record-metric">{t(`records.sessions.${record.kind}`)}</span>
       <span className="record-value">{sessionValue(record, language)}</span>
       <span className="record-date">{onDate(record.localDate, language)}</span>

@@ -317,7 +317,7 @@ describe('the workout page\'s hero', () => {
   // moving-time hero it set elapsed against moving as if one could beat the other.
   it('names the longest only under an elapsed-time hero, never under a moving-time one', async () => {
     const strength = strengthPageFixture()
-    const best = { ...strength.best, longestMs: { value: 3_235_000, sessionId: 'long', localDate: '2026-03-10' } }
+    const best = { ...strength.best, longest: { value: 3_235_000, sessionId: 'long', localDate: '2026-03-10' } }
     const moving = await mount({ ...strength, best }, strengthSessionFixture())
     expect(moving.querySelector('.workout-hero-best')).toBeNull()
     act(() => { root!.unmount() })
@@ -837,7 +837,7 @@ describe('the workout page\'s fastest efforts', () => {
 
   it('leaves out a distance the route is shorter than, and marks nothing without a best of this run\'s', async () => {
     const page = workoutPageFixture()
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, fiveK: null } }, fullSession()), 'Fastest efforts')!
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '5k': null } }, fullSession()), 'Fastest efforts')!
     expect(efforts(card).map(([distance]) => distance)).toEqual(['Distance', '1 km', '1 mile'])
     expect(card.querySelector('.workout-hero-line')).toBeNull()
     expect(card.textContent).not.toContain('✦')
@@ -849,9 +849,9 @@ describe('the workout page\'s fastest efforts', () => {
     const card = cardLabelled(await mount({
       ...page,
       efforts: {
-        km: { seconds: 296, fromMeters: 0, source: 'gps', best: mine(296), previousBest: null, isBest: true },
+        '1k': { seconds: 296, fromMeters: 0, source: 'gps', best: mine(296), previousBest: null, isBest: true },
         mile: { seconds: 479, fromMeters: 0, source: 'gps', best: null, previousBest: null, isBest: false },
-        fiveK: { seconds: 1602, fromMeters: 0, source: 'gps', best: mine(1602), previousBest: { value: 1667, sessionId: 'old', localDate: '2025-10-01' }, isBest: true },
+        '5k': { seconds: 1602, fromMeters: 0, source: 'gps', best: mine(1602), previousBest: { value: 1667, sessionId: 'old', localDate: '2025-10-01' }, isBest: true },
       },
     }, fullSession()), 'Fastest efforts')!
     expect(efforts(card).slice(1).map((row) => [row[0], row[1], row[3]]))
@@ -862,36 +862,54 @@ describe('the workout page\'s fastest efforts', () => {
 
   it("names the watch's split in the footnote for a kilometre that is one, and the GPS for the rest", async () => {
     const page = workoutPageFixture()
-    const km = { ...page.efforts!.km!, source: 'split' as const }
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, km } }, fullSession()), 'Fastest efforts')!
+    const km = { ...page.efforts!['1k']!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '1k': km } }, fullSession()), 'Fastest efforts')!
     expect(text(card, '.workout-compared-footnote'))
       .toBe("1 km: your watch's split · the rest from the distance along the GPS route · counts towards Records")
   })
 
   it('leaves the GPS out of the footnote when the split kilometre is the only row', async () => {
     const page = workoutPageFixture()
-    const km = { ...page.efforts!.km!, source: 'split' as const }
-    const card = cardLabelled(await mount({ ...page, efforts: { km, mile: null, fiveK: null } }, fullSession()), 'Fastest efforts')!
+    const km = { ...page.efforts!['1k']!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { '1k': km, mile: null, '5k': null } }, fullSession()), 'Fastest efforts')!
     expect(text(card, '.workout-compared-footnote')).toBe("1 km: your watch's split · counts towards Records")
   })
 
   it('names the split in Dutch too', async () => {
     const page = workoutPageFixture()
-    const km = { ...page.efforts!.km!, source: 'split' as const }
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, km } }, fullSession(), 'nl'), 'Snelste stukken')!
+    const km = { ...page.efforts!['1k']!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '1k': km } }, fullSession(), 'nl'), 'Snelste stukken')!
     expect(text(card, '.workout-compared-footnote'))
       .toBe('1 km: de split van je horloge · de rest uit de afstand langs de gps-route · telt mee in Records')
   })
 
   it('says no margin over a best before it that prints the same', async () => {
     const page = workoutPageFixture()
-    const fiveK = { ...page.efforts!.fiveK!, previousBest: { value: 1602, sessionId: 'old', localDate: '2026-08-15' } }
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, fiveK } }, fullSession()), 'Fastest efforts')!
+    const fiveK = { ...page.efforts!['5k']!, previousBest: { value: 1602, sessionId: 'old', localDate: '2026-08-15' } }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '5k': fiveK } }, fullSession()), 'Fastest efforts')!
     expect(text(card, '.workout-hero-line')).toBe('✦ your fastest 5 km ever')
   })
 
+  const NBSP = String.fromCharCode(0xa0)
+  it("reads a ride's rows over the ride's distances, in their order, each stretch its own length", async () => {
+    const page = workoutPageFixture()
+    const card = cardLabelled(await mount({
+      ...page,
+      exerciseType: 'MOUNTAIN_BIKE',
+      efforts: {
+        '20k': { seconds: 2410, fromMeters: 1200, source: 'gps', best: { value: 2300, sessionId: 'ride-may', localDate: '2026-05-10' }, previousBest: null, isBest: false },
+        '40k': { seconds: 5000, fromMeters: 0, source: 'gps', best: { value: 5000, sessionId: WORKOUT_ID, localDate: '2026-09-04' }, previousBest: null, isBest: true },
+        '100k': null,
+      },
+    }, fullSession()), 'Fastest efforts')!
+    expect(efforts(card).slice(1)).toEqual([
+      ['20 km', '40:10', '1.2 – 21.2' + NBSP + 'km', '38:20 · May'],
+      ['40 km', '1:23:20 ✦', '0.0 – 40.0' + NBSP + 'km', 'this workout'],
+    ])
+  })
+
   it('is left out when no distance fits inside the route', async () => {
-    const host = await mount({ ...workoutPageFixture(), efforts: { km: null, mile: null, fiveK: null } }, fullSession())
+    const host = await mount({ ...workoutPageFixture(), efforts: { '1k': null, mile: null, '5k': null } }, fullSession())
     expect(cardLabelled(host, 'Fastest efforts')).toBeUndefined()
     expect(cardLabelled(host, 'This route')!.getAttribute('data-span')).toBe('12')
   })

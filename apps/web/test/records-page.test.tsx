@@ -154,24 +154,24 @@ describe('the all-time page', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
-        { kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: 'RUNNING', value: 12_850_000 },
-        { kind: 'fastest-km', sessionId: 'c', localDate: '2026-06-16', exerciseType: 'RUNNING', value: 308.5 },
+        { category: 'cardio', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
+        { category: 'run', kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: 'RUNNING', value: 12_850 },
+        { category: 'run', kind: 'fastest-1k', sessionId: 'c', localDate: '2026-06-16', exerciseType: 'RUNNING', value: 308.5 },
       ],
     })
     expect(text("[data-record='longest'] .record-value")).toBe('4h 24m')
     expect(text("[data-record='furthest'] .record-value")).toBe('12.9 km')
     // 308.5s rounds to 5:09, not down to 5:08. A record must never render faster than it was
     // run, so the half-second goes against the runner rather than for them.
-    expect(text("[data-record='fastest-km'] .record-value")).toBe('5:09 / km')
+    expect(text("[data-record='fastest-1k'] .record-value")).toBe('5:09 / km')
   })
 
   it('shows the fastest mile and 5 km off the GPS route as a stopwatch time with its pace', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
-        { kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 3662 },
+        { category: 'run', kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
+        { category: 'run', kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 3662 },
       ],
     })
     expect(text("[data-record='fastest-mile'] .record-metric")).toBe('Fastest mile')
@@ -186,8 +186,8 @@ describe('the all-time page', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
-        { kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 1562 },
+        { category: 'run', kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
+        { category: 'run', kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 1562 },
       ],
     }, 'nl')
     expect(text("[data-record='fastest-mile'] .record-metric")).toBe('Snelste mijl')
@@ -200,7 +200,7 @@ describe('the all-time page', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
+        { category: 'cardio', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
       ],
     }, 'nl')
     expect(text("[data-record='longest'] .record-value")).toBe('4u 24m')
@@ -212,11 +212,50 @@ describe('the all-time page', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'WORKOUT', value: 60 * 60_000 },
+        { category: 'cardio', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'WORKOUT', value: 60 * 60_000 },
       ],
     })
     expect(container!.querySelectorAll('[data-record]')).toHaveLength(1)
     expect(container!.querySelector("[data-record='furthest']")).toBeNull()
+  })
+
+  it('lists each category its own rows, a longest for each, labelled per kind', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'TRAIL_RUN', value: 95 * 60_000 },
+        { category: 'run', kind: 'most-climb', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'TRAIL_RUN', value: 412 },
+        { category: 'run', kind: 'fastest-10k', sessionId: 'b', localDate: '2026-07-01', exerciseType: 'RUNNING', value: 2890 },
+        { category: 'ride', kind: 'longest', sessionId: 'c', localDate: '2026-08-02', exerciseType: 'BIKING', value: 180 * 60_000 },
+        { category: 'ride', kind: 'fastest-20k', sessionId: 'c', localDate: '2026-08-02', exerciseType: 'BIKING', value: 2400 },
+      ],
+    })
+    expect(container!.querySelectorAll("[data-record='longest']")).toHaveLength(2)
+    expect(text("[data-category='ride'][data-record='longest'] .record-value")).toBe('3h 00m')
+    expect(text("[data-record='most-climb'] .record-metric")).toBe('Most climb')
+    expect(text("[data-record='most-climb'] .record-value")).toBe('412 m')
+    expect(text("[data-record='fastest-10k'] .record-metric")).toBe('Fastest 10 km')
+    // 2890 s over 10 km is 4:49 a km.
+    expect(text("[data-record='fastest-10k'] .record-value")).toBe('48:10 · 4:49 / km')
+    expect(text("[data-record='fastest-20k'] .record-metric")).toBe('Fastest 20 km')
+    // A ride reads its speed: 20 km in 40 minutes is 30 km/h.
+    expect(text("[data-record='fastest-20k'] .record-value")).toBe('40:00 · 30.0 km/h')
+  })
+
+  it('names the new kinds in Dutch', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'walk', kind: 'most-climb', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'HIKING', value: 1250 },
+        { category: 'run', kind: 'fastest-half', sessionId: 'b', localDate: '2026-07-01', exerciseType: 'RUNNING', value: 6300 },
+        { category: 'ride', kind: 'fastest-40k', sessionId: 'c', localDate: '2026-08-02', exerciseType: 'BIKING', value: 4800 },
+      ],
+    }, 'nl')
+    expect(text("[data-record='most-climb'] .record-metric")).toBe('Meeste klim')
+    expect(text("[data-record='most-climb'] .record-value")).toBe('1.250 m')
+    expect(text("[data-record='fastest-half'] .record-metric")).toBe('Snelste halve marathon')
+    expect(text("[data-record='fastest-40k'] .record-metric")).toBe('Snelste 40 km')
+    expect(text("[data-record='fastest-40k'] .record-value")).toBe('1:20:00 · 30,0 km/h')
   })
 
   it('names the device that set a record, and says nothing when it cannot', () => {
@@ -268,8 +307,8 @@ describe('the all-time page', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
-        { kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: null, value: 12_850_000 },
+        { category: 'run', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { category: 'run', kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: null, value: 12_850 },
       ],
     })
     for (const row of Array.from(container!.querySelectorAll('[data-record]'))) {
