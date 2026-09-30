@@ -7,6 +7,7 @@ import { CARDIO_LOAD_METRIC } from '../api/cardioLoad.ts'
 import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
 import type { PersonQuery } from './personQuery.ts'
 import type { WorkoutSession } from './sessions.ts'
+import type { SessionRate } from '../api/exerciseCategory.ts'
 import { ACTIVE_MINUTE_METRICS, FIGURE_METRIC_ALIAS, judge, standingOf } from './glance.ts'
 import type { FigureDirection, GlanceStanding, Judged } from './glance.ts'
 import { usualOf } from './pageFigure.ts'
@@ -22,6 +23,8 @@ export interface WorkoutListRow {
   type: string | null, durationSeconds: number | null, distanceMeters: number | null
   caloriesKcal: number | null, averageHeartRateBpm: number | null
   paceSecondsPerKm: number | null, elevationGainMeters: number | null, excluded: boolean
+  /** The session's rate as its category reads it, rounded (sessions.ts's sessionRateOf). */
+  rate: SessionRate | null
 }
 /** A month's counted workouts (excluded ones left out), for the list's month headers on 3 months and a year. */
 export interface WorkoutMonth { month: string, count: number, seconds: number }
@@ -100,7 +103,7 @@ function rowOf(w: WorkoutSession): WorkoutListRow {
     durationSeconds: detail.activeDurationSeconds ?? (w.endMs - w.startMs) / 1000,
     distanceMeters: summary.distanceMeters, caloriesKcal: summary.caloriesKcal, averageHeartRateBpm: summary.averageHeartRateBpm,
     paceSecondsPerKm: summary.paceSecondsPerKm, elevationGainMeters: summary.elevationGainMeters,
-    excluded: w.excluded,
+    excluded: w.excluded, rate: w.rate,
   }
 }
 

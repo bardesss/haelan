@@ -348,7 +348,7 @@ describe('seedArchive', () => {
     const google = exercises.filter((p) => p.dataSource.platform === 'FITBIT').map((p) => p.exercise)
     const seconds = (d: string): number => Number(d.slice(0, -1))
     const types = new Set(google.map((e) => e.exerciseType))
-    for (const type of ['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL']) expect(types.has(type), type).toBe(true)
+    for (const type of ['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL', 'TRAIL_RUN', 'TREADMILL']) expect(types.has(type), type).toBe(true)
     let midPauses = 0
     for (const e of google) {
       const startMs = Date.parse(e.interval.startTime)
@@ -376,10 +376,21 @@ describe('seedArchive', () => {
         expect(m.totalSwimLengths * e.exerciseMetadata.poolLengthMillimeters).toBe(m.distanceMillimeters)
         continue
       }
-      // Pace and speed are both the distance over the moving time.
-      expect(m.averagePaceSecondsPerMeter * m.distanceMillimeters / 1000).toBeCloseTo(active, -1)
-      expect(m.averageSpeedMillimetersPerSecond * active).toBeCloseTo(m.distanceMillimeters, -4)
-      if (e.exerciseType === 'BIKING') continue
+      if (e.exerciseType === 'TREADMILL') {
+        // A belt: no fix, no climb, and no pace of the watch's own, so the page works it out.
+        expect(e.exerciseMetadata.hasGps).toBe(false)
+        expect([m.averagePaceSecondsPerMeter, m.averageSpeedMillimetersPerSecond, m.elevationGainMillimeters]).toEqual([undefined, undefined, undefined])
+      } else {
+        // Pace and speed are both the distance over the moving time.
+        expect(m.averagePaceSecondsPerMeter * m.distanceMillimeters / 1000).toBeCloseTo(active, -1)
+        expect(m.averageSpeedMillimetersPerSecond * active).toBeCloseTo(m.distanceMillimeters, -4)
+      }
+      if (e.exerciseType === 'BIKING') {
+        // Once round the loop, under the hour every seeded workout keeps to, a few steps a minute.
+        expect(Math.abs(m.distanceMillimeters / 1000 - 21_000)).toBeLessThanOrEqual(151)
+        expect(elapsed).toBeLessThan(3600)
+        expect(Number(m.steps) / (active / 60)).toBeLessThan(40)
+      }
       const splits = e.splits as Array<{ splitType: string, activeDuration: string, metricsSummary: { distanceMillimeters: number } }>
       expect(splits.every((s) => s.splitType === 'DISTANCE')).toBe(true)
       expect(splits.reduce((sum, s) => sum + s.metricsSummary.distanceMillimeters, 0)).toBe(m.distanceMillimeters)
@@ -390,11 +401,16 @@ describe('seedArchive', () => {
       }
     }
     expect(midPauses, 'no run in 120 days paused mid-run').toBeGreaterThan(0)
-    // Routes ride on the phone's own copy of a run, never on Google's: on the last run, and on
-    // earlier ones only when they are near enough its length to be its route.
-    const routed = exercises.filter((p) => p.exercise.route !== undefined)
+    // Routes ride on the phone's own copy of a run or a ride, never on Google's: on the last run, and
+    // on earlier ones only when they are near enough its length to be its route; the rides likewise.
+    const routedAll = exercises.filter((p) => p.exercise.route !== undefined)
+    expect(routedAll.every((p) => p.dataSource.platform === 'HEALTH_CONNECT')).toBe(true)
+    expect(new Set(routedAll.map((p) => p.exercise.exerciseType))).toEqual(new Set(['RUNNING', 'BIKING']))
+    const rides = google.filter((e) => e.exerciseType === 'BIKING').sort((a, b) => a.interval.startTime.localeCompare(b.interval.startTime))
+    const routedRides = routedAll.filter((p) => p.exercise.exerciseType === 'BIKING').map((p) => p.exercise.interval.startTime as string)
+    expect(routedRides).toEqual(rides.slice(-2).map((e) => e.interval.startTime))
+    const routed = routedAll.filter((p) => p.exercise.exerciseType === 'RUNNING')
     expect(routed.length).toBeGreaterThan(0)
-    expect(routed.every((p) => p.dataSource.platform === 'HEALTH_CONNECT' && p.exercise.exerciseType === 'RUNNING')).toBe(true)
     expect(google.every((e) => e.route === undefined)).toBe(true)
     const runs = google.filter((e) => e.exerciseType === 'RUNNING').sort((a, b) => a.interval.startTime.localeCompare(b.interval.startTime))
     const routedStarts = routed.map((p) => p.exercise.interval.startTime as string)
@@ -413,21 +429,28 @@ describe('seedArchive', () => {
   // The demo's own span, end and clock (scripts/capture-demo.mjs's 371 days, seed-demo.mjs's end and
   // apps/web's DEMO_CLOCK_MS, half a day before it), so this is the run the demo opens: each earlier
   // routed run is the last one's route to routeMatch.ts, and its page draws "Deze route".
-  it("routes the demo's runs so the last one finds the others on its route", () => {
+  it("routes the demo's runs and rides so the last of each finds the others on its route", () => {
     const puts: Array<{ dataType: string, body: string }> = []
     const archive = { put: (row: { dataType: string, body: string }) => { puts.push(row) } }
     const endMs = localMidnightMs('2026-09-07')
     seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 371, endMs, demoRoute: true, lastDayUntilMs: endMs - 12 * 3_600_000 })
-    const routes = puts.filter((p) => p.dataType === 'exercise')
-      .flatMap((p) => (JSON.parse(p.body) as { dataPoints: Array<{ exercise: { route?: Array<{ latitude: number, longitude: number }> } }> }).dataPoints)
-      .flatMap((p) => (p.exercise.route === undefined ? [] : [p.exercise.route]))
-    expect(routes).toHaveLength(3)
+    const routed = puts.filter((p) => p.dataType === 'exercise')
+      .flatMap((p) => (JSON.parse(p.body) as { dataPoints: Array<{ exercise: { exerciseType: string, route?: Array<{ latitude: number, longitude: number }> } }> }).dataPoints)
+      .flatMap((p) => (p.exercise.route === undefined ? [] : [p.exercise]))
+    const routesOf = (type: string) => routed.filter((e) => e.exerciseType === type).map((e) => e.route!)
+    // Three runs and two rides: the demo's routed pages, bounded by the capture's size ceiling.
+    expect(routesOf('RUNNING')).toHaveLength(3)
+    expect(routesOf('BIKING')).toHaveLength(2)
     // One start for all of them, which is also where each loop closes.
-    for (const route of routes) {
-      expect([route[0], route.at(-1)].map((p) => [p!.latitude, p!.longitude])).toEqual([[0, 0], [0, 0]])
+    for (const { route } of routed) {
+      expect([route![0], route!.at(-1)].map((p) => [p!.latitude, p!.longitude])).toEqual([[0, 0], [0, 0]])
     }
-    const [last, ...earlier] = routes.map((route) => routeSignature(route)!).reverse()
-    for (const signature of earlier) expect(sameRoute(last!, signature)).toBe(true)
+    for (const type of ['RUNNING', 'BIKING']) {
+      const [last, ...earlier] = routesOf(type).map((route) => routeSignature(route)!).reverse()
+      for (const signature of earlier) expect(sameRoute(last!, signature), type).toBe(true)
+    }
+    // A run's loop and a ride's share the start and nothing else.
+    expect(sameRoute(routeSignature(routesOf('RUNNING').at(-1)!)!, routeSignature(routesOf('BIKING').at(-1)!)!)).toBe(false)
   }, 60_000)
 
   // The hourly day curve, the night's readings, a workout's own and the minutes after it are four

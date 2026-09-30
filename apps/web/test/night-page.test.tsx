@@ -946,7 +946,7 @@ describe('the night page\'s day before it', () => {
     expect(text(card, '.today-workouts > .label')).toBe('Workouts')
     const workoutLink = card.querySelector<HTMLAnchorElement>('.today-workouts a.session-row-link')
     expect(text(workoutLink!, '.session-row-type')).toBe('Biking')
-    expect(text(workoutLink!, '.session-row-duration')).toBe('52 min')
+    expect(text(workoutLink!, '.session-row-duration')).toBe('52\u00a0min')
     expect(workoutLink?.getAttribute('href')).toBe('/activity/w1')
   })
 
@@ -967,7 +967,7 @@ describe('the night page\'s day before it', () => {
       },
     })
     const card = [...host.querySelectorAll('.card')].find((c) => c.querySelector('.label')?.textContent === 'That day')!
-    expect(text(card, '.session-row-stats')).toBe('131 bpm')
+    expect(text(card, '.session-row-stats')).toBe('131\u00a0bpm')
   })
 
   it('shows a chip with no count for a kind tapped only once', async () => {

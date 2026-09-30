@@ -130,6 +130,29 @@ function seedHeartRate(fromMs: number, bpms: readonly number[]) {
   })
 }
 
+// Metres per degree of latitude on the 6,371 km sphere, and per degree of longitude at 52 N.
+const metresPerDegree = (6_371_000 * Math.PI) / 180
+const lonMetres = metresPerDegree * Math.cos((52 * Math.PI) / 180)
+
+/** A route from the session's start, a fix every 10 s at `speed` m/s for `fixes` fixes, heading `north` or `east`. */
+function seedRoute(sessionId: string, localDate: string, o: { speed?: number, fixes?: number, heading?: 'north' | 'east', hhmm?: string } = {}) {
+  const startMs = at(localDate, o.hhmm ?? '07:00')
+  const step = (o.speed ?? 3) * 10
+  test.db.insert(sessionRoutes).values(Array.from({ length: (o.fixes ?? 70) + 1 }, (_, i) => ({
+    id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
+    latitude: 52 + (o.heading === 'east' ? 0 : (i * step) / metresPerDegree),
+    longitude: 5 + (o.heading === 'east' ? (i * step) / lonMetres : 0),
+    altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+  }))).run()
+}
+
+/** Heart rate around a 30-minute workout's end at 07:30: its last minute, the minute of the end, and the two after. */
+const seedRecovery = (localDate: string, bpms: readonly number[], sourceId = 'watch') => bpms.forEach((bpm, i) => {
+  for (const agg of ['min', 'mean', 'max'] as const) {
+    insertSample(test.db, { personId: 'p1', sourceId, metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
+  }
+})
+
 describe('readWorkoutPage', () => {
   it('is null for an unknown session', () => {
     expect(readWorkoutPage(q(), input('nope'))).toBeNull()
@@ -219,7 +242,7 @@ describe('readWorkoutPage', () => {
   it('names the fastest kilometre of this type from the splits', () => {
     seedRun('fast', '2026-06-01', { splits: [{ distance: 1000, seconds: 290 }] })
     seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 310 }] })
-    expect(readWorkoutPage(q(), input('subject'))!.best.fastestKmSeconds).toEqual({ value: 290, sessionId: 'fast', localDate: '2026-06-01' })
+    expect(readWorkoutPage(q(), input('subject'))!.best['fastest-1k']).toEqual({ value: 290, sessionId: 'fast', localDate: '2026-06-01' })
   })
 
   it('names the furthest and the longest of this type, skipping an excluded one and another type', () => {
@@ -229,16 +252,18 @@ describe('readWorkoutPage', () => {
     seedRide('ride', '2026-07-02', { distance: 60_000 }, { minutes: 180 })
     seedRun('subject', SUBJECT_DATE, { distance: 5000 })
     expect(readWorkoutPage(q(), input('subject'))!.best).toEqual({
-      fastestKmSeconds: null,
-      furthestMeters: { value: 12_000, sessionId: 'far', localDate: '2026-05-01' },
-      longestMs: { value: 95 * 60_000, sessionId: 'long', localDate: '2026-06-01' },
+      longest: { value: 95 * 60_000, sessionId: 'long', localDate: '2026-06-01' },
+      furthest: { value: 12_000, sessionId: 'far', localDate: '2026-05-01' },
+      'most-climb': null,
+      'fastest-1k': null, 'fastest-mile': null, 'fastest-5k': null,
+      'fastest-10k': null, 'fastest-half': null, 'fastest-marathon': null,
     })
   })
 
   it('names the Records best, even when it was run after this workout', () => {
     seedRun('subject', '2026-08-01', { splits: [{ distance: 1000, seconds: 310 }] })
     seedRun('later', '2026-09-01', { splits: [{ distance: 1000, seconds: 280 }] })
-    expect(readWorkoutPage(q(), input('subject'))!.best.fastestKmSeconds).toEqual({ value: 280, sessionId: 'later', localDate: '2026-09-01' })
+    expect(readWorkoutPage(q(), input('subject'))!.best['fastest-1k']).toEqual({ value: 280, sessionId: 'later', localDate: '2026-09-01' })
   })
 
   it('never names a zero-second kilometre or a zero distance as a best', () => {
@@ -246,8 +271,8 @@ describe('readWorkoutPage', () => {
     // No distance on the subject, so a zero would be the only distance there is to name.
     seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 310 }] })
     const { best } = readWorkoutPage(q(), input('subject'))!
-    expect(best.fastestKmSeconds).toEqual({ value: 310, sessionId: 'subject', localDate: SUBJECT_DATE })
-    expect(best.furthestMeters).toBeNull()
+    expect(best['fastest-1k']).toEqual({ value: 310, sessionId: 'subject', localDate: SUBJECT_DATE })
+    expect(best.furthest).toBeNull()
   })
 
   it('still reads a workout whose type is outside the known list, compared against nothing', () => {
@@ -337,7 +362,7 @@ describe('readWorkoutPage', () => {
       { distance: 1000, seconds: 330 }, { distance: 1000, seconds: 320 },
       { distance: 1000, seconds: 300 }, { distance: 200, seconds: 56 },
     ] })
-    expect(readWorkoutPage(q(), input('subject'))!.splitTrend!.secondHalfFasterBySecondsPerKm).toBeCloseTo(28.333, 2)
+    expect(readWorkoutPage(q(), input('subject'))!.splitTrend).toEqual({ secondHalfFasterBySecondsPerKm: expect.closeTo(28.333, 2) })
   })
 
   it('leaves the middle kilometre out of an odd count, and reads a slower second half as negative', () => {
@@ -386,7 +411,7 @@ describe('readWorkoutPage', () => {
   })
 
   it('leads with speed for a ride, with moving time for a strength session, and with elapsed time when that is all there is', () => {
-    seedRide('ride', SUBJECT_DATE, { pace: 120, metrics: { averageSpeedMillimetersPerSecond: 8000 } })
+    seedRide('ride', SUBJECT_DATE, { pace: 120, distance: 20_000, metrics: { averageSpeedMillimetersPerSecond: 8000 } })
     seedWorkout('lift', '2026-09-05', 'STRENGTH_TRAINING', { moving: 2400 })
     seedWorkout('plain', '2026-09-06', 'STRENGTH_TRAINING', {})
     expect(readWorkoutPage(q(), input('ride'))!.hero).toBe('speed')
@@ -398,7 +423,7 @@ describe('readWorkoutPage', () => {
     const speed = { averageSpeedMillimetersPerSecond: 5000 }
     seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 600, metrics: speed })
     seedWorkout('hike', '2026-09-05', 'HIKING', { pace: 700, metrics: speed })
-    seedWorkout('hand', '2026-09-06', 'HAND_CYCLING', { pace: 200, metrics: speed })
+    seedWorkout('hand', '2026-09-06', 'HAND_CYCLING', { pace: 200, distance: 9000, metrics: speed })
     expect(readWorkoutPage(q(), input('walk'))!.hero).toBe('pace')
     expect(readWorkoutPage(q(), input('hike'))!.hero).toBe('pace')
     expect(readWorkoutPage(q(), input('hand'))!.hero).toBe('speed')
@@ -410,7 +435,9 @@ describe('readWorkoutPage', () => {
     const page = readWorkoutPage(q(), input('subject'))!
     const candidates = q().sessions({ kind: 'exercise', from: '1970-01-01', to: SUBJECT_DATE, type: 'RUNNING' })
     expect(page.comparison).toEqual(compareWorkout(q().sessionById({ sessionId: 'subject' })!, candidates))
-    expect(page.comparison).toMatchObject({ of: 7, pace: { better: 7, of: 7 } })
+    expect(page.comparison).toMatchObject({ of: 7, reason: null })
+    // The pace a run is ranked by is the page's own rank now, over that same window.
+    expect(page.rank).toEqual({ better: 7, of: 7 })
   })
 
   it('links the night after and the workouts before and after', () => {
@@ -455,12 +482,6 @@ describe('readWorkoutPage', () => {
 
 describe('readWorkoutPage: heart-rate recovery', () => {
   const END = at(SUBJECT_DATE, '07:30')
-  /** Heart rate for a run ending at 07:30: its last minute, the minute of the end, and the two after. */
-  const seedRecovery = (localDate: string, bpms: readonly number[], sourceId = 'watch') => bpms.forEach((bpm, i) => {
-    for (const agg of ['min', 'mean', 'max'] as const) {
-      insertSample(test.db, { personId: 'p1', sourceId, metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
-    }
-  })
 
   it('reads how far heart rate fell one and two minutes after the end, judged against the earlier runs', () => {
     seedRuns(10, { pace: 330 })
@@ -588,7 +609,6 @@ describe('readWorkoutPage: through the workout', () => {
     seedRun('subject', SUBJECT_DATE, { pace: 300 }, { minutes: 2 })
     seedRun('bare', SUBJECT_DATE, { pace: 300 }, { hhmm: '18:00' })
     const startMs = at(SUBJECT_DATE, '07:00')
-    const metresPerDegree = (6_371_000 * Math.PI) / 180
     test.db.insert(sessionRoutes).values(Array.from({ length: 19 }, (_, i) => ({
       id: `subject-${i}`, sessionId: 'subject', ordinal: i, atMs: startMs + i * 10_000,
       latitude: 52 + (i * 30) / metresPerDegree, longitude: 5,
@@ -630,21 +650,6 @@ describe('readWorkoutPage: through the workout', () => {
 })
 
 describe('readWorkoutPage: this route and fastest efforts', () => {
-  const metresPerDegree = (6_371_000 * Math.PI) / 180
-  const lonMetres = metresPerDegree * Math.cos((52 * Math.PI) / 180)
-
-  /** A route from the session's start, a fix every 10 s at `speed` m/s for `fixes` fixes, heading `north` or `east`. */
-  function seedRoute(sessionId: string, localDate: string, o: { speed?: number, fixes?: number, heading?: 'north' | 'east', hhmm?: string } = {}) {
-    const startMs = at(localDate, o.hhmm ?? '07:00')
-    const step = (o.speed ?? 3) * 10
-    test.db.insert(sessionRoutes).values(Array.from({ length: (o.fixes ?? 70) + 1 }, (_, i) => ({
-      id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
-      latitude: 52 + (o.heading === 'east' ? 0 : (i * step) / metresPerDegree),
-      longitude: 5 + (o.heading === 'east' ? (i * step) / lonMetres : 0),
-      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
-    }))).run()
-  }
-
   /** `n` runs on the same 2.1 km route, every third day before SUBJECT_DATE, moving time alternating 600 +/- 10 s. */
   function seedRouteRuns(n: number) {
     for (let i = 0; i < n; i += 1) {
@@ -694,9 +699,9 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     expect(sameRoute!.times).toBe(8)
     // The oldest of the seven the count is of.
     expect(sameRoute!.since).toBe(shiftLocalDate(SUBJECT_DATE, -21))
-    expect(sameRoute!.pace).toMatchObject({ key: 'pace', unit: 'seconds_per_km', direction: 'down', value: 280, standing: 'below', judged: 'better' })
-    expect(sameRoute!.pace!.baseline!.center).toBeCloseTo(295)
-    expect(sameRoute!.pace!.strip.map((p) => p.sessionId)).toEqual(['loop-0', 'loop-1', 'loop-2', 'loop-3', 'loop-4', 'loop-5', 'subject'])
+    expect(sameRoute!.rate).toMatchObject({ key: 'pace', unit: 'seconds_per_km', direction: 'down', value: 280, standing: 'below', judged: 'better' })
+    expect(sameRoute!.rate!.baseline!.center).toBeCloseTo(295)
+    expect(sameRoute!.rate!.strip.map((p) => p.sessionId)).toEqual(['loop-0', 'loop-1', 'loop-2', 'loop-3', 'loop-4', 'loop-5', 'subject'])
   })
 
   it('has no pace on the route for a workout without one of its own', () => {
@@ -704,7 +709,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { moving: 540 })
     seedRoute('subject', SUBJECT_DATE)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
-    expect(sameRoute!.pace).toBeNull()
+    expect(sameRoute!.rate).toBeNull()
     expect(sameRoute!.since).toBe(shiftLocalDate(SUBJECT_DATE, -9))
   })
 
@@ -826,16 +831,16 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, {})
     seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
     const page = readWorkoutPage(q(), input('subject'))!
-    expect(page.efforts!.km!.seconds).toBeCloseTo(1000 / 3, 1)
-    expect(page.efforts!.km!.isBest).toBe(false)
-    expect(page.efforts!.km!.source).toBe('gps')
-    expect(page.efforts!.km!.best).toMatchObject({ sessionId: 'quick', localDate: '2026-09-01' })
-    expect(page.efforts!.km!.best!.value).toBeCloseTo(250, 6)
+    expect(page.efforts!['1k']!.seconds).toBeCloseTo(1000 / 3, 1)
+    expect(page.efforts!['1k']!.isBest).toBe(false)
+    expect(page.efforts!['1k']!.source).toBe('gps')
+    expect(page.efforts!['1k']!.best).toMatchObject({ sessionId: 'quick', localDate: '2026-09-01' })
+    expect(page.efforts!['1k']!.best!.value).toBeCloseTo(250, 6)
     expect(page.efforts!.mile).toMatchObject({ isBest: true, best: { sessionId: 'subject' } })
-    expect(page.efforts!.fiveK).toMatchObject({ isBest: true, best: { sessionId: 'subject' } })
+    expect(page.efforts!['5k']).toMatchObject({ isBest: true, best: { sessionId: 'subject' } })
     // The Records best reads the GPS kilometre too, so the two cannot disagree.
-    expect(page.best.fastestKmSeconds).toMatchObject({ sessionId: 'quick' })
-    expect(readWorkoutPage(q(), input('quick'))!.efforts).toMatchObject({ km: { isBest: true }, mile: null, fiveK: null })
+    expect(page.best['fastest-1k']).toMatchObject({ sessionId: 'quick' })
+    expect(readWorkoutPage(q(), input('quick'))!.efforts).toMatchObject({ '1k': { isBest: true }, mile: null, '5k': null })
     // Nothing in the page carries a coordinate.
     expect(JSON.stringify(page)).not.toMatch(/latitude|longitude/)
   })
@@ -853,29 +858,94 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
     const { efforts } = readWorkoutPage(q(), input('subject'))!
     // Even 30 m legs: each fastest window is the first, ending on the first fix past its distance.
-    expect(efforts!.km!.fromMeters).toBeCloseTo(20, 0)
+    expect(efforts!['1k']!.fromMeters).toBeCloseTo(20, 0)
     expect(efforts!.mile!.fromMeters).toBeCloseTo(1620 - 1609.344, 0)
-    expect(efforts!.fiveK!.fromMeters).toBeCloseTo(10, 0)
-    expect(efforts!.km!.best).toMatchObject({ sessionId: 'later' })
-    expect(efforts!.km!.previousBest).toMatchObject({ sessionId: 'quick', localDate: '2026-09-01' })
-    expect(efforts!.km!.previousBest!.value).toBeCloseTo(250, 6)
+    expect(efforts!['5k']!.fromMeters).toBeCloseTo(10, 0)
+    expect(efforts!['1k']!.best).toMatchObject({ sessionId: 'later' })
+    expect(efforts!['1k']!.previousBest).toMatchObject({ sessionId: 'quick', localDate: '2026-09-01' })
+    expect(efforts!['1k']!.previousBest!.value).toBeCloseTo(250, 6)
     expect(efforts!.mile!.previousBest).toMatchObject({ sessionId: 'slow-mile' })
-    expect(efforts!.fiveK!.previousBest).toBeNull()
+    expect(efforts!['5k']!.previousBest).toBeNull()
     // Read off the earlier run, whose own best is nothing before it.
-    expect(readWorkoutPage(q(), input('quick'))!.efforts!.km).toMatchObject({ previousBest: null })
+    expect(readWorkoutPage(q(), input('quick'))!.efforts!['1k']).toMatchObject({ previousBest: null })
   })
 
-  it('has efforts on a routed run and none on a routed ride', () => {
-    seedRide('ride', SUBJECT_DATE, {})
-    seedRoute('ride', SUBJECT_DATE, { speed: 8, fixes: 200 })
+  it("reads a ride's efforts over the ride's own distances, and none of a run's", () => {
+    // 25 km at 8 m/s: a 20 km, no 40 km or 100 km. Its kilometre splits make no record.
+    seedRide('ride', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 90 }] })
+    seedRoute('ride', SUBJECT_DATE, { speed: 8, fixes: 313 })
     seedRun('run', SUBJECT_DATE, {}, { hhmm: '18:00' })
     seedRoute('run', SUBJECT_DATE, { fixes: 200, hhmm: '18:00' })
-    expect(readWorkoutPage(q(), input('ride'))!.efforts).toBeNull()
-    // Nor does an earlier routed ride's GPS kilometre become the rides' best.
+    const ride = readWorkoutPage(q(), input('ride'))!
+    expect(Object.keys(ride.efforts!)).toEqual(['20k', '40k', '100k'])
+    expect(ride.efforts!['20k']).toMatchObject({ source: 'gps', isBest: true, best: { sessionId: 'ride', value: 2500 } })
+    expect(ride.efforts!['20k']!.seconds).toBeCloseTo(2500, 0)
+    expect([ride.efforts!['40k'], ride.efforts!['100k']]).toEqual([null, null])
+    expect(Object.keys(ride.best)).toEqual(['longest', 'furthest', 'most-climb', 'fastest-20k', 'fastest-40k', 'fastest-100k'])
+    // An earlier, quicker ride holds the ride's 20 km, and the run's bests are the run's alone.
     seedRide('earlier-ride', '2026-09-01', {})
-    seedRoute('earlier-ride', '2026-09-01', { speed: 8, fixes: 200 })
-    expect(readWorkoutPage(q(), input('ride'))!.best.fastestKmSeconds).toBeNull()
-    expect(readWorkoutPage(q(), input('run'))!.efforts!.fiveK).toMatchObject({ isBest: true })
+    seedRoute('earlier-ride', '2026-09-01', { speed: 10, fixes: 250 })
+    expect(readWorkoutPage(q(), input('ride'))!.efforts!['20k']).toMatchObject({ isBest: false, best: { sessionId: 'earlier-ride', value: 2000 } })
+    expect(readWorkoutPage(q(), input('run'))!.efforts!['5k']).toMatchObject({ isBest: true })
+    expect(readWorkoutPage(q(), input('run'))!.best).not.toHaveProperty('fastest-20k')
+  })
+
+  it('reads no efforts off a treadmill run or an indoor ride, and lets neither hold a speed best', () => {
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { splits: [{ distance: 1000, seconds: 200 }] })
+    seedRoute('treadmill', SUBJECT_DATE, { speed: 5, fixes: 200 })
+    seedWorkout('spin', SUBJECT_DATE, 'SPINNING', {}, { hhmm: '18:00' })
+    seedRoute('spin', SUBJECT_DATE, { speed: 12, fixes: 200, hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('treadmill'))!.efforts).toBeNull()
+    expect(readWorkoutPage(q(), input('treadmill'))!.best['fastest-1k']).toBeNull()
+    expect(readWorkoutPage(q(), input('spin'))!.efforts).toBeNull()
+  })
+
+  it("names a treadmill run's and an indoor ride's bests as the category's, GPS efforts included", () => {
+    // An outdoor run's 6 km route holds every run distance up to 5 km off GPS, quicker than any split;
+    // an outdoor ride's 25 km route holds the ride's 20 km. The indoor subjects hold none of it.
+    seedRun('road', '2026-08-01', { splits: [{ distance: 1000, seconds: 400 }] })
+    seedRoute('road', '2026-08-01', { fixes: 200 })
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { splits: [{ distance: 1000, seconds: 380 }] })
+    seedRide('outdoor', '2026-08-02', {})
+    seedRoute('outdoor', '2026-08-02', { speed: 8, fixes: 313 })
+    seedWorkout('spin', SUBJECT_DATE, 'STATIONARY_BIKE', {}, { hhmm: '18:00' })
+    const records = q().allTime().sessionRecords
+    const same = (sessionId: string, category: string) => {
+      const { best } = readWorkoutPage(q(), input(sessionId))!
+      const held = records.filter((r) => r.category === category)
+      expect(held.some((r) => r.kind.startsWith('fastest-') && r.kind !== 'fastest-1k'), category).toBe(true)
+      for (const record of held) {
+        expect(best[record.kind], `${category} ${record.kind}`).toEqual({ value: record.value, sessionId: record.sessionId, localDate: record.localDate })
+      }
+    }
+    same('treadmill', 'run')
+    expect(readWorkoutPage(q(), input('treadmill'))!.best['fastest-1k']).toMatchObject({ sessionId: 'road', value: 333 })
+    same('spin', 'ride')
+    expect(readWorkoutPage(q(), input('spin'))!.best['fastest-20k']).toMatchObject({ sessionId: 'outdoor', value: 2500 })
+    // Neither indoor page reads efforts of its own.
+    expect(readWorkoutPage(q(), input('treadmill'))!.efforts).toBeNull()
+    expect(readWorkoutPage(q(), input('spin'))!.efforts).toBeNull()
+  })
+
+  it("names a trail run's bests as the run category's, the same records the Records page holds", () => {
+    // A road run holds the kilometre and the distance, a treadmill run the longest; the trail run
+    // itself the climb. Every one of them is a run, and a ride is none of them.
+    seedRun('road', '2026-08-01', { distance: 12_000, splits: [{ distance: 1000, seconds: 280 }] })
+    seedWorkout('treadmill', '2026-08-02', 'TREADMILL', { distance: 20_000, splits: [{ distance: 1000, seconds: 200 }] }, { minutes: 150 })
+    seedRide('ride', '2026-08-03', { distance: 60_000, splits: [{ distance: 1000, seconds: 90 }] }, { minutes: 200 })
+    seedWorkout('subject', SUBJECT_DATE, 'TRAIL_RUN', { distance: 9000, metrics: { elevationGainMillimeters: 350_000 }, splits: [{ distance: 1000, seconds: 330 }] })
+    const { best } = readWorkoutPage(q(), input('subject'))!
+    expect(best).toMatchObject({
+      longest: { sessionId: 'treadmill', value: 150 * 60_000 },
+      furthest: { sessionId: 'road', value: 12_000 },
+      'most-climb': { sessionId: 'subject', value: 350 },
+      'fastest-1k': { sessionId: 'road', value: 280 },
+    })
+    const run = q().allTime().sessionRecords.filter((r) => r.category === 'run')
+    for (const record of run) {
+      expect(best[record.kind], record.kind).toEqual({ value: record.value, sessionId: record.sessionId, localDate: record.localDate })
+    }
+    expect(run.map((r) => r.kind)).toEqual(['longest', 'furthest', 'most-climb', 'fastest-1k'])
   })
 
   it('prints the kilometre Records holds, a split when it beat the GPS, and where that split began', () => {
@@ -883,8 +953,8 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 340 }, { distance: 1000, seconds: 320 }, { distance: 1000, seconds: 345 }] })
     seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
     const page = readWorkoutPage(q(), input('subject'))!
-    expect(page.efforts!.km).toMatchObject({ seconds: 320, fromMeters: 1000, source: 'split', isBest: true, best: { sessionId: 'subject', value: 320 } })
-    expect(page.best.fastestKmSeconds).toMatchObject({ sessionId: 'subject', value: 320 })
+    expect(page.efforts!['1k']).toMatchObject({ seconds: 320, fromMeters: 1000, source: 'split', isBest: true, best: { sessionId: 'subject', value: 320 } })
+    expect(page.best['fastest-1k']).toMatchObject({ sessionId: 'subject', value: 320 })
     // The mile has no split, so it stays the GPS's.
     expect(page.efforts!.mile!.seconds).toBeCloseTo(536.4, 1)
     expect(page.efforts!.mile!.source).toBe('gps')
@@ -895,12 +965,12 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
     vi.mocked(fastestEffortsAlong).mockClear()
     vi.mocked(fastestEfforts).mockClear()
-    expect(readWorkoutPage(q(), input('subject'))!.efforts!.fiveK).toMatchObject({ isBest: true })
+    expect(readWorkoutPage(q(), input('subject'))!.efforts!['5k']).toMatchObject({ isBest: true })
     expect(fastestEffortsAlong).toHaveBeenCalledTimes(1)
     expect(fastestEfforts).not.toHaveBeenCalled()
   })
 
-  it("reads no later workout's route for a type without efforts, and a run's for its bests", () => {
+  it("reads no later workout's route for a category without efforts, and every run's for a run's bests", () => {
     const summarised = (sessionId: string) => {
       const query = q()
       const spy = vi.spyOn(query, 'workoutRouteSummaries')
@@ -909,20 +979,257 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
       spy.mockRestore()
       return ids
     }
-    seedRide('earlier-ride', '2026-09-01', {})
-    seedRide('ride', SUBJECT_DATE, {})
-    seedRide('later-ride', '2026-09-06', {})
-    expect(summarised('ride')).toEqual([['earlier-ride']])
+    seedWorkout('earlier-walk', '2026-09-01', 'WALKING', {})
+    seedWorkout('walk', SUBJECT_DATE, 'WALKING', {})
+    seedWorkout('later-walk', '2026-09-06', 'WALKING', {})
+    expect(summarised('walk')).toEqual([['earlier-walk']])
     // In the evening, so no run overlaps a ride and merges with it.
     seedRun('earlier-run', '2026-09-01', {}, { hhmm: '18:00' })
     seedRun('run', SUBJECT_DATE, {}, { hhmm: '18:00' })
     seedRun('later-run', '2026-09-06', {}, { hhmm: '18:00' })
     expect(summarised('run')).toEqual([['earlier-run', 'later-run']])
+    // A trail run's bests read every run's route that can hold a speed record: never a treadmill's.
+    seedWorkout('trail', SUBJECT_DATE, 'TRAIL_RUN', {}, { hhmm: '12:00' })
+    seedWorkout('treadmill', '2026-09-02', 'TREADMILL', {}, { hhmm: '12:00' })
+    expect(summarised('trail')).toEqual([['earlier-run', 'run', 'later-run']])
   })
 
   it('has no efforts without a route', () => {
     seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 300 }] })
     expect(readWorkoutPage(q(), input('subject'))!.efforts).toBeNull()
+  })
+})
+
+describe('readWorkoutPage: per sport', () => {
+  const mobility = {
+    mobilityMetrics: {
+      avgCadenceStepsPerMinute: 172, avgStrideLengthMillimeters: '1150', avgGroundContactTimeDuration: '0.256s',
+      avgVerticalOscillationMillimeters: '88', avgVerticalRatio: 7.6,
+    },
+  }
+  const FORM = ['cadence', 'strideLength', 'groundContact', 'verticalOscillation', 'verticalRatio'] as const
+
+  it('leads a treadmill run with its pace, worked out from distance and moving time when the device sent none', () => {
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { distance: 6000, moving: 1800 })
+    seedWorkout('sent', '2026-09-05', 'TREADMILL', { pace: 310, distance: 6000, moving: 1800 })
+    seedWorkout('bare', '2026-09-06', 'TREADMILL', { moving: 1800 })
+    const page = readWorkoutPage(q(), input('treadmill'))!
+    expect(page.hero).toBe('pace')
+    expect(page.figures.pace).toMatchObject({ value: 300, unit: 'seconds_per_km' })
+    // The device's own pace, where it sent one, is the pace.
+    expect(readWorkoutPage(q(), input('sent'))!.figures.pace!.value).toBe(310)
+    // Without a distance there is no pace to work out.
+    expect(readWorkoutPage(q(), input('bare'))!.hero).toBe('movingTime')
+  })
+
+  it('leads a trail and an incline run with pace, as a run', () => {
+    seedWorkout('trail', SUBJECT_DATE, 'TRAIL_RUN', { pace: 400 })
+    seedWorkout('track', '2026-09-05', 'TRACK_AND_FIELD', { pace: 250 })
+    expect(readWorkoutPage(q(), input('trail'))!.hero).toBe('pace')
+    expect(readWorkoutPage(q(), input('track'))!.hero).toBe('pace')
+  })
+
+  it('leads a ride with speed only when it covered a distance outdoors, and never shows a pace for it', () => {
+    const speed = { averageSpeedMillimetersPerSecond: 7500 }
+    seedWorkout('road', SUBJECT_DATE, 'BIKING', { pace: 133, distance: 27_000, moving: 3600, metrics: speed })
+    seedWorkout('mtb', '2026-09-05', 'MOUNTAIN_BIKE', { distance: 20_000, moving: 4000 })
+    seedWorkout('nodistance', '2026-09-06', 'BIKING', { moving: 3600, metrics: speed })
+    seedWorkout('indoor', '2026-09-07', 'STATIONARY_BIKE', { distance: 27_000, moving: 3600, metrics: speed })
+    const road = readWorkoutPage(q(), input('road'))!
+    expect(road.hero).toBe('speed')
+    expect(road.figures.pace).toBeUndefined()
+    // No device speed: the distance over the moving time, 20 km in 4000 s.
+    const mtb = readWorkoutPage(q(), input('mtb'))!
+    expect(mtb.hero).toBe('speed')
+    expect(mtb.figures.speed).toMatchObject({ value: 5, unit: 'meters_per_second', direction: 'up' })
+    expect(readWorkoutPage(q(), input('nodistance'))!.hero).toBe('movingTime')
+    expect(readWorkoutPage(q(), input('indoor'))!.hero).toBe('movingTime')
+  })
+
+  it('leads a swim with its pace per 100 m, and shows no pace per km and no climb for it', () => {
+    seedWorkout('pool', SUBJECT_DATE, 'SWIMMING_POOL', {
+      pace: 1200, distance: 1500, moving: 1800, metrics: { elevationGainMillimeters: 4000 },
+    })
+    seedWorkout('nodistance', '2026-09-05', 'SWIMMING', { moving: 1800 })
+    const pool = readWorkoutPage(q(), input('pool'))!
+    expect(pool.hero).toBe('swimPace')
+    expect(pool.figures.swimPace).toMatchObject({ key: 'swimPace', value: 120, unit: 'seconds_per_100m', precision: 0, direction: 'down' })
+    expect(pool.figures.pace).toBeUndefined()
+    expect(pool.figures.elevationGain).toBeUndefined()
+    expect(readWorkoutPage(q(), input('nodistance'))!.hero).toBe('movingTime')
+  })
+
+  it("sends a swim's distance under the metric that reads in whole metres, and a run's under its key", () => {
+    seedWorkout('pool', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1500, moving: 1800 })
+    seedWorkout('run', '2026-09-05', 'RUNNING', { pace: 300, distance: 1500, moving: 450 })
+    expect(readWorkoutPage(q(), input('pool'))!.figures.distance).toMatchObject({ key: 'distance', metric: 'swimDistance', value: 1500 })
+    expect(readWorkoutPage(q(), input('run'))!.figures.distance).toMatchObject({ key: 'distance', metric: 'distance', value: 1500 })
+  })
+
+  it('leads every other category with moving time, whatever rate it carries', () => {
+    seedWorkout('hiit', SUBJECT_DATE, 'HIIT', { pace: 400, distance: 3000, moving: 1500, metrics: { averageSpeedMillimetersPerSecond: 2500 } })
+    seedWorkout('lift', '2026-09-05', 'WEIGHTLIFTING', { pace: 400, distance: 3000, moving: 1500 })
+    const hiit = readWorkoutPage(q(), input('hiit'))!
+    expect(hiit.hero).toBe('movingTime')
+    expect(hiit.figures.swimPace).toBeUndefined()
+    expect(readWorkoutPage(q(), input('lift'))!.hero).toBe('movingTime')
+  })
+
+  it('shows step cadence and running form for a run and a walk alone', () => {
+    seedWorkout('run', SUBJECT_DATE, 'RUNNING', { pace: 300, metrics: mobility })
+    seedWorkout('walk', '2026-09-05', 'WALKING', { pace: 600, metrics: mobility })
+    seedWorkout('ride', '2026-09-06', 'BIKING', { distance: 20_000, moving: 3000, metrics: mobility })
+    seedWorkout('hiit', '2026-09-07', 'HIIT', { moving: 1500, metrics: mobility })
+    for (const id of ['run', 'walk']) {
+      const { figures } = readWorkoutPage(q(), input(id))!
+      for (const key of FORM) expect(figures[key], `${id} ${key}`).toBeDefined()
+    }
+    for (const id of ['ride', 'hiit']) {
+      const { figures } = readWorkoutPage(q(), input(id))!
+      for (const key of FORM) expect(figures[key], `${id} ${key}`).toBeUndefined()
+    }
+  })
+
+  it('reads no cadence series for a ride, however finely its device logged steps', () => {
+    seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 600 })
+    seedWorkout('ride', '2026-09-05', 'BIKING', { distance: 20_000, moving: 1800 })
+    for (const localDate of [SUBJECT_DATE, '2026-09-05']) {
+      for (let i = 0; i < 30; i += 1) {
+        insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: at(localDate, '07:00') + i * 60_000, tzOffsetMinutes: OFFSET, value: 110 })
+      }
+    }
+    expect(readWorkoutPage(q(), input('walk'))!.through.cadence).not.toBeNull()
+    expect(readWorkoutPage(q(), input('ride'))!.through.cadence).toBeNull()
+  })
+
+  it('shows no climb for an indoor run, walk or ride, and keeps it outdoors and on an e-bike', () => {
+    const climb = { elevationGainMillimeters: 50_000 }
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { distance: 5000, moving: 1500, metrics: climb })
+    seedWorkout('treadwalk', '2026-09-05', 'TREADMILL_WALK', { distance: 3000, moving: 1800, metrics: climb })
+    seedWorkout('spin', '2026-09-06', 'SPINNING', { moving: 2700, metrics: climb })
+    seedWorkout('road', '2026-09-07', 'BIKING', { distance: 20_000, moving: 3000, metrics: climb })
+    seedWorkout('ebike', '2026-09-08', 'ELECTRIC_BIKE', { distance: 20_000, moving: 3000, metrics: climb })
+    for (const id of ['treadmill', 'treadwalk', 'spin']) expect(readWorkoutPage(q(), input(id))!.figures.elevationGain, id).toBeUndefined()
+    for (const id of ['road', 'ebike']) expect(readWorkoutPage(q(), input(id))!.figures.elevationGain, id).toMatchObject({ value: 50 })
+  })
+
+  it('shows no climb for an incline treadmill or a cardio machine, and leaves their records to the record rule', () => {
+    const climb = { elevationGainMillimeters: 50_000 }
+    const machines = ['INCLINE_RUN', 'INCLINE_WALK', 'ELLIPTICAL', 'ROWING_MACHINE', 'STAIRCLIMBER']
+    machines.forEach((type, i) => seedWorkout(type, shiftLocalDate(SUBJECT_DATE, i), type, { distance: 3000, moving: 1500, metrics: climb }))
+    for (const type of machines) expect(readWorkoutPage(q(), input(type))!.figures.elevationGain, type).toBeUndefined()
+    // Indoor is about the climb alone: an incline run still holds the run's distance records.
+    expect(readWorkoutPage(q(), input('INCLINE_RUN'))!.best.furthest).toMatchObject({ sessionId: 'INCLINE_RUN', value: 3000 })
+  })
+
+  it("ranks a ride by the speed its hero shows, worked out where the device sent no pace", () => {
+    // Four earlier rides at 5, 6, 7 and 8 m/s, none with a device pace or speed; this one at 7.5.
+    ;[4000, 3333, 2857, 2500].forEach((moving, i) => seedWorkout(`ride-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (4 - i)), 'BIKING', { distance: 20_000, moving }))
+    seedWorkout('subject', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 2667 })
+    const page = readWorkoutPage(q(), input('subject'))!
+    expect(page.hero).toBe('speed')
+    expect(page.rank).toEqual({ better: 3, of: 4 })
+  })
+
+  it("ranks a treadmill run by its worked-out pace, and a swim by its pace per 100 m", () => {
+    // Treadmill: 330, 320, 290 s/km before; this one 300 s/km, faster than two.
+    ;[1650, 1600, 1450].forEach((moving, i) => seedWorkout(`tm-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (3 - i)), 'TREADMILL', { distance: 5000, moving }))
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { distance: 5000, moving: 1500 })
+    // Swims: 2:10, 2:00 and 2:10 a 100 m before; this one 2:00, faster than two, a tie never better.
+    ;[1300, 1200, 1300].forEach((moving, i) => seedWorkout(`swim-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (3 - i)), 'SWIMMING_POOL', { distance: 1000, moving }, { hhmm: '18:00' }))
+    seedWorkout('swim', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1000, moving: 1200 }, { hhmm: '18:00' })
+    const treadmill = readWorkoutPage(q(), input('treadmill'))!
+    expect(treadmill.rank).toEqual({ better: 2, of: 3 })
+    const swim = readWorkoutPage(q(), input('swim'))!
+    expect(swim.hero).toBe('swimPace')
+    expect(swim.rank).toEqual({ better: 2, of: 3 })
+  })
+
+  it('ranks nothing under a time hero, or with too few earlier workouts', () => {
+    ;[2400, 2500, 2600].forEach((moving, i) => seedWorkout(`lift-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (3 - i)), 'WEIGHTLIFTING', { moving }))
+    seedWorkout('lift', SUBJECT_DATE, 'WEIGHTLIFTING', { moving: 2700 })
+    seedWorkout('ride-0', '2026-09-01', 'BIKING', { distance: 20_000, moving: 3000 })
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 2800 }, { hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('lift'))!.rank).toBeNull()
+    expect(readWorkoutPage(q(), input('ride'))!.rank).toBeNull()
+  })
+
+  it('reads heart-rate recovery after a run, a ride, a swim and a cardio session, and after nothing else', () => {
+    const days = { RUNNING: '2026-08-01', BIKING: '2026-08-02', SWIMMING_POOL: '2026-08-03', HIIT: '2026-08-04', WALKING: '2026-08-05', WEIGHTLIFTING: '2026-08-06', YOGA: '2026-08-07' }
+    for (const [type, localDate] of Object.entries(days)) {
+      seedWorkout(type, localDate, type, { distance: 3000, moving: 1500 })
+      seedRecovery(localDate, [160, 150, 135, 118])
+    }
+    for (const type of ['RUNNING', 'BIKING', 'SWIMMING_POOL', 'HIIT']) {
+      expect(readWorkoutPage(q(), input(type))!.heartRateRecovery, type).toMatchObject({ oneMinute: { value: 25 } })
+    }
+    for (const type of ['WALKING', 'WEIGHTLIFTING', 'YOGA']) expect(readWorkoutPage(q(), input(type))!.heartRateRecovery, type).toBeNull()
+  })
+
+  it("draws a ride's speed through the workout in place of its pace", () => {
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { distance: 5000, moving: 700 }, { minutes: 12 })
+    seedRoute('ride', SUBJECT_DATE, { speed: 8 })
+    const { through } = readWorkoutPage(q(), input('ride'))!
+    expect(through.pace).toBeNull()
+    expect(through.speed!.unit).toBe('meters_per_second')
+    expect(through.speed!.points[0]!.value).toBeCloseTo(8, 1)
+    expect(through.speed!.fastest).toEqual({ metersPerSecond: expect.closeTo(8, 1), elapsedSeconds: expect.any(Number) })
+  })
+
+  it('draws a run\'s pace and no speed', () => {
+    seedRun('run', SUBJECT_DATE, { pace: 300 }, { minutes: 12 })
+    seedRoute('run', SUBJECT_DATE, { speed: 3 })
+    const { through } = readWorkoutPage(q(), input('run'))!
+    expect(through.speed).toBeNull()
+    expect(through.pace!.points[0]!.value).toBeCloseTo(1000 / 3, 1)
+  })
+
+  it('reads a pause by the category: a slow walk still moves, a slow ride has stopped', () => {
+    // 30 m a minute: over a walk's 20 m, under a run's 50 m.
+    seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 2000 }, { minutes: 12 })
+    seedRoute('walk', SUBJECT_DATE, { speed: 0.5 })
+    seedRun('run', '2026-09-05', { pace: 2000 }, { minutes: 12 })
+    seedRoute('run', '2026-09-05', { speed: 0.5 })
+    // 120 m a minute: over a run's 50 m, under a ride's 150 m.
+    seedWorkout('ride', '2026-09-06', 'BIKING', { distance: 1500, moving: 700 }, { minutes: 12 })
+    seedRoute('ride', '2026-09-06', { speed: 2 })
+    seedRun('jog', '2026-09-07', { pace: 500 }, { minutes: 12 })
+    seedRoute('jog', '2026-09-07', { speed: 2 })
+    expect(readWorkoutPage(q(), input('walk'))!.through.pace).not.toBeNull()
+    expect(readWorkoutPage(q(), input('run'))!.through.pace).toBeNull()
+    expect(readWorkoutPage(q(), input('ride'))!.through.speed).toBeNull()
+    expect(readWorkoutPage(q(), input('jog'))!.through.pace).not.toBeNull()
+  })
+
+  it("sets a ride's speed against the earlier speeds on the route", () => {
+    for (let i = 0; i < 5; i += 1) {
+      const localDate = shiftLocalDate(SUBJECT_DATE, -3 * (5 - i))
+      seedWorkout(`loop-${i}`, localDate, 'BIKING', { distance: 5600, moving: i % 2 === 0 ? 800 : 700 })
+      seedRoute(`loop-${i}`, localDate, { speed: 8 })
+    }
+    seedWorkout('subject', SUBJECT_DATE, 'BIKING', { distance: 5600, moving: 560 })
+    seedRoute('subject', SUBJECT_DATE, { speed: 8 })
+    const rate = readWorkoutPage(q(), input('subject'))!.sameRoute!.rate!
+    expect(rate).toMatchObject({ key: 'speed', unit: 'meters_per_second', direction: 'up', value: 10, standing: 'above', judged: 'better' })
+    expect(rate.strip).toHaveLength(6)
+  })
+
+  it("sends the previous ride's worked-out speed and no pace, and the previous swim's pace per 100 m", () => {
+    seedWorkout('ride-before', '2026-09-01', 'BIKING', { pace: 150, distance: 20_000, moving: 4000 })
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 3600 })
+    seedWorkout('swim-before', '2026-09-01', 'SWIMMING_POOL', { distance: 1000, moving: 1300 }, { hhmm: '18:00' })
+    seedWorkout('swim', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1000, moving: 1200 }, { hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('ride'))!.previous!.values).toEqual({ speed: 5, distance: 20_000, movingTime: 4000, elapsed: 1800 })
+    expect(readWorkoutPage(q(), input('swim'))!.previous!.values).toEqual({ swimPace: 130, distance: 1000, movingTime: 1300, elapsed: 1800 })
+  })
+
+  it("says how much faster the second half of a ride's kilometres went, in metres per second", () => {
+    // 150 and 150 s against 120 and 120 s a kilometre: 6.67 m/s then 8.33 m/s.
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { splits: [
+      { distance: 1000, seconds: 150 }, { distance: 1000, seconds: 150 },
+      { distance: 1000, seconds: 120 }, { distance: 1000, seconds: 120 },
+    ] })
+    expect(readWorkoutPage(q(), input('ride'))!.splitTrend).toEqual({ secondHalfFasterByMetersPerSecond: expect.closeTo(1000 / 120 - 1000 / 150, 6) })
   })
 })
 

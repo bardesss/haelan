@@ -324,8 +324,9 @@
       "meters": "m",
       "ms": "ms",
       "cm": "cm",
-      "kmh": "km/h",
-      "perMin": "/min"
+      "kmh": "km/u",
+      "perMin": "/min",
+      "per100mSuffix": "/100 m"
     },
     "distance": {
       "label": "Afstand"
@@ -356,6 +357,7 @@
       "SPINNING": "Spinning",
       "BIKING": "Fietsen",
       "TREADMILL": "Loopband",
+      "TRAIL_RUN": "Trailrun",
       "HIKING": "Hiken",
       "WEIGHTLIFTING": "Krachttraining",
       "STROLLER_WALK": "Wandelen met kinderwagen",
@@ -402,8 +404,8 @@
         "filledFromTrace": "Hartslagen met † zijn niet per tussentijd of ronde opgeslagen; ze komen uit de hartslag van deze sessie over dat stuk."
       },
       "comparison": {
-        "pace": "Sneller dan {{better}} van je laatste {{of}} van dit type",
-        "paceAll": "Sneller dan al je laatste {{of}} van dit type"
+        "rank": "Sneller dan {{better}} van je laatste {{of}} van dit type",
+        "rankAll": "Sneller dan al je laatste {{of}} van dit type"
       },
       "page": {
         "nav": "Trainingen",
@@ -431,7 +433,8 @@
           "verticalOscillation": "Verticale oscillatie",
           "verticalRatio": "Verticale ratio",
           "vo2max": "VO₂max",
-          "swimLengths": "Baantjes"
+          "swimLengths": "Baantjes",
+          "swimPace": "Zwemtempo"
         },
         "heroStrip_one": "deze training en de vorige van dit type",
         "heroStrip_other": "deze training en de {{count}} van dit type ervoor",
@@ -485,7 +488,11 @@
           "even": "Gelijke split",
           "faster": "tweede helft {{value}} s/km sneller",
           "slower": "tweede helft {{value}} s/km langzamer",
-          "same": "beide helften even snel"
+          "same": "beide helften even snel",
+          "speedBar": "Snelheid naast de andere kilometers",
+          "fasterSpeed": "tweede helft {{value}} km/u sneller",
+          "slowerSpeed": "tweede helft {{value}} km/u langzamer",
+          "sameSpeed": "beide helften even snel"
         },
         "sameRoute": {
           "label": "Deze route",
@@ -502,9 +509,15 @@
           "time": "Tijd",
           "where": "Waar",
           "best": "Je beste",
-          "km": "1 km",
+          "1k": "1 km",
           "mile": "1 mijl",
-          "fiveK": "5 km",
+          "5k": "5 km",
+          "10k": "10 km",
+          "half": "halve marathon",
+          "marathon": "marathon",
+          "20k": "20 km",
+          "40k": "40 km",
+          "100k": "100 km",
           "thisWorkout": "deze training",
           "fastest": "je snelste {{distance}} ooit",
           "fastestBy": "je snelste {{distance}} ooit, {{delta}} sneller dan in {{month}}",
@@ -533,23 +546,31 @@
           "smoothed": {
             "pace": "tempo gladgestreken over drie minuten",
             "cadence": "cadans gladgestreken over drie minuten",
-            "both": "tempo en cadans gladgestreken over drie minuten"
+            "both": "tempo en cadans gladgestreken over drie minuten",
+            "speed": "snelheid gladgestreken over drie minuten"
           },
           "noRoute": "zonder route geen tempolijn",
+          "noRouteSpeed": "zonder route geen snelheidslijn",
           "from": {
             "pace_one": "Het tempo komt uit de tijden van het ene routepunt.",
             "pace_other": "Het tempo komt uit de tijden van de {{count}} routepunten.",
             "cadence": "De cadans komt uit de stappen per minuut.",
             "both_one": "Het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
-            "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+            "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut.",
+            "speed_one": "De snelheid komt uit de tijden van het ene routepunt.",
+            "speed_other": "De snelheid komt uit de tijden van de {{count}} routepunten."
           },
           "fromAfter": {
             "pace_one": "het tempo komt uit de tijden van het ene routepunt.",
             "pace_other": "het tempo komt uit de tijden van de {{count}} routepunten.",
             "cadence": "de cadans komt uit de stappen per minuut.",
             "both_one": "het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
-            "both_other": "het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
-          }
+            "both_other": "het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut.",
+            "speed_one": "de snelheid komt uit de tijden van het ene routepunt.",
+            "speed_other": "de snelheid komt uit de tijden van de {{count}} routepunten."
+          },
+          "speed": "Snelheid",
+          "speedChart": "Snelheid door de training"
         },
         "zones": {
           "label": "Hartslagzones",
@@ -560,12 +581,13 @@
           "oneMinute": "Daling na 1 minuut",
           "twoMinutes": "Daling na 2 minuten",
           "between": "van {{from}} naar {{to}}",
+          "caption_zero": "uit je hartslag in de minuten na het stoppen · nog geen training van dit type ervoor voor een gebruikelijke waarde",
           "caption_one": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} training van dit type ervoor",
           "caption_other": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} trainingen van dit type ervoor"
         },
         "form": {
           "label": "Loopvorm",
-          "caption": "van je horloge, alleen bij hardlopen"
+          "caption": "van je horloge, alleen bij hardlopen en wandelen"
         },
         "more": {
           "label": "Meer over deze training",
@@ -605,7 +627,8 @@
           "excluded": "uitgesloten",
           "action": "uitsluiten of een notitie toevoegen",
           "details": "Details"
-        }
+        },
+        "secondsPer100m": "{{value}} s/100 m"
       }
     },
     "period": {
@@ -1647,14 +1670,28 @@
       },
       "run": "{{days}} dagen op rij met een stappenteller"
     },
+    "categories": {
+      "run": "Hardlopen",
+      "ride": "Fietsen",
+      "walk": "Wandelen",
+      "swim": "Zwemmen",
+      "strength": "Kracht",
+      "cardio": "Cardio",
+      "other": "Overig"
+    },
     "sessions": {
-      "label": "Beste losse sessie",
-      "basis": "Gelezen uit de trainingen zelf, niet uit een dag vol trainingen.",
-      "longest": "Langste sessie",
-      "furthest": "Verste sessie",
-      "fastest-km": "Snelste kilometer",
+      "longest": "Langste",
+      "furthest": "Verste",
+      "most-climb": "Meeste klim",
+      "fastest-1k": "Snelste kilometer",
       "fastest-mile": "Snelste mijl",
-      "fastest-5k": "Snelste 5 km"
+      "fastest-5k": "Snelste 5 km",
+      "fastest-10k": "Snelste 10 km",
+      "fastest-half": "Snelste halve marathon",
+      "fastest-marathon": "Snelste marathon",
+      "fastest-20k": "Snelste 20 km",
+      "fastest-40k": "Snelste 40 km",
+      "fastest-100k": "Snelste 100 km"
     }
   },
   "recoveryIndex": {

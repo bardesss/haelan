@@ -1,5 +1,6 @@
 import type { CardioLoad } from '@haelan/core/cardio-load'
 import type { FilledSplit } from '@haelan/core/split-heart-rate'
+import type { SessionRate } from '@haelan/core/exercise-category'
 
 // `attrs` is the provider's payload, kept whole and unparsed. The one decoder allowed to look
 // inside it is packages/core/src/api/workoutSummary.ts, reached here through the
@@ -26,6 +27,10 @@ export interface WorkoutSession {
    */
   sources?: string[]
   alternateIds?: string[]
+  /** The session's rate as its category reads it, worded by key and unit and rounded (core's
+   *  sessionRateOf, the workout page's own rules); null for none. Optional for the same reason as
+   *  `sources`, a capture or cache older than it. */
+  rate?: SessionRate | null
 }
 
 /** One recorded GPS fix. Mirrors `RoutePoint` in packages/core/src/query/workoutDerived.ts field

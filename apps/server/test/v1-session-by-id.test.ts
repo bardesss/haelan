@@ -75,6 +75,15 @@ describe('GET /sessions/:sessionId', () => {
     expect(session.attrs.splits).toEqual([{ splitType: 'DISTANCE' }])
   })
 
+  it("sends the session's rate as its category reads it, rounded to the figure's precision", async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    // 20 km in 40 minutes is 8.333... m/s: sent at the workout page's two decimals, never unrounded.
+    seedWorkout(harness, { id: 'ride1', attrs: { exerciseType: 'BIKING', activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000 } } })
+    const ride = (await get(harness, token, '/sessions/ride1')).json()
+    expect(ride.rate).toEqual({ key: 'speed', unit: 'meters_per_second', value: 8.33 })
+    expect(ride).not.toHaveProperty('speedMetersPerSecond')
+  })
+
   it('answers 404 in the envelope shape for an id that names nothing', async () => {
     harness = await withServer(); const token = await harness.signIn()
 

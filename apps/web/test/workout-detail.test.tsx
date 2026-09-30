@@ -23,7 +23,8 @@ import { navigate } from '../src/router.js'
 import { pumpUntil } from './flush.js'
 import {
   NAV_PREVIOUS_ID, NEXT_ID, PREVIOUS_ID, ROUTE_FIXTURE, SPLITS_FIXTURE, WORKOUT_ID,
-  strengthPageFixture, strengthSessionFixture, workoutPageFixture, workoutSessionFixture,
+  ridePageFixture, rideSessionFixture, strengthPageFixture, strengthSessionFixture, swimPageFixture,
+  workoutPageFixture, workoutSessionFixture,
 } from './fixtures/workoutPage.js'
 import type { IntradayPoint } from '../src/data/useIntraday.js'
 import { pausesOf } from '../src/pages/activity/workout/workoutText.js'
@@ -246,7 +247,7 @@ describe('the workout page\'s hero', () => {
   // "Faster than 20 of your last 20" reads as a sum to check; every one of them is "all".
   it('says "all" when the workout beat every one it is ranked against', async () => {
     const page = workoutPageFixture()
-    const host = await mount({ ...page, comparison: { ...page.comparison, pace: { ...page.comparison.pace!, better: 20, of: 20 } } })
+    const host = await mount({ ...page, rank: { better: 20, of: 20 } })
     expect(text(host, '.workout-hero-rank')).toBe('Faster than all of your last 20 of this type')
   })
 
@@ -317,7 +318,7 @@ describe('the workout page\'s hero', () => {
   // moving-time hero it set elapsed against moving as if one could beat the other.
   it('names the longest only under an elapsed-time hero, never under a moving-time one', async () => {
     const strength = strengthPageFixture()
-    const best = { ...strength.best, longestMs: { value: 3_235_000, sessionId: 'long', localDate: '2026-03-10' } }
+    const best = { ...strength.best, longest: { value: 3_235_000, sessionId: 'long', localDate: '2026-03-10' } }
     const moving = await mount({ ...strength, best }, strengthSessionFixture())
     expect(moving.querySelector('.workout-hero-best')).toBeNull()
     act(() => { root!.unmount() })
@@ -757,7 +758,7 @@ describe('the workout page\'s same route', () => {
 
   it('draws the time alone without a pace on the route', async () => {
     const page = workoutPageFixture()
-    const card = cardLabelled(await mount({ ...page, sameRoute: { ...page.sameRoute!, pace: null } }, fullSession()), 'This route')!
+    const card = cardLabelled(await mount({ ...page, sameRoute: { ...page.sameRoute!, rate: null } }, fullSession()), 'This route')!
     expect(rowsIn(card).map(([label]) => label)).toEqual(['Moving time'])
     expect(card.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('1')
   })
@@ -767,7 +768,7 @@ describe('the workout page\'s same route', () => {
     const same = page.sameRoute!
     const thin = (f: typeof same.time) => ({ ...f, baseline: { ...f.baseline!, thin: true }, standing: null, judged: null })
     const both = cardLabelled(await mount({
-      ...page, sameRoute: { ...same, time: thin(same.time), pace: thin(same.pace!) },
+      ...page, sameRoute: { ...same, time: thin(same.time), rate: thin(same.rate!) },
     }, fullSession()), 'This route')!
     expect(text(both, '.detail-rows + .dash-caption')).toBe(
       'each line: every time on this route, oldest left · matched by start, finish, direction and distance · higher = faster')
@@ -837,7 +838,7 @@ describe('the workout page\'s fastest efforts', () => {
 
   it('leaves out a distance the route is shorter than, and marks nothing without a best of this run\'s', async () => {
     const page = workoutPageFixture()
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, fiveK: null } }, fullSession()), 'Fastest efforts')!
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '5k': null } }, fullSession()), 'Fastest efforts')!
     expect(efforts(card).map(([distance]) => distance)).toEqual(['Distance', '1 km', '1 mile'])
     expect(card.querySelector('.workout-hero-line')).toBeNull()
     expect(card.textContent).not.toContain('✦')
@@ -849,9 +850,9 @@ describe('the workout page\'s fastest efforts', () => {
     const card = cardLabelled(await mount({
       ...page,
       efforts: {
-        km: { seconds: 296, fromMeters: 0, source: 'gps', best: mine(296), previousBest: null, isBest: true },
+        '1k': { seconds: 296, fromMeters: 0, source: 'gps', best: mine(296), previousBest: null, isBest: true },
         mile: { seconds: 479, fromMeters: 0, source: 'gps', best: null, previousBest: null, isBest: false },
-        fiveK: { seconds: 1602, fromMeters: 0, source: 'gps', best: mine(1602), previousBest: { value: 1667, sessionId: 'old', localDate: '2025-10-01' }, isBest: true },
+        '5k': { seconds: 1602, fromMeters: 0, source: 'gps', best: mine(1602), previousBest: { value: 1667, sessionId: 'old', localDate: '2025-10-01' }, isBest: true },
       },
     }, fullSession()), 'Fastest efforts')!
     expect(efforts(card).slice(1).map((row) => [row[0], row[1], row[3]]))
@@ -862,36 +863,54 @@ describe('the workout page\'s fastest efforts', () => {
 
   it("names the watch's split in the footnote for a kilometre that is one, and the GPS for the rest", async () => {
     const page = workoutPageFixture()
-    const km = { ...page.efforts!.km!, source: 'split' as const }
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, km } }, fullSession()), 'Fastest efforts')!
+    const km = { ...page.efforts!['1k']!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '1k': km } }, fullSession()), 'Fastest efforts')!
     expect(text(card, '.workout-compared-footnote'))
       .toBe("1 km: your watch's split · the rest from the distance along the GPS route · counts towards Records")
   })
 
   it('leaves the GPS out of the footnote when the split kilometre is the only row', async () => {
     const page = workoutPageFixture()
-    const km = { ...page.efforts!.km!, source: 'split' as const }
-    const card = cardLabelled(await mount({ ...page, efforts: { km, mile: null, fiveK: null } }, fullSession()), 'Fastest efforts')!
+    const km = { ...page.efforts!['1k']!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { '1k': km, mile: null, '5k': null } }, fullSession()), 'Fastest efforts')!
     expect(text(card, '.workout-compared-footnote')).toBe("1 km: your watch's split · counts towards Records")
   })
 
   it('names the split in Dutch too', async () => {
     const page = workoutPageFixture()
-    const km = { ...page.efforts!.km!, source: 'split' as const }
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, km } }, fullSession(), 'nl'), 'Snelste stukken')!
+    const km = { ...page.efforts!['1k']!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '1k': km } }, fullSession(), 'nl'), 'Snelste stukken')!
     expect(text(card, '.workout-compared-footnote'))
       .toBe('1 km: de split van je horloge · de rest uit de afstand langs de gps-route · telt mee in Records')
   })
 
   it('says no margin over a best before it that prints the same', async () => {
     const page = workoutPageFixture()
-    const fiveK = { ...page.efforts!.fiveK!, previousBest: { value: 1602, sessionId: 'old', localDate: '2026-08-15' } }
-    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, fiveK } }, fullSession()), 'Fastest efforts')!
+    const fiveK = { ...page.efforts!['5k']!, previousBest: { value: 1602, sessionId: 'old', localDate: '2026-08-15' } }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, '5k': fiveK } }, fullSession()), 'Fastest efforts')!
     expect(text(card, '.workout-hero-line')).toBe('✦ your fastest 5 km ever')
   })
 
+  const NBSP = String.fromCharCode(0xa0)
+  it("reads a ride's rows over the ride's distances, in their order, each stretch its own length", async () => {
+    const page = workoutPageFixture()
+    const card = cardLabelled(await mount({
+      ...page,
+      exerciseType: 'MOUNTAIN_BIKE',
+      efforts: {
+        '20k': { seconds: 2410, fromMeters: 1200, source: 'gps', best: { value: 2300, sessionId: 'ride-may', localDate: '2026-05-10' }, previousBest: null, isBest: false },
+        '40k': { seconds: 5000, fromMeters: 0, source: 'gps', best: { value: 5000, sessionId: WORKOUT_ID, localDate: '2026-09-04' }, previousBest: null, isBest: true },
+        '100k': null,
+      },
+    }, fullSession()), 'Fastest efforts')!
+    expect(efforts(card).slice(1)).toEqual([
+      ['20 km', '40:10', '1.2 – 21.2' + NBSP + 'km', '38:20 · May'],
+      ['40 km', '1:23:20 ✦', '0.0 – 40.0' + NBSP + 'km', 'this workout'],
+    ])
+  })
+
   it('is left out when no distance fits inside the route', async () => {
-    const host = await mount({ ...workoutPageFixture(), efforts: { km: null, mile: null, fiveK: null } }, fullSession())
+    const host = await mount({ ...workoutPageFixture(), efforts: { '1k': null, mile: null, '5k': null } }, fullSession())
     expect(cardLabelled(host, 'Fastest efforts')).toBeUndefined()
     expect(cardLabelled(host, 'This route')!.getAttribute('data-span')).toBe('12')
   })
@@ -956,7 +975,7 @@ describe('the workout page\'s trace', () => {
     act(() => { root!.unmount() })
     root = createRoot(container!)
     tracePoints = []
-    const empty = await mount({ ...workoutPageFixture(), through: { pace: null, cadence: null } }, fullSession())
+    const empty = await mount({ ...workoutPageFixture(), through: { pace: null, speed: null, cadence: null } }, fullSession())
     expect(empty.querySelector('.workout-through')).toBeNull()
   })
 })
@@ -1052,7 +1071,7 @@ function rowsIn(card: ParentNode): string[][] {
 describe('the workout page\'s running form', () => {
   it('reads cadence, stride, ground contact in milliseconds, oscillation in centimetres and the ratio, each against its usual', async () => {
     const card = cardLabelled(await mount(workoutPageFixture()), 'Running form')!
-    expect(text(card, '.detail-side-caption')).toBe('from your watch, runs only')
+    expect(text(card, '.detail-side-caption')).toBe('from your watch, runs and walks only')
     expect(rowsIn(card)).toEqual([
       ['Cadence', '172\u00a0/min', 'within your usual 166 – 174\u00a0/min'],
       ['Stride length', '1.09\u00a0m', 'within your usual 1.02 – 1.10\u00a0m'],
@@ -1152,7 +1171,7 @@ describe('the workout page\'s day', () => {
     expect(text(card, '.today-workouts > .label')).toBe('Workouts')
     const link = card.querySelector<HTMLAnchorElement>('.today-workouts a.session-row-link')
     expect(text(link!, '.session-row-type')).toBe('Walking')
-    expect(text(link!, '.session-row-duration')).toBe('30 min')
+    expect(text(link!, '.session-row-duration')).toBe('30\u00a0min')
     expect(link?.getAttribute('href')).toBe('/activity/walk1')
   })
 
@@ -1303,6 +1322,13 @@ describe('the workout page\'s heart-rate recovery', () => {
     root = createRoot(container!)
     const nl = cardLabelled(await mount({ ...page, heartRateRecovery: { ...page.heartRateRecovery!, history: 1 } }, workoutSessionFixture(), 'nl'), 'Hartslagherstel')!
     expect(text(nl, '.detail-rows + .dash-caption')).toContain('gebruikelijk uit 1 training van dit type ervoor')
+  })
+
+  it('says there is no earlier workout of the type rather than a usual from 0, for the first of its type', async () => {
+    const page = workoutPageFixture()
+    const none = cardLabelled(await mount({ ...page, heartRateRecovery: { ...page.heartRateRecovery!, history: 0 } }, workoutSessionFixture(), 'nl'), 'Hartslagherstel')!
+    expect(text(none, '.detail-rows + .dash-caption')).toContain('nog geen training van dit type ervoor voor een gebruikelijke waarde')
+    expect(text(none, '.detail-rows + .dash-caption')).not.toContain('uit 0')
   })
 
   it('leaves out the minute without a value, and the card without either', async () => {
@@ -1473,7 +1499,7 @@ describe('the workout page\'s pace and cadence', () => {
     expect(charts(paceOnly).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([true])
     act(() => { root!.unmount() })
     root = createRoot(container!)
-    const none = await mount({ ...page, through: { pace: null, cadence: null } }, fullSession())
+    const none = await mount({ ...page, through: { pace: null, speed: null, cadence: null } }, fullSession())
     expect(none.querySelector('.workout-through')).toBeNull()
   })
 
@@ -1565,5 +1591,158 @@ describe('the workout page\'s about fold', () => {
     expect(rowsIn(cardLabelled(host, 'Daarna')!)[2]?.[0]).toBe('Rusthartslag')
     expect(cardLabelled(host, 'Daarna')!.querySelector('a.card-link')?.textContent).toBe('Bekijk de nacht')
     expect(text(cardLabelled(host, 'Over deze training')!, '.detail-about-line')).toBe('Opgenomen door watch · uitsluiten of een notitie toevoegen')
+  })
+})
+
+describe('the workout page per sport', () => {
+  const heroLabel = (host: ParentNode) => host.querySelector('.detail-hero')?.closest('.card')?.querySelector('.label')?.textContent
+  const remount = () => { act(() => { root!.unmount() }); root = createRoot(container!) }
+  const throughHeads = (host: ParentNode) => [...host.querySelectorAll('.workout-through-head')]
+    .map((head) => [text(head, '.label') ?? '', text(head, '.workout-through-summary') ?? null])
+  const throughCharts = (host: ParentNode) => [...host.querySelectorAll<HTMLDivElement>('.workout-through-chart [role="img"]')]
+    .map((chart) => echarts.getInstanceByDom(chart)!.getOption() as { yAxis: { inverse?: boolean }[] })
+  const swimSession = (): WorkoutSessionDetail => ({ ...workoutSessionFixture(), attrs: { exerciseType: 'SWIMMING_POOL', activeDuration: '1875s' } })
+
+  it('leads a ride with its speed in km/h, and says how much faster it went than the previous one', async () => {
+    const host = await mount(ridePageFixture(), rideSessionFixture())
+    expect(heroLabel(host)).toBe('Speed')
+    expect(text(host, '.detail-hero-value')).toBe('27.4\u00a0km/h')
+    expect(text(host, '.workout-hero-previous')).toBe('0.8\u00a0km/h faster than the previous one, Tuesday, September 1')
+  })
+
+  it('words a slower ride as slower, and one the same to the tenth as just as fast', async () => {
+    const page = ridePageFixture()
+    const slower = await mount({ ...page, previous: { ...page.previous!, values: { ...page.previous!.values, speed: 7.7 } } }, rideSessionFixture())
+    expect(text(slower, '.workout-hero-previous')).toBe('0.3\u00a0km/h slower than the previous one, Tuesday, September 1')
+    remount()
+    // 27.43 km/h prints as 27.4, the same as this ride's 27.36.
+    const same = await mount({ ...page, previous: { ...page.previous!, values: { ...page.previous!.values, speed: 7.62 } } }, rideSessionFixture())
+    expect(text(same, '.workout-hero-previous')).toBe('As fast as the previous one, Tuesday, September 1')
+  })
+
+  it("ranks a ride by the server's rank on its speed, which the comparison carries no facet for", async () => {
+    const host = await mount(ridePageFixture(), rideSessionFixture())
+    expect(text(host, '.workout-hero-rank')).toBe('Faster than 12 of your last 20 of this type')
+  })
+
+  it('ranks a swim by its pace per 100 m, in the same words in Dutch', async () => {
+    const swim = { ...workoutSessionFixture(), attrs: { exerciseType: 'SWIMMING_POOL', activeDuration: '1875s' } }
+    const host = await mount(swimPageFixture(), swim, 'nl')
+    expect(text(host, '.workout-hero-rank')).toBe('Sneller dan al je laatste 20 van dit type')
+  })
+
+  it('draws no rank when the server sends none, whatever the comparison holds', async () => {
+    const host = await mount({ ...workoutPageFixture(), rank: null })
+    expect(host.querySelector('.workout-hero-rank')).toBeNull()
+  })
+
+  it('says a ride without a route has no speed line, not no pace line', async () => {
+    const page = ridePageFixture()
+    tracePoints = [reading(minute(1), 120)]
+    const host = await mount({ ...page, exerciseType: 'STATIONARY_BIKE', hero: 'movingTime', through: { pace: null, speed: null, cadence: null } },
+      { ...rideSessionFixture(), route: [] })
+    const caption = text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through ~ .dash-caption')
+    expect(caption).toContain('no route, no speed line')
+    expect(caption).not.toContain('pace')
+  })
+
+  it('says nothing of a missing route under a swim, which a pool never has', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const host = await mount(swimPageFixture(), { ...workoutSessionFixture(), attrs: { exerciseType: 'SWIMMING_POOL', activeDuration: '1875s' }, route: [] }, 'nl')
+    const caption = text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through ~ .dash-caption')
+    expect(caption).toContain('0:00')
+    expect(caption).not.toContain('zonder route')
+  })
+
+  it('reads the same ride in Dutch, in km/u', async () => {
+    const host = await mount(ridePageFixture(), rideSessionFixture(), 'nl')
+    expect(heroLabel(host)).toBe('Snelheid')
+    expect(text(host, '.detail-hero-value')).toBe('27,4\u00a0km/u')
+    expect(text(host, '.workout-hero-previous')).toBe('0,8\u00a0km/u sneller dan de vorige, dinsdag 1 september')
+  })
+
+  it('sets a ride\'s speed beside the previous one\'s in the compared table, with no pace row', async () => {
+    const host = await mount(ridePageFixture(), rideSessionFixture())
+    expect(compared(host).map((row) => row[0])).toEqual(['Speed', 'Distance', 'Avg heart rate', 'Cardio load'])
+    expect(compared(host)[0]!.slice(0, 3)).toEqual(['Speed', '27.4\u00a0km/h', '26.6\u00a0km/h +0.8'])
+  })
+
+  it('keeps an indoor ride\'s speed row under its moving time hero', async () => {
+    const page = ridePageFixture()
+    const host = await mount({ ...page, exerciseType: 'STATIONARY_BIKE', hero: 'movingTime' }, rideSessionFixture())
+    expect(heroLabel(host)).toBe('Moving time')
+    expect(compared(host).map((row) => row[0])).toEqual(['Moving time', 'Speed', 'Distance', 'Avg heart rate', 'Cardio load'])
+  })
+
+  it('reads a ride\'s kilometres in km/h, the quickest filling its bar, and its split trend in km/h', async () => {
+    const host = await mount(ridePageFixture(), rideSessionFixture())
+    expect([...host.querySelectorAll('.workout-km thead th')].map((th) => th.textContent))
+      .toEqual(['km', 'Speed', 'Speed against the other kilometres', 'Heart rate'])
+    expect(kilometres(host)).toEqual([
+      ['1', '30.0\u00a0km/h', '', '140'], ['2', '36.0\u00a0km/h', '', '141'], ['3', '24.0\u00a0km/h', '', '142'],
+    ])
+    // By speed, not by pace: 30 km/h sits halfway between 24 and 36, so 0.4 + 0.6 * 0.5 of the row.
+    expect([...host.querySelectorAll<HTMLElement>('.workout-km-bar-fill')].map((bar) => bar.style.width)).toEqual(['70%', '100%', '40%'])
+    expect(text(host, '.workout-split-trend')).toBe('Negative split · second half 1.2\u00a0km/h faster')
+  })
+
+  it('words a ride\'s slower second half, and one level to the tenth, in km/h', async () => {
+    const slower = await mount({ ...ridePageFixture(), splitTrend: { secondHalfFasterByMetersPerSecond: -0.33 } }, rideSessionFixture())
+    expect(text(slower, '.workout-split-trend')).toBe('Positive split · second half 1.2\u00a0km/h slower')
+    remount()
+    // 0.01 m/s is 0.036 km/h, which prints as nothing.
+    const level = await mount({ ...ridePageFixture(), splitTrend: { secondHalfFasterByMetersPerSecond: 0.01 } }, rideSessionFixture())
+    expect(text(level, '.workout-split-trend')).toBe('Even split · both halves at the same speed')
+  })
+
+  it('reads a ride\'s kilometres and split trend in Dutch, in km/u', async () => {
+    const host = await mount(ridePageFixture(), rideSessionFixture(), 'nl')
+    expect(host.querySelectorAll('.workout-km thead th')[1]?.textContent).toBe('Snelheid')
+    expect(kilometres(host)[0]).toEqual(['1', '30,0\u00a0km/u', '', '140'])
+    expect(text(host, '.workout-split-trend')).toBe('Negatieve split · tweede helft 1,2\u00a0km/u sneller')
+  })
+
+  it('draws a ride\'s speed through the workout the right way up, headed by its highest minute', async () => {
+    tracePoints = [reading(minute(1), 120), reading(minute(20), 150)]
+    const host = await mount(ridePageFixture(), rideSessionFixture())
+    expect(throughHeads(host)).toEqual([['Heart rate', 'highest 178\u00a0bpm'], ['Speed', 'highest 32.4\u00a0km/h at 14:00']])
+    expect(throughCharts(host)[1]!.yAxis[0]!.inverse).toBe(false)
+    expect(text(host, '.workout-through-note')).toBe('The speed comes from the times of the 4 route points.')
+    expect(text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through ~ .dash-caption')).toContain('speed smoothed over three minutes')
+  })
+
+  it('heads a ride\'s speed in Dutch', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const host = await mount(ridePageFixture(), rideSessionFixture(), 'nl')
+    expect(throughHeads(host)[1]).toEqual(['Snelheid', 'hoogste 32,4\u00a0km/u na 14:00'])
+    expect(text(host, '.workout-through-note')).toBe('De snelheid komt uit de tijden van de 4 routepunten.')
+  })
+
+  it('sets a ride\'s speed on the loop against the earlier ones, labelled as speed', async () => {
+    const card = cardLabelled(await mount(ridePageFixture(), rideSessionFixture()), 'This route')!
+    expect(rowsIn(card)).toEqual([
+      ['Speed', '27.4\u00a0km/h', 'within your usual 24.8 – 28.1\u00a0km/h'],
+      ['Moving time', '28:04', 'faster than your usual 28:20 – 30:00'],
+    ])
+    // A higher speed already sits higher; only the time, where less is faster, is drawn upside down.
+    const inverse = [...card.querySelectorAll<HTMLDivElement>('[role="img"]')]
+      .map((chart) => (echarts.getInstanceByDom(chart)!.getOption() as { yAxis: { inverse?: boolean }[] }).yAxis[0]!.inverse === true)
+    expect(inverse).toEqual([false, true])
+  })
+
+  it('leads a swim with its pace per 100 m, and sets no pace per km beside the previous one', async () => {
+    const host = await mount(swimPageFixture(), swimSession())
+    expect(heroLabel(host)).toBe('Swim pace')
+    expect(text(host, '.detail-hero-value')).toBe('2:05\u00a0/100\u202fm')
+    expect(text(host, '.workout-hero-previous')).toBe('4\u00a0s/100 m faster than the previous one, Tuesday, September 1')
+    expect(compared(host).map((row) => row[0])).toEqual(['Swim pace', 'Distance', 'Avg heart rate'])
+    expect(compared(host)[0]!.slice(0, 3)).toEqual(['Swim pace', '2:05\u00a0/100\u202fm', '2:09\u00a0/100\u202fm -4\u00a0s/100 m'])
+  })
+
+  it('reads the swim in Dutch', async () => {
+    const host = await mount(swimPageFixture(), swimSession(), 'nl')
+    expect(heroLabel(host)).toBe('Zwemtempo')
+    expect(text(host, '.workout-hero-previous')).toBe('4\u00a0s/100 m sneller dan de vorige, dinsdag 1 september')
+    expect(text(host, '.detail-verdict')).toBe('binnen je gebruikelijke bereik 2:02 – 2:14\u00a0/100\u202fm')
   })
 })

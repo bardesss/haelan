@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
+import { exerciseCategory, rateOf } from '@haelan/core/exercise-category'
 import { Card } from '../../../components/Card.js'
 import { BasisContext } from '../../../components/basis.js'
 import { ErrorState } from '../../../components/ErrorState.js'
@@ -13,7 +14,8 @@ import { useSourceTrace } from '../../../data/useSourceTrace.js'
 import { useSourceNames } from '../../../data/useSourceNames.js'
 import type { WorkoutSession, WorkoutSessionDetail } from '../../../data/useSessions.js'
 import type { IntradayPoint } from '../../../data/useIntraday.js'
-import type { MinuteSeries, PaceSeries, WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
+import type { MinuteSeries, PaceSeries, SpeedSeries, WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
+import { formatNumber } from '../../../format.js'
 import type { Translate } from '../../../format.js'
 import { formatFigureValue, formatStopwatch } from '../../detail/figureText.js'
 import { pausesOf } from './workoutText.js'
@@ -55,34 +57,50 @@ export function minutePoints(series: MinuteSeries, startMs: number, sourceId: st
 const SERIES_HEIGHT = 120
 
 /**
+ * The heading's words for the series' best minute, when the server named one: pace's fastest
+ * ("fastest 5:18 /km at 14:00"), or a ride's highest speed, in the words the heart rate's highest
+ * takes ("highest 32.4 km/h at 14:00"), since more of a speed is more, as more of a heart rate is.
+ */
+function bestMinute(series: MinuteSeries | PaceSeries | SpeedSeries, figure: { metric: string, value: null, unit: string, precision: number }, language: string, t: Translate): string | null {
+  if (!('fastest' in series) || series.fastest === null) return null
+  const time = formatElapsed(series.fastest.elapsedSeconds * 1000)
+  if ('metersPerSecond' in series.fastest) {
+    return t('activity.workout.page.through.highest', { value: formatFigureValue(figure, series.fastest.metersPerSecond, language, t), time })
+  }
+  return t('activity.workout.page.through.fastest', { value: formatFigureValue(figure, series.fastest.secondsPerKm, language, t), time })
+}
+
+/**
  * One series row's chart settings and words, memoised on the series: `single` reaches the chart's
  * build, and a fresh one every render would rebuild it. The average is the page's own figure for
- * the workout (the server's), never worked out from the series; so is pace's fastest minute, which
- * the heading names when the server sent one, as the heart rate's heading names its highest.
+ * the workout (the server's), never worked out from the series; so is the best minute (bestMinute),
+ * which the heading names when the server sent one, as the heart rate's heading names its highest.
+ * Pace is drawn upside down with a stopwatch axis; a ride's speed the right way up, its axis in
+ * whole km/h.
  */
-function useSeriesRow(series: MinuteSeries | PaceSeries | null, average: WorkoutFigure | undefined, key: 'pace' | 'cadence', startMs: number, sourceId: string) {
+function useSeriesRow(series: MinuteSeries | PaceSeries | SpeedSeries | null, average: WorkoutFigure | undefined, key: 'pace' | 'speed' | 'cadence', startMs: number, sourceId: string) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   return useMemo(() => {
     if (series === null) return null
     const figure = { metric: key, value: null, unit: series.unit, precision: 0 }
     const averageText = average === undefined || average.value === null ? null : formatFigureValue(average, average.value, language, t)
+    const formatAxis = key === 'pace' ? formatStopwatch
+      : key === 'speed' ? (value: number) => formatNumber(value * 3.6, 0, language, '')
+        : (value: number) => formatFigureValue({ ...figure, unit: 'count' }, value, language, t)
     return {
       points: minutePoints(series, startMs, sourceId),
       single: {
         column: t(`activity.workout.page.through.${key}`),
         formatValue: (value: number) => formatFigureValue(figure, value, language, t),
-        formatAxis: key === 'pace' ? formatStopwatch : (value: number) => formatFigureValue({ ...figure, unit: 'count' }, value, language, t),
+        formatAxis,
         inverse: key === 'pace',
         ...(average !== undefined && average.value !== null && averageText !== null && {
           reference: { value: average.value, label: t('activity.workout.page.through.averageShort', { value: averageText }) },
         }),
       },
-      summary: 'fastest' in series && series.fastest !== null
-        ? t('activity.workout.page.through.fastest', {
-          value: formatFigureValue(figure, series.fastest.secondsPerKm, language, t), time: formatElapsed(series.fastest.elapsedSeconds * 1000),
-        })
-        : averageText === null ? null : t('activity.workout.page.through.average', { value: averageText }),
+      summary: bestMinute(series, figure, language, t)
+        ?? (averageText === null ? null : t('activity.workout.page.through.average', { value: averageText })),
     }
   }, [series, average, key, startMs, sourceId, language, t])
 }
@@ -90,10 +108,10 @@ function useSeriesRow(series: MinuteSeries | PaceSeries | null, average: Workout
 /**
  * Through the workout (M10a-3): the heart rate on the workout's own clock, 0:00 to its end, with
  * the zones as bands behind it and its pauses shaded. Under it, on the same axis (M10b), the pace
- * and the cadence a minute at a time as the server reads them (`page.through`), each smoothed over
- * three minutes and each with the workout's own average as a dashed line. Pace is drawn upside
- * down, since a faster minute is a smaller number, and comes from the route's own timestamps, so
- * a workout without a route has none. Cadence comes from the steps the workout's own device
+ * (a ride's speed in its place) and the cadence a minute at a time as the server reads them
+ * (`page.through`), each smoothed over three minutes and each with the workout's own average as a
+ * dashed line. Pace is drawn upside down, since a faster minute is a smaller number, a speed the
+ * right way up; both come from the route's own timestamps, so a workout without a route has none. Cadence comes from the steps the workout's own device
  * logged, and is missing where those rows are further apart than a minute (a device that logs
  * steps in longer intervals), where only another device logged steps, and on a workout longer
  * than the window read allows. The lowest drawn row labels the time for all of them.
@@ -123,7 +141,11 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
   // Memoised: each reaches the chart's build, and a fresh reference every render rebuilds it.
   const pauses = useMemo(() => pausesOf(detail.events, session.endMs), [detail.events, session.endMs])
   const zoneBands = useMemo(() => zoneBandsOf(page.zoneBounds, t), [page.zoneBounds, t])
-  const pace = useSeriesRow(page.through.pace, page.figures.pace, 'pace', session.startMs, session.sourceId)
+  // A ride's speed takes pace's row; the server sends one or the other. `speed` is read
+  // defensively: a response cached from before the field existed lacks it.
+  const speedSeries = (page.through.speed as SpeedSeries | null | undefined) ?? null
+  const rateKey = speedSeries === null ? 'pace' : 'speed'
+  const rate = useSeriesRow(speedSeries ?? page.through.pace, page.figures[rateKey], rateKey, session.startMs, session.sourceId)
   const cadence = useSeriesRow(page.through.cadence, page.figures.cadence, 'cadence', session.startMs, session.sourceId)
 
   const label = t('activity.workout.page.through.label')
@@ -131,14 +153,16 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     return <Card span={12} label={label}><ErrorState onRetry={() => trace.refetch()} error={trace.error} /></Card>
   }
   if (trace.isPending) return <Card span={12} label={label}><Loading /></Card>
-  // Which of the two series is drawn, as the catalogue names the case.
-  const both = pace === null && cadence === null ? null : pace === null ? 'cadence' : cadence === null ? 'pace' : 'both'
+  // Which of the two series is drawn, as the catalogue names the case. A ride has no cadence, so
+  // its speed is only ever drawn alone.
+  const both = rate === null && cadence === null ? null : rate === null ? 'cadence' : cadence === null ? rateKey : 'both'
   // No heart rate in this window from any device, fallback included, leaves its row out; the card
   // stays for a pace or a cadence, and is absent, not an empty chart, with none of the three.
   const hasTrace = trace.points.length > 0
   if (!hasTrace && both === null) return null
   // A response cached from before a field existed can lack `route`.
   const routePoints = (session.route as WorkoutSessionDetail['route'] | undefined)?.length ?? 0
+  const lineRate = rateOf(exerciseCategory(page.exerciseType))
   const pausedMs = pauses.spans.reduce((sum, span) => sum + span.endMs - span.startMs, 0)
   const basis = [
     t('activity.workout.page.through.basis', { end: formatElapsed(session.endMs - session.startMs) }),
@@ -146,7 +170,11 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     ...(both === null ? [] : [t(`activity.workout.page.through.smoothed.${both}`)]),
     // Only a workout that covers a distance and has no route points is missing its pace for want of
     // a route; a route whose minutes all fail the pace rules says nothing here.
-    ...(pace === null && page.figures.distance !== undefined && routePoints === 0 ? [t('activity.workout.page.through.noRoute')] : []),
+    // Worded for the line the category would draw: a ride's speed, anything else's pace. Never for
+    // a swim: a pool has no route to lack, so saying one is missing reads as a fault.
+    ...(rate === null && page.figures.distance !== undefined && routePoints === 0 && lineRate !== 'swimPace'
+      ? [t(lineRate === 'speed' ? 'activity.workout.page.through.noRouteSpeed' : 'activity.workout.page.through.noRoute')]
+      : []),
   ].join(' · ')
 
   // The highest reading is the server's figure; when in the workout it came is read off the trace.
@@ -174,7 +202,7 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     : t(`activity.workout.page.through.${note === null ? 'from' : 'fromAfter'}.${both}`, { count: routePoints })
   const noteLine = note === null ? seriesFrom : seriesFrom === null ? note : `${note}; ${seriesFrom}`
   // Each drawn chart's table id, in the order drawn; one chart alone keeps its own control.
-  const tables = [hasTrace && 'heart', pace !== null && 'pace', cadence !== null && 'cadence']
+  const tables = [hasTrace && 'heart', rate !== null && rateKey, cadence !== null && 'cadence']
     .flatMap((row) => (row === false ? [] : [`${tableIds}-${row}`]))
   const shared = tables.length > 1 ? { tableShown: tablesShown } : {}
 
@@ -199,9 +227,9 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
             </div>
           </>
         )}
-        {pace !== null && (
-          <SeriesRow row={pace} label={t('activity.workout.page.through.pace')} chartLabel={t('activity.workout.page.through.paceChart')}
-            session={session} spans={pauses.spans} xLabels={cadence === null} tableId={`${tableIds}-pace`} shared={shared} />
+        {rate !== null && (
+          <SeriesRow row={rate} label={t(`activity.workout.page.through.${rateKey}`)} chartLabel={t(`activity.workout.page.through.${rateKey}Chart`)}
+            session={session} spans={pauses.spans} xLabels={cadence === null} tableId={`${tableIds}-${rateKey}`} shared={shared} />
         )}
         {cadence !== null && (
           <SeriesRow row={cadence} label={t('activity.workout.page.through.cadence')} chartLabel={t('activity.workout.page.through.cadenceChart')}

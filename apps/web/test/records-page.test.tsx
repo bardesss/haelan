@@ -56,6 +56,7 @@ function mountPage(all: AllTime, lng = 'en'): void {
   })
 }
 
+const NB = '\u00a0'
 const text = (selector: string): string => container!.querySelector(selector)?.textContent ?? ''
 
 describe('the all-time page', () => {
@@ -125,7 +126,8 @@ describe('the all-time page', () => {
         from: '2026-01-21', days: 235, sourceName: null,
       }],
     })
-    expect(text("[data-metric='distance'] .record-value")).toBe('10.0 km')
+    // A day's distance, as the Activity page prints one, with a no-break space like every figure beside it.
+    expect(text("[data-metric='distance'] .record-value")).toBe('10.0\u00a0km')
   })
 
   it('formats a million steps as a number a person reads, not as 1000000', () => {
@@ -150,60 +152,63 @@ describe('the all-time page', () => {
     expect(text("[data-metric='steps'] .record-window")).toBe(`of 235 days since ${from}`)
   })
 
-  it('shows the three session records in the units each one is measured in', () => {
+  it('shows the session records in the units each one is measured in', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
-        { kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: 'RUNNING', value: 12_850_000 },
-        { kind: 'fastest-km', sessionId: 'c', localDate: '2026-06-16', exerciseType: 'RUNNING', value: 308.5 },
+        { category: 'run', kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: 'RUNNING', value: 12_850 },
+        { category: 'run', kind: 'fastest-1k', sessionId: 'c', localDate: '2026-06-16', exerciseType: 'RUNNING', value: 308.5 },
+        { category: 'cardio', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
       ],
     })
-    expect(text("[data-record='longest'] .record-value")).toBe('4h 24m')
-    expect(text("[data-record='furthest'] .record-value")).toBe('12.9 km')
+    expect(text("[data-record='longest'] .record-metric")).toBe('Longest')
+    expect(text("[data-record='longest'] .record-value")).toBe(`4h${NB}24m`)
+    expect(text("[data-record='furthest'] .record-metric")).toBe('Furthest')
+    // Whole metres, read as the workout page reads a distance.
+    expect(text("[data-record='furthest'] .record-value")).toBe(`12.9${NB}km`)
     // 308.5s rounds to 5:09, not down to 5:08. A record must never render faster than it was
     // run, so the half-second goes against the runner rather than for them.
-    expect(text("[data-record='fastest-km'] .record-value")).toBe('5:09 / km')
+    expect(text("[data-record='fastest-1k'] .record-value")).toBe(`5:09${NB}/km`)
   })
 
   it('shows the fastest mile and 5 km off the GPS route as a stopwatch time with its pace', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
-        { kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 3662 },
+        { category: 'run', kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
+        { category: 'run', kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 3662 },
       ],
     })
     expect(text("[data-record='fastest-mile'] .record-metric")).toBe('Fastest mile')
     // 466 s over 1.609 km is 289.6 s a km.
-    expect(text("[data-record='fastest-mile'] .record-value")).toBe('7:46 · 4:50 / km')
+    expect(text("[data-record='fastest-mile'] .record-value")).toBe(`7:46 · 4:50${NB}/km`)
     expect(text("[data-record='fastest-5k'] .record-metric")).toBe('Fastest 5 km')
     // Past the hour, the stopwatch shows one.
-    expect(text("[data-record='fastest-5k'] .record-value")).toBe('1:01:02 · 12:12 / km')
+    expect(text("[data-record='fastest-5k'] .record-value")).toBe(`1:01:02 · 12:12${NB}/km`)
   })
 
   it('names the fastest mile and 5 km in Dutch', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
-        { kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 1562 },
+        { category: 'run', kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
+        { category: 'run', kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 1562 },
       ],
     }, 'nl')
     expect(text("[data-record='fastest-mile'] .record-metric")).toBe('Snelste mijl')
-    expect(text("[data-record='fastest-mile'] .record-value")).toBe('7:46 · 4:50 / km')
+    expect(text("[data-record='fastest-mile'] .record-value")).toBe(`7:46 · 4:50${NB}/km`)
     expect(text("[data-record='fastest-5k'] .record-metric")).toBe('Snelste 5 km')
-    expect(text("[data-record='fastest-5k'] .record-value")).toBe('26:02 · 5:12 / km')
+    expect(text("[data-record='fastest-5k'] .record-value")).toBe(`26:02 · 5:12${NB}/km`)
   })
 
   it('writes the longest session\'s hour as "u" in Dutch', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
+        { category: 'cardio', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
       ],
     }, 'nl')
-    expect(text("[data-record='longest'] .record-value")).toBe('4u 24m')
+    expect(text("[data-record='longest'] .record-value")).toBe(`4u${NB}24m`)
   })
 
   it('shows only the session records the sessions support', () => {
@@ -212,11 +217,200 @@ describe('the all-time page', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'WORKOUT', value: 60 * 60_000 },
+        { category: 'cardio', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'WORKOUT', value: 60 * 60_000 },
       ],
     })
     expect(container!.querySelectorAll('[data-record]')).toHaveLength(1)
     expect(container!.querySelector("[data-record='furthest']")).toBeNull()
+  })
+
+  it('lists each category its own rows, a longest for each, labelled per kind', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'TRAIL_RUN', value: 95 * 60_000 },
+        { category: 'run', kind: 'most-climb', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'TRAIL_RUN', value: 412 },
+        { category: 'run', kind: 'fastest-10k', sessionId: 'b', localDate: '2026-07-01', exerciseType: 'RUNNING', value: 2890 },
+        { category: 'ride', kind: 'longest', sessionId: 'c', localDate: '2026-08-02', exerciseType: 'BIKING', value: 180 * 60_000 },
+        { category: 'ride', kind: 'fastest-20k', sessionId: 'c', localDate: '2026-08-02', exerciseType: 'BIKING', value: 2400 },
+      ],
+    })
+    expect(container!.querySelectorAll("[data-record='longest']")).toHaveLength(2)
+    expect(text("[data-category='run'][data-record='longest'] .record-metric")).toBe('Longest')
+    expect(text("[data-category='ride'][data-record='longest'] .record-metric")).toBe('Longest')
+    expect(text("[data-category='ride'][data-record='longest'] .record-value")).toBe(`3h${NB}00m`)
+    expect(text("[data-record='most-climb'] .record-metric")).toBe('Most climb')
+    expect(text("[data-record='most-climb'] .record-value")).toBe(`412${NB}m`)
+    expect(text("[data-record='fastest-10k'] .record-metric")).toBe('Fastest 10 km')
+    // 2890 s over 10 km is 4:49 a km.
+    expect(text("[data-record='fastest-10k'] .record-value")).toBe(`48:10 · 4:49${NB}/km`)
+    expect(text("[data-record='fastest-20k'] .record-metric")).toBe('Fastest 20 km')
+    // A ride reads its speed: 20 km in 40 minutes is 30 km/h.
+    expect(text("[data-record='fastest-20k'] .record-value")).toBe(`40:00 · 30.0${NB}km/h`)
+  })
+
+  it('names the new kinds in Dutch, a ride in km/u', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'walk', kind: 'most-climb', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'HIKING', value: 1250 },
+        { category: 'run', kind: 'fastest-half', sessionId: 'b', localDate: '2026-07-01', exerciseType: 'RUNNING', value: 6300 },
+        { category: 'ride', kind: 'fastest-40k', sessionId: 'c', localDate: '2026-08-02', exerciseType: 'BIKING', value: 4800 },
+      ],
+    }, 'nl')
+    expect(text("[data-record='most-climb'] .record-metric")).toBe('Meeste klim')
+    // A climb stays in metres past a thousand of them.
+    expect(text("[data-record='most-climb'] .record-value")).toBe(`1.250${NB}m`)
+    expect(text("[data-record='fastest-half'] .record-metric")).toBe('Snelste halve marathon')
+    expect(text("[data-record='fastest-40k'] .record-metric")).toBe('Snelste 40 km')
+    expect(text("[data-record='fastest-40k'] .record-value")).toBe(`1:20:00 · 30,0${NB}km/u`)
+  })
+
+  it('names the longest and furthest in the same words in every category, in Dutch', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { category: 'run', kind: 'furthest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 12_000 },
+        { category: 'ride', kind: 'longest', sessionId: 'b', localDate: '2026-06-19', exerciseType: 'BIKING', value: 60 * 60_000 },
+        { category: 'ride', kind: 'furthest', sessionId: 'b', localDate: '2026-06-19', exerciseType: 'BIKING', value: 52_300 },
+        { category: 'walk', kind: 'longest', sessionId: 'c', localDate: '2026-06-19', exerciseType: 'WALKING', value: 60 * 60_000 },
+        { category: 'walk', kind: 'furthest', sessionId: 'c', localDate: '2026-06-19', exerciseType: 'WALKING', value: 800 },
+        { category: 'swim', kind: 'longest', sessionId: 'd', localDate: '2026-06-19', exerciseType: 'SWIMMING_POOL', value: 60 * 60_000 },
+        { category: 'swim', kind: 'furthest', sessionId: 'd', localDate: '2026-06-19', exerciseType: 'SWIMMING_POOL', value: 1500 },
+        { category: 'strength', kind: 'longest', sessionId: 'e', localDate: '2026-06-19', exerciseType: 'WEIGHTLIFTING', value: 60 * 60_000 },
+      ],
+    }, 'nl')
+    const names = [...container!.querySelectorAll('[data-record] .record-metric')].map((cell) => cell.textContent)
+    // The card's label names the sport, so the row does not say it again.
+    expect(names).toEqual([
+      'Langste', 'Verste', 'Langste', 'Verste', 'Langste', 'Verste', 'Langste', 'Verste', 'Langste',
+    ])
+    expect(text("[data-category='ride'][data-record='furthest'] .record-value")).toBe(`52,3${NB}km`)
+    // Under a kilometre a distance reads in metres; a swim's always does.
+    expect(text("[data-category='walk'][data-record='furthest'] .record-value")).toBe(`800${NB}m`)
+    expect(text("[data-category='swim'][data-record='furthest'] .record-value")).toBe(`1.500${NB}m`)
+  })
+
+  it('gives each category with a record its own card, labelled with its name and icon, run, ride, walk, swim first', () => {
+    // Sent out of order on purpose: the page orders the cards itself.
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'other', kind: 'longest', sessionId: 'o', localDate: '2026-06-19', exerciseType: 'SPORT', value: 60 * 60_000 },
+        { category: 'swim', kind: 'longest', sessionId: 's', localDate: '2026-06-19', exerciseType: 'SWIMMING_POOL', value: 60 * 60_000 },
+        { category: 'cardio', kind: 'longest', sessionId: 'c', localDate: '2026-06-19', exerciseType: 'WORKOUT', value: 60 * 60_000 },
+        { category: 'walk', kind: 'longest', sessionId: 'w', localDate: '2026-06-19', exerciseType: 'WALKING', value: 60 * 60_000 },
+        { category: 'strength', kind: 'longest', sessionId: 'k', localDate: '2026-06-19', exerciseType: 'WEIGHTLIFTING', value: 60 * 60_000 },
+        { category: 'ride', kind: 'longest', sessionId: 'b', localDate: '2026-06-19', exerciseType: 'BIKING', value: 60 * 60_000 },
+        { category: 'run', kind: 'longest', sessionId: 'r', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+      ],
+    })
+    const cards = [...container!.querySelectorAll<HTMLElement>('section.card')].filter((card) => card.querySelector('[data-record]') !== null)
+    expect(cards.map((card) => card.querySelector('h2.label')?.textContent)).toEqual(
+      ['Running', 'Cycling', 'Walking', 'Swimming', 'Strength', 'Cardio', 'Other'])
+    expect(cards.map((card) => card.querySelector('h2.label .card-label-icon')?.getAttribute('data-category')))
+      .toEqual(['run', 'ride', 'walk', 'swim', 'strength', 'cardio', 'other'])
+    // The glyph each category draws (CATEGORY_ICONS), the same one a session row carries.
+    for (const card of cards) expect(card.querySelector('h2.label .card-label-icon svg')).not.toBeNull()
+    // Each card holds only its own category's rows.
+    expect(cards.map((card) => [...card.querySelectorAll('[data-record]')].map((row) => row.getAttribute('data-category'))))
+      .toEqual([['run'], ['ride'], ['walk'], ['swim'], ['strength'], ['cardio'], ['other']])
+    // Halves, two to a row; the seventh, alone in its row, takes the whole of it.
+    expect(cards.map((card) => card.getAttribute('data-span'))).toEqual(['6', '6', '6', '6', '6', '6', '12'])
+  })
+
+  // An odd count's last card has no partner: at half width it would share a row with the
+  // Eddington card and leave milestones alone below. Full width, the category cards end on a whole
+  // row and the two span-6 cards after them pair as before.
+  it('gives the last of an odd number of category cards the whole row, so Eddington and milestones still pair', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'r', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { category: 'walk', kind: 'longest', sessionId: 'w', localDate: '2026-06-19', exerciseType: 'WALKING', value: 60 * 60_000 },
+        { category: 'strength', kind: 'longest', sessionId: 'k', localDate: '2026-06-19', exerciseType: 'WEIGHTLIFTING', value: 60 * 60_000 },
+      ],
+      eddington: { e: 12, from: '2026-01-01', days: 31 },
+      milestones: [{ kind: 'first', metric: 'exercise', localDate: '2026-01-02' }],
+    })
+    const spans = [...container!.querySelectorAll('section.card')].map((card) => [
+      card.querySelector('.record-list[data-category]')?.getAttribute('data-category') ?? card.querySelector('h2.label')?.textContent,
+      card.getAttribute('data-span'),
+    ])
+    expect(spans).toEqual([['run', '6'], ['walk', '6'], ['strength', '12'], ['Eddington number', '6'], ['Milestones', '6']])
+  })
+
+  it('names the cards in Dutch', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'r', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { category: 'swim', kind: 'longest', sessionId: 's', localDate: '2026-06-19', exerciseType: 'SWIMMING_POOL', value: 60 * 60_000 },
+        { category: 'strength', kind: 'longest', sessionId: 'k', localDate: '2026-06-19', exerciseType: 'WEIGHTLIFTING', value: 60 * 60_000 },
+        { category: 'other', kind: 'longest', sessionId: 'o', localDate: '2026-06-19', exerciseType: 'SPORT', value: 60 * 60_000 },
+      ],
+    }, 'nl')
+    const labels = [...container!.querySelectorAll('section.card')].filter((card) => card.querySelector('[data-record]') !== null)
+      .map((card) => card.querySelector('h2.label')?.textContent)
+    expect(labels).toEqual(['Hardlopen', 'Zwemmen', 'Kracht', 'Overig'])
+  })
+
+  it('keeps an even number of category cards at half width, the last one too', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'r', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { category: 'ride', kind: 'longest', sessionId: 'b', localDate: '2026-06-19', exerciseType: 'BIKING', value: 60 * 60_000 },
+      ],
+    })
+    const spans = [...container!.querySelectorAll('.record-list[data-category]')].map((list) => list.closest('section.card')!.getAttribute('data-span'))
+    expect(spans).toEqual(['6', '6'])
+  })
+
+  it('gives a lone category card the whole row', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'ride', kind: 'longest', sessionId: 'b', localDate: '2026-06-19', exerciseType: 'BIKING', value: 60 * 60_000 },
+        { category: 'ride', kind: 'furthest', sessionId: 'b', localDate: '2026-06-19', exerciseType: 'BIKING', value: 40_000 },
+      ],
+    })
+    const card = container!.querySelector('[data-record]')!.closest('section.card')!
+    expect(card.getAttribute('data-span')).toBe('12')
+  })
+
+  it('links each row to the workout that set it, the whole row the link', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'run 1', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { category: 'ride', kind: 'fastest-20k', sessionId: 'ride-7', localDate: '2026-06-19', exerciseType: 'BIKING', value: 2400 },
+      ],
+    })
+    const links = [...container!.querySelectorAll('[data-record] > a.record-row-link')]
+    // Through workoutPath, its id encoded.
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/activity/run%201', '/activity/ride-7'])
+    // The row's four cells are inside the link.
+    expect(links.map((link) => link.children.length)).toEqual([4, 4])
+  })
+
+  it('names the exercise type only where it says more than the card does', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { category: 'run', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'TREADMILL', value: 95 * 60_000 },
+        { category: 'run', kind: 'furthest', sessionId: 'b', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 12_000 },
+        { category: 'run', kind: 'most-climb', sessionId: 'c', localDate: '2026-06-19', exerciseType: 'TRAIL_RUN', value: 400 },
+        { category: 'cardio', kind: 'longest', sessionId: 'd', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 60 * 60_000 },
+      ],
+    }, 'nl')
+    expect(text("[data-category='run'][data-record='longest'] .record-source")).toBe('Loopband')
+    expect(text("[data-category='run'][data-record='furthest'] .record-source")).toBe('')
+    // Seeded since the demo holds one, so in Dutch rather than the humanised English.
+    expect(text("[data-category='run'][data-record='most-climb'] .record-source")).toBe('Trailrun')
+    // A category with no one plain type names every type.
+    expect(text("[data-category='cardio'][data-record='longest'] .record-source")).toBe('Cardiotraining')
   })
 
   it('names the device that set a record, and says nothing when it cannot', () => {
@@ -268,12 +462,13 @@ describe('the all-time page', () => {
     mountPage({
       ...EMPTY,
       sessionRecords: [
-        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
-        { kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: null, value: 12_850_000 },
+        { category: 'run', kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { category: 'run', kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: null, value: 12_850 },
       ],
     })
-    for (const row of Array.from(container!.querySelectorAll('[data-record]'))) {
-      expect(row.children.length, row.getAttribute('data-record') ?? '').toBe(4)
+    for (const row of Array.from(container!.querySelectorAll('[data-record] > .record-row-link'))) {
+      expect(row.children.length, row.parentElement!.getAttribute('data-record') ?? '').toBe(4)
+      expect(row.lastElementChild!.className).toBe('record-source')
     }
   })
 

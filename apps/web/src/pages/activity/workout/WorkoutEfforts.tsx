@@ -2,14 +2,13 @@ import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { Link } from '../../../router.js'
-import type { EffortKey, WorkoutPageData } from '../../../data/useWorkoutPage.js'
-import { EFFORT_DISTANCES } from '@haelan/core/fastest-efforts'
+import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
+import { effortDistancesOf } from '@haelan/core/fastest-efforts'
+import { exerciseCategory } from '@haelan/core/exercise-category'
 import { formatStopwatch } from '../../detail/figureText.js'
 import { formatNumber } from '../../../format.js'
 import { bestMonth } from './workoutText.js'
 
-// The mockup's rows, shortest first.
-const EFFORTS: readonly EffortKey[] = ['km', 'mile', 'fiveK']
 // The quiet good-day mark (PATTERNS.md): after the value in the table, before the words under it.
 const MARK = '✦'
 // Where a stretch lay, as the mockup words it: kilometres at one decimal at both ends, even one that
@@ -18,7 +17,8 @@ const ALONG_DECIMALS = 1
 
 /**
  * "Fastest efforts" (the mockup's "Snelste stukken"), beside the same route under the route card:
- * the fastest kilometre, mile and 5 km inside the run, read off its GPS route by the server, each
+ * the fastest stretch over each of the category's distances (a run's kilometre to marathon, a ride's
+ * 20 to 100 km, shortest first) inside the workout, read off its GPS route by the server, each
  * with where along the run it lay and beside the Records best of its kind with the month it was
  * set. A best that is this run's own reads "this workout", its time is marked ✦, and a line under
  * the table says it is the fastest ever and, with a best before it, by how much it beat that one.
@@ -26,14 +26,16 @@ const ALONG_DECIMALS = 1
  * scrolling sideways.
  *
  * A distance the route is shorter than is left out, and the card with none left, as it is for
- * any workout the server reads no efforts off (anything but a run, or one without a route).
+ * any workout the server reads no efforts off (a category with no distances, or one without a route).
  */
 export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 | 12 }): ReactNode {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const rows = EFFORTS.flatMap((key) => {
+  // The category's distances in their own order, through the shared core map: the server keys the
+  // efforts by them, and each carries the metres the where column needs.
+  const rows = effortDistancesOf(exerciseCategory(page.exerciseType)).flatMap(({ key, meters }) => {
     const effort = page.efforts?.[key] ?? null
-    return effort === null ? [] : [{ key, effort, distance: t(`activity.workout.page.efforts.${key}`) }]
+    return effort === null ? [] : [{ key, meters, effort, distance: t(`activity.workout.page.efforts.${key}`) }]
   })
   if (rows.length === 0) return null
   const bestOf = ({ best, isBest }: typeof rows[number]['effort']) => {
@@ -43,9 +45,9 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
       value: formatStopwatch(best.value), month: bestMonth(best.localDate, page.localDate, language),
     })
   }
-  const whereOf = (key: EffortKey, fromMeters: number) => {
-    const km = (meters: number) => formatNumber(meters / 1000, ALONG_DECIMALS, language, t('common.absent'))
-    return `${km(fromMeters)} – ${km(fromMeters + EFFORT_DISTANCES[key])}\u00a0${t('activity.units.km')}`
+  const whereOf = (meters: number, fromMeters: number) => {
+    const km = (at: number) => formatNumber(at / 1000, ALONG_DECIMALS, language, t('common.absent'))
+    return `${km(fromMeters)} – ${km(fromMeters + meters)}\u00a0${t('activity.units.km')}`
   }
   // "12 s faster than in August": seconds under a minute, a stopwatch past one; the plain line when
   // there was no best before this one, or the two print the same. Not formatFigureDifference: that
@@ -83,7 +85,7 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ key, effort, distance }) => (
+            {rows.map(({ key, meters, effort, distance }) => (
               <tr key={key}>
                 <th scope="row">{distance}</th>
                 <td className="workout-compared-this">
@@ -91,7 +93,7 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
                   {/* The line under the table says what the mark means; a screen reader hears it there. */}
                   {effort.isBest && <> <span aria-hidden="true">{MARK}</span></>}
                 </td>
-                <td className="workout-efforts-where">{whereOf(key, effort.fromMeters)}</td>
+                <td className="workout-efforts-where">{whereOf(meters, effort.fromMeters)}</td>
                 <td>{bestOf(effort)}</td>
               </tr>
             ))}

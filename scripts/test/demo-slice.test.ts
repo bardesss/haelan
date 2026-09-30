@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Glance } from '../../packages/core/src/query/glance.ts'
-import { sliceToFirstDay, trimGlance, unreachableDays, unreachableRouteWorkouts, unreachableWorkouts } from '../../demo/capture/slice.ts'
+import { sliceToFirstDay, trimGlance, unreachableDays, unreachableRecordWorkouts, unreachableRouteWorkouts, unreachableWorkouts } from '../../demo/capture/slice.ts'
 
 const P = '/api/v1/p/demo'
 
@@ -159,7 +159,7 @@ describe('unreachableRouteWorkouts', () => {
     // A previous time the strip leaves out, so each source is checked on its own.
     previous: { sessionId: 'prev-link' },
     time: { strip: [{ sessionId: 'old' }, { sessionId: 'prev' }, { sessionId: 'run' }] },
-    pace: { strip: [{ sessionId: 'pace-only' }, { sessionId: 'run' }] },
+    rate: { strip: [{ sessionId: 'rate-only' }, { sessionId: 'run' }] },
   }
 
   it('names the previous time and every strip dot on a same-route card with no recorded session page', () => {
@@ -169,9 +169,9 @@ describe('unreachableRouteWorkouts', () => {
       [`${P}/sessions/old`, { id: 'old' }],
     ])
     expect(unreachableRouteWorkouts(recorded)).toEqual([
-      { id: 'pace-only', from: `${P}/workout/run` },
       { id: 'prev', from: `${P}/workout/run` },
       { id: 'prev-link', from: `${P}/workout/run` },
+      { id: 'rate-only', from: `${P}/workout/run` },
     ])
   })
 
@@ -179,10 +179,40 @@ describe('unreachableRouteWorkouts', () => {
     const recorded = new Map<string, unknown>([
       [`${P}/workout/run`, page(card)],
       [`${P}/workout/ride`, page(null)],
-      ...['run', 'old', 'prev', 'prev-link', 'pace-only'].map((id) => [`${P}/sessions/${id}`, { id }] as [string, unknown]),
+      ...['run', 'old', 'prev', 'prev-link', 'rate-only'].map((id) => [`${P}/sessions/${id}`, { id }] as [string, unknown]),
     ])
     expect(unreachableRouteWorkouts(recorded)).toEqual([])
-    expect(unreachableRouteWorkouts(new Map([[`${P}/workout/run`, page({ ...card, previous: null, pace: null })]])))
+    expect(unreachableRouteWorkouts(new Map([[`${P}/workout/run`, page({ ...card, previous: null, rate: null })]])))
       .toEqual([{ id: 'old', from: `${P}/workout/run` }, { id: 'prev', from: `${P}/workout/run` }, { id: 'run', from: `${P}/workout/run` }])
+  })
+})
+
+describe('unreachableRecordWorkouts', () => {
+  const records = (...ids: string[]) => ({ sessionRecords: ids.map((sessionId) => ({ sessionId })) })
+
+  it('names every record row whose workout has no recorded page or session read, each once', () => {
+    const recorded = new Map<string, unknown>([
+      [`${P}/all-time`, records('run', 'ride', 'swim', 'walk', 'ride')],
+      [`${P}/workout/run`, {}],
+      [`${P}/sessions/run`, { id: 'run' }],
+      // Half an opening each: the page without its session read, the session without its page.
+      [`${P}/workout/ride`, {}],
+      [`${P}/sessions/swim`, { id: 'swim' }],
+    ])
+    expect(unreachableRecordWorkouts(recorded)).toEqual([
+      { id: 'ride', from: `${P}/all-time` },
+      { id: 'swim', from: `${P}/all-time` },
+      { id: 'walk', from: `${P}/all-time` },
+    ])
+  })
+
+  it('is empty when every record opens, and reads no other url', () => {
+    const recorded = new Map<string, unknown>([
+      [`${P}/all-time`, records('run')],
+      [`${P}/workout/run`, {}],
+      [`${P}/sessions/run`, { id: 'run' }],
+      [`${P}/insights`, records('elsewhere')],
+    ])
+    expect(unreachableRecordWorkouts(recorded)).toEqual([])
   })
 })

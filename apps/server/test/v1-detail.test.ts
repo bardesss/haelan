@@ -348,7 +348,40 @@ describe('GET /workout/:sessionId', () => {
     seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 140, exerciseType: 'BIKING', metrics: { averageSpeedMillimetersPerSecond: 7000 } })
     const body = (await get(harness, token, '/workout/subject')).json()
     expect(body.previous.values.speed).toBe(6.54)
-    expect(body.previous.values.pace).toBe(150)
+    // A ride reads as speed, so its pace is not sent even where the device logged one.
+    expect(body.previous.values.pace).toBeUndefined()
+  })
+
+  // 83.33 m every 10 s is 8.333 m/s, sent as 8.33; 150.05 against 120.05 s a kilometre is 6.664
+  // then 8.330 m/s, 1.665 faster, sent as 1.67; 1500 m in 1810.4 s is 120.69 s per 100 m, sent as 121.
+  it("sends a ride's speed series and split trend at the speed figure's precision, and a swim's pace per 100 m whole", async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedRun(harness, {
+      id: 'ride', sourceId: 'watch', localDate: '2026-09-04', pace: 120, exerciseType: 'BIKING', splitSeconds: [150.3, 149.8, 120.2, 119.9],
+    })
+    seedRun(harness, {
+      id: 'swim', sourceId: 'watch', localDate: '2026-09-05', pace: 1200, exerciseType: 'SWIMMING_POOL',
+      metrics: { distanceMillimeters: 1_500_000 }, activeDuration: '1810.4s',
+    })
+    const startMs = at('2026-09-04', '07:00')
+    const metresPerDegree = (6_371_000 * Math.PI) / 180
+    harness.app.haelan.instance.db.insert(schema.sessionRoutes).values(Array.from({ length: 19 }, (_, i) => ({
+      id: `ride-${i}`, sessionId: 'ride', ordinal: i, atMs: startMs + i * 10_000,
+      latitude: 52 + (i * 250) / 3 / metresPerDegree, longitude: 5,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+    const ride = (await get(harness, token, '/workout/ride')).json()
+    expect(ride.through.pace).toBeNull()
+    expect(ride.through.speed.points.map((p: { value: number }) => p.value)).toEqual([8.33, 8.33, 8.33])
+    expect(ride.through.speed.fastest.metersPerSecond).toBe(8.33)
+    expect([0, 60, 120]).toContain(ride.through.speed.fastest.elapsedSeconds)
+    expect(ride.splitTrend).toEqual({ secondHalfFasterByMetersPerSecond: 1.67 })
+    const swim = (await get(harness, token, '/workout/swim')).json()
+    expect(swim.hero).toBe('swimPace')
+    expect(swim.figures.swimPace.value).toBe(121)
   })
 
   // 330.4 and 320.2 against 300.1 and 290.3 is 30.1 s/km faster, sent as 30; the ceilings are
@@ -487,25 +520,58 @@ describe('GET /workout/:sessionId', () => {
     expect(body.sameRoute.time.value).toBe(1700)
     expect(body.sameRoute.time.strip.map((p: { value: number }) => p.value)).toEqual([1801, 1700])
     expect(body.sameRoute.time.baseline.center).toBe(1801)
-    expect(body.efforts.km.seconds).toBe(333)
+    expect(body.efforts['1k'].seconds).toBe(333)
     expect(body.efforts.mile.seconds).toBe(536)
-    expect(body.efforts.fiveK.seconds).toBe(1667)
+    expect(body.efforts['5k'].seconds).toBe(1667)
     // The Records bests, whole from core: the earlier run's, since the two are equal once printed
     // and a tie goes to the earlier run.
-    expect(body.efforts.km.best).toMatchObject({ sessionId: 'earlier', value: 333 })
+    expect(body.efforts['1k'].best).toMatchObject({ sessionId: 'earlier', value: 333 })
     expect(body.efforts.mile.best.value).toBe(536)
-    expect(body.efforts.fiveK.best.value).toBe(1667)
+    expect(body.efforts['5k'].best.value).toBe(1667)
+    expect(body.best['fastest-1k']).toMatchObject({ sessionId: 'earlier', value: 333 })
     // The pace on the route at the pace figure's precision; where each stretch began in whole
     // metres (the mile's first window starts 190.66 m in); the earlier run's efforts, the bests
     // this one set itself against, in whole seconds.
-    expect(body.sameRoute.pace.value).toBe(300)
-    expect(body.sameRoute.pace.strip.map((p: { value: number }) => p.value)).toEqual([300, 300])
+    expect(body.sameRoute.rate.value).toBe(300)
+    expect(body.sameRoute.rate.strip.map((p: { value: number }) => p.value)).toEqual([300, 300])
     expect(body.efforts.mile.fromMeters).toBe(191)
-    expect(body.efforts.km.fromMeters).toBe(200)
-    expect(body.efforts.km.previousBest).toMatchObject({ sessionId: 'earlier', value: 333 })
+    expect(body.efforts['1k'].fromMeters).toBe(200)
+    expect(body.efforts['1k'].previousBest).toMatchObject({ sessionId: 'earlier', value: 333 })
     expect(body.efforts.mile.previousBest.value).toBe(536)
     // The route the times come from stays on the server.
     expect(JSON.stringify(body)).not.toMatch(/latitude|longitude/)
+  })
+
+  // A 25 km ride at 8.3 m/s: its 20 km in whole seconds (2409.6 s sent as 2410), no 40 km, and its
+  // bests keyed by the ride's own kinds, distance and climb in whole metres.
+  it("sends a ride's efforts and bests over the ride's own distances, whole", async () => {
+    const h = await withServer()
+    harness = h
+    h.clock.nowMs = NOW_MS
+    const token = await h.signIn()
+    seedSource(h, 'watch')
+    seedRun(h, {
+      id: 'ride', sourceId: 'watch', localDate: '2026-09-04', pace: 120, exerciseType: 'BIKING',
+      metrics: { distanceMillimeters: 25_000_400, elevationGainMillimeters: 212_600 },
+    })
+    const startMs = at('2026-09-04', '07:00')
+    const metresPerDegree = (6_371_000 * Math.PI) / 180
+    h.app.haelan.instance.db.insert(schema.sessionRoutes).values(Array.from({ length: 302 }, (_, i) => ({
+      id: `ride-${i}`, sessionId: 'ride', ordinal: i, atMs: startMs + i * 10_000,
+      latitude: 52 + (i * 83) / metresPerDegree, longitude: 5,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+    const body = (await get(h, token, '/workout/ride')).json()
+    expect(Object.keys(body.efforts)).toEqual(['20k', '40k', '100k'])
+    expect(body.efforts['20k']).toMatchObject({ seconds: 2410, isBest: true, best: { sessionId: 'ride', value: 2410 } })
+    expect(body.efforts['40k']).toBeNull()
+    expect(body.best).toEqual({
+      longest: { sessionId: 'ride', localDate: '2026-09-04', value: 30 * 60_000 },
+      furthest: { sessionId: 'ride', localDate: '2026-09-04', value: 25_000 },
+      'most-climb': { sessionId: 'ride', localDate: '2026-09-04', value: 213 },
+      'fastest-20k': { sessionId: 'ride', localDate: '2026-09-04', value: 2410 },
+      'fastest-40k': null, 'fastest-100k': null,
+    })
   })
 
   // An alternate's id is an old link to a workout another source also recorded; the page answers

@@ -1,6 +1,6 @@
 import type { GlanceBaseline, GlanceFigure, GlanceStanding } from '../../src/data/useGlance.js'
 import type { PageFigure } from '../../src/data/useNightPage.js'
-import type { MinuteSeries, PaceSeries, WorkoutFigure, WorkoutFigureKey, WorkoutPageData } from '../../src/data/useWorkoutPage.js'
+import type { MinuteSeries, PaceSeries, SpeedSeries, WorkoutFigure, WorkoutFigureKey, WorkoutPageData } from '../../src/data/useWorkoutPage.js'
 import type { WorkoutSessionDetail } from '../../src/data/useSessions.js'
 
 // One whole workout page (GET /p/:personId/workout/:sessionId) in the wire shape the route sends:
@@ -125,7 +125,7 @@ function sameRouteFixture(): NonNullable<WorkoutPageData['sameRoute']> {
     times: ROUTE_TIMES,
     since: ROUTE_SINCE,
     time: loop(time),
-    pace: loop(pace),
+    rate: loop(pace),
     previous: { sessionId: ROUTE_PREVIOUS_ID, localDate: STRIP_DATES[8]!, seconds: 1712 },
   }
 }
@@ -162,13 +162,18 @@ export function workoutPageFixture(): WorkoutPageData {
     },
     comparison: {
       exerciseType: 'RUNNING', of: 20, reason: null,
-      pace: { better: 17, of: 20 }, heartRate: { better: 4, of: 20 }, distance: { better: 12, of: 20 }, cardioLoad: { better: 18, of: 20 },
+      heartRate: { better: 4, of: 20 }, distance: { better: 12, of: 20 }, cardioLoad: { better: 18, of: 20 },
     },
+    rank: { better: 17, of: 20 },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { pace: 336, distance: 5000, averageHeartRate: 153, cardioLoad: 62 } },
     best: {
-      fastestKmSeconds: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
-      furthestMeters: { value: 10400, sessionId: 'run-may', localDate: '2026-05-10' },
-      longestMs: { value: 3_904_000, sessionId: 'run-may', localDate: '2026-05-10' },
+      longest: { value: 3_904_000, sessionId: 'run-may', localDate: '2026-05-10' },
+      furthest: { value: 10400, sessionId: 'run-may', localDate: '2026-05-10' },
+      'most-climb': null,
+      'fastest-1k': { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
+      'fastest-mile': { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
+      'fastest-5k': { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE },
+      'fastest-10k': null, 'fastest-half': null, 'fastest-marathon': null,
     },
     day: {
       steps: dayFigure('steps', 'count', 'up', 12880, band(8250, 6000, 10500)),
@@ -207,7 +212,7 @@ export function workoutPageFixture(): WorkoutPageData {
       },
       restingHeartRate: dayFigure('resting_heart_rate', 'bpm', 'down', 53, band(54, 51, 57)),
     },
-    through: { pace: PACE_SERIES, cadence: CADENCE_SERIES },
+    through: { pace: PACE_SERIES, speed: null, cadence: CADENCE_SERIES },
     // The mockup's negative split, and the provider's zone ceilings for the day.
     splitTrend: { secondHalfFasterBySecondsPerKm: 22 },
     zoneBounds: { moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 },
@@ -216,7 +221,7 @@ export function workoutPageFixture(): WorkoutPageData {
     // kilometre and the mile short of the June bests, the 5 km this run's own, 12 s quicker than
     // the August best it beat.
     efforts: {
-      km: {
+      '1k': {
         seconds: 296, fromMeters: 3400, source: 'gps', isBest: false,
         best: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
         previousBest: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
@@ -226,11 +231,12 @@ export function workoutPageFixture(): WorkoutPageData {
         best: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
         previousBest: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
       },
-      fiveK: {
+      '5k': {
         seconds: 1602, fromMeters: 180, source: 'gps', isBest: true,
         best: { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE },
         previousBest: { value: 1614, sessionId: 'run-august', localDate: '2026-08-15' },
       },
+      '10k': null, half: null, marathon: null,
     },
     log: {
       presets: ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine'],
@@ -261,13 +267,107 @@ export function strengthPageFixture(): WorkoutPageData {
       averageHeartRate: figure({ key: 'averageHeartRate', unit: 'bpm', value: 112, baseline: thin(112) }),
       calories: figure({ key: 'calories', unit: 'kcal', value: 240, baseline: thin(240) }),
     },
-    comparison: { exerciseType: 'WEIGHTLIFTING', of: 0, reason: 'too-few', pace: null, heartRate: null, distance: null, cardioLoad: null },
+    comparison: { exerciseType: 'WEIGHTLIFTING', of: 0, reason: 'too-few', heartRate: null, distance: null, cardioLoad: null },
+    rank: null,
     previous: null,
-    best: { fastestKmSeconds: null, furthestMeters: null, longestMs: null },
+    best: { longest: null, furthest: null, 'most-climb': null },
     splitTrend: null,
     // No route and no steps from the gym: nothing a minute at a time beside the heart rate.
-    through: { pace: null, cadence: null },
+    through: { pace: null, speed: null, cadence: null },
     // No route, so no loop to set it against and no stretch to time.
+    sameRoute: null,
+    efforts: null,
+  }
+}
+
+/**
+ * A ride's speed a minute at a time, in metres per second at the speed figure's two decimals: 8.33
+ * (30.0 km/h) for twelve minutes, the pause, then 9.00 (32.4 km/h), its highest the first of those.
+ */
+export const SPEED_SERIES: SpeedSeries = {
+  unit: 'meters_per_second',
+  points: Array.from({ length: 34 }, (_, m) => m).filter((m) => m !== 12 && m !== 13)
+    .map((m) => ({ elapsedSeconds: m * 60, value: m < 12 ? 8.33 : 9 })),
+  fastest: { metersPerSecond: 9, elapsedSeconds: 14 * 60 },
+}
+
+/**
+ * A road ride as the server sends one (workoutPage.ts per sport): speed its hero, 7.6 m/s (27.4
+ * km/h) inside its usual; no pace, no cadence and no running form, since a ride has none; the
+ * previous ride's speed 7.38 m/s (26.6 km/h), so 0.8 km/h slower than this one; its speed through
+ * the workout in place of pace; a split trend in metres per second; and its speed on the loop.
+ */
+export function ridePageFixture(): WorkoutPageData {
+  const page = workoutPageFixture()
+  const speed = figure({
+    key: 'speed', unit: 'meters_per_second', precision: 2, direction: 'up', value: 7.6, baseline: band(7.3, 6.9, 7.8),
+    strip: [7.1, 7.2, 7.0, 7.4, 7.3, 7.5, 7.2, 7.1, 7.38, 7.6],
+  })
+  const { pace: _pace, cadence: _cadence, strideLength: _s, groundContact: _g, verticalOscillation: _o, verticalRatio: _r, vo2max: _v, ...rest } = page.figures
+  const same = page.sameRoute!
+  return {
+    ...page,
+    exerciseType: 'BIKING',
+    hero: 'speed',
+    figures: { ...rest, speed, distance: figure({ key: 'distance', unit: 'meters', value: 30_000, baseline: band(28_000, 24_000, 32_000) }) },
+    comparison: { ...page.comparison, exerciseType: 'BIKING' },
+    rank: { better: 12, of: 20 },
+    previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { speed: 7.38, distance: 28_000, averageHeartRate: 141, cardioLoad: 60 } },
+    best: {
+      longest: { value: 9_000_000, sessionId: 'ride-may', localDate: '2026-05-10' },
+      furthest: { value: 80_000, sessionId: 'ride-may', localDate: '2026-05-10' },
+      'most-climb': null, 'fastest-20k': null, 'fastest-40k': null, 'fastest-100k': null,
+    },
+    through: { pace: null, speed: SPEED_SERIES, cadence: null },
+    // 0.33 m/s is 1.188 km/h, printed 1.2.
+    splitTrend: { secondHalfFasterByMetersPerSecond: 0.33 },
+    sameRoute: { ...same, rate: { ...speed, strip: speed.strip.map((point, i) => (i === speed.strip.length - 1 ? point : { ...point, sessionId: `loop-${i}` })) } },
+    efforts: null,
+  }
+}
+
+/** The ride's own `/sessions/:id` answer: its three kilometres at 30.0, 36.0 and 24.0 km/h. */
+export function rideSessionFixture(): WorkoutSessionDetail {
+  const session = workoutSessionFixture()
+  return {
+    ...session,
+    attrs: { exerciseType: 'BIKING', activeDuration: '4000s', metricsSummary: { distanceMillimeters: 30_000_000 } },
+    route: ROUTE_FIXTURE,
+    autoSplits: [120, 100, 150].map((pace, i) => ({
+      startMs: START + i * 150_000, endMs: START + (i + 1) * 150_000, splitType: 'DISTANCE',
+      activeDurationSeconds: pace, distanceMeters: 1000, paceSecondsPerKm: pace,
+      averageHeartRateBpm: 140 + i, averageHeartRateBpmSource: 'provider' as const,
+    })),
+  }
+}
+
+/**
+ * A pool swim as the server sends one: its pace per 100 m the hero, 2:05 inside its usual; no pace
+ * per km, no climb; the previous swim 2:09 a 100 m, so 4 s/100 m slower; no route, so nothing
+ * through the workout, no loop and no stretches.
+ */
+export function swimPageFixture(): WorkoutPageData {
+  const page = workoutPageFixture()
+  return {
+    ...page,
+    exerciseType: 'SWIMMING_POOL',
+    hero: 'swimPace',
+    figures: {
+      swimPace: figure({ key: 'swimPace', unit: 'seconds_per_100m', direction: 'down', value: 125, baseline: band(128, 122, 134), strip: [131, 129, 133, 127, 128, 130, 126, 128, 129, 125] }),
+      distance: figure({ key: 'distance', unit: 'meters', value: 1500, baseline: band(1400, 1200, 1600) }),
+      movingTime: figure({ key: 'movingTime', unit: 'seconds', value: 1875, baseline: band(1800, 1600, 2000) }),
+      averageHeartRate: page.figures.averageHeartRate!,
+    },
+    comparison: { ...page.comparison, exerciseType: 'SWIMMING_POOL' },
+    rank: { better: 20, of: 20 },
+    previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { swimPace: 129, distance: 1400, averageHeartRate: 150 } },
+    best: {
+      longest: { value: 3_000_000, sessionId: 'swim-may', localDate: '2026-05-10' },
+      furthest: { value: 2000, sessionId: 'swim-may', localDate: '2026-05-10' },
+      'most-climb': null,
+    },
+    through: { pace: null, speed: null, cadence: null },
+    splitTrend: null,
     sameRoute: null,
     efforts: null,
   }

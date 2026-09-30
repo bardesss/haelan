@@ -11,6 +11,8 @@ interface WorkoutEvidence {
   figures: { key: string, standing: string | null }[] | null
   peakMinutes: number | null
   lastKilometre: { seconds: number, standing: string | null, earlierKilometres: number } | null
+  secondHalfFasterBySecondsPerKm: number | null
+  secondHalfFasterByMetersPerSecond: number | null
   standsOut: string | null
 }
 
@@ -30,6 +32,8 @@ interface Values {
   peak?: number
   /** Full-kilometre splits, each its seconds. */
   kilometres?: number[]
+  /** Moving time in seconds, what a swim's pace per 100 m and a ride's speed are worked out over. */
+  moving?: number
 }
 
 describe('explain, kind workout', () => {
@@ -76,7 +80,8 @@ describe('explain, kind workout', () => {
       attrs: JSON.stringify({
         type: null, mainSleep: null, stagesStatus: null, summary: null, shortAwakenings: null,
         splitSummaries: null, exerciseEvents: null, displayName: null, notes: null, routeConsentRequired: null,
-        exerciseMetadata: { hasGps: false }, exerciseType, metricsSummary, splits: splits ?? null, activeDuration: null,
+        exerciseMetadata: { hasGps: false }, exerciseType, metricsSummary, splits: splits ?? null,
+        activeDuration: v.moving === undefined ? null : `${v.moving}s`,
       }),
     }).run()
     if (o.excluded === true) {
@@ -197,6 +202,43 @@ describe('explain, kind workout', () => {
     expect(answer.stoppedAt).toBe('withinUsual')
     expect(answer.walked).toEqual(['excluded', 'thinHistory', 'hero', 'hardMinutes', 'lastKilometre', 'otherFigure', 'withinUsual'])
     expect(answer.evidence.standsOut).toBeNull()
+  })
+
+  it("carries a ride's split trend in m/s and a run's in s/km, each in its own field", () => {
+    // A ride's page sends its split trend in speed; read as s/km it would claim a pace a ride has not.
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { pace: 120, distance: 4000, kilometres: [125, 125, 115, 115] })
+    const ride = explain('ride').evidence
+    expect(ride.secondHalfFasterBySecondsPerKm).toBeNull()
+    expect(ride.secondHalfFasterByMetersPerSecond).toBeCloseTo(1000 / 115 - 1000 / 125, 6)
+    seedWorkout('run', shiftLocalDate(SUBJECT_DATE, -1), 'RUNNING', { pace: 330, distance: 4000, kilometres: [340, 340, 320, 320] })
+    const run = explain('run').evidence
+    expect(run.secondHalfFasterBySecondsPerKm).toBeCloseTo(20, 6)
+    expect(run.secondHalfFasterByMetersPerSecond).toBeNull()
+  })
+
+  it("words a swim's pace per 100 m in its unit, and a slower one as slower", () => {
+    // Six earlier pool swims at about 2:30 per 100 m, then one at 2:40: its hero is the pace per
+    // 100 m worked out from distance and moving time, a figure that runs down like a pace.
+    for (let i = 0; i < 6; i += 1) {
+      seedWorkout(`swim-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (6 - i)), 'SWIMMING_POOL', { distance: 1500, moving: 2250 + (i % 2 === 0 ? 15 : -15) })
+    }
+    seedWorkout('subject', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1500, moving: 2400 })
+    const answer = explain('subject')
+    expect(answer.stoppedAt).toBe('hero')
+    expect(answer.evidence.hero).toBe('swimPace')
+    expect(answer.finding).toMatch(/^This swimming pool session on 2026-09-04: pace per 100 m 2:40\/100m, slower than the usual 2:2\d\/100m to 2:3\d\/100m over its 6 earlier sessions of the type\.$/)
+  })
+
+  it("never narrates a ride's last kilometre as a clock time, a ride reads in speed", () => {
+    // The last split is far quicker than the ones before it; a run would stop on it.
+    for (let i = 0; i < 6; i += 1) {
+      seedWorkout(`ride-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (6 - i)), 'BIKING', { distance: 20_000 + (i % 2 === 0 ? 100 : -100), moving: 2400 + (i % 2 === 0 ? 20 : -20) })
+    }
+    seedWorkout('subject', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 2400, kilometres: [125, 125, 125, 125, 90] })
+    const answer = explain('subject')
+    expect(answer.evidence.hero).toBe('speed')
+    expect(answer.evidence.lastKilometre).toBeNull()
+    expect(answer.stoppedAt).toBe('withinUsual')
   })
 
   it('refuses an id naming no workout, and a night', () => {

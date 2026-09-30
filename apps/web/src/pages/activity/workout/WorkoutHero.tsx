@@ -5,34 +5,52 @@ import { BasisContext } from '../../../components/basis.js'
 import { verdictTone } from '../../../components/FigureRow.js'
 import { Sparkline } from '../../../charts/Sparkline.js'
 import { Link } from '../../../router.js'
-import { formatSessionDateHeading } from '../../../format.js'
+import { formatNumber, formatSessionDateHeading } from '../../../format.js'
 import type { Translate } from '../../../format.js'
 import { useOpensDay } from '../../dashboard/cardShared.js'
 import type { WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/figureText.js'
 import { bestMonth, workoutPath } from './workoutText.js'
 
-// The heroes whose ranking is the comparison's pace facet: faster is faster whether it is read as
-// a pace or as a speed. Moving time has no facet of its own to rank by.
-const RANKED_BY_PACE: ReadonlySet<string> = new Set(['pace', 'speed'])
+/**
+ * How far this workout's rate lies from the previous one's, as printed and without its sign, and
+ * whether it was the quicker: a pace in whole seconds per km ("12 s/km"), a swim's per 100 m
+ * ("4 s/100 m"), a ride's speed in km/h at one decimal ("0.8 km/h"). Null for a hero that is no
+ * rate, or one the previous workout has no value for. Zero apart is `faster: null`.
+ */
+function rateDifference(
+  hero: WorkoutFigure, before: number | undefined, language: string, t: Translate,
+): { difference: string, faster: boolean | null } | null {
+  if (before === undefined || hero.value === null) return null
+  if (hero.key === 'speed') {
+    // Tenths of a km/h, the two speeds as formatFigureValue prints them; a higher speed is faster.
+    const tenths = Math.round(hero.value * 36) - Math.round(before * 36)
+    const difference = `${formatNumber(Math.abs(tenths) / 10, 1, language, '')}\u00a0${t('activity.units.kmh')}`
+    return { difference, faster: tenths === 0 ? null : tenths > 0 }
+  }
+  const key = hero.key === 'pace' ? 'secondsPerKm' : hero.key === 'swimPace' ? 'secondsPer100m' : null
+  if (key === null) return null
+  // Between the two paces as printed (whole seconds), as the comparison table takes its difference.
+  const seconds = Math.round(hero.value) - Math.round(before)
+  return { difference: t(`activity.workout.page.${key}`, { value: Math.abs(seconds) }), faster: seconds === 0 ? null : seconds < 0 }
+}
 
 /**
- * "12 s/km faster than the previous one" for a pace hero, the only hero the previous workout's
- * values cover (workoutPage.ts's previousOf sends pace, distance, heart rate and load). Faster and
- * slower are what a smaller and a larger pace mean, not a verdict: the same words a stopwatch
- * would use. Any other hero still names the previous one and links to it, without a difference.
+ * "12 s/km faster than the previous one" under a pace hero, "0.8 km/h faster" under a ride's
+ * speed, "4 s/100 m faster" under a swim's pace (workoutPage.ts's previousOf sends each rate, as
+ * the page's own figure reads it). Faster and slower are what a quicker and a slower rate mean, not
+ * a verdict: the same words a stopwatch would use. Any other hero still names the previous one and
+ * links to it, without a difference.
  */
 function previousLine(page: WorkoutPageData, hero: WorkoutFigure, language: string, t: Translate): string | null {
   const { previous } = page
   if (previous === null) return null
   const date = formatSessionDateHeading(previous.localDate, language)
-  const before = hero.key === 'pace' ? previous.values.pace : undefined
-  if (before === undefined || hero.value === null) return t('activity.workout.page.previousOnly', { date })
-  // Between the two paces as printed (whole seconds), as the comparison table takes its difference.
-  const seconds = Math.round(hero.value) - Math.round(before)
-  if (seconds === 0) return t('activity.workout.page.previousSame', { date })
-  const difference = t('activity.workout.page.secondsPerKm', { value: Math.abs(seconds) })
-  return t(seconds < 0 ? 'activity.workout.page.previousFaster' : 'activity.workout.page.previousSlower', { difference, date })
+  const { key } = hero
+  const apart = key === 'pace' || key === 'speed' || key === 'swimPace' ? rateDifference(hero, previous.values[key], language, t) : null
+  if (apart === null) return t('activity.workout.page.previousOnly', { date })
+  if (apart.faster === null) return t('activity.workout.page.previousSame', { date })
+  return t(apart.faster ? 'activity.workout.page.previousFaster' : 'activity.workout.page.previousSlower', { difference: apart.difference, date })
 }
 
 /**
@@ -44,14 +62,15 @@ function previousLine(page: WorkoutPageData, hero: WorkoutFigure, language: stri
  * since Records keeps no fastest speed; the comparison table's distance row still carries the furthest.
  */
 function bestLine(page: WorkoutPageData, hero: WorkoutFigure, language: string, t: Translate): string | null {
-  if (hero.key === 'pace' && page.best.fastestKmSeconds !== null) {
-    const { value, localDate } = page.best.fastestKmSeconds
+  const fastestKm = page.best['fastest-1k'] ?? null
+  if (hero.key === 'pace' && fastestKm !== null) {
+    const { value, localDate } = fastestKm
     return t('activity.workout.page.bestFastestKm', {
       value: formatFigureValue(hero, value, language, t), month: bestMonth(localDate, page.localDate, language),
     })
   }
-  if (hero.key === 'elapsed' && page.best.longestMs !== null) {
-    const { value, localDate } = page.best.longestMs
+  if (hero.key === 'elapsed' && page.best.longest !== null) {
+    const { value, localDate } = page.best.longest
     return t('activity.workout.page.bestLongest', {
       value: formatFigureValue(hero, value / 1000, language, t), month: bestMonth(localDate, page.localDate, language),
     })
@@ -61,7 +80,7 @@ function bestLine(page: WorkoutPageData, hero: WorkoutFigure, language: string, 
 
 /**
  * The workout's lead, wired as the night page's hero is (NightHero): the figure its type is judged
- * by (the server's `hero`: pace on foot, speed on a bike, moving time otherwise) in display type,
+ * by (the server's `hero`: pace on foot, speed on a bike outdoors, pace per 100 m in the water, moving time otherwise) in display type,
  * its verdict in `.detail-verdict` coloured by verdictTone, how it ranks among recent workouts of
  * the type, the difference from the previous one with a way to it, the Records best, and a strip of
  * this workout and up to nine of its type before it with the usual shaded behind and both its edges
@@ -107,12 +126,15 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   const verdict = verdictLine(hero, language, t)
   const tone = verdictTone(hero.judged, hero.standing)
   const { comparison } = page
-  const rankable = RANKED_BY_PACE.has(hero.key) && comparison.reason === null && band !== undefined
-  // "Faster than 20 of your last 20" is a sum the reader has to check; every one of them is "all".
-  const rank = rankable && comparison.pace !== null
-    ? t(comparison.pace.better === comparison.pace.of ? 'activity.workout.comparison.paceAll' : 'activity.workout.comparison.pace',
-      { better: comparison.pace.better, of: comparison.pace.of })
-    : null
+  // The server's rank on the rate the hero shows (workoutPage.ts's rankOf: a pace, a ride's speed
+  // or a swim's pace per 100 m, each faster being better), so one sentence serves all three; none
+  // for a time hero. "Faster than 20 of your last 20" is a sum the reader has to check; every one of
+  // them is "all".
+  // `?? null`: a page cached or captured before the rank was sent carries none.
+  const serverRank = page.rank ?? null
+  const ranked = serverRank !== null && comparison.reason === null && band !== undefined ? serverRank : null
+  const rank = ranked === null ? null
+    : t(ranked.better === ranked.of ? 'activity.workout.comparison.rankAll' : 'activity.workout.comparison.rank', { better: ranked.better, of: ranked.of })
   const previous = previousLine(page, hero, language, t)
   const best = bestLine(page, hero, language, t)
   // A pace strip is drawn upside down so a faster run sits higher; the caption says so, since a

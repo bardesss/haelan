@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { balanceOf, ConfigError, morningSummaryOfMorning, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
-import type { GlanceRecovery, MinuteSeries, NightPage, NightTrace, PaceSeries, WorkoutPage } from '@haelan/core'
+import type { GlanceRecovery, MinuteSeries, NightPage, NightTrace, PaceSeries, SpeedSeries, WorkoutPage } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
   personAndToday, personIdOf, personQueryOf, roundFigure, roundMetricValue, roundMetricValueOrNull, roundPageFigure,
@@ -123,13 +123,36 @@ function roundWorkoutNight(night: WorkoutPage['after']['night']): WorkoutPage['a
   return night === null ? null : { ...night, asleep: roundPageFigure(night.asleep), deep: roundPageFigure(night.deep) }
 }
 
-/** A minute series under the trace, each value whole: seconds per km as the pace figure is sent, steps per minute as cadence is. */
-function roundMinuteSeries<T extends MinuteSeries>(series: T | null): T | null {
-  return series === null ? null : { ...series, points: series.points.map((p) => ({ ...p, value: Number(p.value.toFixed(0)) })) }
+/** A minute series under the trace, each value to `digits` (whole unless said): seconds per km as the pace figure is sent, steps per minute as cadence is. */
+function roundMinuteSeries<T extends MinuteSeries>(series: T | null, digits = 0): T | null {
+  return series === null ? null : { ...series, points: series.points.map((p) => ({ ...p, value: Number(p.value.toFixed(digits)) })) }
+}
+
+// A speed in metres per second at the speed figure's own precision (workoutPage.ts's FIGURES),
+// since a whole metre per second is 3.6 km/h.
+const SPEED_DIGITS = 2
+
+/** A ride's speed series at the speed figure's precision, its fastest minute likewise, its elapsed seconds whole. */
+function roundSpeedSeries(series: SpeedSeries | null): SpeedSeries | null {
+  const rounded = roundMinuteSeries(series, SPEED_DIGITS)
+  if (rounded === null || rounded.fastest === null) return rounded
+  const { metersPerSecond, elapsedSeconds } = rounded.fastest
+  return { ...rounded, fastest: { metersPerSecond: Number(metersPerSecond.toFixed(SPEED_DIGITS)), elapsedSeconds: Number(elapsedSeconds.toFixed(0)) } }
+}
+
+/** The split trend in whole seconds per km, as the pace figure is sent, or a ride's at the speed figure's precision. */
+function roundSplitTrend(trend: WorkoutPage['splitTrend']): WorkoutPage['splitTrend'] {
+  if (trend === null) return null
+  if ('secondHalfFasterByMetersPerSecond' in trend) {
+    return { secondHalfFasterByMetersPerSecond: Number(trend.secondHalfFasterByMetersPerSecond.toFixed(SPEED_DIGITS)) }
+  }
+  return { secondHalfFasterBySecondsPerKm: Number(trend.secondHalfFasterBySecondsPerKm.toFixed(0)) }
 }
 
 /** One fastest effort in whole seconds and whole metres. */
-function roundEffort(effort: NonNullable<WorkoutPage['efforts']>['km']): NonNullable<WorkoutPage['efforts']>['km'] {
+type WorkoutEffort = NonNullable<WorkoutPage['efforts']>[string]
+
+function roundEffort(effort: WorkoutEffort): WorkoutEffort {
   return effort === null ? null : {
     ...effort,
     seconds: Number(effort.seconds.toFixed(0)),
@@ -153,7 +176,7 @@ function roundPaceSeries(series: PaceSeries | null): PaceSeries | null {
  * duration in milliseconds: every one of them a whole number on the page's own figures
  * (workoutPage.ts's FIGURES, all precision 0), so each is sent whole. The previous ride's speed is
  * the exception, sent at the speed figure's own precision, since a whole metre per second is
- * 3.6 km/h.
+ * 3.6 km/h; so is a ride's speed series and its split trend.
  */
 function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
   const figures: WorkoutPage['figures'] = {}
@@ -161,7 +184,6 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     if (figure !== undefined) figures[key as keyof WorkoutPage['figures']] = roundWorkoutFigure(figure)
   }
   const whole = (value: number) => Number(value.toFixed(0))
-  const ref = (r: WorkoutPage['best']['fastestKmSeconds']) => (r === null ? null : { ...r, value: whole(r.value) })
   const { previous, after, before, heartRateRecovery, through, splitTrend, zoneBounds, sameRoute, efforts } = page
   return {
     ...page,
@@ -172,11 +194,8 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
         key, key === 'speed' ? Number(value.toFixed(figures.speed?.precision ?? 2)) : whole(value),
       ])),
     },
-    best: {
-      fastestKmSeconds: ref(page.best.fastestKmSeconds),
-      furthestMeters: ref(page.best.furthestMeters),
-      longestMs: ref(page.best.longestMs),
-    },
+    // `best` is Records values, already whole from core (sessionRecords.ts): seconds for a time,
+    // metres for a distance or a climb, whole seconds of milliseconds for the longest.
     day: { ...page.day, steps: roundPageFigure(page.day.steps), activeMinutes: roundPageFigure(page.day.activeMinutes) },
     after: {
       night: roundWorkoutNight(after.night),
@@ -197,15 +216,13 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     sameRoute: sameRoute === null ? null : {
       ...sameRoute,
       time: roundWorkoutFigure(sameRoute.time),
-      pace: sameRoute.pace === null ? null : roundWorkoutFigure(sameRoute.pace),
+      rate: sameRoute.rate === null ? null : roundWorkoutFigure(sameRoute.rate),
       previous: sameRoute.previous === null ? null : { ...sameRoute.previous, seconds: whole(sameRoute.previous.seconds) },
     },
-    efforts: efforts === null ? null : {
-      km: roundEffort(efforts.km), mile: roundEffort(efforts.mile), fiveK: roundEffort(efforts.fiveK),
-    },
-    through: { pace: roundPaceSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
-    // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.
-    splitTrend: splitTrend === null ? null : { secondHalfFasterBySecondsPerKm: whole(splitTrend.secondHalfFasterBySecondsPerKm) },
+    efforts: efforts === null ? null : Object.fromEntries(Object.entries(efforts).map(([key, effort]) => [key, roundEffort(effort)])),
+    through: { pace: roundPaceSeries(through.pace), speed: roundSpeedSeries(through.speed), cadence: roundMinuteSeries(through.cadence) },
+    splitTrend: roundSplitTrend(splitTrend),
+    // Whole bpm, as every heart rate is.
     zoneBounds: zoneBounds === null ? null : {
       moderateMin: whole(zoneBounds.moderateMin), vigorousMin: whole(zoneBounds.vigorousMin),
       peakMin: whole(zoneBounds.peakMin), max: whole(zoneBounds.max),

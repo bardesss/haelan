@@ -3,11 +3,12 @@ import { formatNumber, formatSessionDateHeading, formatWeekdayDate } from '../..
 import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
-import { exerciseCategory } from '../../data/exerciseCategory.js'
-import type { ExerciseCategory } from '../../data/exerciseCategory.js'
+import { exerciseCategory } from '@haelan/core/exercise-category'
+import type { ExerciseCategory, SessionRate } from '@haelan/core/exercise-category'
 import { Icon } from '../../components/icons.js'
 import { Link } from '../../router.js'
-import { formatPace } from './pace.js'
+import { distanceText, sessionRateText } from './categoryText.js'
+import { noBreak } from '../detail/figureText.js'
 import { workoutPath } from './workout/workoutText.js'
 
 /**
@@ -68,7 +69,8 @@ export interface SessionRowViewProps {
   excludeReason?: string | null
   /** The person's own day for the row, the same one a caller's date heading groups by. */
   localDate: string
-  paceSecondsPerKm?: number | null
+  /** The session's rate as core sends it (sessions.ts's sessionRateOf); absent from an older payload. */
+  rate?: SessionRate | null
   elevationGainMeters?: number | null
   /** The date at the head of the second line ("Wed, Sep 30 · 8.7 km"), for a list with no date
    *  headings of its own (the Activity overview's workouts, the approved mockup's). */
@@ -80,7 +82,7 @@ export function SessionRowView(props: SessionRowViewProps) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const { distanceMeters, caloriesKcal, averageHeartRateBpm } = props
-  const paceSecondsPerKm = props.paceSecondsPerKm ?? null
+  const rate = props.rate ?? null
   const elevationGainMeters = props.elevationGainMeters ?? null
   const excludeReason = props.excludeReason ?? null
   const { localDate } = props
@@ -95,16 +97,16 @@ export function SessionRowView(props: SessionRowViewProps) {
   // them is never one of the fields this row has to omit.
   const durationMinutes = props.durationSeconds === null ? null : Math.round(props.durationSeconds / 60)
   const durationText = durationMinutes === null ? null
-    : `${formatNumber(durationMinutes, 0, language, '0')} ${t('activity.units.min')}`
+    : noBreak(`${formatNumber(durationMinutes, 0, language, '0')} ${t('activity.units.min')}`)
 
   const stats = [
     caloriesKcal === null ? null
-      : `${formatNumber(caloriesKcal, 0, language, '')} ${t('activity.units.kcalShort')}`,
+      : noBreak(`${formatNumber(caloriesKcal, 0, language, '')} ${t('activity.units.kcalShort')}`),
     averageHeartRateBpm === null ? null
-      : `${formatNumber(averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`,
+      : noBreak(`${formatNumber(averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`),
   ].filter((part): part is string => part !== null)
 
-  // Distance, pace and elevation gain only. workoutSummary also carries steps and
+  // Distance, the category's rate and elevation gain only. workoutSummary also carries steps and
   // activeZoneMinutes, but activeZoneMinutes alone covers 167 of 192 sessions, which would make
   // this line a routine five figures on the common case rather than the one to three the two line
   // design was scoped for. Steps on a run restates distance and active zone minutes restates the
@@ -112,12 +114,13 @@ export function SessionRowView(props: SessionRowViewProps) {
   // reader actually came to a workout row to see (fix round 1 review).
   const detail = [
     props.dated === true ? formatWeekdayDate(localDate, language) : null,
-    distanceMeters === null ? null
-      : `${formatNumber(distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
-    paceSecondsPerKm === null ? null
-      : `${formatPace(paceSecondsPerKm, language)} ${t('activity.units.paceSuffix')}`,
+    // As Records and the per-type totals beside the Activity list print a distance (distanceText).
+    distanceMeters === null ? null : distanceText(category, distanceMeters, language, t),
+    // The rate the category reads (a ride's speed, a swim's time per 100 m), as the server picked
+    // it by the workout page's rules; nothing where it sends none.
+    sessionRateText(rate, language, t),
     elevationGainMeters === null ? null
-      : `${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
+      : noBreak(`${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`),
   ].filter((part): part is string => part !== null)
 
   // Struck through and kept, not filtered out: the Activity count above this list already drops
@@ -187,7 +190,7 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       averageHeartRateBpm={summary.averageHeartRateBpm}
       excluded={session.excluded}
       excludeReason={session.excludeReason}
-      paceSecondsPerKm={summary.paceSecondsPerKm}
+      rate={session.rate ?? null}
       elevationGainMeters={summary.elevationGainMeters}
       localDate={session.localDate}
     />

@@ -1591,6 +1591,9 @@ button.week-bar-slot { cursor: pointer; }
   .grid [data-span='11'] {
     grid-column: span 12 !important;
   }
+  /* The Records page's category cards take the row here: four record columns do not fit half of
+     a ~660px column. All of them, so the run stays uniform. */
+  .grid .card:has(> .record-list[data-category]) { grid-column: span 12 !important; }
 }
 
 /* The Dashboard's own mid band: every card takes the row. Halving as above would give recovery's
@@ -1748,6 +1751,19 @@ button.week-bar-slot { cursor: pointer; }
   font-size: var(--font-size-sm);
 }
 .record-row:last-child { border-bottom: 0; }
+/* A session record opens the workout that set it, the whole row the target as an Activity list
+   row is (.session-row-link). The link takes the row's columns (a subgrid of the row's subgrid)
+   and its padding, so the hover surface and the focus ring cover the whole row. */
+.record-row-linked { padding: 0; }
+.record-row-link {
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline;
+  padding: var(--space-3) 0; color: inherit; text-decoration: none;
+}
+.record-row-link:hover { background: var(--surface-hover); }
+.record-row-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* A Records card's category glyph, before the label in its heading, at the label's small size. */
+.card-label-icon { vertical-align: middle; margin-right: var(--space-2); }
+.card-label-icon svg { width: 14px; height: 14px; }
 .record-metric { min-width: 0; }
 .record-value, .record-date, .record-source { padding-left: var(--space-4); }
 /* The window is the row's second line: it cannot be folded into one footnote per card, because
@@ -2188,6 +2204,12 @@ button.week-bar-slot { cursor: pointer; }
      reads as three separate figures. */
   .record-date { white-space: nowrap; }
   .record-window { flex-basis: 100%; }
+  /* A linked row wraps the same way, its link now the flex row and holding the padding. */
+  .record-row-linked > .record-row-link {
+    display: flex; flex-wrap: wrap; flex-basis: 100%; gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) 0;
+  }
+  .record-row-link > * { padding: 0; }
 
   /* Four columns need width to mean anything, and at 375px there is none to give - the same
      ruling the record rows take one block up. Back to the wrapping flex line this row was before
@@ -2264,7 +2286,7 @@ button.week-bar-slot { cursor: pointer; }
      them, so a mis-tap did not miss, it navigated to the neighbour. The check now sweeps the
      drawer open as well as closed, which is what turned this from an argument into a failure. */
   .button, .icon-button, .chart-table-toggle, .chart-annotate, .card-link,
-  .session-row-link, .night-row-link, .date-picker, .input, .rail-item, .rail-person,
+  .session-row-link, .night-row-link, .record-row-link, .date-picker, .input, .rail-item, .rail-person,
   .source-order-list button, .log-face, .log-chip, .log-edit-item {
     min-height: 44px;
   }

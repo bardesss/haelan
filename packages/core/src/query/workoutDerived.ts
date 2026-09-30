@@ -12,7 +12,8 @@ import type { WorkoutSession } from './sessions.ts'
 import { routeSignature } from '../api/routeMatch.ts'
 import type { RouteSignature } from '../api/routeMatch.ts'
 import { fastestEfforts } from '../api/fastestEfforts.ts'
-import type { EffortKey } from '../api/fastestEfforts.ts'
+import type { Efforts } from '../api/fastestEfforts.ts'
+import { exerciseCategory } from '../api/exerciseCategory.ts'
 
 
 /**
@@ -198,9 +199,9 @@ function routesByOwner<T>(exercise: readonly WorkoutSession[], rows: readonly ({
 export const ROUTE_CHUNK_SESSIONS = 100
 
 /** What a route reduces to for comparing against other workouts: never a point, only its signature and efforts (null or NO_EFFORTS when not asked for). */
-export interface RouteSummary { signature: RouteSignature | null, efforts: Record<EffortKey, number | null> }
+export interface RouteSummary { signature: RouteSignature | null, efforts: Efforts<number | null> }
 
-const NO_EFFORTS: Readonly<Record<EffortKey, number | null>> = Object.freeze({ km: null, mile: null, fiveK: null })
+const NO_EFFORTS: Readonly<Efforts<number | null>> = Object.freeze({})
 
 /**
  * Many workouts' routes reduced to a signature and the fastest efforts, each only when asked for,
@@ -210,23 +211,36 @@ const NO_EFFORTS: Readonly<Record<EffortKey, number | null>> = Object.freeze({ k
  * and the workout page's comparisons both read through here; only a workout's own page ever holds
  * one full route.
  *
- * `efforts` is the caller's GPS_EFFORT_TYPE decision (sessionRecords.ts): the page asks for it
- * for a run's history, Records for its runs, and nobody computes efforts off a ride. `signatures`
- * is for the same-route match, which Records never makes.
+ * `efforts` asks for each session's efforts over its own category's distances, at its category's
+ * jump speed (fastestEfforts.ts); the callers pass only sessions of a category that reads them
+ * (readsEfforts in sessionRecords.ts), since any other gets none. `signatures` is for the
+ * same-route match, which Records never makes.
  */
 export function readRouteSummaries(
   db: DbOrTx, sessions: readonly WorkoutSession[], options: { efforts: boolean, signatures: boolean },
 ): Map<string, RouteSummary> {
   const summaries = new Map<string, RouteSummary>()
+  const byId = new Map(sessions.map((session) => [session.id, session]))
   for (let from = 0; from < sessions.length; from += ROUTE_CHUNK_SESSIONS) {
     for (const [sessionId, route] of readRouteFixesFor(db, sessions.slice(from, from + ROUTE_CHUNK_SESSIONS))) {
       summaries.set(sessionId, {
         signature: options.signatures ? routeSignature(route) : null,
-        efforts: options.efforts ? fastestEfforts(route) : NO_EFFORTS,
+        efforts: options.efforts ? fastestEfforts(route, categoryOf(byId.get(sessionId))) : NO_EFFORTS,
       })
     }
   }
   return summaries
+}
+
+/** The type a session's payload recorded, read without parsing the rest of it; null for none. */
+export function exerciseTypeOf(session: WorkoutSession | undefined): string | null {
+  const attrs = session?.attrs as { exerciseType?: unknown } | null | undefined
+  return typeof attrs?.exerciseType === 'string' ? attrs.exerciseType : null
+}
+
+/** The category a session is read as (its route, its records), from the type its payload recorded. */
+export function categoryOf(session: WorkoutSession | undefined) {
+  return exerciseCategory(exerciseTypeOf(session))
 }
 
 /**

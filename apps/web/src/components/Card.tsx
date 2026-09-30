@@ -7,9 +7,11 @@ import { ErrorBoundary } from './ErrorBoundary.js'
 // first. Hoisting either use to module-evaluation scope would break that silently.
 import { useCardPresence } from './CardGrid.js'
 
-export function Card({ span, label, basis, measured = false, ambient, id, children }: {
+export function Card({ span, label, labelIcon, basis, measured = false, ambient, id, children }: {
   span: number
   label?: string
+  /** A glyph drawn before the label, inside its heading: a Records card's category icon. */
+  labelIcon?: React.ReactNode
   basis?: string
   /**
    * For a card holding reading matter rather than a chart: it keeps its span, so nothing about
@@ -62,7 +64,7 @@ export function Card({ span, label, basis, measured = false, ambient, id, childr
       style={{ gridColumn: `span ${span}` }}>
       {/* A heading, so a screen reader's list of headings names every card, styled as the small
           uppercase label (app.css resets a heading's own size and margins on .label). */}
-      {label && <h2 className="label">{label}</h2>}
+      {label && <h2 className="label">{labelIcon}{label}</h2>}
       {basis && <p className="basis" id={basisId}>{basis}</p>}
       <BasisContext.Provider value={basis ? basisId : undefined}>
         {/* Inside the card rather than around it, so a card whose contents throw keeps its frame,
