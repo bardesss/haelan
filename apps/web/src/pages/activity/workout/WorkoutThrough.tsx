@@ -122,11 +122,12 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     return <Card span={12} label={label}><ErrorState onRetry={() => trace.refetch()} error={trace.error} /></Card>
   }
   if (trace.isPending) return <Card span={12} label={label}><Loading /></Card>
-  // Absent, not an empty chart: nobody recorded a heart rate in this window, fallback included.
-  if (trace.points.length === 0) return null
-
   // Which of the two series is drawn, as the catalogue names the case.
   const both = pace === null && cadence === null ? null : pace === null ? 'cadence' : cadence === null ? 'pace' : 'both'
+  // No heart rate in this window from any device, fallback included, leaves its row out; the card
+  // stays for a pace or a cadence, and is absent, not an empty chart, with none of the three.
+  const hasTrace = trace.points.length > 0
+  if (!hasTrace && both === null) return null
   const pausedMs = pauses.spans.reduce((sum, span) => sum + span.endMs - span.startMs, 0)
   const basis = [
     t('activity.workout.page.through.basis', { end: formatElapsed(session.endMs - session.startMs) }),
@@ -165,19 +166,23 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
   return (
     <Card span={12} label={label}>
       <div className="workout-through">
-        <div className="workout-through-head" id={headId}>
-          <span className="label">{t('activity.workout.page.through.heartRate')}</span>
-          {summary !== null && <p className="workout-through-summary">{summary}</p>}
-        </div>
-        <div className="workout-through-chart">
-          <BasisContext.Provider value={headId}>
-            <IntradayHeartRate points={trace.points} reduction={trace.reduction}
-              label={t('activity.workout.trace.label')}
-              offsetMinutes={session.startOffsetMinutes}
-              startMs={session.startMs} endMs={session.endMs} axis="elapsed" xLabels={both === null}
-              spans={pauses.spans} eventMarks={pauses.marks} zoneBands={zoneBands} />
-          </BasisContext.Provider>
-        </div>
+        {hasTrace && (
+          <>
+            <div className="workout-through-head" id={headId}>
+              <span className="label">{t('activity.workout.page.through.heartRate')}</span>
+              {summary !== null && <p className="workout-through-summary">{summary}</p>}
+            </div>
+            <div className="workout-through-chart">
+              <BasisContext.Provider value={headId}>
+                <IntradayHeartRate points={trace.points} reduction={trace.reduction}
+                  label={t('activity.workout.trace.label')}
+                  offsetMinutes={session.startOffsetMinutes}
+                  startMs={session.startMs} endMs={session.endMs} axis="elapsed" xLabels={both === null}
+                  spans={pauses.spans} eventMarks={pauses.marks} zoneBands={zoneBands} />
+              </BasisContext.Provider>
+            </div>
+          </>
+        )}
         {pace !== null && (
           <SeriesRow row={pace} label={t('activity.workout.page.through.pace')} chartLabel={t('activity.workout.page.through.paceChart')}
             session={session} spans={pauses.spans} xLabels={cadence === null} />

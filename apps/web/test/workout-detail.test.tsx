@@ -751,14 +751,14 @@ describe('the workout page\'s trace', () => {
     })
   }
 
-  it('draws no zones when the server sent no bounds, and is left out with no heart rate at all', async () => {
+  it('draws no zones when the server sent no bounds, and is left out with no heart rate, pace or cadence at all', async () => {
     tracePoints = [reading(minute(10), 150)]
     const host = await mount({ ...workoutPageFixture(), zoneBounds: null }, fullSession())
     expect(optionIn(host, '.workout-through-chart').series.some((series) => series.id === 'zones')).toBe(false)
     act(() => { root!.unmount() })
     root = createRoot(container!)
     tracePoints = []
-    const empty = await mount(workoutPageFixture(), fullSession())
+    const empty = await mount({ ...workoutPageFixture(), through: { pace: null, cadence: null } }, fullSession())
     expect(empty.querySelector('.workout-through')).toBeNull()
   })
 })
@@ -1177,6 +1177,25 @@ describe('the workout page\'s pace and cadence', () => {
     expect(charts(host).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([false, true])
     expect(caption(host)).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40 · pace smoothed over three minutes')
     expect(text(host, '.workout-through-note')).toBe('The pace comes from the times of the 4 route points.')
+  })
+
+  it('draws pace and cadence without a heart rate, the cadence row labelling the time, and nothing with none of the three', async () => {
+    tracePoints = []
+    const host = await mount(workoutPageFixture(), fullSession())
+    expect(heads(host).map(([label]) => label)).toEqual(['Pace', 'Cadence'])
+    expect(charts(host).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([false, true])
+    expect(text(host.querySelector('.workout-through')!.closest('.card')!, '.label')).toBe('Through the workout')
+    expect(text(host, '.workout-through-note')).toBe('The pace comes from the times of the 4 route points, the cadence from the steps per minute.')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const page = workoutPageFixture()
+    const paceOnly = await mount({ ...page, through: { ...page.through, cadence: null } }, fullSession())
+    expect(heads(paceOnly).map(([label]) => label)).toEqual(['Pace'])
+    expect(charts(paceOnly).map((o) => o.xAxis[0]!.axisLabel.show)).toEqual([true])
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const none = await mount({ ...page, through: { pace: null, cadence: null } }, fullSession())
+    expect(none.querySelector('.workout-through')).toBeNull()
   })
 
   it('draws neither for a strength session, whose heart rate labels its own time, with no word about a route', async () => {
