@@ -141,6 +141,23 @@ describe('periodFigureOf', () => {
     expect(f.usualTotal!.high).toBeLessThan(f.total!)
     expect([f.totalStanding, f.totalJudged]).toEqual(['above', 'better'])
   })
+  it("leaves a finished period's total without a usual, and unjudged, when under 70% of its days carry a value", () => {
+    const values = new Map(history)
+    datesIn({ from: '2026-09-01', to: '2026-09-20' }).forEach((d) => values.set(d, 8500))
+    const f = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands })
+    // Only because days are missing would it read below: 20 days' sum against whole months'.
+    expect(f.total).toBeLessThan(periodTotalUsual(values, 'month', periodBounds('month', '2026-09-15'))!.low)
+    expect([f.usualTotal, f.totalStanding, f.totalJudged]).toEqual([null, null, null])
+    expect(f.standing).toBe('within')
+    // While it runs, the same days keep the usual for "so far", unjudged.
+    const running = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-29', values, dailyBands: bands })
+    expect(running.usualTotal).not.toBeNull()
+    expect(running.totalStanding).toBeNull()
+    // At exactly 70% the total is judged: 21 of 30 days.
+    values.set('2026-09-21', 8500)
+    const at = periodFigureOf({ ...base, range: 'month', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: bands })
+    expect([at.totalStanding, at.totalJudged]).toEqual(['below', 'worse'])
+  })
   it("leaves a running period's total unjudged, however far past the usual it is", () => {
     const values = new Map(history)
     datesIn({ from: '2026-09-01', to: '2026-09-20' }).forEach((d) => values.set(d, 40000))

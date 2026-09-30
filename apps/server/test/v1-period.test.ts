@@ -245,7 +245,7 @@ describe('roundPeriodFigure', () => {
     expect([rounded.totalStanding, rounded.totalJudged]).toEqual(['within', null])
   })
 
-  it("keeps a running period's total unjudged", () => {
+  it("keeps a total core left unjudged, for a running period or one under 70% of its days", () => {
     const rounded = roundPeriodFigure(figure({
       usualTotal: { ...band(2000, 1900, 2100), window: WINDOW, periods: 12 }, totalStanding: null, totalJudged: null,
     }))

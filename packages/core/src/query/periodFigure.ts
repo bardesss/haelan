@@ -44,10 +44,14 @@ export interface PeriodFigure {
   usual: PeriodUsual | null
   /**
    * An additive figure's usual for its total: each earlier block's sum scaled to the period's length,
-   * over the blocks the usual itself counts, so it is thin exactly when `usual` is. Null otherwise.
+   * over the blocks the usual itself counts, so it is thin exactly when `usual` is. Null otherwise,
+   * and null for a finished period with under 70% of its days carrying a value.
    */
   usualTotal: PeriodUsual | null
-  /** `total` against `usualTotal`, left unjudged while the period runs (a total so far is not a whole period's). */
+  /**
+   * `total` against `usualTotal`, left unjudged while the period runs (a total so far is not a whole
+   * period's) and when under 70% of its days carry a value (a sum shrinks with every day missing).
+   */
   totalStanding: GlanceStanding | null
   totalJudged: Judged
   standing: GlanceStanding | null
@@ -160,7 +164,11 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
   const value = days === 0 ? null : (sum / days) * scale
   const usual = periodUsual(values, range, bounds, scale)
   const total = input.additive && days > 0 ? sum : null
-  const usualTotal = input.additive ? periodTotalUsual(values, range, bounds) : null
+  // A total is a sum, so it shrinks with every missing day: a finished period with under 70% of its
+  // days carrying a value, the rule each earlier block in usualTotal was held to, has no usual for its
+  // total, and the page falls back to the average's verdict. A running one keeps it for "so far".
+  const covered = blockMean(values, bounds, lastDay).mean !== null
+  const usualTotal = input.additive && (covered || running) ? periodTotalUsual(values, range, bounds) : null
   const totalStanding = standingOf(total, usualTotal, running)
 
   let standing: GlanceStanding | null = null
