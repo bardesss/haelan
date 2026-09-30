@@ -14,6 +14,8 @@ import { WorkoutHero } from './activity/workout/WorkoutHero.js'
 import { WorkoutMinis } from './activity/workout/WorkoutMinis.js'
 import { WorkoutCompared } from './activity/workout/WorkoutCompared.js'
 import { WorkoutMap } from './activity/workout/WorkoutMap.js'
+import { WorkoutRouteUsual } from './activity/workout/WorkoutRouteUsual.js'
+import { WorkoutEfforts } from './activity/workout/WorkoutEfforts.js'
 import { WorkoutThrough } from './activity/workout/WorkoutThrough.js'
 import { WorkoutZones } from './activity/workout/WorkoutZones.js'
 import { WorkoutForm } from './activity/workout/WorkoutForm.js'
@@ -119,6 +121,10 @@ export function WorkoutDetail() {
   // Before and after share a row, half each, when both are drawn; either alone takes the whole
   // row, so no run of cards is left with a hole in it.
   const sideSpan = hasBefore(page) && hasAfter(page) ? 6 : 12
+  // The same route and the fastest efforts share the row under the route card by the same rule.
+  // Each card leaves itself out on exactly these conditions (no same route; no effort at all).
+  const hasEfforts = page.efforts !== null && Object.values(page.efforts).some((effort) => effort !== null)
+  const routeSpan = page.sameRoute !== null && hasEfforts ? 6 : 12
 
   return (
     <div className="detail-page">
@@ -128,6 +134,8 @@ export function WorkoutDetail() {
         <WorkoutMinis page={page} />
         <WorkoutCompared page={page} />
         <WorkoutMap session={query.data} page={page} />
+        <WorkoutRouteUsual page={page} span={routeSpan} onOpenWorkout={openWorkout} />
+        <WorkoutEfforts page={page} span={routeSpan} />
         <WorkoutThrough session={query.data} detail={detail} page={page} chosenSource={chosenSource} />
         <WorkoutZones detail={detail} page={page} />
         <WorkoutRecovery page={page} />

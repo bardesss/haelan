@@ -179,7 +179,12 @@ export function variedLine(
  * only way to reach here with a real, non-thin baseline), which reads as "so far" against the
  * baseline's center, never as a shortfall.
  */
-export function verdictLine(figure: Omit<PageFigure, 'strip'>, language: string, t: Translate): string | null {
+export function verdictLine(
+  figure: Omit<PageFigure, 'strip'>, language: string, t: Translate,
+  // The words a verdict off the usual takes, the unit's own unless a caller knows better: a time on
+  // a course is slower or faster ('pace'), which a moving time in general is not.
+  direction: 'clock' | 'pace' | null = directionWords(figure.unit),
+): string | null {
   if (figure.value === null || figure.baseline === null) return null
   const { baseline } = figure
   if (baseline.thin) return t('glance.usual.thin')
@@ -191,7 +196,7 @@ export function verdictLine(figure: Omit<PageFigure, 'strip'>, language: string,
   // a bedtime or wake time (glance.usual.clockShort): "above your usual 22:44 – 01:35" asks the
   // reader to work out that a higher clock reading is a later night. A pace likewise is slower or
   // faster, since "below your usual" of a faster run reads as a worse one.
-  const words = figure.standing === 'within' ? null : directionWords(figure.unit)
+  const words = figure.standing === 'within' ? null : direction
   // A usual with no width (every night of the window read the same, say no naps at all) is one
   // value, and "0 – 0" reads as a typo for it.
   if (formatFigureValue(figure, baseline.low, language, t) === high) {

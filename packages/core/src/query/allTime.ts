@@ -2,8 +2,8 @@ import { sql } from 'drizzle-orm'
 import { eddingtonOf } from '../api/eddington.ts'
 import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
-import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
-import type { SessionRecord } from '../api/sessionRecords.ts'
+import { GPS_EFFORT_TYPE, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
+import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
 import type { NamedSource } from '../store/sourceAliases.ts'
 import type { DefaultName } from '../api/sourceNames.ts'
@@ -12,6 +12,7 @@ import type { DbOrTx } from '../db/open.ts'
 import { mergeRuleFor, mergeWorkouts } from './mergedWorkouts.ts'
 import { readSessions } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
+import { readRouteSummaries } from './workoutDerived.ts'
 
 /**
  * Everything the all-time page shows, in one read.
@@ -227,7 +228,7 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
   return {
     span: { from: span.from ?? '', to: span.to ?? '', days: span.days ?? 0 },
     records,
-    sessionRecords: sessionRecordsOf(workouts.map(sessionForRecords)),
+    sessionRecords: sessionRecordsOf(sessionsForRecords(db, workouts)),
     eddington,
     milestones: milestonesOf(records, stepDays, {
       exercise: workouts.map((workout) => workout.localDate),
@@ -300,6 +301,22 @@ function soleSourceOn(
 function keptWorkouts(db: DbOrTx, personId: string): WorkoutSession[] {
   const raw = readSessions(db, { personId, kind: 'exercise', from: '0000-01-01', to: '9999-12-31' })
   return mergeWorkouts(raw, mergeRuleFor(db, personId)).filter((workout) => !workout.excluded)
+}
+
+/**
+ * Every workout in the shape sessionRecordsOf reads, in the same order, each parsed once. Only a
+ * run's route yields efforts (GPS_EFFORT_TYPE), so only runs have their routes read, in chunks,
+ * through readRouteSummaries.
+ */
+function sessionsForRecords(db: DbOrTx, workouts: readonly WorkoutSession[]): SessionForRecords[] {
+  const parsed = workouts.map((workout) => sessionForRecords(workout))
+  const runs = workouts.filter((_, i) => parsed[i]!.exerciseType === GPS_EFFORT_TYPE)
+  // Records never matches routes, so it asks for no signatures.
+  const summaries = readRouteSummaries(db, runs, { efforts: true, signatures: false })
+  return parsed.map((session) => {
+    const summary = summaries.get(session.sessionId)
+    return summary === undefined ? session : { ...session, efforts: summary.efforts }
+  })
 }
 
 /**

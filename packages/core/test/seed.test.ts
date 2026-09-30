@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
-import { seedArchive, localMidnightMs } from '../src/testing/seed.ts'
+import { seedArchive, localMidnightMs, routedRunLengthTolerance } from '../src/testing/seed.ts'
 import {
   rawPayloads, samples, daily, sessions, sessionSegments, sessionRoutes, observations,
 } from '../src/db/schema/index.ts'
@@ -14,6 +14,7 @@ import { PeopleStore } from '../src/store/people.ts'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
 import { MERGED_SOURCE } from '../src/derive/rollup.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
+import { routeSignature, sameRoute } from '../src/api/routeMatch.ts'
 
 const END = Date.parse('2026-03-01T00:00:00Z')
 
@@ -389,14 +390,45 @@ describe('seedArchive', () => {
       }
     }
     expect(midPauses, 'no run in 120 days paused mid-run').toBeGreaterThan(0)
-    // Routes ride on the phone's own copy of a run, never on Google's, and only on the last few.
+    // Routes ride on the phone's own copy of a run, never on Google's: on the last run, and on
+    // earlier ones only when they are near enough its length to be its route.
     const routed = exercises.filter((p) => p.exercise.route !== undefined)
     expect(routed.length).toBeGreaterThan(0)
     expect(routed.every((p) => p.dataSource.platform === 'HEALTH_CONNECT' && p.exercise.exerciseType === 'RUNNING')).toBe(true)
     expect(google.every((e) => e.route === undefined)).toBe(true)
-    const runStarts = google.filter((e) => e.exerciseType === 'RUNNING').map((e) => e.interval.startTime as string).sort()
-    expect(routed.map((p) => p.exercise.interval.startTime as string).sort()).toEqual(runStarts.slice(-routed.length))
+    const runs = google.filter((e) => e.exerciseType === 'RUNNING').sort((a, b) => a.interval.startTime.localeCompare(b.interval.startTime))
+    const routedStarts = routed.map((p) => p.exercise.interval.startTime as string)
+    expect(routedStarts).toContain(runs.at(-1)!.interval.startTime)
+    const lengthOf = (start: string) => runs.find((e) => e.interval.startTime === start)!.metricsSummary.distanceMillimeters as number
+    const lastLength = lengthOf(runs.at(-1)!.interval.startTime)
+    const near = (start: string) => Math.abs(lengthOf(start) - lastLength) / 1000 <= routedRunLengthTolerance(lastLength / 1000)
+    for (const start of routedStarts) expect(near(start), start).toBe(true)
+    // The most recent of them: no run of that length since the oldest routed one goes unrouted.
+    const oldest = [...routedStarts].sort()[0]!
+    const skipped = runs.map((e) => e.interval.startTime as string)
+      .filter((start) => start > oldest && !routedStarts.includes(start) && near(start))
+    expect(skipped).toEqual([])
   })
+
+  // The demo's own span, end and clock (scripts/capture-demo.mjs's 371 days, seed-demo.mjs's end and
+  // apps/web's DEMO_CLOCK_MS, half a day before it), so this is the run the demo opens: each earlier
+  // routed run is the last one's route to routeMatch.ts, and its page draws "Deze route".
+  it("routes the demo's runs so the last one finds the others on its route", () => {
+    const puts: Array<{ dataType: string, body: string }> = []
+    const archive = { put: (row: { dataType: string, body: string }) => { puts.push(row) } }
+    const endMs = localMidnightMs('2026-09-07')
+    seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 371, endMs, demoRoute: true, lastDayUntilMs: endMs - 12 * 3_600_000 })
+    const routes = puts.filter((p) => p.dataType === 'exercise')
+      .flatMap((p) => (JSON.parse(p.body) as { dataPoints: Array<{ exercise: { route?: Array<{ latitude: number, longitude: number }> } }> }).dataPoints)
+      .flatMap((p) => (p.exercise.route === undefined ? [] : [p.exercise.route]))
+    expect(routes).toHaveLength(3)
+    // One start for all of them, which is also where each loop closes.
+    for (const route of routes) {
+      expect([route[0], route.at(-1)].map((p) => [p!.latitude, p!.longitude])).toEqual([[0, 0], [0, 0]])
+    }
+    const [last, ...earlier] = routes.map((route) => routeSignature(route)!).reverse()
+    for (const signature of earlier) expect(sameRoute(last!, signature)).toBe(true)
+  }, 60_000)
 
   // The hourly day curve, the night's readings, a workout's own and the minutes after it are four
   // writers of one heart-rate series, each told to stay out of the others' minutes. Two readings in

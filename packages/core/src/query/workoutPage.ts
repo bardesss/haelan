@@ -20,8 +20,12 @@ import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
 import { compareWorkout, sameTypeWindow } from '../api/workoutComparison.ts'
 import type { WorkoutComparison } from '../api/workoutComparison.ts'
-import { sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
-import type { SessionRecordKind } from '../api/sessionRecords.ts'
+import { GPS_EFFORT_TYPE, kilometreSplitsOf, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
+import type { SessionForRecords, SessionRecord, SessionRecordKind } from '../api/sessionRecords.ts'
+import { routeSignature, sameRoute as onSameRoute } from '../api/routeMatch.ts'
+import { EFFORT_DISTANCES, effortSeconds, fastestEffortsAlong } from '../api/fastestEfforts.ts'
+import type { Effort, EffortKey } from '../api/fastestEfforts.ts'
+import type { RoutePoint, RouteSummary } from './workoutDerived.ts'
 
 // Five, not the night page's sixty: a person runs a few times a week, and five same-type sessions
 // is the least evidence a usual range for a workout can honestly stand on.
@@ -75,7 +79,34 @@ export interface WorkoutPage {
   splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
   /** Where the heart rate zones above light begin, for the bands behind the trace. */
   zoneBounds: ZoneBounds | null
+  /**
+   * This workout's time against the earlier times on the same route (routeMatch.ts), lower being
+   * better; null without a route or with no earlier workout on it. `times` is how many times the
+   * route was done, this workout counted in, as the caption says it.
+   */
+  sameRoute: {
+    times: number
+    /** The date of the oldest of the earlier workouts on the route. */
+    since: string
+    time: WorkoutFigure
+    /** This workout's pace against the earlier paces on the route (every match that has one); null without a pace of its own. */
+    pace: WorkoutFigure | null
+    previous: { sessionId: string, localDate: string, seconds: number } | null
+  } | null
+  /**
+   * The fastest kilometre, mile and 5 km inside the route (the kilometre a split when a split beat
+   * the GPS, as Records takes it, and `source` says which), each beside the Records best of the type
+   * up to today (as `best` reads it) and the best set before this workout (`previousBest`, what a
+   * new best beat); `fromMeters` is how far along the route the stretch began. Null for a distance
+   * the route is shorter than, and null altogether without a route.
+   */
+  efforts: Record<EffortKey, {
+    seconds: number, fromMeters: number, source: EffortSource, best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean
+  } | null> | null
 }
+
+/** Where an effort's time came from: the GPS route, or (a kilometre only) the watch's own split. */
+export type EffortSource = 'gps' | 'split'
 
 export interface WorkoutPageInput { sessionId: string, today: string, nowMs: number, nameOf: (id: string) => string }
 
@@ -206,10 +237,10 @@ function heartRateRecoveryOf(q: PersonQuery, subject: WorkoutSession, window: re
 }
 
 // Answers: the pace and cadence minute series. Pace from the route (a merged workout's first
-// member with one, readWorkoutRoute's rule); cadence from the workout's own device's steps rows,
-// each point a minute's sum (mean times readings), since the window read groups raw rows by minute.
-function throughOf(q: PersonQuery, session: WorkoutSession): WorkoutPage['through'] {
-  const route = q.workoutRoute({ sessionId: session.id }) ?? []
+// member with one, readRoutesFor's rule, read with the page's other routes); cadence from the
+// workout's own device's steps rows, each point a minute's sum (mean times readings), since the
+// window read groups raw rows by minute.
+function throughOf(q: PersonQuery, session: WorkoutSession, route: readonly RoutePoint[]): WorkoutPage['through'] {
   const cadence = session.endMs - session.startMs > MAX_HR_WINDOW_MS ? null : cadenceSeries(
     q.intradayWindow({ metric: 'steps', startMs: session.startMs, endMs: session.endMs, points: NO_THINNING, sourceId: session.sourceId })
       .points.flatMap((p) => (p.excluded || p.mean === null ? [] : [{ utcMs: p.utcMs, value: p.mean * p.n }])),
@@ -238,25 +269,126 @@ function figuresOf(subject: Reading, window: readonly Reading[]): WorkoutPage['f
   for (const spec of FIGURES) {
     const value = spec.of(subject)
     if (value === null) continue
-    const history = window.flatMap((r) => { const v = spec.of(r); return v === null ? [] : [v] })
     // Banister and highest heart rate are read for the subject alone (readingOf's default), so
     // their history is empty and usualOf answers no band: no verdict is claimed on them.
-    const baseline = usualOf(history, WORKOUT_BAND_MIN)
-    const standing = standingOf(value, baseline, false)
-    const pointOf = (session: WorkoutSession, v: number | null): WorkoutStripPoint => {
-      const pointStanding = standingOf(v, baseline, false)
-      return { sessionId: session.id, localDate: session.localDate, value: v, standing: pointStanding, judged: judge(pointStanding, spec.direction) }
-    }
-    figures[spec.key] = {
-      key: spec.key, metric: spec.key, value, unit: spec.unit, precision: spec.precision, direction: spec.direction,
-      baseline, standing, judged: judge(standing, spec.direction),
-      strip: [
-        ...stripped.map((r) => pointOf(r.session, spec.of(r))),
-        pointOf(subject.session, value),
-      ],
-    }
+    const history = window.flatMap((r) => { const v = spec.of(r); return v === null ? [] : [v] })
+    figures[spec.key] = workoutFigureOf({ ...spec, metric: spec.key }, value, history, [
+      ...stripped.map((r) => ({ session: r.session, value: spec.of(r) })),
+      { session: subject.session, value },
+    ])
   }
   return figures
+}
+
+// Answers: one figure judged against its history's usual (WORKOUT_BAND_MIN), each strip point
+// judged against that same usual. The strip is given oldest first, ending in the subject.
+function workoutFigureOf(
+  spec: { key: WorkoutFigureKey, metric: string, unit: string, precision: number, direction: FigureDirection },
+  value: number, history: readonly number[], strip: readonly { session: WorkoutSession, value: number | null }[],
+): WorkoutFigure {
+  const baseline = usualOf(history, WORKOUT_BAND_MIN)
+  const standing = standingOf(value, baseline, false)
+  const pointOf = ({ session, value: v }: { session: WorkoutSession, value: number | null }): WorkoutStripPoint => {
+    const pointStanding = standingOf(v, baseline, false)
+    return { sessionId: session.id, localDate: session.localDate, value: v, standing: pointStanding, judged: judge(pointStanding, spec.direction) }
+  }
+  return {
+    key: spec.key, metric: spec.metric, value, unit: spec.unit, precision: spec.precision, direction: spec.direction,
+    baseline, standing, judged: judge(standing, spec.direction), strip: strip.map(pointOf),
+  }
+}
+
+const elapsedOf = (r: Reading) => (r.session.endMs - r.session.startMs) / 1000
+
+/**
+ * Answers: this workout's time against the earlier times on the same route. The candidates are the
+ * kept same-type sessions the page already read (the caller leaves out the excluded), those before
+ * this one whose route matches (start, end, distance and direction: routeMatch.ts), each compared
+ * by its signature alone. Lower is better, since it is one course.
+ *
+ * Like with like: a workout that recorded a moving time is set against the earlier ones that did
+ * too, and one that did not against everyone's elapsed time, so a clock time with its stops never
+ * sits in a usual of moving times. The key says which of the two it is.
+ */
+function sameRouteOf(
+  subject: Reading, ownRoute: readonly RoutePoint[], kept: readonly WorkoutSession[], summaries: ReadonlyMap<string, RouteSummary>,
+): WorkoutPage['sameRoute'] {
+  const own = routeSignature(ownRoute)
+  if (own === null) return null
+  const moving = subject.detail.activeDurationSeconds
+  const timeOf = moving === null ? elapsedOf : (r: Reading) => r.detail.activeDurationSeconds
+  const onRoute = kept
+    .filter((s) => s.startMs < subject.session.startMs)
+    .filter((s) => {
+      const signature = summaries.get(s.id)?.signature ?? null
+      return signature !== null && onSameRoute(own, signature)
+    })
+    .sort((a, b) => b.startMs - a.startMs)
+    .map((session) => readingOf(session))
+  // Latest first, each with the reading `of` gives it; a match without one is not in its history.
+  const valued = (of: (r: Reading) => number | null) =>
+    onRoute.flatMap((r) => { const value = of(r); return value === null ? [] : [{ session: r.session, value }] })
+  const matches = valued(timeOf)
+  const latest = matches[0]
+  const oldest = matches.at(-1)
+  if (latest === undefined || oldest === undefined) return null
+  const value = moving ?? elapsedOf(subject)
+  const key = moving === null ? 'elapsed' : 'movingTime'
+  const time = workoutFigureOf(
+    { key, metric: key, unit: 'seconds', precision: 0, direction: 'down' },
+    value, matches.map((m) => m.value),
+    [...matches.slice(0, WORKOUT_STRIP - 1).reverse(), { session: subject.session, value }],
+  )
+  return {
+    times: matches.length + 1, since: oldest.session.localDate, time, pace: routePaceOf(subject, valued),
+    previous: { sessionId: latest.session.id, localDate: latest.session.localDate, seconds: latest.value },
+  }
+}
+
+const PACE = FIGURES.find((spec) => spec.key === 'pace')!
+
+// Answers: the subject's pace against the earlier paces on its route, the page's own pace figure
+// over the route's history rather than the type's; null when the subject has no pace.
+function routePaceOf(
+  subject: Reading, valued: (of: (r: Reading) => number | null) => { session: WorkoutSession, value: number }[],
+): WorkoutFigure | null {
+  const value = PACE.of(subject)
+  if (value === null) return null
+  const history = valued(PACE.of)
+  return workoutFigureOf({ ...PACE, metric: PACE.key }, value, history.map((h) => h.value),
+    [...history.slice(0, WORKOUT_STRIP - 1).reverse(), { session: subject.session, value }])
+}
+
+const EFFORT_KINDS: Record<EffortKey, SessionRecordKind> = { km: 'fastest-km', mile: 'fastest-mile', fiveK: 'fastest-5k' }
+
+// Answers: the fastest efforts inside a run's route, each beside the type's Records best; null
+// without a route and for any other type (GPS_EFFORT_TYPE), as the records read no efforts off it.
+// The kilometre is the quicker of the GPS and the splits, Records' own rule, so the row prints the
+// time Records holds and says where that kilometre began.
+function effortsOf(
+  subject: Reading, own: Record<EffortKey, Effort | null> | null, records: readonly SessionRecord[], earlier: readonly SessionRecord[],
+): WorkoutPage['efforts'] {
+  if (own === null) return null
+  const sourced = (effort: Effort | null, source: EffortSource) => (effort === null ? null : { ...effort, source })
+  const km = [
+    ...(own.km === null ? [] : [sourced(own.km, 'gps')!]),
+    ...kilometreSplitsOf(subject.session.attrs).map((split) => sourced(split, 'split')!),
+  ].reduce<(Effort & { source: EffortSource }) | null>((best, e) => (best === null || e.seconds < best.seconds ? e : best), null)
+  const fastest = { km, mile: sourced(own.mile, 'gps'), fiveK: sourced(own.fiveK, 'gps') }
+  const refOf = (all: readonly SessionRecord[], key: EffortKey): RecordRef | null => {
+    const record = all.find((r) => r.kind === EFFORT_KINDS[key])
+    return record === undefined ? null : { value: record.value, sessionId: record.sessionId, localDate: record.localDate }
+  }
+  const efforts = {} as NonNullable<WorkoutPage['efforts']>
+  for (const key of Object.keys(EFFORT_DISTANCES) as EffortKey[]) {
+    const effort = fastest[key]
+    const best = refOf(records, key)
+    efforts[key] = effort === null ? null : {
+      seconds: effort.seconds, fromMeters: effort.fromMeters, source: effort.source,
+      best, previousBest: refOf(earlier, key), isBest: best?.sessionId === subject.session.id,
+    }
+  }
+  return efforts
 }
 
 // Answers: the figure the page leads with, chosen by type: pace on foot, speed on a bike, time otherwise.
@@ -287,10 +419,22 @@ function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession
   return { sessionId: latest.id, localDate: latest.localDate, values }
 }
 
-// Answers: this type's fastest kilometre, furthest and longest session, the Records page's own
-// rule and parsing, over every session of the type up to today rather than up to this workout.
-function bestOf(everSameType: readonly WorkoutSession[]): WorkoutPage['best'] {
-  const records = sessionRecordsOf(everSameType.filter((s) => !s.excluded).map(sessionForRecords))
+// Answers: this type's session records, the Records page's own rule and parsing (GPS efforts
+// included), over every kept session of the type up to today rather than up to this workout: the
+// subject as the caller parsed it, efforts off its own full route, every other one's off its summary.
+function recordsOf(
+  kept: readonly WorkoutSession[], subject: SessionForRecords, summaries: ReadonlyMap<string, RouteSummary>,
+): SessionRecord[] {
+  return sessionRecordsOf(kept.map((s) => {
+    if (s.id === subject.sessionId) return subject
+    const parsed = sessionForRecords(s)
+    const summary = summaries.get(s.id)
+    return summary === undefined ? parsed : { ...parsed, efforts: summary.efforts }
+  }))
+}
+
+// Answers: this type's fastest kilometre, furthest and longest session, from its records.
+function bestOf(records: readonly SessionRecord[]): WorkoutPage['best'] {
   const ref = (kind: SessionRecordKind, scale: number): RecordRef | null => {
     const record = records.find((r) => r.kind === kind)
     return record === undefined ? null : { value: record.value / scale, sessionId: record.sessionId, localDate: record.localDate }
@@ -389,6 +533,24 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
   const everSameType = sameTypeSessions(q, exerciseType, input.today > session.localDate ? input.today : session.localDate)
   const candidates = everSameType.filter((s) => s.localDate <= session.localDate)
   const window = sameTypeWindow(session, candidates).map((s) => readingOf(s))
+  // This workout's full route, for its pace, efforts and route match; every other kept one of its
+  // type only as a signature and efforts, read in bounded chunks, for the same-route times and the
+  // Records bests. Efforts only for a run's history, the one type they are read off.
+  // A later workout matters only to the Records bests, which only a run's efforts read: any other
+  // type reads the routes before this one alone, for the same-route match.
+  const kept = everSameType.filter((s) => !s.excluded)
+  const isRun = exerciseType === GPS_EFFORT_TYPE
+  const ownRoute = q.workoutRoute({ sessionId: session.id }) ?? []
+  const summaries = q.workoutRouteSummaries({
+    sessions: kept.filter((s) => s.id !== session.id && (isRun || s.startMs < session.startMs)), efforts: isRun,
+  })
+  // This run's efforts, found once: its row on the page and its entry in both sets of records.
+  const ownEfforts = isRun && ownRoute.length >= 2 ? fastestEffortsAlong(ownRoute) : null
+  const parsed = sessionForRecords(session)
+  const ownRecord = ownEfforts === null || parsed.exerciseType !== GPS_EFFORT_TYPE ? parsed : { ...parsed, efforts: effortSeconds(ownEfforts) }
+  const records = recordsOf(kept, ownRecord, summaries)
+  // The same records over what was done before this workout alone: what a new best of its beat.
+  const earlierRecords = recordsOf(kept.filter((s) => s.startMs < session.startMs), ownRecord, summaries)
   const figures = figuresOf(subject, window)
   // The glance's view of the workout's own day, shared by the day card and the morning before it.
   const dayCtx = contextFor(q, { today: session.localDate, nowMs: input.nowMs, nameOf: input.nameOf, finished: session.localDate < input.today })
@@ -404,13 +566,15 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     comparison: compareWorkout(session, candidates),
     previous: previousOf(session, candidates),
     // The Records best, so it may be a session done after this one.
-    best: bestOf(everSameType),
+    best: bestOf(records),
     day: dayOf(q, session, input, dayCtx),
     after: afterOf(q, session, input),
     heartRateRecovery: heartRateRecoveryOf(q, session, window),
     before: beforeOf(q, session, dayCtx),
-    through: throughOf(q, session),
+    through: throughOf(q, session, ownRoute),
     splitTrend: splitTrendOf(subject.detail.autoSplits),
     zoneBounds: q.workoutZoneBounds({ sessionId: session.id }),
+    sameRoute: sameRouteOf(subject, ownRoute, kept, summaries),
+    efforts: effortsOf(subject, ownEfforts, records, earlierRecords),
   }
 }

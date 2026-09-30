@@ -26,6 +26,12 @@ export interface FigureRowStrip {
   // The chart's accessible name when the row's own label is not enough to tell it from another
   // chart on the same page (two called "HRV", say); the row's label otherwise.
   label?: string
+  // A strip whose dots open their own sessions (the hero's wiring, Sparkline's pointIds and
+  // opensDay), and one drawn upside down so a lower value sits higher (a time on a course).
+  pointIds?: readonly string[]
+  onPointClick?: (id: string) => void
+  opensDay?: { current: string, tail: string, idle: string, named: (name: string) => string }
+  inverse?: boolean
 }
 
 const pct = (f: number) => `${(f * 100).toFixed(1)}%`
@@ -83,7 +89,8 @@ export function FigureRow({ label, value, verdict, judged, standing, band, mark,
       {strip !== undefined ? (
         <BasisContext.Provider value={verdict === null ? undefined : verdictId}>
           <Sparkline values={strip.values} labels={strip.labels} label={strip.label ?? label} unit={strip.unit} metric={strip.metric}
-            formatValue={strip.formatValue} bands={strip.bands} pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} height={30} dots tableToggle={false} />
+            formatValue={strip.formatValue} bands={strip.bands} pointStandings={strip.pointStandings} pointJudged={strip.pointJudged} height={30} dots tableToggle={false}
+            pointIds={strip.pointIds} onPointClick={strip.onPointClick} opensDay={strip.opensDay} inverse={strip.inverse} />
         </BasisContext.Provider>
       ) : scale !== null && band !== null && (
         <div className="figure-row-bar" aria-hidden="true">

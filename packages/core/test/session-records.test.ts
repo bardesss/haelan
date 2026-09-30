@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { sessionRecordsOf } from '../src/api/sessionRecords.ts'
+import { sessionForRecords, sessionRecordsOf } from '../src/api/sessionRecords.ts'
 import type { SessionForRecords } from '../src/api/sessionRecords.ts'
 
 const session = (over: Partial<SessionForRecords> = {}): SessionForRecords => ({
   sessionId: 's1', localDate: '2026-01-01', exerciseType: 'RUNNING',
   durationMs: 30 * 60_000, distanceMm: 5_000_000, kilometreSeconds: [],
+  efforts: { km: null, mile: null, fiveK: null },
   ...over,
 })
 
@@ -60,5 +61,63 @@ describe('sessionRecordsOf', () => {
     // than two cards.
     const records = sessionRecordsOf([session({ distanceMm: null, kilometreSeconds: [] })])
     expect(records.map((r) => r.kind)).toEqual(['longest'])
+  })
+
+  it('takes the fastest kilometre as the quicker of the splits and the GPS, whichever is lower', () => {
+    const records = sessionRecordsOf([
+      session({ sessionId: 'splits', kilometreSeconds: [300], efforts: { km: 310, mile: null, fiveK: null } }),
+      session({ sessionId: 'gps', kilometreSeconds: [305], efforts: { km: 295, mile: null, fiveK: null } }),
+    ])
+    expect(records.find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'gps', value: 295 })
+    // The splits win when they are the quicker, and a session with GPS alone still competes.
+    expect(sessionRecordsOf([
+      session({ sessionId: 'splits', kilometreSeconds: [290], efforts: { km: 310, mile: null, fiveK: null } }),
+      session({ sessionId: 'gps-only', kilometreSeconds: [], efforts: { km: 292, mile: null, fiveK: null } }),
+    ]).find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'splits', value: 290 })
+    expect(sessionRecordsOf([session({ sessionId: 'gps-only', efforts: { km: 292, mile: null, fiveK: null } })])
+      .find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'gps-only', value: 292 })
+  })
+
+  it('finds the fastest mile and 5 km from the GPS, omitting each no route covered', () => {
+    const records = sessionRecordsOf([
+      session({ sessionId: 'a', localDate: '2026-02-01', efforts: { km: 300, mile: 490, fiveK: 1600 } }),
+      session({ sessionId: 'b', localDate: '2026-03-01', efforts: { km: 310, mile: 480, fiveK: null } }),
+    ])
+    expect(records.find((r) => r.kind === 'fastest-mile')).toMatchObject({ sessionId: 'b', value: 480 })
+    expect(records.find((r) => r.kind === 'fastest-5k')).toMatchObject({ sessionId: 'a', value: 1600 })
+    expect(sessionRecordsOf([session({ efforts: { km: 300, mile: null, fiveK: null } })]).map((r) => r.kind))
+      .toEqual(['longest', 'furthest', 'fastest-km'])
+  })
+
+  it('picks the fastest holders in whole seconds, so a tie on screen goes to the earlier run', () => {
+    // Both print 4:01 (and 8:01, 25:01); fractional, the later run would take all three.
+    const records = sessionRecordsOf([
+      session({ sessionId: 'early', localDate: '2026-02-01', efforts: { km: 241.4, mile: 481.4, fiveK: 1501.4 } }),
+      session({ sessionId: 'late', localDate: '2026-03-01', efforts: { km: 241.2, mile: 481.2, fiveK: 1501.2 } }),
+    ])
+    expect(records.find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'early', value: 241 })
+    expect(records.find((r) => r.kind === 'fastest-mile')).toMatchObject({ sessionId: 'early', value: 481 })
+    expect(records.find((r) => r.kind === 'fastest-5k')).toMatchObject({ sessionId: 'early', value: 1501 })
+  })
+})
+
+describe('sessionForRecords', () => {
+  const START = Date.parse('2026-09-01T07:00:00Z')
+  const row = { id: 's1', localDate: '2026-09-01', startMs: START, endMs: START + 30 * 60_000, attrs: { exerciseType: 'RUNNING' } }
+  const metresPerDegree = (6_371_000 * Math.PI) / 180
+
+  it('reads the efforts off the route, and nulls without one', () => {
+    // 1.2 km due north at 4 m/s, a fix every 10 s.
+    const route = Array.from({ length: 31 }, (_, i) => ({
+      atMs: START + i * 10_000, latitude: 52 + (i * 40) / metresPerDegree, longitude: 5,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))
+    const withRoute = sessionForRecords(row, route)
+    expect(withRoute.efforts.km).toBeCloseTo(250, 6)
+    expect([withRoute.efforts.mile, withRoute.efforts.fiveK]).toEqual([null, null])
+    expect(sessionForRecords(row).efforts).toEqual({ km: null, mile: null, fiveK: null })
+    // A ride's route yields no efforts; its splits still count as they always have.
+    const ride = sessionForRecords({ ...row, attrs: { exerciseType: 'BIKING' } }, route)
+    expect(ride.efforts).toEqual({ km: null, mile: null, fiveK: null })
   })
 })

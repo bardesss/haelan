@@ -166,6 +166,36 @@ describe('the all-time page', () => {
     expect(text("[data-record='fastest-km'] .record-value")).toBe('5:09 / km')
   })
 
+  it('shows the fastest mile and 5 km off the GPS route as a stopwatch time with its pace', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
+        { kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 3662 },
+      ],
+    })
+    expect(text("[data-record='fastest-mile'] .record-metric")).toBe('Fastest mile')
+    // 466 s over 1.609 km is 289.6 s a km.
+    expect(text("[data-record='fastest-mile'] .record-value")).toBe('7:46 · 4:50 / km')
+    expect(text("[data-record='fastest-5k'] .record-metric")).toBe('Fastest 5 km')
+    // Past the hour, the stopwatch shows one.
+    expect(text("[data-record='fastest-5k'] .record-value")).toBe('1:01:02 · 12:12 / km')
+  })
+
+  it('names the fastest mile and 5 km in Dutch', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { kind: 'fastest-mile', sessionId: 'd', localDate: '2026-05-20', exerciseType: 'RUNNING', value: 466 },
+        { kind: 'fastest-5k', sessionId: 'e', localDate: '2026-08-02', exerciseType: 'RUNNING', value: 1562 },
+      ],
+    }, 'nl')
+    expect(text("[data-record='fastest-mile'] .record-metric")).toBe('Snelste mijl')
+    expect(text("[data-record='fastest-mile'] .record-value")).toBe('7:46 · 4:50 / km')
+    expect(text("[data-record='fastest-5k'] .record-metric")).toBe('Snelste 5 km')
+    expect(text("[data-record='fastest-5k'] .record-value")).toBe('26:02 · 5:12 / km')
+  })
+
   it('writes the longest session\'s hour as "u" in Dutch', () => {
     mountPage({
       ...EMPTY,

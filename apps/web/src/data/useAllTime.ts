@@ -30,11 +30,11 @@ export interface MetricRecord {
 }
 
 export interface SessionRecord {
-  kind: 'longest' | 'furthest' | 'fastest-km'
+  kind: 'longest' | 'furthest' | 'fastest-km' | 'fastest-mile' | 'fastest-5k'
   sessionId: string
   localDate: string
   exerciseType: string | null
-  /** Milliseconds, millimetres or seconds, depending on `kind`. */
+  /** Milliseconds, millimetres or seconds, depending on `kind`: seconds for every `fastest-*`. */
   value: number
 }
 

@@ -487,6 +487,34 @@
           "slower": "second half {{value}} s/km slower",
           "same": "both halves at the same pace"
         },
+        "sameRoute": {
+          "label": "This route",
+          "count_one": "{{count}} time on this route since {{month}}",
+          "count_other": "{{count}} times on this route since {{month}}",
+          "strip": "each line: every time on this route, oldest left",
+          "matched": "matched by start, finish, direction and distance",
+          "view": "View the previous time, {{date}}"
+        },
+        "efforts": {
+          "label": "Fastest efforts",
+          "tableCaption": "The fastest stretches inside this run, beside your best",
+          "distance": "Distance",
+          "time": "Time",
+          "where": "Where",
+          "best": "Your best",
+          "km": "1 km",
+          "mile": "1 mile",
+          "fiveK": "5 km",
+          "thisWorkout": "this workout",
+          "fastest": "your fastest {{distance}} ever",
+          "fastestBy": "your fastest {{distance}} ever, {{delta}} faster than in {{month}}",
+          "seconds": "{{value}} s",
+          "caption": "from the distance along the GPS route · counts towards Records",
+          "captionSplit": "{{distance}}: your watch's split",
+          "captionRestGps": "the rest from the distance along the GPS route",
+          "captionRecords": "counts towards Records",
+          "view": "View records"
+        },
         "through": {
           "label": "Through the workout",
           "basis": "on the workout's own clock, 0:00 to {{end}}",
@@ -1624,7 +1652,9 @@
       "basis": "Read from the workouts themselves, not from a day of them.",
       "longest": "Longest session",
       "furthest": "Furthest session",
-      "fastest-km": "Fastest kilometre"
+      "fastest-km": "Fastest kilometre",
+      "fastest-mile": "Fastest mile",
+      "fastest-5k": "Fastest 5 km"
     }
   },
   "recoveryIndex": {

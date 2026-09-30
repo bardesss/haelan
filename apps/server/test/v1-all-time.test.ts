@@ -79,4 +79,39 @@ describe('GET /p/:personId/all-time', () => {
       records: [], sessionRecords: [], eddington: null, milestones: [],
     })
   })
+
+  // One straight 6 km run at 3 m/s: the GPS fastest kilometre is 333.33 s, the mile 536.4 and the
+  // 5 km 1666.67, and a record's seconds go out whole, as the workout page's efforts do.
+  it('sends the GPS records in whole seconds', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({ id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch', kind: 'device', createdAtMs: 0 }).run()
+    const startMs = Date.UTC(2026, 8, 4, 5, 0)
+    db.insert(schema.sessions).values({
+      id: 'run', personId: 'p1', sourceId: 'watch', kind: 'exercise', externalId: 'run',
+      startMs, startOffsetMinutes: 120, endMs: startMs + 2_000_000, endOffsetMinutes: 120,
+      localDate: '2026-09-04', rawPayloadId: null,
+      attrs: JSON.stringify({
+        type: null, mainSleep: null, stagesStatus: null, summary: null, shortAwakenings: null,
+        splitSummaries: null, exerciseEvents: null, displayName: null, notes: null, routeConsentRequired: null,
+        exerciseMetadata: { hasGps: true }, exerciseType: 'RUNNING', metricsSummary: null, splits: null, activeDuration: null,
+      }),
+    }).run()
+    const metresPerDegree = (6_371_000 * Math.PI) / 180
+    db.insert(schema.sessionRoutes).values(Array.from({ length: 21 }, (_, i) => ({
+      id: `run-${i}`, sessionId: 'run', ordinal: i, atMs: startMs + i * 100_000,
+      latitude: 52 + (i * 300) / metresPerDegree, longitude: 5,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/all-time', headers: { authorization: `Bearer ${token}` },
+    })
+    const byKind = Object.fromEntries(response.json().sessionRecords.map((r: { kind: string, value: number }) => [r.kind, r.value]))
+    expect(byKind['fastest-km']).toBe(333)
+    expect(byKind['fastest-mile']).toBe(536)
+    expect(byKind['fastest-5k']).toBe(1667)
+    expect(response.body).not.toMatch(/latitude|longitude/)
+  })
 })
