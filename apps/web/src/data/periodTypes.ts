@@ -31,7 +31,8 @@ export interface PeriodFigure {
   unit: string
   precision: number
   direction: FigureDirection
-  per: 'day' | 'week'
+  /** What value and usual are an average of: a day, a week's worth, or the whole period's worth (the nap count). */
+  per: 'day' | 'week' | 'period'
   value: number | null
   total: number | null
   days: number
@@ -69,7 +70,14 @@ export interface SleepListRow {
   standing: GlanceStanding | null
   judged: Judged
   good: boolean
+  /** Filed under a Saturday or Sunday morning: core's rule, the schedule's weekend colour. */
+  weekend: boolean
 }
+
+/** A Monday-to-Sunday week of the balance, clipped to the period: its nights' signed minutes added up. */
+export interface BalanceWeek { from: string, to: string, value: number | null }
+/** A calendar month of the nights list ("2026-08"), its nights with a time asleep and their mean. */
+export interface NightMonth { month: string, nights: number, asleepMinutes: number | null }
 
 export interface ScheduleSide { bedtimeMinutes: number, waketimeMinutes: number, nights: number }
 export interface ScheduleSides { weekday: ScheduleSide | null, weekend: ScheduleSide | null }
@@ -94,10 +102,12 @@ export interface SleepPeriodData {
     variability: PeriodFigure | null
     sides: ScheduleSides
   }
-  balance: { zeroLine: ZeroLine, values: (number | null)[], total: number } | null
+  balance: { zeroLine: ZeroLine, values: (number | null)[], total: number, weekly: BalanceWeek[] } | null
   mornings: PeriodFigure[]
   more: PeriodFigure[]
   nights: SleepListRow[]
+  /** Newest first: the nights list's month headers on 3 months and a year. */
+  months: NightMonth[]
 }
 
 export interface WorkoutListRow {

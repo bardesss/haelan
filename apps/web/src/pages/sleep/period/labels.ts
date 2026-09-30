@@ -23,6 +23,7 @@ const LABEL_KEYS: Readonly<Record<string, string>> = {
   sleep_latency_minutes: 'sleep.night.more.minutesToFallAsleep',
   sleep_awakenings: 'sleep.night.more.awakenings',
   sleep_after_wake_minutes: 'sleep.night.more.minutesAfterWakeUp',
+  sleep_nap_count: 'sleep.night.more.naps',
   sleep_nap_minutes: 'sleep.night.more.naps',
 }
 

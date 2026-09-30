@@ -10,11 +10,17 @@ import { Link } from '../../router.js'
  * GlanceCalendar's popover rule. Escape is claimed, so a layer beneath does not close with it.
  *
  * The rows are the caller's, so a week's point (which reads only that week's hero value, and has
- * no page of its own) is one row and no link.
+ * no page of its own) is one row and no link. A row may carry that point's own verdict words
+ * (pointVerdictWords), in its tone (verdictTone), as the approved mockup lists them beside each
+ * value; `subtitle` is a plain line under the title ("naar bed 00:41 · wakker geworden 06:58"). The
+ * close control is the panel's own, for a phone where no press lands outside it.
  */
-export function PointPanel({ title, rows, open, onAnnotate, onClose }: {
+export interface PointPanelRow { label: string, value: string, verdict?: string, tone?: 'better' | 'worse' | 'is-out' | null }
+
+export function PointPanel({ title, subtitle = null, rows, open, onAnnotate, onClose }: {
   title: string
-  rows: { label: string, value: string }[]
+  subtitle?: string | null
+  rows: PointPanelRow[]
   open: { to: string, text: string } | null
   onAnnotate: (() => void) | null
   onClose: () => void
@@ -48,13 +54,22 @@ export function PointPanel({ title, rows, open, onAnnotate, onClose }: {
 
   return (
     <div ref={panel} className="point-panel" role="dialog" aria-label={title}>
-      <p className="point-panel-title">{title}</p>
+      <div className="point-panel-head">
+        <p className="point-panel-title">{title}</p>
+        <button type="button" className="point-panel-close" aria-label={t('period.panel.close')} onClick={onClose}>
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+      {subtitle !== null && <p className="point-panel-subtitle">{subtitle}</p>}
       {rows.length > 0 && (
         <dl className="point-panel-rows">
           {rows.map((row) => (
             <div key={row.label} className="point-panel-row">
               <dt>{row.label}</dt>
-              <dd>{row.value}</dd>
+              <dd className="point-panel-value">{row.value}</dd>
+              {row.verdict !== undefined && row.verdict !== '' && (
+                <dd className={row.tone === null || row.tone === undefined ? 'point-panel-verdict' : `point-panel-verdict ${row.tone}`}>{row.verdict}</dd>
+              )}
             </div>
           ))}
         </dl>

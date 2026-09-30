@@ -51,17 +51,6 @@ export function sidesSentence(sides: ScheduleSides, t: Translate): Emphasised | 
 }
 
 /**
- * Whether a night is a weekend night, by the date it is filed under (the morning it ended): Saturday
- * and Sunday mornings, the nights of Friday and Saturday. The server's own rule for the weekend side
- * of the sentence (sleepPeriod.ts's sides), so the chart's colours and the sentence mean the same
- * nights.
- */
-export function isWeekendNight(localDate: string): boolean {
-  const day = new Date(`${localDate}T00:00:00Z`).getUTCDay()
-  return day === 0 || day === 6
-}
-
-/**
  * "Slaapschema", the approved mockup's: first the bedtime variability as a sentence against its
  * usual ("Bedtime varied ±34 min this month · your usual ±20 – 40 min") and the weekend against the
  * weekdays in another, its amounts bold. Then on Week and Month every night's bed to wake on the
@@ -115,7 +104,8 @@ export function SleepScheduleCard({ data, range, span, nightsRange }: {
       date: night.localDate,
       ...withinSchedule(bedRaw, wakeRaw, WIDE_WINDOW),
       naps: naps === undefined ? EMPTY_NAPS : naps.map((raw) => napInWindow(raw, bedRaw ?? wakeRaw, WIDE_WINDOW)),
-      weekend: isWeekendNight(night.localDate),
+      // The server's flag, by the rule its weekend sentence uses, so colours and sentence mean the same nights.
+      weekend: night.weekend,
       bedOut: bedOut.has(night.localDate),
     }
   }), [data.nights, napsByDate, bedOut])

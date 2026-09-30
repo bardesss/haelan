@@ -737,7 +737,11 @@
       "caption": "newest first · the dot is that night's verdict",
       "longest": "your longest",
       "showAll_one": "Show all {{count}} night",
-      "showAll_other": "Show all {{count}} nights"
+      "showAll_other": "Show all {{count}} nights",
+      "monthSummary_one": "1 night · avg. {{average}}",
+      "monthSummary_other": "{{count}} nights · avg. {{average}}",
+      "monthNights_one": "1 night",
+      "monthNights_other": "{{count}} nights"
     },
     "night": {
       "when": "Bedtime {{bed}} · wake time {{wake}} · {{source}}",
@@ -788,7 +792,12 @@
       },
       "through": {
         "label": "The night",
-        "share": "{{duration}} · {{percent}} %"
+        "share": "{{duration}} · {{percent}} %",
+        "firstDeep": "First deep sleep",
+        "firstRem": "First REM",
+        "cycles": "Sleep cycles",
+        "afterOnset": "after falling asleep, at {{clock}}",
+        "cycleNote": "one cycle: light, deep and REM, about 90 min"
       },
       "traces": {
         "heart_rate": "Heart rate",
@@ -803,7 +812,8 @@
         "lowest": "lowest {{value}} at {{time}}",
         "highest": "highest {{value}} at {{time}}",
         "caption": "band = your usual range · same time axis as the stages",
-        "hrvChart": "HRV through the night"
+        "hrvChart": "HRV through the night",
+        "dipBelow": "{{dip}} below your resting heart rate"
       },
       "sessions": {
         "excluded": "Excluded",
@@ -823,6 +833,7 @@
         "label": "The morning after",
         "labelDated": "Recovery on {{date}}",
         "restingHeartRate": "Resting heart rate",
+        "heartRateDip": "Sleeping heart-rate dip",
         "hrv": "HRV",
         "hrvChart": "HRV this morning",
         "breathing": "Breathing in sleep",
@@ -836,6 +847,23 @@
           "respiratoryRate": "breathing",
           "sleep": "sleep",
           "bedtime": "bedtime"
+        },
+        "summary": "Overnight {{outside}} of {{of}} outside your usual range:",
+        "summaryAll": "Overnight all {{of}} within your usual range",
+        "dipNote": "lowest {{lowest}} against resting heart rate {{resting}}",
+        "summaryOutside": "{{name}} {{direction}}",
+        "summaryWithin": "{{names}} within",
+        "direction": {
+          "above": "higher",
+          "below": "lower"
+        },
+        "names": {
+          "restingHeartRate": "heart rate",
+          "hrv": "HRV",
+          "heartRateDip": "heart-rate dip",
+          "spo2": "oxygen",
+          "breathing": "breathing",
+          "skinTemperature": "skin temperature"
         }
       },
       "day": {
@@ -914,7 +942,15 @@
       "balanceAgainstBaseline_one": "against your usual {{usual}}, over {{count}} night",
       "balanceAgainstBaseline_other": "against your usual {{usual}}, over {{count}} nights",
       "balanceAgainstTarget_one": "against your target of {{target}}, over {{count}} night",
-      "balanceAgainstTarget_other": "against your target of {{target}}, over {{count}} nights"
+      "balanceAgainstTarget_other": "against your target of {{target}}, over {{count}} nights",
+      "naps_one": "1 nap, {{minutes}} together",
+      "naps_other": "{{count}} naps, {{minutes}} together",
+      "barsWeeklyBaseline": "each bar: that week added up, against your usual",
+      "barsWeeklyTarget": "each bar: that week added up, against your target",
+      "panel": {
+        "bed": "bedtime {{time}}",
+        "wake": "wake time {{time}}"
+      }
     }
   },
   "setup": {
@@ -1795,6 +1831,16 @@
       "month": "this month",
       "3months": "these 3 months",
       "year": "this year"
+    },
+    "per": {
+      "week": "per week",
+      "month": "per month",
+      "quarter": "per 3 months",
+      "year": "per year"
+    },
+    "panel": {
+      "within": "within your usual",
+      "close": "Close"
     }
   }
 }

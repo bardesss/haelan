@@ -268,6 +268,7 @@ export { figureDirection, standingOf } from './query/glance.ts'
 // the judged figure shape both detail pages share. `judge` is exported as well, for the HTTP route
 // that serves the page.
 export type { NightPage, NightPageInput } from './query/nightPage.ts'
+export { morningSummaryOfMorning } from './query/nightPage.ts'
 export type {
   WorkoutPage, WorkoutPageInput, WorkoutFigure, WorkoutFigureKey, WorkoutStripPoint, RecordRef,
 } from './query/workoutPage.ts'
@@ -302,6 +303,7 @@ export type {
   PeriodWindow, PeriodUsual, DayCounts, PeriodStripPoint, PeriodReason, PeriodFigure, PeriodHigh, PeriodChange, PeriodHeader,
 } from './query/periodFigure.ts'
 export { countsOf, highOf } from './query/periodFigure.ts'
-export type { SleepPeriod, SleepListRow, ScheduleSides, ScheduleSide } from './query/sleepPeriod.ts'
+export type { SleepPeriod, SleepListRow, ScheduleSides, ScheduleSide, BalanceWeek, NightMonth } from './query/sleepPeriod.ts'
+export { balanceWeeks, isWeekendMorning, nightMonths } from './query/sleepPeriod.ts'
 export type { ActivityPeriod, WorkoutListRow, TypeTotal, Vo2Trend } from './query/activityPeriod.ts'
 export { vo2TrendOf } from './query/activityPeriod.ts'

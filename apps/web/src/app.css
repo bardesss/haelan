@@ -654,6 +654,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-verdict { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
 .detail-verdict.better { color: var(--positive); }
 .detail-verdict.worse, .detail-verdict.is-out { color: var(--negative); }
+/* The morning summary's outside figures, named in their verdict tone inside a plain sentence. */
+.night-summary-name.better { color: var(--positive); }
+.night-summary-name.worse, .night-summary-name.is-out { color: var(--negative); }
 /* The figures under the hero, and every other card that is a grid of FigureRows (FigureRows): one
    column per row up to its cap (data-columns, four across a full card, three where a card gives
    them three quarters), two below the grid's collapse width (the GRID_STACK_WIDTH block, for the
@@ -698,16 +701,30 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    own tap control under the strip (Sparkline's), so the hint gives way to it there. */
 .period-hero-captions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--space-3); }
 .period-hero-hint { font-style: italic; margin-left: auto; }
-.period-hero-panel { position: absolute; top: 100%; right: 0; z-index: 30; width: min(20rem, 100%); margin-top: var(--space-1); }
+.period-hero-panel { position: absolute; top: 100%; right: 0; z-index: 30; width: min(24rem, 100%); margin-top: var(--space-1); }
 .point-panel {
   box-sizing: border-box; padding: var(--space-3); background: var(--surface-card); color: var(--text-primary);
   border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
 }
-.point-panel-title { margin: 0; font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
-.point-panel-rows { margin: var(--space-2) 0 0; display: grid; gap: var(--space-1); }
-.point-panel-row { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-sm); }
-.point-panel-row dt { color: var(--text-secondary); }
-.point-panel-row dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* The title and the panel's own close, the subtitle under them, then a row a figure: its name, its
+   value bold, and that point's verdict in its tone (the verdict line's colours). */
+.point-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.point-panel-title { margin: 0; font-size: var(--font-size-sm); font-weight: var(--weight-bold); }
+.point-panel-close {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: calc(-1 * var(--space-1));
+  padding: 0; border: 0; border-radius: var(--radius-md); background: none; color: var(--text-secondary); font-size: var(--font-size-md); cursor: pointer;
+}
+.point-panel-close:hover { background: var(--surface-hover); color: var(--text-primary); }
+.point-panel-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+.point-panel-subtitle { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.point-panel-rows { margin: var(--space-2) 0 0; display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: baseline; }
+.point-panel-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; }
+.point-panel-row dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.point-panel-row dd { margin: 0; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.point-panel-value { font-weight: var(--weight-bold); }
+.point-panel-row .point-panel-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
+.point-panel-verdict.better { color: var(--positive); }
+.point-panel-verdict.worse, .point-panel-verdict.is-out { color: var(--negative); }
 .point-panel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); }
 .point-panel-actions .card-link { margin: 0; }
 /* On a phone the panel is a sheet along the bottom edge (the approved mockup's, .cal-sheet's
@@ -717,11 +734,12 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
   .period-hero-hint { display: none; }
   .period-hero-panel { position: fixed; top: auto; right: 0; bottom: 0; left: 0; width: auto; margin: 0; z-index: 40; }
   .period-hero-panel .point-panel {
-    max-height: 85dvh; overflow-y: auto;
+    max-height: 85dvh; overflow-y: auto; padding: var(--space-4);
     border-width: 1px 0 0; border-radius: var(--radius-md) var(--radius-md) 0 0;
   }
   .point-panel-actions { flex-direction: column; align-items: stretch; }
   .point-panel-actions .card-link, .point-panel-actions .button { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+  .point-panel-close { width: 44px; height: 44px; margin: calc(-1 * var(--space-2)); }
 }
 /* A list (ExpandableList): the first seven, then every item flowing into columns of at least
    18rem, a month's heading kept with its first item; one column on a phone. */
@@ -729,7 +747,15 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .period-list { display: flex; flex-direction: column; align-items: flex-start; }
 .period-list-items { align-self: stretch; min-width: 0; }
 .period-list-expanded { columns: 3 18rem; column-gap: var(--space-4); }
-.period-list-heading { margin: var(--space-3) 0 var(--space-1); break-after: avoid; }
+/* A group's heading, the year mockup's month header: its name bold on the left, a quiet summary on
+   the right, a rule under both. */
+.period-list-heading {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 var(--space-3);
+  margin: var(--space-3) 0 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-sm); color: var(--text-primary); break-after: avoid;
+}
+.period-list-name { margin: 0; font-size: inherit; font-weight: var(--weight-bold); }
+.period-list-aside { font-size: var(--font-size-xs); color: var(--text-secondary); }
 .period-list-group:first-child .period-list-heading { margin-top: 0; }
 .period-list-toggle { margin-top: var(--space-3); }
 @media (max-width: 620px) {
@@ -787,6 +813,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-legend-key[data-stage="light"] { background: var(--chart-stage-light); }
 .detail-legend-key[data-stage="rem"] { background: var(--chart-stage-rem); }
 .detail-legend-key[data-stage="awake"] { background: var(--chart-stage-awake); }
+/* The stage timing rows under that legend: the traces' own gap above them, so a row's label does
+   not sit on the legend's line. */
+.detail-legend + .detail-rows { margin-top: var(--space-3); }
 /* The Sleep page's schedule legend (SleepScheduleCard): its keys in the colours SleepSchedule draws
    (a weekday span, a weekend span, the bedtime-outside-its-usual dot, the usual band). */
 .detail-legend-key[data-schedule="weekday"] { background: var(--chart-stage-light); }
@@ -1310,9 +1339,8 @@ button.week-bar-slot { cursor: pointer; }
 .figure-row-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
 .figure-row-verdict.better { color: var(--positive); }
 .figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
-/* A line under the verdict that is not one (FigureRow's note): the verdict's own muted colour, never its tone. */
-.figure-row-note { font-size: var(--font-size-xs); color: var(--text-muted); }
-
+/* A line under the verdict that is not one (FigureRow's note): smaller and fainter than the verdict, never its tone. */
+.figure-row-note { font-size: var(--font-size-micro); color: var(--text-faint); }
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }

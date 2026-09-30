@@ -737,7 +737,11 @@
       "caption": "de nieuwste eerst · de stip is de verdict van die nacht",
       "longest": "je langste",
       "showAll_one": "Toon alle {{count}} nacht",
-      "showAll_other": "Toon alle {{count}} nachten"
+      "showAll_other": "Toon alle {{count}} nachten",
+      "monthSummary_one": "1 nacht · gem. {{average}}",
+      "monthSummary_other": "{{count}} nachten · gem. {{average}}",
+      "monthNights_one": "1 nacht",
+      "monthNights_other": "{{count}} nachten"
     },
     "night": {
       "when": "Naar bed {{bed}} · wakker geworden {{wake}} · {{source}}",
@@ -788,7 +792,12 @@
       },
       "through": {
         "label": "De nacht",
-        "share": "{{duration}} · {{percent}} %"
+        "share": "{{duration}} · {{percent}} %",
+        "firstDeep": "Eerste diepe slaap",
+        "firstRem": "Eerste REM",
+        "cycles": "Slaapcycli",
+        "afterOnset": "na het inslapen, om {{clock}}",
+        "cycleNote": "een cyclus: licht, diep en REM, ongeveer 90 min"
       },
       "traces": {
         "heart_rate": "Hartslag",
@@ -803,7 +812,8 @@
         "lowest": "laagste {{value}} om {{time}}",
         "highest": "hoogste {{value}} om {{time}}",
         "caption": "band = je gebruikelijke bereik · zelfde tijdas als de fasen",
-        "hrvChart": "HRV in de nacht"
+        "hrvChart": "HRV in de nacht",
+        "dipBelow": "{{dip}} onder je rusthartslag"
       },
       "sessions": {
         "excluded": "Uitgesloten",
@@ -823,6 +833,7 @@
         "label": "De ochtend erna",
         "labelDated": "Herstel op {{date}}",
         "restingHeartRate": "Rusthartslag",
+        "heartRateDip": "Hartslagdaling in slaap",
         "hrv": "HRV",
         "hrvChart": "HRV vanochtend",
         "breathing": "Ademhaling in slaap",
@@ -836,6 +847,23 @@
           "respiratoryRate": "ademhaling",
           "sleep": "slaap",
           "bedtime": "bedtijd"
+        },
+        "summary": "'s Nachts {{outside}} van {{of}} buiten je gebruikelijke bereik:",
+        "summaryAll": "'s Nachts alle {{of}} binnen je gebruikelijke bereik",
+        "dipNote": "laagste {{lowest}} tegenover rusthartslag {{resting}}",
+        "summaryOutside": "{{name}} {{direction}}",
+        "summaryWithin": "{{names}} binnen",
+        "direction": {
+          "above": "hoger",
+          "below": "lager"
+        },
+        "names": {
+          "restingHeartRate": "hartslag",
+          "hrv": "HRV",
+          "heartRateDip": "hartslagdaling",
+          "spo2": "zuurstof",
+          "breathing": "ademhaling",
+          "skinTemperature": "huidtemperatuur"
         }
       },
       "day": {
@@ -914,7 +942,15 @@
       "balanceAgainstBaseline_one": "ten opzichte van je gebruikelijke {{usual}}, over {{count}} nacht",
       "balanceAgainstBaseline_other": "ten opzichte van je gebruikelijke {{usual}}, over {{count}} nachten",
       "balanceAgainstTarget_one": "ten opzichte van je doel van {{target}}, over {{count}} nacht",
-      "balanceAgainstTarget_other": "ten opzichte van je doel van {{target}}, over {{count}} nachten"
+      "balanceAgainstTarget_other": "ten opzichte van je doel van {{target}}, over {{count}} nachten",
+      "naps_one": "1 dutje, samen {{minutes}}",
+      "naps_other": "{{count}} dutjes, samen {{minutes}}",
+      "barsWeeklyBaseline": "elke balk: die week opgeteld, tegenover je gebruikelijke",
+      "barsWeeklyTarget": "elke balk: die week opgeteld, tegenover je doel",
+      "panel": {
+        "bed": "naar bed {{time}}",
+        "wake": "wakker geworden {{time}}"
+      }
     }
   },
   "setup": {
@@ -1795,6 +1831,16 @@
       "month": "deze maand",
       "3months": "deze 3 maanden",
       "year": "dit jaar"
+    },
+    "per": {
+      "week": "per week",
+      "month": "per maand",
+      "quarter": "per 3 maanden",
+      "year": "per jaar"
+    },
+    "panel": {
+      "within": "binnen je gebruikelijke bereik",
+      "close": "Sluiten"
     }
   }
 }

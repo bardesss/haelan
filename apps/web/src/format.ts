@@ -135,6 +135,13 @@ export function formatSessionDateHeading(date: string, language: string): string
  * (NightRow), whose expanded columns are too narrow for formatSessionDateHeading's long form: the
  * good-night mark wrapped onto a line of its own. Same UTC anchoring as formatLocalDate.
  */
+/** A date by its full weekday, day and month, no year ("woensdag 16 september"), as a point panel titles its night. Same UTC anchoring. */
+export function formatLongWeekdayDate(date: string, language: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleString(language, {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
+  })
+}
+
 export function formatWeekdayDate(date: string, language: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleString(language, {
     weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',

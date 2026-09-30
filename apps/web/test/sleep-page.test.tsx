@@ -55,6 +55,8 @@ afterEach(() => {
   root = null
 })
 
+// The no-break space formatFigureValue joins a value's parts with.
+const NB = '\u00a0'
 const MONTH_URL = '/sleep?range=month&on=2026-08-15'
 const YEAR_URL = '/sleep?range=year&on=2025-06-01'
 
@@ -87,7 +89,8 @@ const NIGHT_MIDNIGHT = Date.parse(`${NIGHT_DATE}T00:00:00Z`)
 function oneNight(bedtimeMinutes: number, waketimeMinutes: number): SleepListRow[] {
   return [{
     localDate: NIGHT_DATE, sourceId: 'watch', asleepMinutes: 420, bedtimeMinutes, waketimeMinutes,
-    standing: 'within', judged: null, good: false,
+    // 15 August 2026 is a Saturday morning.
+    standing: 'within', judged: null, good: false, weekend: true,
   }]
 }
 /** /sleep/nights' own night for NIGHT_DATE, carrying `naps`. */
@@ -241,8 +244,37 @@ describe('the Sleep page: sections', () => {
     const notes = (label: string) => [...cardFor(label)!.querySelectorAll('.figure-row-note')].map((note) => note.textContent ?? '')
     expect(notes('The mornings').length).toBeGreaterThan(0)
     for (const note of notes('The mornings')) expect(note).toMatch(/^\d+ of \d+ mornings? usual/)
-    expect(notes('More about the sleep').length).toBeGreaterThan(0)
-    for (const note of notes('More about the sleep')) expect(note).toMatch(/^\d+ of \d+ usual/)
+    // Every row but the naps, whose line is their own (the next test).
+    const more = notes('More about the sleep').filter((note) => !note.includes('naps'))
+    expect(more.length).toBeGreaterThan(0)
+    for (const note of more) expect(note).toMatch(/^\d+ of \d+ usual/)
+  })
+
+  // The fixture's August holds four naps and 100 minutes of them.
+  it("prints the naps as one row: the count, its usual a month's worth, and the naps and minutes together", async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    const naps = () => [...cardFor('More about the sleep')!.querySelectorAll('.figure-row')].filter((row) => row.querySelector('.label')?.textContent === 'Naps')
+    expect(naps()).toHaveLength(1)
+    expect(naps()[0]!.querySelector('.figure-row-verdict')!.textContent).toBe('within your usual 3 – 4 per month')
+    expect(naps()[0]!.querySelector('.figure-row-note')!.textContent).toBe(`4 naps, 1h${NB}40m together`)
+    expect(naps()[0]!.textContent).toContain('4')
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    const dutjes = [...cardFor('Meer over de slaap')!.querySelectorAll('.figure-row')].filter((row) => row.querySelector('.label')?.textContent === 'Dutjes')
+    expect(dutjes).toHaveLength(1)
+    expect(dutjes[0]!.querySelector('.figure-row-verdict')!.textContent).toBe('binnen je gebruikelijke bereik 3 – 4 per maand')
+    expect(dutjes[0]!.querySelector('.figure-row-note')!.textContent).toBe(`4 dutjes, samen 1u${NB}40m`)
+  })
+
+  it('says no naps rather than none together, and keeps the minutes row where no count came', async () => {
+    const more = SLEEP_PERIOD_MONTH.more.map((figure) => (figure.metric === 'sleep_nap_count' ? { ...figure, total: 0 } : figure))
+    await renderAt(MONTH_URL, { period: month({ more }) })
+    const note = () => [...cardFor('More about the sleep')!.querySelectorAll('.figure-row')]
+      .filter((row) => row.querySelector('.label')?.textContent === 'Naps').map((row) => row.querySelector('.figure-row-note')?.textContent)
+    expect(note()).toEqual(['no naps'])
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: month({ more: SLEEP_PERIOD_MONTH.more.filter((figure) => figure.metric !== 'sleep_nap_count') }) })
+    expect(note()).toEqual(['24 of 28 usual · 4 longer'])
   })
 
   it('overlays last year\'s nights on the hero\'s strip with the comparison on, aligned by date', async () => {
@@ -323,7 +355,7 @@ describe('the Sleep page: sections', () => {
     expect(cardFor('Nights')!.querySelector('.period-list-heading')).toBeNull()
   })
 
-  it('draws weekly points on a year, and groups the expanded list by month', async () => {
+  it('draws weekly points on a year, and groups the list by month', async () => {
     await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR })
     expect(sparklines.get(HERO)!.values).toHaveLength(SLEEP_PERIOD_YEAR.hero.weekly!.length)
     expect([...cardFor(HERO)!.querySelectorAll('.period-hero-captions .dash-caption')].map((caption) => caption.textContent))
@@ -341,11 +373,27 @@ describe('the Sleep page: sections', () => {
       .toEqual(['Bedtime', 'Wake time'])
     expect(cardFor('Sleep schedule')!.querySelector('.schedule-sentences p')?.textContent).toMatch(/^Bedtime varied ±\d+\smin this year/)
     expect(sparklines.get('Bedtime')!.values).toHaveLength(SLEEP_PERIOD_YEAR.schedule.bedtime!.weekly!.length)
-    expect(cardFor('Nights')!.querySelector('.period-list-heading')).toBeNull()
+    // Collapsed, the seven newest nights are December's, under its header and the server's summary.
+    const headings = () => [...cardFor('Nights')!.querySelectorAll('.period-list-heading')]
+      .map((h) => [h.querySelector('.period-list-name')?.textContent, h.querySelector('.period-list-aside')?.textContent ?? null])
+    expect(headings()).toEqual([['December', `28 nights · avg. 7h${NB}00m`]])
     act(() => { cardFor('Nights')!.querySelector<HTMLButtonElement>('.period-list-toggle')!.click() })
-    const headings = [...cardFor('Nights')!.querySelectorAll('.period-list-heading')].map((h) => h.textContent)
-    expect(headings[0]).toBe('December 2025')
-    expect(headings).toHaveLength(12)
+    expect(headings()[0]).toEqual(['December', `28 nights · avg. 7h${NB}00m`])
+    expect(headings()).toHaveLength(12)
+    expect(headings()[11]).toEqual(['January', `29 nights · avg. 7h${NB}01m`])
+  })
+
+  it('heads each month in Dutch, and with no average says only how many nights', async () => {
+    await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR }, 'nl')
+    const heading = () => cardFor('Nachten')!.querySelector('.period-list-heading')!
+    expect(heading().querySelector('.period-list-name')?.textContent).toBe('december')
+    expect(heading().querySelector('.period-list-aside')?.textContent).toBe(`28 nachten · gem. 7u${NB}00m`)
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(YEAR_URL, { period: { ...SLEEP_PERIOD_YEAR, months: [{ month: '2025-12', nights: 1, asleepMinutes: null }] } }, 'nl')
+    expect(heading().querySelector('.period-list-aside')?.textContent).toBe('1 nacht')
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(YEAR_URL, { period: { ...SLEEP_PERIOD_YEAR, months: [] } }, 'nl')
+    expect(heading().querySelector('.period-list-aside')).toBeNull()
   })
 
   it('writes the hour as "u" in Dutch, and the verdict in the catalogue\'s words', async () => {
@@ -375,12 +423,21 @@ describe('the Sleep page: the hero\'s point panel', () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
     act(() => { sparklines.get(HERO)!.onPointClick!('2026-08-31') })
     const panel = container!.querySelector('.point-panel')!
-    expect(panel.querySelector('.point-panel-title')?.textContent).toBe('Aug 31, 2026')
-    expect([...panel.querySelectorAll('.point-panel-row')].map((row) => row.textContent))
-      .toEqual(['Time asleep7h 18m', 'Bedtime22:44', 'Wake time06:32'])
+    expect(panel.querySelector('.point-panel-title')?.textContent).toBe('Monday, August 31')
+    expect(panel.querySelector('.point-panel-subtitle')?.textContent).toBe('bedtime 22:44 · wake time 06:32')
+    // The mockup's rows, each with that night's own verdict; REM is left to the night page.
+    const cells = (row: Element) => [...row.children].map((cell) => cell.textContent)
+    expect([...panel.querySelectorAll('.point-panel-row')].map(cells)).toEqual([
+      ['Time asleep', `7h${NB}18m`, 'above your usual'],
+      ['Efficiency', `93${NB}%`, 'within your usual'],
+      ['Deep sleep', `1h${NB}15m`, 'above your usual'],
+      ['Bedtime', '22:44', 'earlier than your usual'],
+    ])
+    expect([...panel.querySelectorAll('.point-panel-verdict')].map((v) => v.className))
+      .toEqual(['point-panel-verdict better', 'point-panel-verdict', 'point-panel-verdict better', 'point-panel-verdict is-out'])
     expect(panel.querySelector('a')?.getAttribute('href')).toBe(nightPath('2026-08-31'))
     expect(panel.querySelector('a')?.textContent).toBe('View night')
-    act(() => { panel.querySelector<HTMLButtonElement>('button')!.click() })
+    act(() => { panel.querySelector<HTMLButtonElement>('.point-panel-actions button')!.click() })
     expect(container!.querySelector('.point-panel')).toBeNull()
     expect(document.querySelector('.annotate-panel')).not.toBeNull()
   })
@@ -393,7 +450,20 @@ describe('the Sleep page: the hero\'s point panel', () => {
     expect(panel.querySelectorAll('.point-panel-row')).toHaveLength(1)
     expect(panel.querySelector('.point-panel-row dt')?.textContent).toBe('Time asleep')
     expect(panel.querySelector('a')).toBeNull()
-    expect(panel.querySelector('button')).toBeNull()
+    expect(panel.querySelector('.point-panel-actions')).toBeNull()
+    act(() => { panel.querySelector<HTMLButtonElement>('.point-panel-close')!.click() })
+    expect(container!.querySelector('.point-panel')).toBeNull()
+  })
+
+  it('titles and words a night\'s panel in Dutch', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    act(() => { sparklines.get('Tijd in slaap, gemiddeld per nacht')!.onPointClick!('2026-08-31') })
+    const panel = container!.querySelector('.point-panel')!
+    expect(panel.querySelector('.point-panel-title')?.textContent).toBe('maandag 31 augustus')
+    expect(panel.querySelector('.point-panel-subtitle')?.textContent).toBe('naar bed 22:44 · wakker geworden 06:32')
+    expect([...panel.querySelectorAll('.point-panel-verdict')].map((v) => v.textContent))
+      .toEqual(['boven je gebruikelijke bereik', 'binnen je gebruikelijke bereik', 'boven je gebruikelijke bereik', 'eerder dan je gebruikelijke tijd'])
+    expect(panel.querySelector('.point-panel-close')?.getAttribute('aria-label')).toBe('Sluiten')
   })
 })
 
@@ -468,6 +538,20 @@ describe('the Sleep page: the nights, the stages, the mornings', () => {
     expect(yAxis.interval).toBe(240)
     expect([0, 240, 480].map((v) => yAxis.axisLabel!.formatter!(v))).toEqual(['0u', '4u', '8u'])
     expect(yAxis.name ?? '').toBe('')
+  })
+
+  const stageLabels = () => {
+    const host = cardFor('De nachten')!.querySelector<HTMLDivElement>('div[role="img"]')!
+    const axis = (echarts.getInstanceByDom(host)?.getOption() as { xAxis: { data: string[], axisLabel: { interval: (i: number) => boolean } }[] }).xAxis[0]!
+    return axis.data.filter((_, i) => axis.axisLabel.interval(i))
+  }
+
+  it('labels the stages by day number on a month and by month name on a year', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    expect(stageLabels()).toEqual(['1', '8', '15', '22', '29'])
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR }, 'nl')
+    expect(stageLabels()).toEqual(['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'])
   })
 
   it('gives each stage\'s average and share in the legend, through the shared stage names', async () => {
@@ -646,10 +730,16 @@ describe('the Sleep page: the schedule chart', () => {
     const oldestFirst = [...SLEEP_PERIOD_MONTH.nights].reverse()
     const out = new Set(SLEEP_PERIOD_MONTH.schedule.bedtime!.daily.filter((p) => p.standing === 'above' || p.standing === 'below').map((p) => p.from))
     expect(out.size).toBeGreaterThan(0)
-    expect(rows.map((row) => row[3])).toEqual(oldestFirst.map((night) => ([0, 6].includes(new Date(`${night.localDate}T00:00:00Z`).getUTCDay()) ? 1 : 0)))
+    expect(rows.map((row) => row[3])).toEqual(oldestFirst.map((night) => (night.weekend ? 1 : 0)))
     expect(rows.map((row) => row[4])).toEqual(oldestFirst.map((night) => (out.has(night.localDate) ? 1 : 0)))
     // Aug 1 2026 is a Saturday, Aug 3 a Monday.
     expect(rows[oldestFirst.findIndex((night) => night.localDate === '2026-08-01')]![3]).toBe(1)
     expect(rows[oldestFirst.findIndex((night) => night.localDate === '2026-08-03')]![3]).toBe(0)
+  })
+
+  it("colours a night by the server's weekend flag, never by working the weekday out itself", async () => {
+    // A Saturday morning the server did not flag stays a weekday night.
+    await renderAt(MONTH_URL, { period: month({ nights: [{ ...oneNight(-56, 400)[0]!, weekend: false }] }) })
+    expect((placed() as number[][])[0]![3]).toBe(0)
   })
 })

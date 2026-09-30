@@ -1,7 +1,7 @@
 import type { PeriodChange, PeriodFigure, PeriodHigh, PeriodRange, PeriodStripPoint, PeriodWindow } from '../../data/periodTypes.js'
 import { formatSignedDuration, formatSignedNumber, formatWeekdayDate } from '../../format.js'
 import type { Translate } from '../../format.js'
-import { directionWords } from '../../charts/base.js'
+import { directionWords, standingShort } from '../../charts/base.js'
 import type { PointJudged, PointStanding } from '../../charts/base.js'
 import { stripBands } from '../dashboard/cardShared.js'
 import { deviationVerdictLine, formatFigureDifference, formatFigureValue, isShortSpan, verdictLine } from './figureText.js'
@@ -35,8 +35,11 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   if (figure.reason === 'no-data') return null
   if (figure.reason === 'too-few-days') return t('period.reason.tooFewDays')
   if (figure.reason === 'thin-usual') return t('glance.usual.thin')
-  const verdict = verdictLine({ ...figure, baseline: figure.usual }, language, t)
-  if (verdict === null || figure.usual === null || o.window !== true) return verdict
+  const line = verdictLine({ ...figure, baseline: figure.usual }, language, t)
+  if (line === null || figure.usual === null) return line
+  // A per-period figure's range is a whole period's worth ("1 - 5 a month"), and says so.
+  const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${figure.usual.window.unit}`)}` : line
+  if (o.window !== true) return verdict
   return `${verdict} ${windowPhrase(figure.usual.window, t)}`
 }
 
@@ -52,6 +55,16 @@ function sideWords(unit: string): { above: string, below: string } {
 // all where a card of one kind of day says it once for every row ("26 of 30 usual").
 const COUNT_KEYS = { night: 'usualNights', day: 'usualDays', morning: 'usualMornings', none: 'usual' } as const
 export type CountNoun = keyof typeof COUNT_KEYS
+
+/**
+ * One point's verdict in words, without its range, as the point panel lists it beside the value:
+ * standingShort's words outside the usual ("below your usual", "later than your usual"), "within
+ * your usual" inside it, and nothing for a point the server did not judge.
+ */
+export function pointVerdictWords(standing: PeriodStripPoint['standing'], unit: string, t: Translate): string {
+  if (standing === 'within') return t('period.panel.within')
+  return standing === null ? '' : standingShort(standing, unit, t)
+}
 
 /** "24 of 30 nights usual · 3 longer · 3 shorter"; null when no day was counted, or none judged. */
 export function dayCountsLine(figure: PeriodFigure, noun: CountNoun, t: Translate): string | null {
@@ -202,10 +215,12 @@ export const PERIOD_TOTAL_METRICS: readonly string[] = ['distance', 'floors', 'a
 
 /**
  * The figure's value: for a total (PERIOD_TOTAL_METRICS), the period's total, with its average per day
- * in the line under it; otherwise the average alone (per night, per day, or per week), whether or not
- * the server sent a total.
+ * in the line under it; for a per-period figure (the nap count), the period's total alone, since its
+ * verdict already reads a period's worth; otherwise the average alone (per night, per day, or per
+ * week), whether or not the server sent a total.
  */
 export function periodValueLine(figure: PeriodFigure, language: string, t: Translate): { value: string, under: string | null } {
+  if (figure.per === 'period' && figure.total !== null) return { value: formatFigureValue(figure, figure.total, language, t), under: null }
   const value = formatFigureValue(figure, figure.value, language, t)
   if (figure.total === null || !PERIOD_TOTAL_METRICS.includes(figure.metric)) return { value, under: null }
   return { value: formatFigureValue(figure, figure.total, language, t), under: t('period.value.perDay', { value }) }
