@@ -16,6 +16,8 @@ import { ALL_SOURCES } from '../src/controls/source.js'
 import { useBaseline } from '../src/data/useBaseline.js'
 import { glanceKey } from '../src/data/useGlance.js'
 import { glanceCalendarKey } from '../src/data/useGlanceCalendar.js'
+import { sleepPeriodKey } from '../src/data/useSleepPeriod.js'
+import { nightPageKey } from '../src/data/useNightPage.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -287,6 +289,32 @@ describe('useWriteOverride, applied true', () => {
 
     expect(client.getQueryState(day)?.isInvalidated).toBe(true)
     expect(client.getQueryState(month)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(otherPerson)?.isInvalidated).toBe(false)
+  })
+
+  // The period reads are keyed by range name, anchor and source, the night page by its night: no
+  // from/to for overlapsAffected to find, so an excluded night stayed on the Sleep page.
+  it('invalidates the period reads and the night page, which carry no range to overlap', async () => {
+    const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
+    const sleep = sleepPeriodKey('p1', 'month', '2026-08-31', ALL_SOURCES)
+    const activity = [...queryKeys.resource('p1', 'activity-period'), 'month', '2026-08-31', ALL_SOURCES]
+    const night = nightPageKey('p1', '2026-08-15')
+    const otherPerson = sleepPeriodKey('p2', 'month', '2026-08-31', ALL_SOURCES)
+    for (const key of [sleep, activity, night, otherPerson]) client.setQueryData(key, {})
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: true,
+    })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(client.getQueryState(sleep)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(activity)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(night)?.isInvalidated).toBe(true)
     expect(client.getQueryState(otherPerson)?.isInvalidated).toBe(false)
   })
 
