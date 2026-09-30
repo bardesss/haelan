@@ -190,7 +190,7 @@ export function Sleep() {
             onToggle={() => setExpandedFor(expanded ? null : periodKey)} />
         )}
         {balanceShown && data.balance !== null && (
-          <SleepBalanceCard balance={data.balance} dates={heroDates} nights={hero.days} span={morningSpan}
+          <SleepBalanceCard balance={data.balance} range={data.period.range} dates={heroDates} nights={hero.days} span={morningSpan}
             excluded={overrides.excluded} annotations={overrides.annotations}
             onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: ASLEEP })} />
         )}

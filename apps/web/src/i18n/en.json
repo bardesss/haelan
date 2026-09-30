@@ -940,7 +940,9 @@
       "balanceAgainstTarget_one": "against your target of {{target}}, over {{count}} night",
       "balanceAgainstTarget_other": "against your target of {{target}}, over {{count}} nights",
       "naps_one": "1 nap, {{minutes}} together",
-      "naps_other": "{{count}} naps, {{minutes}} together"
+      "naps_other": "{{count}} naps, {{minutes}} together",
+      "barsWeeklyBaseline": "each bar: that week added up, against your usual",
+      "barsWeeklyTarget": "each bar: that week added up, against your target"
     }
   },
   "setup": {

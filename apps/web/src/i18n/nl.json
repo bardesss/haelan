@@ -940,7 +940,9 @@
       "balanceAgainstTarget_one": "ten opzichte van je doel van {{target}}, over {{count}} nacht",
       "balanceAgainstTarget_other": "ten opzichte van je doel van {{target}}, over {{count}} nachten",
       "naps_one": "1 dutje, samen {{minutes}}",
-      "naps_other": "{{count}} dutjes, samen {{minutes}}"
+      "naps_other": "{{count}} dutjes, samen {{minutes}}",
+      "barsWeeklyBaseline": "elke balk: die week opgeteld, tegenover je gebruikelijke",
+      "barsWeeklyTarget": "elke balk: die week opgeteld, tegenover je doel"
     }
   },
   "setup": {

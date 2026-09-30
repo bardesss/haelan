@@ -14,7 +14,7 @@ import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { SleepPeriodData } from '../src/data/periodTypes.js'
-import { SLEEP_PERIOD_MONTH } from './fixtures/sleepPeriod.js'
+import { SLEEP_PERIOD_MONTH, SLEEP_PERIOD_YEAR } from './fixtures/sleepPeriod.js'
 import { stubSleep, withQuery } from './sleepPageStub.js'
 import type { SleepStub } from './sleepPageStub.js'
 import { flush } from './flush.js'
@@ -40,11 +40,12 @@ afterEach(() => {
 })
 
 const MONTH_URL = '/sleep?range=month&on=2026-08-15'
+const YEAR_URL = '/sleep?range=year&on=2025-06-01'
 // The month fixture's sixth night (2026-08-06) has no reading: its balance value is null.
 const SILENT = '2026-08-06'
 
-async function renderWith(stub: SleepStub, lng = 'en'): Promise<string[]> {
-  window.history.replaceState(null, '', MONTH_URL)
+async function renderWith(stub: SleepStub, lng = 'en', url = MONTH_URL): Promise<string[]> {
+  window.history.replaceState(null, '', url)
   const urls: string[] = []
   restore = stubSleep(urls, stub)
   const { client, tree } = withQuery(<Sleep />)
@@ -65,6 +66,11 @@ const rowFor = (date: string): (string | null)[] | undefined =>
     .find((cells) => cells[0] === date)
 const drawn = (): unknown[] | undefined =>
   (echarts.getInstanceByDom(host())?.getOption() as { series?: { data?: unknown[] }[] } | undefined)?.series?.[0]?.data
+// The x axis's labels and the ones it prints (periodAxisLabels).
+const xLabels = (): string[] => {
+  const axis = (echarts.getInstanceByDom(host())?.getOption() as { xAxis: { data: string[], axisLabel: { interval: (i: number) => boolean } }[] }).xAxis[0]!
+  return axis.data.filter((_, i) => axis.axisLabel.interval(i))
+}
 
 const EXCLUDE_SILENT = [{
   id: 'o1', scope: 'day_metric', targetKey: dayMetricTarget({ localDate: SILENT, metric: 'sleep_asleep_minutes' }),
@@ -108,6 +114,34 @@ describe('the sleep balance card', () => {
     expect(rowFor(SILENT)![1]).toBe('excluded')
     // The other silent nights, which the reader did nothing to, say something else.
     expect(rowFor('2026-08-17')![1]).toBe('no reading')
+  })
+
+  it("labels a month's bars by day number, every seventh day", async () => {
+    await renderWith({ period: SLEEP_PERIOD_MONTH })
+    expect(xLabels()).toEqual(['1', '8', '15', '22', '29'])
+  })
+
+  it('draws a week a bar on a year, its nights added up, under month names', async () => {
+    await renderWith({ period: SLEEP_PERIOD_YEAR }, 'en', YEAR_URL)
+    expect(drawn()).toEqual(SLEEP_PERIOD_YEAR.balance.weekly.map((week) => week.value))
+    expect(drawn()).toHaveLength(53)
+    expect(rowFor('2025-01-06')).toBeDefined()
+    expect(xLabels()).toEqual(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+    expect(balanceCard()!.querySelector('.night-week-bars-caption')?.textContent).toBe('each bar: that week added up, against your usual')
+    // The total and its nights stay the period's.
+    expect(balanceCard()!.querySelector('.night-week-against')?.textContent).toBe('against your usual 7h 00m, over 332 nights')
+  })
+
+  it('words the weekly bars in Dutch, against the target too', async () => {
+    await renderWith({ period: { ...SLEEP_PERIOD_YEAR, balance: { ...SLEEP_PERIOD_YEAR.balance, zeroLine: { minutes: 480, source: 'target' } } } }, 'nl', YEAR_URL)
+    expect(balanceCard('Slaapbalans')!.querySelector('.night-week-bars-caption')?.textContent).toBe('elke balk: die week opgeteld, tegenover je doel')
+  })
+
+  it('opens nothing from a week bar: a week is no one night to exclude or note', async () => {
+    await renderWith({ period: SLEEP_PERIOD_YEAR }, 'en', YEAR_URL)
+    const instance = echarts.getInstanceByDom(host()) as unknown as { trigger: (event: string, payload: unknown) => void }
+    act(() => { instance.trigger('click', { componentType: 'series', seriesType: 'bar', dataIndex: 2 }) })
+    expect(document.querySelector('.annotate-panel')).toBeNull()
   })
 
   it('opens the annotate panel on the night a bar was clicked', async () => {
