@@ -770,9 +770,32 @@ export interface SeedArchiveInput {
    * It must fall inside the final day, after that day's start and no later than `endMs`.
    */
   lastDayUntilMs?: number
+  /**
+   * Opt-in and false by default: one walk the phone alone recorded (PHONE_WORKOUT below), on the
+   * most recent day before the last that has no scheduled workout. A Health Connect exercise with
+   * no Google copy and no metricsSummary, the way the companion sends one, beside the phone's own
+   * heart rate, steps, distance and active energy over its minutes, so the workout page fills it
+   * from those samples and says Google's figures are still coming. scripts/seed-demo.mjs is the
+   * one caller, so every other seeded archive keeps exactly the payloads it had.
+   */
+  phoneWorkout?: boolean
 }
 
 export interface SeedArchiveResult { payloads: number }
+
+/**
+ * The dataSource the companion app sends (SyncEngine.kt's dataSourceOf): platform HEALTH_CONNECT,
+ * its own package, no recordingMethod. The routes' phone copies wear it too (exercisePoint).
+ */
+const PHONE_DATA_SOURCE = { platform: 'HEALTH_CONNECT', application: { packageName: 'com.haelan.android' }, device: { displayName: 'Phone' } }
+
+/**
+ * The phone-only walk `phoneWorkout` asks for: its local start and its length. Off the hour, so no
+ * minute of its heart rate shares one with the hourly day curve's reading on the hour, and clear of
+ * the 7, 12 and 18 o'clock workout hours. Every figure below is a fixed formula of the minute, not
+ * a draw, so it moves no stream and the archive around it stays byte for byte what it was.
+ */
+const PHONE_WORKOUT = { startHour: 16, startMinute: 20, minutes: 36 }
 
 export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const exerciseTypes = requireExerciseTypes()
@@ -1288,8 +1311,49 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     })])
   }
 
+  if (input.phoneWorkout) putPhoneWorkout()
+
   putRollups(TOTAL_CALORIES, totalCaloriesWindows)
   putRollups(FLOORS, floorsWindows)
 
   return { payloads }
+
+  /**
+   * PHONE_WORKOUT, as the companion would upload it: the exercise (type and interval, nothing
+   * else), then a reading a minute of heart rate, steps, distance and active energy, all on the
+   * phone's own source. A brisk walk: about 112 steps and 84 m a minute, heart rate climbing from
+   * 96 to a plateau near 118, 5 kcal a minute.
+   */
+  function putPhoneWorkout(): void {
+    const day = Array.from({ length: input.days - 1 }, (_, i) => i).filter((i) => i % 3 !== 1).at(-1)
+    if (day === undefined) return
+    const dayStart = input.endMs - (input.days - day) * DAY_MS
+    const startMs = dayStart + PHONE_WORKOUT.startHour * HOUR_MS + PHONE_WORKOUT.startMinute * 60_000
+    const endMs = startMs + PHONE_WORKOUT.minutes * 60_000
+    const offset = amsterdamOffset(startMs)
+    const at = (k: number) => startMs + k * 60_000
+    const minutes = Array.from({ length: PHONE_WORKOUT.minutes }, (_, k) => k)
+    put(EXERCISE, startMs, endMs, [{
+      name: `users/me/dataTypes/exercise/dataPoints/seed-phone-walk-${day}`,
+      dataSource: PHONE_DATA_SOURCE,
+      exercise: {
+        interval: { startTime: new Date(startMs).toISOString(), startUtcOffset: offset, endTime: new Date(endMs).toISOString(), endUtcOffset: offset },
+        exerciseType: 'WALKING',
+      },
+    }])
+    // Half a minute in, so a reading never lands on a minute boundary another writer owns.
+    put(HEART_RATE, startMs, endMs, minutes.map((k) => samplePoint({
+      payloadKey: HEART_RATE.payloadKey, valuePath: HEART_RATE.valuePath,
+      value: String(Math.round(96 + 22 * (1 - Math.exp(-k / 6)) + 3 * Math.sin(k / 2.5))),
+      physicalTime: new Date(at(k) + 30_000).toISOString(), utcOffset: offset, dataSource: PHONE_DATA_SOURCE,
+    })))
+    const perMinute = (t: DataType, value: (k: number) => number) => put(t, startMs, endMs, minutes.map((k) => intervalPoint({
+      payloadKey: t.payloadKey, valuePath: t.valuePath, value: value(k),
+      physicalTime: new Date(at(k)).toISOString(), endTime: new Date(at(k + 1)).toISOString(),
+      utcOffset: offset, dataSource: PHONE_DATA_SOURCE,
+    })))
+    perMinute(STEPS, (k) => 112 + ((k * 7) % 9) - 4)
+    perMinute(DISTANCE, (k) => (112 + ((k * 7) % 9) - 4) * 750)
+    perMinute(ACTIVE_ENERGY_BURNED, (k) => 5 + (k % 3 === 0 ? 1 : 0))
+  }
 }

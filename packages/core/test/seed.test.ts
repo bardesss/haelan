@@ -469,10 +469,67 @@ describe('seedArchive', () => {
         }
       },
     }
-    seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 365, endMs: END, demoRoute: true })
+    seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 365, endMs: END, demoRoute: true, phoneWorkout: true })
     expect(minutes.size).toBeGreaterThan(0)
     const doubled = [...minutes].filter(([, n]) => n > 1).map(([minute]) => new Date(minute * 60_000).toISOString())
     expect(doubled).toEqual([])
+  }, 60_000)
+
+  // The demo's one phone-only workout: a walk the companion sent with no Google copy, which the
+  // workout page fills from the phone's own samples and marks as waiting for Google's figures.
+  it('adds one phone-only walk on request, and nothing else', () => {
+    type Put = { dataType: string, windowStartMs: number, body: string }
+    const run = (phoneWorkout: boolean): Put[] => {
+      const puts: Put[] = []
+      const archive = { put: (row: Put) => { puts.push({ dataType: row.dataType, windowStartMs: row.windowStartMs, body: row.body }) } }
+      seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 31, endMs: localMidnightMs('2026-09-07'), phoneWorkout })
+      return puts
+    }
+    const without = run(false)
+    const withWalk = run(true)
+    // Five payloads more: the exercise and its heart rate, steps, distance and energy.
+    expect(withWalk.length - without.length).toBe(5)
+    const phone = withWalk.filter((p) => p.body.includes('HEALTH_CONNECT'))
+    expect(phone.map((p) => p.dataType)).toEqual(['exercise', 'heart-rate', 'steps', 'distance', 'active-energy-burned'])
+    // Every other payload is byte for byte what it was: the walk draws on no stream.
+    expect(withWalk.filter((p) => !phone.includes(p))).toEqual(without)
+    const exercise = JSON.parse(phone[0]!.body).dataPoints[0].exercise
+    expect(exercise).not.toHaveProperty('metricsSummary')
+    expect(exercise.exerciseType).toBe('WALKING')
+    // The most recent day before the last with no scheduled workout (the 5th, over 31 days), 16:20 in Amsterdam.
+    expect(exercise.interval.startTime).toBe('2026-09-05T14:20:00.000Z')
+    expect(run(true)).toEqual(withWalk)
+  })
+
+  it('fills the phone-only walk from its samples after a rebuild, and marks it awaiting Google', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-phone-walk-'))
+    const instance = openHaelan(dir)
+    try {
+      seedPerson(instance.db, 'p1')
+      const endMs = localMidnightMs('2026-09-07')
+      seedArchive({ archive: instance.archive, personId: 'p1', days: 10, endMs, phoneWorkout: true })
+      const report = runRebuild({
+        db: instance.db, archive: instance.archive, peopleStore: new PeopleStore(instance.db),
+        priority: instance.sourcePriority, overrides: instance.overrides, settings: instance.settings, nowMs: endMs,
+      })
+      expect(report.failures).toEqual([])
+      // Google connected, as the demo person is: the walk's Google copy is then still to come.
+      instance.credentials.putRefreshToken({ personId: 'p1', refreshToken: 'not-real', scopes: [], nowMs: endMs })
+      const q = new PersonQuery(instance.db, 'p1')
+      const [walk, ...others] = q.sessions({ kind: 'exercise', from: '2026-09-05', to: '2026-09-05', fill: true })
+      expect(others).toEqual([])
+      expect(walk!.attrs).toMatchObject({ awaitingSummary: true, filledFromSamples: true, exerciseType: 'WALKING' })
+      const summary = (walk!.attrs as { metricsSummary: Record<string, number> }).metricsSummary
+      // 36 minutes of 108 to 116 steps (the formula's own sum), 750 mm each, 5 or 6 kcal.
+      expect(summary.steps).toBe(4032)
+      expect(summary.distanceMillimeters).toBe(4032 * 750)
+      expect(summary.caloriesKcal).toBe(192)
+      expect(summary.averageHeartRateBeatsPerMinute).toBeGreaterThan(100)
+      expect(q.workoutPage({ sessionId: walk!.id, today: '2026-09-06', nowMs: endMs })!.pending).toBe(true)
+    } finally {
+      instance.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
   }, 60_000)
 
   describe('lastDayUntilMs', () => {
