@@ -101,9 +101,10 @@ const SPLIT: FilledSplit = {
  */
 function workoutPageFor(url: string) {
   const id = decodeURIComponent(url.split('/workout/')[1]!.split('?')[0]!)
-  // RUN carries no route, so the server would send no pace; nor cadence, so the note under the
-  // trace says only what these tests are about.
-  return { ...workoutPageFixture(), sessionId: id, through: { pace: null, cadence: null } }
+  // RUN carries no route, so the server would send no pace; the cadence stays, so the note under a
+  // fallback trace is read with the sentence about the series after it.
+  const page = workoutPageFixture()
+  return { ...page, sessionId: id, through: { ...page.through, pace: null } }
 }
 
 function stub(sessions: Record<string, WorkoutSession>): () => void {
@@ -560,7 +561,7 @@ describe('the workout page\'s own ?source= parameter', () => {
       expect(traceCard, 'the trace card was absent').not.toBeUndefined()
       expect(traceCard?.querySelector('.workout-through-note')?.textContent).toBe(
         'Pixel Watch 4 recorded no heart rate during this workout, so this line comes from your other devices; '
-        + 'this 1 point is the reading',
+        + 'this 1 point is the reading; the cadence comes from the steps per minute.',
       )
     } finally { globalThis.fetch = original }
   })

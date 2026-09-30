@@ -586,6 +586,13 @@
             "cadence": "De cadans komt uit de stappen per minuut.",
             "both_one": "Het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
             "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+          },
+          "fromAfter": {
+            "pace_one": "het tempo komt uit de tijden van het ene routepunt.",
+            "pace_other": "het tempo komt uit de tijden van de {{count}} routepunten.",
+            "cadence": "de cadans komt uit de stappen per minuut.",
+            "both_one": "het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
+            "both_other": "het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
           }
         },
         "zones": {

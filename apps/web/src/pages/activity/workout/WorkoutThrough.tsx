@@ -135,10 +135,6 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     // Only a workout that covers a distance has a pace to miss.
     ...(pace === null && page.figures.distance !== undefined ? [t('activity.workout.page.through.noRoute')] : []),
   ].join(' · ')
-  // Where the two series come from, after whatever the note says about the heart rate. A response
-  // cached from before a field existed can lack `route` (the same shape WorkoutSplits survives).
-  const routePoints = (session.route as WorkoutSessionDetail['route'] | undefined)?.length ?? 0
-  const seriesFrom = both === null ? null : t(`activity.workout.page.through.from.${both}`, { count: routePoints })
 
   // The highest reading is the server's figure; when in the workout it came is read off the trace.
   const highest = page.figures.highestHeartRate
@@ -157,6 +153,14 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
       pinned: nameOf(trace.pinnedSourceId), detail: intradayBasis(t, trace.reduction, trace.points.length),
     })
     : trace.reduction === null ? null : intradayBasis(t, trace.reduction, trace.points.length)
+  // Where the two series come from: a sentence of its own, or after the note about the heart rate
+  // its continuation, joined by the note's own semicolon ("…are the readings; the pace comes …"),
+  // since the note ends without a full stop. A response cached from before a field existed can
+  // lack `route` (the same shape WorkoutSplits survives).
+  const routePoints = (session.route as WorkoutSessionDetail['route'] | undefined)?.length ?? 0
+  const seriesFrom = both === null ? null
+    : t(`activity.workout.page.through.${note === null ? 'from' : 'fromAfter'}.${both}`, { count: routePoints })
+  const noteLine = note === null ? seriesFrom : seriesFrom === null ? note : `${note}; ${seriesFrom}`
 
   return (
     <Card span={12} label={label}>
@@ -185,9 +189,7 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
       </div>
       {/* What the axis is, under the chart it describes, so the card's first line is its label. */}
       <p className="dash-caption">{basis}</p>
-      {(note !== null || seriesFrom !== null) && (
-        <p className="workout-through-note">{[note, seriesFrom].filter((part) => part !== null).join(' ')}</p>
-      )}
+      {noteLine !== null && <p className="workout-through-note">{noteLine}</p>}
     </Card>
   )
 }

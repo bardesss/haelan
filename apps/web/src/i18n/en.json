@@ -586,6 +586,13 @@
             "cadence": "The cadence comes from the steps per minute.",
             "both_one": "The pace comes from the times of the one route point, the cadence from the steps per minute.",
             "both_other": "The pace comes from the times of the {{count}} route points, the cadence from the steps per minute."
+          },
+          "fromAfter": {
+            "pace_one": "the pace comes from the times of the one route point.",
+            "pace_other": "the pace comes from the times of the {{count}} route points.",
+            "cadence": "the cadence comes from the steps per minute.",
+            "both_one": "the pace comes from the times of the one route point, the cadence from the steps per minute.",
+            "both_other": "the pace comes from the times of the {{count}} route points, the cadence from the steps per minute."
           }
         },
         "zones": {

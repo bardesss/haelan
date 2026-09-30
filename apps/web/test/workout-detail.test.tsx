@@ -84,6 +84,8 @@ const NO_SUCH_WORKOUT: Answer = { status: 404, body: { error: { code: 'not_found
  * answering `page`, which only the cases that seed nothing ever reach.
  */
 let tracePoints: IntradayPoint[] = []
+// What the trace read says it thinned, null (the whole series) unless a test sets it.
+let traceReduction: { method: 'lttb' | 'minmax', from: number, to: number } | null = null
 // Every URL the page asked for, in order.
 let fetched: string[] = []
 
@@ -98,11 +100,11 @@ function stubFetch(page: Answer): void {
     if (url.includes('/workout/')) return json(page.body, page.status)
     // An unseeded session read fails the way the page read is told to.
     if (url.includes(`/sessions/${WORKOUT_ID}`)) return json(page.body, page.status)
-    if (url.includes('/intraday/window')) return json({ points: tracePoints, reduction: null })
+    if (url.includes('/intraday/window')) return json({ points: tracePoints, reduction: traceReduction })
     if (url.includes('/sources')) return json({ items: [] })
     return json({ items: [], cursor: null })
   }) as typeof fetch
-  restoreFetch = () => { globalThis.fetch = original; tracePoints = []; fetched = [] }
+  restoreFetch = () => { globalThis.fetch = original; tracePoints = []; traceReduction = null; fetched = [] }
 }
 
 async function mount(
@@ -1191,6 +1193,21 @@ describe('the workout page\'s pace and cadence', () => {
     const host = await mount({ ...page, figures }, fullSession())
     expect(heads(host)[2]).toEqual(['Cadence', null])
     expect(charts(host)[2]!.series.some((series) => series.id === 'reference')).toBe(false)
+  })
+
+  it('continues the note about a thinned trace with where the series come from, after its semicolon', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    traceReduction = { method: 'lttb', from: 2040, to: 400 }
+    const host = await mount(workoutPageFixture(), fullSession())
+    expect(text(host, '.workout-through-note')).toBe(
+      '2040 readings thinned to 400 points; the pace comes from the times of the 4 route points, the cadence from the steps per minute.')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    tracePoints = [reading(minute(1), 120)]
+    traceReduction = { method: 'lttb', from: 2040, to: 400 }
+    const page = workoutPageFixture()
+    const nl = await mount({ ...page, through: { ...page.through, pace: null } }, fullSession(), 'nl')
+    expect(text(nl, '.workout-through-note')).toBe('2040 metingen teruggebracht tot 400 punten; de cadans komt uit de stappen per minuut.')
   })
 
   it('words the rows in Dutch', async () => {
