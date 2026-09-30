@@ -3,7 +3,7 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { FigureRows } from '../../../components/FigureRow.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
-import { formatFigureValue } from '../../detail/figureText.js'
+import { formatFigureRange } from '../../detail/figureText.js'
 import { WorkoutFigureRow } from './WorkoutFigureRow.js'
 
 /**
@@ -20,9 +20,12 @@ export function WorkoutRecovery({ page }: { page: WorkoutPageData }): ReactNode 
   const recovery = page.heartRateRecovery
   if (recovery === null) return null
   const { oneMinute, twoMinutes, readings } = recovery
-  const bpm = (value: number) => formatFigureValue(oneMinute, value, i18n.language, t)
-  const between = (after: number | null) => (after === null ? undefined
-    : t('activity.workout.page.recovery.between', { from: bpm(readings.endBpm), to: bpm(after) }))
+  // The unit once, after the second reading, the way a range is written ("from 146 to 122 bpm").
+  const between = (after: number | null) => {
+    if (after === null) return undefined
+    const { low, high } = formatFigureRange(oneMinute, readings.endBpm, after, i18n.language, t)
+    return t('activity.workout.page.recovery.between', { from: low, to: high })
+  }
   return (
     <Card span={12} label={t('activity.workout.page.recovery.label')}>
       <FigureRows>

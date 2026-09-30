@@ -1076,7 +1076,7 @@ describe('the workout page\'s heart-rate recovery', () => {
     ])
     // The two readings each fall is between, under its verdict.
     expect([...card.querySelectorAll('.figure-row')].map((row) => text(row, '.figure-row-verdict + .figure-row-note')))
-      .toEqual(['from 146\u00a0bpm to 121\u00a0bpm', 'from 146\u00a0bpm to 105\u00a0bpm'])
+      .toEqual(['from 146 to 121\u00a0bpm', 'from 146 to 105\u00a0bpm'])
     const verdicts = [...card.querySelectorAll('.figure-row-verdict')].map((v) => v.className)
     expect(verdicts).toEqual(['figure-row-verdict', 'figure-row-verdict better'])
     expect(card.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('2')
@@ -1093,7 +1093,7 @@ describe('the workout page\'s heart-rate recovery', () => {
       ['Daling na 1 minuut', '25\u00a0bpm', 'binnen je gebruikelijke bereik 18 – 27\u00a0bpm'],
       ['Daling na 2 minuten', '41\u00a0bpm', 'boven je gebruikelijke bereik 30 – 38\u00a0bpm'],
     ])
-    expect(text(card, '.figure-row-note')).toBe('van 146\u00a0bpm naar 121\u00a0bpm')
+    expect(text(card, '.figure-row-note')).toBe('van 146 naar 121\u00a0bpm')
   })
 
   it('leaves out the minute without a value, and the card without either', async () => {
@@ -1111,7 +1111,7 @@ describe('the workout page\'s heart-rate recovery', () => {
       ...page, heartRateRecovery: { ...recovery, oneMinute: { ...recovery.oneMinute, value: null }, readings: { ...recovery.readings, oneMinuteBpm: null } },
     }), 'Heart-rate recovery')!
     expect(rowsIn(two).map(([label]) => label)).toEqual(['Drop after 2 minutes'])
-    expect(text(two, '.figure-row-note')).toBe('from 146\u00a0bpm to 105\u00a0bpm')
+    expect(text(two, '.figure-row-note')).toBe('from 146 to 105\u00a0bpm')
     expect(two.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('1')
     act(() => { root!.unmount() })
     root = createRoot(container!)
