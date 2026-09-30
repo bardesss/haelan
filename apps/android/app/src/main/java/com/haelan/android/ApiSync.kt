@@ -63,6 +63,16 @@ object ApiSync {
     }
 
     /**
+     * One tap: the line under the button is cleared before the request goes out, so the last
+     * answer ("Google sync started") never stands beside a tap still waiting on its own. Inline, so
+     * the screen's request can suspend inside it; the clearing is the part a test can hold.
+     */
+    inline fun tap(clearLine: () -> Unit, request: () -> Answer): Answer {
+        clearLine()
+        return request()
+    }
+
+    /**
      * The card's line for an answer, or null for a failure, which the screen words the way it words
      * every other failed exchange (SyncRun.reasonFor).
      */

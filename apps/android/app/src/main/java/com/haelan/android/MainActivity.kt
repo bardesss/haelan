@@ -760,12 +760,18 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
      * this screen's scope and a rotation mid-request only loses the line, never the run it asked for.
      *
      * The button is off while the request is out, so a second tap cannot race the first into a 409
-     * it caused itself. A 401 ends the session the way every other exchange on this screen ends it.
+     * it caused itself, and the line is cleared as it goes out, so an earlier answer is not read as
+     * this tap's. A 401 ends the session the way every other exchange on this screen ends it.
      */
     private suspend fun runApiSync() {
         apiSyncButton.isEnabled = false
         val answer = try {
-            withContext(Dispatchers.IO) { InstanceClient.runApiSync(server, cookie) }
+            ApiSync.tap(clearLine = {
+                apiSyncStatus.text = ""
+                apiSyncStatus.visibility = View.GONE
+            }) {
+                withContext(Dispatchers.IO) { InstanceClient.runApiSync(server, cookie) }
+            }
         } finally {
             apiSyncButton.isEnabled = true
         }

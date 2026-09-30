@@ -124,4 +124,16 @@ class ApiSyncTest {
         // A failure has no line of its own: the screen prints the app's existing error wording.
         assertNull(ApiSync.lineFor(ApiSync.Answer.Failed(InstanceClient.InstanceHttpException(500, ""))))
     }
+
+    // Review M2: a tap clears the last answer before its own request goes out.
+    @Test
+    fun `a tap clears the line before its request goes out`() {
+        val order = mutableListOf<String>()
+        val answer = ApiSync.tap(clearLine = { order += "clear" }) {
+            order += "request"
+            ApiSync.Answer.Started
+        }
+        assertEquals(listOf("clear", "request"), order)
+        assertEquals(ApiSync.Answer.Started, answer)
+    }
 }
