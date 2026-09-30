@@ -293,9 +293,11 @@ describe('GET /workout/:sessionId', () => {
     expect(body.zoneBounds).toEqual({ moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 })
   })
 
-  // Five earlier runs that each fell 20.3 bpm make a usual of exactly 20.3 (no spread), and core
-  // calls the subject's 20.4 above it, a better recovery. On the wire both are 20, so the page
-  // must say within and claim no verdict, or it shows "20, better than your usual 20".
+  // Core takes each fall between whole-bpm readings, so every fall is whole, but their usual is
+  // not: four earlier runs that fell 20 and one that fell 21 make a usual of 20.2 with a band that
+  // ends near 20.65, and core calls the subject's 21 above it, a better recovery. On the wire the
+  // band's top is 21, so the page must say within and claim no verdict, or it shows "21, better
+  // than your usual 20 - 21".
   it('sends heart-rate recovery rounded, re-judged on the rounded numbers', async () => {
     harness = await withServer()
     harness.clock.nowMs = NOW_MS
@@ -309,12 +311,12 @@ describe('GET /workout/:sessionId', () => {
     for (let i = 0; i < 5; i += 1) {
       const localDate = shiftLocalDate('2026-09-04', -3 * (5 - i))
       seedRun(harness, { id: `run-${i}`, sourceId: 'watch', localDate, pace: 310 })
-      seedAfter(localDate, [160, 150, 139.7, 128.2])
+      seedAfter(localDate, [160, 150, i === 4 ? 139 : 140, 128.2])
     }
     seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 300 })
-    seedAfter('2026-09-04', [160, 150, 139.6, 120.4])
+    seedAfter('2026-09-04', [160, 150, 139, 120.4])
     const { heartRateRecovery } = (await get(harness, token, '/workout/subject')).json()
-    expect(heartRateRecovery.oneMinute).toMatchObject({ value: 20, baseline: { center: 20, low: 20, high: 20 }, standing: 'within', judged: null })
+    expect(heartRateRecovery.oneMinute).toMatchObject({ value: 21, baseline: { center: 20, low: 20, high: 21 }, standing: 'within', judged: null })
     expect(heartRateRecovery.twoMinutes).toMatchObject({ value: 40, baseline: { center: 32 }, standing: 'above', judged: 'better' })
   })
 

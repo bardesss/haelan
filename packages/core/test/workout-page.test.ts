@@ -503,6 +503,15 @@ describe('readWorkoutPage: heart-rate recovery', () => {
     expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery).toMatchObject({ oneMinute: { value: 25 }, twoMinutes: { value: 42 } })
   })
 
+  it('takes each fall between the readings rounded to whole bpm, so the printed pair and fall agree', () => {
+    seedRun('subject', SUBJECT_DATE, { pace: 300 })
+    // Unrounded, 160.6 to 139.4 falls 21.2; printed as 161 and 139, the fall must be 22.
+    seedRecovery(SUBJECT_DATE, [160.6, 150, 139.4, 118.5])
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery).toMatchObject({
+      oneMinute: { value: 22 }, twoMinutes: { value: 42 }, readings: { endBpm: 161, oneMinuteBpm: 139, twoMinutesBpm: 119 },
+    })
+  })
+
   it('leaves out an excluded minute, and reads the other one without it', () => {
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])

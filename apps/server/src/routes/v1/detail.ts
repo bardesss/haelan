@@ -164,12 +164,8 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     },
     heartRateRecovery: heartRateRecovery === null ? null : {
       oneMinute: roundPageFigure(heartRateRecovery.oneMinute), twoMinutes: roundPageFigure(heartRateRecovery.twoMinutes),
-      // Whole bpm, as every heart rate is sent.
-      readings: {
-        endBpm: whole(heartRateRecovery.readings.endBpm),
-        oneMinuteBpm: heartRateRecovery.readings.oneMinuteBpm === null ? null : whole(heartRateRecovery.readings.oneMinuteBpm),
-        twoMinutesBpm: heartRateRecovery.readings.twoMinutesBpm === null ? null : whole(heartRateRecovery.readings.twoMinutesBpm),
-      },
+      // Already whole bpm: core rounds each minute before taking the fall between them.
+      readings: heartRateRecovery.readings,
     },
     through: { pace: roundPaceSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
     // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.

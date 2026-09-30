@@ -162,7 +162,9 @@ const MINUTE_MS = 60_000
  * and two minutes after its end, in bpm; null where either minute has no reading. Heart rate is
  * stored per minute, keyed on the minute's start (downsample.ts), so the minutes are the stored ones
  * around the end's own minute. One read over them, from the session's own source, else from any
- * source, the rule highestHeartRate follows; several sources in one minute are averaged.
+ * source, the rule highestHeartRate follows; several sources in one minute are averaged. Each
+ * minute's mean is rounded to whole bpm before the fall is taken, so the readings the page prints
+ * and the fall it prints between them always agree (160.6 and 139.4 fall 22, printed 161 and 139).
  */
 function recoveryOf(q: PersonQuery, session: WorkoutSession): { one: number | null, two: number | null, last: number | null, afterOne: number | null, afterTwo: number | null } {
   const endMinute = Math.floor(session.endMs / MINUTE_MS) * MINUTE_MS
@@ -173,7 +175,7 @@ function recoveryOf(q: PersonQuery, session: WorkoutSession): { one: number | nu
   const points = own.length > 0 ? own : read()
   const meanAt = (minuteMs: number) => {
     const means = points.flatMap((p) => (p.utcMs >= minuteMs && p.utcMs < minuteMs + MINUTE_MS && p.mean !== null ? [p.mean] : []))
-    return means.length === 0 ? null : means.reduce((sum, v) => sum + v, 0) / means.length
+    return means.length === 0 ? null : Math.round(means.reduce((sum, v) => sum + v, 0) / means.length)
   }
   const last = meanAt(endMinute - MINUTE_MS)
   const afterOne = meanAt(endMinute + MINUTE_MS)
