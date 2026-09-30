@@ -34,7 +34,7 @@ import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { mergedWorkoutFor, mergeRuleFor, readMergedWorkouts } from './mergedWorkouts.ts'
-import { fillFromSamples } from './fillFromSamples.ts'
+import { isBare, samplesFiller } from './fillFromSamples.ts'
 import { readRouteSummaries, readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute, readWorkoutZoneBounds } from './workoutDerived.ts'
 import type { CardioLoad, ZoneBounds } from '../api/cardioLoad.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
@@ -715,7 +715,9 @@ export class PersonQuery {
    *
    * `fill` is for a read that displays its rows: a merged workout still waiting for Google's copy is
    * then filled from its own samples (fillFromSamples.ts). A history or baseline read leaves it out,
-   * so an estimate never enters a usual, a comparison or a record. Only the merged read fills.
+   * so an estimate never enters a usual, a comparison or a record. A read of one named source fills
+   * as fillWorkouts does for one. `nowMs` is the reading clock a filled row's promise of Google's
+   * figures is measured against; without it nothing is promised.
    */
   sessions(input: {
     kind: 'sleep' | 'exercise'
@@ -725,6 +727,7 @@ export class PersonQuery {
     type?: string
     last?: number
     fill?: boolean
+    nowMs?: number
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
@@ -751,9 +754,10 @@ export class PersonQuery {
         last: input.last,
         rule: mergeRuleFor(this.#db, this.#personId),
         fill: input.fill ?? false,
+        nowMs: input.nowMs,
       })
     }
-    return readSessions(this.#db, {
+    const raw = readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
       from: input.from,
@@ -762,6 +766,7 @@ export class PersonQuery {
       type: input.type,
       last: input.last,
     })
+    return input.fill === true ? this.fillWorkouts(raw, { nowMs: input.nowMs, sourceId: input.sourceId }) : raw
   }
 
   /**
@@ -779,23 +784,38 @@ export class PersonQuery {
    * `fill` as on `sessions`: the workout page's subject and the by-id route pass it; the readers
    * below do not.
    */
-  sessionById(input: { sessionId: string, fill?: boolean }): WorkoutSession | null {
+  sessionById(input: { sessionId: string, fill?: boolean, nowMs?: number }): WorkoutSession | null {
     if (input.sessionId.trim() === '') throw new ConfigError('sessionId is required')
     const session = readSession(this.#db, { personId: this.#personId, sessionId: input.sessionId })
     if (session === null || session.kind !== 'exercise') return session
     return mergedWorkoutFor(this.#db, {
-      personId: this.#personId, session, rule: mergeRuleFor(this.#db, this.#personId), fill: input.fill ?? false,
+      personId: this.#personId, session, rule: mergeRuleFor(this.#db, this.#personId), fill: input.fill ?? false, nowMs: input.nowMs,
     })
   }
 
   /**
-   * One merged workout the caller already holds, filled from its samples as a displaying read
-   * fills it (fillFromSamples.ts). For a list read unfilled and then narrowed: the workout page's
-   * day reads its workouts with the subject among them, and filling the list before dropping the
+   * Workouts the caller already holds, filled from their samples as a displaying read fills them
+   * (fillFromSamples.ts), the grant and each source read once for the lot. For a list read unfilled
+   * and then narrowed: the list route fills only the page it answers, and the workout page's day
+   * reads its workouts with the subject among them, where filling the list before dropping the
    * subject would fill the subject a second time.
+   *
+   * With `sourceId`, the rows are that source's own, unmerged: a phone copy whose Google copy has
+   * merged is bare in its own row but not as a workout, and is left as recorded. Only a row whose
+   * merged workout is bare too is filled, at the cost of one merged read over the rows' dates.
    */
-  fillWorkout(session: WorkoutSession): WorkoutSession {
-    return fillFromSamples(this.#db, { personId: this.#personId, session })
+  fillWorkouts(rows: readonly WorkoutSession[], input: { nowMs?: number, sourceId?: string } = {}): WorkoutSession[] {
+    const fill = samplesFiller(this.#db, { personId: this.#personId, nowMs: input.nowMs })
+    if (input.sourceId === undefined) return rows.map(fill)
+    const dates = rows.filter(isBare).map((r) => r.localDate).sort()
+    if (dates.length === 0) return [...rows]
+    const bare = new Set(readMergedWorkouts(this.#db, {
+      personId: this.#personId,
+      from: shiftLocalDate(dates[0]!, -1),
+      to: shiftLocalDate(dates[dates.length - 1]!, 1),
+      rule: mergeRuleFor(this.#db, this.#personId),
+    }).filter(isBare).flatMap((w) => [w.id, ...w.alternateIds]))
+    return rows.map((r) => (bare.has(r.id) ? fill(r) : r))
   }
 
   /**

@@ -15,12 +15,51 @@ import { hasGoogleGrant } from '../store/credentials.ts'
  */
 export const PHONE_SOURCE_PREFIX = 'HEALTH_CONNECT:'
 
-// Answers: whether a Google copy of this bare row is still to come. Only a phone's workout has
-// one, and only for a person whose Google grant stands: an all-Android household syncs no copy
-// at all, so its phone workouts are filled but promise nothing.
-function copyToCome(db: DbOrTx, personId: string, sourceId: string): boolean {
-  return getSource(db, personId, sourceId)?.externalId.startsWith(PHONE_SOURCE_PREFIX) === true
-    && hasGoogleGrant(db, personId)
+/**
+ * How long after a phone workout ends its page still promises Google's figures. Google's copy
+ * usually lands within hours of the watch syncing, so two days leaves room for a watch that synced
+ * late. Past it the promise lapses and the fill stays: a workout Google never receives (one from an
+ * app that writes to Health Connect alone, say Strava) would otherwise promise figures forever.
+ */
+export const PENDING_WINDOW_MS = 48 * 60 * 60 * 1000
+
+/** Whether a merged exercise row has no Google payload behind it: no metricsSummary at all. */
+export function isBare(session: WorkoutSession): boolean {
+  if (session.kind !== 'exercise') return false
+  const attrs = session.attrs
+  if (typeof attrs !== 'object' || attrs === null || Array.isArray(attrs)) return false
+  const summary = (attrs as Record<string, unknown>).metricsSummary
+  return summary === null || summary === undefined
+}
+
+/**
+ * One read's filler: fillFromSamples for each row it is handed, with what every row asks the same
+ * (the person's Google grant, whether a source is a phone) read at most once per read, not once per
+ * row. `nowMs` is the reading clock the promise is measured against (PENDING_WINDOW_MS); a read
+ * without one promises nothing and still fills.
+ */
+export function samplesFiller(db: DbOrTx, input: { personId: string, nowMs?: number }): (session: WorkoutSession) => WorkoutSession {
+  const { personId, nowMs } = input
+  let grant: boolean | undefined
+  const phone = new Map<string, boolean>()
+  const isPhone = (sourceId: string) => {
+    let known = phone.get(sourceId)
+    if (known === undefined) {
+      known = getSource(db, personId, sourceId)?.externalId.startsWith(PHONE_SOURCE_PREFIX) === true
+      phone.set(sourceId, known)
+    }
+    return known
+  }
+  // Answers: whether a Google copy of this bare row is still to come. Only a recent phone workout
+  // has one, and only for a person whose Google grant stands: an all-Android household syncs no
+  // copy at all, so its phone workouts are filled but promise nothing. Cheapest question first.
+  const copyToCome = (session: WorkoutSession) => {
+    if (nowMs === undefined || nowMs - session.endMs >= PENDING_WINDOW_MS) return false
+    if (!isPhone(session.sourceId)) return false
+    grant ??= hasGoogleGrant(db, personId)
+    return grant
+  }
+  return (session) => fillOne(db, { personId, session, copyToCome })
 }
 
 /**
@@ -56,11 +95,12 @@ function copyToCome(db: DbOrTx, personId: string, sourceId: string): boolean {
  * Edwards load and the hard-zone minutes follow from the zones where they are read.
  *
  * **Marked.** Every bare row from a phone (a Health Connect source: PHONE_SOURCE_PREFIX) of a
- * person with a standing Google grant (hasGoogleGrant) gets `attrs.awaitingSummary: true`, filled
- * or not (no samples, or a span too long to read), so the page can say the watch's figures are
- * still coming. A bare row from any other source (a Google exercise logged without a summary), or
- * from the phone of a person who never connected Google or whose grant was revoked, has no copy
- * on its way and is never marked: it would promise figures forever. Where
+ * person with a standing Google grant (hasGoogleGrant), ended less than PENDING_WINDOW_MS before
+ * the read's `nowMs`, gets `attrs.awaitingSummary: true`, filled or not (no samples, or a span too
+ * long to read), so the page can say the watch's figures are still coming. A bare row from any
+ * other source (a Google exercise logged without a summary), from the phone of a person who never
+ * connected Google or whose grant was revoked, or older than the window, has no copy on its way
+ * and is never marked: it would promise figures forever. A read with no `nowMs` marks nothing. Where
  * something was filled, `attrs.filledFromSamples` is true and `attrs.filled` lists the
  * metricsSummary keys that came from samples, so a figure can say where it came from and records
  * can refuse an estimate (sessionRecords.ts).
@@ -68,18 +108,24 @@ function copyToCome(db: DbOrTx, personId: string, sourceId: string): boolean {
  * **Over `[startMs, endMs)`.** A sample is keyed on the start of its interval (a heart rate minute
  * on the minute's start), so one starting at the workout's end belongs to the time after it.
  *
- * **Cost.** One intraday read per metric for each bare row (a second for a metric the workout's own
- * source did not record), and none for a merged one. Bare rows are only the most recent phone
- * workouts whose Google copy has not synced, so a list pays for a handful at most.
+ * **Cost.** About eight reads per bare row (one intraday read per metric, a second for a metric the
+ * workout's own source did not record, the heart rate minutes and the zone bounds), and none for a
+ * merged one. Every bare row costs that, and an all-Android household's workouts are all bare, so a
+ * read fills only rows it displays and bounds them: the list route fills its page alone, and the
+ * Activity period only a week's or a month's rows (activityPeriod.ts). The grant and the source are
+ * read once per read (samplesFiller).
  */
-export function fillFromSamples(db: DbOrTx, input: { personId: string, session: WorkoutSession }): WorkoutSession {
+export function fillFromSamples(db: DbOrTx, input: { personId: string, session: WorkoutSession, nowMs?: number }): WorkoutSession {
+  return samplesFiller(db, input)(input.session)
+}
+
+function fillOne(db: DbOrTx, input: {
+  personId: string, session: WorkoutSession, copyToCome: (session: WorkoutSession) => boolean
+}): WorkoutSession {
   const { personId, session } = input
-  if (session.kind !== 'exercise') return session
-  const attrs = session.attrs
-  if (typeof attrs !== 'object' || attrs === null || Array.isArray(attrs)) return session
-  const record = attrs as Record<string, unknown>
-  if (record.metricsSummary !== null && record.metricsSummary !== undefined) return session
-  const awaiting = copyToCome(db, personId, session.sourceId) ? { ...record, awaitingSummary: true } : record
+  if (!isBare(session)) return session
+  const record = session.attrs as Record<string, unknown>
+  const awaiting = input.copyToCome(session) ? { ...record, awaitingSummary: true } : record
   const unfilled = { ...session, attrs: awaiting }
   const { startMs } = session
   // Half open: readIntradayWindow includes its end, so read to the last millisecond before the

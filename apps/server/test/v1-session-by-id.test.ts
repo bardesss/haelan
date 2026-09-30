@@ -54,7 +54,10 @@ function seedOfKind(h: Harness, input: { id: string, kind: 'sleep' | 'exercise' 
 
 describe('GET /sessions/:sessionId', () => {
   it('fills a workout still waiting for the Google copy from its samples, the load beside it and the list alike', async () => {
-    harness = await withServer(); const token = await harness.signIn()
+    harness = await withServer()
+    // The hour after the run: Google's copy is still promised.
+    harness.clock.nowMs = Date.parse('2026-08-18T09:00:00Z')
+    const token = await harness.signIn()
     const db = harness.app.haelan.instance.db
     // A phone-only treadmill run, as the companion stores it: every key, no metricsSummary.
     seedWorkout(harness, { id: 'bare', sourceId: 'phone', attrs: { exerciseType: 'TREADMILL', metricsSummary: null } })
@@ -82,6 +85,43 @@ describe('GET /sessions/:sessionId', () => {
 
     const list = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-18&to=2026-08-18')).json()
     expect(list.items[0].attrs).toMatchObject({ awaitingSummary: true, metricsSummary: { steps: 6000 } })
+  })
+
+  // A bare row costs some eight reads, and an all-Android household's workouts are all bare: the
+  // list pages first and fills only the rows it answers.
+  it('fills only the page the list answers, however long the range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    seedSource(harness, 'p1', 'phone')
+    const days = ['2026-08-16', '2026-08-17', '2026-08-18']
+    for (const localDate of days) {
+      const startMs = Date.parse(`${localDate}T09:00:00Z`)
+      db.insert(schema.sessions).values({
+        id: `bare-${localDate}`, personId: 'p1', sourceId: 'phone', kind: 'exercise', externalId: `bare-${localDate}`,
+        startMs, startOffsetMinutes: OFFSET_MINUTES, endMs: startMs + 1_800_000, endOffsetMinutes: OFFSET_MINUTES,
+        localDate, attrs: JSON.stringify({ exerciseType: 'RUNNING', metricsSummary: null }), rawPayloadId: null,
+      }).run()
+      for (let i = 0; i < 30; i += 1) {
+        insertSample(db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET_MINUTES, value: 100 })
+      }
+    }
+    const prepare = vi.spyOn(db.$client, 'prepare')
+    const sampleReads = async (path: string) => {
+      prepare.mockClear()
+      const body = (await get(harness!, token, path)).json()
+      return { body, reads: prepare.mock.calls.filter(([sql]) => String(sql).includes('"samples"')).length }
+    }
+
+    const one = await sampleReads('/sessions?kind=exercise&from=2026-08-18&to=2026-08-18')
+    const paged = await sampleReads('/sessions?kind=exercise&from=2015-01-01&to=2026-12-31&limit=1')
+    expect(paged.body.items).toHaveLength(1)
+    expect(paged.body.items[0].attrs).toMatchObject({ filledFromSamples: true, metricsSummary: { steps: 3000 } })
+    // The one row it answers costs what a range of that one row does, the two rows it does not answer nothing.
+    expect(one.reads).toBeGreaterThan(0)
+    expect(paged.reads).toBe(one.reads)
+    // A list of the phone's own rows fills its bare rows too.
+    const own = await sampleReads('/sessions?kind=exercise&from=2026-08-16&to=2026-08-18&source=phone')
+    expect(own.body.items.map((s: { attrs: { metricsSummary: { steps: number } | null } }) => s.attrs.metricsSummary?.steps)).toEqual([3000, 3000, 3000])
   })
 
   it('answers the session itself, not a one-item list', async () => {

@@ -6,7 +6,7 @@ import { loadPriority } from '../store/sourcePriority.ts'
 import { SettingsStore } from '../store/settings.ts'
 import { workoutSummary } from '../api/workoutSummary.ts'
 import { readSessions, sessionRateOf } from './sessions.ts'
-import { fillFromSamples } from './fillFromSamples.ts'
+import { samplesFiller } from './fillFromSamples.ts'
 import type { WorkoutSession } from './sessions.ts'
 
 /**
@@ -172,6 +172,8 @@ export function readMergedWorkouts(db: DbOrTx, input: {
   rule: MergeRule
   /** Fill a workout still waiting for Google's copy from its samples; only for rows a read displays. */
   fill?: boolean
+  /** The reading clock a filled row's promise of Google's figures is measured against (fillFromSamples.ts). */
+  nowMs?: number
 }): WorkoutSession[] {
   const raw = readSessions(db, {
     personId: input.personId,
@@ -187,7 +189,7 @@ export function readMergedWorkouts(db: DbOrTx, input: {
   const answered = input.last === undefined ? matched : matched.slice(-input.last)
   if (input.fill !== true) return answered
   // Last, so only a workout this read answers pays for its samples (fillFromSamples.ts).
-  return answered.map((session) => fillFromSamples(db, { personId: input.personId, session }))
+  return answered.map(samplesFiller(db, { personId: input.personId, nowMs: input.nowMs }))
 }
 
 /**
@@ -203,8 +205,9 @@ export function mergedWorkoutFor(db: DbOrTx, input: {
   personId: string
   session: WorkoutSession
   rule: MergeRule
-  /** As readMergedWorkouts' `fill`. */
+  /** As readMergedWorkouts' `fill` and `nowMs`. */
   fill?: boolean
+  nowMs?: number
 }): WorkoutSession {
   const { session } = input
   if (session.kind !== 'exercise') return session
@@ -216,5 +219,5 @@ export function mergedWorkoutFor(db: DbOrTx, input: {
   })
   const merged = mergeWorkouts(around, input.rule)
   const found = merged.find((w) => w.id === session.id || w.alternateIds.includes(session.id)) ?? session
-  return input.fill === true ? fillFromSamples(db, { personId: input.personId, session: found }) : found
+  return input.fill === true ? samplesFiller(db, { personId: input.personId, nowMs: input.nowMs })(found) : found
 }

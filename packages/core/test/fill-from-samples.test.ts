@@ -13,6 +13,9 @@ import { readWorkoutPage } from '../src/query/workoutPage.ts'
 import { readActivityPeriod } from '../src/query/activityPeriod.ts'
 import { contextFor, readDay } from '../src/query/glance.ts'
 import { readNightPage } from '../src/query/nightPage.ts'
+import { hasGoogleGrant } from '../src/store/credentials.ts'
+import { getSource } from '../src/store/sources.ts'
+import { PENDING_WINDOW_MS } from '../src/query/fillFromSamples.ts'
 
 // Itself, only watched: the cost test counts the intraday reads a list pays for.
 vi.mock('../src/query/intraday.ts', async (importOriginal) => {
@@ -20,10 +23,22 @@ vi.mock('../src/query/intraday.ts', async (importOriginal) => {
   return { ...actual, readIntradayWindow: vi.fn(actual.readIntradayWindow) }
 })
 
+// Watched as well: the grant and the source are read once a read, not once a row.
+vi.mock('../src/store/credentials.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/store/credentials.ts')>()
+  return { ...actual, hasGoogleGrant: vi.fn(actual.hasGoogleGrant) }
+})
+vi.mock('../src/store/sources.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/store/sources.ts')>()
+  return { ...actual, getSource: vi.fn(actual.getSource) }
+})
+
 const START = Date.parse('2026-09-20T07:00:00Z')
 const MINUTE = 60_000
 const END = START + 30 * MINUTE
 const DATE = '2026-09-20'
+/** An hour after the run: the reading clock a promise of Google's figures is measured against. */
+const SOON = END + 60 * MINUTE
 
 /** The fifteen keys mapSessions writes, null where the payload did not carry the field. */
 function attrsOf(fields: Record<string, unknown>): Record<string, unknown> {
@@ -70,6 +85,8 @@ beforeEach(() => {
     personId: 'p1', refreshTokenEncrypted: 'sealed', grantedScopes: '', obtainedAtMs: 0, revokedAtMs: null,
   }).run()
   vi.mocked(readIntradayWindow).mockClear()
+  vi.mocked(hasGoogleGrant).mockClear()
+  vi.mocked(getSource).mockClear()
 })
 afterEach(() => t.cleanup())
 
@@ -132,7 +149,7 @@ describe('fillFromSamples, through the merged reads', () => {
     seedSamples()
     seedZoneCeilings(DATE)
 
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     const summary = workoutSummary(run.attrs)
     expect(summary.steps).toBe(4500)
     expect(summary.distanceMeters).toBe(5100)
@@ -153,14 +170,14 @@ describe('fillFromSamples, through the merged reads', () => {
     expect(run.rate).toEqual({ key: 'pace', unit: 'seconds_per_km', value: 353, fromElapsed: true })
 
     // The list answers the same filled row.
-    const [listed] = q().sessions({ kind: 'exercise', from: DATE, to: DATE, fill: true })
+    const [listed] = q().sessions({ kind: 'exercise', from: DATE, to: DATE, fill: true, nowMs: SOON })
     expect(listed).toEqual(run)
   })
 
   it('fills a ride\'s speed rather than a pace', () => {
     insertSession({ id: 'phone-ride', sourceId: 'phone', attrs: attrsOf({ exerciseType: 'BIKING' }) })
     seedSamples()
-    const ride = q().sessionById({ sessionId: 'phone-ride', fill: true })!
+    const ride = q().sessionById({ sessionId: 'phone-ride', fill: true, nowMs: SOON })!
     expect((ride.attrs as { metricsSummary: Record<string, unknown> }).metricsSummary.averageSpeedMillimetersPerSecond).toBeCloseTo(5_100_000 / 1800, 6)
     expect(workoutSummary(ride.attrs).paceSecondsPerKm).toBeNull()
     expect(ride.rate).toEqual({ key: 'speed', unit: 'meters_per_second', value: 2.83, fromElapsed: true })
@@ -172,7 +189,7 @@ describe('fillFromSamples, through the merged reads', () => {
     seedSamples()
     seedZoneCeilings(DATE)
 
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(run.id).toBe('google-run')
     const summary = workoutSummary(run.attrs)
     expect(summary.steps).toBe(3900)
@@ -194,7 +211,7 @@ describe('fillFromSamples, through the merged reads', () => {
     insertSession({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_TREADMILL })
     seedSamples()
 
-    const [run] = q().sessions({ kind: 'exercise', from: DATE, to: DATE, fill: true })
+    const [run] = q().sessions({ kind: 'exercise', from: DATE, to: DATE, fill: true, nowMs: SOON })
     expect(run!.id).toBe('phone-run')
     expect(workoutSummary(run!.attrs).steps).toBe(3900)
     expect(run!.attrs).not.toHaveProperty('filledFromSamples')
@@ -205,7 +222,7 @@ describe('fillFromSamples, through the merged reads', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
     seedSamples()
 
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(workoutDetail(run.attrs).zones).toBeNull()
     expect(workoutSummary(run.attrs).averageHeartRateBpm).toBe(123)
     expect((run.attrs as { filled: string[] }).filled).not.toContain('heartRateZoneDurations')
@@ -213,7 +230,7 @@ describe('fillFromSamples, through the merged reads', () => {
 
   it('marks a bare run with no samples at all as awaiting its summary, and as nothing filled', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(run.attrs).toEqual({ ...PHONE_TREADMILL, awaitingSummary: true })
   })
 
@@ -221,10 +238,10 @@ describe('fillFromSamples, through the merged reads', () => {
   // its way, so it never promises figures, though its samples still fill what they can.
   it('never marks a bare row from a source that is not a phone as awaiting its summary', () => {
     insertSession({ id: 'google-log', sourceId: 'google', attrs: PHONE_TREADMILL })
-    const bare = q().sessionById({ sessionId: 'google-log', fill: true })!
+    const bare = q().sessionById({ sessionId: 'google-log', fill: true, nowMs: SOON })!
     expect(bare.attrs).toEqual(PHONE_TREADMILL)
     seedSamples('google')
-    const filled = q().sessionById({ sessionId: 'google-log', fill: true })!
+    const filled = q().sessionById({ sessionId: 'google-log', fill: true, nowMs: SOON })!
     expect(filled.attrs).toMatchObject({ filledFromSamples: true })
     expect(filled.attrs).not.toHaveProperty('awaitingSummary')
   })
@@ -234,9 +251,9 @@ describe('fillFromSamples, through the merged reads', () => {
   it('never marks a phone workout awaiting its summary for a person with no Google grant', () => {
     t.db.delete(credentials).run()
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
-    expect(q().sessionById({ sessionId: 'phone-run', fill: true })!.attrs).toEqual(PHONE_TREADMILL)
+    expect(q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!.attrs).toEqual(PHONE_TREADMILL)
     seedSamples()
-    const filled = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const filled = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(filled.attrs).toMatchObject({ filledFromSamples: true })
     expect(workoutSummary(filled.attrs).steps).toBe(4500)
     expect(filled.attrs).not.toHaveProperty('awaitingSummary')
@@ -245,7 +262,7 @@ describe('fillFromSamples, through the merged reads', () => {
   it('never marks it for a person whose Google grant was revoked', () => {
     t.db.update(credentials).set({ revokedAtMs: 1 }).run()
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
-    expect(q().sessionById({ sessionId: 'phone-run', fill: true })!.attrs).toEqual(PHONE_TREADMILL)
+    expect(q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!.attrs).toEqual(PHONE_TREADMILL)
   })
 
   it('counts nothing that starts at the end of the workout: the window is [start, end)', () => {
@@ -255,7 +272,7 @@ describe('fillFromSamples, through the merged reads', () => {
       { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: END, tzOffsetMinutes: 120, value: 999 },
       ...(['min', 'mean', 'max'] as const).map((agg) => ({ personId: 'p1', sourceId: 'phone', metric: 'heart_rate', utcMs: END, tzOffsetMinutes: 120, agg, value: 190 })),
     ])
-    const summary = workoutSummary(q().sessionById({ sessionId: 'phone-run', fill: true })!.attrs)
+    const summary = workoutSummary(q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!.attrs)
     expect(summary.steps).toBe(4500)
     expect(summary.averageHeartRateBpm).toBe(123)
   })
@@ -263,7 +280,7 @@ describe('fillFromSamples, through the merged reads', () => {
   it('fills nothing, and puts no pace on, a zero-length row', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL, endMs: START })
     seedSamples()
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(workoutSummary(run.attrs).paceSecondsPerKm).toBeNull()
     expect(run.rate).toBeNull()
     expect(run.attrs).toEqual({ ...PHONE_TREADMILL, awaitingSummary: true })
@@ -272,7 +289,7 @@ describe('fillFromSamples, through the merged reads', () => {
   it('reads nothing for a row longer than the intraday window, and still marks it', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL, endMs: START + 49 * 60 * MINUTE, localDate: '2026-09-22' })
     seedSamples()
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(run.attrs).toEqual({ ...PHONE_TREADMILL, awaitingSummary: true })
     expect(vi.mocked(readIntradayWindow)).not.toHaveBeenCalled()
   })
@@ -283,7 +300,7 @@ describe('fillFromSamples, through the merged reads', () => {
     // A second device with fewer readings over the same run: summed with the first, the steps would double.
     insertSamples(t.db, [{ personId: 'p1', sourceId: 'scale', metric: 'steps', utcMs: START, tzOffsetMinutes: 120, value: 50 }])
 
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(workoutSummary(run.attrs).steps).toBe(4500)
   })
 
@@ -292,7 +309,7 @@ describe('fillFromSamples, through the merged reads', () => {
     seedSamples('google')
     insertSamples(t.db, [{ personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: START, tzOffsetMinutes: 120, value: 50 }])
 
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(workoutSummary(run.attrs).steps).toBe(50)
   })
 
@@ -301,14 +318,14 @@ describe('fillFromSamples, through the merged reads', () => {
     seedSamples()
     seedOverride(t.db, { personId: 'p1', scope: 'sample', targetKey: sampleTarget({ source: 'phone', metric: 'steps', utcMs: START + 5 * MINUTE }) })
 
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(workoutSummary(run.attrs).steps).toBe(4350)
   })
 
   it('never lets a filled distance or climb set a record', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
     seedSamples()
-    const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
     expect(workoutSummary(run.attrs).distanceMeters).toBe(5100)
     expect(sessionForRecords(run).distanceMm).toBeNull()
 
@@ -334,13 +351,130 @@ describe('fillFromSamples, through the merged reads', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
     seedSamples()
 
-    const list = q().sessions({ kind: 'exercise', from: '2026-09-01', to: DATE, fill: true })
+    const list = q().sessions({ kind: 'exercise', from: '2026-09-01', to: DATE, fill: true, nowMs: SOON })
     expect(list).toHaveLength(10)
     expect(list.filter((w) => (w.attrs as { filledFromSamples?: boolean }).filledFromSamples === true).map((w) => w.id)).toEqual(['phone-run'])
     // Steps, distance, energy and heart rate: one read each, all for the bare row.
     const calls = vi.mocked(readIntradayWindow).mock.calls
     expect(calls.map(([, input]) => input.metric).sort()).toEqual(['active_energy', 'distance', 'heart_rate', 'steps'])
     expect(calls.every(([, input]) => input.startMs === START && input.endMs === END - 1)).toBe(true)
+  })
+
+  it('reads the grant once and each source once for a list of bare phone rows, not once a row', () => {
+    for (let d = 0; d < 5; d += 1) {
+      const startMs = START - d * 24 * 60 * MINUTE
+      insertSession({ id: `phone-${d}`, sourceId: 'phone', attrs: PHONE_TREADMILL, startMs, endMs: startMs + 30 * MINUTE, localDate: `2026-09-${String(20 - d).padStart(2, '0')}` })
+    }
+    // Asked an hour after the last run, it and the day before's are still promised; asked before
+    // the first, all five are.
+    const list = q().sessions({ kind: 'exercise', from: '2026-09-01', to: DATE, fill: true, nowMs: SOON })
+    expect(list.filter((w) => (w.attrs as { awaitingSummary?: boolean }).awaitingSummary === true).map((w) => w.id)).toEqual(['phone-1', 'phone-0'])
+    const early = q().sessions({ kind: 'exercise', from: '2026-09-01', to: DATE, fill: true, nowMs: START - 4 * 24 * 60 * MINUTE })
+    expect(early.filter((w) => (w.attrs as { awaitingSummary?: boolean }).awaitingSummary === true)).toHaveLength(5)
+    // Two reads: one grant and one source lookup each.
+    expect(vi.mocked(hasGoogleGrant)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(getSource).mock.calls.filter(([, , sourceId]) => sourceId === 'phone')).toHaveLength(2)
+  })
+})
+
+describe("the promise of Google's figures lapses", () => {
+  const HOUR = 60 * MINUTE
+  const page = (nowMs: number) => readWorkoutPage(q(), { sessionId: 'phone-run', today: '2026-09-22', nowMs, nameOf: (id) => id })!
+
+  it("is kept two days from the workout's end", () => {
+    expect(PENDING_WINDOW_MS).toBe(48 * HOUR)
+  })
+
+  it('still pends 47 hours after the workout ended, and no longer at 49, when the fill stays', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    const recent = page(END + 47 * HOUR)
+    expect(recent.pending).toBe(true)
+    const lapsed = page(END + 49 * HOUR)
+    expect(lapsed.pending).toBe(false)
+    // Only the promise expires: the samples still fill the page.
+    expect(lapsed.figures.distance?.value).toBe(5100)
+    expect(lapsed.filled).toContain('distance')
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: END + 49 * HOUR })!
+    expect(run.attrs).toMatchObject({ filledFromSamples: true })
+    expect(run.attrs).not.toHaveProperty('awaitingSummary')
+  })
+
+  it('promises nothing on a read that brings no clock', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    expect(q().sessionById({ sessionId: 'phone-run', fill: true })!.attrs).toEqual(PHONE_TREADMILL)
+  })
+})
+
+describe('a read of one source fills its bare rows alone', () => {
+  it('fills a phone row that is bare as a workout, and leaves a phone copy whose Google copy merged as recorded', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    const laterMs = START + 4 * 60 * MINUTE
+    insertSession({ id: 'phone-merged', sourceId: 'phone', attrs: PHONE_TREADMILL, startMs: laterMs, endMs: laterMs + 30 * MINUTE })
+    insertSession({ id: 'google-merged', sourceId: 'google', attrs: GOOGLE_TREADMILL, startMs: laterMs, endMs: laterMs + 30 * MINUTE })
+    seedSamples('phone', laterMs)
+
+    const rows = q().sessions({ kind: 'exercise', from: DATE, to: DATE, sourceId: 'phone', fill: true, nowMs: SOON })
+    const byId = new Map(rows.map((r) => [r.id, r]))
+    expect(workoutSummary(byId.get('phone-run')!.attrs).steps).toBe(4500)
+    expect(byId.get('phone-run')!.attrs).toMatchObject({ filledFromSamples: true, awaitingSummary: true })
+    // Its figures are Google's, one read away: the phone's own row is not an estimate to show.
+    expect(byId.get('phone-merged')!.attrs).toEqual(PHONE_TREADMILL)
+    // Unasked, nothing is filled.
+    expect(q().sessions({ kind: 'exercise', from: DATE, to: DATE, sourceId: 'phone' })
+      .every((r) => JSON.stringify(r.attrs) === JSON.stringify(PHONE_TREADMILL))).toBe(true)
+  })
+})
+
+describe('the Activity period', () => {
+  it('fills the rows a week or a month lists, and never a sum: an estimate enters no total', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    const earlierMs = START - 24 * 60 * MINUTE
+    insertSession({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_TREADMILL, startMs: earlierMs, endMs: earlierMs + 30 * MINUTE, localDate: '2026-09-19' })
+
+    for (const range of ['week', 'month'] as const) {
+      const period = readActivityPeriod(q(), { range, anchor: DATE, today: DATE })
+      expect(period.workouts.find((w) => w.id === 'phone-run')!.distanceMeters).toBe(5100)
+      const treadmill = period.types.find((t) => t.type === 'TREADMILL')!
+      // Google's 4 km alone: the filled 5.1 km is listed, never summed.
+      expect(treadmill.distanceMeters).toBe(4000)
+      expect(treadmill.count).toBe(2)
+    }
+  })
+
+  it("leaves three months' and a year's rows as recorded, and reads no samples for them", () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    for (const range of ['3months', 'year'] as const) {
+      vi.mocked(readIntradayWindow).mockClear()
+      const period = readActivityPeriod(q(), { range, anchor: DATE, today: DATE })
+      expect(period.workouts.find((w) => w.id === 'phone-run')!.distanceMeters).toBeNull()
+      expect(vi.mocked(readIntradayWindow)).not.toHaveBeenCalled()
+    }
+  })
+
+  it('fills a list of one source too, on a week', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    const period = readActivityPeriod(q(), { range: 'week', anchor: DATE, today: DATE, source: 'phone' })
+    expect(period.workouts.find((w) => w.id === 'phone-run')!.distanceMeters).toBe(5100)
+  })
+})
+
+describe('the workout page', () => {
+  it('reads the cardio load off the session it filled, not by id again', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    seedZoneCeilings(DATE)
+    const query = q()
+    const load = vi.spyOn(query, 'cardioLoad')
+    readWorkoutPage(query, { sessionId: 'phone-run', today: DATE, nowMs: SOON, nameOf: (id) => id })
+    expect(load).toHaveBeenCalledTimes(1)
+    const [input] = load.mock.calls[0]!
+    expect(input).toHaveProperty('session')
+    expect((input as { session: { attrs: unknown } }).session.attrs).toMatchObject({ filledFromSamples: true })
   })
 })
 
@@ -509,11 +643,11 @@ describe('the workout page says what is still coming and what was filled', () =>
     const ride = page('phone-ride')
     expect(ride.hero).toBe('speed')
     expect(ride.filled).toContain('speed')
-    expect(q().sessionById({ sessionId: 'phone-ride', fill: true })!.rate).toMatchObject({ key: 'speed', fromElapsed: true })
+    expect(q().sessionById({ sessionId: 'phone-ride', fill: true, nowMs: SOON })!.rate).toMatchObject({ key: 'speed', fromElapsed: true })
   })
 
   it('sends no elapsed flag on a rate the device recorded', () => {
     insertSession({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_TREADMILL })
-    expect(q().sessionById({ sessionId: 'google-run', fill: true })!.rate).not.toHaveProperty('fromElapsed')
+    expect(q().sessionById({ sessionId: 'google-run', fill: true, nowMs: SOON })!.rate).not.toHaveProperty('fromElapsed')
   })
 })

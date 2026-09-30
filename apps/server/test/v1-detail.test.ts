@@ -578,7 +578,8 @@ describe('GET /workout/:sessionId', () => {
   // phone's samples filled, and the rounding keeps both.
   it('sends a bare workout as pending, with the figures its samples filled', async () => {
     harness = await withServer()
-    harness.clock.nowMs = NOW_MS
+    // The next morning: a day after the run, inside the time Google's copy is still promised.
+    harness.clock.nowMs = at('2026-09-05', '07:00')
     const token = await harness.signIn()
     // A companion upload's source, as describe() files it (ingest.ts): only a phone promises figures.
     harness.app.haelan.instance.db.insert(schema.sources).values({

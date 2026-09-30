@@ -610,10 +610,10 @@ function dayOf(q: PersonQuery, subject: WorkoutSession, input: WorkoutPageInput,
   return {
     steps: pageFigureOf(dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: localDate, partial: localDate === input.today, asOfMs: null }), false),
     activeMinutes: pageFigureOf(activeMinutesFigure(ctx), false),
-    // Read unfilled and filled one by one once the subject is out: filling the whole list would
-    // fill the subject, already filled above, a second time.
-    otherWorkouts: q.sessions({ kind: 'exercise', from: localDate, to: localDate })
-      .filter((s) => s.id !== subject.id).map((s) => q.fillWorkout(s)),
+    // Read unfilled and filled once the subject is out: filling the whole list would fill the
+    // subject, already filled above, a second time.
+    otherWorkouts: q.fillWorkouts(q.sessions({ kind: 'exercise', from: localDate, to: localDate })
+      .filter((s) => s.id !== subject.id), { nowMs: input.nowMs }),
   }
 }
 
@@ -677,11 +677,13 @@ export function splitTrendOf(splits: readonly WorkoutSplit[], rate: 'pace' | 'sp
 }
 
 export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): WorkoutPage | null {
-  // The subject is filled (fillFromSamples.ts); every read of its history below stays as recorded.
-  const session = q.sessionById({ sessionId: input.sessionId, fill: true })
+  // The subject is filled (fillFromSamples.ts), its promise of Google's figures measured against
+  // the page's own clock; every read of its history below stays as recorded.
+  const session = q.sessionById({ sessionId: input.sessionId, fill: true, nowMs: input.nowMs })
   if (session === null || session.kind !== 'exercise') return null
   const subject = readingOf(session, {
-    banister: q.cardioLoad({ sessionId: session.id })?.banister ?? null,
+    // The session filled above, not the id read and merged again.
+    banister: q.cardioLoad({ session })?.banister ?? null,
     highestHr: highestHeartRate(q, session),
   })
   const exerciseType = subject.summary.exerciseType

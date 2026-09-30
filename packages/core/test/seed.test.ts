@@ -516,7 +516,7 @@ describe('seedArchive', () => {
       // Google connected, as the demo person is: the walk's Google copy is then still to come.
       instance.credentials.putRefreshToken({ personId: 'p1', refreshToken: 'not-real', scopes: [], nowMs: endMs })
       const q = new PersonQuery(instance.db, 'p1')
-      const [walk, ...others] = q.sessions({ kind: 'exercise', from: '2026-09-05', to: '2026-09-05', fill: true })
+      const [walk, ...others] = q.sessions({ kind: 'exercise', from: '2026-09-05', to: '2026-09-05', fill: true, nowMs: endMs })
       expect(others).toEqual([])
       expect(walk!.attrs).toMatchObject({ awaitingSummary: true, filledFromSamples: true, exerciseType: 'WALKING' })
       const summary = (walk!.attrs as { metricsSummary: Record<string, number> }).metricsSummary
