@@ -494,11 +494,46 @@
           "pauses_other": "{{count}} pauses, {{duration}} in all",
           "heartRate": "Heart rate",
           "highest": "highest {{value}} at {{time}}",
-          "highestOnly": "highest {{value}}"
+          "highestOnly": "highest {{value}}",
+          "pace": "Pace",
+          "cadence": "Cadence",
+          "paceChart": "Pace through the workout",
+          "cadenceChart": "Cadence through the workout",
+          "average": "average {{value}}",
+          "averageShort": "avg {{value}}",
+          "fastest": "fastest {{value}} at {{time}}",
+          "smoothed": {
+            "pace": "pace smoothed over three minutes",
+            "cadence": "cadence smoothed over three minutes",
+            "both": "pace and cadence smoothed over three minutes"
+          },
+          "noRoute": "no route, no pace line",
+          "from": {
+            "pace_one": "The pace comes from the times of the one route point.",
+            "pace_other": "The pace comes from the times of the {{count}} route points.",
+            "cadence": "The cadence comes from the steps per minute.",
+            "both_one": "The pace comes from the times of the one route point, the cadence from the steps per minute.",
+            "both_other": "The pace comes from the times of the {{count}} route points, the cadence from the steps per minute."
+          },
+          "fromAfter": {
+            "pace_one": "the pace comes from the times of the one route point.",
+            "pace_other": "the pace comes from the times of the {{count}} route points.",
+            "cadence": "the cadence comes from the steps per minute.",
+            "both_one": "the pace comes from the times of the one route point, the cadence from the steps per minute.",
+            "both_other": "the pace comes from the times of the {{count}} route points, the cadence from the steps per minute."
+          }
         },
         "zones": {
           "label": "Heart-rate zones",
           "hard": "{{value}} vigorous or peak"
+        },
+        "recovery": {
+          "label": "Heart-rate recovery",
+          "oneMinute": "Drop after 1 minute",
+          "twoMinutes": "Drop after 2 minutes",
+          "between": "from {{from}} to {{to}}",
+          "caption_one": "from your heart rate in the minutes after you stopped · usual from {{count}} workout of this type before it",
+          "caption_other": "from your heart rate in the minutes after you stopped · usual from {{count}} workouts of this type before it"
         },
         "form": {
           "label": "Running form",
@@ -517,6 +552,14 @@
           "steps": "Steps",
           "activeMinutes": "Active minutes",
           "workouts": "Workouts"
+        },
+        "before": {
+          "label": "Before",
+          "caption": "the night before this workout and that morning",
+          "asleep": "Time asleep",
+          "recoveryIndex": "Recovery index",
+          "restingHeartRate": "Resting heart rate",
+          "night": "View the night"
         },
         "after": {
           "label": "Afterwards",

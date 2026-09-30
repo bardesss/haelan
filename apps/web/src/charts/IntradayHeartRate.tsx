@@ -171,6 +171,33 @@ type Props = {
    * effective zone.
    */
   timeZone?: string | null
+  /**
+   * A series of one value a minute rather than readings with a spread: a workout's pace and
+   * cadence under its heart rate (WorkoutThrough.tsx), whose points carry the one value as min,
+   * mean and max alike, so the band behind the line has no width. The tooltip and the table print
+   * that value through `formatValue` (its unit included) under the one `column`, the y axis labels
+   * through `formatAxis`; `inverse` turns the axis upside down, for a pace, where a faster minute
+   * is a smaller number and should sit higher; `reference` draws one dashed line across at a value,
+   * its words at the left (the workout's own average). Unset, the chart is the heart-rate chart it
+   * always was. Memoise it, for the same reason as `usualBand`.
+   */
+  single?: {
+    column: string
+    formatValue: (value: number) => string
+    formatAxis: (value: number) => string
+    inverse?: boolean
+    reference?: { value: number, label: string }
+  }
+  /**
+   * False leaves the x axis's labels off: a chart stacked over another on the same axis (a
+   * workout's heart rate over its pace) lets the lowest one label the time for all of them.
+   */
+  xLabels?: boolean
+  /** Full mode's height in px; 170 unset. */
+  height?: number
+  /** ChartFigure's own: set, the table is shown by one control for several charts, not this chart's. */
+  tableShown?: boolean
+  tableId?: string
 }
 
 /**
@@ -252,7 +279,7 @@ const COMPACT_HEIGHT = 84
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
   compact = false, startMs, endMs, spans = NO_SPANS, offsetMinutes = null, timeZone,
-  axis = 'clock', usualBand, zoneBands,
+  axis = 'clock', usualBand, zoneBands, single, xLabels = true, height = 170, tableShown, tableId,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -346,7 +373,9 @@ export function IntradayHeartRate({
     // not a colour scheme chosen for its own sake.
     const colors = [tokens.series, tokens.seriesAlt, ...scaleStops(tokens)]
     return {
-      grid: compact ? { left: 0, right: 0, top: 4, bottom: 4 } : base.grid({ top: 18 }),
+      // Without its time labels a stacked chart keeps no room for them, so the row under it sits
+      // close, as the approved mockup stacks them.
+      grid: compact ? { left: 0, right: 0, top: 4, bottom: 4 } : base.grid({ top: 18, ...(!xLabels && { bottom: 6 }) }),
       tooltip: {
         ...base.tooltip,
         trigger: 'axis' as const,
@@ -360,6 +389,7 @@ export function IntradayHeartRate({
             .map((p) => {
               const point = pointsBySeriesIndex.get(p.seriesIndex)![p.dataIndex]
               if (!point) return ''
+              if (single !== undefined) return point.mean === null ? '' : tip`${tick(point.utcMs)}<br/>${single.formatValue(point.mean)}`
               const mean = formatMetricValue(point.mean, metric, i18n.language, '')
               const min = formatMetricValue(point.min, metric, i18n.language, '')
               const max = formatMetricValue(point.max, metric, i18n.language, '')
@@ -384,6 +414,7 @@ export function IntradayHeartRate({
               ...(interval !== null && { interval }),
               axisLabel: {
                 ...base.axisLabel,
+                show: xLabels,
                 formatter: (value: number) => formatElapsed(value),
                 showMaxLabel: interval !== null && elapsedSpan !== null && elapsedSpan % interval === 0,
               },
@@ -402,7 +433,7 @@ export function IntradayHeartRate({
             // unchanged from before this existed.
             ...(startMs !== undefined && { min: startMs }),
             ...(lastMs !== null && endMs !== undefined && { max: lastMs }),
-            axisLabel: { ...base.axisLabel, formatter: (value: number) => tick(value) },
+            axisLabel: { ...base.axisLabel, show: xLabels, formatter: (value: number) => tick(value) },
             axisLine: base.labelledAxis.axisLine,
           },
       // Either form reaches both ends of the usual band as well as the readings: scaled to the
@@ -413,6 +444,13 @@ export function IntradayHeartRate({
         ...(compact
           ? { type: 'value' as const, scale: true, show: false }
           : { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel }),
+        ...(!compact && single !== undefined && {
+          // A slim row under the heart rate: two steps (three labels), as the approved mockup
+          // draws it, where echarts' default five crowded a 120px row into overlapping labels.
+          splitNumber: 2,
+          axisLabel: { ...base.axisLabel, formatter: (value: number) => single.formatAxis(value) },
+          inverse: single.inverse === true,
+        }),
         ...(usualBand !== undefined && zoned === null && {
           min: (extent: { min: number }) => Math.min(extent.min, usualBand.low),
           max: (extent: { max: number }) => Math.max(extent.max, usualBand.high),
@@ -514,9 +552,23 @@ export function IntradayHeartRate({
             ] as [{ name: string, yAxis: number, itemStyle: { color: string, opacity: number } }, { yAxis: number }]),
           },
         }]),
+        // A single series' reference, last for the same index-stability reason: a dashed line
+        // across the plot at the value, its words over its left end.
+        ...(single?.reference === undefined ? [] : [{
+          id: 'reference',
+          type: 'line' as const,
+          data: [],
+          markLine: {
+            symbol: 'none' as const,
+            silent: true,
+            lineStyle: { color: tokens.axis, type: 'dashed' as const },
+            label: { show: true, position: 'insideStartTop' as const, color: tokens.muted, fontSize: base.axisLabel.fontSize, formatter: single.reference.label },
+            data: [{ yAxis: single.reference.value }],
+          },
+        }]),
       ],
     }
-  }, [series, pointsBySeriesIndex, tick, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, endMs, lastMs, spans, axis, usualBand, zoned, elapsedFrom, x])
+  }, [series, pointsBySeriesIndex, tick, t, i18n.language, nameOf, eventMarks, metric, unit, compact, startMs, endMs, lastMs, spans, axis, usualBand, zoned, elapsedFrom, x, single, xLabels])
 
   // Shared by onClick and describe below, so the annotate control acts on precisely the point a
   // click would have opened rather than on a second reading of the same event.
@@ -548,10 +600,14 @@ export function IntradayHeartRate({
   // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
   // renders an annotate control that names a point and then does nothing when pressed. See
   // useChart's ChartPointHandlers doc comment; chart-annotate-handlers.test.tsx pins it.
-  const { host, style, tap } = useChart(build, compact ? COMPACT_HEIGHT : 170, onPointClick ? { onClick, describe } : undefined)
+  const { host, style, tap } = useChart(build, compact ? COMPACT_HEIGHT : height, onPointClick ? { onClick, describe } : undefined)
+  const absent = t('charts.absence.noReading')
   return (
-    <ChartFigure label={label} host={host} style={style} tap={tap} tableToggle={!compact}
-      table={{
+    <ChartFigure label={label} host={host} style={style} tap={tap} tableToggle={!compact} tableShown={tableShown} tableId={tableId}
+      table={single !== undefined ? {
+        columns: [t('charts.columns.time'), single.column],
+        rows: points.map((p) => [tick(p.utcMs), p.mean === null ? absent : single.formatValue(p.mean)]),
+      } : {
         columns: [
           t('charts.columns.time'), t('charts.columns.source'),
           t('charts.columns.minimum'), t('charts.columns.mean'), t('charts.columns.maximum'),
@@ -566,17 +622,14 @@ export function IntradayHeartRate({
         // screen-reader user (ChartFigure's own sr-only table), so on a workout (axis='elapsed') it
         // must read the same elapsed time the visible axis and tooltip do, not a clock time drawn
         // nowhere else on the chart. Fix round 1 review finding.
-        rows: points.map((p) => {
-          const absent = t('charts.absence.noReading')
-          return [
-            tick(p.utcMs),
-            nameOf(p.sourceId),
-            formatMetricValue(p.min, metric, i18n.language, absent),
-            formatMetricValue(p.mean, metric, i18n.language, absent),
-            formatMetricValue(p.max, metric, i18n.language, absent),
-            p.excluded ? t('charts.absence.excluded') : '',
-          ]
-        }),
+        rows: points.map((p) => [
+          tick(p.utcMs),
+          nameOf(p.sourceId),
+          formatMetricValue(p.min, metric, i18n.language, absent),
+          formatMetricValue(p.mean, metric, i18n.language, absent),
+          formatMetricValue(p.max, metric, i18n.language, absent),
+          p.excluded ? t('charts.absence.excluded') : '',
+        ]),
       }} />
   )
 }

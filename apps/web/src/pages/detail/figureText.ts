@@ -45,7 +45,7 @@ const SMALL_UNITS: Readonly<Record<string, { factor: number, precision: number, 
 // one sub-second figure that also carries the 'seconds' unit (`groundContact`) reads in
 // milliseconds instead (SMALL_UNITS above).
 // Named apart from charts/elapsed.ts's formatElapsed, which takes milliseconds.
-function formatStopwatch(totalSeconds: number): string {
+export function formatStopwatch(totalSeconds: number): string {
   const total = Math.round(totalSeconds)
   const hours = Math.floor(total / 3600)
   const minutes = Math.floor((total % 3600) / 60)
