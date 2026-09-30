@@ -214,3 +214,19 @@ export class CredentialStore {
     }
   }
 }
+
+/**
+ * Whether a person holds a Google grant that has not been revoked: listConnectedPeople's
+ * predicate for one person, and a free function because its callers hold a database but no
+ * instance key. Never decrypts, so it cannot throw on a key that has gone bad; a row the key
+ * cannot open still counts, since the grant is there and reconsent (not a missing Google path)
+ * is its way back.
+ *
+ * fillFromSamples asks it before promising a phone workout's Google figures: a person with no
+ * grant has no copy on its way, and would be told figures are coming forever.
+ */
+export function hasGoogleGrant(db: DbOrTx, personId: string): boolean {
+  const row = db.select({ revokedAtMs: credentials.revokedAtMs })
+    .from(credentials).where(eq(credentials.personId, personId)).get()
+  return row !== undefined && row.revokedAtMs === null
+}

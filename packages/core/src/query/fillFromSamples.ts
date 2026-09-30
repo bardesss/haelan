@@ -7,6 +7,7 @@ import type { WorkoutSession } from './sessions.ts'
 import { zoneSecondsFromMinutes } from '../api/cardioLoad.ts'
 import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
 import { getSource } from '../store/sources.ts'
+import { hasGoogleGrant } from '../store/credentials.ts'
 
 /**
  * The start of every Health Connect source's externalId: sources.ts's describe() joins the
@@ -14,10 +15,12 @@ import { getSource } from '../store/sources.ts'
  */
 export const PHONE_SOURCE_PREFIX = 'HEALTH_CONNECT:'
 
-// Answers: whether the row's source is a phone's, the only kind whose bare workout has a Google
-// copy still to come.
-function fromPhone(db: DbOrTx, personId: string, sourceId: string): boolean {
+// Answers: whether a Google copy of this bare row is still to come. Only a phone's workout has
+// one, and only for a person whose Google grant stands: an all-Android household syncs no copy
+// at all, so its phone workouts are filled but promise nothing.
+function copyToCome(db: DbOrTx, personId: string, sourceId: string): boolean {
   return getSource(db, personId, sourceId)?.externalId.startsWith(PHONE_SOURCE_PREFIX) === true
+    && hasGoogleGrant(db, personId)
 }
 
 /**
@@ -52,11 +55,12 @@ function fromPhone(db: DbOrTx, personId: string, sourceId: string): boolean {
  *
  * Edwards load and the hard-zone minutes follow from the zones where they are read.
  *
- * **Marked.** Every bare row from a phone (a Health Connect source: PHONE_SOURCE_PREFIX) gets
- * `attrs.awaitingSummary: true`, filled or not (no samples, or a span too long to read), so the
- * page can say the watch's figures are still coming. A bare row from any other source, a Google
- * exercise logged without a summary, has no copy on its way and is never marked: it would
- * promise figures forever. Where
+ * **Marked.** Every bare row from a phone (a Health Connect source: PHONE_SOURCE_PREFIX) of a
+ * person with a standing Google grant (hasGoogleGrant) gets `attrs.awaitingSummary: true`, filled
+ * or not (no samples, or a span too long to read), so the page can say the watch's figures are
+ * still coming. A bare row from any other source (a Google exercise logged without a summary), or
+ * from the phone of a person who never connected Google or whose grant was revoked, has no copy
+ * on its way and is never marked: it would promise figures forever. Where
  * something was filled, `attrs.filledFromSamples` is true and `attrs.filled` lists the
  * metricsSummary keys that came from samples, so a figure can say where it came from and records
  * can refuse an estimate (sessionRecords.ts).
@@ -75,7 +79,7 @@ export function fillFromSamples(db: DbOrTx, input: { personId: string, session: 
   if (typeof attrs !== 'object' || attrs === null || Array.isArray(attrs)) return session
   const record = attrs as Record<string, unknown>
   if (record.metricsSummary !== null && record.metricsSummary !== undefined) return session
-  const awaiting = fromPhone(db, personId, session.sourceId) ? { ...record, awaitingSummary: true } : record
+  const awaiting = copyToCome(db, personId, session.sourceId) ? { ...record, awaitingSummary: true } : record
   const unfilled = { ...session, attrs: awaiting }
   const { startMs } = session
   // Half open: readIntradayWindow includes its end, so read to the last millisecond before the

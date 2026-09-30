@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createTestDatabase, seedPerson, insertSamples, seedOverride } from '../src/testing/fixtures.ts'
 import type { TestDatabase, InsertSampleInput } from '../src/testing/fixtures.ts'
-import { daily, sessions, sessionSegments, sourcePriority, sources } from '../src/db/schema/index.ts'
+import { credentials, daily, sessions, sessionSegments, sourcePriority, sources } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { sampleTarget } from '../src/derive/targetKey.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
@@ -64,6 +64,11 @@ beforeEach(() => {
     { personId: 'p1', metric: 'exercise', sourceId: 'google', rank: 0 },
     { personId: 'p1', metric: 'exercise', sourceId: 'phone', rank: 1 },
   ]).run()
+  // A Google grant, as the connect flow leaves one: the household whose phone workouts have a
+  // Google copy on its way. Never decrypted here, so the token need not be sealed.
+  t.db.insert(credentials).values({
+    personId: 'p1', refreshTokenEncrypted: 'sealed', grantedScopes: '', obtainedAtMs: 0, revokedAtMs: null,
+  }).run()
   vi.mocked(readIntradayWindow).mockClear()
 })
 afterEach(() => t.cleanup())
@@ -222,6 +227,25 @@ describe('fillFromSamples, through the merged reads', () => {
     const filled = q().sessionById({ sessionId: 'google-log', fill: true })!
     expect(filled.attrs).toMatchObject({ filledFromSamples: true })
     expect(filled.attrs).not.toHaveProperty('awaitingSummary')
+  })
+
+  // An all-Android household syncs no Google copy, so a phone workout's figures are never
+  // coming: its samples still fill it, and it promises nothing.
+  it('never marks a phone workout awaiting its summary for a person with no Google grant', () => {
+    t.db.delete(credentials).run()
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    expect(q().sessionById({ sessionId: 'phone-run', fill: true })!.attrs).toEqual(PHONE_TREADMILL)
+    seedSamples()
+    const filled = q().sessionById({ sessionId: 'phone-run', fill: true })!
+    expect(filled.attrs).toMatchObject({ filledFromSamples: true })
+    expect(workoutSummary(filled.attrs).steps).toBe(4500)
+    expect(filled.attrs).not.toHaveProperty('awaitingSummary')
+  })
+
+  it('never marks it for a person whose Google grant was revoked', () => {
+    t.db.update(credentials).set({ revokedAtMs: 1 }).run()
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    expect(q().sessionById({ sessionId: 'phone-run', fill: true })!.attrs).toEqual(PHONE_TREADMILL)
   })
 
   it('counts nothing that starts at the end of the workout: the window is [start, end)', () => {
@@ -461,6 +485,15 @@ describe('the workout page says what is still coming and what was filled', () =>
     const bare = page('phone-run')
     expect(bare.pending).toBe(true)
     expect(bare.filled).toEqual([])
+  })
+
+  it('is not pending for a phone workout of a person with no Google grant, and still names what was filled', () => {
+    t.db.delete(credentials).run()
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    const androidOnly = page('phone-run')
+    expect(androidOnly.pending).toBe(false)
+    expect(androidOnly.filled).toContain('steps')
   })
 
   it('names a ride\'s filled speed, and its list rate says it runs over elapsed time', () => {
