@@ -149,7 +149,9 @@ export function StackedDailyBars({
         // total's ratio between two days DailyBars' own comment on this same line describes.
         min: 0,
         ...(valueAxis === undefined
-          ? { name: axisUnit, nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize } }
+          // Two steps, three ticks ("0 150 300", the approved mockup's): at the chart's 130px
+          // echarts' own five crowd the labels into one another.
+          ? { name: axisUnit, nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize }, splitNumber: 2 }
           // The top on the data's own step (stepAxisMax), or echarts ends the axis on its own round
           // number ("10h" over "8h" on a four-hour step).
           : { interval: valueAxis.interval, max: (extent: { max: number }) => stepAxisMax(extent.max, valueAxis.interval) }),

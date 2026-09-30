@@ -278,6 +278,7 @@ describe('standoutLines', () => {
     const en = standoutLines({ ...o, language: 'en', t })
     expect(plain(en)).toEqual([`longest: 8h${NB}21m on Sun, Aug 23 ✦`, `+0h${NB}23m against July`])
     expect(strong(en)).toEqual([[`8h${NB}21m`], [`+0h${NB}23m`]])
+    expect(en.map((line) => line.filter((run) => run.good === true).map((run) => run.text))).toEqual([['✦'], []])
     const nl = standoutLines({ ...o, language: 'nl', t: tNl })
     expect(plain(nl)).toEqual([`je langste: 8u${NB}21m op zo 23 aug ✦`, `+0u${NB}23m tegenover juli`])
     expect(strong(nl)).toEqual([[`8u${NB}21m`], [`+0u${NB}23m`]])

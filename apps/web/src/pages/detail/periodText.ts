@@ -145,7 +145,8 @@ function hasChange(change: PeriodChange | null): change is PeriodChange & { valu
 }
 
 /** A line in runs of plain and emphasised text: the figures a sentence turns on are set bold. */
-export type Emphasised = { text: string, strong: boolean }[]
+/** A line's runs: bold where `strong`, and in the positive colour where `good` (a good day's ✦). */
+export type Emphasised = { text: string, strong: boolean, good?: true }[]
 
 // A mark no catalogue string contains, either side of the index of each emphasised value.
 const MARK = '\u0000'
@@ -189,7 +190,7 @@ export function standoutLines(o: {
   if (high !== null) {
     const date = formatWeekdayDate(high.localDate, language)
     const line = emphasise(t, `period.standout.${o.highWord}`, { value: formatFigureValue(figure, high.value, language, t), date }, ['value'])
-    lines.push(high.good ? [...line, { text: ' ✦', strong: false }] : line)
+    lines.push(high.good ? [...line, { text: ' ', strong: false }, { text: '✦', strong: false, good: true }] : line)
   }
   if (hasChange(previous)) {
     lines.push(emphasise(t, perDay ? 'period.standout.previousPerDay' : 'period.standout.previous', {

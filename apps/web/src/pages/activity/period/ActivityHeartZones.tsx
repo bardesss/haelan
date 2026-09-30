@@ -30,8 +30,8 @@ export function hasHeartZones(zones: ActivityPeriodData['heartRateZones'], maxHe
  * two zones in display type (the server's `hard`, its total), named "intensief of piek" (the workout
  * page's term) with its verdict against the usual for a period's total; then the period's time in each
  * of the four zones as one bar in the zones' own colours (the workout page's ZoneBar), a legend naming
- * each zone's time, the day's highest heart rate as a figure row against its usual, and a caption
- * saying where the time comes from.
+ * each zone's time, the day's highest heart rate as a figure row against its usual, and, with any
+ * zone's time, a caption saying where that time comes from.
  */
 export function ActivityHeartZones({ zones, maxHeartRate, range, span }: {
   zones: ActivityPeriodData['heartRateZones']
@@ -82,7 +82,8 @@ export function ActivityHeartZones({ zones, maxHeartRate, range, span }: {
         </>
       )}
       <PeriodFigureRows figures={figures} labelOf={labelOf} noun="day" bars max={2} />
-      <p className="dash-caption">{t('activity.period.zones.caption', { period: thisPeriod(range, t) })}</p>
+      {/* The caption names the zones' time, so a card holding only the highest heart rate has none. */}
+      {rows.length > 0 && <p className="dash-caption">{t('activity.period.zones.caption', { period: thisPeriod(range, t) })}</p>}
     </Card>
   )
 }

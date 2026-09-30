@@ -167,6 +167,8 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
       },
       yAxis: {
         type: 'category' as const, data: weekdayLabels,
+        // Monday on top, as a calendar reads (the approved mockup's); a category axis runs upward otherwise.
+        inverse: true,
         axisLabel: base.axisLabel, ...base.hiddenAxis,
       },
       // seriesIndex: visualMap applies to every series by default and would repaint the absence dots too.

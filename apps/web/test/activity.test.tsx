@@ -398,6 +398,14 @@ describe('the Activity page: sections', () => {
     expect(zones.querySelector('.dash-headline')).toBeNull()
     expect(zones.querySelector('div[role="img"]')).toBeNull()
     expect(rowNamed('Heart-rate zones', 'Highest heart rate, per day')).toBeDefined()
+    // The caption speaks of time in each zone, so it goes with them.
+    expect(zones.querySelector('.dash-caption')).toBeNull()
+  })
+
+  it('captions the zones with where their time comes from', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(cardFor('Heart-rate zones')!.querySelector('.dash-caption')?.textContent)
+      .toBe('time in each zone over this month, from your heart rate through the whole day')
   })
 
   it.each<[string, string, Partial<ActivityPeriodData>]>([

@@ -1900,7 +1900,9 @@ button.week-bar-slot { cursor: pointer; }
 /* Wraps session-row-type and session-row-duration (plus an sr-only date, invisible either way) so
    the gap between them comes from layout rather than a literal space character joining two spans
    with nothing else to tell them apart. */
-.session-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+/* It wraps as whole pieces: on a phone a long type pushes its duration to the next line whole
+   ("54 min"), never splitting it into "54" and "min". */
+.session-row-primary { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); min-width: 0; }
 /* The category mark. Centred against the line rather than sitting on its baseline, which a glyph
    has no business doing, and muted: it is there to be scanned past, not read. */
 .session-row-icon { display: inline-flex; align-self: center; color: var(--text-muted); flex: none; }
@@ -1924,7 +1926,7 @@ button.week-bar-slot { cursor: pointer; }
 /* The secondary half beside it: text-secondary and font-size-xs are the same pairing
    .stepper-label already uses for a label that supports the element next to it rather than
    standing on its own. */
-.session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); }
+.session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); white-space: nowrap; }
 .session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Indented to the name's own column by hand, because it sits outside the row's grid: the glyph's
    width plus the grid's gap, which is what puts it under the type rather than under the mark. */
@@ -1972,6 +1974,8 @@ button.week-bar-slot { cursor: pointer; }
 .night-row-dot.worse, .night-row-dot.is-out { background: var(--negative); }
 /* The good-night mark (PATTERNS.md): quiet, in the positive tone, never a badge. */
 .night-row-good { color: var(--positive); }
+/* The ✦ on an overview hero's good high point, in the nights list's colour. */
+.period-good { color: var(--positive); }
 .night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 6.5rem; }
 /* Copied from .session-row-link's own hover/focus rules, unchanged, so the two lists behave
    identically under a keyboard: same surface-hover on hover, same inward focus ring. */

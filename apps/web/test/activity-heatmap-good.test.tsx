@@ -48,6 +48,15 @@ function mount(good: string | null) {
   return { series: (options.at(-1)!.series as Series[]), rows: [...container!.querySelectorAll('table tbody tr')] }
 }
 
+describe('ActivityHeatmap: the weekdays', () => {
+  it('puts Monday on top, as a calendar reads', () => {
+    mount(null)
+    const yAxis = options.at(-1)!.yAxis as { inverse?: boolean, data: string[] }
+    expect(yAxis.data[0]).toBe('Mon')
+    expect(yAxis.inverse).toBe(true)
+  })
+})
+
 describe('ActivityHeatmap: a good day', () => {
   it('rings the good day\'s cell alone, silent, and marks its table row ✦', () => {
     const { series, rows } = mount('2026-07-07')

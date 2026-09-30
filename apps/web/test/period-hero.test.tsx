@@ -50,7 +50,10 @@ const panelFor = (point: PeriodStripPoint, close: () => void) => (
     onAnnotate={null} onClose={close} />
 )
 
-const LONGEST: Emphasised = [{ text: 'longest: ', strong: false }, { text: '7h 27m', strong: true }, { text: ' on Sun, Aug 23 ✦', strong: false }]
+const LONGEST: Emphasised = [
+  { text: 'longest: ', strong: false }, { text: '7h 27m', strong: true }, { text: ' on Sun, Aug 23 ', strong: false },
+  { text: '✦', strong: false, good: true },
+]
 const CHANGE: Emphasised = [{ text: '+0h 23m', strong: true }, { text: ' against July', strong: false }]
 
 function hero(figure: PeriodFigure, o: { standout?: Emphasised[], hint?: string, lastYear?: (number | null)[], panel?: typeof panelFor } = {}) {
@@ -72,6 +75,8 @@ describe('PeriodHero', () => {
     expect(lines()).toEqual(['16 of 28 nights usual · 6 longer · 6 shorter', 'longest: 7h 27m on Sun, Aug 23 ✦', '+0h 23m against July'])
     // The values the lines turn on are bold, and nothing else is.
     expect([...container.querySelectorAll('.workout-hero-line strong')].map((strong) => strong.textContent)).toEqual(['7h 27m', '+0h 23m'])
+    // The good day's ✦ in the positive colour, and only it.
+    expect([...container.querySelectorAll('.workout-hero-line .period-good')].map((mark) => mark.textContent)).toEqual(['✦'])
     expect(container.querySelector('.dash-caption')?.textContent).toBe('every night this month')
     expect(container.querySelector('h2')?.textContent).toBe('Time asleep')
   })
