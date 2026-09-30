@@ -99,7 +99,7 @@ describe('PointPanel', () => {
 
   it('calls onAnnotate from its button, and a press on the button does not close it', () => {
     const props = mount()
-    const button = container.querySelector('.point-panel-actions button')!
+    const button = container.querySelector<HTMLButtonElement>('.point-panel-actions button')!
     press(button)
     click(button)
     expect(props.onAnnotate).toHaveBeenCalledTimes(1)
