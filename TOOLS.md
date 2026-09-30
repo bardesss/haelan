@@ -556,10 +556,13 @@ Walks one chain for a question and stops at the first link that accounts for it,
 
 `kind: workout` asks what stands out about the exercise session `sessionId` (from get_workouts) against this person's earlier sessions of its type - the same usual ranges the app's workout page draws, from up to twenty sessions in the 90 days before it. The links, in order: `excluded`, a session excluded by hand is not judged; `thinHistory`, too few earlier sessions for a usual, or no type at all; `hero`, the figure the page leads with (pace on foot, speed on a bike, time otherwise) outside its usual; `hardMinutes`, the minutes in the vigorous and peak zones outside theirs; `lastKilometre`, the last full kilometre against the session's own earlier kilometres; `otherFigure`, any other figure outside its usual; and `withinUsual`. These are facts about the session, never about a next one.
 
+`kind: day` asks what on the finished day `localDate` sits away from this person's own usual, and what was lived beside it - the same readings and 60-day usual ranges the app's dashboard draws for that day. It needs `today`, which must be after `localDate`: a day still running is not judged against whole days. The gates come first and stop the walk, because the data cannot carry an interpretation of such a day: `dayEmpty`, nothing arrived; `sourceStopped`, a source feeding the day had stopped before it, judged as of the day itself; `hrvFilled`, the day's own HRV is an intraday average; `thinBaselines`, no reading has enough history to judge; then `nothingAway`, every reading sits within its usual. Otherwise the first reading away from its usual, looked for in a fixed order (resting heart rate, HRV, breathing rate, sleep, steps, active minutes), is reported beside the first lived factor away from its own usual, in a fixed order per reading: `shortNight`, `lateBedtime` and `heavyYesterday` (the day before's vigorous minutes) for a body reading on its worse side, `lateBedtime` for a short night, `workoutThatDay` for more movement, and `loggedEvent` for every reading; `noLivedFactor` when none was. A lived factor is an association reported beside the reading, never the reason for it, and the finding says so.
+
 **Input**
 
-- **kind** ('empty' | 'recovery' | 'workout')
-- **localDate** (string, optional) — YYYY-MM-DD. Required for `empty` and `recovery`, refused for `workout`.
+- **kind** ('empty' | 'recovery' | 'workout' | 'day')
+- **localDate** (string, optional) — YYYY-MM-DD. Required for `empty`, `recovery` and `day`, refused for `workout`.
+- **today** (string, optional) — YYYY-MM-DD, today in the person's own zone. Required for `day`, refused otherwise: a day is only explained once it is over.
 - **sessionId** (string, optional) — An exercise session id from get_workouts. Required for `workout`, refused otherwise.
 - **metric** (string, optional) — Required for `empty`, refused otherwise.
 - **agg** (string, optional) — `empty` only. Omitted, the metric's own default aggregate, the one get_daily uses.
@@ -567,10 +570,10 @@ Walks one chain for a question and stops at the first link that accounts for it,
 
 **Output**
 
-- **kind** ('empty' | 'recovery' | 'workout')
+- **kind** ('empty' | 'recovery' | 'workout' | 'day')
 - **finding** (string)
-- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual')
-- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual')
+- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual' | 'dayEmpty' | 'sourceStopped' | 'hrvFilled' | 'thinBaselines' | 'nothingAway' | 'shortNight' | 'lateBedtime' | 'heavyYesterday' | 'workoutThatDay' | 'loggedEvent' | 'noLivedFactor')
+- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual' | 'dayEmpty' | 'sourceStopped' | 'hrvFilled' | 'thinBaselines' | 'nothingAway' | 'shortNight' | 'lateBedtime' | 'heavyYesterday' | 'workoutThatDay' | 'loggedEvent' | 'noLivedFactor')
 - **evidence** (object)
   - **empty** (object, nullable)
     - **metric** (string)
@@ -634,3 +637,29 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **earlierKilometres** (number)
     - **secondHalfFasterBySecondsPerKm** (number, nullable) — How much faster the second half of the splits went than the first, in s/km (negative: slower).
     - **standsOut** (string, nullable) — The figure the walk stopped on, when it stopped on one.
+  - **day** (object, nullable)
+    - **localDate** (string)
+    - **today** (string)
+    - **figures** (array of object, nullable) — The day's readings against their own 60-day usual, as the dashboard judges them.
+      - **key** (string)
+      - **value** (number, nullable)
+      - **usual** (object, nullable)
+        - **low** (number)
+        - **high** (number)
+        - **thin** (boolean)
+      - **standing** ('within' | 'above' | 'below', nullable)
+    - **stoppedSources** (array of object, nullable) — Sources feeding one of the day's readings that had stopped reporting before it, by their own cadence as of the day itself.
+      - **sourceId** (string)
+      - **lastReportedDate** (string)
+    - **hrvFilled** (boolean, nullable)
+    - **away** (string, nullable) — The first reading away from its usual, in the fixed order the chain looks in.
+    - **factor** (object, nullable) — The lived factor the walk stopped on, where it is a reading with a usual of its own.
+      - **value** (number, nullable)
+      - **usual** (object, nullable)
+        - **low** (number)
+        - **high** (number)
+        - **thin** (boolean)
+    - **workouts** (array of object, nullable)
+      - **sessionId** (string)
+      - **exerciseType** (string, nullable)
+    - **eventIds** (array of string, nullable) — Events logged on the day or the day before; read them with get_events.
