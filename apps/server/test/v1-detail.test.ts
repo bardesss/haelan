@@ -318,6 +318,22 @@ describe('GET /workout/:sessionId', () => {
     expect(heartRateRecovery.twoMinutes).toMatchObject({ value: 40, baseline: { center: 32 }, standing: 'above', judged: 'better' })
   })
 
+  it('sends the readings a recovery falls between in whole bpm, and none for a minute without one', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 300 })
+    // The last full minute, the end's own minute, then only the minute one after it.
+    for (const [i, bpm] of [160.4, 150, 139.6].entries()) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(harness.app.haelan.instance.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at('2026-09-04', '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
+      }
+    }
+    const { heartRateRecovery } = (await get(harness, token, '/workout/subject')).json()
+    expect(heartRateRecovery.readings).toEqual({ endBpm: 160, oneMinuteBpm: 140, twoMinutesBpm: null })
+  })
+
   // The night before, its morning's recovery and resting heart rate, each at its own precision.
   it("sends the morning before rounded, the recovery by the glance's rule", async () => {
     harness = await withServer()
@@ -360,6 +376,10 @@ describe('GET /workout/:sessionId', () => {
     }
     const { through } = (await get(harness, token, '/workout/subject')).json()
     expect(through.pace.points.map((p: { value: number }) => p.value)).toEqual([333, 333, 333])
+    // Every minute is 333.3 give or take a float's last digit, so which one is fastest is noise;
+    // what is sent is whole, and one of the three.
+    expect(through.pace.fastest.secondsPerKm).toBe(333)
+    expect([0, 60, 120]).toContain(through.pace.fastest.elapsedSeconds)
     expect(through.cadence.points.map((p: { value: number }) => p.value)).toEqual([171, 171, 171, 171, 171])
   })
 

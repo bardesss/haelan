@@ -32,6 +32,18 @@ describe('paceSeries', () => {
     expect(series.points[3]!.value).toBeCloseTo(250, 1)
   })
 
+  it('names the fastest minute by its smoothed pace, and the earlier of a tie', () => {
+    // 3, 4, 4, 4, 3 m/s: the middle minute alone smooths to 250 s/km.
+    const middle = paceSeries(route([...Array(6).fill(3), ...Array(18).fill(4), ...Array(6).fill(3)]), START, HOUR_ON)!
+    expect(middle.fastest!.elapsedSeconds).toBe(120)
+    expect(middle.fastest!.secondsPerKm).toBeCloseTo(250, 1)
+    expect(middle.fastest!.secondsPerKm).toBe(Math.min(...middle.points.map((p) => p.value)))
+    // 4, 4, 3, 3, 4, 4 m/s: the first two and the last two minutes both smooth to 250.
+    const tie = paceSeries(route([...Array(12).fill(4), ...Array(12).fill(3), ...Array(12).fill(4)]), START, HOUR_ON)!
+    expect(tie.points.at(-1)!.value).toBeCloseTo(250, 1)
+    expect(tie.fastest!.elapsedSeconds).toBe(0)
+  })
+
   it('draws a minute of just over 50 m and leaves out one of just under', () => {
     const series = paceSeries(route([...Array(6).fill(51 / 60), ...Array(6).fill(49 / 60)]), START, HOUR_ON)!
     expect(series.points.map((p) => p.elapsedSeconds)).toEqual([0])

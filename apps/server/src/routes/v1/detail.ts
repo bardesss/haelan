@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { balanceOf, ConfigError, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
-import type { GlanceRecovery, MinuteSeries, NightPage, NightTrace, WorkoutPage } from '@haelan/core'
+import type { GlanceRecovery, MinuteSeries, NightPage, NightTrace, PaceSeries, WorkoutPage } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
   personAndToday, personIdOf, personQueryOf, roundFigure, roundMetricValue, roundMetricValueOrNull, roundPageFigure,
@@ -110,8 +110,16 @@ function roundWorkoutNight(night: WorkoutPage['after']['night']): WorkoutPage['a
 }
 
 /** A minute series under the trace, each value whole: seconds per km as the pace figure is sent, steps per minute as cadence is. */
-function roundMinuteSeries(series: MinuteSeries | null): MinuteSeries | null {
+function roundMinuteSeries<T extends MinuteSeries>(series: T | null): T | null {
   return series === null ? null : { ...series, points: series.points.map((p) => ({ ...p, value: Number(p.value.toFixed(0)) })) }
+}
+
+/** Pace's series as roundMinuteSeries sends it, its fastest minute whole seconds per km, as its point is. */
+function roundPaceSeries(series: PaceSeries | null): PaceSeries | null {
+  const rounded = roundMinuteSeries(series)
+  if (rounded === null || rounded.fastest === null) return rounded
+  const { secondsPerKm, elapsedSeconds } = rounded.fastest
+  return { ...rounded, fastest: { secondsPerKm: Number(secondsPerKm.toFixed(0)), elapsedSeconds: Number(elapsedSeconds.toFixed(0)) } }
 }
 
 /**
@@ -156,8 +164,14 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     },
     heartRateRecovery: heartRateRecovery === null ? null : {
       oneMinute: roundPageFigure(heartRateRecovery.oneMinute), twoMinutes: roundPageFigure(heartRateRecovery.twoMinutes),
+      // Whole bpm, as every heart rate is sent.
+      readings: {
+        endBpm: whole(heartRateRecovery.readings.endBpm),
+        oneMinuteBpm: heartRateRecovery.readings.oneMinuteBpm === null ? null : whole(heartRateRecovery.readings.oneMinuteBpm),
+        twoMinutesBpm: heartRateRecovery.readings.twoMinutesBpm === null ? null : whole(heartRateRecovery.readings.twoMinutesBpm),
+      },
     },
-    through: { pace: roundMinuteSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
+    through: { pace: roundPaceSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
     // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.
     splitTrend: splitTrend === null ? null : { secondHalfFasterBySecondsPerKm: whole(splitTrend.secondHalfFasterBySecondsPerKm) },
     zoneBounds: zoneBounds === null ? null : {

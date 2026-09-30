@@ -470,6 +470,8 @@ describe('readWorkoutPage: heart-rate recovery', () => {
       baseline: { center: 20, thin: false },
     })
     expect(heartRateRecovery!.twoMinutes).toMatchObject({ value: 42, standing: 'above', baseline: { center: 32, thin: false } })
+    // The minute means each fall is taken between: the last full minute, then each minute after.
+    expect(heartRateRecovery!.readings).toEqual({ endBpm: 160, oneMinuteBpm: 135, twoMinutesBpm: 118 })
   })
 
   it('judges against the latest ten runs alone, leaving older ones out of the usual', () => {
@@ -505,7 +507,9 @@ describe('readWorkoutPage: heart-rate recovery', () => {
     seedRun('subject', SUBJECT_DATE, { pace: 300 })
     seedRecovery(SUBJECT_DATE, [160, 150, 135, 118])
     seedOverride(test.db, { personId: 'p1', scope: 'sample', targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: at(SUBJECT_DATE, '07:31') }) })
-    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery).toMatchObject({ oneMinute: { value: null }, twoMinutes: { value: 42 } })
+    expect(readWorkoutPage(q(), input('subject'))!.heartRateRecovery).toMatchObject({
+      oneMinute: { value: null }, twoMinutes: { value: 42 }, readings: { endBpm: 160, oneMinuteBpm: null, twoMinutesBpm: 118 },
+    })
   })
 
   it('is null with no heart rate after the end, even with heart rate during the run', () => {
@@ -572,6 +576,7 @@ describe('readWorkoutPage: through the workout', () => {
     const { pace } = readWorkoutPage(q(), input('subject'))!.through
     expect(pace!.points.map((p) => p.elapsedSeconds)).toEqual([0, 60])
     expect(pace!.points[0]!.value).toBeCloseTo(1000 / 3, 1)
+    expect(pace!.fastest).toEqual({ secondsPerKm: pace!.points[0]!.value, elapsedSeconds: 0 })
     expect(readWorkoutPage(q(), input('bare'))!.through.pace).toBeNull()
   })
 

@@ -4,6 +4,9 @@
 
 export interface MinuteSeries { unit: string, points: { elapsedSeconds: number, value: number }[] }
 
+/** Pace, with its fastest minute: the lowest smoothed seconds per km and when it came. */
+export interface PaceSeries extends MinuteSeries { fastest: { secondsPerKm: number, elapsedSeconds: number } | null }
+
 const MINUTE_MS = 60_000
 const EARTH_RADIUS_METRES = 6_371_000
 /** Less than this in a full minute is standing still or GPS drift, not a pace worth drawing. */
@@ -44,8 +47,9 @@ function smoothed(byMinute: ReadonlyMap<number, number>, unit: string): MinuteSe
  * last one, or one side of a dropout) is read over the seconds they do span, the 50 m scaled to
  * match, rather than as a whole minute that went slowly. Null too when no minute qualifies.
  * Fixes outside [startMs, endMs) count for nothing, so pace never runs past the trace's own axis.
+ * `fastest` is the minute with the lowest smoothed pace, the earlier of a tie.
  */
-export function paceSeries(route: readonly { atMs: number, latitude: number, longitude: number }[], startMs: number, endMs: number): MinuteSeries | null {
+export function paceSeries(route: readonly { atMs: number, latitude: number, longitude: number }[], startMs: number, endMs: number): PaceSeries | null {
   const fixes = [...route].sort((a, b) => a.atMs - b.atMs)
   const metres = new Map<number, number>()
   const covered = new Map<number, number>()
@@ -71,7 +75,11 @@ export function paceSeries(route: readonly { atMs: number, latitude: number, lon
     if (m < PACE_GAP_METRES * (seconds / 60)) continue
     pace.set(minute, seconds / (m / 1000))
   }
-  return smoothed(pace, 'seconds_per_km')
+  const series = smoothed(pace, 'seconds_per_km')
+  if (series === null) return null
+  // The first of the lowest, so a tie names the earlier minute. A series has at least one point.
+  const fastest = series.points.reduce((best, p) => (p.value < best.value ? p : best), series.points[0]!)
+  return { ...series, fastest: { secondsPerKm: fastest.value, elapsedSeconds: fastest.elapsedSeconds } }
 }
 
 /**

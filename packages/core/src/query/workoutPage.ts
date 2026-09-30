@@ -12,7 +12,7 @@ import type { FigureDirection, PageFigure } from './pageFigure.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { NO_THINNING } from './sessionHeartRate.ts'
 import { cadenceSeries, paceSeries } from './workoutThrough.ts'
-import type { MinuteSeries } from './workoutThrough.ts'
+import type { MinuteSeries, PaceSeries } from './workoutThrough.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
 import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
@@ -58,12 +58,16 @@ export interface WorkoutPage {
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
-  /** How far heart rate fell one and two minutes after the end, against the earlier sessions of the type; null without the minutes. */
-  heartRateRecovery: { oneMinute: PageFigure, twoMinutes: PageFigure } | null
+  /** How far heart rate fell one and two minutes after the end, against the earlier sessions of the type; null without the minutes.
+   *  `readings` are the minute means each fall is taken between: the last full minute, and each minute after. */
+  heartRateRecovery: {
+    oneMinute: PageFigure, twoMinutes: PageFigure
+    readings: { endBpm: number, oneMinuteBpm: number | null, twoMinutesBpm: number | null }
+  } | null
   /** The night ending on the workout's own date and that morning's recovery; null for each with no value. */
   before: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, recovery: GlanceRecovery | null, restingHeartRate: PageFigure | null }
   /** The minute series drawn under the heart rate trace, on its elapsed axis. */
-  through: { pace: MinuteSeries | null, cadence: MinuteSeries | null }
+  through: { pace: PaceSeries | null, cadence: MinuteSeries | null }
   /** Seconds per km the second half of the automatic splits was faster than the first (negative:
    *  slower); null below two usable splits. */
   splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
@@ -160,7 +164,7 @@ const MINUTE_MS = 60_000
  * around the end's own minute. One read over them, from the session's own source, else from any
  * source, the rule highestHeartRate follows; several sources in one minute are averaged.
  */
-function recoveryOf(q: PersonQuery, session: WorkoutSession): { one: number | null, two: number | null } {
+function recoveryOf(q: PersonQuery, session: WorkoutSession): { one: number | null, two: number | null, last: number | null, afterOne: number | null, afterTwo: number | null } {
   const endMinute = Math.floor(session.endMs / MINUTE_MS) * MINUTE_MS
   const read = (sourceId?: string) => q.intradayWindow({
     metric: 'heart_rate', startMs: endMinute - MINUTE_MS, endMs: endMinute + 3 * MINUTE_MS, points: NO_THINNING, sourceId,
@@ -172,8 +176,10 @@ function recoveryOf(q: PersonQuery, session: WorkoutSession): { one: number | nu
     return means.length === 0 ? null : means.reduce((sum, v) => sum + v, 0) / means.length
   }
   const last = meanAt(endMinute - MINUTE_MS)
+  const afterOne = meanAt(endMinute + MINUTE_MS)
+  const afterTwo = meanAt(endMinute + 2 * MINUTE_MS)
   const fall = (after: number | null) => (last === null || after === null ? null : last - after)
-  return { one: fall(meanAt(endMinute + MINUTE_MS)), two: fall(meanAt(endMinute + 2 * MINUTE_MS)) }
+  return { one: fall(afterOne), two: fall(afterTwo), last, afterOne, afterTwo }
 }
 
 // Answers: the subject's heart-rate recovery, judged against the latest WORKOUT_STRIP sessions of
@@ -186,7 +192,12 @@ function heartRateRecoveryOf(q: PersonQuery, subject: WorkoutSession, window: re
     metric, unit: 'bpm', precision: 0, direction: 'up', value: own[key], minN: WORKOUT_BAND_MIN,
     history: earlier.flatMap((r) => { const v = r[key]; return v === null ? [] : [v] }),
   })
-  return { oneMinute: figure('heart_rate_recovery_1min', 'one'), twoMinutes: figure('heart_rate_recovery_2min', 'two') }
+  return {
+    oneMinute: figure('heart_rate_recovery_1min', 'one'), twoMinutes: figure('heart_rate_recovery_2min', 'two'),
+    // A fall has a value only with the last minute's, so `last` is there whenever either is, and a
+    // reading after the end has a value exactly when its fall does.
+    readings: { endBpm: own.last!, oneMinuteBpm: own.afterOne, twoMinutesBpm: own.afterTwo },
+  }
 }
 
 // Answers: the pace and cadence minute series. Pace from the route (a merged workout's first
