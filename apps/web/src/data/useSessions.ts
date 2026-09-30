@@ -1,9 +1,3 @@
-import { useQuery } from '@tanstack/react-query'
-import type { UseQueryResult } from '@tanstack/react-query'
-import { apiGet } from '../api/client.js'
-import { queryKeys } from '../api/queryKeys.js'
-import { useSession } from '../auth/session.js'
-import { sourceParam } from '../controls/source.js'
 import type { CardioLoad } from '@haelan/core/cardio-load'
 import type { FilledSplit } from '@haelan/core/split-heart-rate'
 
@@ -57,64 +51,4 @@ export interface WorkoutSessionDetail extends WorkoutSession {
   autoSplits: FilledSplit[]
   laps: FilledSplit[]
   route: RoutePoint[]
-}
-
-/**
- * Exported so the request shape, including the all sources sentinel's omission, can be asserted
- * without mounting a component. Mirrors nightsPath in useNights.ts for the same reason.
- *
- * The route is GET /api/v1/p/:personId/sessions taking kind (required, 'exercise' or 'sleep'),
- * from, to, limit, cursor and source, and answering { items, cursor }. source routes through
- * sourceParam so the all sources sentinel is omitted rather than sent literally, which is the
- * defect the M3 phase review found in exportPathFor: the server knows no source called 'all' and
- * every request 400s at the default view.
- *
- * 'merged' is a real row value on the tier 1 `daily` rollup (MERGED_SOURCE), which is why
- * useSeries and useBaseline can send it as-is. Tier 2 reads (this route) go straight to the
- * `sessions` table in packages/core/src/query/sessions.ts, which carries only per-device source
- * ids; personQuery.sessions calls requireSource with an empty alsoAllowed array
- * (packages/core/src/query/personQuery.ts line 274), so a literal 'merged' here is not a known
- * source and the request 400s (ConfigError). sourceParam only omits the all sources sentinel, so
- * it does not prevent 'merged' from being sent. Its one caller, SessionList, is handed a source
- * already run through resolveSource (Activity.tsx builds `resolved` from it), and resolveSource
- * only ever answers ALL_SOURCES or a source id read out of a sourceMix, which names devices and
- * never 'merged'. A future caller that skips that step and passes an unresolved source straight
- * through would not be caught here.
- */
-export function sessionsPath(
-  personId: string,
-  query: { kind: 'exercise' | 'sleep', from: string, to: string, source: string },
-): string {
-  const params = new URLSearchParams({ kind: query.kind, from: query.from, to: query.to })
-  const source = sourceParam(query.source)
-  if (source !== undefined) params.set('source', source)
-  return `/api/v1/p/${personId}/sessions?${params.toString()}`
-}
-
-/**
- * `options.enabled` is separate from `query` the way useIntradayWindow's own is: whether a caller
- * wants the request at all is not a fact about which window to fetch, and folding it into `query`
- * would put it in the cache key and cycle the entry every time it flipped.
- *
- * No caller passes it today - the workout comparison this was built for now reads `page.comparison`
- * off the server instead (Task 5 of M10a-3 retired the client-side useWorkoutComparison hook this
- * guard existed for, along with the rest of the old workout page). Left in place on the same
- * reasoning `enabled` gets everywhere else in this file: a future caller with no window to ask for
- * until some other fact resolves - the exact shape useWorkoutComparison was - would otherwise fire
- * an empty `{ from: '', to: '' }` range as a real request, `?kind=exercise&from=&to=`, the moment
- * personId alone was ready.
- */
-export function useSessions(
-  query: { kind: 'exercise' | 'sleep', from: string, to: string, source: string },
-  options?: { enabled?: boolean },
-): UseQueryResult<{ items: WorkoutSession[], cursor: string | null }> {
-  const session = useSession()
-  const personId = session.data?.personId
-  return useQuery({
-    queryKey: queryKeys.resource(personId ?? '', 'sessions', query),
-    // Without the personId half this requests /api/v1/p/undefined/sessions on first render, which
-    // the server answers 404 for and which then sits in the cache under a key naming no person.
-    enabled: personId !== undefined && (options?.enabled ?? true),
-    queryFn: () => apiGet<{ items: WorkoutSession[], cursor: string | null }>(sessionsPath(personId!, query)),
-  })
 }

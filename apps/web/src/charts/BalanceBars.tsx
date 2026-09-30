@@ -11,13 +11,13 @@ import type { PeriodAxis } from './barAxis.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
 
-// A stable reference for a caller that omits annotations/excluded, the same device DailyBars' own
-// EMPTY constant is: a default parameter expression that is a fresh `[]` literal runs on every
+// A stable reference for a caller that omits annotations/excluded, the same device StackedDailyBars'
+// own EMPTY constant is: a default parameter expression that is a fresh `[]` literal runs on every
 // call, handing `build`'s useCallback a new array identity on every render regardless of what
 // actually changed, which is precisely the defect chart-lifecycle.test.tsx guards against.
 const EMPTY = Object.freeze([]) as never[]
 
-// The zero line's own dashed mark, the same shape DailyBars gives its annotation line. A constant
+// The zero line's own dashed mark, the same shape a bar chart gives its annotation line. A constant
 // rather than an object literal built inside `build`, for the same reason EMPTY is one: `build`
 // closes over it, so a fresh object here would be a fresh dependency on every render.
 const ZERO_LINE_NAME = 'zero'
@@ -26,8 +26,8 @@ const ZERO_LINE_NAME = 'zero'
  * The sleep balance card's chart: one bar per night, drawn as its signed deviation from a zero
  * line rather than as a value measured from the axis floor.
  *
- * A separate component from DailyBars, not a flag on it, and the difference is the axis contract
- * rather than a preference. DailyBars starts its value axis at zero deliberately, because a bar's
+ * A separate component from the plain bar charts, not a flag on them, and the difference is the axis contract
+ * rather than a preference. A plain bar chart starts its value axis at zero deliberately, because a bar's
  * LENGTH is its value there and a truncated axis would misstate the ratio between two days; that
  * is the whole reason it carries `min: 0` and a comment saying so. This chart's bars are
  * deviations, half of them negative by construction, and clamping them to a floor at zero would
@@ -36,7 +36,7 @@ const ZERO_LINE_NAME = 'zero'
  * carries "this is where the comparison sits" in the axis's absence.
  *
  * What it does NOT change is the accessible table, the marks or the click resolution: all three go
- * through the same shared helpers DailyBars uses (dayTableRows, dayMarks, dayPointDate), because a
+ * through the same shared helpers the bar charts use (dayTableRows, dayMarks, dayPointDate), because a
  * canvas and a table that disagree about a day are the defect this project treats as binding.
  */
 export function BalanceBars({
@@ -44,14 +44,14 @@ export function BalanceBars({
   height = 130, annotations = EMPTY, excluded = EMPTY, onPointClick, axis,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
-  // was reported: see DailyBars' own comment on this same prop for why a sparse pair is not enough
+  // was reported: a sparse pair is not enough for a bar chart
   // (a day with no position on this axis cannot be marked). A null draws no bar at all, which is
   // the point rather than an empty one: absent is never a zero here, because a night with no
   // reading is not a night of exactly zero surplus.
   values: (number | null)[]
   labels: string[]
   label: string
-  /** The accessible table's value-column header, as DailyBars' prop of this name. */
+  /** The accessible table's value-column header, as StackedDailyBars' prop of this name. */
   unit: string
   // Every value in `values` is presumed to be minutes of deviation from the zero line. Optional,
   // and defaulted to formatSignedDuration below, because this is the only chart in the app whose
@@ -74,7 +74,7 @@ export function BalanceBars({
   }), [labels, values, excluded, annotations, t])
 
   // One formatter, read by the canvas's tooltip, the value axis and every table row, rather than
-  // several built the same way. Unlike DailyBars this falls back to formatSignedDuration rather
+  // several built the same way. Unlike a metric's chart this falls back to formatSignedDuration rather
   // than to the metric catalogue: there is no metric behind these numbers, they are a subtraction
   // the caller performed, and formatMetricValue would need a metric name that does not exist.
   const format = (value: number | null, absent: string): string =>
@@ -130,7 +130,7 @@ export function BalanceBars({
       },
       xAxis: {
         type: 'category' as const,
-        // Dates, not array positions, for DailyBars' own reason: this axis is labelled, so what it
+        // Dates, not array positions, as every bar chart here does: this axis is labelled, so what it
         // carries is what a reader reads. barDateLabels switches to MM-DD once the range crosses a
         // second calendar month, so a quarter or a year does not repeat the same handful of
         // day-of-month numbers with nothing to tell them apart.
@@ -140,7 +140,7 @@ export function BalanceBars({
       },
       yAxis: {
         type: 'value' as const,
-        // No `min: 0`. This is the deliberate difference from DailyBars and the reason this is a
+        // No `min: 0`. This is the deliberate difference from a plain bar chart and the reason this is a
         // second component: half of these bars are negative by construction, and a floor at zero
         // would silently flatten every deficit night to nothing.
         //
@@ -170,7 +170,7 @@ export function BalanceBars({
             typeof params.value === 'number' && params.value < 0 ? tokens.balanceUnder : tokens.balanceOver,
         },
         // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands
-        // off the fitted range; anchor at the day's own value instead, same as DailyBars. dayMarks
+        // off the fitted range; anchor at the day's own value instead, as the other bar charts do. dayMarks
         // has already dropped a date this chart is not drawing and moved an excluded day with no
         // value left to `atDate`, where it is drawn by position instead of being silently lost.
         markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },

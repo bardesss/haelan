@@ -11,7 +11,6 @@ import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ActivityHeatmap } from '../src/charts/ActivityHeatmap.js'
 import { BalanceBars } from '../src/charts/BalanceBars.js'
-import { DailyBars } from '../src/charts/DailyBars.js'
 import { HeartRateRange } from '../src/charts/HeartRateRange.js'
 import { IntradayHeartRate } from '../src/charts/IntradayHeartRate.js'
 import { Sparkline } from '../src/charts/Sparkline.js'
@@ -115,12 +114,6 @@ const CHARTS: { name: string, render: (onPointClick?: (...args: never[]) => void
   {
     name: 'BalanceBars',
     render: (onPointClick) => <BalanceBars values={VALUES} labels={LABELS} label="Balance" unit="Minutes over or under"
-      onPointClick={onPointClick as ((date: string) => void) | undefined} />,
-  },
-  {
-    name: 'DailyBars',
-    render: (onPointClick) => <DailyBars values={VALUES} labels={LABELS} label="Steps" unit="steps"
-      axisUnit="steps" metric="steps"
       onPointClick={onPointClick as ((date: string) => void) | undefined} />,
   },
   {

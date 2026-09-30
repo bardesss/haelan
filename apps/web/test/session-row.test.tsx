@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { SessionRow } from '../src/pages/activity/SessionRow.js'
+import { SessionRow, SessionRowView } from '../src/pages/activity/SessionRow.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { WorkoutSession } from '../src/data/useSessions.js'
 
@@ -171,5 +171,52 @@ describe('what a row carries besides its numbers', () => {
   it('hides that mark from assistive technology', () => {
     const html = render(run({ exerciseType: 'RUNNING', metricsSummary: {} }))
     expect(html).toMatch(/class="session-row-go" aria-hidden="true"|aria-hidden="true" class="session-row-go"/)
+  })
+})
+
+describe('SessionRowView', () => {
+  const view = (props: Partial<React.ComponentProps<typeof SessionRowView>> = {}) =>
+    renderToStaticMarkup(
+      <I18nProvider lng="nl">
+        <SessionRowView id="s1" type="RUNNING" startMs={Date.UTC(2026, 8, 3, 8, 0)} durationSeconds={54 * 60}
+          distanceMeters={null} caloriesKcal={null} averageHeartRateBpm={null} excluded={false} localDate="2026-09-03"
+          {...props} />
+      </I18nProvider>,
+    )
+
+  it('renders the same markup as SessionRow for the equivalent session', () => {
+    const attrs = { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 445, averageHeartRateBeatsPerMinute: '151' } }
+    expect(view({ caloriesKcal: 445, averageHeartRateBpm: 151 })).toBe(render(run(attrs)))
+  })
+
+  it('leaves out a distance the row never had, and links through workoutPath', () => {
+    const html = view()
+    expect(html).not.toContain('session-row-detail')
+    expect(html).toContain('href="/activity/s1"')
+  })
+
+  it('shows the distance when there is one', () => {
+    expect(view({ distanceMeters: 5000 })).toContain('<div class="session-row-detail">5,0 km</div>')
+  })
+
+  it('heads the second line with its date when dated, and alone when it has nothing else', () => {
+    expect(view({ distanceMeters: 5000, dated: true })).toContain('<div class="session-row-detail">do 3 sep · 5,0 km</div>')
+    expect(view({ dated: true })).toContain('<div class="session-row-detail">do 3 sep</div>')
+  })
+
+  it('renders a row without a duration, with no duration span and no zero', () => {
+    const html = view({ durationSeconds: null })
+    expect(html).toContain('session-row-type')
+    expect(html).not.toContain('session-row-duration')
+    expect(html).not.toContain('0 min')
+  })
+
+  it('strikes an excluded row and names the reason, or a bare Excluded without one', () => {
+    const withReason = view({ excluded: true, excludeReason: 'fout' })
+    expect(withReason).toContain('session-row-excluded')
+    expect(withReason).toContain('fout')
+    const bare = view({ excluded: true })
+    expect(bare).toContain('session-row-excluded-reason')
+    expect(bare).not.toContain('fout')
   })
 })

@@ -30,7 +30,10 @@ export const primitives = {
   // 100 and 950 are the basemap's park, one per theme (map.ts): the land's own lightness with a
   // little of the mint's hue, so green space is there when looked for and never competes with the
   // route drawn over it.
-  mint: { 100: '#D9EFE4', 400: '#5EC9A0', 700: '#166F52', 950: '#0F1F1B' },
+  mint: {
+    100: '#D9EFE4', 400: '#5EC9A0', 500: '#38A078', 600: '#1F8060', 700: '#166F52', 800: '#0F5A42',
+    950: '#0F1F1B', 975: '#0A140F',
+  },
   coral: { 400: '#E8846B', 700: '#AB432A' },
   slate: {
     50: '#FFFFFF',

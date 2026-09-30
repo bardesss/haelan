@@ -280,8 +280,8 @@ export function markClickDate(
  * render environment cannot hit-test (see chart-marks.test.tsx's own note), so the
  * translation from a click event to a date is the one piece of this behaviour a test can reach.
  *
- * Shared by Sparkline and DailyBars (was `sparklinePointDate`, local to Sparkline.tsx, until
- * DailyBars needed the identical logic): centralised here for the same reason `dayTooltip` was
+ * Shared by Sparkline and the bar charts (was `sparklinePointDate`, local to Sparkline.tsx, until
+ * a bar chart needed the identical logic): centralised here for the same reason `dayTooltip` was
  * renamed off `sparklineTooltip` before it, so a second caller does not mean a second copy to
  * keep in sync by hand.
  */
@@ -294,8 +294,8 @@ export function dayPointDate(
 
 /**
  * The accessible table rows for a day-indexed value chart: one row per day, `[date, formatted
- * value, ...optional trend, note]`. Sparkline and DailyBars each built this by hand -- verbatim
- * but for the trend column and the `episodic` filter, neither of which DailyBars draws -- which
+ * value, ...optional trend, note]`. Sparkline and the bar charts each built this by hand -- verbatim
+ * but for the trend column and the `episodic` filter, neither of which a bar chart draws -- which
  * is the third time this branch has pulled a piece of Sparkline out to a shared function rather
  * than let a second, byte-identical copy sit beside it (`dayTooltip.ts` and `dayPointDate` above
  * are the other two).

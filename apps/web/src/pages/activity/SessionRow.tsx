@@ -1,5 +1,5 @@
 import { useTranslation } from '../../i18n/index.js'
-import { formatNumber, formatSessionDateHeading } from '../../format.js'
+import { formatNumber, formatSessionDateHeading, formatWeekdayDate } from '../../format.js'
 import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
@@ -8,6 +8,7 @@ import type { ExerciseCategory } from '../../data/exerciseCategory.js'
 import { Icon } from '../../components/icons.js'
 import { Link } from '../../router.js'
 import { formatPace } from './pace.js'
+import { workoutPath } from './workout/workoutText.js'
 
 /**
  * Two lines, not a fixed column table: only 97 of 192 real sessions carry a distance and 77 a
@@ -17,10 +18,10 @@ import { formatPace } from './pace.js'
  * carries only the fields THIS session has, built as an array and joined so a field the session
  * never recorded is left out of the sentence rather than printed as an empty slot.
  *
- * The date is not on that first line: SessionList groups rows by localDate and prints the date
- * once as a heading above each run of same-day rows, so a row repeating it would say it twice. It
- * still names its own date, in the `sr-only` span below, because a screen reader landing on one
- * row by arrow-key browsing has no guarantee it heard the heading first.
+ * The date is not on that first line unless `dated` asks for it (the Activity page's list, whose
+ * rows span days and print it on the row itself). Otherwise a caller's own heading carries it, and
+ * the row still names its own date in the `sr-only` span below, because a screen reader landing on
+ * one row by arrow-key browsing has no guarantee it heard the heading first.
  *
  * `session-row` on the root is load bearing beyond this file: the next task's list counts rows
  * with `container.querySelectorAll('.session-row')`, so it has to be there even though nothing in
@@ -45,7 +46,7 @@ import { formatPace } from './pace.js'
 const SEPARATOR = ' · '
 
 /** The glyph each category draws. Named here so icons.tsx stays a set of drawings. */
-const CATEGORY_ICONS: Record<ExerciseCategory, string> = {
+export const CATEGORY_ICONS: Record<ExerciseCategory, string> = {
   run: 'sessionRun',
   walk: 'sessionWalk',
   ride: 'sessionRide',
@@ -55,27 +56,52 @@ const CATEGORY_ICONS: Record<ExerciseCategory, string> = {
   other: 'sessionOther',
 }
 
-export function SessionRow({ session }: { session: WorkoutSession }) {
+export interface SessionRowViewProps {
+  id: string
+  type: string | null
+  startMs: number
+  durationSeconds: number | null
+  distanceMeters: number | null
+  caloriesKcal: number | null
+  averageHeartRateBpm: number | null
+  excluded: boolean
+  excludeReason?: string | null
+  /** The person's own day for the row, the same one a caller's date heading groups by. */
+  localDate: string
+  paceSecondsPerKm?: number | null
+  elevationGainMeters?: number | null
+  /** The date at the head of the second line ("Wed, Sep 30 · 8.7 km"), for a list with no date
+   *  headings of its own (the Activity overview's workouts, the approved mockup's). */
+  dated?: boolean
+}
+
+/** The row, from flat props, for callers that hold a summary and not a merged session. */
+export function SessionRowView(props: SessionRowViewProps) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const summary = workoutSummary(session.attrs)
+  const { distanceMeters, caloriesKcal, averageHeartRateBpm } = props
+  const paceSecondsPerKm = props.paceSecondsPerKm ?? null
+  const elevationGainMeters = props.elevationGainMeters ?? null
+  const excludeReason = props.excludeReason ?? null
+  const { localDate } = props
 
-  // The same call SessionList's own heading makes for this session's group, reused here rather
+  // The same call a caller's date heading makes for a session's group, reused here rather
   // than reformatted, so the sr-only date below can never read a different day than the heading
   // a sighted reader sees above it.
-  const dateHeading = formatSessionDateHeading(session.localDate, language)
-  const typeText = exerciseTypeLabel(t, summary.exerciseType)
-  const category = exerciseCategory(summary.exerciseType)
+  const dateHeading = formatSessionDateHeading(localDate, language)
+  const typeText = exerciseTypeLabel(t, props.type)
+  const category = exerciseCategory(props.type)
   // Not read off metricsSummary: every session has a start and an end, so a duration derived from
   // them is never one of the fields this row has to omit.
-  const durationMinutes = Math.round((session.endMs - session.startMs) / 60_000)
-  const durationText = `${formatNumber(durationMinutes, 0, language, '0')} ${t('activity.units.min')}`
+  const durationMinutes = props.durationSeconds === null ? null : Math.round(props.durationSeconds / 60)
+  const durationText = durationMinutes === null ? null
+    : `${formatNumber(durationMinutes, 0, language, '0')} ${t('activity.units.min')}`
 
   const stats = [
-    summary.caloriesKcal === null ? null
-      : `${formatNumber(summary.caloriesKcal, 0, language, '')} ${t('activity.units.kcalShort')}`,
-    summary.averageHeartRateBpm === null ? null
-      : `${formatNumber(summary.averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`,
+    caloriesKcal === null ? null
+      : `${formatNumber(caloriesKcal, 0, language, '')} ${t('activity.units.kcalShort')}`,
+    averageHeartRateBpm === null ? null
+      : `${formatNumber(averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`,
   ].filter((part): part is string => part !== null)
 
   // Distance, pace and elevation gain only. workoutSummary also carries steps and
@@ -85,25 +111,26 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
   // heart rate already on the first line, so leaving both off keeps this line reserved for what a
   // reader actually came to a workout row to see (fix round 1 review).
   const detail = [
-    summary.distanceMeters === null ? null
-      : `${formatNumber(summary.distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
-    summary.paceSecondsPerKm === null ? null
-      : `${formatPace(summary.paceSecondsPerKm, language)} ${t('activity.units.paceSuffix')}`,
-    summary.elevationGainMeters === null ? null
-      : `${formatNumber(summary.elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
+    props.dated === true ? formatWeekdayDate(localDate, language) : null,
+    distanceMeters === null ? null
+      : `${formatNumber(distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
+    paceSecondsPerKm === null ? null
+      : `${formatPace(paceSecondsPerKm, language)} ${t('activity.units.paceSuffix')}`,
+    elevationGainMeters === null ? null
+      : `${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
   ].filter((part): part is string => part !== null)
 
   // Struck through and kept, not filtered out: the Activity count above this list already drops
   // an excluded workout at derivation, and the two visibly disagreeing (fewer counted than listed,
   // one struck through) is what lets a reader see what they threw out, rather than wondering why a
   // session they remember is simply gone.
-  const rowClassName = session.excluded ? 'session-row session-row-excluded' : 'session-row'
+  const rowClassName = props.excluded ? 'session-row session-row-excluded' : 'session-row'
 
   return (
     // The row's own way into WorkoutDetail (M8b): the whole row is the target, not a link buried
     // inside it, so this wraps the existing body unchanged rather than adding a link somewhere
     // within it.
-    <Link to={`/activity/${encodeURIComponent(session.id)}`} className="session-row-link">
+    <Link to={workoutPath(props.id)} className="session-row-link">
       <div className={rowClassName}>
         <div className="session-row-main">
           {/* A glyph per category, never per type: the catalogue declares 182 exercise types and a
@@ -119,7 +146,7 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
                 reader concatenates the two into one word ("augustusCardiotraining"). */}
             <span className="sr-only">{`${dateHeading} `}</span>
             <span className="session-row-type">{typeText}</span>
-            <span className="session-row-duration">{durationText}</span>
+            {durationText !== null && <span className="session-row-duration">{durationText}</span>}
           </span>
           {stats.length > 0 && <span className="session-row-stats">{stats.join(SEPARATOR)}</span>}
           {/* The row has linked to the workout page since M8b with nothing at rest to say so - a
@@ -134,14 +161,35 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
         {/* excludeReason can be null even when excluded is true (a person can exclude without
             typing a reason), so this falls back to a bare "Excluded" rather than printing "Excluded:
             " with nothing after the colon. */}
-        {session.excluded && (
+        {props.excluded && (
           <div className="session-row-excluded-reason">
-            {session.excludeReason !== null
-              ? t('activity.sessions.excluded', { reason: session.excludeReason })
+            {excludeReason !== null
+              ? t('activity.sessions.excluded', { reason: excludeReason })
               : t('activity.sessions.excludedNoReason')}
           </div>
         )}
       </div>
     </Link>
+  )
+}
+
+/** A workout session as it reaches the row today: the merged session, read through workoutSummary. */
+export function SessionRow({ session }: { session: WorkoutSession }) {
+  const summary = workoutSummary(session.attrs)
+  return (
+    <SessionRowView
+      id={session.id}
+      type={summary.exerciseType}
+      startMs={session.startMs}
+      durationSeconds={(session.endMs - session.startMs) / 1000}
+      distanceMeters={summary.distanceMeters}
+      caloriesKcal={summary.caloriesKcal}
+      averageHeartRateBpm={summary.averageHeartRateBpm}
+      excluded={session.excluded}
+      excludeReason={session.excludeReason}
+      paceSecondsPerKm={summary.paceSecondsPerKm}
+      elevationGainMeters={summary.elevationGainMeters}
+      localDate={session.localDate}
+    />
   )
 }

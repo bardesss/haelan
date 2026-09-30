@@ -1,4 +1,4 @@
-// Mirrors the wire shape of packages/core/src/query/periodFigure.ts and sleepPeriod.ts, after
+// Mirrors the wire shape of packages/core/src/query/periodFigure.ts, sleepPeriod.ts and activityPeriod.ts, after
 // apps/server/src/routes/v1/period.ts rounds, re-judges and trims it, field for field rather than
 // imported: @haelan/core's root export pulls in better-sqlite3 and drizzle, which have no business in
 // a browser bundle (the precedent is useNightPage.ts).
@@ -37,6 +37,11 @@ export interface PeriodFigure {
   total: number | null
   days: number
   usual: PeriodUsual | null
+  /** An additive figure's usual for its total, a whole period's worth; thin exactly when `usual` is. */
+  usualTotal: PeriodUsual | null
+  /** `total` against `usualTotal`; null while the period runs. */
+  totalStanding: GlanceStanding | null
+  totalJudged: Judged
   standing: GlanceStanding | null
   judged: Judged
   reason: PeriodReason
@@ -108,4 +113,72 @@ export interface SleepPeriodData {
   nights: SleepListRow[]
   /** Newest first: the nights list's month headers on 3 months and a year. */
   months: NightMonth[]
+}
+
+export interface WorkoutListRow {
+  id: string
+  sourceId: string
+  localDate: string
+  startMs: number
+  endMs: number
+  type: string | null
+  durationSeconds: number | null
+  distanceMeters: number | null
+  caloriesKcal: number | null
+  averageHeartRateBpm: number | null
+  paceSecondsPerKm: number | null
+  elevationGainMeters: number | null
+  excluded: boolean
+}
+
+/** A calendar month of the workouts list ("2026-08"): its counted workouts and their time. */
+export interface WorkoutMonth { month: string, count: number, seconds: number }
+
+export interface TypeTotal {
+  type: string | null
+  count: number
+  seconds: number
+  distanceMeters: number | null
+  /** Fractional: each earlier block is scaled to the period's length. */
+  usualCount: PeriodUsual | null
+  standing: GlanceStanding | null
+  /** More of a type than usual is the better side. */
+  judged: Judged
+}
+
+export interface Vo2Trend {
+  metric: string
+  latest: number
+  latestDate: string
+  earlier: number | null
+  earlierDate: string | null
+  trend: 'rising' | 'falling' | 'steady' | null
+}
+
+export interface ActivityPeriodData {
+  period: PeriodHeader
+  /** Steps, per day. */
+  hero: PeriodFigure
+  high: PeriodHigh | null
+  previous: PeriodChange
+  yearEarlier: PeriodChange
+  workoutCount: number
+  figures: PeriodFigure[]
+  intensity: { light: PeriodFigure | null, moderate: PeriodFigure | null, vigorous: PeriodFigure | null }
+  zoneMinutes: { fatBurn: PeriodFigure | null, cardio: PeriodFigure | null, peak: PeriodFigure | null }
+  /** `hard` is the vigorous and peak zones summed a day ("intensief of piek"). */
+  heartRateZones: {
+    light: PeriodFigure | null, moderate: PeriodFigure | null, vigorous: PeriodFigure | null, peak: PeriodFigure | null
+    hard: PeriodFigure | null
+  }
+  /** Each day's highest heart rate, averaged over the period. */
+  maxHeartRate: PeriodFigure | null
+  /** Newest first, every workout of the period, excluded ones included. */
+  workouts: WorkoutListRow[]
+  /** Newest first, a month each that has a counted workout: the list's month headers on 3 months and a year. */
+  workoutMonths: WorkoutMonth[]
+  types: TypeTotal[]
+  cardioLoad: PeriodFigure | null
+  vo2max: Vo2Trend | null
+  more: PeriodFigure[]
 }
