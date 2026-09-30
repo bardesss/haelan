@@ -56,6 +56,8 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   // `insertRecoverySeries` writes below - both people score `enough: true` here, which is what
   // makes this tool's entry in ALICE_FINGERPRINTS mean something.
   recovery_index: { from: RECOVERY_ON, to: RECOVERY_ON },
+  // A day with a reading, so the chain stops at its first gate and `evidence.value` carries it.
+  explain: { kind: 'empty', metric: 'steps', localDate: '2026-08-01' },
 }
 
 /**
@@ -138,6 +140,8 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   // only matches when both are simultaneously correct - not a looser substring of either value
   // alone the way a bare '76' or a bare 'above' could be.
   recovery_index: '"score":76,"band":"above"',
+  // Alice's own steps on the day asked about, read back as the chain's evidence.
+  explain: '1200',
 }
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
