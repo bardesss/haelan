@@ -25,6 +25,7 @@ function figure(overrides: Partial<PeriodFigure> = {}): PeriodFigure {
     metric: 'sleep_asleep_minutes', unit: 'minutes', precision: 0, direction: 'up', per: 'day',
     value: 420, total: null, days: 30,
     usual: { center: 430, low: 410, high: 450, thin: false, window: MONTH, periods: 12 },
+    usualTotal: null, totalStanding: null, totalJudged: null,
     standing: 'within', judged: null, reason: null,
     counts: { within: 24, above: 3, below: 3, unjudged: 0 },
     daily: [], weekly: null, ...overrides,

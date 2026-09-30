@@ -37,6 +37,11 @@ export interface PeriodFigure {
   total: number | null
   days: number
   usual: PeriodUsual | null
+  /** An additive figure's usual for its total, a whole period's worth; thin exactly when `usual` is. */
+  usualTotal: PeriodUsual | null
+  /** `total` against `usualTotal`; null while the period runs. */
+  totalStanding: GlanceStanding | null
+  totalJudged: Judged
   standing: GlanceStanding | null
   judged: Judged
   reason: PeriodReason
@@ -121,8 +126,13 @@ export interface WorkoutListRow {
   distanceMeters: number | null
   caloriesKcal: number | null
   averageHeartRateBpm: number | null
+  paceSecondsPerKm: number | null
+  elevationGainMeters: number | null
   excluded: boolean
 }
+
+/** A calendar month of the workouts list ("2026-08"): its counted workouts and their time. */
+export interface WorkoutMonth { month: string, count: number, seconds: number }
 
 export interface TypeTotal {
   type: string | null
@@ -132,6 +142,8 @@ export interface TypeTotal {
   /** Fractional: each earlier block is scaled to the period's length. */
   usualCount: PeriodUsual | null
   standing: GlanceStanding | null
+  /** More of a type than usual is the better side. */
+  judged: Judged
 }
 
 export interface Vo2Trend {
@@ -154,9 +166,17 @@ export interface ActivityPeriodData {
   figures: PeriodFigure[]
   intensity: { light: PeriodFigure | null, moderate: PeriodFigure | null, vigorous: PeriodFigure | null }
   zoneMinutes: { fatBurn: PeriodFigure | null, cardio: PeriodFigure | null, peak: PeriodFigure | null }
-  heartRateZones: { light: PeriodFigure | null, moderate: PeriodFigure | null, vigorous: PeriodFigure | null, peak: PeriodFigure | null }
+  /** `hard` is the vigorous and peak zones summed a day ("intensief of piek"). */
+  heartRateZones: {
+    light: PeriodFigure | null, moderate: PeriodFigure | null, vigorous: PeriodFigure | null, peak: PeriodFigure | null
+    hard: PeriodFigure | null
+  }
+  /** Each day's highest heart rate, averaged over the period. */
+  maxHeartRate: PeriodFigure | null
   /** Newest first, every workout of the period, excluded ones included. */
   workouts: WorkoutListRow[]
+  /** Newest first, a month each that has a counted workout: the list's month headers on 3 months and a year. */
+  workoutMonths: WorkoutMonth[]
   types: TypeTotal[]
   cardioLoad: PeriodFigure | null
   vo2max: Vo2Trend | null

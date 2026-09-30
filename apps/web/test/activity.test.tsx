@@ -311,7 +311,7 @@ describe('the Activity page: sections', () => {
 
   it.each<[string, string, Partial<ActivityPeriodData>]>([
     ['Active Zone Minutes', 'Heart-rate zones', { zoneMinutes: { fatBurn: null, cardio: null, peak: null } }],
-    ['Heart-rate zones', 'Active Zone Minutes', { heartRateZones: { light: null, moderate: null, vigorous: null, peak: null } }],
+    ['Heart-rate zones', 'Active Zone Minutes', { heartRateZones: { light: null, moderate: null, vigorous: null, peak: null, hard: null } }],
     ['Workouts', 'By type', { workouts: [] }],
     ['By type', 'Workouts', { types: [], cardioLoad: null, vo2max: null }],
   ])('leaves out %s when its data is absent, and %s takes the whole row', async (gone, partner, patch) => {
