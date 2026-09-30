@@ -350,6 +350,7 @@ describe('the Activity page: sections', () => {
     expect(azm.querySelector('.dash-headline')?.textContent).toBe(`685${NB}min`)
     expect(azm.querySelector('.detail-verdict')?.textContent).toBe(`within your usual 684 – 714${NB}min for a month`)
     expect([...azm.querySelectorAll('.detail-legend li')].map((li) => li.textContent)).toEqual(['Fat burn 429', 'Cardio 205', 'Peak 51'])
+    expect([...azm.querySelectorAll('.detail-legend-key')].map((key) => (key as HTMLElement).dataset.azm)).toEqual(['fatBurn', 'cardio', 'peak'])
     const zones = cardFor('Heart-rate zones')!
     expect(zones.querySelector('.dash-headline')?.textContent).toBe(`5h${NB}36m`)
     expect(zones.querySelector('.workout-hero-line')?.textContent)
@@ -357,6 +358,15 @@ describe('the Activity page: sections', () => {
     expect([...zones.querySelectorAll('.detail-legend li')].map((li) => li.textContent))
       .toEqual([`Light 107h${NB}01m`, `Moderate 18h${NB}01m`, `Vigorous 4h${NB}55m`, `Peak 41${NB}min`])
     expect(zones.querySelector('div[role="img"]')).not.toBeNull()
+  })
+
+  it("tones the zone minutes by their total's verdict, not their average's", async () => {
+    const more = ACTIVITY_PERIOD_MONTH.more.map((f) => (f.metric === 'active_zone_minutes'
+      ? { ...f, standing: 'within' as const, judged: null, totalStanding: 'above' as const, totalJudged: 'better' as const } : f))
+    await renderAt(MONTH_URL, { period: month({ more }) })
+    const verdict = cardFor('Active Zone Minutes')!.querySelector('.detail-verdict')!
+    expect(verdict.textContent).toBe(`above your usual 684 – 714${NB}min for a month`)
+    expect(verdict.className).toBe('detail-verdict better')
   })
 
   it("prints the server's hard-zone total, never the zones' own sum, with its total's tone", async () => {

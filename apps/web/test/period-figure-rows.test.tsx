@@ -102,6 +102,18 @@ describe('PeriodFigureRows', () => {
     expect(rowProps[0]!.mark).toBe(3)
   })
 
+  it("bars, marks and tones a total by its total against the usual for a period's total", () => {
+    const usualTotal = { center: 520_000, low: 500_000, high: 540_000, thin: false, window: deep.usual!.window, periods: 12 }
+    const climb = {
+      ...rem, metric: 'altitude_gain', unit: 'millimeters', value: 18_000, total: 560_000, standing: 'within' as const, judged: null,
+      usualTotal, totalStanding: 'above' as const, totalJudged: 'better' as const,
+    }
+    render([climb], { bars: true })
+    expect(rowProps[0]!.band).toBe(usualTotal)
+    expect(rowProps[0]!.mark).toBe(560_000)
+    expect([rowProps[0]!.standing, rowProps[0]!.judged]).toEqual(['above', 'better'])
+  })
+
   it('draws the bar alone with `bars`', () => {
     render([rem], { bars: true })
     expect(rowProps[0]!.strip).toBeUndefined()
