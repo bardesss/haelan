@@ -67,6 +67,7 @@ import { randomUUID } from 'node:crypto'
 import type { DataType } from '../api/catalogue.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
+import { ROUTE_DISTANCE_TOLERANCE, ROUTE_MATCH_METERS } from '../api/routeMatch.ts'
 import { localDateOf } from '../derive/localDay.ts'
 import { rollupRangeCapDays } from '../sync/runRollupJob.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
@@ -311,15 +312,23 @@ function recoveryFor(rr: () => number, o: { endMs: number, lastBpm: number, rest
 }
 
 // How many runs carry a route, when the caller asked for routes at all: the last run and the most
-// recent earlier ones of nearly its length (ROUTED_RUN_LENGTH_TOLERANCE), so the last run's page
+// recent earlier ones of nearly its length (routedRunLengthTolerance), so the last run's page
 // finds them as the same route and draws "Deze route". Bounded
 // by the demo capture's size ceiling (scripts/capture-demo.mjs's MAX_CAPTURE_BYTES): a route costs
 // the capture some 30 KB for each routed run whose page the demo mounts, measured 2026-09-29.
 const ROUTED_RUNS = 3
-// How close in length an earlier run must be to the last to share its loop. Two circles through one
-// start put their quarter points Δr·√2 apart, so at 5 % of a 10 km loop that is some 110 m, inside
-// routeMatch.ts's 150 m, where its own 10 % tolerance would put them some 220 m apart.
-const ROUTED_RUN_LENGTH_TOLERANCE = 0.05
+/**
+ * How far in metres an earlier run's length may lie from the last run's for the two to be one
+ * route to routeMatch.ts. Two circles through one start put their quarter points Δr·√2 apart, which
+ * is ΔL·√2/2π, so the quarter points stay inside ROUTE_MATCH_METERS while ΔL is under
+ * ROUTE_MATCH_METERS·π·√2 (some 666 m) at any loop length, and the lengths inside
+ * ROUTE_DISTANCE_TOLERANCE of each other; nine tenths of the lesser, for a margin. A fixed share
+ * of the length would not do: 5 % finds no earlier run near the demo's last one, whose loop is one
+ * of its longest, and 10 % puts a 10 km loop's quarter points some 220 m apart.
+ */
+export function routedRunLengthTolerance(lastMeters: number): number {
+  return 0.9 * Math.min(ROUTE_MATCH_METERS * Math.PI * Math.SQRT2, ROUTE_DISTANCE_TOLERANCE * lastMeters)
+}
 // A GPS fix every ten seconds of moving time: dense enough that the kilometre marks and the
 // height profile read smoothly, coarse enough to stay inside that ceiling.
 const ROUTE_STEP_SECONDS = 10
@@ -1188,7 +1197,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const lastRun = keptRuns.at(-1)
   const routedRuns = !input.demoRoute || lastRun === undefined ? [] : [
     ...keptRuns.slice(0, -1)
-      .filter((run) => Math.abs(lengthOf(run) - lengthOf(lastRun)) <= ROUTED_RUN_LENGTH_TOLERANCE * lengthOf(lastRun))
+      .filter((run) => Math.abs(lengthOf(run) - lengthOf(lastRun)) <= routedRunLengthTolerance(lengthOf(lastRun)))
       .slice(-(ROUTED_RUNS - 1)),
     lastRun,
   ]
