@@ -257,7 +257,7 @@ describe('the Sleep page: sections', () => {
     expect(naps()).toHaveLength(1)
     expect(naps()[0]!.querySelector('.figure-row-verdict')!.textContent).toBe('within your usual 3 – 4 per month')
     expect(naps()[0]!.querySelector('.figure-row-note')!.textContent).toBe(`4 naps, 1h${NB}40m together`)
-    expect(naps()[0]!.textContent).toContain('4')
+    expect(naps()[0]!.querySelector('.figure-row-value')!.textContent).toBe('4')
     act(() => { root?.unmount() }); root = createRoot(container!)
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
     const dutjes = [...cardFor('Meer over de slaap')!.querySelectorAll('.figure-row')].filter((row) => row.querySelector('.label')?.textContent === 'Dutjes')
