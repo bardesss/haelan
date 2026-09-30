@@ -162,7 +162,7 @@ export function workoutPageFixture(): WorkoutPageData {
     },
     comparison: {
       exerciseType: 'RUNNING', of: 20, reason: null,
-      pace: { better: 17, of: 20 }, heartRate: { better: 4, of: 20 }, distance: { better: 12, of: 20 }, cardioLoad: { better: 18, of: 20 },
+      heartRate: { better: 4, of: 20 }, distance: { better: 12, of: 20 }, cardioLoad: { better: 18, of: 20 },
     },
     rank: { better: 17, of: 20 },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { pace: 336, distance: 5000, averageHeartRate: 153, cardioLoad: 62 } },
@@ -267,7 +267,7 @@ export function strengthPageFixture(): WorkoutPageData {
       averageHeartRate: figure({ key: 'averageHeartRate', unit: 'bpm', value: 112, baseline: thin(112) }),
       calories: figure({ key: 'calories', unit: 'kcal', value: 240, baseline: thin(240) }),
     },
-    comparison: { exerciseType: 'WEIGHTLIFTING', of: 0, reason: 'too-few', pace: null, heartRate: null, distance: null, cardioLoad: null },
+    comparison: { exerciseType: 'WEIGHTLIFTING', of: 0, reason: 'too-few', heartRate: null, distance: null, cardioLoad: null },
     rank: null,
     previous: null,
     best: { longest: null, furthest: null, 'most-climb': null },
@@ -310,7 +310,7 @@ export function ridePageFixture(): WorkoutPageData {
     exerciseType: 'BIKING',
     hero: 'speed',
     figures: { ...rest, speed, distance: figure({ key: 'distance', unit: 'meters', value: 30_000, baseline: band(28_000, 24_000, 32_000) }) },
-    comparison: { ...page.comparison, exerciseType: 'BIKING', pace: null },
+    comparison: { ...page.comparison, exerciseType: 'BIKING' },
     rank: { better: 12, of: 20 },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { speed: 7.38, distance: 28_000, averageHeartRate: 141, cardioLoad: 60 } },
     best: {
@@ -358,7 +358,7 @@ export function swimPageFixture(): WorkoutPageData {
       movingTime: figure({ key: 'movingTime', unit: 'seconds', value: 1875, baseline: band(1800, 1600, 2000) }),
       averageHeartRate: page.figures.averageHeartRate!,
     },
-    comparison: { ...page.comparison, exerciseType: 'SWIMMING_POOL', pace: null },
+    comparison: { ...page.comparison, exerciseType: 'SWIMMING_POOL' },
     rank: { better: 20, of: 20 },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { swimPace: 129, distance: 1400, averageHeartRate: 150 } },
     best: {

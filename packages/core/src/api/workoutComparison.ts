@@ -40,15 +40,17 @@ export interface WorkoutComparison {
    *  cards already do: "no comparable workouts yet" and "this workout has no type" are different
    *  statements with different remedies. */
   reason: ComparisonReason | null
-  pace: ComparisonFacet | null
   heartRate: ComparisonFacet | null
   distance: ComparisonFacet | null
   /**
-   * Edwards TRIMP, and the only one of these four whose figure a reader cannot interpret alone.
-   * A pace is fast or slow on its own terms and a distance is long or short; a training impulse of
-   * 86 means nothing without knowing what this person's workouts usually come to. Higher counts as
-   * "more" rather than "better" here - the copy above it says harder - and the tie rule is the
-   * same as the other three's.
+   * Edwards TRIMP, and the only one of these three whose figure a reader cannot interpret alone.
+   * A heart rate is high or low on its own terms and a distance is long or short; a training
+   * impulse of 86 means nothing without knowing what this person's workouts usually come to. Higher
+   * counts as "more" rather than "better" here - the copy above it says harder - and the tie rule
+   * is the same as the other two's.
+   *
+   * There is no pace facet: the hero's rank is the workout page's own (workoutPage.ts's rankOf),
+   * read on the rate the hero shows, which for a ride or a swim is not the device's pace.
    *
    * Edwards rather than Banister, because Edwards needs only the session's own zone durations.
    * Banister needs a resting and a maximum heart rate off the person's profile, which this module
@@ -57,7 +59,7 @@ export interface WorkoutComparison {
   cardioLoad: ComparisonFacet | null
 }
 
-const WITHHELD = { pace: null, heartRate: null, distance: null, cardioLoad: null } as const
+const WITHHELD = { heartRate: null, distance: null, cardioLoad: null } as const
 
 /**
  * A facet is dropped rather than reported thin: fewer than COMPARISON_MIN prior workouts recorded
@@ -127,7 +129,6 @@ export function compareWorkout(
     exerciseType,
     of: compared.length,
     reason: null,
-    pace: facet(subjectSummary.paceSecondsPerKm, compared.map((e) => e.summary.paceSecondsPerKm), true),
     heartRate: facet(subjectSummary.averageHeartRateBpm, compared.map((e) => e.summary.averageHeartRateBpm), true),
     distance: facet(subjectSummary.distanceMeters, compared.map((e) => e.summary.distanceMeters), false),
     // false: a bigger load counts, the same direction as distance. "Better" is the comparator's

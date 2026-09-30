@@ -43,7 +43,6 @@ export interface WorkoutComparison {
   exerciseType: string | null
   of: number
   reason: ComparisonReason | null
-  pace: ComparisonFacet | null
   heartRate: ComparisonFacet | null
   distance: ComparisonFacet | null
   cardioLoad: ComparisonFacet | null

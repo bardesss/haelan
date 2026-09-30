@@ -435,7 +435,9 @@ describe('readWorkoutPage', () => {
     const page = readWorkoutPage(q(), input('subject'))!
     const candidates = q().sessions({ kind: 'exercise', from: '1970-01-01', to: SUBJECT_DATE, type: 'RUNNING' })
     expect(page.comparison).toEqual(compareWorkout(q().sessionById({ sessionId: 'subject' })!, candidates))
-    expect(page.comparison).toMatchObject({ of: 7, pace: { better: 7, of: 7 } })
+    expect(page.comparison).toMatchObject({ of: 7, reason: null })
+    // The pace a run is ranked by is the page's own rank now, over that same window.
+    expect(page.rank).toEqual({ better: 7, of: 7 })
   })
 
   it('links the night after and the workouts before and after', () => {
@@ -1126,7 +1128,6 @@ describe('readWorkoutPage: per sport', () => {
     seedWorkout('subject', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 2667 })
     const page = readWorkoutPage(q(), input('subject'))!
     expect(page.hero).toBe('speed')
-    expect(page.comparison.pace).toBeNull()
     expect(page.rank).toEqual({ better: 3, of: 4 })
   })
 
@@ -1138,7 +1139,6 @@ describe('readWorkoutPage: per sport', () => {
     ;[1300, 1200, 1300].forEach((moving, i) => seedWorkout(`swim-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (3 - i)), 'SWIMMING_POOL', { distance: 1000, moving }, { hhmm: '18:00' }))
     seedWorkout('swim', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1000, moving: 1200 }, { hhmm: '18:00' })
     const treadmill = readWorkoutPage(q(), input('treadmill'))!
-    expect(treadmill.comparison.pace).toBeNull()
     expect(treadmill.rank).toEqual({ better: 2, of: 3 })
     const swim = readWorkoutPage(q(), input('swim'))!
     expect(swim.hero).toBe('swimPace')

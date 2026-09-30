@@ -403,8 +403,8 @@
         "filledFromTrace": "Heart rates marked † were not recorded per split; they are this session's own heart rate over that split's window."
       },
       "comparison": {
-        "pace": "Faster than {{better}} of your last {{of}} of this type",
-        "paceAll": "Faster than all of your last {{of}} of this type"
+        "rank": "Faster than {{better}} of your last {{of}} of this type",
+        "rankAll": "Faster than all of your last {{of}} of this type"
       },
       "page": {
         "nav": "Workouts",

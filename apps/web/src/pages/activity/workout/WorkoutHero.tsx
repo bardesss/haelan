@@ -130,9 +130,11 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   // or a swim's pace per 100 m, each faster being better), so one sentence serves all three; none
   // for a time hero. "Faster than 20 of your last 20" is a sum the reader has to check; every one of
   // them is "all".
-  const ranked = page.rank !== null && comparison.reason === null && band !== undefined ? page.rank : null
+  // `?? null`: a page cached or captured before the rank was sent carries none.
+  const serverRank = page.rank ?? null
+  const ranked = serverRank !== null && comparison.reason === null && band !== undefined ? serverRank : null
   const rank = ranked === null ? null
-    : t(ranked.better === ranked.of ? 'activity.workout.comparison.paceAll' : 'activity.workout.comparison.pace', { better: ranked.better, of: ranked.of })
+    : t(ranked.better === ranked.of ? 'activity.workout.comparison.rankAll' : 'activity.workout.comparison.rank', { better: ranked.better, of: ranked.of })
   const previous = previousLine(page, hero, language, t)
   const best = bestLine(page, hero, language, t)
   // A pace strip is drawn upside down so a faster run sits higher; the caption says so, since a

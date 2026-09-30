@@ -1613,7 +1613,7 @@ describe('the workout page per sport', () => {
     expect(text(same, '.workout-hero-previous')).toBe('As fast as the previous one, Tuesday, September 1')
   })
 
-  it("ranks a ride by the server's rank on its speed, though the comparison has no pace facet", async () => {
+  it("ranks a ride by the server's rank on its speed, which the comparison carries no facet for", async () => {
     const host = await mount(ridePageFixture(), rideSessionFixture())
     expect(text(host, '.workout-hero-rank')).toBe('Faster than 12 of your last 20 of this type')
   })

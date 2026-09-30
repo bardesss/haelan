@@ -403,8 +403,8 @@
         "filledFromTrace": "Hartslagen met † zijn niet per tussentijd of ronde opgeslagen; ze komen uit de hartslag van deze sessie over dat stuk."
       },
       "comparison": {
-        "pace": "Sneller dan {{better}} van je laatste {{of}} van dit type",
-        "paceAll": "Sneller dan al je laatste {{of}} van dit type"
+        "rank": "Sneller dan {{better}} van je laatste {{of}} van dit type",
+        "rankAll": "Sneller dan al je laatste {{of}} van dit type"
       },
       "page": {
         "nav": "Trainingen",
