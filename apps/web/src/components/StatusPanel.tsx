@@ -6,6 +6,7 @@ import { sourceLabel } from '../data/useSourceNames.js'
 import { addDays } from '../controls/range.js'
 import { dataTypeForMetric } from '@haelan/core/metric-data-type'
 import { dataTypeName } from '../data/dataTypeName.js'
+import { syncButtonState } from '../data/useStatusPanel.js'
 import type { StatusPanel as StatusPanelData, StatusConnection, StatusFailure } from '../data/useStatusPanel.js'
 
 /**
@@ -250,16 +251,12 @@ function SyncButton({ sync, pending, onSync }: {
   onSync: () => void
 }) {
   const { t } = useTranslation()
-  // Three disabled states, each for its own reason. Running: the server would answer 409. Pending:
-  // the press is in flight and a second would race it. Cooldown: the server refuses a run inside a
-  // minute of the last one (429), and "Synced just now" is the true thing to say about that minute
-  // - a live button that is certain to be refused is a control that lies.
-  const coolingDown = !sync.running && sync.cooldownRemainingMs > 0
-  const label = sync.running ? t('status.sync.running') : coolingDown ? t('status.sync.cooldown') : t('status.sync.run')
+  // The one rule every sync button follows (syncButtonState).
+  const { label, disabled } = syncButtonState(sync, pending)
   return (
     <button type="button" className="button status-sync" data-running={sync.running ? 'true' : undefined}
-      disabled={sync.running || pending || coolingDown} onClick={onSync}>
-      {sync.running && <Icon name="sync" />}{label}
+      disabled={disabled} onClick={onSync}>
+      {sync.running && <Icon name="sync" />}{t(`status.sync.${label}`)}
     </button>
   )
 }

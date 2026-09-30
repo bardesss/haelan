@@ -448,6 +448,7 @@
         "previousSlower": "{{difference}} slower than the previous one, {{date}}",
         "previousSame": "As fast as the previous one, {{date}}",
         "previousOnly": "The previous one: {{date}}",
+        "previousValue": "The previous one: {{value}}, {{date}}",
         "view": "View the previous one",
         "secondsPerKm": "{{value}} s/km",
         "bestFastestKm": "Your best: fastest kilometre {{value}} ({{month}})",
@@ -463,6 +464,9 @@
           "bestLongest": "longest {{value}} · {{month}}",
           "caption": "This type only",
           "captionBest": "your best from Records",
+          "filled": "this workout from your readings",
+          "filledPace": "this workout from your readings, its pace over the elapsed time",
+          "filledSpeed": "this workout from your readings, its speed over the elapsed time",
           "tableCaption": "This workout beside the previous one of its type",
           "tableCaptionAlone": "This workout",
           "captionWith": {
@@ -625,8 +629,14 @@
           "merged": "Recorded by {{source}}, merged with {{others}}",
           "named": "named “{{name}}”",
           "excluded": "excluded",
+          "pending": "your watch’s figures arrive with the next sync",
           "action": "exclude or add a note",
           "details": "Details"
+        },
+        "filled": {
+          "figure": "from your readings",
+          "rate": "from your readings, over the elapsed time",
+          "previous": "this one measured over the elapsed time"
         },
         "secondsPer100m": "{{value}} s/100 m"
       }

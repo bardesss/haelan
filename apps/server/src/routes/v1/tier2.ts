@@ -199,9 +199,12 @@ export function registerTier2Routes(app: FastifyInstance): void {
     //
     // `latest` is not exposed: a caller wanting one session should say so with `limit=1` against
     // this same list rather than gain a second, narrower parameter to keep in sync with it.
+    // Paged as recorded, then only the page filled: a list displays its rows (fillFromSamples.ts),
+    // and a bare row costs some eight reads, so a range of years asked for one row fills that one.
     const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source, type })
     const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
-    return sendHashed(reply, request, page)
+    const items = personQuery.fillWorkouts(page.items, { nowMs: app.haelan.now(), sourceId: source })
+    return sendHashed(reply, request, { ...page, items })
   })
 
   /**
@@ -224,7 +227,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     // another: the answer's own `id` is then the primary's, not the one in the path. Answered in
     // place rather than redirected, so a link made before the merge keeps working with no second
     // round trip, and everything joined below is read for the merged workout rather than the copy.
-    const session: WorkoutSession | null = personQuery.sessionById({ sessionId })
+    const session: WorkoutSession | null = personQuery.sessionById({ sessionId, fill: true, nowMs: app.haelan.now() })
     // 404 for an id that names nothing and for one belonging to somebody else alike. readSession
     // is scoped by person, so this handler never learns which of the two it is, and therefore
     // cannot leak the difference: a 403 would confirm the id exists.
@@ -242,7 +245,8 @@ export function registerTier2Routes(app: FastifyInstance): void {
     // the list route would be the worst version of this mistake, not a milder one.
     return sendHashed(reply, request, {
       ...session,
-      cardioLoad: personQuery.cardioLoad({ sessionId }),
+      // The session filled above, not the id read and filled again.
+      cardioLoad: personQuery.cardioLoad({ session }),
       // Never null here: `session` above already resolved this exact id, and workoutSplits cannot
       // answer null for an id sessionById just answered a row for.
       ...personQuery.workoutSplits({ sessionId })!,

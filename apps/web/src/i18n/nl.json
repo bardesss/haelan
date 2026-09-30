@@ -448,6 +448,7 @@
         "previousSlower": "{{difference}} langzamer dan de vorige, {{date}}",
         "previousSame": "Even snel als de vorige, {{date}}",
         "previousOnly": "De vorige: {{date}}",
+        "previousValue": "De vorige: {{value}}, {{date}}",
         "view": "Bekijk de vorige",
         "secondsPerKm": "{{value}} s/km",
         "bestFastestKm": "Je beste: snelste kilometer {{value}} ({{month}})",
@@ -463,6 +464,9 @@
           "bestLongest": "langste {{value}} · {{month}}",
           "caption": "Alleen dit type",
           "captionBest": "je beste uit Records",
+          "filled": "deze training uit je metingen",
+          "filledPace": "deze training uit je metingen, het tempo over de verstreken tijd",
+          "filledSpeed": "deze training uit je metingen, de snelheid over de verstreken tijd",
           "tableCaption": "Deze training naast de vorige van dit type",
           "tableCaptionAlone": "Deze training",
           "captionWith": {
@@ -625,8 +629,14 @@
           "merged": "Opgenomen door {{source}}, samengevoegd met {{others}}",
           "named": "genaamd “{{name}}”",
           "excluded": "uitgesloten",
+          "pending": "de cijfers van je horloge komen met de volgende synchronisatie",
           "action": "uitsluiten of een notitie toevoegen",
           "details": "Details"
+        },
+        "filled": {
+          "figure": "uit je metingen",
+          "rate": "uit je metingen, over de verstreken tijd",
+          "previous": "deze gemeten over de verstreken tijd"
         },
         "secondsPer100m": "{{value}} s/100 m"
       }

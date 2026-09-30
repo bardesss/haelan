@@ -1,10 +1,10 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { insertSample, schema } from '@haelan/core'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { DERIVATION_VERSION, PersonQuery, insertSample, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
 let harness: Harness | null = null
-afterEach(async () => { await harness?.cleanup(); harness = null })
+afterEach(async () => { vi.restoreAllMocks(); await harness?.cleanup(); harness = null })
 
 const OFFSET_MINUTES = 120
 
@@ -18,7 +18,8 @@ async function get(h: Harness, token: string, path: string, personId = 'p1') {
 
 function seedSource(h: Harness, personId: string, sourceId: string): void {
   h.app.haelan.instance.db.insert(schema.sources).values({
-    id: sourceId, personId, externalId: sourceId, displayName: sourceId,
+    // The phone's externalId as describe() builds it for a companion upload: a phone source.
+    id: sourceId, personId, externalId: sourceId === 'phone' ? 'HEALTH_CONNECT:com.haelan.android' : sourceId, displayName: sourceId,
     kind: 'device', createdAtMs: 0,
   }).onConflictDoNothing().run()
 }
@@ -52,6 +53,77 @@ function seedOfKind(h: Harness, input: { id: string, kind: 'sleep' | 'exercise' 
 }
 
 describe('GET /sessions/:sessionId', () => {
+  it('fills a workout still waiting for the Google copy from its samples, the load beside it and the list alike', async () => {
+    harness = await withServer()
+    // The hour after the run: Google's copy is still promised.
+    harness.clock.nowMs = Date.parse('2026-08-18T09:00:00Z')
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    // A phone-only treadmill run, as the companion stores it: every key, no metricsSummary.
+    seedWorkout(harness, { id: 'bare', sourceId: 'phone', attrs: { exerciseType: 'TREADMILL', metricsSummary: null } })
+    const startMs = Date.parse('2026-08-18T09:00:00Z') - OFFSET_MINUTES * 60_000
+    for (let i = 0; i < 60; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(db, { personId: 'p1', sourceId: 'phone', metric: 'heart_rate', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET_MINUTES, agg, value: 150 })
+      }
+      insertSample(db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET_MINUTES, value: 100 })
+    }
+    for (const [zone, value] of [['light', 113], ['moderate', 137], ['vigorous', 162], ['peak', 187]] as const) {
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate: '2026-08-18', metric: `heart_rate_zone_${zone}_max_bpm`, agg: 'last', source: 'merged', value,
+        coverage: 1, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+
+    const byId = vi.spyOn(PersonQuery.prototype, 'sessionById')
+    const session = (await get(harness, token, '/sessions/bare')).json()
+    expect(session.attrs).toMatchObject({ awaitingSummary: true, filledFromSamples: true, metricsSummary: { steps: 6000, averageHeartRateBeatsPerMinute: 150 } })
+    // Sixty minutes at 150 bpm, all vigorous: 3 * 60.
+    expect(session.cardioLoad.edwards).toBe(180)
+    // Filled once: the load is read off the session the route already filled, not a second fill of its id.
+    expect(byId.mock.calls.filter(([input]) => input.fill === true)).toHaveLength(1)
+
+    const list = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-18&to=2026-08-18')).json()
+    expect(list.items[0].attrs).toMatchObject({ awaitingSummary: true, metricsSummary: { steps: 6000 } })
+  })
+
+  // A bare row costs some eight reads, and an all-Android household's workouts are all bare: the
+  // list pages first and fills only the rows it answers.
+  it('fills only the page the list answers, however long the range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    seedSource(harness, 'p1', 'phone')
+    const days = ['2026-08-16', '2026-08-17', '2026-08-18']
+    for (const localDate of days) {
+      const startMs = Date.parse(`${localDate}T09:00:00Z`)
+      db.insert(schema.sessions).values({
+        id: `bare-${localDate}`, personId: 'p1', sourceId: 'phone', kind: 'exercise', externalId: `bare-${localDate}`,
+        startMs, startOffsetMinutes: OFFSET_MINUTES, endMs: startMs + 1_800_000, endOffsetMinutes: OFFSET_MINUTES,
+        localDate, attrs: JSON.stringify({ exerciseType: 'RUNNING', metricsSummary: null }), rawPayloadId: null,
+      }).run()
+      for (let i = 0; i < 30; i += 1) {
+        insertSample(db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET_MINUTES, value: 100 })
+      }
+    }
+    const prepare = vi.spyOn(db.$client, 'prepare')
+    const sampleReads = async (path: string) => {
+      prepare.mockClear()
+      const body = (await get(harness!, token, path)).json()
+      return { body, reads: prepare.mock.calls.filter(([sql]) => String(sql).includes('"samples"')).length }
+    }
+
+    const one = await sampleReads('/sessions?kind=exercise&from=2026-08-18&to=2026-08-18')
+    const paged = await sampleReads('/sessions?kind=exercise&from=2015-01-01&to=2026-12-31&limit=1')
+    expect(paged.body.items).toHaveLength(1)
+    expect(paged.body.items[0].attrs).toMatchObject({ filledFromSamples: true, metricsSummary: { steps: 3000 } })
+    // The one row it answers costs what a range of that one row does, the two rows it does not answer nothing.
+    expect(one.reads).toBeGreaterThan(0)
+    expect(paged.reads).toBe(one.reads)
+    // A list of the phone's own rows fills its bare rows too.
+    const own = await sampleReads('/sessions?kind=exercise&from=2026-08-16&to=2026-08-18&source=phone')
+    expect(own.body.items.map((s: { attrs: { metricsSummary: { steps: number } | null } }) => s.attrs.metricsSummary?.steps)).toEqual([3000, 3000, 3000])
+  })
+
   it('answers the session itself, not a one-item list', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedWorkout(harness, {

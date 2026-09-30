@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { hashKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient, UseMutationResult, UseQueryResult } from '@tanstack/react-query'
-import type { StatusPanel } from '@haelan/core/status-panel'
+import type { StatusPanel, StatusSync } from '@haelan/core/status-panel'
 import { apiGet, apiSend } from '../api/client.js'
 import type { ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
@@ -87,6 +87,54 @@ export function useStatusPanel(): UseQueryResult<StatusPanel> {
       return IDLE_REFETCH_MS
     },
   })
+}
+
+/**
+ * The status as the shell already reads it, for a second place that shows the sync (the workout
+ * page's "Sync now"): the same query and key as useStatusPanel, but with no timer of its own and
+ * no refetch on mount or focus while it holds an answer, so it adds no reads beside the shell's
+ * poll. It still refetches when invalidated, as useRunSync does after a press.
+ */
+export function useStatusSnapshot(): UseQueryResult<StatusPanel> {
+  const session = useSession()
+  const personId = session.data?.personId
+  return useQuery({
+    queryKey: statusKey(personId ?? ''),
+    enabled: personId !== undefined,
+    queryFn: () => apiGet<StatusPanel>('/api/status'),
+    staleTime: Infinity,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
+ * What a sync button says and whether it can be pressed, the one rule every sync button follows
+ * (the status panel's and the workout page's). Three disabled states, each for its own reason.
+ * Running: the server would answer 409. Pending: the press is in flight and a second would race
+ * it. Cooldown: the server refuses a run inside a minute of the last one (429), and "Synced just
+ * now" is the true thing to say about that minute - a live button that is certain to be refused
+ * is a control that lies. The cooldown is the status's alone, never a remembered 429: a refused
+ * press re-reads the status (useRunSync's onError), and the button comes back when that says the
+ * minute is over. `label` is the key under `status.sync`.
+ */
+export function syncButtonState(sync: StatusSync | null, pending: boolean): { label: 'run' | 'running' | 'cooldown', disabled: boolean } {
+  const running = sync?.running === true
+  const coolingDown = !running && (sync?.cooldownRemainingMs ?? 0) > 0
+  return { label: running ? 'running' : coolingDown ? 'cooldown' : 'run', disabled: running || pending || coolingDown }
+}
+
+/**
+ * What a refused press says, a key under `status.sync`, or null. 429 is the server's minute of
+ * cooldown after a run, which means a run just finished: the true answer is "Synced just now", not
+ * a failure - and the button already says exactly that (syncButtonState), so a 429 has no line of
+ * its own and the button carries the cooldown alone. 409 is a run already going, or the instance
+ * shutting down; either way nothing new was started by this press. Anything else did not start.
+ */
+export function syncRefusal(runSync: Pick<UseMutationResult<unknown, ApiError, void>, 'isError' | 'error'>): 'alreadyRunning' | 'didNotStart' | null {
+  if (!runSync.isError) return null
+  const status = runSync.error?.status
+  return status === 429 ? null : status === 409 ? 'alreadyRunning' : 'didNotStart'
 }
 
 /**

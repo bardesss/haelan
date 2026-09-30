@@ -580,6 +580,8 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    detail-* set further down (PATTERNS.md). --- */
 /* The ranking, the previous workout and the best under the hero's verdict: one quiet line each. */
 .workout-hero-line { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+/* Where a filled figure came from, as quiet as a FigureRow's note: a source, not a verdict. */
+.workout-hero-filled { font-size: var(--font-size-micro); color: var(--text-faint); }
 .workout-hero-rank, .workout-hero-previous, .workout-hero-best { font-variant-numeric: tabular-nums; }
 /* The compared-with table, and the fastest efforts beside the same route: .override-table's rows, with this workout's own column the bold one
    and each difference beside its reading in the plain colour unless the figure has a direction. */
@@ -629,6 +631,12 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    header carried, and the one button. */
 .workout-about-body { display: flex; flex-direction: column; gap: var(--space-2); }
 .workout-about-body .workout-actions { justify-content: flex-start; }
+/* A value the phone's samples filled, its note on a line of its own under it in the table. */
+/* The pending clause's sync button sits in the About line's text, not on a line of its own. */
+.detail-about-line .workout-sync-now { vertical-align: baseline; margin-left: var(--space-1); }
+/* A refused press, said beside the button a shade stronger than the line it sits in. Never hidden
+   while empty: it is a live region, and one shown only once filled is not reliably announced. */
+.workout-sync-outcome { color: var(--text-primary); }
 @media (max-width: 620px) {
   /* The best and the usual columns go on a phone, so the table fits its card instead of scrolling
      sideways; the hero and the rows above it already say the usual. The caption's and the
@@ -782,6 +790,7 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
      item, so it keeps its disclosure triangle (.status-failure-details summary's own reason), and
      align-content centres the text in the taller block. */
   .detail-about summary { display: list-item; min-height: 44px; align-content: center; }
+  .detail-about-line .workout-sync-now { min-height: 44px; }
 }
 /* --- end detail pages --- */
 
@@ -1963,6 +1972,11 @@ button.week-bar-slot { cursor: pointer; }
    "this text is gone" and the reason is the opposite, the one line explaining why. */
 .session-row-excluded { color: var(--text-faint); text-decoration: line-through; }
 .session-row-excluded-reason { font-size: var(--font-size-xs); color: var(--text-faint); text-decoration: none; margin-top: var(--space-1); }
+/* A row the phone's samples filled, said once under the figures it covers, aligned with them. */
+.session-row-filled {
+  font-size: var(--font-size-xs); color: var(--text-faint);
+  margin-top: var(--space-1); padding-left: calc(18px + var(--space-3));
+}
 
 /* The row itself keeps every rule it had; the link exists to make the whole row a target and to
    stop the browser underlining and recolouring the text inside it. surface-hover is the same

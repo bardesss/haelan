@@ -25,6 +25,8 @@ export interface WorkoutListRow {
   paceSecondsPerKm: number | null, elevationGainMeters: number | null, excluded: boolean
   /** The session's rate as its category reads it, rounded (sessions.ts's sessionRateOf). */
   rate: SessionRate | null
+  /** Some figure on the row came from the phone's samples (fillFromSamples.ts's `filledFromSamples`). */
+  filled: boolean
 }
 /** A month's counted workouts (excluded ones left out), for the list's month headers on 3 months and a year. */
 export interface WorkoutMonth { month: string, count: number, seconds: number }
@@ -104,6 +106,7 @@ function rowOf(w: WorkoutSession): WorkoutListRow {
     distanceMeters: summary.distanceMeters, caloriesKcal: summary.caloriesKcal, averageHeartRateBpm: summary.averageHeartRateBpm,
     paceSecondsPerKm: summary.paceSecondsPerKm, elevationGainMeters: summary.elevationGainMeters,
     excluded: w.excluded, rate: w.rate,
+    filled: typeof w.attrs === 'object' && w.attrs !== null && (w.attrs as { filledFromSamples?: unknown }).filledFromSamples === true,
   }
 }
 
@@ -121,6 +124,14 @@ export function workoutMonths(rows: readonly WorkoutListRow[]): WorkoutMonth[] {
   }
   return [...months.values()].sort((a, b) => (a.month < b.month ? 1 : -1))
 }
+
+/**
+ * The ranges whose listed workouts are filled from their samples (fillFromSamples.ts): a week's or
+ * a month's, a few dozen rows at most. Three months and a year list every workout of the period,
+ * and an all-Android household's are every one bare, each some eight reads on the event loop, so
+ * those lists stay as recorded; the week and month tabs show the same rows filled.
+ */
+export const FILLED_RANGES: ReadonlySet<PeriodRange> = new Set(['week', 'month'])
 
 const byType = (a: string | null, b: string | null) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1)
 
@@ -217,9 +228,14 @@ export function readActivityPeriod(q: PersonQuery, input: ActivityPeriodInput): 
 
   // Today's workouts are listed, though no figure counts today.
   const listTo = minDate(today, bounds.to)
-  const workouts = q.sessions({ kind: 'exercise', from: bounds.from, to: listTo, sourceId: source })
-    .map(rowOf).sort((a, b) => b.startMs - a.startMs)
-  const counted = workouts.filter((w) => !w.excluded)
+  // Read as recorded: every total below (the count, each type's time and distance) is a sum, and an
+  // estimate never enters a sum, as it never sets a record. Only the listed rows are filled, and
+  // only on a range short enough to afford it (FILLED_RANGES).
+  const recorded = q.sessions({ kind: 'exercise', from: bounds.from, to: listTo, sourceId: source })
+  const byNewest = (a: WorkoutListRow, b: WorkoutListRow) => b.startMs - a.startMs
+  const counted = recorded.map(rowOf).filter((w) => !w.excluded)
+  const listed = FILLED_RANGES.has(range) ? q.fillWorkouts(recorded, { sourceId: source }) : recorded
+  const workouts = listed.map(rowOf).sort(byNewest)
   const { blocks } = earlierBlocks(range, bounds)
   const earlierTypes = q.sessions({ kind: 'exercise', from: blocks[0]!.from, to: shiftLocalDate(bounds.from, -1), sourceId: source })
     .filter((w) => !w.excluded)

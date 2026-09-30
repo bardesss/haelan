@@ -3,7 +3,7 @@ import type { CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams, ECElement
 import { useChart } from './useChart.js'
 import { chartBase, dayMarks, dayPointDate, dayTableRows, escapeHtml, AXIS_FONT_SIZE, STROKE, OPACITY, SYMBOL } from './base.js'
 import { verdictTone } from './base.js'
-import type { PointJudged, PointStanding } from './base.js'
+import type { Annotation, PointJudged, PointStanding } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
@@ -165,7 +165,8 @@ export function Sparkline({
   // here (HeartRateRange's own pair is required) because Sparkline's own default parameter (EMPTY,
   // below) has to exist regardless: a page can still mount a card before its overrides query has
   // answered.
-  annotations?: { date: string; text: string }[]
+  // An entry with an `index` marks that one point, for a strip whose points share dates (base.ts's Annotation).
+  annotations?: Annotation[]
   excluded?: string[]
   onPointClick?: (localDate: string) => void
   // Dense over the same `labels` axis as `values`, one entry per calendar day with null where the

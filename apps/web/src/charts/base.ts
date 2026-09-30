@@ -132,15 +132,29 @@ export const ANNOTATION_JOIN = ', '
  * standing for the same day.
  */
 export function annotationsByDate(
-  annotations: readonly { date: string; text: string }[],
-): { date: string; text: string }[] {
-  const byDate = new Map<string, string[]>()
+  annotations: readonly Annotation[],
+): Annotation[] {
+  // Keyed by the point where one is named: two points can share a date (a workout strip's two
+  // sessions of one day), and an annotation about one of them is not about the other.
+  const byKey = new Map<string, { date: string; index?: number; texts: string[] }>()
   for (const a of annotations) {
-    const texts = byDate.get(a.date) ?? []
-    texts.push(a.text)
-    byDate.set(a.date, texts)
+    const key = a.index === undefined ? `d:${a.date}` : `i:${a.index}`
+    const group = byKey.get(key) ?? { date: a.date, ...(a.index !== undefined && { index: a.index }), texts: [] }
+    group.texts.push(a.text)
+    byKey.set(key, group)
   }
-  return [...byDate].map(([date, texts]) => ({ date, text: texts.join(ANNOTATION_JOIN) }))
+  return [...byKey.values()].map(({ texts, ...at }) => ({ ...at, text: texts.join(ANNOTATION_JOIN) }))
+}
+
+/**
+ * A chart's note about a day, or, with `index`, about the one point at that position: a strip whose
+ * points are sessions rather than days (the workout hero's) can hold two on one date.
+ */
+export interface Annotation { date: string; text: string; index?: number }
+
+/** Whether an annotation speaks of the point at `index`, whose label is `date`. */
+export function annotates(a: Annotation, date: string, index: number): boolean {
+  return a.index === undefined ? a.date === date : a.index === index
 }
 
 /** An excluded day drawn at its own plotted value: the point is still on the chart, and the mark
@@ -201,7 +215,7 @@ export function dayMarks(input: {
   dates: readonly string[]
   values: readonly (number | null | undefined)[]
   excluded: readonly string[]
-  annotations: readonly { date: string; text: string }[]
+  annotations: readonly Annotation[]
   excludedText: string
 }): DayMarks {
   const indexOf = new Map(input.dates.map((date, index) => [date, index]))
@@ -224,8 +238,8 @@ export function dayMarks(input: {
 
   const atDate: DateMark[] = []
   for (const annotation of annotationsByDate(input.annotations)) {
-    const index = indexOf.get(annotation.date)
-    if (index === undefined) continue
+    const index = annotation.index ?? indexOf.get(annotation.date)
+    if (index === undefined || input.dates[index] !== annotation.date) continue
     const excluded = gaps.delete(annotation.date)
     atDate.push({
       date: annotation.date,
@@ -308,7 +322,7 @@ export function dayTableRows(input: {
   values: readonly (number | null)[]
   labels: readonly string[]
   excluded: readonly string[]
-  annotations: readonly { date: string; text: string }[]
+  annotations: readonly Annotation[]
   format: (value: number | null, absent: string) => string
   t: Translate
   episodic?: boolean
@@ -337,7 +351,7 @@ export function dayTableRows(input: {
     .filter(([v, i]) => {
       if (!episodic || v !== null) return true
       const date = labels[i] ?? String(i)
-      return excluded.includes(date) || annotations.some((a) => a.date === date)
+      return excluded.includes(date) || annotations.some((a) => annotates(a, date, i))
     })
     .map(([v, i]) => {
       const date = labels[i] ?? String(i)
@@ -356,7 +370,7 @@ export function dayTableRows(input: {
           // first and drop the rest. ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate
           // above reads the same constant, so a table cell and a canvas label built from the same
           // annotations array cannot drift apart on separator alone.
-          annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
+          annotations.filter((a) => annotates(a, date, i)).map((a) => a.text).join(ANNOTATION_JOIN)]
           .filter(Boolean).join(ANNOTATION_JOIN)]
     })
 }

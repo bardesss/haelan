@@ -140,10 +140,26 @@ object InstanceClient {
     ): Outcome<T> = exchange("DELETE", server, path, null, cookie, emptyMap(), parse)
 
     /**
+     * The Health API sync button's call: ask the instance to run its Google sync now. Answered once
+     * and never asked again, whatever came back - [ApiSync] says why a 429 here is not the weather
+     * the ingest's retry takes it for. The body is an empty object because the instance refuses a
+     * JSON content type with no body at all.
+     */
+    fun runApiSync(server: String, cookie: String): ApiSync.Answer {
+        val outcome = exchange("POST", server, ApiSync.PATH, "{}", cookie, emptyMap(), parse = { it }, accepts = ApiSync.ANSWERS)
+        return when (outcome) {
+            is Outcome.Ok -> ApiSync.answerFor(outcome.value)
+            is Outcome.Failed -> ApiSync.Answer.Failed(outcome.error)
+        }
+    }
+
+    /**
      * The exchange every verb shares. [parse] runs on a 200, and on a 304, which is an answer and
      * not a failure: "what you have is still current" is exactly what a conditional read asked to
      * hear, and it carries no body, so [Reply.body] is empty and [parse] reads the status instead.
-     * Everything else is [Outcome.Failed] with the status, for the caller to decide about.
+     * Everything else is [Outcome.Failed] with the status, for the caller to decide about, unless
+     * the caller names it in [accepts]: a route whose other statuses are answers too gets the
+     * whole [Reply] for them, headers included, instead of an exception that has dropped them.
      *
      * Everything is opened, used and disconnected inside this call. A connection left open holds
      * its socket until the read timeout expires, which is how "the sync is slow" becomes true for
@@ -157,6 +173,7 @@ object InstanceClient {
         cookie: String?,
         headers: Map<String, String>,
         parse: (Reply) -> T,
+        accepts: Set<Int> = emptySet(),
     ): Outcome<T> {
         var connection: HttpURLConnection? = null
         return try {
@@ -184,7 +201,7 @@ object InstanceClient {
             // Once. Everything below reads what this returned rather than asking again.
             val status = connection.responseCode
             val reply = Reply(status, connection.readOnce(status), connection.cookiesOf(), connection.headersOf())
-            if (status == 200 || status == NOT_MODIFIED) {
+            if (status == 200 || status == NOT_MODIFIED || status in accepts) {
                 Outcome.Ok(parse(reply))
             } else {
                 Outcome.Failed(InstanceHttpException(status, reply.body))

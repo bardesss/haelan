@@ -218,3 +218,34 @@ export function zoneBoundsOf(ceilings: {
   if (!(light < moderate && moderate < vigorous && vigorous < peak)) return null
   return { moderateMin: light, vigorousMin: moderate, peakMin: vigorous, max: peak }
 }
+
+const SECONDS_PER_HEART_RATE_MINUTE = 60
+
+/**
+ * A workout's time in each heart rate zone from its minute-by-minute heart rate, in the shape
+ * `edwardsLoadFromSeconds` and a device's own breakdown read: what a phone-only workout, which
+ * carries no breakdown of its own, is filled with (query/fillFromSamples.ts). Heart rate is stored
+ * one reading a minute, so each reading stands for sixty seconds.
+ *
+ * A reading at a zone's lower edge is in that zone: the bounds say where each zone begins, and the
+ * workout page draws its bands the same way (WorkoutThrough.tsx). Below the moderate edge is light,
+ * since the provider stores ceilings and no light floor; at or above the peak edge is peak, above
+ * the day's peak ceiling included, because a reading past the ceiling is still the hardest zone.
+ *
+ * Structural rather than HeartRateZoneDurations, for the reason `edwardsLoadFromSeconds` gives.
+ */
+export function zoneSecondsFromMinutes(minutes: readonly { bpm: number }[], bounds: ZoneBounds): {
+  lightSeconds: number
+  moderateSeconds: number
+  vigorousSeconds: number
+  peakSeconds: number
+} {
+  const zones = { lightSeconds: 0, moderateSeconds: 0, vigorousSeconds: 0, peakSeconds: 0 }
+  for (const { bpm } of minutes) {
+    if (bpm >= bounds.peakMin) zones.peakSeconds += SECONDS_PER_HEART_RATE_MINUTE
+    else if (bpm >= bounds.vigorousMin) zones.vigorousSeconds += SECONDS_PER_HEART_RATE_MINUTE
+    else if (bpm >= bounds.moderateMin) zones.moderateSeconds += SECONDS_PER_HEART_RATE_MINUTE
+    else zones.lightSeconds += SECONDS_PER_HEART_RATE_MINUTE
+  }
+  return zones
+}

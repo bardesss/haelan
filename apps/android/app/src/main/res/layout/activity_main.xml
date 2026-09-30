@@ -224,6 +224,31 @@
                         android:layout_gravity="end"
                         android:layout_marginTop="12dp"
                         android:text="@string/sync_action" />
+
+                    <!-- Asks the instance to run its own Google sync now, which the button above
+                         does not: that one sends what Health Connect holds. Outlined, so the card
+                         keeps one filled button. Stacked rather than beside it, because the two
+                         Dutch labels together are wider than a small phone's card. -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/buttonApiSync"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/api_sync_action" />
+
+                    <!-- The instance's answer to the button above, one line; gone until it has one. -->
+                    <TextView
+                        android:id="@+id/apiSyncStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:accessibilityLiveRegion="polite"
+                        android:gravity="end"
+                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                        android:textColor="@color/text_muted"
+                        android:visibility="gone" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

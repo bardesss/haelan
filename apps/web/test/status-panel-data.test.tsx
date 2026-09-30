@@ -13,6 +13,7 @@ import {
 } from '../src/data/useStatusPanel.js'
 import type { StatusPanel } from '../src/data/useStatusPanel.js'
 import { sourceNamesKey, sourceActivityKey } from '../src/data/useSourceNames.js'
+import { workoutPageKey } from '../src/data/useWorkoutPage.js'
 
 /**
  * The status panel's data layer, and the finished-run refresh that moved into it from SyncControl.
@@ -174,6 +175,17 @@ describe('a finished sync', () => {
 
     expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(true)
     expect(statusReads).toBe(0)
+  })
+
+  // The workout page's "your watch's figures arrive with the next sync" waits on exactly this: the
+  // run ending refreshes the page, which then reads the watch's summary if the run brought it.
+  it('invalidates a workout page waiting for its figures when a watched run ends', async () => {
+    const client = seeded(true)
+    const workoutKey = workoutPageKey(PERSON.personId, 'phone-run')
+    client.setQueryData(workoutKey, { pending: true })
+    mount(client)
+    await pollAnswers(statusBody(false, Date.now()), client)
+    expect(client.getQueryState(workoutKey)!.isInvalidated).toBe(true)
   })
 
   // A run with little to fetch can finish before the status re-read that follows the 202 gets its

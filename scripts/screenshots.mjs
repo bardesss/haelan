@@ -41,7 +41,7 @@ export const SCREENSHOTS = [
   {
     file: 'activity.png',
     title: 'Activity',
-    alt: 'The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.',
+    alt: 'The Activity page for a month: the month\'s average daily steps against the usual for a month, with how many days were usual, fewer or more and the busiest day, above active minutes per week, distance, floors and active energy, each against its own usual.',
     role: 'gallery',
     readme: 'inline',
   },
