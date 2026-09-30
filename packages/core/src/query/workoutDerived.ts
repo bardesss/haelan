@@ -141,10 +141,7 @@ export function readWorkoutRoute(db: DbOrTx, input: {
  * each want every route of a person's history, and a query per workout there is hundreds.
  */
 export function readRoutesFor(db: DbOrTx, sessions: readonly WorkoutSession[]): Map<string, RoutePoint[]> {
-  const routes = new Map<string, RoutePoint[]>()
   const exercise = sessions.filter((session) => session.kind === 'exercise')
-  const ids = [...new Set(exercise.flatMap((session) => [session.id, ...session.alternateIds]))]
-  const byMember = new Map<string, RoutePoint[]>()
   const rows = db.select({
     sessionId: sessionRoutes.sessionId,
     atMs: sessionRoutes.atMs,
@@ -153,13 +150,43 @@ export function readRoutesFor(db: DbOrTx, sessions: readonly WorkoutSession[]): 
     altitudeMetres: sessionRoutes.altitudeMetres,
     horizontalAccuracyMetres: sessionRoutes.horizontalAccuracyMetres,
     verticalAccuracyMetres: sessionRoutes.verticalAccuracyMetres,
-  }).from(sessionRoutes).where(inArray(sessionRoutes.sessionId, ids))
+  }).from(sessionRoutes).where(inArray(sessionRoutes.sessionId, memberIdsOf(exercise)))
     .orderBy(asc(sessionRoutes.ordinal)).all()
+  return routesByOwner(exercise, rows)
+}
+
+/** One timed fix, all a route summary reads: no altitude, no accuracy. */
+export interface RouteFix { atMs: number, latitude: number, longitude: number }
+
+/**
+ * readRoutesFor with only the columns a signature and the efforts read: the history reads walk
+ * every route of a type, and the three columns nobody reads there are most of each row.
+ */
+function readRouteFixesFor(db: DbOrTx, sessions: readonly WorkoutSession[]): Map<string, RouteFix[]> {
+  const exercise = sessions.filter((session) => session.kind === 'exercise')
+  const rows = db.select({
+    sessionId: sessionRoutes.sessionId,
+    atMs: sessionRoutes.atMs,
+    latitude: sessionRoutes.latitude,
+    longitude: sessionRoutes.longitude,
+  }).from(sessionRoutes).where(inArray(sessionRoutes.sessionId, memberIdsOf(exercise)))
+    .orderBy(asc(sessionRoutes.ordinal)).all()
+  return routesByOwner(exercise, rows)
+}
+
+function memberIdsOf(exercise: readonly WorkoutSession[]): string[] {
+  return [...new Set(exercise.flatMap((session) => [session.id, ...session.alternateIds]))]
+}
+
+// Each session's route under its own id: the first member's, in the merge's best-first order, that has one, whole.
+function routesByOwner<T>(exercise: readonly WorkoutSession[], rows: readonly ({ sessionId: string } & T)[]): Map<string, T[]> {
+  const byMember = new Map<string, T[]>()
   for (const { sessionId, ...point } of rows) {
     const points = byMember.get(sessionId)
-    if (points === undefined) byMember.set(sessionId, [point])
-    else points.push(point)
+    if (points === undefined) byMember.set(sessionId, [point as unknown as T])
+    else points.push(point as unknown as T)
   }
+  const routes = new Map<string, T[]>()
   for (const session of exercise) {
     const owner = [session.id, ...session.alternateIds].find((id) => byMember.has(id))
     if (owner !== undefined) routes.set(session.id, byMember.get(owner)!)
@@ -170,27 +197,33 @@ export function readRoutesFor(db: DbOrTx, sessions: readonly WorkoutSession[]): 
 /** Routes are read this many sessions to a query, so a 1 Hz phone route history is never all in memory at once. */
 export const ROUTE_CHUNK_SESSIONS = 100
 
-/** What a route reduces to for comparing against other workouts: never a point, only its signature and efforts. */
+/** What a route reduces to for comparing against other workouts: never a point, only its signature and efforts (null or NO_EFFORTS when not asked for). */
 export interface RouteSummary { signature: RouteSignature | null, efforts: Record<EffortKey, number | null> }
 
 const NO_EFFORTS: Readonly<Record<EffortKey, number | null>> = Object.freeze({ km: null, mile: null, fiveK: null })
 
 /**
- * Many workouts' routes reduced to a signature and, when `efforts` is asked for, the fastest
- * efforts, keyed by session id; a session with no route has no entry. Read through readRoutesFor
+ * Many workouts' routes reduced to a signature and the fastest efforts, each only when asked for,
+ * keyed by session id; a session with no route has no entry. Read through readRouteFixesFor
  * ROUTE_CHUNK_SESSIONS sessions at a time, each chunk reduced and its points let go before the
  * next is read, so memory and the IN list stay bounded however long the history. The Records page
  * and the workout page's comparisons both read through here; only a workout's own page ever holds
  * one full route.
  *
  * `efforts` is the caller's GPS_EFFORT_TYPE decision (sessionRecords.ts): the page asks for it
- * for a run's history, Records for its runs, and nobody computes efforts off a ride.
+ * for a run's history, Records for its runs, and nobody computes efforts off a ride. `signatures`
+ * is for the same-route match, which Records never makes.
  */
-export function readRouteSummaries(db: DbOrTx, sessions: readonly WorkoutSession[], options: { efforts: boolean }): Map<string, RouteSummary> {
+export function readRouteSummaries(
+  db: DbOrTx, sessions: readonly WorkoutSession[], options: { efforts: boolean, signatures: boolean },
+): Map<string, RouteSummary> {
   const summaries = new Map<string, RouteSummary>()
   for (let from = 0; from < sessions.length; from += ROUTE_CHUNK_SESSIONS) {
-    for (const [sessionId, route] of readRoutesFor(db, sessions.slice(from, from + ROUTE_CHUNK_SESSIONS))) {
-      summaries.set(sessionId, { signature: routeSignature(route), efforts: options.efforts ? fastestEfforts(route) : NO_EFFORTS })
+    for (const [sessionId, route] of readRouteFixesFor(db, sessions.slice(from, from + ROUTE_CHUNK_SESSIONS))) {
+      summaries.set(sessionId, {
+        signature: options.signatures ? routeSignature(route) : null,
+        efforts: options.efforts ? fastestEfforts(route) : NO_EFFORTS,
+      })
     }
   }
   return summaries

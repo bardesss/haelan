@@ -818,7 +818,7 @@ export class PersonQuery {
    * footing readWorkoutRoute stands on. Server-side only; a signature never reaches a payload.
    */
   workoutRouteSummaries(input: { sessions: readonly WorkoutSession[], efforts: boolean }): Map<string, RouteSummary> {
-    return readRouteSummaries(this.#db, input.sessions, { efforts: input.efforts })
+    return readRouteSummaries(this.#db, input.sessions, { efforts: input.efforts, signatures: true })
   }
 
   /**

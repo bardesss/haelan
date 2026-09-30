@@ -6,6 +6,13 @@ import { seedOverride } from '../src/testing/fixtures.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { MIN_RUN_DAYS } from '../src/api/runs.ts'
 import { readAllTime } from '../src/query/allTime.ts'
+import { routeSignature } from '../src/api/routeMatch.ts'
+
+// routeSignature as itself, only watched: Records never matches routes, so it should never sign one.
+vi.mock('../src/api/routeMatch.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/api/routeMatch.ts')>()
+  return { ...actual, routeSignature: vi.fn(actual.routeSignature) }
+})
 
 let test: TestDatabase
 let sessionsInserted = 0
@@ -237,7 +244,16 @@ describe('readAllTime', () => {
     seedRoute('quick-km', 4, 30)
 
     let sessionRecords: ReturnType<typeof readAllTime>['sessionRecords'] = []
-    expect(countRouteReads(() => { sessionRecords = readAllTime(test.db, 'p1').sessionRecords })).toBe(1)
+    vi.mocked(routeSignature).mockClear()
+    const prepare = vi.spyOn(test.db.$client, 'prepare')
+    sessionRecords = readAllTime(test.db, 'p1').sessionRecords
+    const routeReads = prepare.mock.calls.map(([source]) => String(source)).filter((source) => source.includes('"session_routes"'))
+    prepare.mockRestore()
+    expect(routeReads).toHaveLength(1)
+    // Only the columns the efforts read, and no signature for a match Records never makes.
+    expect(routeReads[0]).toMatch(/"latitude"/)
+    expect(routeReads[0]).not.toMatch(/altitude|accuracy/)
+    expect(routeSignature).not.toHaveBeenCalled()
     expect(sessionRecords.find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'quick-km' })
     expect(sessionRecords.find((r) => r.kind === 'fastest-km')!.value).toBe(250)
     expect(sessionRecords.find((r) => r.kind === 'fastest-mile')).toMatchObject({ sessionId: 'long-run' })

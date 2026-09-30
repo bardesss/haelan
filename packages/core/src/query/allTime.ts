@@ -311,7 +311,8 @@ function keptWorkouts(db: DbOrTx, personId: string): WorkoutSession[] {
 function sessionsForRecords(db: DbOrTx, workouts: readonly WorkoutSession[]): SessionForRecords[] {
   const parsed = workouts.map((workout) => sessionForRecords(workout))
   const runs = workouts.filter((_, i) => parsed[i]!.exerciseType === GPS_EFFORT_TYPE)
-  const summaries = readRouteSummaries(db, runs, { efforts: true })
+  // Records never matches routes, so it asks for no signatures.
+  const summaries = readRouteSummaries(db, runs, { efforts: true, signatures: false })
   return parsed.map((session) => {
     const summary = summaries.get(session.sessionId)
     return summary === undefined ? session : { ...session, efforts: summary.efforts }
