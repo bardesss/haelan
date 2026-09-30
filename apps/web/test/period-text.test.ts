@@ -131,6 +131,18 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine({ ...naps, per: 'day' }, 'en', t)).not.toContain('so far; usual')
   })
 
+  it("words a running period's zero-width usual as one value, not a range", () => {
+    const naps = figure({
+      metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 0, total: 0, standing: null,
+      usual: { center: 0, low: 0, high: 0, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(naps, 'en', t)).toBe('so far; usual 0 a month')
+    expect(periodVerdictLine(naps, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 0 per maand')
+    expect(periodVerdictLine(naps, 'en', t, { window: true })).toBe('so far; usual 0 a month for a month, last 12 months')
+    const year = { ...naps, usual: { ...naps.usual!, window: { unit: 'year' as const, count: 1, from: '2025-01-01', to: '2025-12-31' } } }
+    expect(periodVerdictLine(year, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 0 per jaar')
+  })
+
   it('prints a reason the same with the window asked for', () => {
     expect(periodVerdictLine(figure({ reason: 'thin-usual', standing: null }), 'en', t, { window: true })).toBe('not enough history for a usual yet')
   })

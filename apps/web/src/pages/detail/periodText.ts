@@ -39,7 +39,11 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   // count so far beside a whole period's usual ("so far; usual 1 - 5 a month"), no verdict.
   if (figure.per === 'period' && figure.standing === null && figure.value !== null && figure.usual !== null && !figure.usual.thin) {
     const { low, high } = formatFigureRange(figure, figure.usual.low, figure.usual.high, language, t)
-    const soFar = t(`period.soFar.${figure.usual.window.unit}`, { low, high })
+    // A usual with no width is one value; "0 - 0" reads as a typo for it (as in verdictLine).
+    const single = formatFigureValue(figure, figure.usual.low, language, t) === high
+    const soFar = single
+      ? t(`period.soFarSingle.${figure.usual.window.unit}`, { value: high })
+      : t(`period.soFar.${figure.usual.window.unit}`, { low, high })
     return o.window === true ? `${soFar} ${windowPhrase(figure.usual.window, t)}` : soFar
   }
   const line = verdictLine({ ...figure, baseline: figure.usual }, language, t)

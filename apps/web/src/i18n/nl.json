@@ -1844,6 +1844,12 @@
       "quarter": "tot nu toe; gebruikelijk {{low}} – {{high}} per 3 maanden",
       "year": "tot nu toe; gebruikelijk {{low}} – {{high}} per jaar"
     },
+    "soFarSingle": {
+      "week": "tot nu toe; gebruikelijk {{value}} per week",
+      "month": "tot nu toe; gebruikelijk {{value}} per maand",
+      "quarter": "tot nu toe; gebruikelijk {{value}} per 3 maanden",
+      "year": "tot nu toe; gebruikelijk {{value}} per jaar"
+    },
     "panel": {
       "within": "binnen je gebruikelijke bereik",
       "close": "Sluiten"
