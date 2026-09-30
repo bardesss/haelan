@@ -12,6 +12,14 @@ import type { PointJudged, PointStanding } from '../../charts/base.js'
 // of a sentence, never inside a figure.
 const NBSP = '\u00a0'
 
+/** A figure's text with every space in it made a no-break one (formatFigureValue's rule), for a
+ *  figure worded outside it: a row's "32 min", "412 kcal" or "25 m gained" never breaks inside. */
+export function noBreak(text: string): string {
+  return text.replaceAll(' ', NBSP)
+}
+// Inside a unit of two words ("/100 m"), so the unit reads as one (formatFigureValue's swim pace).
+const NARROW_NBSP = '\u202f'
+
 // Figures measured in minutes that are only ever a few of them: "12 min" reads as what it is,
 // where "0h 12m" puts an empty hour in front of it. Time asleep, the stages, time in bed and time
 // awake stay durations, since those do run to hours. A workout's minutes in the hard zones
@@ -39,6 +47,13 @@ const SMALL_UNITS: Readonly<Record<string, { factor: number, precision: number, 
   verticalOscillation: { factor: 100, precision: 1, unit: 'activity.units.cm' },
 }
 
+// Distances that read in whole metres however far they run, keyed on the figure as SMALL_UNITS is,
+// since every other distance in metres turns to kilometres past a thousand: a climb ("1,250 m",
+// never "1.25 km") and a swim's distance, whose pool and pace are both counted in metres ("1,500
+// m"). The Records page and the session rows name them 'climb' and 'swimDistance'; the workout page
+// sends its climb under its key, 'elevationGain', and a swim's distance as 'swimDistance'.
+const WHOLE_METRES: ReadonlySet<string> = new Set(['climb', 'elevationGain', 'swimDistance'])
+
 // A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading
 // zero on the minutes, an hour digit only once there is one to show. workoutPage.ts's `pace`
 // (seconds per kilometre) and its true durations (`movingTime`, `elapsed`) share this shape; the
@@ -52,6 +67,16 @@ export function formatStopwatch(totalSeconds: number): string {
   const seconds = total % 60
   const clock = `${minutes}:${String(seconds).padStart(2, '0')}`
   return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` : clock
+}
+
+/**
+ * A value that is not one of a page's figures, named the way formatFigureValue knows it: its unit,
+ * a metric where the unit alone does not say how it reads (a swim's distance in whole metres), and
+ * the stored unit's precision. The one shape for it: the Records page, the session rows and the
+ * kilometre table's speed all build theirs here.
+ */
+export function figureAs(metric: string, unit: string, precision = 0): Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'> {
+  return { metric, unit, precision, value: null }
 }
 
 /**
@@ -70,7 +95,7 @@ export function formatFigureValue(
   language: string,
   t: Translate,
 ): string {
-  return figureValueText(figure, value, language, t).replaceAll(' ', NBSP)
+  return noBreak(figureValueText(figure, value, language, t))
 }
 
 function figureValueText(
@@ -96,13 +121,18 @@ function figureValueText(
     case 'count': return formatNumber(value, figure.precision, language, absent)
     // The workout page's own units (workoutPage.ts's FIGURES table).
     case 'seconds_per_km': return `${formatStopwatch(value)} ${t('activity.units.paceSuffix')}`
+    // A swim's pace, the stopwatch time for each 100 m, as a pool clock reads it. The space inside
+    // "/100 m" is a narrow no-break one, so the suffix is one unit to unitOf and a range prints it
+    // once ("1:55 – 2:05 /100 m") rather than cutting it after its "100".
+    case 'seconds_per_100m': return `${formatStopwatch(value)} ${t('activity.units.per100mSuffix').replaceAll(' ', NARROW_NBSP)}`
     // Stored as metres per second; shown as km/h, a converted unit whose precision is this
     // function's own rather than the figure's stored-unit precision (format.ts's own comment on
     // formatMetricValue explains why a converted value cannot go through the catalogue precision).
     case 'meters_per_second': return `${formatNumber(value * 3.6, 1, language, absent)} ${t('activity.units.kmh')}`
     // Kilometres once the distance clears four digits of metres, at two decimals - also a
     // converted unit, so also its own fixed precision rather than the figure's stored-unit one.
-    case 'meters': return value >= 1000
+    case 'meters': if (WHOLE_METRES.has(figure.metric)) return `${formatNumber(value, 0, language, absent)} ${t('activity.units.meters')}`
+      return value >= 1000
       ? `${formatNumber(value / 1000, 2, language, absent)} ${t('activity.units.km')}`
       : `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.meters')}`
     case 'seconds': return formatStopwatch(value)
@@ -285,27 +315,30 @@ export function workoutStripOf(figure: WorkoutFigure): {
 /**
  * How far this figure's value lies from another reading of it (the previous workout's), signed,
  * in the figure's own terms: a pace in seconds per kilometre ("-12 s/km", the words the hero's
- * previous line uses), a stopwatch time as a stopwatch ("+1:40"), a speed in km/h, a distance in
- * kilometres once the value is in kilometres, anything else at its own precision, the last three
+ * previous line uses) or a swim's per 100 m ("-4 s/100 m"), a stopwatch time as a stopwatch ("+1:40"), a speed in km/h, a distance in
+ * kilometres once the value is in kilometres (a climb's and a swim's always in metres), anything else at its own precision, the last three
  * without their unit. Taken between the two values as they are printed, each rounded first, so a
  * row adds up: 5.20 km beside 5.00 km reads +0.20 whatever the metres behind them. A difference
  * that rounds to nothing carries no sign (formatSignedNumber's rule).
  */
 export function formatFigureDifference(
-  figure: Pick<PageFigure, 'value' | 'unit' | 'precision'>, value: number, before: number, language: string, t: Translate,
+  figure: Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'>, value: number, before: number, language: string, t: Translate,
 ): string {
   const absent = t('common.absent')
   // The two values rounded to 1/`scale` of the stored unit, as printed, and their difference.
   const between = (scale: number) => (Math.round(value * scale) - Math.round(before * scale)) / scale
   switch (figure.unit) {
     case 'seconds_per_km': return t('activity.workout.page.secondsPerKm', { value: formatSignedNumber(between(1), 0, language, absent) })
+    case 'seconds_per_100m': return t('activity.workout.page.secondsPer100m', { value: formatSignedNumber(between(1), 0, language, absent) })
     case 'seconds': {
       const seconds = between(1)
       return `${seconds > 0 ? '+' : seconds < 0 ? '-' : ''}${formatStopwatch(Math.abs(seconds))}`
     }
     // A speed is printed in km/h at one decimal (formatFigureValue), so its difference is too.
     case 'meters_per_second': return formatSignedNumber(between(36) * 3.6, 1, language, absent)
-    case 'meters': return figure.value !== null && figure.value >= 1000
+    // A whole-metre distance (WHOLE_METRES) is printed in metres however far it runs, so its difference is too.
+    case 'meters': if (WHOLE_METRES.has(figure.metric)) return formatSignedNumber(between(1), 0, language, absent)
+      return figure.value !== null && figure.value >= 1000
       ? formatSignedNumber(between(1 / 10) / 1000, 2, language, absent)
       : formatSignedNumber(between(10 ** figure.precision), figure.precision, language, absent)
     default: return formatSignedNumber(between(10 ** figure.precision), figure.precision, language, absent)

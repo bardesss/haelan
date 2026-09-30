@@ -4,18 +4,21 @@ import { Link } from '../../../router.js'
 import { formatShortDate } from '../../../format.js'
 import type { WorkoutFigure, WorkoutPageData, RecordRef } from '../../../data/useWorkoutPage.js'
 import { formatFigureDifference, formatFigureRange, formatFigureValue } from '../../detail/figureText.js'
+import { exerciseCategory, rateOf } from '@haelan/core/exercise-category'
 import { bestMonth, workoutPath } from './workoutText.js'
 
 // The table's rows, in the mockup's order: the four measures the previous workout's values cover.
-// The first follows the hero: a ride leads with its speed, so its table does too (previousOf sends
-// the previous ride's speed for exactly this row), and a time hero (a strength session's moving
-// time) leads with that time, the figure the page is about, ahead of the four.
-const ROWS = ['pace', 'distance', 'averageHeartRate', 'cardioLoad'] as const
-type Row = typeof ROWS[number] | 'speed' | 'movingTime' | 'elapsed'
-const rowsFor = (hero: string): readonly Row[] => {
-  if (hero === 'speed') return ['speed', ...ROWS.slice(1)]
-  if (hero === 'movingTime' || hero === 'elapsed') return [hero, ...ROWS]
-  return ROWS
+// The first is the rate the category reads (rateOf, through the shared core map): a ride's speed,
+// a swim's pace per 100 m, pace per km for the rest (previousOf sends each for exactly this row),
+// so an indoor ride led by its moving time still sets its speed beside the last one and a swim
+// never shows a pace per km. A time hero (a strength session's moving time) leads with that time,
+// the figure the page is about, ahead of the four.
+const ROWS = ['distance', 'averageHeartRate', 'cardioLoad'] as const
+type Row = typeof ROWS[number] | 'pace' | 'speed' | 'swimPace' | 'movingTime' | 'elapsed'
+const rowsFor = (hero: string, exerciseType: string | null): readonly Row[] => {
+  const rate = rateOf(exerciseCategory(exerciseType)) ?? 'pace'
+  const time: Row[] = hero === 'movingTime' || hero === 'elapsed' ? [hero] : []
+  return [...time, rate, ...ROWS]
 }
 
 // The Records best each row can name, with the words that say what it measures where the row's own
@@ -23,10 +26,11 @@ const rowsFor = (hero: string): readonly Row[] => {
 // kilometre; an elapsed row's best the longest session. The furthest is a distance like the row.
 // Records keeps no best heart rate or load, which would not be a best if it did.
 function bestOf(page: WorkoutPageData, key: Row): { ref: RecordRef, value: number, words: string } | null {
-  const { fastestKmSeconds, furthestMeters, longestMs } = page.best
-  if (key === 'pace' && fastestKmSeconds !== null) return { ref: fastestKmSeconds, value: fastestKmSeconds.value, words: 'bestFastestKm' }
-  if (key === 'distance' && furthestMeters !== null) return { ref: furthestMeters, value: furthestMeters.value, words: 'bestValue' }
-  if (key === 'elapsed' && longestMs !== null) return { ref: longestMs, value: longestMs.value / 1000, words: 'bestLongest' }
+  const fastestKm = page.best['fastest-1k'] ?? null
+  const { furthest, longest } = page.best
+  if (key === 'pace' && fastestKm !== null) return { ref: fastestKm, value: fastestKm.value, words: 'bestFastestKm' }
+  if (key === 'distance' && furthest !== null) return { ref: furthest, value: furthest.value, words: 'bestValue' }
+  if (key === 'elapsed' && longest !== null) return { ref: longest, value: longest.value / 1000, words: 'bestLongest' }
   return null
 }
 
@@ -49,7 +53,7 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const absent = t('common.absent')
-  const rows = rowsFor(page.hero).flatMap((key) => {
+  const rows = rowsFor(page.hero, page.exerciseType).flatMap((key) => {
     const figure = page.figures[key]
     return figure === undefined || figure.value === null ? [] : [{ key, figure, value: figure.value }]
   })

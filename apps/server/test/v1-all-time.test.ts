@@ -108,10 +108,13 @@ describe('GET /p/:personId/all-time', () => {
     const response = await harness.app.inject({
       method: 'GET', url: '/api/v1/p/p1/all-time', headers: { authorization: `Bearer ${token}` },
     })
-    const byKind = Object.fromEntries(response.json().sessionRecords.map((r: { kind: string, value: number }) => [r.kind, r.value]))
-    expect(byKind['fastest-km']).toBe(333)
+    const records = response.json().sessionRecords as { category: string, kind: string, value: number }[]
+    const byKind = Object.fromEntries(records.map((r) => [r.kind, r.value]))
+    expect(byKind['fastest-1k']).toBe(333)
     expect(byKind['fastest-mile']).toBe(536)
     expect(byKind['fastest-5k']).toBe(1667)
+    // Every record is the run category's, and says so.
+    expect(new Set(records.map((r) => r.category))).toEqual(new Set(['run']))
     expect(response.body).not.toMatch(/latitude|longitude/)
   })
 })

@@ -84,4 +84,15 @@ describe('the workout page\'s hero strip', () => {
     expect(html.split('within your usual 5:22 – 5:36 /km')).toHaveLength(2)
     expect(html).not.toContain('sr-only')
   })
+
+  it('prints the rank line off the server\'s rank, and draws the hero without one from an older payload', () => {
+    expect(render()).toContain('Faster than 17 of your last 20 of this type')
+    // A page cached or captured before `rank` was sent has no such field at all.
+    const { rank: _dropped, ...older } = workoutPageFixture()
+    const html = renderToStaticMarkup(
+      <I18nProvider lng="en"><WorkoutHero page={older as ReturnType<typeof workoutPageFixture>} /></I18nProvider>,
+    )
+    expect(html).toContain('dash-headline')
+    expect(html).not.toContain('Faster than')
+  })
 })

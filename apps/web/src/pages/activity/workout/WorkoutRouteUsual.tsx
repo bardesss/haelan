@@ -11,15 +11,16 @@ import { bestMonth, workoutPath } from './workoutText.js'
 
 /**
  * "This route" (the mockup's "Deze route"), beside the fastest efforts under the route card: how
- * many times the route has been run since the oldest time on it, then this workout's pace and
- * time against the earlier ones on it, as the server matched and judged them (workoutPage.ts's
- * sameRouteOf). The time row is labelled from the key it was compared on, moving or elapsed, and
+ * many times the route has been run since the oldest time on it, then this workout's rate (the
+ * category's: pace, a ride's speed, a swim's pace per 100 m) and time against the earlier ones on
+ * it, as the server matched and judged them (workoutPage.ts's sameRouteOf). The time row is labelled from the key it was compared on, moving or elapsed, and
  * its verdict worded slower or faster, since less time on the same course is the quicker run.
- * Each strip draws the latest readings on the route, a lower one higher as the hero draws a pace,
- * each dot opening its workout; then a way to the latest earlier one.
+ * Each strip draws the latest readings on the route, a lower time or pace higher as the hero draws
+ * a pace (a speed stays the right way up, higher being faster already), each dot opening its
+ * workout; then a way to the latest earlier one.
  *
- * Left out when the server sends no same route: no route, or no earlier workout on it; the pace
- * row without a pace. The approved mockup also names the route and its length, and a line under
+ * Left out when the server sends no same route: no route, or no earlier workout on it; the rate
+ * row without a rate. The approved mockup also names the route and its length, and a line under
  * each row; the payload carries none of those, so none is drawn.
  */
 export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
@@ -31,8 +32,8 @@ export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
   const { t, i18n } = useTranslation()
   const same = page.sameRoute
   if (same === null) return null
-  const { time, pace, previous, times, since } = same
-  const drawn = [time, ...(pace === null ? [] : [pace])].flatMap((figure) => {
+  const { time, rate, previous, times, since } = same
+  const drawn = [time, ...(rate === null ? [] : [rate])].flatMap((figure) => {
     const strip = workoutStripOf(figure)
     return strip === null ? [] : [strip]
   })
@@ -52,7 +53,9 @@ export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
         {t('activity.workout.page.sameRoute.count', { count: times, month: bestMonth(since, page.localDate, i18n.language) })}
       </p>
       <FigureRows>
-        {pace !== null && <WorkoutFigureRow figure={pace} label={t('activity.workout.page.figures.pace')} withStrip inverse opens={opens} />}
+        {rate !== null && (
+          <WorkoutFigureRow figure={rate} label={t(`activity.workout.page.figures.${rate.key}`)} withStrip inverse={rate.direction === 'down'} opens={opens} />
+        )}
         <WorkoutFigureRow figure={time} label={t(`activity.workout.page.figures.${time.key}`)} withStrip words="pace" inverse opens={opens} />
       </FigureRows>
       <p className="dash-caption">{caption}</p>

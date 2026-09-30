@@ -2,7 +2,8 @@ import { sql } from 'drizzle-orm'
 import { eddingtonOf } from '../api/eddington.ts'
 import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
-import { GPS_EFFORT_TYPE, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
+import { readsEfforts, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
+import { countsForDistanceRecords, exerciseCategory } from '../api/exerciseCategory.ts'
 import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
 import type { NamedSource } from '../store/sourceAliases.ts'
@@ -305,14 +306,18 @@ function keptWorkouts(db: DbOrTx, personId: string): WorkoutSession[] {
 
 /**
  * Every workout in the shape sessionRecordsOf reads, in the same order, each parsed once. Only a
- * run's route yields efforts (GPS_EFFORT_TYPE), so only runs have their routes read, in chunks,
- * through readRouteSummaries.
+ * category with effort distances (run and ride: readsEfforts) reads efforts off a route, so only
+ * its workouts have their routes read, in chunks, through readRouteSummaries.
  */
 function sessionsForRecords(db: DbOrTx, workouts: readonly WorkoutSession[]): SessionForRecords[] {
   const parsed = workouts.map((workout) => sessionForRecords(workout))
-  const runs = workouts.filter((_, i) => parsed[i]!.exerciseType === GPS_EFFORT_TYPE)
+  // A treadmill run or an indoor ride holds no speed record, so its route (if it has one) goes unread.
+  const routed = workouts.filter((_, i) => {
+    const type = parsed[i]!.exerciseType
+    return readsEfforts(exerciseCategory(type)) && countsForDistanceRecords(type)
+  })
   // Records never matches routes, so it asks for no signatures.
-  const summaries = readRouteSummaries(db, runs, { efforts: true, signatures: false })
+  const summaries = readRouteSummaries(db, routed, { efforts: true, signatures: false })
   return parsed.map((session) => {
     const summary = summaries.get(session.sessionId)
     return summary === undefined ? session : { ...session, efforts: summary.efforts }

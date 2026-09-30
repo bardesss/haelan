@@ -1126,7 +1126,12 @@
         "sources": [
           "watch"
         ],
-        "alternateIds": []
+        "alternateIds": [],
+        "rate": {
+          "key": "pace",
+          "unit": "seconds_per_km",
+          "value": 350
+        }
       }
     ]
   },

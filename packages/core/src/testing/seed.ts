@@ -194,6 +194,9 @@ const stepCurve = (hour: number): number => Math.max(0, Math.sin(((hour - 6) / 1
 // which is demo-data drift stopping somebody's dashboard. `requireType` above is a function for
 // the same reason; this used to be the one that was not.
 const SEED_EXERCISE_TYPES = ['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL'] as const
+// Two of the last runs are filed as a trail run and a treadmill run (RELABELLED_RUNS below), so the
+// demo has a run of each kind the workout page reads another way. Checked with the five above.
+const RELABELLED_TYPES = ['TRAIL_RUN', 'TREADMILL'] as const
 
 // The order the workout days take their type in, round and round. A pick over the five types gave
 // a run one workout in five, too few for the demo's workout page to find a usual range for a run
@@ -206,7 +209,7 @@ const WORKOUT_SCHEDULE: readonly (typeof SEED_EXERCISE_TYPES)[number][] = [
 ]
 
 function requireExerciseTypes(): readonly string[] {
-  for (const type of SEED_EXERCISE_TYPES) {
+  for (const type of [...SEED_EXERCISE_TYPES, ...RELABELLED_TYPES]) {
     if (!EXERCISE_TYPES.includes(type)) {
       throw new Error(`seedArchive: '${type}' is no longer an exercise type this catalogue knows about`)
     }
@@ -294,6 +297,25 @@ const WORKOUT_STREAM = 0x776f726b
 const RECOVERY_STREAM = 0x72656376
 // The minutes of heart rate written after each workout's end, for the page's heart-rate recovery.
 const RECOVERY_MINUTES = 3
+// Seeds the stream every ride draws from (see rideRand), its readings and its length and speed
+// alike, so giving rides splits, steps and a loop of their own moved no draw on the workout stream
+// (the ride it drew before is still drawn there, and set aside), and no figure a run, a walk, a
+// swim or a lift already had.
+const RIDE_STREAM = 0x72696465
+// Every ride goes round one loop of about this length, a little over the shortest ride effort (20
+// km, fastestEfforts.ts), so each one has a 20 km time and any two are the same route to
+// routeMatch.ts. Kept under an hour at the slowest speed drawn (RIDE_SPEED_KMH), as every seeded
+// workout is: one that ran past the next hour would share that hour's minute with the hourly
+// heart-rate curve.
+const RIDE_LOOP_METERS = 21_000
+const RIDE_LOOP_JITTER_METERS = 150
+const RIDE_SPEED_KMH: [number, number] = [22, 27]
+// How many rides carry a route when the caller asked for routes: the last ride and the most recent
+// earlier one of nearly its length, so its page draws "Deze route", the ride's efforts and records.
+const ROUTED_RIDES = 2
+// The runs, counted back from the last one scheduled, filed as another kind of run: late enough that
+// the demo's detail sweep mounts their pages, early enough never to be the routed last run.
+const RELABELLED_RUNS: Readonly<Record<number, (typeof RELABELLED_TYPES)[number]>> = { 4: 'TREADMILL', 3: 'TRAIL_RUN' }
 
 /**
  * Heart rate for the minutes after a workout: one reading a minute from the minute after the end's
@@ -401,11 +423,15 @@ interface WorkoutReading {
 function workoutReadingFor(wr: () => number, o: {
   exerciseType: string, startMs: number, endMs: number, offset: string, startBpm: number,
   restingBpm: number, maxBpm: number, ceilings: ZoneCeilings, runIndex: number, vo2Base: number,
+  /** A ride's loop, in metres: its distance, the speed following from its moving time. */
+  rideMeters?: number,
 }): WorkoutReading {
   const profile = WORKOUT_PROFILES[o.exerciseType]!
   const elapsedMs = o.endMs - o.startMs
   const isRun = o.exerciseType === 'RUNNING'
   const onFoot = isRun || o.exerciseType === 'WALKING'
+  // A ride on its loop; without one, the ride this file drew before loops (seedArchive sets it aside).
+  const isRide = o.exerciseType === 'BIKING' && o.rideMeters !== undefined
 
   // A run now and then stops mid-way (a crossing, a shoelace) for one to three minutes, never
   // near the end, where the finish sequence's own PAUSE already sits.
@@ -496,10 +522,11 @@ function workoutReadingFor(wr: () => number, o: {
     }
   }
 
-  // Runs get a little quicker over the span; a ride's pace is its speed turned over.
+  // Runs get a little quicker over the span; a ride's pace is its loop over its moving time.
   const paceSecondsPerKm = isRun ? range(wr, 305, 360) - Math.min(20, o.runIndex * 0.25)
     : onFoot ? range(wr, 600, 720)
-      : 3600 / range(wr, 22, 28)
+      : o.rideMeters !== undefined ? activeSeconds / (o.rideMeters / 1000)
+        : 3600 / range(wr, 22, 28)
   const distanceMillimeters = Math.round((activeSeconds / paceSecondsPerKm) * 1_000_000)
   const elevationMeters = onFoot ? range(wr, 12, 80) : range(wr, 80, 320)
   const metricsSummary: Record<string, unknown> = {
@@ -510,11 +537,13 @@ function workoutReadingFor(wr: () => number, o: {
     elevationGainMillimeters: Math.round(elevationMeters * 1000),
   }
   const detail: Record<string, unknown> = { ...common, exerciseMetadata: { hasGps: true }, metricsSummary }
-  if (!onFoot) {
+  if (!onFoot && !isRide) {
     return { detail, heartRate, progress: [], pause, activeSeconds, elevationMeters }
   }
 
-  const steps = Math.round((isRun ? range(wr, 160, 176) : range(wr, 106, 120)) * activeSeconds / 60)
+  // A wrist on a handlebar still counts a few steps a minute, from the road through the bars.
+  const stepsPerMinute = isRun ? range(wr, 160, 176) : isRide ? range(wr, 18, 34) : range(wr, 106, 120)
+  const steps = Math.round(stepsPerMinute * activeSeconds / 60)
   metricsSummary.steps = String(steps)
 
   // Automatic kilometre splits and the short one a workout ends on. Each kilometre's pace wobbles
@@ -559,6 +588,20 @@ function workoutReadingFor(wr: () => number, o: {
     metricsSummary.runVo2Max = Number((o.vo2Base + o.runIndex * 0.05 + range(wr, -0.4, 0.4)).toFixed(1))
   }
   return { detail, heartRate, progress, pause, activeSeconds, elevationMeters }
+}
+
+// A run filed as a treadmill run: a belt has no satellite fix and no hill, and the watch works out
+// no pace of its own there, so the page works its pace out from distance and moving time.
+function treadmillDetail(detail: Record<string, unknown>): Record<string, unknown> {
+  const { averagePaceSecondsPerMeter: _pace, averageSpeedMillimetersPerSecond: _speed, elevationGainMillimeters: _climb, ...metrics } =
+    detail.metricsSummary as Record<string, unknown>
+  return { ...detail, exerciseMetadata: { hasGps: false }, metricsSummary: metrics }
+}
+
+// A run filed as a trail run: the same run up and down a good deal more, four times the climb.
+function trailDetail(detail: Record<string, unknown>): Record<string, unknown> {
+  const metrics = detail.metricsSummary as Record<string, unknown>
+  return { ...detail, metricsSummary: { ...metrics, elevationGainMillimeters: (metrics.elevationGainMillimeters as number) * 4 } }
 }
 
 // A demo route, opted into only by scripts/seed-demo.mjs via SeedArchiveInput's `demoRoute` below -
@@ -767,6 +810,11 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   // minute at a time, the day's zone ceilings) draw from a third stream, for the same reason.
   const workoutRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ WORKOUT_STREAM)
   const recoveryRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ RECOVERY_STREAM)
+  const rideRand = mulberry32((input.seed ?? DEFAULT_SEED) ^ RIDE_STREAM)
+  // The day indices of the scheduled runs, so RELABELLED_RUNS can count back from the last one.
+  const runDays = Array.from({ length: input.days }, (_, i) => i)
+    .filter((i) => i % 3 === 1 && WORKOUT_SCHEDULE[((i - 1) / 3) % WORKOUT_SCHEDULE.length] === 'RUNNING')
+  const relabelled = new Map(Object.entries(RELABELLED_RUNS).map(([back, type]) => [runDays.at(-Number(back)), type]))
   // One person, so one heart rate ceiling and one fitness level for the whole span.
   const maxBpm = range(workoutRand, 182, 194)
   const vo2Base = range(workoutRand, 42, 46)
@@ -875,6 +923,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   // its pace and VO2max improve with.
   let runIndex = 0
   const keptRuns: Array<{ name: string, startMs: number, endMs: number, offset: string, reading: WorkoutReading }> = []
+  const keptRides: typeof keptRuns = []
 
   for (let i = 0; i < input.days; i++) {
     const dayStart = input.endMs - (input.days - i) * DAY_MS
@@ -901,7 +950,12 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       // that depended on the pick (peakMinutes below).
       const drawnRun = pick(rand, exerciseTypes) === 'RUNNING'
       const exerciseType = WORKOUT_SCHEDULE[((i - 1) / 3) % WORKOUT_SCHEDULE.length]!
-      return { hour, startMs, endMs, exerciseType, drawnRun }
+      if (exerciseType !== 'BIKING') return { hour, startMs, endMs, exerciseType, drawnRun, rideMeters: undefined, drawnEndMs: endMs }
+      // A ride goes round the loop at its own speed, both off the ride stream; `endMs` above is
+      // still drawn, and set aside, so `rand` moves exactly as it did.
+      const rideMeters = Math.round(RIDE_LOOP_METERS + range(rideRand, -RIDE_LOOP_JITTER_METERS, RIDE_LOOP_JITTER_METERS))
+      const rideSeconds = Math.round(rideMeters / (range(rideRand, ...RIDE_SPEED_KMH) / 3.6))
+      return { hour, startMs, endMs: startMs + rideSeconds * 1000, exerciseType, drawnRun, rideMeters, drawnEndMs: endMs }
     })() : null
 
     // Moved ahead of the heart-rate curve below, which reads this same trend for its overnight
@@ -1148,10 +1202,22 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     if (workout) {
       // Drawn whether or not lastDayUntilMs keeps the workout, so the stream never depends on it.
       const offset = amsterdamOffset(workout.startMs)
-      const reading = workoutReadingFor(workoutRand, {
+      const readingInput = {
+        exerciseType: workout.exerciseType, startMs: workout.startMs, offset,
+        startBpm: workoutStartBpm, restingBpm: restingHrBpm, maxBpm, ceilings, runIndex, vo2Base,
+      }
+      // The ride this file drew before rides had a loop, drawn on the workout stream as it was and
+      // set aside, so every run, walk, swim and lift after it keeps each figure it had.
+      if (workout.exerciseType === 'BIKING') workoutReadingFor(workoutRand, { ...readingInput, endMs: workout.drawnEndMs })
+      const reading = workoutReadingFor(workout.exerciseType === 'BIKING' ? rideRand : workoutRand, {
         exerciseType: workout.exerciseType, startMs: workout.startMs, endMs: workout.endMs, offset,
         startBpm: workoutStartBpm, restingBpm: restingHrBpm, maxBpm, ceilings, runIndex, vo2Base,
+        ...(workout.rideMeters === undefined ? {} : { rideMeters: workout.rideMeters }),
       })
+      // A relabelled run is drawn as a run, so no stream moves, and filed as its own kind.
+      const filedType = relabelled.get(i) ?? workout.exerciseType
+      const detail = filedType === 'TREADMILL' ? treadmillDetail(reading.detail)
+        : filedType === 'TRAIL_RUN' ? trailDetail(reading.detail) : reading.detail
       if (workout.exerciseType === 'RUNNING') runIndex++
       const after = recoveryFor(recoveryRand, { endMs: workout.endMs, lastBpm: reading.heartRate.at(-1)!.bpm, restingBpm: restingHrBpm })
       if (workoutKept) {
@@ -1161,8 +1227,8 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
           startTime: new Date(workout.startMs).toISOString(),
           endTime: new Date(workout.endMs).toISOString(),
           utcOffset: offset,
-          exerciseType: workout.exerciseType,
-          detail: reading.detail,
+          exerciseType: filedType,
+          detail,
         })])
         // Fetched over the workout's own span and the minutes after it, like a night's readings
         // over the night's, so it is not read as a re-fetch of the day's hourly curve. The window's
@@ -1175,8 +1241,11 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
           payloadKey: HEART_RATE.payloadKey, valuePath: HEART_RATE.valuePath, value: String(r.bpm),
           physicalTime: new Date(r.atMs).toISOString(), utcOffset: amsterdamOffset(r.atMs),
         })))
-        if (workout.exerciseType === 'RUNNING') {
+        if (filedType === 'RUNNING') {
           keptRuns.push({ name, startMs: workout.startMs, endMs: workout.endMs, offset, reading })
+        }
+        if (filedType === 'BIKING') {
+          keptRides.push({ name, startMs: workout.startMs, endMs: workout.endMs, offset, reading })
         }
       }
     }
@@ -1193,25 +1262,30 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   // the type and the route and nothing the companion sync does not send.
   // The last run, and the most recent earlier runs of nearly its length: chosen by what the stream
   // already drew, with no draw of their own, so routing changes nothing else the demo holds.
+  // The rides the same way: the last one and the most recent earlier one on the loop, from one start.
   const lengthOf = (run: (typeof keptRuns)[number]) => run.reading.progress.at(-1)!.meters
-  const lastRun = keptRuns.at(-1)
-  const routedRuns = !input.demoRoute || lastRun === undefined ? [] : [
-    ...keptRuns.slice(0, -1)
-      .filter((run) => Math.abs(lengthOf(run) - lengthOf(lastRun)) <= routedRunLengthTolerance(lengthOf(lastRun)))
-      .slice(-(ROUTED_RUNS - 1)),
-    lastRun,
+  const routedOf = (kept: typeof keptRuns, count: number): typeof keptRuns => {
+    const last = kept.at(-1)
+    return !input.demoRoute || last === undefined ? [] : [
+      ...kept.slice(0, -1)
+        .filter((run) => Math.abs(lengthOf(run) - lengthOf(last)) <= routedRunLengthTolerance(lengthOf(last)))
+        .slice(-(count - 1)),
+      last,
+    ]
+  }
+  const routed = [
+    ...routedOf(keptRuns, ROUTED_RUNS).map((run) => ({ run, exerciseType: 'RUNNING' })),
+    ...routedOf(keptRides, ROUTED_RIDES).map((run) => ({ run, exerciseType: 'BIKING' })),
   ]
-  if (input.demoRoute) {
-    for (const run of routedRuns) {
-      put(EXERCISE, run.startMs, run.endMs, [exercisePoint({
-        name: `${run.name}-phone`,
-        startTime: new Date(run.startMs).toISOString(),
-        endTime: new Date(run.endMs).toISOString(),
-        utcOffset: run.offset,
-        exerciseType: 'RUNNING',
-        route: syntheticRoute({ startMs: run.startMs, ...run.reading }),
-      })])
-    }
+  for (const { run, exerciseType } of routed) {
+    put(EXERCISE, run.startMs, run.endMs, [exercisePoint({
+      name: `${run.name}-phone`,
+      startTime: new Date(run.startMs).toISOString(),
+      endTime: new Date(run.endMs).toISOString(),
+      utcOffset: run.offset,
+      exerciseType,
+      route: syntheticRoute({ startMs: run.startMs, ...run.reading }),
+    })])
   }
 
   putRollups(TOTAL_CALORIES, totalCaloriesWindows)

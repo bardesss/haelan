@@ -172,7 +172,7 @@ const WORKOUT = /^\/api\/v1\/p\/[^/]+\/workout\/[^/]+$/
 
 /**
  * Every workout a captured workout page's same-route card opens whose page the demo cannot open:
- * its "view the previous time" link (`sameRoute.previous`) and each dot on its time and pace strips,
+ * its "view the previous time" link (`sameRoute.previous`) and each dot on its time and rate strips,
  * with no recorded `/sessions/:id` (the read WorkoutDetail makes for it, as unreachableWorkouts
  * checks). The same route's earlier runs can lie months before the window the sweep mounts, so the
  * recorder mounts these until this is empty. Each entry is the missing id; `from` is the page.
@@ -187,10 +187,33 @@ export function unreachableRouteWorkouts(recorded: ReadonlyMap<string, unknown>)
     if (same === null || same === undefined) continue
     const ids = [
       ...(same.previous === null ? [] : [same.previous.sessionId]),
-      ...[same.time, ...(same.pace === null ? [] : [same.pace])].flatMap((figure) => figure.strip.flatMap((p) => (p.sessionId === undefined ? [] : [p.sessionId]))),
+      ...[same.time, ...(same.rate === null ? [] : [same.rate])].flatMap((figure) => figure.strip.flatMap((p) => (p.sessionId === undefined ? [] : [p.sessionId]))),
     ]
     for (const id of ids) {
       if (!recorded.has(`${base}/sessions/${encodeURIComponent(id)}`) && !missing.has(id)) missing.set(id, url)
+    }
+  }
+  return [...missing].map(([id, from]) => ({ id, from })).sort((a, b) => a.id.localeCompare(b.id))
+}
+
+const ALL_TIME = /^\/api\/v1\/p\/[^/]+\/all-time$/
+
+/**
+ * Every workout a captured Records page links to (each `sessionRecords` row opens the workout that
+ * set it) whose page the demo cannot open: no recorded `/workout/:id` or `/sessions/:id`, the two
+ * reads WorkoutDetail makes. A record can be set months before anything the sweep mounts, so the
+ * recorder mounts these after it. Each entry is the missing id; `from` is the Records read.
+ */
+export function unreachableRecordWorkouts(recorded: ReadonlyMap<string, unknown>): { id: string, from: string }[] {
+  const missing = new Map<string, string>()
+  for (const [url, body] of recorded) {
+    const [path = ''] = url.split('?')
+    if (!ALL_TIME.test(path)) continue
+    const base = path.slice(0, -'/all-time'.length)
+    for (const { sessionId } of (body as { sessionRecords: { sessionId: string }[] }).sessionRecords) {
+      const id = encodeURIComponent(sessionId)
+      const opens = recorded.has(`${base}/workout/${id}`) && recorded.has(`${base}/sessions/${id}`)
+      if (!opens) missing.set(sessionId, url)
     }
   }
   return [...missing].map(([id, from]) => ({ id, from })).sort((a, b) => a.id.localeCompare(b.id))
@@ -200,5 +223,5 @@ export function unreachableRouteWorkouts(recorded: ReadonlyMap<string, unknown>)
 interface RouteCard {
   previous: { sessionId: string } | null
   time: { strip: { sessionId?: string }[] }
-  pace: { strip: { sessionId?: string }[] } | null
+  rate: { strip: { sessionId?: string }[] } | null
 }

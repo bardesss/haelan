@@ -7,6 +7,7 @@ import type { PageFigure } from './useNightPage.js'
 import type { DayLog } from './useNightPage.js'
 import type { GlanceRecovery, GlanceStanding } from './useGlance.js'
 import type { WorkoutSession } from './useSessions.js'
+import type { SessionRecordKind } from './useAllTime.js'
 
 // Mirrors the wire shape of packages/core/src/query/workoutPage.ts's WorkoutPage, after
 // apps/server/src/routes/v1/detail.ts rounds it and adds `log`, field for field rather than
@@ -15,7 +16,7 @@ import type { WorkoutSession } from './useSessions.js'
 // than importing core's.
 
 /** packages/core/src/query/workoutPage.ts's own WorkoutFigureKey union. */
-export type WorkoutFigureKey = 'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate'
+export type WorkoutFigureKey = 'pace' | 'speed' | 'swimPace' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate'
   | 'highestHeartRate' | 'cardioLoad' | 'banister' | 'calories' | 'steps' | 'activeZoneMinutes'
   | 'elevationGain' | 'hardZoneMinutes' | 'cadence' | 'strideLength' | 'groundContact'
   | 'verticalOscillation' | 'verticalRatio' | 'vo2max' | 'swimLengths'
@@ -42,7 +43,6 @@ export interface WorkoutComparison {
   exerciseType: string | null
   of: number
   reason: ComparisonReason | null
-  pace: ComparisonFacet | null
   heartRate: ComparisonFacet | null
   distance: ComparisonFacet | null
   cardioLoad: ComparisonFacet | null
@@ -55,10 +55,13 @@ export interface MinuteSeries { unit: string, points: { elapsedSeconds: number, 
 /** Pace, with its fastest minute: the lowest smoothed seconds per km and when it came (workoutThrough.ts's PaceSeries). */
 export interface PaceSeries extends MinuteSeries { fastest: { secondsPerKm: number, elapsedSeconds: number } | null }
 
-export interface RecordRef { value: number, sessionId: string, localDate: string }
+/** A ride's speed in metres per second, with its fastest minute: the highest smoothed speed and when it came (workoutThrough.ts's SpeedSeries). */
+export interface SpeedSeries extends MinuteSeries { fastest: { metersPerSecond: number, elapsedSeconds: number } | null }
 
-/** The three distances a run's fastest efforts are read over (fastestEfforts.ts's EffortKey). */
-export type EffortKey = 'km' | 'mile' | 'fiveK'
+/** The figures the previous workout's values cover (workoutPage.ts's PreviousKey). */
+export type PreviousKey = 'pace' | 'speed' | 'swimPace' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad'
+
+export interface RecordRef { value: number, sessionId: string, localDate: string }
 
 /** One fastest effort beside the Records best of its kind and the best before this workout
  *  (workoutPage.ts's efforts entry): whole seconds, and whole metres along the route to where the
@@ -75,13 +78,21 @@ export interface WorkoutPageData {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
-  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad', number>> } | null
-  best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
+  /** How many of the compared workouts this one beat on the rate its hero shows (a pace, a ride's
+   *  speed, a swim's pace per 100 m), read as the hero reads it; null for a time hero, a comparison
+   *  with a reason, or too few earlier readings (workoutPage.ts's rankOf). */
+  rank: ComparisonFacet | null
+  previous: { sessionId: string, localDate: string, values: Partial<Record<PreviousKey, number>> } | null
+  /** The category's Records bests (workoutPage.ts's best): one per kind the category keeps, null
+   *  where none is held; `longest`, `furthest` and `most-climb` always present. Milliseconds for
+   *  `longest`, whole metres for `furthest` and `most-climb`, whole seconds for each `fastest-*`. */
+  best: Partial<Record<SessionRecordKind, RecordRef | null>> & Record<'longest' | 'furthest' | 'most-climb', RecordRef | null>
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
   /** How far heart rate fell one and two minutes after the end, in whole bpm, each judged against
    *  the latest ten workouts of the type, and the minute means each fall is between (`readings`,
-   *  whole bpm, null for a minute with no reading); null when neither minute had a reading. */
+   *  whole bpm, null for a minute with no reading); null when neither minute had a reading, and
+   *  for any category but a run, a ride, a swim and cardio. */
   heartRateRecovery: {
     oneMinute: PageFigure, twoMinutes: PageFigure
     readings: { endBpm: number, oneMinuteBpm: number | null, twoMinutesBpm: number | null }
@@ -90,29 +101,35 @@ export interface WorkoutPageData {
   } | null
   /** The night ending on the workout's own date and that morning's recovery; null for each with no value. */
   before: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, recovery: GlanceRecovery | null, restingHeartRate: PageFigure | null }
-  /** Pace (seconds per km, from the route) and cadence (steps per minute, from the workout's own
-   *  device's steps) a minute at a time, whole numbers; null for each the workout cannot give. */
-  through: { pace: PaceSeries | null, cadence: MinuteSeries | null }
-  /** Whole seconds per km the second half of the automatic splits was faster than the first,
-   *  negative when slower; null below two usable splits (workoutPage.ts's splitTrendOf). */
-  splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
+  /** Pace (whole seconds per km, from the route), or for a ride its speed in its place (metres per
+   *  second at two decimals), and cadence (whole steps per minute, from the workout's own device's
+   *  steps, a run's or a walk's alone) a minute at a time; null for each the workout cannot give. */
+  through: { pace: PaceSeries | null, speed: SpeedSeries | null, cadence: MinuteSeries | null }
+  /** How much faster the second half of the automatic splits went than the first, negative when
+   *  slower: whole seconds per km, or for a ride metres per second at two decimals; null below two
+   *  usable splits (workoutPage.ts's splitTrendOf). */
+  splitTrend: { secondHalfFasterBySecondsPerKm: number } | { secondHalfFasterByMetersPerSecond: number } | null
   /** Where each heart rate zone above light begins, in whole bpm, from the provider's ceilings for
    *  the day (cardioLoad.ts's ZoneBounds); light has no floor to send. */
   zoneBounds: { moderateMin: number, vigorousMin: number, peakMin: number, max: number } | null
   /** This workout's time against the earlier times on the same route (workoutPage.ts's
    *  sameRouteOf): `time` is judged like any figure, lower being better, under the key it was
-   *  compared on ('movingTime', or 'elapsed' when this workout recorded no moving time); `pace`
-   *  the same against the earlier paces on the route, null without a pace of its own; `times` is
+   *  compared on ('movingTime', or 'elapsed' when this workout recorded no moving time); `rate`
+   *  the same against the earlier rates on the route, read as the category reads one (a ride's
+   *  speed, a swim's pace per 100 m, pace per km for the rest), null without one of its own; `times` is
    *  how many times the route was done, this workout counted in, `since` the date of the oldest earlier one, `previous` the
    *  latest, its time in whole seconds. Null without a route or with no earlier workout on it. */
   sameRoute: {
-    times: number, since: string, time: WorkoutFigure, pace: WorkoutFigure | null
+    times: number, since: string, time: WorkoutFigure, rate: WorkoutFigure | null
     previous: { sessionId: string, localDate: string, seconds: number } | null
   } | null
-  /** The fastest kilometre, mile and 5 km inside a run's route, in whole seconds, each beside the
-   *  type's Records best (`isBest` when that best is this workout); null for a distance the route
-   *  is shorter than, and null altogether without a route or for any type but a run. */
-  efforts: Record<EffortKey, WorkoutEffort | null> | null
+  /** The fastest stretch over each of the category's effort distances inside the route (a run's
+   *  1 km to marathon, a ride's 20 to 100 km), keyed by distance, in whole seconds, each beside the
+   *  category's Records best (`isBest` when that best is this workout); null for a distance the
+   *  route is shorter than, and null altogether without a route, for a category with no distances,
+   *  or for a type that holds no speed record. Keyed by fastestEfforts.ts's
+   *  EFFORT_DISTANCES_BY_CATEGORY keys ('1k', '20k'). */
+  efforts: Record<string, WorkoutEffort | null> | null
   /** The quick log for the day this workout was done on (routes/v1/detail.ts: the workout's own localDate). */
   log: DayLog
 }

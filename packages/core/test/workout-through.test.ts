@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cadenceSeries, paceSeries } from '../src/query/workoutThrough.ts'
+import { cadenceSeries, paceSeries, pauseMetresPerMinuteOf, speedSeries } from '../src/query/workoutThrough.ts'
 
 const START = Date.parse('2026-09-04T05:00:00Z')
 /** An end well past every route below, for the tests the end plays no part in. */
@@ -90,6 +90,54 @@ describe('paceSeries', () => {
   it('is null for a single fix, and for a route that never moves', () => {
     expect(paceSeries(route([]), START, HOUR_ON)).toBeNull()
     expect(paceSeries(route(Array(12).fill(0)), START, HOUR_ON)).toBeNull()
+  })
+  it('takes its pause threshold from the caller: 30 m a minute moves at 20 and stands still at 50', () => {
+    const slow = route(Array(12).fill(0.5))
+    expect(paceSeries(slow, START, HOUR_ON, 20)!.points.map((p) => p.elapsedSeconds)).toEqual([0, 60])
+    expect(paceSeries(slow, START, HOUR_ON)).toBeNull()
+  })
+})
+
+describe('pauseMetresPerMinuteOf', () => {
+  it('stops a walk under 20 m a minute, a run under 50 and a ride under 150', () => {
+    expect(pauseMetresPerMinuteOf('walk')).toBe(20)
+    expect(pauseMetresPerMinuteOf('run')).toBe(50)
+    expect(pauseMetresPerMinuteOf('ride')).toBe(150)
+  })
+
+  it('reads any other category as a run', () => {
+    expect(pauseMetresPerMinuteOf('swim')).toBe(50)
+    expect(pauseMetresPerMinuteOf('cardio')).toBe(50)
+  })
+})
+
+describe('speedSeries', () => {
+  it('reads 8 m/s as 8 m/s, every minute of it', () => {
+    const series = speedSeries(route(Array(60).fill(8)), START, HOUR_ON, 150)!
+    expect(series.unit).toBe('meters_per_second')
+    expect(series.points).toHaveLength(10)
+    for (const p of series.points) expect(p.value).toBeCloseTo(8, 3)
+  })
+
+  it('names the fastest minute by its highest smoothed speed, and the earlier of a tie', () => {
+    // 6, 9, 9, 9, 6 m/s: the middle minute alone smooths to 9.
+    const middle = speedSeries(route([...Array(6).fill(6), ...Array(18).fill(9), ...Array(6).fill(6)]), START, HOUR_ON, 150)!
+    expect(middle.fastest).toEqual({ metersPerSecond: expect.closeTo(9, 3), elapsedSeconds: 120 })
+    expect(middle.fastest!.metersPerSecond).toBe(Math.max(...middle.points.map((p) => p.value)))
+    const tie = speedSeries(route([...Array(12).fill(9), ...Array(12).fill(6), ...Array(12).fill(9)]), START, HOUR_ON, 150)!
+    expect(tie.fastest!.elapsedSeconds).toBe(0)
+  })
+
+  it('leaves a minute under its pause threshold out, as pace does', () => {
+    // 2 m/s is 120 m a minute: moving at a run's 50, standing still at a ride's 150.
+    const slow = route([...Array(6).fill(8), ...Array(6).fill(2), ...Array(6).fill(8)])
+    expect(speedSeries(slow, START, HOUR_ON, 150)!.points.map((p) => p.elapsedSeconds)).toEqual([0, 120])
+    expect(speedSeries(slow, START, HOUR_ON, 50)!.points.map((p) => p.elapsedSeconds)).toEqual([0, 60, 120])
+  })
+
+  it('is null for a single fix, and for a route that never moves', () => {
+    expect(speedSeries(route([]), START, HOUR_ON)).toBeNull()
+    expect(speedSeries(route(Array(12).fill(0)), START, HOUR_ON)).toBeNull()
   })
 })
 

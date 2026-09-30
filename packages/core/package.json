@@ -22,7 +22,8 @@
     "./nights": "./src/api/nights.ts",
     "./event-kinds": "./src/api/eventKinds.ts",
     "./status-panel": "./src/api/statusPanel.ts",
-    "./fastest-efforts": "./src/api/fastestEfforts.ts"
+    "./fastest-efforts": "./src/api/fastestEfforts.ts",
+    "./exercise-category": "./src/api/exerciseCategory.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"

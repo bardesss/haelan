@@ -154,4 +154,27 @@ describe('the grid-collapse rule', () => {
     const rule = rules(blocks[dashboard]!.body).find((r) => parts(r.selector).includes('.dashboard-grid [data-span]'))!
     expect(rule.body).toMatch(/^grid-column:\s*span 12 !important;?$/)
   })
+  // The Records page's category cards: four record columns do not fit half of the mid band's ~660px
+  // column, so there every category card takes the row. Keyed on the list the card holds (the `>`
+  // holds only while Card renders its children straight into the section), and !important for the
+  // same reason as every mid-band span.
+  it('gives every Records category card the whole row in the mid band', () => {
+    const query = '@media (width > 900px) and (max-width: 1200px)'
+    const selector = '.grid .card:has(> .record-list[data-category])'
+    const bodies: string[] = []
+    for (let at = css.indexOf(query); at !== -1; at = css.indexOf(query, at + 1)) {
+      const open = css.indexOf('{', at)
+      let depth = 0
+      for (let i = open; i < css.length; i += 1) {
+        if (css[i] === '{') depth += 1
+        else if (css[i] === '}') {
+          depth -= 1
+          if (depth === 0) { bodies.push(css.slice(open + 1, i)); break }
+        }
+      }
+    }
+    const rule = bodies.flatMap((body) => rules(body)).find((r) => parts(r.selector).includes(selector))
+    expect(rule, `a mid-band block should carry ${selector}`).toBeDefined()
+    expect(rule!.body).toMatch(/^grid-column:\s*span 12 !important;?$/)
+  })
 })

@@ -56,9 +56,10 @@ describe('the @haelan/core/metrics subpath', () => {
     // one-night-per-date rule the glance and apps/web share, to the same empty list;
     // and status-panel-subpath.test.ts holds ./status-panel, whose 30-day default rule the server's
     // panel and the source list's switch share, to that empty list too; fastest-efforts-subpath.test.ts
-    // holds ./fastest-efforts to the one pure module it reads, workoutThrough.ts.
+    // holds ./fastest-efforts to the one pure module it reads, workoutThrough.ts;
+    // exercise-category-subpath.test.ts holds ./exercise-category to an empty import list.
     expect(Object.keys(pkg.exports).sort()).toEqual([
-      '.', './baseline-window', './cardio-load', './coverage-signal', './event-kinds', './fastest-efforts', './metric-data-type', SUBPATH,
+      '.', './baseline-window', './cardio-load', './coverage-signal', './event-kinds', './exercise-category', './fastest-efforts', './metric-data-type', SUBPATH,
       './nights', './recovery-index', './source-cadence', './split-heart-rate', './status-panel', './target-key', './training-load',
       './workout-comparison', './workout-summary',
     ])

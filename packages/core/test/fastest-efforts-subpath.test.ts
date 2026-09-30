@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { EFFORT_DISTANCES, fastestEfforts } from '../src/api/fastestEfforts.ts'
+import { EFFORT_DISTANCES_BY_CATEGORY, fastestEfforts } from '../src/api/fastestEfforts.ts'
 
-// The browser-safe entry point the Records page reads EFFORT_DISTANCES through (M10b PR 6).
+// The browser-safe entry point the Records page reads EFFORT_DISTANCES_BY_CATEGORY through (M10b PR 6).
 // apps/web cannot depend on the barrel (it pulls better-sqlite3 and drizzle into a browser bundle).
 // Unlike workout-comparison, this module reaches into query/, where nearly every module imports
 // the database: it borrows haversineMeters from workoutThrough.ts, which today imports nothing.
@@ -36,13 +36,16 @@ describe('the @haelan/core/fastest-efforts subpath', () => {
       expect(from, 'a relative module inside src/, never a package')
         .toMatch(/^(?:\.\/|\.\.\/[a-z]+\/)[A-Za-z]+\.ts$/)
       const target = new URL(from!, new URL('../src/api/', import.meta.url))
+      // A type-only import is erased before any bundle sees it (workoutThrough.ts names
+      // ExerciseCategory as a type), so it reaches nothing; any import that survives does.
       const reached = [...readFileSync(fileURLToPath(target), 'utf8').matchAll(IMPORT_LINE)]
-      expect(reached.map((m) => m[0]), `${from} must import nothing`).toEqual([])
+        .map((m) => m[0]).filter((l) => !/^import\s+type\s/.test(l))
+      expect(reached, `${from} must import nothing`).toEqual([])
     }
   })
 
   it('is a pure function of its arguments', () => {
-    expect(Object.keys(EFFORT_DISTANCES)).toEqual(['km', 'mile', 'fiveK'])
-    expect(fastestEfforts([])).toEqual(fastestEfforts([]))
+    expect(Object.keys(EFFORT_DISTANCES_BY_CATEGORY)).toEqual(['run', 'ride'])
+    expect(fastestEfforts([], 'run')).toEqual(fastestEfforts([], 'run'))
   })
 })

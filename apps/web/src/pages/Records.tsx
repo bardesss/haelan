@@ -1,15 +1,23 @@
 import { useTranslation } from '../i18n/index.js'
-import { EFFORT_DISTANCES } from '@haelan/core/fastest-efforts'
+import { effortDistancesOf } from '@haelan/core/fastest-efforts'
+import { PLAIN_TYPE, RATE_FIGURES, RECORD_CATEGORY_ORDER, rateOf } from '@haelan/core/exercise-category'
+import type { ExerciseCategory } from '@haelan/core/exercise-category'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
+import { Icon } from '../components/icons.js'
 import { Loading } from '../components/Loading.js'
-import { formatDuration, formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
+import { Link } from '../router.js'
+import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
+import { exerciseTypeLabel } from '../data/exerciseTypeLabel.js'
+import { CATEGORY_ICONS } from './activity/SessionRow.js'
+import { distanceText, sessionRateText } from './activity/categoryText.js'
+import { workoutPath } from './activity/workout/workoutText.js'
 import { useAllTime } from '../data/useAllTime.js'
 import { sourceLabel } from '../data/useSourceNames.js'
 import { useSession } from '../auth/session.js'
 import { localToday } from '../controls/range.js'
 import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/useAllTime.js'
-import { formatStopwatch } from './detail/figureText.js'
+import { figureAs, formatFigureValue, noBreak } from './detail/figureText.js'
 
 /**
  * What only the whole archive can answer.
@@ -59,17 +67,29 @@ const onDate = formatLocalDate
  * A record's value as a person reads it, which is not always the number in the row.
  *
  * `distance` is stored in millimetres (METRICS.distance, precision 0), so the catalogue's own
- * formatter would render a ten kilometre day as "10,000,000". Every other surface in this app
- * converts at the point of display for exactly this metric; this is that conversion, in the one
- * place this page needs it. Every other metric goes through formatMetricValue so its precision
+ * formatter would render a ten kilometre day as "10,000,000". It reads as every day's distance does
+ * (formatFigureValue's millimetres: "41.8 km", the Activity page's), with no-break spaces like the
+ * session records beside it. Every other metric goes through formatMetricValue so its precision
  * comes off the catalogue rather than off a literal here.
  */
-function recordValue(metric: string, value: number, language: string): string {
-  if (metric === 'distance') return `${formatNumber(value / 1_000_000, 1, language, '')} km`
-  return formatMetricValue(value, metric, language, '')
+function recordValue(metric: string, value: number, language: string, t: Translate): string {
+  if (metric === 'distance') return formatFigureValue(figureAs('distance', 'millimeters'), value, language, t)
+  return noBreak(formatMetricValue(value, metric, language, ''))
+}
+
+/**
+ * The session records by category, in RECORD_CATEGORY_ORDER (run, ride, walk, swim, then the ones
+ * that keep only a longest session), each keeping the order the server listed its kinds in. A
+ * category with no record has no group, so no card.
+ */
+function recordGroups(records: readonly SessionRecord[]): { category: ExerciseCategory, records: SessionRecord[] }[] {
+  return RECORD_CATEGORY_ORDER
+    .map((category) => ({ category, records: records.filter((r) => r.category === category) }))
+    .filter((group) => group.records.length > 0)
 }
 
 function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, language: string }) {
+  const groups = recordGroups(all.sessionRecords)
   return (
     <>
       <p className="all-time-span">
@@ -91,15 +111,26 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
           </Card>
         )}
 
-        {all.sessionRecords.length > 0 && (
-          <Card span={12} label={t('records.sessions.label')} basis={t('records.sessions.basis')}>
-            <ul className="record-list list-measured">
-              {all.sessionRecords.map((record) => (
+        {/* A card per category that holds a record, labelled by the category with its glyph: a
+            ride never sits in a run's list. Half width, two to a row; a card left alone in its row
+            (the last of an odd count, or the only one) takes the whole row, so the category cards
+            end on a full row and Eddington and milestones below still pair (PATTERNS.md's span
+            rule: a lone card spans the full width). */}
+        {groups.map(({ category, records }, i) => (
+          <Card key={category} span={i === groups.length - 1 && groups.length % 2 === 1 ? 12 : 6}
+            label={t(`records.categories.${category}`)}
+            labelIcon={(
+              <span className="session-row-icon card-label-icon" data-category={category} aria-hidden="true">
+                <Icon name={CATEGORY_ICONS[category]} />
+              </span>
+            )}>
+            <ul className="record-list list-measured" data-category={category}>
+              {records.map((record) => (
                 <SessionRecordRow key={record.kind} record={record} t={t} language={language} />
               ))}
             </ul>
           </Card>
-        )}
+        ))}
 
         {all.eddington !== null && (
           <Card span={6} label={t('records.eddington.label')}>
@@ -148,7 +179,7 @@ function RecordRow({ record, t, language }: {
     // and every class in this app stays greppable as written.
     <li className="record-row" data-metric={record.metric}>
       <span className="record-metric">{t(`records.metric.${record.metric}`)}</span>
-      <span className="record-value">{recordValue(record.metric, record.value, language)}</span>
+      <span className="record-value">{recordValue(record.metric, record.value, language, t)}</span>
       <span className="record-date">{onDate(record.localDate, language)}</span>
       {/* Named only when one device can be. A merged day assembled from two watches belongs to
           neither, and a provider row carries no mix at all, so most of the time this says nothing
@@ -171,50 +202,58 @@ function RecordRow({ record, t, language }: {
 }
 
 /**
- * A session record's value, in the unit that record is measured in.
- *
- * Three units for three records, which is why this is a switch rather than one formatter: a
- * duration reads as hours and minutes, a distance as kilometres, and a pace as minutes and
- * seconds per kilometre. Rendering any of them as a bare number would be technically true and
- * useless.
+ * A session record's value, in the unit its category reads it in, through the workout page's own
+ * formatter for each (formatFigureValue): a duration for the longest ("4h 24m", "4u 24m"), a
+ * distance in kilometres (a swim's in whole metres), a climb in whole metres, and a fastest time
+ * as its stopwatch followed by the category's rate over that distance: a pace a kilometre on foot,
+ * a speed on a bike ("km/u" in Dutch). A run's kilometre is its pace alone, as it always read.
  */
-function sessionValue(record: SessionRecord, language: string): string {
-  if (record.kind === 'longest') {
-    return formatDuration(record.value / 60_000, language)
-  }
+function sessionValue(record: SessionRecord, language: string, t: Translate): string {
+  const value = (metric: string, unit: string, v: number) => formatFigureValue(figureAs(metric, unit), v, language, t)
+  if (record.kind === 'longest') return value('longest', 'minutes', record.value / 60_000)
   if (record.kind === 'furthest') {
-    return `${formatNumber(record.value / 1_000_000, 1, language, '')} km`
+    return distanceText(record.category, record.value, language, t)
   }
-  // The mile and the 5 km off a run's GPS route: the stopwatch time, then its pace a kilometre.
-  const km = EFFORT_KM[record.kind]
-  if (km !== undefined) return `${formatStopwatch(record.value)} · ${formatStopwatch(record.value / km)} / km`
-  const seconds = Math.round(record.value)
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} / km`
-}
-
-// How many kilometres each GPS effort record is run over, from the distances core reads them over.
-const EFFORT_KM: Partial<Record<SessionRecord['kind'], number>> = {
-  'fastest-mile': EFFORT_DISTANCES.mile / 1000, 'fastest-5k': EFFORT_DISTANCES.fiveK / 1000,
+  if (record.kind === 'most-climb') return value('climb', 'meters', record.value)
+  if (record.category === 'run' && record.kind === 'fastest-1k') return value('pace', 'seconds_per_km', record.value)
+  const time = value('elapsed', 'seconds', record.value)
+  // The distance core reads the effort over, through the shared map.
+  const key = record.kind.slice('fastest-'.length)
+  const meters = effortDistancesOf(record.category).find((d) => d.key === key)?.meters
+  if (meters === undefined || record.value <= 0) return time
+  // An effort's rate over its own distance and time, as the record states both: a speed on a bike,
+  // a pace a kilometre on foot (only a run, a ride and a walk keep a fastest effort).
+  const rateKey = rateOf(record.category) === 'speed' ? 'speed' : 'pace'
+  const rate = sessionRateText({
+    key: rateKey, unit: RATE_FIGURES[rateKey].unit,
+    value: rateKey === 'speed' ? meters / record.value : record.value / (meters / 1000),
+  }, language, t)
+  return rate === null ? time : `${time} · ${rate}`
 }
 
 function SessionRecordRow({ record, t, language }: {
   record: SessionRecord, t: Translate, language: string
 }) {
+  // Named only when it says more than the card's label does: "Trail run" under Running, never
+  // "Running" again. A category with no one plain type names every type.
+  const typeText = record.exerciseType === null || record.exerciseType === PLAIN_TYPE[record.category]
+    ? '' : exerciseTypeLabel(t, record.exerciseType)
   return (
-    // No class of its own: it shares .record-row's layout deliberately, because the two
-    // lists answer the same question at different grains and should not look like two
-    // features. `data-record` is the seam a test needs, and it carries the kind anyway.
-    <li className="record-row" data-record={record.kind}>
-      <span className="record-metric">{t(`records.sessions.${record.kind}`)}</span>
-      <span className="record-value">{sessionValue(record, language)}</span>
-      <span className="record-date">{onDate(record.localDate, language)}</span>
-      {/* The activity as the device recorded it. Not translated: it is the provider's own enum,
-          and inventing Dutch for CARDIO_WORKOUT would be inventing a fact about the payload.
-          Empty rather than omitted when the device recorded no type, for the same reason
-          RecordRow's device cell is: these rows are columns, and an omitted cell holds no width. */}
-      <span className="record-source">
-        {record.exerciseType === null ? '' : record.exerciseType.toLowerCase().replace(/_/g, ' ')}
-      </span>
+    // .record-row's layout, shared deliberately with the daily records: the two lists answer the
+    // same question at different grains and should not look like two features. `data-record` is
+    // the seam a test needs. The whole row opens the workout that set it, as an Activity list row
+    // does (workoutPath), rather than a link buried in one cell.
+    <li className="record-row record-row-linked" data-record={record.kind} data-category={record.category}>
+      <Link to={workoutPath(record.sessionId)} className="record-row-link">
+        {/* The same words in every category ("Langste", "Snelste 5 km"): the card's label already
+            names the sport. */}
+        <span className="record-metric">{t(`records.sessions.${record.kind}`)}</span>
+        <span className="record-value">{sessionValue(record, language, t)}</span>
+        <span className="record-date">{onDate(record.localDate, language)}</span>
+        {/* Empty rather than omitted when there is nothing to add, for the same reason RecordRow's
+            device cell is: these rows are columns, and an omitted cell holds no width. */}
+        <span className="record-source">{typeText}</span>
+      </Link>
     </li>
   )
 }

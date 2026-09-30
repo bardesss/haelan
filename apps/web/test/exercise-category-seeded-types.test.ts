@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exerciseCategory, EXERCISE_CATEGORIES } from '../src/data/exerciseCategory.js'
+import { exerciseCategory, EXERCISE_CATEGORIES } from '@haelan/core/exercise-category'
 import { SEEDED_EXERCISE_TYPES } from '../src/data/exerciseTypeLabel.js'
 
 /**

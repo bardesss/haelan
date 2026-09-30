@@ -17,8 +17,8 @@ const run = (id: string, daysAgo: number, over: Record<string, unknown> = {}) =>
   },
 })
 
-// The subject: 0.28 s/m is faster than the 0.3 the helper above gives every candidate.
-const subject = run('subject', 0, { averagePaceSecondsPerMeter: 0.28 })
+// The subject: 140 bpm is lower than the 150 the helper above gives every candidate.
+const subject = run('subject', 0, { averagePaceSecondsPerMeter: 0.28, averageHeartRateBeatsPerMinute: '140' })
 
 describe('comparing a workout against recent ones of the same type', () => {
   it('counts how many it beat rather than ranking it', () => {
@@ -26,7 +26,9 @@ describe('comparing a workout against recent ones of the same type', () => {
     // M6's archive-wide records can honestly claim.
     const result = compareWorkout(subject, [run('a', 1), run('b', 2), run('c', 3)])
     expect(result.reason).toBeNull()
-    expect(result.pace).toEqual({ better: 3, of: 3 })
+    expect(result.heartRate).toEqual({ better: 3, of: 3 })
+    // No pace facet: the hero's rank is the workout page's, on the rate the hero shows.
+    expect(result).not.toHaveProperty('pace')
   })
 
   it('withholds itself with a reason when there are fewer than three prior workouts', () => {
@@ -44,7 +46,8 @@ describe('comparing a workout against recent ones of the same type', () => {
   it('counts a tie as not better, in either direction', () => {
     const tied = run('subject', 0)
     const result = compareWorkout(tied, [run('a', 1), run('b', 2), run('c', 3)])
-    expect(result.pace).toEqual({ better: 0, of: 3 })
+    expect(result.heartRate).toEqual({ better: 0, of: 3 })
+    expect(result.distance).toEqual({ better: 0, of: 3 })
   })
 
   it('ignores a workout of a different type', () => {
@@ -89,14 +92,14 @@ describe('comparing a workout against recent ones of the same type', () => {
     })
     const result = compareWorkout(subject, [withoutHr('a', 1), withoutHr('b', 2), withoutHr('c', 3)])
     expect(result.heartRate).toBeNull()
-    expect(result.pace).toEqual({ better: 3, of: 3 })
+    expect(result.distance).toEqual({ better: 0, of: 3 })
   })
 
   it('answers no facets at all when nothing was compared', () => {
     const result = compareWorkout(subject, [])
     expect(result).toEqual({
       exerciseType: 'RUNNING', of: 0, reason: 'too-few',
-      pace: null, heartRate: null, distance: null, cardioLoad: null,
+      heartRate: null, distance: null, cardioLoad: null,
     })
   })
 })

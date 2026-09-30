@@ -3,6 +3,7 @@ import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import type { DefaultName } from './useSourceNames.js'
+import type { ExerciseCategory } from '@haelan/core/exercise-category'
 
 // Mirrors AllTime in packages/core/src/query/allTime.ts, which the route sends whole - the same
 // choice useSourceNames.ts and useMaintenance.ts make, and for the same reason: apps/web imports
@@ -29,12 +30,17 @@ export interface MetricRecord {
   sourceDefaultName?: DefaultName | null
 }
 
+/** sessionRecords.ts's SessionRecordKind: `fastest-${key}` over EFFORT_DISTANCES_BY_CATEGORY's keys. */
+export type SessionRecordKind = 'longest' | 'furthest' | 'most-climb' | `fastest-${string}`
+
 export interface SessionRecord {
-  kind: 'longest' | 'furthest' | 'fastest-km' | 'fastest-mile' | 'fastest-5k'
+  /** The category the record is held in (exerciseCategory.ts): a ride never holds a run's record. */
+  category: ExerciseCategory
+  kind: SessionRecordKind
   sessionId: string
   localDate: string
   exerciseType: string | null
-  /** Milliseconds, millimetres or seconds, depending on `kind`: seconds for every `fastest-*`. */
+  /** Milliseconds for `longest`, whole metres for `furthest` and `most-climb`, whole seconds for every `fastest-*`. */
   value: number
 }
 

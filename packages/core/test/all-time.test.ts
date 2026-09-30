@@ -194,13 +194,13 @@ describe('readAllTime', () => {
     })
 
     const { sessionRecords } = readAllTime(test.db, 'p1')
-    expect(sessionRecords.find((r) => r.kind === 'longest')).toMatchObject({
+    expect(sessionRecords.find((r) => r.kind === 'longest' && r.category === 'cardio')).toMatchObject({
       sessionId: 'long', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000,
     })
     expect(sessionRecords.find((r) => r.kind === 'furthest')).toMatchObject({
-      sessionId: 'far', value: 12_850_000,
+      sessionId: 'far', value: 12_850,
     })
-    expect(sessionRecords.find((r) => r.kind === 'fastest-km')).toMatchObject({
+    expect(sessionRecords.find((r) => r.kind === 'fastest-1k')).toMatchObject({
       // The 308.5 s split, in whole seconds as every fastest record is (sessionRecords.ts).
       sessionId: 'far', value: 309,
     })
@@ -254,23 +254,45 @@ describe('readAllTime', () => {
     expect(routeReads[0]).toMatch(/"latitude"/)
     expect(routeReads[0]).not.toMatch(/altitude|accuracy/)
     expect(routeSignature).not.toHaveBeenCalled()
-    expect(sessionRecords.find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'quick-km' })
-    expect(sessionRecords.find((r) => r.kind === 'fastest-km')!.value).toBe(250)
+    expect(sessionRecords.find((r) => r.kind === 'fastest-1k')).toMatchObject({ sessionId: 'quick-km' })
+    expect(sessionRecords.find((r) => r.kind === 'fastest-1k')!.value).toBe(250)
     expect(sessionRecords.find((r) => r.kind === 'fastest-mile')).toMatchObject({ sessionId: 'long-run' })
     expect(sessionRecords.find((r) => r.kind === 'fastest-5k')!.value).toBe(1667)
   })
 
-  it('takes no GPS record off a ride, and reads no ride route at all', () => {
+  it("takes a ride's records off its GPS over the ride's distances, and never a run's", () => {
+    // 56 km at 8 m/s: a 20 km and a 40 km, no 100 km.
     insertSession({ kind: 'exercise', id: 'ride', localDate: '2026-03-01', attrs: { exerciseType: 'BIKING' } })
     seedRoute('ride', 8, 700)
     let sessionRecords: ReturnType<typeof readAllTime>['sessionRecords'] = []
-    expect(countRouteReads(() => { sessionRecords = readAllTime(test.db, 'p1').sessionRecords })).toBe(0)
-    expect(sessionRecords.map((r) => r.kind)).toEqual(['longest'])
+    expect(countRouteReads(() => { sessionRecords = readAllTime(test.db, 'p1').sessionRecords })).toBe(1)
+    expect(sessionRecords.map((r) => [r.category, r.kind, r.value]))
+      .toEqual([['ride', 'longest', 60 * 60_000], ['ride', 'fastest-20k', 2500], ['ride', 'fastest-40k', 5000]])
 
     insertSession({ kind: 'exercise', id: 'run', localDate: '2026-03-02', attrs: { exerciseType: 'RUNNING' } })
     seedRoute('run', 3, 200)
-    expect(readAllTime(test.db, 'p1').sessionRecords.map((r) => [r.kind, r.sessionId]))
-      .toEqual([['longest', 'ride'], ['fastest-km', 'run'], ['fastest-mile', 'run'], ['fastest-5k', 'run']])
+    expect(readAllTime(test.db, 'p1').sessionRecords.map((r) => [r.category, r.kind, r.sessionId])).toEqual([
+      ['run', 'longest', 'run'], ['run', 'fastest-1k', 'run'], ['run', 'fastest-mile', 'run'], ['run', 'fastest-5k', 'run'],
+      ['ride', 'longest', 'ride'], ['ride', 'fastest-20k', 'ride'], ['ride', 'fastest-40k', 'ride'],
+    ])
+  })
+
+  it("reads a trail run's route as a run's, and no treadmill's, walk's or indoor ride's route at all", () => {
+    insertSession({ kind: 'exercise', id: 'trail', localDate: '2026-03-01', attrs: { exerciseType: 'TRAIL_RUN' } })
+    seedRoute('trail', 3, 200)
+    for (const [id, exerciseType] of [['treadmill', 'TREADMILL'], ['walk', 'WALKING'], ['spin', 'SPINNING']] as const) {
+      insertSession({ kind: 'exercise', id, localDate: '2026-03-02', attrs: { exerciseType } })
+      seedRoute(id, 5, 200)
+    }
+    const spy = vi.spyOn(test.db.$client, 'prepare')
+    const { sessionRecords } = readAllTime(test.db, 'p1')
+    const routeReads = spy.mock.calls.map(([source]) => String(source)).filter((source) => source.includes('"session_routes"'))
+    spy.mockRestore()
+    expect(routeReads).toHaveLength(1)
+    // One session id bound into that one read: the trail run's.
+    expect(routeReads[0]!.match(/\?/g)).toHaveLength(1)
+    expect(sessionRecords.find((r) => r.kind === 'fastest-5k')).toMatchObject({ category: 'run', sessionId: 'trail', value: 1667 })
+    expect(sessionRecords.filter((r) => r.kind.startsWith('fastest-')).map((r) => r.sessionId)).toEqual(['trail', 'trail', 'trail'])
   })
 
   it('reads the routes of 250 runs in three queries of at most a hundred sessions', () => {
@@ -408,7 +430,7 @@ describe('readAllTime session records over merged workouts', () => {
 
     const { sessionRecords } = readAllTime(test.db, 'p1')
     expect(sessionRecords.find((r) => r.kind === 'furthest'))
-      .toMatchObject({ sessionId: 'fitbit-run', value: 5_000_000 })
+      .toMatchObject({ sessionId: 'fitbit-run', value: 5_000 })
     expect(sessionRecords.find((r) => r.kind === 'longest'))
       .toMatchObject({ sessionId: 'fitbit-run', value: 30 * MINUTE })
   })
@@ -421,7 +443,7 @@ describe('readAllTime session records over merged workouts', () => {
     })
 
     expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'furthest'))
-      .toMatchObject({ sessionId: 'fitbit-run', value: 5_200_000 })
+      .toMatchObject({ sessionId: 'fitbit-run', value: 5_200 })
   })
 
   it('names the kept copy when the primary was excluded, as the workout page does', () => {
@@ -429,7 +451,7 @@ describe('readAllTime session records over merged workouts', () => {
     exclude('fitbit-run')
 
     expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'furthest'))
-      .toMatchObject({ sessionId: 'phone-run', value: 5_200_000 })
+      .toMatchObject({ sessionId: 'phone-run', value: 5_200 })
   })
 
   it('keeps the primary and its own value when only the alternate was excluded', () => {
@@ -437,7 +459,7 @@ describe('readAllTime session records over merged workouts', () => {
     exclude('phone-run')
 
     expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'furthest'))
-      .toMatchObject({ sessionId: 'fitbit-run', value: 5_000_000 })
+      .toMatchObject({ sessionId: 'fitbit-run', value: 5_000 })
   })
 
   it('counts a run recorded on two devices once toward a workout milestone', () => {

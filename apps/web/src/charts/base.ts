@@ -60,13 +60,13 @@ export function verdictTone(judged: PointJudged, standing: PointStanding | undef
 
 /**
  * The figures whose above and below have words of their own: a clock time is later or earlier, a
- * pace (seconds per kilometre, so a higher number is a slower run) slower or faster. `unit` is the
+ * pace (seconds per kilometre, or a swim's per 100 m, so a higher number is slower) slower or faster. `unit` is the
  * catalogue's unit code (MetricSpec.unit, PageFigure.unit). The one table both the verdict line
  * (figureText's verdictLine) and a strip's accessible table read, so the two cannot disagree.
  */
 export function directionWords(unit: string | undefined): 'clock' | 'pace' | null {
   if (unit === 'minutes_from_local_midnight') return 'clock'
-  if (unit === 'seconds_per_km') return 'pace'
+  if (unit === 'seconds_per_km' || unit === 'seconds_per_100m') return 'pace'
   return null
 }
 

@@ -35,6 +35,11 @@ const RAW_ROUTES = JSON.parse(await readFile(resolve('scripts/layout-check-route
 // band below the breakpoint is swept. Demo-specific, so it stays here rather than in the shared
 // module: the boot harness has no rail and no control row to sweep.
 const BAND_ROUTE = '/activity'
+// The Records page's category cards take the row between 900 and 1200px and pair above it
+// (PATTERNS.md, "Per sport"): two layouts no width above reaches, so each is measured once here.
+const RECORDS_ROUTE = '/records'
+const RECORDS_WIDTHS = [1000, 1280]
+const RECORDS_PAIRED_FROM = 1200
 
 const TYPES = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
@@ -476,6 +481,30 @@ try {
     await open(BAND_ROUTE)
     const { scrollWidth, clientWidth } = await measure()
     check(scrollWidth <= clientWidth, `${BAND_ROUTE} is ${scrollWidth}px wide in a ${clientWidth}px viewport`)
+  }
+
+  // The Records page above the band: no sideways scroll, no record row wider than its card, and
+  // above 1200px the category cards really do pair, or this would be measuring the stacked layout
+  // twice and calling it the paired one.
+  for (const width of RECORDS_WIDTHS) {
+    await page.setViewportSize({ width, height: BAND.height })
+    await open(RECORDS_ROUTE)
+    await page.waitForTimeout(SETTLE_MS)
+    const { scrollWidth, clientWidth } = await measure()
+    check(scrollWidth <= clientWidth, `${RECORDS_ROUTE} is ${scrollWidth}px wide in a ${clientWidth}px viewport`)
+    const spilled = await page.locator('.record-row').evaluateAll((nodes) => nodes
+      .filter((node) => node.scrollWidth > node.clientWidth + 1)
+      .map((node) => `"${(node.textContent ?? '').trim().slice(0, 40)}"`))
+    check(spilled.length === 0, `${RECORDS_ROUTE} at ${width}px: ${spilled.length} record row(s) wider than their card: ${spilled.join(', ')}`)
+    const tops = await page.locator('.record-list[data-category]').evaluateAll((lists) => lists
+      .map((list) => Math.round(list.closest('.card').getBoundingClientRect().top)))
+    check(tops.length >= 2, `${RECORDS_ROUTE} at ${width}px shows ${tops.length} category card(s), too few to tell a paired layout`)
+    const paired = new Set(tops).size < tops.length
+    check(
+      paired === (width > RECORDS_PAIRED_FROM),
+      `${RECORDS_ROUTE} at ${width}px: category cards ${paired ? 'pair' : 'each take the row'}, `
+        + `expected them to ${width > RECORDS_PAIRED_FROM ? 'pair' : 'take the row'}`,
+    )
   }
 
   // Crossing the breakpoint upward with no reload in between: a tablet rotating portrait to
@@ -1038,7 +1067,8 @@ console.log(
   `layout:check passed: ${ROUTES.length} routes at ${PHONE.width}px and ${BAND.width}px, `
     + `hit areas on each of them with the drawer shut and again with it open, `
     + `the annotate panel opened and swept on ${PANEL_OPENERS.length} routes, `
-    + `${BAND_ROUTE} across the rest of the band, the same routes rotated across the breakpoint, `
+    + `${BAND_ROUTE} across the rest of the band, ${RECORDS_ROUTE} at ${RECORDS_WIDTHS.join(' and ')}px, `
+    + 'the same routes rotated across the breakpoint, '
     + 'the drawer and its three ways out, the rail foot, the status panel opened '
     + `${statusPanelsOpened} times (phone sheet, desktop popover, collapsed-rail popover) with a long `
     + 'device name and a failed sync injected and no sideways overflow in any of them, '

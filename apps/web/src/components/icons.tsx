@@ -112,7 +112,7 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M12 16.3h.01" strokeWidth="2.6" />
     </>
   ),
-  // One per exercise category (data/exerciseCategory.ts), drawn at the same 1.7 stroke and 24x24
+  // One per exercise category (core's exerciseCategory.ts), drawn at the same 1.7 stroke and 24x24
   // box as everything above so a session row reads as part of this app rather than as clip art.
   // `sessionOther` is the fallback and is deliberately a real mark: every row carries a glyph, so
   // none of them is the row that looks unfinished.

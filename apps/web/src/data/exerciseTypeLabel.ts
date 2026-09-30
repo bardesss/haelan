@@ -16,11 +16,15 @@ import type { Translate } from '../format.js'
  * single session SPORT is: the rule is what the data holds, not how much of it there is, and a
  * type left out falls back to humanise, which produces English ("Household chores") on a page
  * that is otherwise Dutch. eventKinds.ts's SEED_KINDS is the same shape for event kinds.
+ *
+ * TRAIL_RUN is the fourteenth: the household never logged one, but the demo does (seed.ts's
+ * RELABELLED_RUNS), and the Records page names it under Hardlopen, where the humanised "Trail run"
+ * was English on a Dutch page.
  */
 export const SEEDED_EXERCISE_TYPES: readonly string[] = [
   'WALKING', 'CARDIO_WORKOUT', 'RUNNING', 'WORKOUT', 'SPINNING', 'BIKING',
   'TREADMILL', 'HIKING', 'WEIGHTLIFTING', 'STROLLER_WALK', 'SWIMMING_POOL', 'SPORT',
-  'HOUSEHOLD_CHORES',
+  'HOUSEHOLD_CHORES', 'TRAIL_RUN',
 ]
 
 /**

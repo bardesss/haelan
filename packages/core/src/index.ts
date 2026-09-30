@@ -273,7 +273,7 @@ export type {
   WorkoutPage, WorkoutPageInput, WorkoutFigure, WorkoutFigureKey, WorkoutStripPoint, RecordRef,
 } from './query/workoutPage.ts'
 export { WORKOUT_BAND_MIN, WORKOUT_STRIP } from './query/workoutPage.ts'
-export type { MinuteSeries, PaceSeries } from './query/workoutThrough.ts'
+export type { MinuteSeries, PaceSeries, SpeedSeries } from './query/workoutThrough.ts'
 export type { PageFigure, Judged } from './query/pageFigure.ts'
 export { FIGURE_METRIC_ALIAS, judge, usualOf } from './query/pageFigure.ts'
 // The kilometre splits a run's Records read, for explain's last-kilometre link.

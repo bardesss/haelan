@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatFigureValue, verdictLine, stripOf } from '../src/pages/detail/figureText.js'
+import { formatFigureDifference, formatFigureRange, formatFigureValue, verdictLine, stripOf } from '../src/pages/detail/figureText.js'
 import type { PageFigure } from '../src/data/useNightPage.js'
 import type { Translate } from '../src/format.js'
 import { initI18n } from '../src/i18n/index.js'
@@ -75,9 +75,26 @@ describe('formatFigureValue: workout units', () => {
     expect(formatFigureValue(figure({ unit: 'seconds_per_km', precision: 0 }), 324, 'nl', tNl)).toBe('5:24\u00a0/km')
   })
 
-  it('formats meters_per_second as km/h at one decimal', () => {
+  it('formats meters_per_second as km/h at one decimal, km/u in Dutch', () => {
     expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'en', t)).toBe('12.3\u00a0km/h')
-    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'nl', tNl)).toBe('12,3\u00a0km/h')
+    expect(formatFigureValue(figure({ unit: 'meters_per_second', precision: 2 }), 3.4166666, 'nl', tNl)).toBe('12,3\u00a0km/u')
+  })
+
+  it('formats seconds_per_100m as a stopwatch per 100 m, the unit once after a range', () => {
+    const swim = figure({ unit: 'seconds_per_100m', precision: 0 })
+    expect(formatFigureValue(swim, 125, 'en', t)).toBe('2:05\u00a0/100\u202fm')
+    expect(formatFigureValue(swim, 125, 'nl', tNl)).toBe('2:05\u00a0/100\u202fm')
+    expect(formatFigureRange(swim, 115, 125, 'en', t)).toEqual({ low: '1:55', high: '2:05\u00a0/100\u202fm' })
+    // A higher number is the slower swim, so it is worded as a pace is.
+    const baseline = { center: 120, low: 115, high: 125, thin: false }
+    expect(verdictLine({ ...swim, value: 130, baseline, standing: 'above' }, 'en', t)).toBe('slower than your usual 1:55 \u2013 2:05\u00a0/100\u202fm')
+    expect(verdictLine({ ...swim, value: 110, baseline, standing: 'below' }, 'nl', tNl)).toBe('sneller dan je gebruikelijke 1:55 \u2013 2:05\u00a0/100\u202fm')
+  })
+
+  it('takes a swim pace difference in whole seconds per 100 m', () => {
+    const swim = figure({ unit: 'seconds_per_100m', precision: 0 })
+    expect(formatFigureDifference(swim, 121.4, 125.2, 'en', t)).toBe('-4\u00a0s/100 m')
+    expect(formatFigureDifference(swim, 121.4, 125.2, 'nl', tNl)).toBe('-4\u00a0s/100 m')
   })
 
   it('formats meters under 1000 as whole meters', () => {
@@ -88,6 +105,19 @@ describe('formatFigureValue: workout units', () => {
   it('formats meters at or above 1000 as kilometers at two decimals', () => {
     expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'en', t)).toBe('5.20\u00a0km')
     expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'nl', tNl)).toBe('5,20\u00a0km')
+  })
+
+  it("keeps the workout page's climb and a swim's distance in whole metres past 1000, and their difference with them", () => {
+    const climb = figure({ unit: 'meters', precision: 0, metric: 'elevationGain', value: 1250 })
+    const swim = figure({ unit: 'meters', precision: 0, metric: 'swimDistance', value: 1500 })
+    const run = figure({ unit: 'meters', precision: 0, metric: 'distance', value: 1500 })
+    expect(formatFigureValue(climb, 1250, 'en', t)).toBe('1,250 m')
+    expect(formatFigureValue(swim, 1500, 'nl', tNl)).toBe('1.500 m')
+    expect(formatFigureDifference(climb, 1250, 1100, 'en', t)).toBe('+150')
+    expect(formatFigureDifference(swim, 1500, 1750, 'nl', tNl)).toBe('-250')
+    // The same metres as a run's distance still turn to kilometres, value and difference alike.
+    expect(formatFigureValue(run, 1500, 'en', t)).toBe('1.50 km')
+    expect(formatFigureDifference(run, 1500, 1750, 'en', t)).toBe('-0.25')
   })
 
   it('formats seconds under an hour as an elapsed mm:ss', () => {
