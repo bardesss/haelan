@@ -23,7 +23,7 @@ import type { WorkoutComparison } from '../api/workoutComparison.ts'
 import { GPS_EFFORT_TYPE, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
 import type { SessionRecord, SessionRecordKind } from '../api/sessionRecords.ts'
 import { routeSignature, sameRoute as onSameRoute } from '../api/routeMatch.ts'
-import { EFFORT_DISTANCES, fastestEfforts } from '../api/fastestEfforts.ts'
+import { EFFORT_DISTANCES, fastestEffortsAlong } from '../api/fastestEfforts.ts'
 import type { EffortKey } from '../api/fastestEfforts.ts'
 import type { RoutePoint, RouteSummary } from './workoutDerived.ts'
 
@@ -81,13 +81,24 @@ export interface WorkoutPage {
    * This workout's time against the earlier times on the same route (routeMatch.ts), lower being
    * better; null without a route or with no earlier workout on it. `count` is the earlier ones.
    */
-  sameRoute: { count: number, time: WorkoutFigure, previous: { sessionId: string, localDate: string, seconds: number } | null } | null
+  sameRoute: {
+    count: number
+    /** The date of the oldest of the `count` earlier workouts on the route. */
+    since: string
+    time: WorkoutFigure
+    /** This workout's pace against the earlier paces on the route (every match that has one); null without a pace of its own. */
+    pace: WorkoutFigure | null
+    previous: { sessionId: string, localDate: string, seconds: number } | null
+  } | null
   /**
    * The fastest kilometre, mile and 5 km inside the route, each beside the Records best of the type
-   * up to today (as `best` reads it); null for a distance the route is shorter than, and null
-   * altogether without a route.
+   * up to today (as `best` reads it) and the best set before this workout (`previousBest`, what a
+   * new best beat); `fromMeters` is how far along the route the stretch began. Null for a distance
+   * the route is shorter than, and null altogether without a route.
    */
-  efforts: Record<EffortKey, { seconds: number, best: RecordRef | null, isBest: boolean } | null> | null
+  efforts: Record<EffortKey, {
+    seconds: number, fromMeters: number, best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean
+  } | null> | null
 }
 
 export interface WorkoutPageInput { sessionId: string, today: string, nowMs: number, nameOf: (id: string) => string }
@@ -298,16 +309,21 @@ function sameRouteOf(
   if (own === null) return null
   const moving = subject.detail.activeDurationSeconds
   const timeOf = moving === null ? elapsedOf : (r: Reading) => r.detail.activeDurationSeconds
-  const matches = kept
+  const onRoute = kept
     .filter((s) => s.startMs < subject.session.startMs)
     .filter((s) => {
       const signature = summaries.get(s.id)?.signature ?? null
       return signature !== null && onSameRoute(own, signature)
     })
     .sort((a, b) => b.startMs - a.startMs)
-    .flatMap((session) => { const value = timeOf(readingOf(session)); return value === null ? [] : [{ session, value }] })
+    .map((session) => readingOf(session))
+  // Latest first, each with the reading `of` gives it; a match without one is not in its history.
+  const valued = (of: (r: Reading) => number | null) =>
+    onRoute.flatMap((r) => { const value = of(r); return value === null ? [] : [{ session: r.session, value }] })
+  const matches = valued(timeOf)
   const latest = matches[0]
-  if (latest === undefined) return null
+  const oldest = matches.at(-1)
+  if (latest === undefined || oldest === undefined) return null
   const value = moving ?? elapsedOf(subject)
   const key = moving === null ? 'elapsed' : 'movingTime'
   const time = workoutFigureOf(
@@ -316,26 +332,45 @@ function sameRouteOf(
     [...matches.slice(0, WORKOUT_STRIP - 1).reverse(), { session: subject.session, value }],
   )
   return {
-    count: matches.length, time,
+    count: matches.length, since: oldest.session.localDate, time, pace: routePaceOf(subject, valued),
     previous: { sessionId: latest.session.id, localDate: latest.session.localDate, seconds: latest.value },
   }
+}
+
+const PACE = FIGURES.find((spec) => spec.key === 'pace')!
+
+// Answers: the subject's pace against the earlier paces on its route, the page's own pace figure
+// over the route's history rather than the type's; null when the subject has no pace.
+function routePaceOf(
+  subject: Reading, valued: (of: (r: Reading) => number | null) => { session: WorkoutSession, value: number }[],
+): WorkoutFigure | null {
+  const value = PACE.of(subject)
+  if (value === null) return null
+  const history = valued(PACE.of)
+  return workoutFigureOf({ ...PACE, metric: PACE.key }, value, history.map((h) => h.value),
+    [...history.slice(0, WORKOUT_STRIP - 1).reverse(), { session: subject.session, value }])
 }
 
 const EFFORT_KINDS: Record<EffortKey, SessionRecordKind> = { km: 'fastest-km', mile: 'fastest-mile', fiveK: 'fastest-5k' }
 
 // Answers: the fastest efforts inside a run's route, each beside the type's Records best; null for
 // any other type (GPS_EFFORT_TYPE), as the records themselves read no efforts off it.
-function effortsOf(subject: Reading, route: readonly RoutePoint[], records: readonly SessionRecord[]): WorkoutPage['efforts'] {
+function effortsOf(
+  subject: Reading, route: readonly RoutePoint[], records: readonly SessionRecord[], earlier: readonly SessionRecord[],
+): WorkoutPage['efforts'] {
   if (route.length < 2 || subject.summary.exerciseType !== GPS_EFFORT_TYPE) return null
-  const own = fastestEfforts(route)
+  const own = fastestEffortsAlong(route)
+  const refOf = (all: readonly SessionRecord[], key: EffortKey): RecordRef | null => {
+    const record = all.find((r) => r.kind === EFFORT_KINDS[key])
+    return record === undefined ? null : { value: record.value, sessionId: record.sessionId, localDate: record.localDate }
+  }
   const efforts = {} as NonNullable<WorkoutPage['efforts']>
   for (const key of Object.keys(EFFORT_DISTANCES) as EffortKey[]) {
-    const seconds = own[key]
-    const record = records.find((r) => r.kind === EFFORT_KINDS[key])
-    efforts[key] = seconds === null ? null : {
-      seconds,
-      best: record === undefined ? null : { value: record.value, sessionId: record.sessionId, localDate: record.localDate },
-      isBest: record?.sessionId === subject.session.id,
+    const effort = own[key]
+    const best = refOf(records, key)
+    efforts[key] = effort === null ? null : {
+      seconds: effort.seconds, fromMeters: effort.fromMeters,
+      best, previousBest: refOf(earlier, key), isBest: best?.sessionId === subject.session.id,
     }
   }
   return efforts
@@ -492,6 +527,8 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     sessions: kept.filter((s) => s.id !== session.id), efforts: exerciseType === GPS_EFFORT_TYPE,
   })
   const records = recordsOf(kept, session, ownRoute, summaries)
+  // The same records over what was done before this workout alone: what a new best of its beat.
+  const earlierRecords = recordsOf(kept.filter((s) => s.startMs < session.startMs), session, ownRoute, summaries)
   const figures = figuresOf(subject, window)
   // The glance's view of the workout's own day, shared by the day card and the morning before it.
   const dayCtx = contextFor(q, { today: session.localDate, nowMs: input.nowMs, nameOf: input.nameOf, finished: session.localDate < input.today })
@@ -516,6 +553,6 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     splitTrend: splitTrendOf(subject.detail.autoSplits),
     zoneBounds: q.workoutZoneBounds({ sessionId: session.id }),
     sameRoute: sameRouteOf(subject, ownRoute, kept, summaries),
-    efforts: effortsOf(subject, ownRoute, records),
+    efforts: effortsOf(subject, ownRoute, records, earlierRecords),
   }
 }

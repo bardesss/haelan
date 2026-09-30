@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EFFORT_DISTANCES, fastestEfforts } from '../src/api/fastestEfforts.ts'
+import { EFFORT_DISTANCES, fastestEfforts, fastestEffortsAlong } from '../src/api/fastestEfforts.ts'
 
 const METRES_PER_DEGREE = (6_371_000 * Math.PI) / 180
 const START = Date.parse('2026-09-01T07:00:00Z')
@@ -32,6 +32,19 @@ describe('fastestEfforts', () => {
     // 1500 m at 3 m/s, 1000 m at 4 m/s, 1500 m at 3 m/s.
     const efforts = fastestEfforts(run([{ speed: 3, fixes: 50 }, { speed: 4, fixes: 25 }, { speed: 3, fixes: 50 }]))
     expect(efforts.km).toBeCloseTo(250, 6)
+  })
+
+  it('says how far along the route the fastest stretch began', () => {
+    // The fast kilometre runs from 1500 m to 2500 m; each slower window around it starts elsewhere.
+    const along = fastestEffortsAlong(run([{ speed: 3, fixes: 50 }, { speed: 4, fixes: 25 }, { speed: 3, fixes: 50 }]))
+    expect(along.km?.seconds).toBeCloseTo(250, 6)
+    expect(along.km?.fromMeters).toBeCloseTo(1500, 1)
+    // An even run's fastest 5 km is its first window: a later one only replaces it when strictly
+    // quicker. That window ends on the first fix past 5 km (5010 m), so it starts 10 m in, between
+    // two fixes, where the interpolation puts it.
+    const even = fastestEffortsAlong(run([{ speed: 3, fixes: 200 }]))
+    expect(even.fiveK?.fromMeters).toBeCloseTo(10, 1)
+    expect(fastestEffortsAlong(run([{ speed: 3, fixes: 30 }]))).toEqual({ km: null, mile: null, fiveK: null })
   })
 
   it('reads the fixes in time order, whatever order they arrive in', () => {

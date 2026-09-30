@@ -665,6 +665,37 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     expect(sameRoute!.previous).toEqual({ sessionId: 'route-10', localDate: shiftLocalDate(SUBJECT_DATE, -3), seconds: 610 })
   })
 
+  it('sets the pace against the earlier paces on the route, and dates the oldest time on it', () => {
+    // Six runs on the loop with a pace, one without; a faster run elsewhere is no part of either.
+    for (let i = 0; i < 6; i += 1) {
+      const localDate = shiftLocalDate(SUBJECT_DATE, -3 * (7 - i))
+      seedRun(`loop-${i}`, localDate, { moving: 600, pace: i % 2 === 0 ? 290 : 300 })
+      seedRoute(`loop-${i}`, localDate)
+    }
+    seedRun('no-pace', shiftLocalDate(SUBJECT_DATE, -3), { moving: 600 })
+    seedRoute('no-pace', shiftLocalDate(SUBJECT_DATE, -3))
+    seedRun('elsewhere', shiftLocalDate(SUBJECT_DATE, -2), { moving: 600, pace: 200 })
+    seedRoute('elsewhere', shiftLocalDate(SUBJECT_DATE, -2), { heading: 'east' })
+    seedRun('subject', SUBJECT_DATE, { moving: 540, pace: 280 })
+    seedRoute('subject', SUBJECT_DATE)
+    const { sameRoute } = readWorkoutPage(q(), input('subject'))!
+    expect(sameRoute!.count).toBe(7)
+    // The oldest of the seven the count is of.
+    expect(sameRoute!.since).toBe(shiftLocalDate(SUBJECT_DATE, -21))
+    expect(sameRoute!.pace).toMatchObject({ key: 'pace', unit: 'seconds_per_km', direction: 'down', value: 280, standing: 'below', judged: 'better' })
+    expect(sameRoute!.pace!.baseline!.center).toBeCloseTo(295)
+    expect(sameRoute!.pace!.strip.map((p) => p.sessionId)).toEqual(['loop-0', 'loop-1', 'loop-2', 'loop-3', 'loop-4', 'loop-5', 'subject'])
+  })
+
+  it('has no pace on the route for a workout without one of its own', () => {
+    seedRouteRuns(3)
+    seedRun('subject', SUBJECT_DATE, { moving: 540 })
+    seedRoute('subject', SUBJECT_DATE)
+    const { sameRoute } = readWorkoutPage(q(), input('subject'))!
+    expect(sameRoute!.pace).toBeNull()
+    expect(sameRoute!.since).toBe(shiftLocalDate(SUBJECT_DATE, -9))
+  })
+
   it('claims no standing on four earlier times on the route, and still draws them', () => {
     seedRouteRuns(4)
     seedRun('subject', SUBJECT_DATE, { moving: 540 })
@@ -787,6 +818,31 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     expect(readWorkoutPage(q(), input('quick'))!.efforts).toMatchObject({ km: { isBest: true }, mile: null, fiveK: null })
     // Nothing in the page carries a coordinate.
     expect(JSON.stringify(page)).not.toMatch(/latitude|longitude/)
+  })
+
+  it('says where along the route each stretch began, and what best a new best beat', () => {
+    // Before the subject: a 1.2 km at 4 m/s holds the kilometre, a 2 km at 2.5 m/s the mile. After
+    // it, a 7.5 km at 5 m/s holds every distance now, but is no part of what this run beat.
+    seedRun('quick', '2026-09-01', {})
+    seedRoute('quick', '2026-09-01', { speed: 4, fixes: 30 })
+    seedRun('slow-mile', '2026-09-02', {})
+    seedRoute('slow-mile', '2026-09-02', { speed: 2.5, fixes: 80 })
+    seedRun('later', '2026-09-06', {})
+    seedRoute('later', '2026-09-06', { speed: 5, fixes: 150 })
+    seedRun('subject', SUBJECT_DATE, {})
+    seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
+    const { efforts } = readWorkoutPage(q(), input('subject'))!
+    // Even 30 m legs: each fastest window is the first, ending on the first fix past its distance.
+    expect(efforts!.km!.fromMeters).toBeCloseTo(20, 0)
+    expect(efforts!.mile!.fromMeters).toBeCloseTo(1620 - 1609.344, 0)
+    expect(efforts!.fiveK!.fromMeters).toBeCloseTo(10, 0)
+    expect(efforts!.km!.best).toMatchObject({ sessionId: 'later' })
+    expect(efforts!.km!.previousBest).toMatchObject({ sessionId: 'quick', localDate: '2026-09-01' })
+    expect(efforts!.km!.previousBest!.value).toBeCloseTo(250, 6)
+    expect(efforts!.mile!.previousBest).toMatchObject({ sessionId: 'slow-mile' })
+    expect(efforts!.fiveK!.previousBest).toBeNull()
+    // Read off the earlier run, whose own best is nothing before it.
+    expect(readWorkoutPage(q(), input('quick'))!.efforts!.km).toMatchObject({ previousBest: null })
   })
 
   it('has efforts on a routed run and none on a routed ride', () => {
