@@ -154,6 +154,19 @@ describe('periodFigureOf', () => {
     expect(f.usual!.center).toBeCloseTo(thirty.center)
     expect(f.daily[0]!.value).toBe(1)
   })
+  it('does not judge a per-period figure while its period runs, and judges it once the period is over', () => {
+    // One nap on the 1st of every month, and a second on the 15th of every other month: a usual with a width.
+    const values = fill('2025-01-01', '2026-09-30', (d) => (d.endsWith('-01') || (d.endsWith('-15') && Number(d.slice(5, 7)) % 2 === 0) ? 1 : 0))
+    const input = { ...base, metric: 'sleep_nap_count', per: 'period' as const, range: 'month' as const, anchor: '2026-09-15', values, dailyBands: new Map() }
+    const running = periodFigureOf({ ...input, lastDay: '2026-09-20' })
+    expect(running.usual!.thin).toBe(false)
+    expect(running.value).not.toBeNull()
+    expect(running).toMatchObject({ standing: null, judged: null, reason: null, total: 1 })
+    const finished = periodFigureOf({ ...input, lastDay: '2026-09-30' })
+    expect(finished.standing).not.toBeNull()
+    // A per-day figure over the same running days is judged: only a period's worth waits for its end.
+    expect(periodFigureOf({ ...input, per: 'day', lastDay: '2026-09-20' }).standing).not.toBeNull()
+  })
   it("scales a per-period figure's weekly points by seven, a week's worth", () => {
     const values = fill('2025-01-01', '2026-09-30', () => 1)
     const f = periodFigureOf({ ...base, metric: 'sleep_nap_count', per: 'period', range: '3months', anchor: '2026-09-15', lastDay: '2026-09-30', values, dailyBands: new Map() })

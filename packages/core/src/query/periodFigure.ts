@@ -121,8 +121,8 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
   const { range, values, lastDay, direction } = input
   const per = input.per ?? 'day'
   const bounds = periodBounds(range, input.anchor)
-  // A per-period figure is scaled to the whole period, running or not, so a running month is judged
-  // on its pace rather than on the nights it has had so far.
+  // A per-period figure is scaled to the whole period, running or not, so a running month's usual
+  // and value are a whole month's worth; it is judged only once the month is over.
   const scale = per === 'week' ? 7 : per === 'period' ? daysIn(bounds) : 1
   // A week point is a week's worth: a per-period figure's week is its own period of a week.
   const weekScale = per === 'day' ? 1 : 7
@@ -142,7 +142,9 @@ export function periodFigureOf(input: PeriodFigureInput): PeriodFigure {
   if (days === 0) reason = 'no-data'
   else if (running && days < PERIOD_MIN_DAYS) reason = 'too-few-days'
   else {
-    standing = standingOf(value, usual, false)
+    // A per-period figure is not judged while its period runs: its pace would be judged, and the
+    // page prints the count so far, so a verdict could not agree with the number beside it.
+    standing = standingOf(value, usual, per === 'period' && running)
     reason = usual === null || usual.thin ? 'thin-usual' : null
   }
 
