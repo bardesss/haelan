@@ -897,6 +897,33 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     expect(readWorkoutPage(q(), input('spin'))!.efforts).toBeNull()
   })
 
+  it("names a treadmill run's and an indoor ride's bests as the category's, GPS efforts included", () => {
+    // An outdoor run's 6 km route holds every run distance up to 5 km off GPS, quicker than any split;
+    // an outdoor ride's 25 km route holds the ride's 20 km. The indoor subjects hold none of it.
+    seedRun('road', '2026-08-01', { splits: [{ distance: 1000, seconds: 400 }] })
+    seedRoute('road', '2026-08-01', { fixes: 200 })
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { splits: [{ distance: 1000, seconds: 380 }] })
+    seedRide('outdoor', '2026-08-02', {})
+    seedRoute('outdoor', '2026-08-02', { speed: 8, fixes: 313 })
+    seedWorkout('spin', SUBJECT_DATE, 'STATIONARY_BIKE', {}, { hhmm: '18:00' })
+    const records = q().allTime().sessionRecords
+    const same = (sessionId: string, category: string) => {
+      const { best } = readWorkoutPage(q(), input(sessionId))!
+      const held = records.filter((r) => r.category === category)
+      expect(held.some((r) => r.kind.startsWith('fastest-') && r.kind !== 'fastest-1k'), category).toBe(true)
+      for (const record of held) {
+        expect(best[record.kind], `${category} ${record.kind}`).toEqual({ value: record.value, sessionId: record.sessionId, localDate: record.localDate })
+      }
+    }
+    same('treadmill', 'run')
+    expect(readWorkoutPage(q(), input('treadmill'))!.best['fastest-1k']).toMatchObject({ sessionId: 'road', value: 333 })
+    same('spin', 'ride')
+    expect(readWorkoutPage(q(), input('spin'))!.best['fastest-20k']).toMatchObject({ sessionId: 'outdoor', value: 2500 })
+    // Neither indoor page reads efforts of its own.
+    expect(readWorkoutPage(q(), input('treadmill'))!.efforts).toBeNull()
+    expect(readWorkoutPage(q(), input('spin'))!.efforts).toBeNull()
+  })
+
   it("names a trail run's bests as the run category's, the same records the Records page holds", () => {
     // A road run holds the kilometre and the distance, a treadmill run the longest; the trail run
     // itself the climb. Every one of them is a run, and a ride is none of them.

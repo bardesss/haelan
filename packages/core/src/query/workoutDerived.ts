@@ -232,10 +232,15 @@ export function readRouteSummaries(
   return summaries
 }
 
-// The category a session's route is read as, from the type its payload recorded.
-function categoryOf(session: WorkoutSession | undefined) {
+/** The type a session's payload recorded, read without parsing the rest of it; null for none. */
+export function exerciseTypeOf(session: WorkoutSession | undefined): string | null {
   const attrs = session?.attrs as { exerciseType?: unknown } | null | undefined
-  return exerciseCategory(typeof attrs?.exerciseType === 'string' ? attrs.exerciseType : null)
+  return typeof attrs?.exerciseType === 'string' ? attrs.exerciseType : null
+}
+
+/** The category a session is read as (its route, its records), from the type its payload recorded. */
+export function categoryOf(session: WorkoutSession | undefined) {
+  return exerciseCategory(exerciseTypeOf(session))
 }
 
 /**

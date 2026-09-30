@@ -163,7 +163,6 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     if (figure !== undefined) figures[key as keyof WorkoutPage['figures']] = roundWorkoutFigure(figure)
   }
   const whole = (value: number) => Number(value.toFixed(0))
-  const ref = (r: WorkoutPage['best']['longest']) => (r === null ? null : { ...r, value: whole(r.value) })
   const { previous, after, before, heartRateRecovery, through, splitTrend, zoneBounds, sameRoute, efforts } = page
   return {
     ...page,
@@ -174,9 +173,8 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
         key, key === 'speed' ? Number(value.toFixed(figures.speed?.precision ?? 2)) : whole(value),
       ])),
     },
-    // Every best of the category whole: seconds for a time, metres for a distance or a climb,
-    // milliseconds for the longest. Core picked each holder on these same whole values.
-    best: Object.fromEntries(Object.entries(page.best).map(([kind, r]) => [kind, ref(r)])) as WorkoutPage['best'],
+    // `best` is Records values, already whole from core (sessionRecords.ts): seconds for a time,
+    // metres for a distance or a climb, whole seconds of milliseconds for the longest.
     day: { ...page.day, steps: roundPageFigure(page.day.steps), activeMinutes: roundPageFigure(page.day.activeMinutes) },
     after: {
       night: roundWorkoutNight(after.night),

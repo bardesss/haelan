@@ -18,6 +18,7 @@ import { countsForDistanceRecords, exerciseCategory } from './exerciseCategory.t
 import type { ExerciseCategory } from './exerciseCategory.ts'
 import { effortDistancesOf, fastestEfforts } from './fastestEfforts.ts'
 import type { Efforts } from './fastestEfforts.ts'
+import { workoutSummary } from './workoutSummary.ts'
 import type { RoutePoint } from '../query/workoutDerived.ts'
 
 export interface SessionForRecords {
@@ -131,7 +132,9 @@ export function sessionRecordsOf(sessions: readonly SessionForRecords[]): Sessio
   const byCategory = new Map<ExerciseCategory, SessionForRecords[]>()
   for (const session of sessions) {
     const category = exerciseCategory(session.exerciseType)
-    byCategory.set(category, [...(byCategory.get(category) ?? []), session])
+    const members = byCategory.get(category)
+    if (members === undefined) byCategory.set(category, [session])
+    else members.push(session)
   }
 
   const records: SessionRecord[] = []
@@ -179,14 +182,14 @@ export function sessionForRecords(session: {
 }, route?: readonly RoutePoint[]): SessionForRecords {
   const attrs = attrsOf(session.attrs)
 
-  const summary = attrs['metricsSummary'] as { distanceMillimeters?: unknown, elevationGainMillimeters?: unknown } | null | undefined
+  const summary = attrs['metricsSummary'] as { distanceMillimeters?: unknown } | null | undefined
   const distance = typeof summary?.distanceMillimeters === 'number' && summary.distanceMillimeters > 0
     ? summary.distanceMillimeters
     : null
 
-  const elevation = typeof summary?.elevationGainMillimeters === 'number' && summary.elevationGainMillimeters > 0
-    ? summary.elevationGainMillimeters / 1000
-    : null
+  // workoutSummary's own reading of the climb, the one the workout page's figure prints; a zero is no climb.
+  const climb = workoutSummary(attrs).elevationGainMeters
+  const elevation = climb !== null && climb > 0 ? climb : null
 
   const exerciseType = typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null
   return {

@@ -27,6 +27,7 @@ import { effortDistancesOf, effortSeconds, fastestEffortsAlong } from '../api/fa
 import type { Effort, Efforts } from '../api/fastestEfforts.ts'
 import { countsForDistanceRecords, exerciseCategory } from '../api/exerciseCategory.ts'
 import type { ExerciseCategory } from '../api/exerciseCategory.ts'
+import { categoryOf, exerciseTypeOf } from './workoutDerived.ts'
 import type { RoutePoint, RouteSummary } from './workoutDerived.ts'
 
 // Five, not the night page's sixty: a person runs a few times a week, and five same-type sessions
@@ -462,7 +463,7 @@ function bestOf(category: ExerciseCategory, records: readonly SessionRecord[]): 
 // groups them; one read, filtered on the category the payload's type maps to.
 function categorySessions(q: PersonQuery, category: ExerciseCategory, to: string): WorkoutSession[] {
   return q.sessions({ kind: 'exercise', from: '1970-01-01', to })
-    .filter((s) => exerciseCategory(sessionForRecords(s).exerciseType) === category)
+    .filter((s) => categoryOf(s) === category)
 }
 
 // Answers: the nearest workouts either side of this one, of any type, by (startMs, id); never past today.
@@ -562,8 +563,11 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
   // The Records bests are the category's, as the Records page keeps them: a trail run's are every
   // run's, up to today.
   const keptInCategory = categorySessions(q, category, until).filter((s) => !s.excluded)
-  // Efforts only for a category with distances, and only off a type that holds speed records.
-  const readsOwnEfforts = readsEfforts(category) && countsForDistanceRecords(exerciseType)
+  // The category's bests read efforts off routes whenever the category has distances, whatever this
+  // workout's own type: a treadmill run's page still names the GPS kilometre Records holds. Its own
+  // efforts are read only off a type that holds speed records.
+  const categoryEfforts = readsEfforts(category)
+  const readsOwnEfforts = categoryEfforts && countsForDistanceRecords(exerciseType)
   // This workout's full route, for its pace, efforts and route match; every other one only as a
   // signature and efforts, read in bounded chunks: the earlier ones of its type for the same-route
   // times, and, for a category with efforts, every one of the category that can hold a speed
@@ -572,14 +576,14 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
   const ownRoute = q.workoutRoute({ sessionId: session.id }) ?? []
   const summarised = new Map<string, WorkoutSession>()
   for (const s of kept) if (s.id !== session.id && s.startMs < session.startMs) summarised.set(s.id, s)
-  if (readsOwnEfforts) {
+  if (categoryEfforts) {
     for (const s of keptInCategory) {
-      if (s.id !== session.id && countsForDistanceRecords(sessionForRecords(s).exerciseType)) summarised.set(s.id, s)
+      if (s.id !== session.id && countsForDistanceRecords(exerciseTypeOf(s))) summarised.set(s.id, s)
     }
   }
   const summaries = q.workoutRouteSummaries({
     sessions: [...summarised.values()].sort((a, b) => a.startMs - b.startMs || (a.id < b.id ? -1 : 1)),
-    efforts: readsOwnEfforts,
+    efforts: categoryEfforts,
   })
   // This workout's efforts, found once: its row on the page and its entry in both sets of records.
   const ownEfforts = readsOwnEfforts && ownRoute.length >= 2 ? fastestEffortsAlong(ownRoute, category) : null
