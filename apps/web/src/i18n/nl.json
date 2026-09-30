@@ -566,11 +566,46 @@
           "pauses_other": "{{count}} pauzes, samen {{duration}}",
           "heartRate": "Hartslag",
           "highest": "hoogste {{value}} na {{time}}",
-          "highestOnly": "hoogste {{value}}"
+          "highestOnly": "hoogste {{value}}",
+          "pace": "Tempo",
+          "cadence": "Cadans",
+          "paceChart": "Tempo door de training",
+          "cadenceChart": "Cadans door de training",
+          "average": "gemiddeld {{value}}",
+          "averageShort": "gem. {{value}}",
+          "fastest": "snelste {{value}} na {{time}}",
+          "smoothed": {
+            "pace": "tempo gladgestreken over drie minuten",
+            "cadence": "cadans gladgestreken over drie minuten",
+            "both": "tempo en cadans gladgestreken over drie minuten"
+          },
+          "noRoute": "zonder route geen tempolijn",
+          "from": {
+            "pace_one": "Het tempo komt uit de tijden van het ene routepunt.",
+            "pace_other": "Het tempo komt uit de tijden van de {{count}} routepunten.",
+            "cadence": "De cadans komt uit de stappen per minuut.",
+            "both_one": "Het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
+            "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+          },
+          "fromAfter": {
+            "pace_one": "het tempo komt uit de tijden van het ene routepunt.",
+            "pace_other": "het tempo komt uit de tijden van de {{count}} routepunten.",
+            "cadence": "de cadans komt uit de stappen per minuut.",
+            "both_one": "het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
+            "both_other": "het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+          }
         },
         "zones": {
           "label": "Hartslagzones",
           "hard": "{{value}} intensief of piek"
+        },
+        "recovery": {
+          "label": "Hartslagherstel",
+          "oneMinute": "Daling na 1 minuut",
+          "twoMinutes": "Daling na 2 minuten",
+          "between": "van {{from}} naar {{to}}",
+          "caption_one": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} training van dit type ervoor",
+          "caption_other": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit {{count}} trainingen van dit type ervoor"
         },
         "form": {
           "label": "Loopvorm",
@@ -589,6 +624,14 @@
           "steps": "Stappen",
           "activeMinutes": "Actieve minuten",
           "workouts": "Trainingen"
+        },
+        "before": {
+          "label": "Daarvoor",
+          "caption": "de nacht voor deze training en die ochtend",
+          "asleep": "Tijd in slaap",
+          "recoveryIndex": "Herstelindex",
+          "restingHeartRate": "Rusthartslag",
+          "night": "Bekijk de nacht"
         },
         "after": {
           "label": "Daarna",

@@ -22,15 +22,12 @@ import { figureFromValues } from './pageFigure.ts'
 import type { PageFigure } from './pageFigure.ts'
 import { BASELINE_MIN_DAYS } from './baseline.ts'
 import { INTRADAY_WINDOW_MAX_MS } from './intraday.ts'
+import { NO_THINNING } from './sessionHeartRate.ts'
 import { METRICS } from '../derive/metrics.ts'
 import type { PersonQuery } from './personQuery.ts'
 import type { Night } from './sleepNights.ts'
 
 export const NIGHT_TRACE_BANDS = true
-// Larger than any night can hold readings for, so intradayWindow's thinning takes its "nothing to
-// do" branch and hands back the stored series unchanged. See `query/sessionHeartRate.ts`'s own
-// `NO_THINNING`, the same constant for the same reason.
-const NO_THINNING = 1_000_000
 
 export interface Extreme { value: number, atMs: number }
 export interface NightTraceStat { lowest: Extreme | null, highest: Extreme | null, mean: number | null }

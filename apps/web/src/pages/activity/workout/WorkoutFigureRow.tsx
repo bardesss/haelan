@@ -19,12 +19,14 @@ import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/fig
  * those words. The strip is memoised on the figure: its arrays
  * and formatter reach the chart, and fresh ones every render would rebuild it.
  */
-export function WorkoutFigureRow({ figure, label, withStrip = false, verdict, bare = false }: {
+export function WorkoutFigureRow({ figure, label, withStrip = false, verdict, bare = false, note }: {
   figure: WorkoutFigure | PageFigure | undefined
   label: string
   withStrip?: boolean
   verdict?: string
   bare?: boolean
+  /** FigureRow's line under the verdict. */
+  note?: string
 }): ReactNode {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -41,6 +43,6 @@ export function WorkoutFigureRow({ figure, label, withStrip = false, verdict, ba
     <FigureRow label={label} value={formatFigureValue(figure, figure.value, language, t)}
       verdict={verdict ?? verdictLine(figure, language, t) ?? t('glance.usual.none')}
       judged={verdict === undefined ? figure.judged : null} standing={verdict === undefined ? figure.standing : null}
-      band={bare ? null : figure.baseline} mark={figure.value} strip={strip} />
+      band={bare ? null : figure.baseline} mark={figure.value} strip={strip} {...(note !== undefined && { note })} />
   )
 }

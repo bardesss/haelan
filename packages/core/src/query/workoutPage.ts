@@ -5,11 +5,14 @@ import { shiftLocalDate } from '../derive/localDay.ts'
 import { ConfigError } from '../errors.ts'
 import type { PersonQuery } from './personQuery.ts'
 import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS } from './intraday.ts'
-import { activeMinutesFigure, contextFor, dailyFigure, standingOf } from './glance.ts'
-import type { GlanceStanding, Judged } from './glance.ts'
-import { judge, pageFigureOf, usualOf } from './pageFigure.ts'
+import { activeMinutesFigure, contextFor, dailyFigure, readRecovery, standingOf } from './glance.ts'
+import type { GlanceContext, GlanceRecovery, GlanceStanding, Judged } from './glance.ts'
+import { figureFromValues, judge, pageFigureOf, usualOf } from './pageFigure.ts'
 import type { FigureDirection, PageFigure } from './pageFigure.ts'
 import type { WorkoutSession } from './sessions.ts'
+import { NO_THINNING } from './sessionHeartRate.ts'
+import { cadenceSeries, paceSeries } from './workoutThrough.ts'
+import type { MinuteSeries, PaceSeries } from './workoutThrough.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
 import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
@@ -55,6 +58,18 @@ export interface WorkoutPage {
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
+  /** How far heart rate fell one and two minutes after the end, against the earlier sessions of the type; null without the minutes.
+   *  `readings` are the minute means each fall is taken between: the last full minute, and each minute after. */
+  heartRateRecovery: {
+    oneMinute: PageFigure, twoMinutes: PageFigure
+    readings: { endBpm: number, oneMinuteBpm: number | null, twoMinutesBpm: number | null }
+    /** How many earlier workouts of the type have a fall in either minute: what the usual is built from. */
+    history: number
+  } | null
+  /** The night ending on the workout's own date and that morning's recovery; null for each with no value. */
+  before: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, recovery: GlanceRecovery | null, restingHeartRate: PageFigure | null }
+  /** The minute series drawn under the heart rate trace, on its elapsed axis. */
+  through: { pace: PaceSeries | null, cadence: MinuteSeries | null }
   /** Seconds per km the second half of the automatic splits was faster than the first (negative:
    *  slower); null below two usable splits. */
   splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
@@ -140,6 +155,67 @@ function highestHeartRate(q: PersonQuery, session: WorkoutSession): number | nul
   const own = read(session.sourceId)
   const values = own.length > 0 ? own : read()
   return values.length === 0 ? null : Math.max(...values)
+}
+
+const MINUTE_MS = 60_000
+
+/**
+ * Answers: how far heart rate fell from the session's last full minute to the minute starting one
+ * and two minutes after its end, in bpm; null where either minute has no reading. Heart rate is
+ * stored per minute, keyed on the minute's start (downsample.ts), so the minutes are the stored ones
+ * around the end's own minute. One read over them, from the session's own source, else from any
+ * source, the rule highestHeartRate follows; several sources in one minute are averaged. Each
+ * minute's mean is rounded to whole bpm before the fall is taken, so the readings the page prints
+ * and the fall it prints between them always agree (160.6 and 139.4 fall 22, printed 161 and 139).
+ */
+function recoveryOf(q: PersonQuery, session: WorkoutSession): { one: number | null, two: number | null, last: number | null, afterOne: number | null, afterTwo: number | null } {
+  const endMinute = Math.floor(session.endMs / MINUTE_MS) * MINUTE_MS
+  const read = (sourceId?: string) => q.intradayWindow({
+    metric: 'heart_rate', startMs: endMinute - MINUTE_MS, endMs: endMinute + 3 * MINUTE_MS, points: NO_THINNING, sourceId,
+  }).points.filter((p) => !p.excluded && p.mean !== null)
+  const own = read(session.sourceId)
+  const points = own.length > 0 ? own : read()
+  const meanAt = (minuteMs: number) => {
+    const means = points.flatMap((p) => (p.utcMs >= minuteMs && p.utcMs < minuteMs + MINUTE_MS && p.mean !== null ? [p.mean] : []))
+    return means.length === 0 ? null : Math.round(means.reduce((sum, v) => sum + v, 0) / means.length)
+  }
+  const last = meanAt(endMinute - MINUTE_MS)
+  const afterOne = meanAt(endMinute + MINUTE_MS)
+  const afterTwo = meanAt(endMinute + 2 * MINUTE_MS)
+  const fall = (after: number | null) => (last === null || after === null ? null : last - after)
+  return { one: fall(afterOne), two: fall(afterTwo), last, afterOne, afterTwo }
+}
+
+// Answers: the subject's heart-rate recovery, judged against the latest WORKOUT_STRIP sessions of
+// the page's own same-type window: one small read each, so the usual stays cheap on a page read.
+function heartRateRecoveryOf(q: PersonQuery, subject: WorkoutSession, window: readonly Reading[]): WorkoutPage['heartRateRecovery'] {
+  const own = recoveryOf(q, subject)
+  if (own.one === null && own.two === null) return null
+  const earlier = window.slice(0, WORKOUT_STRIP).map((r) => recoveryOf(q, r.session))
+  const figure = (metric: string, key: 'one' | 'two') => figureFromValues({
+    metric, unit: 'bpm', precision: 0, direction: 'up', value: own[key], minN: WORKOUT_BAND_MIN,
+    history: earlier.flatMap((r) => { const v = r[key]; return v === null ? [] : [v] }),
+  })
+  return {
+    oneMinute: figure('heart_rate_recovery_1min', 'one'), twoMinutes: figure('heart_rate_recovery_2min', 'two'),
+    // A fall has a value only with the last minute's, so `last` is there whenever either is, and a
+    // reading after the end has a value exactly when its fall does.
+    readings: { endBpm: own.last!, oneMinuteBpm: own.afterOne, twoMinutesBpm: own.afterTwo },
+    history: earlier.filter((r) => r.one !== null || r.two !== null).length,
+  }
+}
+
+// Answers: the pace and cadence minute series. Pace from the route (a merged workout's first
+// member with one, readWorkoutRoute's rule); cadence from the workout's own device's steps rows,
+// each point a minute's sum (mean times readings), since the window read groups raw rows by minute.
+function throughOf(q: PersonQuery, session: WorkoutSession): WorkoutPage['through'] {
+  const route = q.workoutRoute({ sessionId: session.id }) ?? []
+  const cadence = session.endMs - session.startMs > MAX_HR_WINDOW_MS ? null : cadenceSeries(
+    q.intradayWindow({ metric: 'steps', startMs: session.startMs, endMs: session.endMs, points: NO_THINNING, sourceId: session.sourceId })
+      .points.flatMap((p) => (p.excluded || p.mean === null ? [] : [{ utcMs: p.utcMs, value: p.mean * p.n }])),
+    session.startMs, session.endMs,
+  )
+  return { pace: paceSeries(route, session.startMs, session.endMs), cadence }
 }
 
 // Answers: every session of this type up to a date. A type outside EXERCISE_TYPES is
@@ -236,9 +312,8 @@ function navOf(q: PersonQuery, subject: WorkoutSession, today: string): WorkoutP
 }
 
 // Answers: the day the workout was done on, as the glance tells it.
-function dayOf(q: PersonQuery, subject: WorkoutSession, input: WorkoutPageInput): WorkoutPage['day'] {
+function dayOf(q: PersonQuery, subject: WorkoutSession, input: WorkoutPageInput, ctx: GlanceContext): WorkoutPage['day'] {
   const { localDate } = subject
-  const ctx = contextFor(q, { today: localDate, nowMs: input.nowMs, nameOf: input.nameOf, finished: localDate < input.today })
   return {
     steps: pageFigureOf(dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: localDate, partial: localDate === input.today, asOfMs: null }), false),
     activeMinutes: pageFigureOf(activeMinutesFigure(ctx), false),
@@ -261,6 +336,26 @@ function afterOf(q: PersonQuery, subject: WorkoutSession, input: WorkoutPageInpu
       deep: figure('sleep_deep_minutes', 'sum', night.endMs),
     },
     restingHeartRate: figure('resting_heart_rate', 'last', null),
+  }
+}
+
+// Answers: the night ending on the workout's own date and that morning's recovery, as afterOf reads
+// the next day's; resting heart rate judged with its strip, the way the night page's morning has it.
+function beforeOf(q: PersonQuery, subject: WorkoutSession, ctx: GlanceContext): WorkoutPage['before'] {
+  const { localDate } = subject
+  const night = oneNightPerDate(q.sleepNights({ from: localDate, to: localDate }))[0]
+  const figure = (metric: string, asOfMs: number) =>
+    pageFigureOf(dailyFigure(ctx, { metric, agg: 'sum', on: localDate, partial: false, asOfMs }), false)
+  const recovery = readRecovery(ctx)
+  const restingHeartRate = pageFigureOf(recovery.restingHeartRate, true)
+  return {
+    night: night === undefined ? null : {
+      localDate,
+      asleep: figure('sleep_asleep_minutes', night.endMs),
+      deep: figure('sleep_deep_minutes', night.endMs),
+    },
+    recovery: recovery.index.value === null ? null : recovery,
+    restingHeartRate: restingHeartRate.value === null ? null : restingHeartRate,
   }
 }
 
@@ -295,6 +390,8 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
   const candidates = everSameType.filter((s) => s.localDate <= session.localDate)
   const window = sameTypeWindow(session, candidates).map((s) => readingOf(s))
   const figures = figuresOf(subject, window)
+  // The glance's view of the workout's own day, shared by the day card and the morning before it.
+  const dayCtx = contextFor(q, { today: session.localDate, nowMs: input.nowMs, nameOf: input.nameOf, finished: session.localDate < input.today })
 
   return {
     sessionId: session.id,
@@ -308,8 +405,11 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     previous: previousOf(session, candidates),
     // The Records best, so it may be a session done after this one.
     best: bestOf(everSameType),
-    day: dayOf(q, session, input),
+    day: dayOf(q, session, input, dayCtx),
     after: afterOf(q, session, input),
+    heartRateRecovery: heartRateRecoveryOf(q, session, window),
+    before: beforeOf(q, session, dayCtx),
+    through: throughOf(q, session),
     splitTrend: splitTrendOf(subject.detail.autoSplits),
     zoneBounds: q.workoutZoneBounds({ sessionId: session.id }),
   }
