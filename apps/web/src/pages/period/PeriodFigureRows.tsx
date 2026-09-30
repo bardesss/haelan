@@ -59,15 +59,18 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
     const own = noteOf?.(figure) ?? null
     const parts = own !== null ? [own] : under !== null ? [under] : [dayCountsLine(figure, noun, t)].filter((part) => part !== null)
     const note = parts.length === 0 ? undefined : parts.join(SEPARATOR)
-    return [{ key: figure.metric, label, value, verdict, note, figure, strip }]
+    // A per-period figure prints its count (periodValueLine), so its mark sits on that count: on a
+    // running period the pace would put the mark beside a different number.
+    const mark = figure.per === 'period' && figure.total !== null ? figure.total : figure.value
+    return [{ key: figure.metric, label, value, verdict, note, figure, strip, mark }]
   }), [figures, labelOf, noun, bars, deviation, noteOf, language, t])
   if (rows.length === 0 && (children === undefined || children === null || children === false)) return null
 
   return (
     <FigureRows max={max} side={side}>
-      {rows.map(({ key, label, value, verdict, note, figure, strip }) => (
+      {rows.map(({ key, label, value, verdict, note, figure, strip, mark }) => (
         <FigureRow key={key} label={label} value={value} verdict={verdict} note={note} judged={figure.judged} standing={figure.standing}
-          band={figure.usual} mark={figure.value} strip={strip} />
+          band={figure.usual} mark={mark} strip={strip} />
       ))}
       {children}
     </FigureRows>

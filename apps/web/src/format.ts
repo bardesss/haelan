@@ -22,7 +22,7 @@ export function formatNumber(value: number | null, precision: number, language: 
  * The common case: `value` is still in the unit METRICS[metric] declares (MetricSpec.precision's
  * own doc comment: "in the unit this spec declares"). Reads precision off the catalogue so a call
  * site cannot drift from it the way the precision audit found repeatedly (Recovery.tsx's
- * threaded-literal precision, Sleep.tsx's hardcoded 0, both correct only by coincidence). Before
+ * threaded-literal precision, the old Sleep page's hardcoded 0, both correct only by coincidence). Before
  * this function existed anywhere, the four call sites that skipped rounding altogether
  * (hrTooltip.ts, HeartRateRange.tsx, Sparkline.tsx, OverrideList.tsx) let a raw many-decimal float
  * reach a reader outright.
@@ -135,13 +135,6 @@ export function formatSessionDateHeading(date: string, language: string): string
  * (NightRow), whose expanded columns are too narrow for formatSessionDateHeading's long form: the
  * good-night mark wrapped onto a line of its own. Same UTC anchoring as formatLocalDate.
  */
-/** A date by its full weekday, day and month, no year ("woensdag 16 september"), as a point panel titles its night. Same UTC anchoring. */
-export function formatLongWeekdayDate(date: string, language: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleString(language, {
-    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
-  })
-}
-
 export function formatWeekdayDate(date: string, language: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleString(language, {
     weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  dayCountsLine, emphasise, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
+  dayCountsLine, emphasise, monthName, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
   thisPeriod, windowPhrase,
 } from '../src/pages/detail/periodText.js'
 import type { PeriodChange, PeriodFigure, PeriodStripPoint, PeriodWindow } from '../src/data/periodTypes.js'
@@ -53,6 +53,15 @@ describe('windowPhrase', () => {
     const year: PeriodWindow = { unit: 'year', count: 1, from: '2025-01-01', to: '2025-12-31' }
     expect(windowPhrase(year, t)).toBe('for a year, from 2025')
     expect(windowPhrase(year, tNl)).toBe('voor een jaar, uit 2025')
+  })
+})
+
+describe('monthName', () => {
+  it('names a month alone, from its key or a date inside it, in both languages', () => {
+    expect(monthName('2026-08', 'en')).toBe('August')
+    expect(monthName('2026-08-31', 'nl')).toBe('augustus')
+    // UTC-anchored: the first of a month never slips back to the month before.
+    expect(monthName('2026-01', 'en')).toBe('January')
   })
 })
 
@@ -115,6 +124,33 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine(naps, 'en', t, { window: true })).toBe('within your usual 1 – 5 per month for a month, last 12 months')
     const quarter = { ...naps, usual: { ...naps.usual!, window: { unit: 'quarter' as const, count: 4, from: '2025-07-01', to: '2026-06-30' } } }
     expect(periodVerdictLine(quarter, 'nl', tNl)).toBe('binnen je gebruikelijke bereik 1 – 5 per 3 maanden')
+  })
+
+  it("words a running period's per-period figure as its count so far beside the usual, with no verdict", () => {
+    // The server leaves a per-period figure unjudged while its period runs.
+    const naps = figure({
+      metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 4.2, total: 3, standing: null,
+      usual: { center: 3, low: 1, high: 5, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(naps, 'en', t)).toBe('so far; usual 1 – 5 a month')
+    expect(periodVerdictLine(naps, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 1 – 5 per maand')
+    expect(periodVerdictLine(naps, 'en', t, { window: true })).toBe('so far; usual 1 – 5 a month for a month, last 12 months')
+    const week = { ...naps, usual: { ...naps.usual!, window: { unit: 'week' as const, count: 12, from: '2026-05-04', to: '2026-07-26' } } }
+    expect(periodVerdictLine(week, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 1 – 5 per week')
+    // A per-day figure the server left unjudged keeps verdictLine's own words.
+    expect(periodVerdictLine({ ...naps, per: 'day' }, 'en', t)).not.toContain('so far; usual')
+  })
+
+  it("words a running period's zero-width usual as one value, not a range", () => {
+    const naps = figure({
+      metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 0, total: 0, standing: null,
+      usual: { center: 0, low: 0, high: 0, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(naps, 'en', t)).toBe('so far; usual 0 a month')
+    expect(periodVerdictLine(naps, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 0 per maand')
+    expect(periodVerdictLine(naps, 'en', t, { window: true })).toBe('so far; usual 0 a month for a month, last 12 months')
+    const year = { ...naps, usual: { ...naps.usual!, window: { unit: 'year' as const, count: 1, from: '2025-01-01', to: '2025-12-31' } } }
+    expect(periodVerdictLine(year, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 0 per jaar')
   })
 
   it('prints a reason the same with the window asked for', () => {
@@ -323,10 +359,17 @@ describe('periodValueLine', () => {
     expect(periodValueLine(figure({ value: 420, total: 12600 }), 'en', t)).toEqual({ value: `7h${NB}00m`, under: null })
   })
 
-  it("prints a per-period figure's total, with nothing under it", () => {
-    // Three naps so far, a pace of 4.2 over the period: the value printed is the three.
-    const naps = figure({ metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 4.2, total: 3 })
+  it("prints a running period's per-period figure as its count so far, with nothing under it", () => {
+    // Three naps so far, a pace of 4.2 over the period: unjudged while it runs, and the value printed is the three.
+    const naps = figure({ metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 4.2, total: 3, standing: null })
     expect(periodValueLine(naps, 'en', t)).toEqual({ value: '3', under: null })
+  })
+
+  it("prints a finished period's per-period figure as the total it was judged on", () => {
+    const naps = figure({ metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 4, total: 4, standing: 'within' })
+    expect(periodValueLine(naps, 'en', t)).toEqual({ value: '4', under: null })
+    expect(periodVerdictLine({ ...naps, usual: { center: 3, low: 1, high: 5, thin: false, window: MONTH, periods: 12 } }, 'en', t))
+      .toBe('within your usual 1 – 5 per month')
   })
 
   it('prints the value alone for a figure with no total', () => {

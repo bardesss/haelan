@@ -4,6 +4,7 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import type { NightMonth, PeriodRange, SleepListRow } from '../../../data/periodTypes.js'
 import { formatDuration } from '../../../format.js'
+import { monthName } from '../../detail/periodText.js'
 import { ExpandableList } from '../../period/ExpandableList.js'
 import { NightRow } from '../NightRow.js'
 import { drawsNights } from './SleepScheduleCard.js'
@@ -35,8 +36,7 @@ export function SleepNightsList({ nights, months, range, longest, span, expanded
   const { t, i18n } = useTranslation()
   const language = i18n.language
   // The month alone: a 3 months or a year never holds the same month twice, and the header names the year.
-  const monthLabel = useCallback((month: string) => new Date(`${month}-01T00:00:00Z`)
-    .toLocaleString(language, { month: 'long', timeZone: 'UTC' }), [language])
+  const monthLabel = useCallback((month: string) => monthName(month, language), [language])
   const monthAside = useCallback((month: string) => {
     const summary = months.find((m) => m.month === month)
     if (summary === undefined) return null

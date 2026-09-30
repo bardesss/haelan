@@ -20,7 +20,8 @@ import { useSourceNames } from '../data/useSourceNames.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { exportPathFor } from '../data/pageShell.js'
-import { formatLocalDateRange, formatLongWeekdayDate } from '../format.js'
+import { formatLocalDateRange } from '../format.js'
+import { formatLongDate } from './dashboard/glanceText.js'
 import { formatFigureValue } from './detail/figureText.js'
 import { pointVerdictWords, standoutLines, thisPeriod } from './detail/periodText.js'
 import { verdictTone } from '../charts/base.js'
@@ -155,7 +156,7 @@ export function Activity() {
       return figure === undefined || own === undefined || own.value === null ? [] : [rowOf(figure, own)]
     })]
     return (
-      <PointPanel title={formatLongWeekdayDate(point.from, language)} rows={rows}
+      <PointPanel title={formatLongDate(point.from, language)} rows={rows}
         open={{ to: dayHref(point.from), text: t('activity.period.openDay') }}
         onAnnotate={() => { close(); setAnnotateTarget({ scope: 'day_metric', localDate: point.from, metric: STEPS }) }}
         onClose={close} />
