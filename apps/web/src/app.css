@@ -887,6 +887,9 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    on and off does not resize the card. The layout check cannot see this: it never opens this
    page's tabs, and apps/web/test/route-svg-height.test.ts is the guard instead. */
 .workout-route-svg { display: block; width: 100%; height: auto; max-height: 320px; }
+/* The same route's lead line ("12 times on this route since May") stands off the rows under it, as
+   SideCard's stacked caption does (.detail-side-stacked's gap). */
+.workout-route-lead { margin-bottom: var(--space-2); }
 .workout-route-trace { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .workout-route-point { fill: var(--accent); }
 .workout-route-start { fill: var(--accent); stroke: var(--surface-card); stroke-width: 1.5; }

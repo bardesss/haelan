@@ -48,7 +48,7 @@ export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
   return (
     <Card span={span} label={t('activity.workout.page.sameRoute.label')}>
       {/* This workout counted in: "6 times on this route since May". */}
-      <p className="detail-side-caption">
+      <p className="detail-side-caption workout-route-lead">
         {t('activity.workout.page.sameRoute.count', { count: count + 1, month: bestMonth(since, page.localDate, i18n.language) })}
       </p>
       <FigureRows>
