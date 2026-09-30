@@ -26,9 +26,11 @@ describe('distanceText, the one distance the rows, the per-type totals and Recor
 })
 
 describe('sessionRateText', () => {
-  it("reads a ride's speed as sent and never turns its pace round, and a run's pace", () => {
-    expect(sessionRateText('ride', { paceSecondsPerKm: 120, speedMetersPerSecond: null }, 'en', t)).toBeNull()
-    expect(sessionRateText('ride', { paceSecondsPerKm: null, speedMetersPerSecond: 7.5 }, 'nl', tNl)).toBe(`27,0${NB}km/u`)
-    expect(sessionRateText('run', { paceSecondsPerKm: 324, speedMetersPerSecond: null }, 'en', t)).toBe(`5:24${NB}/km`)
+  it('words the rate the server sends by its key and unit, and nothing for none', () => {
+    expect(sessionRateText(null, 'en', t)).toBeNull()
+    expect(sessionRateText({ key: 'speed', unit: 'meters_per_second', value: 7.5 }, 'nl', tNl)).toBe(`27,0${NB}km/u`)
+    expect(sessionRateText({ key: 'pace', unit: 'seconds_per_km', value: 324 }, 'en', t)).toBe(`5:24${NB}/km`)
+    // A swim's pace per 100 m as sent, never a pace per km cut by ten on the web.
+    expect(sessionRateText({ key: 'swimPace', unit: 'seconds_per_100m', value: 160 }, 'en', t)).toBe(`2:40${NB}/100\u202fm`)
   })
 })

@@ -144,8 +144,8 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
     averageHeartRateBpm: roundToOrNull(0, w.averageHeartRateBpm),
     paceSecondsPerKm: roundToOrNull(0, w.paceSecondsPerKm),
     elevationGainMeters: roundToOrNull(0, w.elevationGainMeters),
-    // Metres per second at two decimals, the workout page's own speed precision: a tenth of a km/h.
-    speedMetersPerSecond: roundToOrNull(2, w.speedMetersPerSecond),
+    // `rate` arrives rounded to its figure's precision (core's sessionRateOf), as on every route
+    // that sends a session.
   }))
   return {
     ...p,

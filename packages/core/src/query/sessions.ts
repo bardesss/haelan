@@ -2,8 +2,9 @@ import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { sessions, overrides as overridesTable } from '../db/schema/index.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
-import { averageSpeedOf, durationSecondsOrNull, numberOrNull, workoutSummary } from '../api/workoutSummary.ts'
-import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
+import { averageSpeedOf, durationSecondsOrNull, numberOrNull, paceOf, swimPaceOf, workoutSummary } from '../api/workoutSummary.ts'
+import { exerciseCategory, isIndoor, RATE_FIGURES, rateOf } from '../api/exerciseCategory.ts'
+import type { SessionRate } from '../api/exerciseCategory.ts'
 
 // Named WorkoutSession rather than a generic SessionRow: the reader also serves readSleepNights'
 // underlying rows for kind 'sleep', but a workout list is its most interesting caller.
@@ -47,28 +48,46 @@ export interface WorkoutSession {
   /** The ids of the other rows merged into this one, best ranked first. Empty for a raw row. */
   alternateIds: string[]
   /**
-   * A ride's average speed in metres per second (rideSpeedOf), sent so a row prints the speed the
-   * workout page leads with rather than turning a pace round; null for every other category and a
-   * ride with neither a device speed nor a distance and a moving time.
+   * The session's average rate as its category reads it (sessionRateOf), sent so a row prints the
+   * rate the workout page leads with, already worded by key and unit and rounded; null for a
+   * category with no rate and a session its page leads with a time for.
    */
-  speedMetersPerSecond: number | null
+  rate: SessionRate | null
 }
 
 /**
- * A ride's average speed, the workout page's own rule (averageSpeedOf): the device's speed, else
- * its distance over its moving time. Null for a session whose category reads no speed. Read off
- * the few fields it needs rather than through workoutDetail, which parses every split; every
- * session list pays for this.
+ * A session's average rate by the workout page's own rules for its hero (workoutPage.ts's FIGURES
+ * and heroOf): on foot the device's pace, else its moving time over its distance (a treadmill run's);
+ * on a bike that covered ground (not isIndoor, with a distance) the device's speed, else its distance
+ * over its moving time, and no rate for an indoor bike, whose page leads with its moving time; in
+ * the water the pace per 100 m, always worked out. Null for a category with no rate, and for a
+ * rate at or below zero, which no page prints. Rounded to the figure's own precision (RATE_FIGURES),
+ * so every route that sends a session sends the one value the row prints.
+ *
+ * Read off the few fields it needs rather than through workoutDetail, which parses every split;
+ * every session list pays for this.
  */
-export function rideSpeedOf(attrs: unknown): number | null {
+export function sessionRateOf(attrs: unknown): SessionRate | null {
   const summary = workoutSummary(attrs)
-  if (rateOf(exerciseCategory(summary.exerciseType)) !== 'speed') return null
-  // A record: a ride's category came off its exerciseType, which only a record carries.
+  const key = rateOf(exerciseCategory(summary.exerciseType))
+  if (key === null) return null
+  // A record: a category with a rate came off its exerciseType, which only a record carries.
   const record = attrs as { metricsSummary?: unknown, activeDuration?: unknown }
-  const metrics = typeof record.metricsSummary === 'object' && record.metricsSummary !== null
-    ? record.metricsSummary as { averageSpeedMillimetersPerSecond?: unknown } : {}
-  const device = numberOrNull(metrics.averageSpeedMillimetersPerSecond)
-  return averageSpeedOf(device === null ? null : device / 1000, summary.distanceMeters, durationSecondsOrNull(record.activeDuration), true)
+  const moving = durationSecondsOrNull(record.activeDuration)
+  const distance = summary.distanceMeters
+  let value: number | null
+  if (key === 'pace') value = paceOf(summary.paceSecondsPerKm, distance, moving, true)
+  else if (key === 'swimPace') value = swimPaceOf(distance, moving)
+  else if (isIndoor(summary.exerciseType) || distance === null) value = null
+  else {
+    const metrics = typeof record.metricsSummary === 'object' && record.metricsSummary !== null
+      ? record.metricsSummary as { averageSpeedMillimetersPerSecond?: unknown } : {}
+    const device = numberOrNull(metrics.averageSpeedMillimetersPerSecond)
+    value = averageSpeedOf(device === null ? null : device / 1000, distance, moving, true)
+  }
+  if (value === null || value <= 0) return null
+  const { unit, precision } = RATE_FIGURES[key]
+  return { key, unit, value: Number(value.toFixed(precision)) }
 }
 
 /**
@@ -189,7 +208,7 @@ function toWorkoutSession(
     excludeReason: excluded.get(row.id) ?? null,
     sources: [row.sourceId],
     alternateIds: [],
-    speedMetersPerSecond: row.kind === 'exercise' ? rideSpeedOf(attrs) : null,
+    rate: row.kind === 'exercise' ? sessionRateOf(attrs) : null,
   }
 }
 

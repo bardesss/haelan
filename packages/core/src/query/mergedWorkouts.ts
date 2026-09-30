@@ -5,7 +5,7 @@ import { shiftLocalDate } from '../derive/localDay.ts'
 import { loadPriority } from '../store/sourcePriority.ts'
 import { SettingsStore } from '../store/settings.ts'
 import { workoutSummary } from '../api/workoutSummary.ts'
-import { readSessions, rideSpeedOf } from './sessions.ts'
+import { readSessions, sessionRateOf } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 
 /**
@@ -79,7 +79,7 @@ function mergeGroup(members: readonly WorkoutSession[]): WorkoutSession {
     ...primary,
     attrs,
     // Read again off the merged attrs: a watch's speed can fill in a ride the phone recorded first.
-    speedMetersPerSecond: rideSpeedOf(attrs),
+    rate: sessionRateOf(attrs),
     // Every member's source, not only the ones that filled a field: "also recorded by" is a fact
     // about the event, and a phone copy that added nothing still recorded it.
     sources: [...new Set(members.map((m) => m.sourceId))],

@@ -21,7 +21,7 @@ const grouped = (range: PeriodRange) => range === '3months' || range === 'year'
 const render = (workout: WorkoutListRow): ReactNode => (
   <SessionRowView id={workout.id} type={workout.type} startMs={workout.startMs} durationSeconds={workout.durationSeconds}
     distanceMeters={workout.distanceMeters} caloriesKcal={workout.caloriesKcal} averageHeartRateBpm={workout.averageHeartRateBpm}
-    paceSecondsPerKm={workout.paceSecondsPerKm} speedMetersPerSecond={workout.speedMetersPerSecond ?? null} elevationGainMeters={workout.elevationGainMeters}
+    rate={workout.rate ?? null} elevationGainMeters={workout.elevationGainMeters}
     excluded={workout.excluded} localDate={workout.localDate} dated />
 )
 

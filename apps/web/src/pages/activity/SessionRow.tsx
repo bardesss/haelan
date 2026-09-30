@@ -4,7 +4,7 @@ import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
 import { exerciseCategory } from '@haelan/core/exercise-category'
-import type { ExerciseCategory } from '@haelan/core/exercise-category'
+import type { ExerciseCategory, SessionRate } from '@haelan/core/exercise-category'
 import { Icon } from '../../components/icons.js'
 import { Link } from '../../router.js'
 import { distanceText, sessionRateText } from './categoryText.js'
@@ -69,9 +69,8 @@ export interface SessionRowViewProps {
   excludeReason?: string | null
   /** The person's own day for the row, the same one a caller's date heading groups by. */
   localDate: string
-  paceSecondsPerKm?: number | null
-  /** A ride's average speed as core sends it (sessions.ts's rideSpeedOf); absent from an older payload. */
-  speedMetersPerSecond?: number | null
+  /** The session's rate as core sends it (sessions.ts's sessionRateOf); absent from an older payload. */
+  rate?: SessionRate | null
   elevationGainMeters?: number | null
   /** The date at the head of the second line ("Wed, Sep 30 · 8.7 km"), for a list with no date
    *  headings of its own (the Activity overview's workouts, the approved mockup's). */
@@ -83,8 +82,7 @@ export function SessionRowView(props: SessionRowViewProps) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const { distanceMeters, caloriesKcal, averageHeartRateBpm } = props
-  const paceSecondsPerKm = props.paceSecondsPerKm ?? null
-  const speedMetersPerSecond = props.speedMetersPerSecond ?? null
+  const rate = props.rate ?? null
   const elevationGainMeters = props.elevationGainMeters ?? null
   const excludeReason = props.excludeReason ?? null
   const { localDate } = props
@@ -118,9 +116,9 @@ export function SessionRowView(props: SessionRowViewProps) {
     props.dated === true ? formatWeekdayDate(localDate, language) : null,
     // As Records and the per-type totals beside the Activity list print a distance (distanceText).
     distanceMeters === null ? null : distanceText(category, distanceMeters, language, t),
-    // The rate the category reads (a ride's speed, a swim's time per 100 m), never a pace per
-    // kilometre on a sport that is not on foot; nothing for one with no rate.
-    sessionRateText(category, { paceSecondsPerKm, speedMetersPerSecond }, language, t),
+    // The rate the category reads (a ride's speed, a swim's time per 100 m), as the server picked
+    // it by the workout page's rules; nothing where it sends none.
+    sessionRateText(rate, language, t),
     elevationGainMeters === null ? null
       : noBreak(`${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`),
   ].filter((part): part is string => part !== null)
@@ -192,8 +190,7 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       averageHeartRateBpm={summary.averageHeartRateBpm}
       excluded={session.excluded}
       excludeReason={session.excludeReason}
-      paceSecondsPerKm={summary.paceSecondsPerKm}
-      speedMetersPerSecond={session.speedMetersPerSecond ?? null}
+      rate={session.rate ?? null}
       elevationGainMeters={summary.elevationGainMeters}
       localDate={session.localDate}
     />

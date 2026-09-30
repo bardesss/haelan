@@ -14,7 +14,7 @@ import { NO_THINNING } from './sessionHeartRate.ts'
 import { cadenceSeries, paceSeries, pauseMetresPerMinuteOf, speedSeries } from './workoutThrough.ts'
 import type { MinuteSeries, PaceSeries, SpeedSeries } from './workoutThrough.ts'
 import { oneNightPerDate } from '../api/nights.ts'
-import { averageSpeedOf, workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
+import { averageSpeedOf, paceOf, swimPaceOf, workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
 import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
 import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
@@ -25,7 +25,7 @@ import type { SessionForRecords, SessionRecord, SessionRecordKind } from '../api
 import { routeSignature, sameRoute as onSameRoute } from '../api/routeMatch.ts'
 import { effortDistancesOf, effortSeconds, fastestEffortsAlong } from '../api/fastestEfforts.ts'
 import type { Effort, Efforts } from '../api/fastestEfforts.ts'
-import { countsForDistanceRecords, exerciseCategory, isIndoor, rateOf } from '../api/exerciseCategory.ts'
+import { countsForDistanceRecords, exerciseCategory, isIndoor, RATE_FIGURES, rateOf } from '../api/exerciseCategory.ts'
 import type { ExerciseCategory } from '../api/exerciseCategory.ts'
 import { categoryOf, exerciseTypeOf } from './workoutDerived.ts'
 import type { RoutePoint, RouteSummary } from './workoutDerived.ts'
@@ -168,14 +168,6 @@ interface FigureSpec {
 const mobility = (pick: (m: NonNullable<WorkoutDetail['mobility']>) => number | null) =>
   (r: Reading) => (r.detail.mobility === null ? null : pick(r.detail.mobility))
 
-// Answers: the distance and the moving time, when the session has both above zero: what a rate is
-// worked out from where the device sent none (a treadmill run's pace, a swim's pace per 100 m).
-function distanceAndMoving(r: Reading): { metres: number, seconds: number } | null {
-  const metres = r.summary.distanceMeters
-  const seconds = r.detail.activeDurationSeconds
-  return metres === null || seconds === null || metres <= 0 || seconds <= 0 ? null : { metres, seconds }
-}
-
 // Step cadence and the running dynamics are strides: a run's or a walk's, and nothing else's.
 const ON_FOOT = (category: ExerciseCategory) => category === 'run' || category === 'walk'
 
@@ -183,23 +175,20 @@ const ON_FOOT = (category: ExerciseCategory) => category === 'run' || category =
 // distance, heart rate, load or cadence is not better by itself (the spec's direction table).
 // Each rate is the one its category reads (rateOf): a ride has no pace and a swim no pace per km,
 // and on foot or on a bike a rate the device left out is worked out from distance and moving time.
+// The three rates are the rules a list row's rate reads too (sessions.ts's sessionRateOf).
 const FIGURES: readonly FigureSpec[] = [
   {
-    key: 'pace', unit: 'seconds_per_km', precision: 0, direction: 'down',
-    of: (r) => {
-      if (r.summary.paceSecondsPerKm !== null) return r.summary.paceSecondsPerKm
-      const both = rateOf(r.category) === 'pace' ? distanceAndMoving(r) : null
-      return both === null ? null : both.seconds / (both.metres / 1000)
-    },
+    key: 'pace', ...RATE_FIGURES.pace, direction: 'down',
+    of: (r) => paceOf(r.summary.paceSecondsPerKm, r.summary.distanceMeters, r.detail.activeDurationSeconds, rateOf(r.category) === 'pace'),
     shows: (category) => category !== 'ride' && category !== 'swim',
   },
   {
-    key: 'speed', unit: 'meters_per_second', precision: 2, direction: 'up',
+    key: 'speed', ...RATE_FIGURES.speed, direction: 'up',
     of: (r) => averageSpeedOf(r.detail.averageSpeedMetersPerSecond, r.summary.distanceMeters, r.detail.activeDurationSeconds, r.category === 'ride'),
   },
   {
-    key: 'swimPace', unit: 'seconds_per_100m', precision: 0, direction: 'down',
-    of: (r) => { const both = distanceAndMoving(r); return both === null ? null : both.seconds / (both.metres / 100) },
+    key: 'swimPace', ...RATE_FIGURES.swimPace, direction: 'down',
+    of: (r) => swimPaceOf(r.summary.distanceMeters, r.detail.activeDurationSeconds),
     shows: (category) => category === 'swim',
   },
   // A swim's distance is counted in metres as its pool and its pace are ("1,500 m", never "1.50 km"):
@@ -490,7 +479,8 @@ function effortsOf(
 // Answers: the figure the page leads with, the rate its category reads (rateOf) where the workout
 // has it: pace on foot (a treadmill run's worked out from distance and moving time), speed on a
 // bike that covered ground (an indoor bike's speed is the machine's), pace per 100 m in the water;
-// moving time otherwise, or elapsed time without one.
+// moving time otherwise, or elapsed time without one. A list row's rate (sessions.ts's sessionRateOf)
+// follows the same rule, so a row never prints a rate its page does not lead with.
 function heroOf(category: ExerciseCategory, exerciseType: string | null, figures: WorkoutPage['figures']): WorkoutFigureKey {
   const rate = rateOf(category)
   if (rate === 'pace' && figures.pace !== undefined) return 'pace'

@@ -139,8 +139,29 @@ export function isIndoor(type: string | null): boolean {
   return type !== null && INDOOR.has(type)
 }
 
+/** The rates a category can read, each the workout page's figure of that key. */
+export type RateKey = 'pace' | 'speed' | 'swimPace'
+
+/**
+ * Each rate's unit and the precision it is sent at, the workout page's FIGURES for the three: a pace
+ * in whole seconds a kilometre, a speed in metres a second to two decimals (a tenth of a km/h), a
+ * swim's pace in whole seconds a 100 m.
+ */
+export const RATE_FIGURES: Readonly<Record<RateKey, { unit: string, precision: number }>> = {
+  pace: { unit: 'seconds_per_km', precision: 0 },
+  speed: { unit: 'meters_per_second', precision: 2 },
+  swimPace: { unit: 'seconds_per_100m', precision: 0 },
+}
+
+/**
+ * A session's own average rate as a list row prints it (sessions.ts's sessionRateOf): the figure's
+ * key and unit, so a reader words it without knowing the session's category, and the value rounded
+ * to that figure's precision.
+ */
+export interface SessionRate { key: RateKey, unit: string, value: number }
+
 /** How the category reads a rate: 'pace' (min/km), 'speed' (km/h), 'swimPace' (min/100 m), or null for none. */
-export function rateOf(category: ExerciseCategory): 'pace' | 'speed' | 'swimPace' | null {
+export function rateOf(category: ExerciseCategory): RateKey | null {
   switch (category) {
     case 'run':
     case 'walk':

@@ -3,6 +3,7 @@
 // imported: @haelan/core's root export pulls in better-sqlite3 and drizzle, which have no business in
 // a browser bundle (the precedent is useNightPage.ts).
 import type { GlanceBaseline, GlanceStanding } from './useGlance.js'
+import type { SessionRate } from '@haelan/core/exercise-category'
 
 export type { GlanceBaseline, GlanceStanding }
 
@@ -129,9 +130,9 @@ export interface WorkoutListRow {
   paceSecondsPerKm: number | null
   elevationGainMeters: number | null
   excluded: boolean
-  /** A ride's average speed in m/s at two decimals (core's rideSpeedOf), null for any other category;
+  /** The workout's rate as its category reads it, rounded (core's sessionRateOf); null for none,
    *  absent from a capture older than it. */
-  speedMetersPerSecond?: number | null
+  rate?: SessionRate | null
 }
 
 /** A calendar month of the workouts list ("2026-08"): its counted workouts and their time. */

@@ -8,7 +8,7 @@ import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { enrichAttrs, mergeWorkouts } from '../src/query/mergedWorkouts.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { readRoutesFor } from '../src/query/workoutDerived.ts'
-import { rideSpeedOf } from '../src/query/sessions.ts'
+import { sessionRateOf } from '../src/query/sessions.ts'
 import type { WorkoutSession } from '../src/query/sessions.ts'
 
 /**
@@ -64,7 +64,7 @@ function session(o: Partial<WorkoutSession> & { id: string, sourceId: string }):
     excludeReason: null,
     sources: [o.sourceId],
     alternateIds: [],
-    speedMetersPerSecond: null,
+    rate: null,
     ...o,
   }
 }
@@ -151,11 +151,11 @@ describe('mergeWorkouts', () => {
     const googleRide = attrsOf({ exerciseType: 'BIKING', activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000 } })
     const phoneRide = attrsOf({ exerciseType: 'BIKING' })
     const [out] = mergeWorkouts([
-      session({ id: 'google-ride', sourceId: 'google', attrs: googleRide, speedMetersPerSecond: rideSpeedOf(googleRide) }),
-      session({ id: 'phone-ride', sourceId: 'phone', attrs: phoneRide, speedMetersPerSecond: rideSpeedOf(phoneRide) }),
+      session({ id: 'google-ride', sourceId: 'google', attrs: googleRide, rate: sessionRateOf(googleRide) }),
+      session({ id: 'phone-ride', sourceId: 'phone', attrs: phoneRide, rate: sessionRateOf(phoneRide) }),
     ], { priority: phoneFirst, overlapRatio: DEFAULT_OVERLAP_RATIO })
     expect(out!.id).toBe('phone-ride')
-    expect(out!.speedMetersPerSecond).toBeCloseTo(20000 / 2400, 9)
+    expect(out!.rate).toEqual({ key: 'speed', unit: 'meters_per_second', value: 8.33 })
   })
 
   it('leaves two workouts that do not overlap enough as two', () => {
@@ -348,19 +348,45 @@ describe('PersonQuery workouts, merged', () => {
   })
 })
 
-describe('rideSpeedOf', () => {
+describe('sessionRateOf', () => {
   const ride = (fields: Record<string, unknown>) => attrsOf({ exerciseType: 'BIKING', ...fields })
-  it("takes the device's own speed first, as the workout page's speed figure does", () => {
-    expect(rideSpeedOf(ride({ activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000, averageSpeedMillimetersPerSecond: 9000 } })))
-      .toBe(9)
+  const speed = (value: number) => ({ key: 'speed', unit: 'meters_per_second', value })
+  it("takes a ride's own device speed first, as the workout page's speed figure does", () => {
+    expect(sessionRateOf(ride({ activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000, averageSpeedMillimetersPerSecond: 9000 } })))
+      .toEqual(speed(9))
   })
-  it('works a ride without a device speed or pace out from its distance over its moving time', () => {
-    expect(rideSpeedOf(ride({ activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000 } }))).toBeCloseTo(20000 / 2400, 9)
+  it('works a ride without a device speed out from its distance over its moving time, to two decimals', () => {
+    // 20 km in 40 minutes is 8.333 m/s; the row is sent the workout page's own precision.
+    expect(sessionRateOf(ride({ activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000 } }))).toEqual(speed(8.33))
   })
-  it('answers null for a ride missing its distance or its moving time, and for every other category', () => {
-    expect(rideSpeedOf(ride({ metricsSummary: { distanceMillimeters: 20_000_000 } }))).toBeNull()
-    expect(rideSpeedOf(ride({ activeDuration: '2400s' }))).toBeNull()
-    expect(rideSpeedOf(GOOGLE_RUN)).toBeNull()
-    expect(rideSpeedOf(null)).toBeNull()
+  it('answers null for a ride missing its distance or its moving time, and one with a speed but no distance', () => {
+    expect(sessionRateOf(ride({ metricsSummary: { distanceMillimeters: 20_000_000 } }))).toBeNull()
+    expect(sessionRateOf(ride({ activeDuration: '2400s' }))).toBeNull()
+    // The page leads such a ride with its moving time (heroOf needs a distance), so the row has no rate.
+    expect(sessionRateOf(ride({ activeDuration: '2400s', metricsSummary: { averageSpeedMillimetersPerSecond: 9000 } }))).toBeNull()
+  })
+  it("gives an indoor bike no rate, since its page leads with its moving time and its speed is the machine's", () => {
+    expect(sessionRateOf(attrsOf({
+      exerciseType: 'STATIONARY_BIKE', activeDuration: '2400s',
+      metricsSummary: { distanceMillimeters: 20_000_000, averageSpeedMillimetersPerSecond: 9000 },
+    }))).toBeNull()
+  })
+  it("works a treadmill run's pace out from its distance and moving time when the device sent none", () => {
+    expect(sessionRateOf(attrsOf({ exerciseType: 'TREADMILL', activeDuration: '1800s', metricsSummary: { distanceMillimeters: 5_000_000 } })))
+      .toEqual({ key: 'pace', unit: 'seconds_per_km', value: 360 })
+  })
+  it("takes a run's device pace first, in whole seconds", () => {
+    expect(sessionRateOf(attrsOf({ exerciseType: 'RUNNING', activeDuration: '1800s', metricsSummary: { distanceMillimeters: 5_000_000, averagePaceSecondsPerMeter: 0.3004 } })))
+      .toEqual({ key: 'pace', unit: 'seconds_per_km', value: 300 })
+  })
+  it("gives a pool swim its pace per 100 m, worked out from its distance and moving time", () => {
+    // 1,500 m in 40 minutes: 160 s a 100 m, the "2:40 /100 m" its page leads with.
+    expect(sessionRateOf(attrsOf({ exerciseType: 'SWIMMING_POOL', activeDuration: '2400s', metricsSummary: { distanceMillimeters: 1_500_000 } })))
+      .toEqual({ key: 'swimPace', unit: 'seconds_per_100m', value: 160 })
+  })
+  it('answers null for a zero rate, a category with no rate, and no record at all', () => {
+    expect(sessionRateOf(ride({ activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000, averageSpeedMillimetersPerSecond: 0 } }))).toBeNull()
+    expect(sessionRateOf(attrsOf({ exerciseType: 'WEIGHTLIFTING', activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000 } }))).toBeNull()
+    expect(sessionRateOf(null)).toBeNull()
   })
 })

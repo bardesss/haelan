@@ -20,6 +20,12 @@ describe('SessionRow', () => {
     expect(html).toContain('54')
   })
 
+  it("prints the rate the server sent with the session, a swim's pace per 100 m where its attrs carry none", () => {
+    const html = render(run({ exerciseType: 'SWIMMING_POOL', metricsSummary: { distanceMillimeters: 1_500_000 } },
+      { rate: { key: 'swimPace', unit: 'seconds_per_100m', value: 160 } }))
+    expect(html).toContain('<div class="session-row-detail">1.500\u00a0m · 2:40\u00a0/100\u202fm</div>')
+  })
+
   // The date used to be the first word on the visible line; SessionList now prints it once as a
   // heading above a run of same-day rows instead, which took it out of each row's own accessible
   // name. A screen reader user who lands on one row (arrow-key browsing, not just Tab, since a
@@ -207,46 +213,42 @@ describe('SessionRowView', () => {
     expect(view({ dated: true })).toContain('<div class="session-row-detail">do 3 sep</div>')
   })
 
-  // The rate a category reads (PATTERNS.md, "Per sport"), off the row's one pace: a pace per km on
-  // foot, a speed on a bike, the time per 100 m in the water, and nothing for a sport with no rate.
-  describe('the rate by category', () => {
+  // The rate a category reads (PATTERNS.md, "Per sport"), as the server sends it with the row (core's
+  // sessionRateOf): a pace per km on foot, a speed on a bike, the time per 100 m in the water, and
+  // nothing where it sends none. The row words it by its key and unit alone.
+  describe('the rate the server sends', () => {
     const detail = (type: string, props: Partial<React.ComponentProps<typeof SessionRowView>>) => {
       const match = /<div class="session-row-detail">([^<]*)<\/div>/.exec(view({ type, ...props }))
       return match?.[1] ?? null
     }
+    const pace = (value: number) => ({ key: 'pace', unit: 'seconds_per_km', value }) as const
+    const speed = (value: number) => ({ key: 'speed', unit: 'meters_per_second', value }) as const
 
     it('reads a run and a walk as a pace per kilometre', () => {
-      expect(detail('RUNNING', { distanceMeters: 5000, paceSecondsPerKm: 324 })).toBe('5,0\u00a0km · 5:24\u00a0/km')
-      expect(detail('HIKING', { paceSecondsPerKm: 720 })).toBe('12:00\u00a0/km')
+      expect(detail('RUNNING', { distanceMeters: 5000, rate: pace(324) })).toBe('5,0\u00a0km · 5:24\u00a0/km')
+      expect(detail('HIKING', { rate: pace(720) })).toBe('12:00\u00a0/km')
     })
 
-    it('reads a ride as the speed core sends, in km/u in Dutch, never as a pace', () => {
+    it('reads a ride as the speed core sends, in km/u in Dutch', () => {
       // 8.33 m/s is 30 km an hour.
-      expect(detail('BIKING', { distanceMeters: 30_000, paceSecondsPerKm: 120, speedMetersPerSecond: 8.33 })).toBe('30,0\u00a0km · 30,0\u00a0km/u')
+      expect(detail('BIKING', { distanceMeters: 30_000, rate: speed(8.33) })).toBe('30,0\u00a0km · 30,0\u00a0km/u')
       const english = renderToStaticMarkup(
         <I18nProvider lng="en">
-          <SessionRowView id="s1" type="SPINNING" startMs={0} durationSeconds={3600} distanceMeters={null} caloriesKcal={null}
-            averageHeartRateBpm={null} excluded={false} localDate="2026-09-03" speedMetersPerSecond={6.94} />
+          <SessionRowView id="s1" type="BIKING" startMs={0} durationSeconds={3600} distanceMeters={null} caloriesKcal={null}
+            averageHeartRateBpm={null} excluded={false} localDate="2026-09-03" rate={speed(6.94)} />
         </I18nProvider>,
       )
       expect(english).toContain('<div class="session-row-detail">25.0\u00a0km/h</div>')
     })
 
-    it("shows a ride's speed without a device pace, and never turns a pace round into one", () => {
-      expect(detail('BIKING', { speedMetersPerSecond: 7.5 })).toBe('27,0\u00a0km/u')
-      expect(detail('BIKING', { paceSecondsPerKm: 120 })).toBeNull()
+    it('reads a swim as the time per 100 m the server worked out, its distance in metres', () => {
+      expect(detail('SWIMMING_POOL', { distanceMeters: 1500, rate: { key: 'swimPace', unit: 'seconds_per_100m', value: 160 } }))
+        .toBe('1.500\u00a0m · 2:40\u00a0/100\u202fm')
     })
 
-    it('reads a swim as the time per 100 m, its distance in metres', () => {
-      // 1200 s a km is 2:00 each 100 m.
-      expect(detail('SWIMMING_POOL', { distanceMeters: 1500, paceSecondsPerKm: 1200 }))
-        .toBe('1.500\u00a0m · 2:00\u00a0/100\u202fm')
-    })
-
-    it('prints no rate for a category that reads none, and no speed off a zero pace', () => {
-      expect(detail('CARDIO_WORKOUT', { paceSecondsPerKm: 400 })).toBeNull()
-      expect(detail('WEIGHTLIFTING', { paceSecondsPerKm: 400 })).toBeNull()
-      expect(detail('BIKING', { speedMetersPerSecond: 0 })).toBeNull()
+    it('prints no rate where the server sends none, an indoor bike or a lift', () => {
+      expect(detail('STATIONARY_BIKE', { rate: null })).toBeNull()
+      expect(detail('WEIGHTLIFTING', {})).toBeNull()
     })
   })
 

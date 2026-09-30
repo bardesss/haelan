@@ -316,6 +316,30 @@ export function averageSpeedOf(
 }
 
 /**
+ * A pace in seconds a kilometre: the device's own where it recorded one, else, where `worksOut` (a
+ * category that reads a pace), its moving time over its distance; null without either. The one rule
+ * the workout page's pace figure and a list row's pace share, so a treadmill run with no device pace
+ * prints the pace its page leads with.
+ */
+export function paceOf(
+  device: number | null, distanceMeters: number | null, movingSeconds: number | null, worksOut: boolean,
+): number | null {
+  if (device !== null) return device
+  if (!worksOut || distanceMeters === null || movingSeconds === null || distanceMeters <= 0 || movingSeconds <= 0) return null
+  return movingSeconds / (distanceMeters / 1000)
+}
+
+/**
+ * A swim's pace in seconds a 100 m, always worked out from its distance and moving time (the device
+ * sends no pace per 100 m); null without both above zero. The workout page's swimPace figure and a
+ * swim's list row share it.
+ */
+export function swimPaceOf(distanceMeters: number | null, movingSeconds: number | null): number | null {
+  if (distanceMeters === null || movingSeconds === null || distanceMeters <= 0 || movingSeconds <= 0) return null
+  return movingSeconds / (distanceMeters / 100)
+}
+
+/**
  * Everything a detail page needs from a session's attrs that workoutSummary does not already
  * answer. Lives here, and not in a module of its own, because workoutSummary.ts's opening line
  * claims to be the only module allowed to open a WorkoutSession's attrs, and a second reader

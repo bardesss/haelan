@@ -1127,7 +1127,11 @@
           "watch"
         ],
         "alternateIds": [],
-        "speedMetersPerSecond": null
+        "rate": {
+          "key": "pace",
+          "unit": "seconds_per_km",
+          "value": 350
+        }
       }
     ]
   },

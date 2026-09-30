@@ -1,6 +1,6 @@
 import { useTranslation } from '../i18n/index.js'
 import { effortDistancesOf } from '@haelan/core/fastest-efforts'
-import { PLAIN_TYPE, RECORD_CATEGORY_ORDER } from '@haelan/core/exercise-category'
+import { PLAIN_TYPE, RATE_FIGURES, RECORD_CATEGORY_ORDER, rateOf } from '@haelan/core/exercise-category'
 import type { ExerciseCategory } from '@haelan/core/exercise-category'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -221,8 +221,13 @@ function sessionValue(record: SessionRecord, language: string, t: Translate): st
   const key = record.kind.slice('fastest-'.length)
   const meters = effortDistancesOf(record.category).find((d) => d.key === key)?.meters
   if (meters === undefined || record.value <= 0) return time
-  // An effort's rate over its own distance and time, as the record states both.
-  const rate = sessionRateText(record.category, { paceSecondsPerKm: record.value / (meters / 1000), speedMetersPerSecond: meters / record.value }, language, t)
+  // An effort's rate over its own distance and time, as the record states both: a speed on a bike,
+  // a pace a kilometre on foot (only a run, a ride and a walk keep a fastest effort).
+  const rateKey = rateOf(record.category) === 'speed' ? 'speed' : 'pace'
+  const rate = sessionRateText({
+    key: rateKey, unit: RATE_FIGURES[rateKey].unit,
+    value: rateKey === 'speed' ? meters / record.value : record.value / (meters / 1000),
+  }, language, t)
   return rate === null ? time : `${time} · ${rate}`
 }
 
