@@ -11,8 +11,8 @@ import { figureFromValues, judge, pageFigureOf, usualOf } from './pageFigure.ts'
 import type { FigureDirection, PageFigure } from './pageFigure.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { NO_THINNING } from './sessionHeartRate.ts'
-import { cadenceSeries, paceSeries } from './workoutThrough.ts'
-import type { MinuteSeries, PaceSeries } from './workoutThrough.ts'
+import { cadenceSeries, paceSeries, pauseMetresPerMinuteOf, speedSeries } from './workoutThrough.ts'
+import type { MinuteSeries, PaceSeries, SpeedSeries } from './workoutThrough.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
 import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
@@ -25,7 +25,7 @@ import type { SessionForRecords, SessionRecord, SessionRecordKind } from '../api
 import { routeSignature, sameRoute as onSameRoute } from '../api/routeMatch.ts'
 import { effortDistancesOf, effortSeconds, fastestEffortsAlong } from '../api/fastestEfforts.ts'
 import type { Effort, Efforts } from '../api/fastestEfforts.ts'
-import { countsForDistanceRecords, exerciseCategory } from '../api/exerciseCategory.ts'
+import { countsForDistanceRecords, exerciseCategory, isIndoor, rateOf } from '../api/exerciseCategory.ts'
 import type { ExerciseCategory } from '../api/exerciseCategory.ts'
 import { categoryOf, exerciseTypeOf } from './workoutDerived.ts'
 import type { RoutePoint, RouteSummary } from './workoutDerived.ts'
@@ -35,7 +35,7 @@ import type { RoutePoint, RouteSummary } from './workoutDerived.ts'
 export const WORKOUT_BAND_MIN = 5
 export const WORKOUT_STRIP = 10
 
-export type WorkoutFigureKey = 'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate'
+export type WorkoutFigureKey = 'pace' | 'speed' | 'swimPace' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate'
   | 'highestHeartRate' | 'cardioLoad' | 'banister' | 'calories' | 'steps' | 'activeZoneMinutes'
   | 'elevationGain' | 'hardZoneMinutes' | 'cadence' | 'strideLength' | 'groundContact'
   | 'verticalOscillation' | 'verticalRatio' | 'vo2max' | 'swimLengths'
@@ -61,7 +61,7 @@ export interface WorkoutPage {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
-  previous: { sessionId: string, localDate: string, values: Partial<Record<'pace' | 'speed' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad', number>> } | null
+  previous: { sessionId: string, localDate: string, values: Partial<Record<PreviousKey, number>> } | null
   /**
    * The Records bests of this workout's category (a trail run's are the run category's), one per
    * kind the category keeps (RECORD_KINDS_BY_CATEGORY), null for one no session holds; `longest`,
@@ -72,7 +72,8 @@ export interface WorkoutPage {
   best: Record<SessionRecordKind, RecordRef | null>
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
-  /** How far heart rate fell one and two minutes after the end, against the earlier sessions of the type; null without the minutes.
+  /** How far heart rate fell one and two minutes after the end, against the earlier sessions of the type; null without the minutes,
+   *  and for a category whose end is no effort to recover from (RECOVERY_CATEGORIES).
    *  `readings` are the minute means each fall is taken between: the last full minute, and each minute after. */
   heartRateRecovery: {
     oneMinute: PageFigure, twoMinutes: PageFigure
@@ -82,11 +83,12 @@ export interface WorkoutPage {
   } | null
   /** The night ending on the workout's own date and that morning's recovery; null for each with no value. */
   before: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, recovery: GlanceRecovery | null, restingHeartRate: PageFigure | null }
-  /** The minute series drawn under the heart rate trace, on its elapsed axis. */
-  through: { pace: PaceSeries | null, cadence: MinuteSeries | null }
-  /** Seconds per km the second half of the automatic splits was faster than the first (negative:
-   *  slower); null below two usable splits. */
-  splitTrend: { secondHalfFasterBySecondsPerKm: number } | null
+  /** The minute series drawn under the heart rate trace, on its elapsed axis: a ride's speed in
+   *  place of pace (each null for the other), and cadence only for a run or a walk. */
+  through: { pace: PaceSeries | null, speed: SpeedSeries | null, cadence: MinuteSeries | null }
+  /** How much faster the second half of the automatic splits went than the first (negative:
+   *  slower), in seconds per km, or for a ride in metres per second; null below two usable splits. */
+  splitTrend: { secondHalfFasterBySecondsPerKm: number } | { secondHalfFasterByMetersPerSecond: number } | null
   /** Where the heart rate zones above light begin, for the bands behind the trace. */
   zoneBounds: ZoneBounds | null
   /**
@@ -99,8 +101,10 @@ export interface WorkoutPage {
     /** The date of the oldest of the earlier workouts on the route. */
     since: string
     time: WorkoutFigure
-    /** This workout's pace against the earlier paces on the route (every match that has one); null without a pace of its own. */
-    pace: WorkoutFigure | null
+    /** This workout's rate against the earlier ones on the route (every match that has one), read
+     *  as its category reads a rate (a ride's speed, a swim's pace per 100 m, else pace per km);
+     *  null without a rate of its own. */
+    rate: WorkoutFigure | null
     previous: { sessionId: string, localDate: string, seconds: number } | null
   } | null
   /**
@@ -117,6 +121,9 @@ export interface WorkoutPage {
   } | null> | null
 }
 
+/** The figures the previous workout's values cover: the comparison table's rows. */
+export type PreviousKey = 'pace' | 'speed' | 'swimPace' | 'distance' | 'movingTime' | 'elapsed' | 'averageHeartRate' | 'cardioLoad'
+
 /** Where an effort's time came from: the GPS route, or (a kilometre only) the watch's own split. */
 export type EffortSource = 'gps' | 'split'
 
@@ -128,6 +135,7 @@ export interface WorkoutPageInput { sessionId: string, today: string, nowMs: num
  * for a usual range on a page read.
  */
 interface Reading {
+  category: ExerciseCategory
   summary: WorkoutSummary
   detail: WorkoutDetail
   session: WorkoutSession
@@ -142,16 +150,51 @@ interface FigureSpec {
   precision: number
   direction: FigureDirection
   of: (r: Reading) => number | null
+  /** Whether the page shows the figure for a workout of this category and type; every one without. */
+  shows?: (category: ExerciseCategory, type: string | null) => boolean
 }
 
 const mobility = (pick: (m: NonNullable<WorkoutDetail['mobility']>) => number | null) =>
   (r: Reading) => (r.detail.mobility === null ? null : pick(r.detail.mobility))
 
+// Answers: the distance and the moving time, when the session has both above zero: what a rate is
+// worked out from where the device sent none (a treadmill run's pace, a swim's pace per 100 m).
+function distanceAndMoving(r: Reading): { metres: number, seconds: number } | null {
+  const metres = r.summary.distanceMeters
+  const seconds = r.detail.activeDurationSeconds
+  return metres === null || seconds === null || metres <= 0 || seconds <= 0 ? null : { metres, seconds }
+}
+
+// Step cadence and the running dynamics are strides: a run's or a walk's, and nothing else's.
+const ON_FOOT = (category: ExerciseCategory) => category === 'run' || category === 'walk'
+
 // Faster pace, higher speed and a higher VO2max are better; everything else is neither, since more
 // distance, heart rate, load or cadence is not better by itself (the spec's direction table).
+// Each rate is the one its category reads (rateOf): a ride has no pace and a swim no pace per km,
+// and on foot or on a bike a rate the device left out is worked out from distance and moving time.
 const FIGURES: readonly FigureSpec[] = [
-  { key: 'pace', unit: 'seconds_per_km', precision: 0, direction: 'down', of: (r) => r.summary.paceSecondsPerKm },
-  { key: 'speed', unit: 'meters_per_second', precision: 2, direction: 'up', of: (r) => r.detail.averageSpeedMetersPerSecond },
+  {
+    key: 'pace', unit: 'seconds_per_km', precision: 0, direction: 'down',
+    of: (r) => {
+      if (r.summary.paceSecondsPerKm !== null) return r.summary.paceSecondsPerKm
+      const both = rateOf(r.category) === 'pace' ? distanceAndMoving(r) : null
+      return both === null ? null : both.seconds / (both.metres / 1000)
+    },
+    shows: (category) => category !== 'ride' && category !== 'swim',
+  },
+  {
+    key: 'speed', unit: 'meters_per_second', precision: 2, direction: 'up',
+    of: (r) => {
+      if (r.detail.averageSpeedMetersPerSecond !== null) return r.detail.averageSpeedMetersPerSecond
+      const both = r.category === 'ride' ? distanceAndMoving(r) : null
+      return both === null ? null : both.metres / both.seconds
+    },
+  },
+  {
+    key: 'swimPace', unit: 'seconds_per_100m', precision: 0, direction: 'down',
+    of: (r) => { const both = distanceAndMoving(r); return both === null ? null : both.seconds / (both.metres / 100) },
+    shows: (category) => category === 'swim',
+  },
   { key: 'distance', unit: 'meters', precision: 0, direction: 'neutral', of: (r) => r.summary.distanceMeters },
   { key: 'movingTime', unit: 'seconds', precision: 0, direction: 'neutral', of: (r) => r.detail.activeDurationSeconds },
   { key: 'elapsed', unit: 'seconds', precision: 0, direction: 'neutral', of: (r) => (r.session.endMs - r.session.startMs) / 1000 },
@@ -162,7 +205,11 @@ const FIGURES: readonly FigureSpec[] = [
   { key: 'calories', unit: 'kcal', precision: 0, direction: 'neutral', of: (r) => r.summary.caloriesKcal },
   { key: 'steps', unit: 'count', precision: 0, direction: 'neutral', of: (r) => r.summary.steps },
   { key: 'activeZoneMinutes', unit: 'minutes', precision: 0, direction: 'neutral', of: (r) => r.summary.activeZoneMinutes },
-  { key: 'elevationGain', unit: 'meters', precision: 0, direction: 'neutral', of: (r) => r.summary.elevationGainMeters },
+  // A pool has no climb, and indoors a climb is the barometer drifting.
+  {
+    key: 'elevationGain', unit: 'meters', precision: 0, direction: 'neutral', of: (r) => r.summary.elevationGainMeters,
+    shows: (category, type) => category !== 'swim' && !isIndoor(type),
+  },
   {
     key: 'hardZoneMinutes', unit: 'minutes', precision: 0, direction: 'neutral',
     of: (r) => {
@@ -171,11 +218,11 @@ const FIGURES: readonly FigureSpec[] = [
       return ((zones.vigorousSeconds ?? 0) + (zones.peakSeconds ?? 0)) / 60
     },
   },
-  { key: 'cadence', unit: 'steps_per_minute', precision: 0, direction: 'neutral', of: mobility((m) => m.cadenceStepsPerMinute) },
-  { key: 'strideLength', unit: 'meters', precision: 2, direction: 'neutral', of: mobility((m) => m.strideLengthMeters) },
-  { key: 'groundContact', unit: 'seconds', precision: 3, direction: 'neutral', of: mobility((m) => m.groundContactTimeSeconds) },
-  { key: 'verticalOscillation', unit: 'meters', precision: 3, direction: 'neutral', of: mobility((m) => m.verticalOscillationMeters) },
-  { key: 'verticalRatio', unit: 'ratio', precision: 1, direction: 'neutral', of: mobility((m) => m.verticalRatio) },
+  { key: 'cadence', unit: 'steps_per_minute', precision: 0, direction: 'neutral', of: mobility((m) => m.cadenceStepsPerMinute), shows: ON_FOOT },
+  { key: 'strideLength', unit: 'meters', precision: 2, direction: 'neutral', of: mobility((m) => m.strideLengthMeters), shows: ON_FOOT },
+  { key: 'groundContact', unit: 'seconds', precision: 3, direction: 'neutral', of: mobility((m) => m.groundContactTimeSeconds), shows: ON_FOOT },
+  { key: 'verticalOscillation', unit: 'meters', precision: 3, direction: 'neutral', of: mobility((m) => m.verticalOscillationMeters), shows: ON_FOOT },
+  { key: 'verticalRatio', unit: 'ratio', precision: 1, direction: 'neutral', of: mobility((m) => m.verticalRatio), shows: ON_FOOT },
   { key: 'vo2max', unit: 'ml_per_kg_min', precision: 0, direction: 'up', of: (r) => r.detail.runVo2Max },
   { key: 'swimLengths', unit: 'count', precision: 0, direction: 'neutral', of: (r) => r.detail.totalSwimLengths },
 ]
@@ -186,7 +233,8 @@ const MAX_HR_POINTS = INTRADAY_WINDOW_MAX_HOURS * 60
 
 function readingOf(session: WorkoutSession, hr: { banister: number | null, highestHr: number | null } = { banister: null, highestHr: null }): Reading {
   const detail = workoutDetail(session.attrs)
-  return { summary: workoutSummary(session.attrs), detail, session, edwards: edwardsLoadFromSeconds(detail.zones), ...hr }
+  const summary = workoutSummary(session.attrs)
+  return { category: exerciseCategory(summary.exerciseType), summary, detail, session, edwards: edwardsLoadFromSeconds(detail.zones), ...hr }
 }
 
 // Answers: the highest heart rate inside the session, from its own source, else from any source.
@@ -229,10 +277,18 @@ function recoveryOf(q: PersonQuery, session: WorkoutSession): { one: number | nu
   return { one: fall(afterOne), two: fall(afterTwo), last, afterOne, afterTwo }
 }
 
+/**
+ * The categories whose end is an effort heart rate recovers from. A walk or a strength session ends
+ * near where it went along, so the fall after it measures the end of the set, not the heart.
+ */
+const RECOVERY_CATEGORIES: ReadonlySet<ExerciseCategory> = new Set(['run', 'ride', 'swim', 'cardio'])
+
 // Answers: the subject's heart-rate recovery, judged against the latest WORKOUT_STRIP sessions of
 // the page's own same-type window: one small read each, so the usual stays cheap on a page read.
-function heartRateRecoveryOf(q: PersonQuery, subject: WorkoutSession, window: readonly Reading[]): WorkoutPage['heartRateRecovery'] {
-  const own = recoveryOf(q, subject)
+// Nothing is read for a category RECOVERY_CATEGORIES leaves out.
+function heartRateRecoveryOf(q: PersonQuery, subject: Reading, window: readonly Reading[]): WorkoutPage['heartRateRecovery'] {
+  if (!RECOVERY_CATEGORIES.has(subject.category)) return null
+  const own = recoveryOf(q, subject.session)
   if (own.one === null && own.two === null) return null
   const earlier = window.slice(0, WORKOUT_STRIP).map((r) => recoveryOf(q, r.session))
   const figure = (metric: string, key: 'one' | 'two') => figureFromValues({
@@ -248,17 +304,24 @@ function heartRateRecoveryOf(q: PersonQuery, subject: WorkoutSession, window: re
   }
 }
 
-// Answers: the pace and cadence minute series. Pace from the route (a merged workout's first
-// member with one, readRoutesFor's rule, read with the page's other routes); cadence from the
-// workout's own device's steps rows, each point a minute's sum (mean times readings), since the
-// window read groups raw rows by minute.
-function throughOf(q: PersonQuery, session: WorkoutSession, route: readonly RoutePoint[]): WorkoutPage['through'] {
-  const cadence = session.endMs - session.startMs > MAX_HR_WINDOW_MS ? null : cadenceSeries(
+// Answers: the pace (a ride's speed) and cadence minute series. Pace from the route (a merged
+// workout's first member with one, readRoutesFor's rule, read with the page's other routes), its
+// pauses by the category's own threshold; cadence, for a run or a walk alone, from the workout's
+// own device's steps rows, each point a minute's sum (mean times readings), since the window read
+// groups raw rows by minute.
+function throughOf(q: PersonQuery, session: WorkoutSession, route: readonly RoutePoint[], category: ExerciseCategory): WorkoutPage['through'] {
+  const cadence = !ON_FOOT(category) || session.endMs - session.startMs > MAX_HR_WINDOW_MS ? null : cadenceSeries(
     q.intradayWindow({ metric: 'steps', startMs: session.startMs, endMs: session.endMs, points: NO_THINNING, sourceId: session.sourceId })
       .points.flatMap((p) => (p.excluded || p.mean === null ? [] : [{ utcMs: p.utcMs, value: p.mean * p.n }])),
     session.startMs, session.endMs,
   )
-  return { pace: paceSeries(route, session.startMs, session.endMs), cadence }
+  const pause = pauseMetresPerMinuteOf(category)
+  const ride = rateOf(category) === 'speed'
+  return {
+    pace: ride ? null : paceSeries(route, session.startMs, session.endMs, pause),
+    speed: ride ? speedSeries(route, session.startMs, session.endMs, pause) : null,
+    cadence,
+  }
 }
 
 // Answers: every session of this type up to a date. A type outside EXERCISE_TYPES is
@@ -273,12 +336,13 @@ function sameTypeSessions(q: PersonQuery, exerciseType: string | null, to: strin
   }
 }
 
-// Answers: each figure the subject has, against the same-type window, with a strip of up to nine
+// Answers: each figure the subject has and its category shows (FigureSpec.shows), against the same-type window, with a strip of up to nine
 // earlier sessions (oldest first) ending in this one.
 function figuresOf(subject: Reading, window: readonly Reading[]): WorkoutPage['figures'] {
   const figures: WorkoutPage['figures'] = {}
   const stripped = window.slice(0, WORKOUT_STRIP - 1).reverse()
   for (const spec of FIGURES) {
+    if (spec.shows !== undefined && !spec.shows(subject.category, subject.summary.exerciseType)) continue
     const value = spec.of(subject)
     if (value === null) continue
     // Banister and highest heart rate are read for the subject alone (readingOf's default), so
@@ -352,22 +416,24 @@ function sameRouteOf(
     [...matches.slice(0, WORKOUT_STRIP - 1).reverse(), { session: subject.session, value }],
   )
   return {
-    times: matches.length + 1, since: oldest.session.localDate, time, pace: routePaceOf(subject, valued),
+    times: matches.length + 1, since: oldest.session.localDate, time, rate: routeRateOf(subject, valued),
     previous: { sessionId: latest.session.id, localDate: latest.session.localDate, seconds: latest.value },
   }
 }
 
-const PACE = FIGURES.find((spec) => spec.key === 'pace')!
+const specOf = (key: WorkoutFigureKey): FigureSpec => FIGURES.find((spec) => spec.key === key)!
 
-// Answers: the subject's pace against the earlier paces on its route, the page's own pace figure
-// over the route's history rather than the type's; null when the subject has no pace.
-function routePaceOf(
+// Answers: the subject's rate against the earlier ones on its route, the page's own figure for the
+// rate its category reads (a ride's speed, a swim's pace per 100 m, pace per km for the rest) over
+// the route's history rather than the type's; null when the subject has no such rate.
+function routeRateOf(
   subject: Reading, valued: (of: (r: Reading) => number | null) => { session: WorkoutSession, value: number }[],
 ): WorkoutFigure | null {
-  const value = PACE.of(subject)
+  const spec = specOf(rateOf(subject.category) ?? 'pace')
+  const value = spec.of(subject)
   if (value === null) return null
-  const history = valued(PACE.of)
-  return workoutFigureOf({ ...PACE, metric: PACE.key }, value, history.map((h) => h.value),
+  const history = valued(spec.of)
+  return workoutFigureOf({ ...spec, metric: spec.key }, value, history.map((h) => h.value),
     [...history.slice(0, WORKOUT_STRIP - 1).reverse(), { session: subject.session, value }])
 }
 
@@ -409,31 +475,36 @@ function effortsOf(
   return efforts
 }
 
-// Answers: the figure the page leads with, chosen by type: pace on foot, speed on a bike, time otherwise.
-function heroOf(exerciseType: string | null, figures: WorkoutPage['figures']): WorkoutFigureKey {
-  const type = exerciseType ?? ''
-  if (/RUN|WALK|HIK/.test(type) && figures.pace !== undefined) return 'pace'
-  if (/BIK|CYCL/.test(type) && figures.speed !== undefined) return 'speed'
+// Answers: the figure the page leads with, the rate its category reads (rateOf) where the workout
+// has it: pace on foot (a treadmill run's worked out from distance and moving time), speed on a
+// bike that covered ground (an indoor bike's speed is the machine's), pace per 100 m in the water;
+// moving time otherwise, or elapsed time without one.
+function heroOf(category: ExerciseCategory, exerciseType: string | null, figures: WorkoutPage['figures']): WorkoutFigureKey {
+  const rate = rateOf(category)
+  if (rate === 'pace' && figures.pace !== undefined) return 'pace'
+  if (rate === 'speed' && figures.speed !== undefined && figures.distance !== undefined && !isIndoor(exerciseType)) return 'speed'
+  if (rate === 'swimPace' && figures.swimPace !== undefined) return 'swimPace'
   return figures.movingTime !== undefined ? 'movingTime' : 'elapsed'
 }
 
 // Answers: the latest earlier session of this type the person did not exclude, however long ago,
-// with the values the comparison table's rows read: speed as well as pace, since a ride's rows follow its hero,
-// and moving and elapsed time, since a time hero leads the table with its own row.
+// with the values the comparison table's rows read, each as the page's own figure reads it and only
+// where the category shows that figure: its rate, and moving and elapsed time, since a time hero
+// leads the table with its own row.
+const PREVIOUS_KEYS: readonly PreviousKey[] = ['pace', 'speed', 'swimPace', 'distance', 'movingTime', 'elapsed', 'averageHeartRate', 'cardioLoad']
+
 function previousOf(subject: WorkoutSession, candidates: readonly WorkoutSession[]): WorkoutPage['previous'] {
   const earlier = candidates.filter((s) => s.id !== subject.id && !s.excluded && s.startMs < subject.startMs)
   const latest = earlier.reduce<WorkoutSession | null>((best, s) => (best === null || s.startMs > best.startMs ? s : best), null)
   if (latest === null) return null
   const r = readingOf(latest)
   const values: NonNullable<WorkoutPage['previous']>['values'] = {}
-  const put = (key: keyof typeof values, v: number | null) => { if (v !== null) values[key] = v }
-  put('pace', r.summary.paceSecondsPerKm)
-  put('speed', r.detail.averageSpeedMetersPerSecond)
-  put('distance', r.summary.distanceMeters)
-  put('movingTime', r.detail.activeDurationSeconds)
-  put('elapsed', (latest.endMs - latest.startMs) / 1000)
-  put('averageHeartRate', r.summary.averageHeartRateBpm)
-  put('cardioLoad', r.edwards)
+  for (const key of PREVIOUS_KEYS) {
+    const spec = specOf(key)
+    if (spec.shows !== undefined && !spec.shows(r.category, r.summary.exerciseType)) continue
+    const value = spec.of(r)
+    if (value !== null) values[key] = value
+  }
   return { sessionId: latest.id, localDate: latest.localDate, values }
 }
 
@@ -528,19 +599,24 @@ function beforeOf(q: PersonQuery, subject: WorkoutSession, ctx: GlanceContext): 
 }
 
 /**
- * Answers: how much faster the second half of the splits went than the first, in s/km. Halves by
- * count, the middle split left out of an odd one; each half's pace weighted by distance, so the
- * short last split a run usually ends on counts for its fifth of a kilometre and not for a whole
- * one. A split with no pace or no distance says nothing about either half and is skipped.
+ * Answers: how much faster the second half of the splits went than the first, in s/km, or for a
+ * ride (`rate` 'speed') in metres per second. Halves by count, the middle split left out of an odd
+ * one; each half's pace weighted by distance, so the short last split a run usually ends on counts
+ * for its fifth of a kilometre and not for a whole one. A half's speed is its distance over its
+ * time, the inverse of that same weighted pace. A split with no pace or no distance says nothing
+ * about either half and is skipped.
  */
-export function splitTrendOf(splits: readonly WorkoutSplit[]): WorkoutPage['splitTrend'] {
+export function splitTrendOf(splits: readonly WorkoutSplit[], rate: 'pace' | 'speed' = 'pace'): WorkoutPage['splitTrend'] {
   const usable = splits.flatMap((s) => (s.paceSecondsPerKm === null || s.distanceMeters === null || s.distanceMeters <= 0
     ? [] : [{ pace: s.paceSecondsPerKm, km: s.distanceMeters / 1000 }]))
   if (usable.length < 2) return null
   const half = Math.floor(usable.length / 2)
   const paceOf = (part: typeof usable) =>
     part.reduce((sum, s) => sum + s.pace * s.km, 0) / part.reduce((sum, s) => sum + s.km, 0)
-  return { secondHalfFasterBySecondsPerKm: paceOf(usable.slice(0, half)) - paceOf(usable.slice(usable.length - half)) }
+  const first = paceOf(usable.slice(0, half))
+  const second = paceOf(usable.slice(usable.length - half))
+  if (rate === 'speed') return { secondHalfFasterByMetersPerSecond: 1000 / second - 1000 / first }
+  return { secondHalfFasterBySecondsPerKm: first - second }
 }
 
 export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): WorkoutPage | null {
@@ -601,7 +677,7 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     sourceId: session.sourceId,
     localDate: session.localDate,
     exerciseType,
-    hero: heroOf(exerciseType, figures),
+    hero: heroOf(category, exerciseType, figures),
     nav: navOf(q, session, input.today),
     figures,
     comparison: compareWorkout(session, candidates),
@@ -610,10 +686,10 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     best: bestOf(category, records),
     day: dayOf(q, session, input, dayCtx),
     after: afterOf(q, session, input),
-    heartRateRecovery: heartRateRecoveryOf(q, session, window),
+    heartRateRecovery: heartRateRecoveryOf(q, subject, window),
     before: beforeOf(q, session, dayCtx),
-    through: throughOf(q, session, ownRoute),
-    splitTrend: splitTrendOf(subject.detail.autoSplits),
+    through: throughOf(q, session, ownRoute, category),
+    splitTrend: splitTrendOf(subject.detail.autoSplits, rateOf(category) === 'speed' ? 'speed' : 'pace'),
     zoneBounds: q.workoutZoneBounds({ sessionId: session.id }),
     sameRoute: sameRouteOf(subject, ownRoute, kept, summaries),
     efforts: effortsOf(subject, category, ownEfforts, records, earlierRecords),

@@ -325,7 +325,8 @@
       "ms": "ms",
       "cm": "cm",
       "kmh": "km/h",
-      "perMin": "/min"
+      "perMin": "/min",
+      "per100mSuffix": "/100 m"
     },
     "distance": {
       "label": "Distance"
@@ -431,7 +432,8 @@
           "verticalOscillation": "Vertical oscillation",
           "verticalRatio": "Vertical ratio",
           "vo2max": "VO₂max",
-          "swimLengths": "Lengths"
+          "swimLengths": "Lengths",
+          "swimPace": "Swim pace"
         },
         "heroStrip_one": "this workout and the one of this type before it",
         "heroStrip_other": "this workout and the {{count}} of this type before it",
@@ -485,7 +487,11 @@
           "even": "Even split",
           "faster": "second half {{value}} s/km faster",
           "slower": "second half {{value}} s/km slower",
-          "same": "both halves at the same pace"
+          "same": "both halves at the same pace",
+          "speedBar": "Speed against the other kilometres",
+          "fasterSpeed": "second half {{value}} km/h faster",
+          "slowerSpeed": "second half {{value}} km/h slower",
+          "sameSpeed": "both halves at the same speed"
         },
         "sameRoute": {
           "label": "This route",
@@ -539,7 +545,8 @@
           "smoothed": {
             "pace": "pace smoothed over three minutes",
             "cadence": "cadence smoothed over three minutes",
-            "both": "pace and cadence smoothed over three minutes"
+            "both": "pace and cadence smoothed over three minutes",
+            "speed": "speed smoothed over three minutes"
           },
           "noRoute": "no route, no pace line",
           "from": {
@@ -547,15 +554,21 @@
             "pace_other": "The pace comes from the times of the {{count}} route points.",
             "cadence": "The cadence comes from the steps per minute.",
             "both_one": "The pace comes from the times of the one route point, the cadence from the steps per minute.",
-            "both_other": "The pace comes from the times of the {{count}} route points, the cadence from the steps per minute."
+            "both_other": "The pace comes from the times of the {{count}} route points, the cadence from the steps per minute.",
+            "speed_one": "The speed comes from the times of the one route point.",
+            "speed_other": "The speed comes from the times of the {{count}} route points."
           },
           "fromAfter": {
             "pace_one": "the pace comes from the times of the one route point.",
             "pace_other": "the pace comes from the times of the {{count}} route points.",
             "cadence": "the cadence comes from the steps per minute.",
             "both_one": "the pace comes from the times of the one route point, the cadence from the steps per minute.",
-            "both_other": "the pace comes from the times of the {{count}} route points, the cadence from the steps per minute."
-          }
+            "both_other": "the pace comes from the times of the {{count}} route points, the cadence from the steps per minute.",
+            "speed_one": "the speed comes from the times of the one route point.",
+            "speed_other": "the speed comes from the times of the {{count}} route points."
+          },
+          "speed": "Speed",
+          "speedChart": "Speed through the workout"
         },
         "zones": {
           "label": "Heart-rate zones",
@@ -571,7 +584,7 @@
         },
         "form": {
           "label": "Running form",
-          "caption": "from your watch, runs only"
+          "caption": "from your watch, runs and walks only"
         },
         "more": {
           "label": "More about this workout",
@@ -611,7 +624,8 @@
           "excluded": "excluded",
           "action": "exclude or add a note",
           "details": "Details"
-        }
+        },
+        "secondsPer100m": "{{value}} s/100 m"
       }
     },
     "period": {

@@ -159,7 +159,7 @@ describe('unreachableRouteWorkouts', () => {
     // A previous time the strip leaves out, so each source is checked on its own.
     previous: { sessionId: 'prev-link' },
     time: { strip: [{ sessionId: 'old' }, { sessionId: 'prev' }, { sessionId: 'run' }] },
-    pace: { strip: [{ sessionId: 'pace-only' }, { sessionId: 'run' }] },
+    rate: { strip: [{ sessionId: 'rate-only' }, { sessionId: 'run' }] },
   }
 
   it('names the previous time and every strip dot on a same-route card with no recorded session page', () => {
@@ -169,9 +169,9 @@ describe('unreachableRouteWorkouts', () => {
       [`${P}/sessions/old`, { id: 'old' }],
     ])
     expect(unreachableRouteWorkouts(recorded)).toEqual([
-      { id: 'pace-only', from: `${P}/workout/run` },
       { id: 'prev', from: `${P}/workout/run` },
       { id: 'prev-link', from: `${P}/workout/run` },
+      { id: 'rate-only', from: `${P}/workout/run` },
     ])
   })
 
@@ -179,10 +179,10 @@ describe('unreachableRouteWorkouts', () => {
     const recorded = new Map<string, unknown>([
       [`${P}/workout/run`, page(card)],
       [`${P}/workout/ride`, page(null)],
-      ...['run', 'old', 'prev', 'prev-link', 'pace-only'].map((id) => [`${P}/sessions/${id}`, { id }] as [string, unknown]),
+      ...['run', 'old', 'prev', 'prev-link', 'rate-only'].map((id) => [`${P}/sessions/${id}`, { id }] as [string, unknown]),
     ])
     expect(unreachableRouteWorkouts(recorded)).toEqual([])
-    expect(unreachableRouteWorkouts(new Map([[`${P}/workout/run`, page({ ...card, previous: null, pace: null })]])))
+    expect(unreachableRouteWorkouts(new Map([[`${P}/workout/run`, page({ ...card, previous: null, rate: null })]])))
       .toEqual([{ id: 'old', from: `${P}/workout/run` }, { id: 'prev', from: `${P}/workout/run` }, { id: 'run', from: `${P}/workout/run` }])
   })
 })

@@ -324,8 +324,9 @@
       "meters": "m",
       "ms": "ms",
       "cm": "cm",
-      "kmh": "km/h",
-      "perMin": "/min"
+      "kmh": "km/u",
+      "perMin": "/min",
+      "per100mSuffix": "/100 m"
     },
     "distance": {
       "label": "Afstand"
@@ -431,7 +432,8 @@
           "verticalOscillation": "Verticale oscillatie",
           "verticalRatio": "Verticale ratio",
           "vo2max": "VO₂max",
-          "swimLengths": "Baantjes"
+          "swimLengths": "Baantjes",
+          "swimPace": "Zwemtempo"
         },
         "heroStrip_one": "deze training en de vorige van dit type",
         "heroStrip_other": "deze training en de {{count}} van dit type ervoor",
@@ -485,7 +487,11 @@
           "even": "Gelijke split",
           "faster": "tweede helft {{value}} s/km sneller",
           "slower": "tweede helft {{value}} s/km langzamer",
-          "same": "beide helften even snel"
+          "same": "beide helften even snel",
+          "speedBar": "Snelheid naast de andere kilometers",
+          "fasterSpeed": "tweede helft {{value}} km/u sneller",
+          "slowerSpeed": "tweede helft {{value}} km/u langzamer",
+          "sameSpeed": "beide helften even snel"
         },
         "sameRoute": {
           "label": "Deze route",
@@ -539,7 +545,8 @@
           "smoothed": {
             "pace": "tempo gladgestreken over drie minuten",
             "cadence": "cadans gladgestreken over drie minuten",
-            "both": "tempo en cadans gladgestreken over drie minuten"
+            "both": "tempo en cadans gladgestreken over drie minuten",
+            "speed": "snelheid gladgestreken over drie minuten"
           },
           "noRoute": "zonder route geen tempolijn",
           "from": {
@@ -547,15 +554,21 @@
             "pace_other": "Het tempo komt uit de tijden van de {{count}} routepunten.",
             "cadence": "De cadans komt uit de stappen per minuut.",
             "both_one": "Het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
-            "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+            "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut.",
+            "speed_one": "De snelheid komt uit de tijden van het ene routepunt.",
+            "speed_other": "De snelheid komt uit de tijden van de {{count}} routepunten."
           },
           "fromAfter": {
             "pace_one": "het tempo komt uit de tijden van het ene routepunt.",
             "pace_other": "het tempo komt uit de tijden van de {{count}} routepunten.",
             "cadence": "de cadans komt uit de stappen per minuut.",
             "both_one": "het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
-            "both_other": "het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
-          }
+            "both_other": "het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut.",
+            "speed_one": "de snelheid komt uit de tijden van het ene routepunt.",
+            "speed_other": "de snelheid komt uit de tijden van de {{count}} routepunten."
+          },
+          "speed": "Snelheid",
+          "speedChart": "Snelheid door de training"
         },
         "zones": {
           "label": "Hartslagzones",
@@ -571,7 +584,7 @@
         },
         "form": {
           "label": "Loopvorm",
-          "caption": "van je horloge, alleen bij hardlopen"
+          "caption": "van je horloge, alleen bij hardlopen en wandelen"
         },
         "more": {
           "label": "Meer over deze training",
@@ -611,7 +624,8 @@
           "excluded": "uitgesloten",
           "action": "uitsluiten of een notitie toevoegen",
           "details": "Details"
-        }
+        },
+        "secondsPer100m": "{{value}} s/100 m"
       }
     },
     "period": {

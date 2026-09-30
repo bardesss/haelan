@@ -339,7 +339,7 @@ describe('readWorkoutPage', () => {
       { distance: 1000, seconds: 330 }, { distance: 1000, seconds: 320 },
       { distance: 1000, seconds: 300 }, { distance: 200, seconds: 56 },
     ] })
-    expect(readWorkoutPage(q(), input('subject'))!.splitTrend!.secondHalfFasterBySecondsPerKm).toBeCloseTo(28.333, 2)
+    expect(readWorkoutPage(q(), input('subject'))!.splitTrend).toEqual({ secondHalfFasterBySecondsPerKm: expect.closeTo(28.333, 2) })
   })
 
   it('leaves the middle kilometre out of an odd count, and reads a slower second half as negative', () => {
@@ -388,7 +388,7 @@ describe('readWorkoutPage', () => {
   })
 
   it('leads with speed for a ride, with moving time for a strength session, and with elapsed time when that is all there is', () => {
-    seedRide('ride', SUBJECT_DATE, { pace: 120, metrics: { averageSpeedMillimetersPerSecond: 8000 } })
+    seedRide('ride', SUBJECT_DATE, { pace: 120, distance: 20_000, metrics: { averageSpeedMillimetersPerSecond: 8000 } })
     seedWorkout('lift', '2026-09-05', 'STRENGTH_TRAINING', { moving: 2400 })
     seedWorkout('plain', '2026-09-06', 'STRENGTH_TRAINING', {})
     expect(readWorkoutPage(q(), input('ride'))!.hero).toBe('speed')
@@ -400,7 +400,7 @@ describe('readWorkoutPage', () => {
     const speed = { averageSpeedMillimetersPerSecond: 5000 }
     seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 600, metrics: speed })
     seedWorkout('hike', '2026-09-05', 'HIKING', { pace: 700, metrics: speed })
-    seedWorkout('hand', '2026-09-06', 'HAND_CYCLING', { pace: 200, metrics: speed })
+    seedWorkout('hand', '2026-09-06', 'HAND_CYCLING', { pace: 200, distance: 9000, metrics: speed })
     expect(readWorkoutPage(q(), input('walk'))!.hero).toBe('pace')
     expect(readWorkoutPage(q(), input('hike'))!.hero).toBe('pace')
     expect(readWorkoutPage(q(), input('hand'))!.hero).toBe('speed')
@@ -696,9 +696,9 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     expect(sameRoute!.times).toBe(8)
     // The oldest of the seven the count is of.
     expect(sameRoute!.since).toBe(shiftLocalDate(SUBJECT_DATE, -21))
-    expect(sameRoute!.pace).toMatchObject({ key: 'pace', unit: 'seconds_per_km', direction: 'down', value: 280, standing: 'below', judged: 'better' })
-    expect(sameRoute!.pace!.baseline!.center).toBeCloseTo(295)
-    expect(sameRoute!.pace!.strip.map((p) => p.sessionId)).toEqual(['loop-0', 'loop-1', 'loop-2', 'loop-3', 'loop-4', 'loop-5', 'subject'])
+    expect(sameRoute!.rate).toMatchObject({ key: 'pace', unit: 'seconds_per_km', direction: 'down', value: 280, standing: 'below', judged: 'better' })
+    expect(sameRoute!.rate!.baseline!.center).toBeCloseTo(295)
+    expect(sameRoute!.rate!.strip.map((p) => p.sessionId)).toEqual(['loop-0', 'loop-1', 'loop-2', 'loop-3', 'loop-4', 'loop-5', 'subject'])
   })
 
   it('has no pace on the route for a workout without one of its own', () => {
@@ -706,7 +706,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { moving: 540 })
     seedRoute('subject', SUBJECT_DATE)
     const { sameRoute } = readWorkoutPage(q(), input('subject'))!
-    expect(sameRoute!.pace).toBeNull()
+    expect(sameRoute!.rate).toBeNull()
     expect(sameRoute!.since).toBe(shiftLocalDate(SUBJECT_DATE, -9))
   })
 
@@ -994,6 +994,212 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
   it('has no efforts without a route', () => {
     seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 300 }] })
     expect(readWorkoutPage(q(), input('subject'))!.efforts).toBeNull()
+  })
+})
+
+describe('readWorkoutPage: per sport', () => {
+  const metresPerDegree = (6_371_000 * Math.PI) / 180
+
+  /** A route heading north from the session's start, a fix every 10 s at `speed` m/s. */
+  function seedRoute(sessionId: string, localDate: string, speed: number, fixes = 70) {
+    const startMs = at(localDate, '07:00')
+    test.db.insert(sessionRoutes).values(Array.from({ length: fixes + 1 }, (_, i) => ({
+      id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
+      latitude: 52 + (i * speed * 10) / metresPerDegree, longitude: 5,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }))).run()
+  }
+
+  /** Heart rate around a 30-minute workout's end at 07:30: its last minute, the minute of the end, and the two after. */
+  function seedRecovery(localDate: string) {
+    [160, 150, 135, 118].forEach((bpm, i) => {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
+      }
+    })
+  }
+
+  const mobility = {
+    mobilityMetrics: {
+      avgCadenceStepsPerMinute: 172, avgStrideLengthMillimeters: '1150', avgGroundContactTimeDuration: '0.256s',
+      avgVerticalOscillationMillimeters: '88', avgVerticalRatio: 7.6,
+    },
+  }
+  const FORM = ['cadence', 'strideLength', 'groundContact', 'verticalOscillation', 'verticalRatio'] as const
+
+  it('leads a treadmill run with its pace, worked out from distance and moving time when the device sent none', () => {
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { distance: 6000, moving: 1800 })
+    seedWorkout('sent', '2026-09-05', 'TREADMILL', { pace: 310, distance: 6000, moving: 1800 })
+    seedWorkout('bare', '2026-09-06', 'TREADMILL', { moving: 1800 })
+    const page = readWorkoutPage(q(), input('treadmill'))!
+    expect(page.hero).toBe('pace')
+    expect(page.figures.pace).toMatchObject({ value: 300, unit: 'seconds_per_km' })
+    // The device's own pace, where it sent one, is the pace.
+    expect(readWorkoutPage(q(), input('sent'))!.figures.pace!.value).toBe(310)
+    // Without a distance there is no pace to work out.
+    expect(readWorkoutPage(q(), input('bare'))!.hero).toBe('movingTime')
+  })
+
+  it('leads a trail and an incline run with pace, as a run', () => {
+    seedWorkout('trail', SUBJECT_DATE, 'TRAIL_RUN', { pace: 400 })
+    seedWorkout('track', '2026-09-05', 'TRACK_AND_FIELD', { pace: 250 })
+    expect(readWorkoutPage(q(), input('trail'))!.hero).toBe('pace')
+    expect(readWorkoutPage(q(), input('track'))!.hero).toBe('pace')
+  })
+
+  it('leads a ride with speed only when it covered a distance outdoors, and never shows a pace for it', () => {
+    const speed = { averageSpeedMillimetersPerSecond: 7500 }
+    seedWorkout('road', SUBJECT_DATE, 'BIKING', { pace: 133, distance: 27_000, moving: 3600, metrics: speed })
+    seedWorkout('mtb', '2026-09-05', 'MOUNTAIN_BIKE', { distance: 20_000, moving: 4000 })
+    seedWorkout('nodistance', '2026-09-06', 'BIKING', { moving: 3600, metrics: speed })
+    seedWorkout('indoor', '2026-09-07', 'STATIONARY_BIKE', { distance: 27_000, moving: 3600, metrics: speed })
+    const road = readWorkoutPage(q(), input('road'))!
+    expect(road.hero).toBe('speed')
+    expect(road.figures.pace).toBeUndefined()
+    // No device speed: the distance over the moving time, 20 km in 4000 s.
+    const mtb = readWorkoutPage(q(), input('mtb'))!
+    expect(mtb.hero).toBe('speed')
+    expect(mtb.figures.speed).toMatchObject({ value: 5, unit: 'meters_per_second', direction: 'up' })
+    expect(readWorkoutPage(q(), input('nodistance'))!.hero).toBe('movingTime')
+    expect(readWorkoutPage(q(), input('indoor'))!.hero).toBe('movingTime')
+  })
+
+  it('leads a swim with its pace per 100 m, and shows no pace per km and no climb for it', () => {
+    seedWorkout('pool', SUBJECT_DATE, 'SWIMMING_POOL', {
+      pace: 1200, distance: 1500, moving: 1800, metrics: { elevationGainMillimeters: 4000 },
+    })
+    seedWorkout('nodistance', '2026-09-05', 'SWIMMING', { moving: 1800 })
+    const pool = readWorkoutPage(q(), input('pool'))!
+    expect(pool.hero).toBe('swimPace')
+    expect(pool.figures.swimPace).toMatchObject({ key: 'swimPace', value: 120, unit: 'seconds_per_100m', precision: 0, direction: 'down' })
+    expect(pool.figures.pace).toBeUndefined()
+    expect(pool.figures.elevationGain).toBeUndefined()
+    expect(readWorkoutPage(q(), input('nodistance'))!.hero).toBe('movingTime')
+  })
+
+  it('leads every other category with moving time, whatever rate it carries', () => {
+    seedWorkout('hiit', SUBJECT_DATE, 'HIIT', { pace: 400, distance: 3000, moving: 1500, metrics: { averageSpeedMillimetersPerSecond: 2500 } })
+    seedWorkout('lift', '2026-09-05', 'WEIGHTLIFTING', { pace: 400, distance: 3000, moving: 1500 })
+    const hiit = readWorkoutPage(q(), input('hiit'))!
+    expect(hiit.hero).toBe('movingTime')
+    expect(hiit.figures.swimPace).toBeUndefined()
+    expect(readWorkoutPage(q(), input('lift'))!.hero).toBe('movingTime')
+  })
+
+  it('shows step cadence and running form for a run and a walk alone', () => {
+    seedWorkout('run', SUBJECT_DATE, 'RUNNING', { pace: 300, metrics: mobility })
+    seedWorkout('walk', '2026-09-05', 'WALKING', { pace: 600, metrics: mobility })
+    seedWorkout('ride', '2026-09-06', 'BIKING', { distance: 20_000, moving: 3000, metrics: mobility })
+    seedWorkout('hiit', '2026-09-07', 'HIIT', { moving: 1500, metrics: mobility })
+    for (const id of ['run', 'walk']) {
+      const { figures } = readWorkoutPage(q(), input(id))!
+      for (const key of FORM) expect(figures[key], `${id} ${key}`).toBeDefined()
+    }
+    for (const id of ['ride', 'hiit']) {
+      const { figures } = readWorkoutPage(q(), input(id))!
+      for (const key of FORM) expect(figures[key], `${id} ${key}`).toBeUndefined()
+    }
+  })
+
+  it('reads no cadence series for a ride, however finely its device logged steps', () => {
+    seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 600 })
+    seedWorkout('ride', '2026-09-05', 'BIKING', { distance: 20_000, moving: 1800 })
+    for (const localDate of [SUBJECT_DATE, '2026-09-05']) {
+      for (let i = 0; i < 30; i += 1) {
+        insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: at(localDate, '07:00') + i * 60_000, tzOffsetMinutes: OFFSET, value: 110 })
+      }
+    }
+    expect(readWorkoutPage(q(), input('walk'))!.through.cadence).not.toBeNull()
+    expect(readWorkoutPage(q(), input('ride'))!.through.cadence).toBeNull()
+  })
+
+  it('shows no climb for an indoor run, walk or ride, and keeps it outdoors and on an e-bike', () => {
+    const climb = { elevationGainMillimeters: 50_000 }
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { distance: 5000, moving: 1500, metrics: climb })
+    seedWorkout('treadwalk', '2026-09-05', 'TREADMILL_WALK', { distance: 3000, moving: 1800, metrics: climb })
+    seedWorkout('spin', '2026-09-06', 'SPINNING', { moving: 2700, metrics: climb })
+    seedWorkout('road', '2026-09-07', 'BIKING', { distance: 20_000, moving: 3000, metrics: climb })
+    seedWorkout('ebike', '2026-09-08', 'ELECTRIC_BIKE', { distance: 20_000, moving: 3000, metrics: climb })
+    for (const id of ['treadmill', 'treadwalk', 'spin']) expect(readWorkoutPage(q(), input(id))!.figures.elevationGain, id).toBeUndefined()
+    for (const id of ['road', 'ebike']) expect(readWorkoutPage(q(), input(id))!.figures.elevationGain, id).toMatchObject({ value: 50 })
+  })
+
+  it('reads heart-rate recovery after a run, a ride, a swim and a cardio session, and after nothing else', () => {
+    const days = { RUNNING: '2026-08-01', BIKING: '2026-08-02', SWIMMING_POOL: '2026-08-03', HIIT: '2026-08-04', WALKING: '2026-08-05', WEIGHTLIFTING: '2026-08-06', YOGA: '2026-08-07' }
+    for (const [type, localDate] of Object.entries(days)) {
+      seedWorkout(type, localDate, type, { distance: 3000, moving: 1500 })
+      seedRecovery(localDate)
+    }
+    for (const type of ['RUNNING', 'BIKING', 'SWIMMING_POOL', 'HIIT']) {
+      expect(readWorkoutPage(q(), input(type))!.heartRateRecovery, type).toMatchObject({ oneMinute: { value: 25 } })
+    }
+    for (const type of ['WALKING', 'WEIGHTLIFTING', 'YOGA']) expect(readWorkoutPage(q(), input(type))!.heartRateRecovery, type).toBeNull()
+  })
+
+  it("draws a ride's speed through the workout in place of its pace", () => {
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { distance: 5000, moving: 700 }, { minutes: 12 })
+    seedRoute('ride', SUBJECT_DATE, 8)
+    const { through } = readWorkoutPage(q(), input('ride'))!
+    expect(through.pace).toBeNull()
+    expect(through.speed!.unit).toBe('meters_per_second')
+    expect(through.speed!.points[0]!.value).toBeCloseTo(8, 1)
+    expect(through.speed!.fastest).toEqual({ metersPerSecond: expect.closeTo(8, 1), elapsedSeconds: expect.any(Number) })
+  })
+
+  it('draws a run\'s pace and no speed', () => {
+    seedRun('run', SUBJECT_DATE, { pace: 300 }, { minutes: 12 })
+    seedRoute('run', SUBJECT_DATE, 3)
+    const { through } = readWorkoutPage(q(), input('run'))!
+    expect(through.speed).toBeNull()
+    expect(through.pace!.points[0]!.value).toBeCloseTo(1000 / 3, 1)
+  })
+
+  it('reads a pause by the category: a slow walk still moves, a slow ride has stopped', () => {
+    // 30 m a minute: over a walk's 20 m, under a run's 50 m.
+    seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 2000 }, { minutes: 12 })
+    seedRoute('walk', SUBJECT_DATE, 0.5)
+    seedRun('run', '2026-09-05', { pace: 2000 }, { minutes: 12 })
+    seedRoute('run', '2026-09-05', 0.5)
+    // 120 m a minute: over a run's 50 m, under a ride's 150 m.
+    seedWorkout('ride', '2026-09-06', 'BIKING', { distance: 1500, moving: 700 }, { minutes: 12 })
+    seedRoute('ride', '2026-09-06', 2)
+    seedRun('jog', '2026-09-07', { pace: 500 }, { minutes: 12 })
+    seedRoute('jog', '2026-09-07', 2)
+    expect(readWorkoutPage(q(), input('walk'))!.through.pace).not.toBeNull()
+    expect(readWorkoutPage(q(), input('run'))!.through.pace).toBeNull()
+    expect(readWorkoutPage(q(), input('ride'))!.through.speed).toBeNull()
+    expect(readWorkoutPage(q(), input('jog'))!.through.pace).not.toBeNull()
+  })
+
+  it("sets a ride's speed against the earlier speeds on the route", () => {
+    for (let i = 0; i < 5; i += 1) {
+      const localDate = shiftLocalDate(SUBJECT_DATE, -3 * (5 - i))
+      seedWorkout(`loop-${i}`, localDate, 'BIKING', { distance: 5600, moving: i % 2 === 0 ? 800 : 700 })
+      seedRoute(`loop-${i}`, localDate, 8)
+    }
+    seedWorkout('subject', SUBJECT_DATE, 'BIKING', { distance: 5600, moving: 560 })
+    seedRoute('subject', SUBJECT_DATE, 8)
+    const rate = readWorkoutPage(q(), input('subject'))!.sameRoute!.rate!
+    expect(rate).toMatchObject({ key: 'speed', unit: 'meters_per_second', direction: 'up', value: 10, standing: 'above', judged: 'better' })
+    expect(rate.strip).toHaveLength(6)
+  })
+
+  it("sends the previous ride's worked-out speed and no pace, and the previous swim's pace per 100 m", () => {
+    seedWorkout('ride-before', '2026-09-01', 'BIKING', { pace: 150, distance: 20_000, moving: 4000 })
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 3600 })
+    seedWorkout('swim-before', '2026-09-01', 'SWIMMING_POOL', { distance: 1000, moving: 1300 }, { hhmm: '18:00' })
+    seedWorkout('swim', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1000, moving: 1200 }, { hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('ride'))!.previous!.values).toEqual({ speed: 5, distance: 20_000, movingTime: 4000, elapsed: 1800 })
+    expect(readWorkoutPage(q(), input('swim'))!.previous!.values).toEqual({ swimPace: 130, distance: 1000, movingTime: 1300, elapsed: 1800 })
+  })
+
+  it("says how much faster the second half of a ride's kilometres went, in metres per second", () => {
+    // 150 and 150 s against 120 and 120 s a kilometre: 6.67 m/s then 8.33 m/s.
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { splits: [
+      { distance: 1000, seconds: 150 }, { distance: 1000, seconds: 150 },
+      { distance: 1000, seconds: 120 }, { distance: 1000, seconds: 120 },
+    ] })
+    expect(readWorkoutPage(q(), input('ride'))!.splitTrend).toEqual({ secondHalfFasterByMetersPerSecond: expect.closeTo(1000 / 120 - 1000 / 150, 6) })
   })
 })
 

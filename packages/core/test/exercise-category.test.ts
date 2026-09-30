@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EXERCISE_TYPES } from '../src/api/enums.ts'
 import {
-  EXERCISE_CATEGORIES, countsForDistanceRecords, exerciseCategory, rateOf,
+  EXERCISE_CATEGORIES, countsForDistanceRecords, exerciseCategory, isIndoor, rateOf,
 } from '../src/api/exerciseCategory.ts'
 
 describe('the exercise category map', () => {
@@ -72,6 +72,21 @@ describe('countsForDistanceRecords', () => {
 
   it('counts a session with no type', () => {
     expect(countsForDistanceRecords(null)).toBe(true)
+  })
+})
+
+describe('isIndoor', () => {
+  it.each(['TREADMILL', 'TREADMILL_WALK', 'STATIONARY_BIKE', 'SPINNING', 'ASSAULT_BIKE'])(
+    'names %s indoor', (type) => expect(isIndoor(type)).toBe(true),
+  )
+
+  // An e-bike is assisted, not indoor: it holds no record, but its climb and speed are real.
+  it.each(['RUNNING', 'WALKING', 'BIKING', 'ELECTRIC_BIKE', 'SWIMMING_POOL', 'WEIGHTLIFTING'])(
+    'does not name %s indoor', (type) => expect(isIndoor(type)).toBe(false),
+  )
+
+  it('does not name a session with no type indoor', () => {
+    expect(isIndoor(null)).toBe(false)
   })
 })
 

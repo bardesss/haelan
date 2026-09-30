@@ -11,6 +11,8 @@ import type { PointJudged, PointStanding } from '../../charts/base.js'
 // Inside one value a space never breaks ("1h 32m", "58 bpm"): a narrow card wraps between the words
 // of a sentence, never inside a figure.
 const NBSP = '\u00a0'
+// Inside a unit of two words ("/100 m"), so the unit reads as one (formatFigureValue's swim pace).
+const NARROW_NBSP = '\u202f'
 
 // Figures measured in minutes that are only ever a few of them: "12 min" reads as what it is,
 // where "0h 12m" puts an empty hour in front of it. Time asleep, the stages, time in bed and time
@@ -96,6 +98,10 @@ function figureValueText(
     case 'count': return formatNumber(value, figure.precision, language, absent)
     // The workout page's own units (workoutPage.ts's FIGURES table).
     case 'seconds_per_km': return `${formatStopwatch(value)} ${t('activity.units.paceSuffix')}`
+    // A swim's pace, the stopwatch time for each 100 m, as a pool clock reads it. The space inside
+    // "/100 m" is a narrow no-break one, so the suffix is one unit to unitOf and a range prints it
+    // once ("1:55 – 2:05 /100 m") rather than cutting it after its "100".
+    case 'seconds_per_100m': return `${formatStopwatch(value)} ${t('activity.units.per100mSuffix').replaceAll(' ', NARROW_NBSP)}`
     // Stored as metres per second; shown as km/h, a converted unit whose precision is this
     // function's own rather than the figure's stored-unit precision (format.ts's own comment on
     // formatMetricValue explains why a converted value cannot go through the catalogue precision).
@@ -285,7 +291,7 @@ export function workoutStripOf(figure: WorkoutFigure): {
 /**
  * How far this figure's value lies from another reading of it (the previous workout's), signed,
  * in the figure's own terms: a pace in seconds per kilometre ("-12 s/km", the words the hero's
- * previous line uses), a stopwatch time as a stopwatch ("+1:40"), a speed in km/h, a distance in
+ * previous line uses) or a swim's per 100 m ("-4 s/100 m"), a stopwatch time as a stopwatch ("+1:40"), a speed in km/h, a distance in
  * kilometres once the value is in kilometres, anything else at its own precision, the last three
  * without their unit. Taken between the two values as they are printed, each rounded first, so a
  * row adds up: 5.20 km beside 5.00 km reads +0.20 whatever the metres behind them. A difference
@@ -299,6 +305,7 @@ export function formatFigureDifference(
   const between = (scale: number) => (Math.round(value * scale) - Math.round(before * scale)) / scale
   switch (figure.unit) {
     case 'seconds_per_km': return t('activity.workout.page.secondsPerKm', { value: formatSignedNumber(between(1), 0, language, absent) })
+    case 'seconds_per_100m': return t('activity.workout.page.secondsPer100m', { value: formatSignedNumber(between(1), 0, language, absent) })
     case 'seconds': {
       const seconds = between(1)
       return `${seconds > 0 ? '+' : seconds < 0 ? '-' : ''}${formatStopwatch(Math.abs(seconds))}`

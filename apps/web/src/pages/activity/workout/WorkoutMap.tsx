@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import type { FilledSplit } from '@haelan/core/split-heart-rate'
+import { exerciseCategory, rateOf } from '@haelan/core/exercise-category'
 import { Card } from '../../../components/Card.js'
 import { formatNumber } from '../../../format.js'
 import type { WorkoutSessionDetail } from '../../../data/useSessions.js'
@@ -19,34 +20,41 @@ const WHOLE_KM_METRES = 950
 // The pace bar's shortest length, as a share of the longest, so the slowest kilometre still draws.
 const BAR_FLOOR = 0.4
 
+// A ride's split speed, the figure unit its speed is judged in, printed in km/h (formatFigureValue).
+const SPEED = { metric: 'speed', value: null, unit: 'meters_per_second', precision: 2 }
+
 /**
- * Each split's pace bar length as a share of the row: the fastest kilometre fills it, the slowest
- * gets BAR_FLOOR, the rest in between by pace. Drawing only - it says which kilometre was quicker,
- * which the pace beside it already says in numbers - so it compares these splits with each other,
- * never with a usual. Null for a split with no pace.
+ * Each split's bar length as a share of the row: the fastest kilometre fills it, the slowest gets
+ * BAR_FLOOR, the rest in between by pace, or for a ride by speed, the number printed beside it.
+ * Drawing only - it says which kilometre was quicker, which the number beside it already says - so
+ * it compares these splits with each other, never with a usual. Null for a split with no pace.
  */
-function barShares(rows: readonly FilledSplit[]): (number | null)[] {
-  const paces = rows.flatMap((r) => (r.paceSecondsPerKm === null ? [] : [r.paceSecondsPerKm]))
-  const fastest = Math.min(...paces)
-  const slowest = Math.max(...paces)
+function barShares(rows: readonly FilledSplit[], speed: boolean): (number | null)[] {
+  // Larger is quicker either way: a speed as it is, a pace turned round.
+  const quickness = (r: FilledSplit) => (r.paceSecondsPerKm === null ? null : speed ? 1000 / r.paceSecondsPerKm : -r.paceSecondsPerKm)
+  const values = rows.flatMap((r) => { const v = quickness(r); return v === null ? [] : [v] })
+  const quickest = Math.max(...values)
+  const slowest = Math.min(...values)
   return rows.map((r) => {
-    if (r.paceSecondsPerKm === null) return null
-    if (slowest === fastest) return 1
-    return BAR_FLOOR + (1 - BAR_FLOOR) * (slowest - r.paceSecondsPerKm) / (slowest - fastest)
+    const v = quickness(r)
+    if (v === null) return null
+    if (slowest === quickest) return 1
+    return BAR_FLOOR + (1 - BAR_FLOOR) * (v - slowest) / (quickest - slowest)
   })
 }
 
 /**
  * The kilometre table: the provider's automatic splits, trimmed from WorkoutSplits' table to the
- * split, its pace with a bar, and its heart rate, with the same dagger and footnote for a heart
+ * split, its pace (a ride's speed in km/h) with a bar, and its heart rate, with the same dagger and footnote for a heart
  * rate filled from the trace (splitHeartRate.ts). Laps are not shown here: none has ever been
  * recorded in this archive (WorkoutSplits.tsx's own measurement), and a lap is a different claim
  * from an automatic kilometre.
  */
-function KilometreTable({ rows }: { rows: readonly FilledSplit[] }) {
+function KilometreTable({ rows, speed }: { rows: readonly FilledSplit[], speed: boolean }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const shares = barShares(rows)
+  const shares = barShares(rows, speed)
+  const rateOfRow = (pace: number) => (speed ? formatFigureValue(SPEED, 1000 / pace, language, t) : formatPace(pace, language))
   const anyFilled = rows.some((row) => row.averageHeartRateBpmSource === 'trace')
   return (
     <>
@@ -54,8 +62,8 @@ function KilometreTable({ rows }: { rows: readonly FilledSplit[] }) {
         <thead>
           <tr>
             <th scope="col">{t('activity.workout.page.map.km')}</th>
-            <th scope="col">{t('activity.workout.splits.pace')}</th>
-            <th scope="col"><span className="sr-only">{t('activity.workout.page.map.paceBar')}</span></th>
+            <th scope="col">{t(speed ? 'activity.workout.page.figures.speed' : 'activity.workout.splits.pace')}</th>
+            <th scope="col"><span className="sr-only">{t(speed ? 'activity.workout.page.map.speedBar' : 'activity.workout.page.map.paceBar')}</span></th>
             <th scope="col">{t('activity.workout.splits.heartRate')}</th>
           </tr>
         </thead>
@@ -66,7 +74,7 @@ function KilometreTable({ rows }: { rows: readonly FilledSplit[] }) {
             return (
               <tr key={`${row.startMs ?? 'unknown'}-${index}`}>
                 <th scope="row">{partial ? formatNumber(row.distanceMeters! / 1000, 1, language, '') : formatNumber(index + 1, 0, language, '')}</th>
-                <td>{row.paceSecondsPerKm === null ? t('common.absent') : formatPace(row.paceSecondsPerKm, language)}</td>
+                <td>{row.paceSecondsPerKm === null ? t('common.absent') : rateOfRow(row.paceSecondsPerKm)}</td>
                 <td className="workout-km-bar-cell">
                   {share !== null && (
                     <span className="workout-km-bar" aria-hidden="true">
@@ -91,18 +99,22 @@ function KilometreTable({ rows }: { rows: readonly FilledSplit[] }) {
 /**
  * The split verdict under the table, in the server's number: "Negative split · second half 22
  * s/km faster" when the second half went quicker, positive when it went slower, even when the two
- * came out the same to the second. The sign is the server's (workoutPage.ts's splitTrendOf); this
- * only words it.
+ * came out the same to the second. A ride's reads in km/h ("second half 1.2 km/h faster"), even
+ * when the two are the same to the tenth it prints. The sign is the server's (workoutPage.ts's
+ * splitTrendOf); this only words it.
  */
 function SplitTrend({ trend }: { trend: NonNullable<WorkoutPageData['splitTrend']> }) {
   const { t, i18n } = useTranslation()
-  const by = trend.secondHalfFasterBySecondsPerKm
-  const value = formatNumber(Math.abs(by), 0, i18n.language, '')
+  const speed = 'secondHalfFasterByMetersPerSecond' in trend
+  // Signed in the unit printed: whole seconds per km, or tenths of a km/h.
+  const by = speed ? Math.round(trend.secondHalfFasterByMetersPerSecond * 36) / 10 : trend.secondHalfFasterBySecondsPerKm
+  const value = formatNumber(Math.abs(by), speed ? 1 : 0, i18n.language, '')
+  const suffix = speed ? 'Speed' : ''
   const [head, tail] = by > 0
-    ? [t('activity.workout.page.map.negative'), t('activity.workout.page.map.faster', { value })]
+    ? [t('activity.workout.page.map.negative'), t(`activity.workout.page.map.faster${suffix}`, { value })]
     : by < 0
-      ? [t('activity.workout.page.map.positive'), t('activity.workout.page.map.slower', { value })]
-      : [t('activity.workout.page.map.even'), t('activity.workout.page.map.same')]
+      ? [t('activity.workout.page.map.positive'), t(`activity.workout.page.map.slower${suffix}`, { value })]
+      : [t('activity.workout.page.map.even'), t(speed ? 'activity.workout.page.map.sameSpeed' : 'activity.workout.page.map.same')]
   return <p className="workout-split-trend"><strong>{head}</strong> · {tail}</p>
 }
 
@@ -165,7 +177,7 @@ export function WorkoutMap({ session, page }: { session: WorkoutSessionDetail, p
         {hasSplits && (
           <div className="workout-map-km">
             <span className="label">{t('activity.workout.page.map.kilometres')}</span>
-            <KilometreTable rows={splits} />
+            <KilometreTable rows={splits} speed={rateOf(exerciseCategory(page.exerciseType)) === 'speed'} />
             {page.splitTrend !== null && <SplitTrend trend={page.splitTrend} />}
           </div>
         )}

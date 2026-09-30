@@ -95,6 +95,19 @@ Every redesigned page is built from the pieces below. A section that looks like 
 - The balance names its zero line and the nights it adds up: "ten opzichte van je gebruikelijke 7u 08m, over 30 nachten" (the hero's `days`). On 3 months and Year a bar is a week, its nights added up (the server's `balance.weekly`), captioned "elke balk: die week opgeteld, tegenover je gebruikelijke"; a week bar opens nothing.
 - A bar chart's x axis speaks the range (`periodAxisLabels`): weekdays on a week ("ma di wo"), day numbers every seventh day on a month ("1 8 15 22 29"), month names on 3 months and Year. An hour axis ends on the data's own step (`stepAxisMax`), so a typical night tops out at "8u".
 
+## Per sport
+
+A workout reads as its category does (core's `exerciseCategory`, the one map core and the web share), and the server decides every rule below; the web renders what it is sent, and reads the category only through the shared map (`rateOf(exerciseCategory(type))`).
+
+- The hero is the category's rate (`rateOf`): pace for a run or a walk (a treadmill run's worked out from distance and moving time), speed for a ride that covered a distance outdoors, pace per 100 m for a swim (`swimPace`, "2:05 /100 m"); moving time for everything else, and for a ride indoors or without a distance.
+- A ride reads in km/h everywhere ("km/u" in Dutch): the hero, the compared table's rate row, the same-route card's rate row, the kilometre table's column and bar, the split trend ("tweede helft 1,2 km/u sneller" / "second half 1.2 km/h faster"), the through chart's speed row ("hoogste 32,4 km/u na 14:00", the heart rate's words, since more of a speed is more), and the previous-workout line ("0,8 km/u sneller dan de vorige"). A ride has no pace figure at all; a swim has no pace per km.
+- A speed is faster or slower against the previous one and in the split trend, as a pace is; its verdict against the usual keeps the plain above and below, as the hero always worded it.
+- The compared table's first row after a time hero's is the category's rate, whatever leads the hero: an indoor ride led by its moving time still sets its speed beside the last one.
+- Step cadence (the through chart's row) and running form ("Loopvorm") are a run's and a walk's alone.
+- Heart-rate recovery is read after a run, a ride, a swim and a cardio session; a walk or a strength session ends near the effort it went along at.
+- Climb is not shown for a swim or an indoor type (treadmill, treadmill walk, a stationary, spinning or assault bike): indoors it is the barometer drifting. An e-bike is assisted, not indoor, and keeps it.
+- The through chart's pauses are the category's: under 20 m a minute stands a walk still, 50 m a run (and every category without its own), 150 m a ride.
+
 ## Terms (nl / en)
 
 Tijd in slaap / Time asleep · Tijd in slaap, gemiddeld per nacht / Time asleep, average per night (an overview's hero) · Naar bed / Bedtime · Wakker geworden / Wake time · Efficiëntie / Efficiency · Stappen / Steps · Actieve minuten / Active minutes · Trainingen / Workouts · Rusthartslag / Resting heart rate · gebruikelijk / usual · Uitsluiten of een notitie toevoegen / Exclude or add a note (`common.annotate`) · Gebruikelijk voor een maand / Usual for a month · Nachten / Nights · Toon alle / Show all · Doordeweeks / Weekdays · Weekend / Weekend.

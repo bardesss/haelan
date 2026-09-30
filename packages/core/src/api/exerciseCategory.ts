@@ -99,6 +99,18 @@ export function countsForDistanceRecords(type: string | null): boolean {
   return type === null || !NOT_FOR_RECORDS.has(type)
 }
 
+const INDOOR: ReadonlySet<string> = new Set([
+  'TREADMILL', 'TREADMILL_WALK', 'STATIONARY_BIKE', 'SPINNING', 'ASSAULT_BIKE',
+])
+
+/**
+ * The indoor variants of a run, a walk and a ride: done in one place, so a climb off the barometer
+ * is drift and a bike's speed is the machine's own reckoning rather than ground covered.
+ */
+export function isIndoor(type: string | null): boolean {
+  return type !== null && INDOOR.has(type)
+}
+
 /** How the category reads a rate: 'pace' (min/km), 'speed' (km/h), 'swimPace' (min/100 m), or null for none. */
 export function rateOf(category: ExerciseCategory): 'pace' | 'speed' | 'swimPace' | null {
   switch (category) {

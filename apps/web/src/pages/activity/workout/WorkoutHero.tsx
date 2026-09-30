@@ -5,7 +5,7 @@ import { BasisContext } from '../../../components/basis.js'
 import { verdictTone } from '../../../components/FigureRow.js'
 import { Sparkline } from '../../../charts/Sparkline.js'
 import { Link } from '../../../router.js'
-import { formatSessionDateHeading } from '../../../format.js'
+import { formatNumber, formatSessionDateHeading } from '../../../format.js'
 import type { Translate } from '../../../format.js'
 import { useOpensDay } from '../../dashboard/cardShared.js'
 import type { WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
@@ -17,22 +17,44 @@ import { bestMonth, workoutPath } from './workoutText.js'
 const RANKED_BY_PACE: ReadonlySet<string> = new Set(['pace', 'speed'])
 
 /**
- * "12 s/km faster than the previous one" for a pace hero, the only hero the previous workout's
- * values cover (workoutPage.ts's previousOf sends pace, distance, heart rate and load). Faster and
- * slower are what a smaller and a larger pace mean, not a verdict: the same words a stopwatch
- * would use. Any other hero still names the previous one and links to it, without a difference.
+ * How far this workout's rate lies from the previous one's, as printed and without its sign, and
+ * whether it was the quicker: a pace in whole seconds per km ("12 s/km"), a swim's per 100 m
+ * ("4 s/100 m"), a ride's speed in km/h at one decimal ("0.8 km/h"). Null for a hero that is no
+ * rate, or one the previous workout has no value for. Zero apart is `faster: null`.
+ */
+function rateDifference(
+  hero: WorkoutFigure, before: number | undefined, language: string, t: Translate,
+): { difference: string, faster: boolean | null } | null {
+  if (before === undefined || hero.value === null) return null
+  if (hero.key === 'speed') {
+    // Tenths of a km/h, the two speeds as formatFigureValue prints them; a higher speed is faster.
+    const tenths = Math.round(hero.value * 36) - Math.round(before * 36)
+    const difference = `${formatNumber(Math.abs(tenths) / 10, 1, language, '')}\u00a0${t('activity.units.kmh')}`
+    return { difference, faster: tenths === 0 ? null : tenths > 0 }
+  }
+  const key = hero.key === 'pace' ? 'secondsPerKm' : hero.key === 'swimPace' ? 'secondsPer100m' : null
+  if (key === null) return null
+  // Between the two paces as printed (whole seconds), as the comparison table takes its difference.
+  const seconds = Math.round(hero.value) - Math.round(before)
+  return { difference: t(`activity.workout.page.${key}`, { value: Math.abs(seconds) }), faster: seconds === 0 ? null : seconds < 0 }
+}
+
+/**
+ * "12 s/km faster than the previous one" under a pace hero, "0.8 km/h faster" under a ride's
+ * speed, "4 s/100 m faster" under a swim's pace (workoutPage.ts's previousOf sends each rate, as
+ * the page's own figure reads it). Faster and slower are what a quicker and a slower rate mean, not
+ * a verdict: the same words a stopwatch would use. Any other hero still names the previous one and
+ * links to it, without a difference.
  */
 function previousLine(page: WorkoutPageData, hero: WorkoutFigure, language: string, t: Translate): string | null {
   const { previous } = page
   if (previous === null) return null
   const date = formatSessionDateHeading(previous.localDate, language)
-  const before = hero.key === 'pace' ? previous.values.pace : undefined
-  if (before === undefined || hero.value === null) return t('activity.workout.page.previousOnly', { date })
-  // Between the two paces as printed (whole seconds), as the comparison table takes its difference.
-  const seconds = Math.round(hero.value) - Math.round(before)
-  if (seconds === 0) return t('activity.workout.page.previousSame', { date })
-  const difference = t('activity.workout.page.secondsPerKm', { value: Math.abs(seconds) })
-  return t(seconds < 0 ? 'activity.workout.page.previousFaster' : 'activity.workout.page.previousSlower', { difference, date })
+  const { key } = hero
+  const apart = key === 'pace' || key === 'speed' || key === 'swimPace' ? rateDifference(hero, previous.values[key], language, t) : null
+  if (apart === null) return t('activity.workout.page.previousOnly', { date })
+  if (apart.faster === null) return t('activity.workout.page.previousSame', { date })
+  return t(apart.faster ? 'activity.workout.page.previousFaster' : 'activity.workout.page.previousSlower', { difference: apart.difference, date })
 }
 
 /**
@@ -62,7 +84,7 @@ function bestLine(page: WorkoutPageData, hero: WorkoutFigure, language: string, 
 
 /**
  * The workout's lead, wired as the night page's hero is (NightHero): the figure its type is judged
- * by (the server's `hero`: pace on foot, speed on a bike, moving time otherwise) in display type,
+ * by (the server's `hero`: pace on foot, speed on a bike outdoors, pace per 100 m in the water, moving time otherwise) in display type,
  * its verdict in `.detail-verdict` coloured by verdictTone, how it ranks among recent workouts of
  * the type, the difference from the previous one with a way to it, the Records best, and a strip of
  * this workout and up to nine of its type before it with the usual shaded behind and both its edges
