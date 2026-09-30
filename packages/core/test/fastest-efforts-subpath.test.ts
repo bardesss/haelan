@@ -36,8 +36,11 @@ describe('the @haelan/core/fastest-efforts subpath', () => {
       expect(from, 'a relative module inside src/, never a package')
         .toMatch(/^(?:\.\/|\.\.\/[a-z]+\/)[A-Za-z]+\.ts$/)
       const target = new URL(from!, new URL('../src/api/', import.meta.url))
+      // A type-only import is erased before any bundle sees it (workoutThrough.ts names
+      // ExerciseCategory as a type), so it reaches nothing; any import that survives does.
       const reached = [...readFileSync(fileURLToPath(target), 'utf8').matchAll(IMPORT_LINE)]
-      expect(reached.map((m) => m[0]), `${from} must import nothing`).toEqual([])
+        .map((m) => m[0]).filter((l) => !/^import\s+type\s/.test(l))
+      expect(reached, `${from} must import nothing`).toEqual([])
     }
   })
 
