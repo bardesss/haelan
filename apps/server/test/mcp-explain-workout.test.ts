@@ -11,6 +11,8 @@ interface WorkoutEvidence {
   figures: { key: string, standing: string | null }[] | null
   peakMinutes: number | null
   lastKilometre: { seconds: number, standing: string | null, earlierKilometres: number } | null
+  secondHalfFasterBySecondsPerKm: number | null
+  secondHalfFasterByMetersPerSecond: number | null
   standsOut: string | null
 }
 
@@ -197,6 +199,18 @@ describe('explain, kind workout', () => {
     expect(answer.stoppedAt).toBe('withinUsual')
     expect(answer.walked).toEqual(['excluded', 'thinHistory', 'hero', 'hardMinutes', 'lastKilometre', 'otherFigure', 'withinUsual'])
     expect(answer.evidence.standsOut).toBeNull()
+  })
+
+  it("carries a ride's split trend in m/s and a run's in s/km, each in its own field", () => {
+    // A ride's page sends its split trend in speed; read as s/km it would claim a pace a ride has not.
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { pace: 120, distance: 4000, kilometres: [125, 125, 115, 115] })
+    const ride = explain('ride').evidence
+    expect(ride.secondHalfFasterBySecondsPerKm).toBeNull()
+    expect(ride.secondHalfFasterByMetersPerSecond).toBeCloseTo(1000 / 115 - 1000 / 125, 6)
+    seedWorkout('run', shiftLocalDate(SUBJECT_DATE, -1), 'RUNNING', { pace: 330, distance: 4000, kilometres: [340, 340, 320, 320] })
+    const run = explain('run').evidence
+    expect(run.secondHalfFasterBySecondsPerKm).toBeCloseTo(20, 6)
+    expect(run.secondHalfFasterByMetersPerSecond).toBeNull()
   })
 
   it('refuses an id naming no workout, and a night', () => {

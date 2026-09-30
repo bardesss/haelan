@@ -636,6 +636,7 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **standing** ('within' | 'above' | 'below', nullable)
       - **earlierKilometres** (number)
     - **secondHalfFasterBySecondsPerKm** (number, nullable) — How much faster the second half of the splits went than the first, in s/km (negative: slower).
+    - **secondHalfFasterByMetersPerSecond** (number, nullable) — A ride's split trend, which reads in speed: how much faster the second half went, in m/s (negative: slower). Null for every other category, which carries the s/km field instead.
     - **standsOut** (string, nullable) — The figure the walk stopped on, when it stopped on one.
   - **day** (object, nullable)
     - **localDate** (string)

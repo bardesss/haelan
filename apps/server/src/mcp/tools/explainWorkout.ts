@@ -61,6 +61,10 @@ export const WORKOUT_EVIDENCE = z.object({
   secondHalfFasterBySecondsPerKm: z.number().nullable().describe(
     'How much faster the second half of the splits went than the first, in s/km (negative: slower).',
   ),
+  secondHalfFasterByMetersPerSecond: z.number().nullable().describe(
+    "A ride's split trend, which reads in speed: how much faster the second half went, in m/s "
+    + '(negative: slower). Null for every other category, which carries the s/km field instead.',
+  ),
   standsOut: z.string().nullable().describe('The figure the walk stopped on, when it stopped on one.'),
 })
 
@@ -202,7 +206,7 @@ export function walkWorkout(q: PersonQuery, sessionId: string): {
   const evidence: Evidence = {
     sessionId: session.id, localDate: session.localDate, exerciseType: null, excluded: session.excluded,
     earlierSessions: null, hero: null, figures: null, peakMinutes: null, lastKilometre: null,
-    secondHalfFasterBySecondsPerKm: null, standsOut: null,
+    secondHalfFasterBySecondsPerKm: null, secondHalfFasterByMetersPerSecond: null, standsOut: null,
   }
   const c: Context = { page: null, evidence }
 
@@ -235,5 +239,9 @@ function readPage(q: PersonQuery, c: Context, localDate: string, nowMs: number, 
   const peak = workoutDetail(attrs).zones?.peakSeconds ?? null
   e.peakMinutes = peak === null ? null : Math.round(peak / 60)
   e.lastKilometre = lastKilometreOf(attrs)
-  e.secondHalfFasterBySecondsPerKm = page.splitTrend?.secondHalfFasterBySecondsPerKm ?? null
+  // A ride's trend comes in speed, every other category's in pace (the page's own split trend, by the
+  // category's rate); each lands in its own field so neither is read in the other's unit.
+  const trend = page.splitTrend
+  e.secondHalfFasterBySecondsPerKm = trend !== null && 'secondHalfFasterBySecondsPerKm' in trend ? trend.secondHalfFasterBySecondsPerKm : null
+  e.secondHalfFasterByMetersPerSecond = trend !== null && 'secondHalfFasterByMetersPerSecond' in trend ? trend.secondHalfFasterByMetersPerSecond : null
 }
