@@ -51,7 +51,7 @@ It is slower than the other tools - it builds a fresh database per query - and i
 
 Pointing an LLM at this server sends that person's health data to whichever model provider is on the other end of the conversation. Self-hosting the store does not self-host the model: haelan keeps the database on your own disk, but the moment an agent calls one of these tools, the answer it reads leaves the house for wherever that model runs.
 
-## Tools (15)
+## Tools (16)
 
 ### describe_person
 
@@ -545,3 +545,42 @@ The recovery index for each day in a date range, oldest first - the same number 
 - **hrvFilled** (object) — How many of the daily HRV readings behind these scores (each day's own reading plus its 60-day baseline) were filled in from an intraday average rather than measured, out of how many were used.
   - **filled** (number)
   - **of** (number)
+
+### explain
+
+Walks one chain for a question and stops at the first link that accounts for it, so an agent does not have to stitch the other tools together and keep looking after the first sufficient answer. `kind: empty` asks why `metric` has no reading on `localDate`. The links are walked in this order: a reading is there after all (`thinBaseline` when its baseline is too thin to judge it against, `present` otherwise); the metric was excluded by hand that day; a sleep session that would have been that day's night was excluded; the night is filed under the next morning, the one it ended on; the `source` asked for has no row but the day does; nothing has ever reported the metric; the day is before its first reading; the day is after its last; no headline reading arrived that day at all; and last, other readings arrived but this one did not. `stoppedAt` names the link that answered and `walked` every link checked on the way, so there is nothing further to walk. `finding` is one sentence about the data, never a claim about the person's health, and `evidence` carries the readings behind it; a field a link never reached is null. A thin baseline is low confidence, not evidence of nothing, and a `filled` reading is an intraday average, not a measurement - say so in words.
+
+**Input**
+
+- **kind** ('empty')
+- **metric** (string)
+- **localDate** (string) — YYYY-MM-DD
+- **agg** (string, optional) — Omitted, the metric's own default aggregate, the one get_daily uses.
+- **source** (string, optional) — A source id from describe_person to read one device on its own, or `merged` for only the days this app reconciled itself, or `provider` for only the days Google had already reconciled. Omitted answers the day rather than one device: the merged row where there is one, the provider row where there is not.
+
+**Output**
+
+- **kind** ('empty')
+- **finding** (string)
+- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay')
+- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay')
+- **evidence** (object)
+  - **metric** (string)
+  - **agg** (string)
+  - **localDate** (string)
+  - **source** (string, nullable) — The `source` asked for, or null for the day itself.
+  - **value** (number, nullable)
+  - **coverage** (number, nullable)
+  - **filled** (boolean, nullable) — True when this reading is the day's intraday average standing in for the daily name, not the device's own daily summary. Say so in words; do not state it as a measurement.
+  - **baseline** (object, nullable) — The reading's own baseline, the days before `localDate`. Only read when there was a reading. Thin is low confidence, not evidence of nothing.
+    - **center** (number)
+    - **spread** (number)
+    - **n** (number)
+    - **thin** (boolean)
+  - **excludedMetrics** (array of string, nullable) — Every metric excluded by hand on `localDate`.
+  - **excludedSleepSessions** (array of string, nullable) — Sleep sessions filed under `localDate` that were excluded by hand and would otherwise have been part of its night. An excluded nap is not listed.
+  - **nightFiledUnder** (string, nullable) — The morning a night that began on the evening of `localDate` is filed under.
+  - **daySource** (string, nullable) — Who answered the day when the `source` asked for did not: `merged` or `provider`.
+  - **lastReportedBefore** (string, nullable)
+  - **firstReportedAfter** (string, nullable)
+  - **dayHasOtherData** (boolean, nullable) — Whether any of the day's headline readings (steps, sleep, resting heart rate, HRV, active minutes, heart rate) arrived on `localDate`.

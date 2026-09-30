@@ -25,11 +25,11 @@ import type { Thinned } from './downsample.ts'
 import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS, readIntraday, readIntradayWindow } from './intraday.ts'
 import type { IntradayResult } from './intraday.ts'
 import { SampleKeys } from '../db/keys.ts'
-import { applyToSamples } from '../derive/overrides.ts'
+import { applyToSamples, excludedMetrics } from '../derive/overrides.ts'
 import type { OverrideLike } from '../derive/overrides.ts'
 import { selectHourWinners } from '../derive/merge.ts'
 import { loadPriority } from '../store/sourcePriority.ts'
-import { readSleepNights } from './sleepNights.ts'
+import { readExcludedNightSessions, readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
@@ -664,6 +664,29 @@ export class PersonQuery {
         input.until === undefined ? undefined : (isBefore ? gte(daily.localDate, input.until) : lte(daily.localDate, input.until)),
       )).get()?.bound ?? null
     return bound
+  }
+
+  /**
+   * The metrics this person excluded on one local date, sorted. Derivation drops an excluded
+   * metric's rows before they are written (`applyToDay`), so a day like that has no `daily` row
+   * and nothing else on this class can say why: this is the one reader that can.
+   */
+  excludedDayMetrics(input: { localDate: string }): string[] {
+    requireDate('localDate', input.localDate)
+    const overrides: OverrideLike[] = this.#db.select().from(overridesTable)
+      .where(and(eq(overridesTable.personId, this.#personId), eq(overridesTable.scope, 'day_metric'))).all()
+      .map((row) => ({ scope: row.scope, targetKey: row.targetKey, action: row.action, correctedValue: row.correctedValue ?? null }))
+    return [...excludedMetrics(overrides, input.localDate)].sort()
+  }
+
+  /**
+   * The excluded sleep sessions filed under `localDate` that would have been part of its night.
+   * See `readExcludedNightSessions` for why an excluded nap is not among them.
+   */
+  excludedNightSessions(input: { localDate: string, sourceId?: string }): string[] {
+    requireDate('localDate', input.localDate)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
+    return readExcludedNightSessions(this.#db, { personId: this.#personId, ...input })
   }
 
   /** The person's sleep nights in a local date range. See `readSleepNights` for the grouping. */

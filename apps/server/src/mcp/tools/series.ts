@@ -17,7 +17,7 @@ import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMM
  * `requireSource` lets them through for the `daily` backed reads only). The intraday, sleep and
  * workout tools take the same argument name but not these two values, and say so themselves.
  */
-const DAILY_SOURCE = z.string().optional().describe(
+export const DAILY_SOURCE = z.string().optional().describe(
   'A source id from describe_person to read one device on its own, or `merged` for only the days '
   + 'this app reconciled itself, or `provider` for only the days Google had already reconciled. '
   + 'Omitted answers the day rather than one device: the merged row where there is one, the '
@@ -120,7 +120,7 @@ export const querySeries = defineTool({
  * weight or body_fat, which is why `aggs[0]` is trusted everywhere else. This overrides it only for
  * the three metrics where the list is a display order rather than a priority order.
  */
-function defaultAggFor(spec: MetricSpec): string {
+export function defaultAggFor(spec: MetricSpec): string {
   return spec.aggs.includes('min') && spec.aggs.includes('mean') ? 'mean' : spec.aggs[0]!
 }
 

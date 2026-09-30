@@ -215,3 +215,64 @@ export function readSleepNights(db: DbOrTx, input: {
 
   return nights.sort((a, b) => a.localDate.localeCompare(b.localDate) || a.sourceId.localeCompare(b.sourceId))
 }
+
+/**
+ * The excluded sleep sessions on one local date that would have been part of its night, sorted.
+ *
+ * `Night.excludedSessions` answers every excluded session on the date, an excluded nap included,
+ * so it cannot say whether an exclusion is why a date has no night. This assembles each source's
+ * sessions again with the exclusions put back, through the same `assembleNights` and the same
+ * gap, and keeps only the excluded ones that land in the night. An excluded nap on a date whose
+ * night was simply never recorded is then not an account of the missing night.
+ */
+export function readExcludedNightSessions(db: DbOrTx, input: {
+  personId: string
+  localDate: string
+  sourceId?: string
+}): string[] {
+  const sessionRows = db.select().from(sessions).where(and(
+    eq(sessions.personId, input.personId),
+    eq(sessions.kind, 'sleep'),
+    eq(sessions.localDate, input.localDate),
+    input.sourceId === undefined ? undefined : eq(sessions.sourceId, input.sourceId),
+  )).orderBy(asc(sessions.startMs), asc(sessions.id)).all()
+  if (sessionRows.length === 0) return []
+
+  const overrideLikes: OverrideLike[] = db.select().from(overridesTable).where(and(
+    eq(overridesTable.personId, input.personId),
+    eq(overridesTable.scope, 'session'),
+  )).all().map((row) => ({
+    scope: row.scope, targetKey: row.targetKey, action: row.action, correctedValue: row.correctedValue ?? null,
+  }))
+  const keptIds = new Set(applyToSessions(
+    sessionRows.map((row) => ({ id: row.id, sourceId: row.sourceId, kind: row.kind, startMs: row.startMs, endMs: row.endMs })),
+    overrideLikes,
+  ).map((s) => s.id))
+  if (keptIds.size === sessionRows.length) return []
+
+  const gapMinutes = new SettingsStore(db).get()?.nightGapMinutes ?? DEFAULT_NIGHT_GAP_MINUTES
+  const bySource = new Map<string, typeof sessionRows>()
+  for (const row of sessionRows) {
+    const group = bySource.get(row.sourceId)
+    if (group) group.push(row)
+    else bySource.set(row.sourceId, [row])
+  }
+
+  const out: string[] = []
+  for (const group of bySource.values()) {
+    const { night } = assembleNights({
+      sessions: group.map((row) => ({
+        id: row.id,
+        sourceId: row.sourceId,
+        startMs: row.startMs,
+        startOffsetMinutes: row.startOffsetMinutes,
+        endMs: row.endMs,
+        endOffsetMinutes: row.endOffsetMinutes,
+        mainSleep: mainSleepOf(row.attrs),
+      })),
+      gapMinutes,
+    })
+    for (const session of night) if (!keptIds.has(session.id)) out.push(session.id)
+  }
+  return out.sort()
+}
