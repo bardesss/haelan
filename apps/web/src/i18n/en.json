@@ -324,7 +324,6 @@
       "meters": "m",
       "ms": "ms",
       "cm": "cm",
-      "trimp": "TRIMP",
       "kmh": "km/h",
       "perMin": "/min"
     },
@@ -366,18 +365,8 @@
       "unknown": "Unknown"
     },
     "sessions": {
-      "count_one": "{{count}} recorded session in this period",
-      "count_other": "{{count}} recorded sessions in this period",
-      "countFiltered": "{{shown}} of {{total}} recorded sessions in this period",
-      "daySummary_one": "{{count}} session · {{duration}}",
-      "daySummary_other": "{{count}} sessions · {{duration}}",
-      "basis": "One row per workout. A workout two devices recorded is shown once, the way the Workouts tile counts it.",
-      "filterLabel": "Filter by type",
-      "allTypes": "All types",
       "emptyPeriodTitle": "No activities recorded in this period.",
       "emptyPeriodDetail": "Nothing has synced for these dates yet.",
-      "emptyFilteredTitle": "No {{type}} sessions in this period.",
-      "emptyFilteredDetail": "Choose another type to see the rest of this period's sessions.",
       "excluded": "Excluded: {{reason}}",
       "excludedNoReason": "Excluded"
     },
@@ -547,15 +536,6 @@
           "details": "Details"
         }
       }
-    },
-    "trainingLoad": {
-      "label": "Training load",
-      "basis": "last {{acuteDays}} days against the {{chronicDays}} before them, {{worn}} days worn",
-      "basisNotEnough": "needs {{needed}} worn days of {{total}}, and has {{worn}}",
-      "notEnough": "Not enough worn days yet to compare a week against a month.",
-      "ratio": "{{ratio}}x your usual",
-      "noUsual": "No usual load to compare against yet.",
-      "target": "Usual week: {{target}}"
     },
     "period": {
       "hero": "Steps, average per day",

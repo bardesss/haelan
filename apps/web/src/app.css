@@ -887,7 +887,7 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 }
 /* One box per tile. Without it the grid's children are StatTile's own three elements rather than
    its tiles, and auto-fit flows label, value and basis into separate columns. min-width: 0 for the
-   same reason .session-list carries it: a grid child defaults to min-content and a long label would
+   same reason .today-workouts carries it: a grid child defaults to min-content and a long label would
    push the track wider than its share. */
 .workout-dynamic-tile { min-width: 0; }
 
@@ -1955,33 +1955,10 @@ button.week-bar-slot { cursor: pointer; }
 .session-row-link:hover .session-row { background: var(--surface-hover); }
 .session-row-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-/* SessionList.tsx's own root: min-width: 0 so a row's own flex children can actually shrink
-   inside the card's grid column rather than pushing it wide, the same reason .card itself carries
-   this. */
-.session-list { min-width: 0; }
-/* The Dashboard's list of today's workouts (TodayWorkouts.tsx): the same SessionRows as
-   .session-list, so the same min-width: 0 for the same reason. */
+/* The Dashboard's list of today's workouts (TodayWorkouts.tsx): min-width: 0 so a row's own flex
+   children can actually shrink inside the card's grid column rather than pushing it wide, the same
+   reason .card itself carries this. */
 .today-workouts { min-width: 0; }
-/* The count sits opposite the type filter (when there is one) rather than above the rows it
-   describes, the same header row shape .card's own .label plays elsewhere. */
-.session-list-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
-.session-list-count { font-size: var(--font-size-xs); color: var(--text-muted); }
-/* One .session-date-group per run of consecutive same-day rows; the gap between groups is what
-   separates one day's rows from the next now that nothing else does (a border would repeat the
-   one every .session-row already carries between rows within a day). */
-.session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
-.session-date-group { min-width: 0; }
-/* The date and its totals on one line, with a rule under them, so a day reads as a group rather
-   than as a loose run of rows following a quiet label. */
-.session-date-heading {
-  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3);
-  font-weight: var(--weight-medium); color: var(--text-primary);
-  margin: 0 0 var(--space-1); padding-bottom: var(--space-1);
-  border-bottom: 1px solid var(--border-subtle);
-}
-/* The two halves carry their own size rather than inheriting one and overriding it, since the
-   heading is a flex container: its own font-size sets nothing here beyond what these two say. */
-.session-date-label { font-size: var(--font-size-sm); }
 
 /* NightRow.tsx: a night in the Sleep page's list (M10b; M8c's list before it), one row per night
    with the date as its first column; the rows' own bottom borders separate them, as .record-row's do. */
@@ -2108,7 +2085,7 @@ button.week-bar-slot { cursor: pointer; }
    reader can already see going wrong, and this one describes something that will look fine for
    months. It is not muted, and it does not sit below the button. */
 /* min-width: 0 so the two .copy-value fields inside can scroll their own long URLs rather than
-   stretching this section past the card, the same reason .session-list carries it. */
+   stretching this section past the card, the same reason .today-workouts carries it. */
 .instance-url { min-width: 0; }
 .instance-url-warning {
   font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);

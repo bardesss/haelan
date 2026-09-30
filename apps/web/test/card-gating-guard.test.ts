@@ -23,10 +23,9 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 
 // Pages with a real reason to hand roll every bit of gating and never mention MetricCard: each
 // wraps exactly one query over a resource that carries no metric and no points, so there is
-// nothing for MetricCard's own `metric`/`points` contract to gate. SessionList.tsx is in the same
-// position and is simply never seen here, since it lives one directory down in pages/activity/ and
-// this guard only reads pages/ itself; WorkoutDetail.tsx (M8b) and NightDetail.tsx (M8c, gated on
-// useNights rather than a metric and its points, the same shape) cannot borrow that same exemption
+// nothing for MetricCard's own `metric`/`points` contract to gate. WorkoutDetail.tsx (M8b) and
+// NightDetail.tsx (M8c, gated on useNights rather than a metric and its points, the same shape)
+// are in that position, and are excused by name.
 // Records.tsx (M6c) joins them for the reason the paragraph above states rather than a new one:
 // it wraps exactly one query over a payload that carries no metric and no points - a span, a
 // record per metric, an integer and a list of dated milestones - so MetricCard's own
