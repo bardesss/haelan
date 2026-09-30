@@ -35,8 +35,11 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   if (figure.reason === 'no-data') return null
   if (figure.reason === 'too-few-days') return t('period.reason.tooFewDays')
   if (figure.reason === 'thin-usual') return t('glance.usual.thin')
-  const verdict = verdictLine({ ...figure, baseline: figure.usual }, language, t)
-  if (verdict === null || figure.usual === null || o.window !== true) return verdict
+  const line = verdictLine({ ...figure, baseline: figure.usual }, language, t)
+  if (line === null || figure.usual === null) return line
+  // A per-period figure's range is a whole period's worth ("1 - 5 a month"), and says so.
+  const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${figure.usual.window.unit}`)}` : line
+  if (o.window !== true) return verdict
   return `${verdict} ${windowPhrase(figure.usual.window, t)}`
 }
 
@@ -202,10 +205,12 @@ export const PERIOD_TOTAL_METRICS: readonly string[] = ['distance', 'floors', 'a
 
 /**
  * The figure's value: for a total (PERIOD_TOTAL_METRICS), the period's total, with its average per day
- * in the line under it; otherwise the average alone (per night, per day, or per week), whether or not
- * the server sent a total.
+ * in the line under it; for a per-period figure (the nap count), the period's total alone, since its
+ * verdict already reads a period's worth; otherwise the average alone (per night, per day, or per
+ * week), whether or not the server sent a total.
  */
 export function periodValueLine(figure: PeriodFigure, language: string, t: Translate): { value: string, under: string | null } {
+  if (figure.per === 'period' && figure.total !== null) return { value: formatFigureValue(figure, figure.total, language, t), under: null }
   const value = formatFigureValue(figure, figure.value, language, t)
   if (figure.total === null || !PERIOD_TOTAL_METRICS.includes(figure.metric)) return { value, under: null }
   return { value: formatFigureValue(figure, figure.total, language, t), under: t('period.value.perDay', { value }) }

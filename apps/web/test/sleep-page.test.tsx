@@ -55,6 +55,8 @@ afterEach(() => {
   root = null
 })
 
+// The no-break space formatFigureValue joins a value's parts with.
+const NB = '\u00a0'
 const MONTH_URL = '/sleep?range=month&on=2026-08-15'
 const YEAR_URL = '/sleep?range=year&on=2025-06-01'
 
@@ -87,7 +89,8 @@ const NIGHT_MIDNIGHT = Date.parse(`${NIGHT_DATE}T00:00:00Z`)
 function oneNight(bedtimeMinutes: number, waketimeMinutes: number): SleepListRow[] {
   return [{
     localDate: NIGHT_DATE, sourceId: 'watch', asleepMinutes: 420, bedtimeMinutes, waketimeMinutes,
-    standing: 'within', judged: null, good: false,
+    // 15 August 2026 is a Saturday morning.
+    standing: 'within', judged: null, good: false, weekend: true,
   }]
 }
 /** /sleep/nights' own night for NIGHT_DATE, carrying `naps`. */
@@ -241,8 +244,37 @@ describe('the Sleep page: sections', () => {
     const notes = (label: string) => [...cardFor(label)!.querySelectorAll('.figure-row-note')].map((note) => note.textContent ?? '')
     expect(notes('The mornings').length).toBeGreaterThan(0)
     for (const note of notes('The mornings')) expect(note).toMatch(/^\d+ of \d+ mornings? usual/)
-    expect(notes('More about the sleep').length).toBeGreaterThan(0)
-    for (const note of notes('More about the sleep')) expect(note).toMatch(/^\d+ of \d+ usual/)
+    // Every row but the naps, whose line is their own (the next test).
+    const more = notes('More about the sleep').filter((note) => !note.includes('naps'))
+    expect(more.length).toBeGreaterThan(0)
+    for (const note of more) expect(note).toMatch(/^\d+ of \d+ usual/)
+  })
+
+  // The fixture's August holds four naps and 100 minutes of them.
+  it("prints the naps as one row: the count, its usual a month's worth, and the naps and minutes together", async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
+    const naps = () => [...cardFor('More about the sleep')!.querySelectorAll('.figure-row')].filter((row) => row.querySelector('.label')?.textContent === 'Naps')
+    expect(naps()).toHaveLength(1)
+    expect(naps()[0]!.querySelector('.figure-row-verdict')!.textContent).toBe('within your usual 3 – 4 per month')
+    expect(naps()[0]!.querySelector('.figure-row-note')!.textContent).toBe(`4 naps, 1h${NB}40m together`)
+    expect(naps()[0]!.textContent).toContain('4')
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    const dutjes = [...cardFor('Meer over de slaap')!.querySelectorAll('.figure-row')].filter((row) => row.querySelector('.label')?.textContent === 'Dutjes')
+    expect(dutjes).toHaveLength(1)
+    expect(dutjes[0]!.querySelector('.figure-row-verdict')!.textContent).toBe('binnen je gebruikelijke bereik 3 – 4 per maand')
+    expect(dutjes[0]!.querySelector('.figure-row-note')!.textContent).toBe(`4 dutjes, samen 1u${NB}40m`)
+  })
+
+  it('says no naps rather than none together, and keeps the minutes row where no count came', async () => {
+    const more = SLEEP_PERIOD_MONTH.more.map((figure) => (figure.metric === 'sleep_nap_count' ? { ...figure, total: 0 } : figure))
+    await renderAt(MONTH_URL, { period: month({ more }) })
+    const note = () => [...cardFor('More about the sleep')!.querySelectorAll('.figure-row')]
+      .filter((row) => row.querySelector('.label')?.textContent === 'Naps').map((row) => row.querySelector('.figure-row-note')?.textContent)
+    expect(note()).toEqual(['no naps'])
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: month({ more: SLEEP_PERIOD_MONTH.more.filter((figure) => figure.metric !== 'sleep_nap_count') }) })
+    expect(note()).toEqual(['24 of 28 usual · 4 longer'])
   })
 
   it('overlays last year\'s nights on the hero\'s strip with the comparison on, aligned by date', async () => {
@@ -646,10 +678,16 @@ describe('the Sleep page: the schedule chart', () => {
     const oldestFirst = [...SLEEP_PERIOD_MONTH.nights].reverse()
     const out = new Set(SLEEP_PERIOD_MONTH.schedule.bedtime!.daily.filter((p) => p.standing === 'above' || p.standing === 'below').map((p) => p.from))
     expect(out.size).toBeGreaterThan(0)
-    expect(rows.map((row) => row[3])).toEqual(oldestFirst.map((night) => ([0, 6].includes(new Date(`${night.localDate}T00:00:00Z`).getUTCDay()) ? 1 : 0)))
+    expect(rows.map((row) => row[3])).toEqual(oldestFirst.map((night) => (night.weekend ? 1 : 0)))
     expect(rows.map((row) => row[4])).toEqual(oldestFirst.map((night) => (out.has(night.localDate) ? 1 : 0)))
     // Aug 1 2026 is a Saturday, Aug 3 a Monday.
     expect(rows[oldestFirst.findIndex((night) => night.localDate === '2026-08-01')]![3]).toBe(1)
     expect(rows[oldestFirst.findIndex((night) => night.localDate === '2026-08-03')]![3]).toBe(0)
+  })
+
+  it("colours a night by the server's weekend flag, never by working the weekday out itself", async () => {
+    // A Saturday morning the server did not flag stays a weekday night.
+    await renderAt(MONTH_URL, { period: month({ nights: [{ ...oneNight(-56, 400)[0]!, weekend: false }] }) })
+    expect((placed() as number[][])[0]![3]).toBe(0)
   })
 })

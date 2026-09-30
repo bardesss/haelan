@@ -21,8 +21,10 @@ const NONE: readonly string[] = []
  * fresh one every render would rebuild it. `labelOf` is a dependency, so a caller keeps it stable,
  * and `deviation` too (a module constant): the metrics read as a deviation from their usual, skin
  * temperature on Sleep (periodDeviationLine), whose strip still plots the readings themselves.
+ * `noteOf` (stable too) gives a figure a note of its own in place of its per-day line and counts,
+ * the nap count's "3 naps, 0h 52m together"; null keeps the usual note.
  */
-export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, bars = false, deviation = NONE }: {
+export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, bars = false, deviation = NONE, noteOf }: {
   figures: PeriodFigure[]
   labelOf: (metric: string) => string
   /** What the day counts count ("nights", "mornings"), or 'none' where the card says it once. */
@@ -31,6 +33,7 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
   side?: boolean
   bars?: boolean
   deviation?: readonly string[]
+  noteOf?: (figure: PeriodFigure) => string | null
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -47,10 +50,11 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
     const { value, under } = deviated === null ? periodValueLine(figure, language, t) : { value: deviated.value, under: null }
     const verdict = (deviated === null ? periodVerdictLine(figure, language, t) : deviated.verdict) ?? t('glance.usual.none')
     // What is not a verdict goes under it, plain, so only the verdict's words take its tone.
-    const parts = [under, dayCountsLine(figure, noun, t)].filter((part) => part !== null)
+    const own = noteOf?.(figure) ?? null
+    const parts = own === null ? [under, dayCountsLine(figure, noun, t)].filter((part) => part !== null) : [own]
     const note = parts.length === 0 ? undefined : parts.join(SEPARATOR)
     return [{ key: figure.metric, label, value, verdict, note, figure, strip }]
-  }), [figures, labelOf, noun, bars, deviation, language, t])
+  }), [figures, labelOf, noun, bars, deviation, noteOf, language, t])
   if (rows.length === 0) return null
 
   return (

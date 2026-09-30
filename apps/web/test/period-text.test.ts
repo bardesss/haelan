@@ -95,6 +95,18 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine(f, 'nl', tNl, { window: true })).toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een jaar, uit 2025`)
   })
 
+  it("says a per-period figure's range is a period's worth, before the window", () => {
+    const naps = figure({
+      metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 3, total: 3,
+      usual: { center: 3, low: 1, high: 5, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(naps, 'en', t)).toBe('within your usual 1 – 5 per month')
+    expect(periodVerdictLine(naps, 'nl', tNl)).toBe('binnen je gebruikelijke bereik 1 – 5 per maand')
+    expect(periodVerdictLine(naps, 'en', t, { window: true })).toBe('within your usual 1 – 5 per month for a month, last 12 months')
+    const quarter = { ...naps, usual: { ...naps.usual!, window: { unit: 'quarter' as const, count: 4, from: '2025-07-01', to: '2026-06-30' } } }
+    expect(periodVerdictLine(quarter, 'nl', tNl)).toBe('binnen je gebruikelijke bereik 1 – 5 per 3 maanden')
+  })
+
   it('prints a reason the same with the window asked for', () => {
     expect(periodVerdictLine(figure({ reason: 'thin-usual', standing: null }), 'en', t, { window: true })).toBe('not enough history for a usual yet')
   })
@@ -288,6 +300,11 @@ describe('periodValueLine', () => {
 
   it('prints the sleep hero\'s average, not the total the server also sends', () => {
     expect(periodValueLine(figure({ value: 420, total: 12600 }), 'en', t)).toEqual({ value: `7h${NB}00m`, under: null })
+  })
+
+  it("prints a per-period figure's total, with nothing under it", () => {
+    const naps = figure({ metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 3.4, total: 3 })
+    expect(periodValueLine(naps, 'en', t)).toEqual({ value: '3', under: null })
   })
 
   it('prints the value alone for a figure with no total', () => {

@@ -938,7 +938,9 @@
       "balanceAgainstBaseline_one": "against your usual {{usual}}, over {{count}} night",
       "balanceAgainstBaseline_other": "against your usual {{usual}}, over {{count}} nights",
       "balanceAgainstTarget_one": "against your target of {{target}}, over {{count}} night",
-      "balanceAgainstTarget_other": "against your target of {{target}}, over {{count}} nights"
+      "balanceAgainstTarget_other": "against your target of {{target}}, over {{count}} nights",
+      "naps_one": "1 nap, {{minutes}} together",
+      "naps_other": "{{count}} naps, {{minutes}} together"
     }
   },
   "setup": {
@@ -1819,6 +1821,12 @@
       "month": "this month",
       "3months": "these 3 months",
       "year": "this year"
+    },
+    "per": {
+      "week": "per week",
+      "month": "per month",
+      "quarter": "per 3 months",
+      "year": "per year"
     }
   }
 }
