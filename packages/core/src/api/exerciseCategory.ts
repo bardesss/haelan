@@ -122,7 +122,8 @@ export function countsForDistanceRecords(type: string | null): boolean {
 }
 
 // The incline run and walk are the treadmill's own; the three cardio machines stand in one place.
-// Records do not read this set: which types count toward them is countsForDistanceRecords' alone.
+// Records read this set for the climb alone (no most climb indoors); which types count toward
+// distance and speed is countsForDistanceRecords' alone.
 const INDOOR: ReadonlySet<string> = new Set([
   'TREADMILL', 'TREADMILL_WALK', 'INCLINE_RUN', 'INCLINE_WALK',
   'STATIONARY_BIKE', 'SPINNING', 'ASSAULT_BIKE',

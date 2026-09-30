@@ -192,6 +192,19 @@ describe('sessionRecordsOf, per category', () => {
     expect(records.find((r) => r.category === 'walk' && r.kind === 'most-climb')).toMatchObject({ sessionId: 'hike', value: 900 })
   })
 
+  it('holds no most climb for an indoor type, whose page hides its climb', () => {
+    // An incline run or walk counts toward distance and speed, but its climb is the treadmill's
+    // own reckoning (isIndoor), which its workout page never prints.
+    const records = sessionRecordsOf([
+      session({ sessionId: 'road', localDate: '2026-02-01', elevationGainMeters: 120 }),
+      session({ sessionId: 'incline', localDate: '2026-03-01', exerciseType: 'INCLINE_RUN', elevationGainMeters: 600, distanceMm: 8_000_000 }),
+      session({ sessionId: 'incline-walk', exerciseType: 'INCLINE_WALK', elevationGainMeters: 500 }),
+    ])
+    expect(records.find((r) => r.category === 'run' && r.kind === 'most-climb')).toMatchObject({ sessionId: 'road', value: 120 })
+    expect(records.find((r) => r.category === 'run' && r.kind === 'furthest')?.sessionId).toBe('incline')
+    expect(records.find((r) => r.category === 'walk' && r.kind === 'most-climb')).toBeUndefined()
+  })
+
   it('picks the longest in whole seconds, so a tie on screen goes to the earlier session', () => {
     const records = sessionRecordsOf([
       session({ sessionId: 'late', localDate: '2026-05-01', durationMs: 3_600_400 }),

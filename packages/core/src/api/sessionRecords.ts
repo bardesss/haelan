@@ -14,7 +14,7 @@
  * reader parses each session through `sessionForRecords` below and drops excluded sessions before
  * calling this; see `query/allTime.ts` and `query/workoutPage.ts`.
  */
-import { countsForDistanceRecords, exerciseCategory, RECORD_CATEGORY_ORDER } from './exerciseCategory.ts'
+import { countsForDistanceRecords, exerciseCategory, isIndoor, RECORD_CATEGORY_ORDER } from './exerciseCategory.ts'
 import type { ExerciseCategory } from './exerciseCategory.ts'
 import { effortDistancesOf, fastestEfforts } from './fastestEfforts.ts'
 import type { Efforts } from './fastestEfforts.ts'
@@ -97,7 +97,9 @@ const whole = (value: number | null) => (value === null ? null : Math.round(valu
  *
  * `longest` counts every session of the category; the distance, climb and speed records only a
  * session whose type counts toward them (countsForDistanceRecords: no treadmill, no indoor or
- * electric bike). A run's fastest kilometre is the quicker of the splits and the GPS: the splits
+ * electric bike), and the climb not an indoor one's either (isIndoor: an incline run's climb is the
+ * treadmill's, which its workout page hides, so Records never links to a climb the page leaves out).
+ * A run's fastest kilometre is the quicker of the splits and the GPS: the splits
  * only ever time each kilometre from the start, while the GPS finds the fastest one wherever it
  * began. A ride's split never makes a record: its distances are the GPS's alone.
  */
@@ -106,6 +108,7 @@ function valueOf(kind: SessionRecordKind, session: SessionForRecords): number | 
   if (!countsForDistanceRecords(session.exerciseType)) return null
   if (kind === 'furthest') return session.distanceMm === null ? null : whole(session.distanceMm / 1000)
   if (kind === 'most-climb') {
+    if (isIndoor(session.exerciseType)) return null
     const climb = whole(session.elevationGainMeters)
     return climb === null || climb <= 0 ? null : climb
   }
