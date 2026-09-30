@@ -59,6 +59,10 @@ export function fastestEffortsAlong(points: readonly { atMs: number, latitude: n
 
 /** fastestEffortsAlong's seconds alone, the shape Records and the route summaries keep. */
 export function fastestEfforts(points: readonly { atMs: number, latitude: number, longitude: number }[]): Record<EffortKey, number | null> {
-  const along = fastestEffortsAlong(points)
+  return effortSeconds(fastestEffortsAlong(points))
+}
+
+/** Efforts already found, reduced to their seconds: a page that has them need not walk the route again. */
+export function effortSeconds(along: Record<EffortKey, Effort | null>): Record<EffortKey, number | null> {
   return { km: along.km?.seconds ?? null, mile: along.mile?.seconds ?? null, fiveK: along.fiveK?.seconds ?? null }
 }

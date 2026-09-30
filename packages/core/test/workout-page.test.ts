@@ -9,6 +9,13 @@ import { PeopleStore } from '../src/store/people.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { readWorkoutPage, splitTrendOf } from '../src/query/workoutPage.ts'
 import { compareWorkout } from '../src/api/workoutComparison.ts'
+import { fastestEfforts, fastestEffortsAlong } from '../src/api/fastestEfforts.ts'
+
+// Both as themselves, only watched: a run's own efforts are found once however many readers want them.
+vi.mock('../src/api/fastestEfforts.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/api/fastestEfforts.ts')>()
+  return { ...actual, fastestEfforts: vi.fn(actual.fastestEfforts), fastestEffortsAlong: vi.fn(actual.fastestEffortsAlong) }
+})
 
 const TODAY = '2026-09-10'
 const SUBJECT_DATE = '2026-09-04'
@@ -791,6 +798,13 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     // The subject's own route, then two chunks of a hundred; the subject is never one of them.
     seedEarlier(0, 200)
     expect(countRouteReads()).toBe(3)
+    // Only the subject's own read carries altitude and accuracy; the chunks read what a signature
+    // and the efforts need.
+    const prepare = vi.spyOn(test.db.$client, 'prepare')
+    readWorkoutPage(q(), input('subject'))
+    const routeReads = prepare.mock.calls.map(([source]) => String(source)).filter((source) => source.includes('"session_routes"'))
+    prepare.mockRestore()
+    expect(routeReads.map((source) => /altitude/.test(source))).toEqual([true, false, false])
     // 250 earlier routed runs: the subject's route and three chunks.
     seedEarlier(200, 250)
     expect(countRouteReads()).toBe(4)
@@ -861,6 +875,47 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRoute('earlier-ride', '2026-09-01', { speed: 8, fixes: 200 })
     expect(readWorkoutPage(q(), input('ride'))!.best.fastestKmSeconds).toBeNull()
     expect(readWorkoutPage(q(), input('run'))!.efforts!.fiveK).toMatchObject({ isBest: true })
+  })
+
+  it('prints the kilometre Records holds, a split when it beat the GPS, and where that split began', () => {
+    // 6 km at 3 m/s is a 333 s GPS kilometre; the second split, from 1 km, was run in 320 s.
+    seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 340 }, { distance: 1000, seconds: 320 }, { distance: 1000, seconds: 345 }] })
+    seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
+    const page = readWorkoutPage(q(), input('subject'))!
+    expect(page.efforts!.km).toMatchObject({ seconds: 320, fromMeters: 1000, isBest: true, best: { sessionId: 'subject', value: 320 } })
+    expect(page.best.fastestKmSeconds).toMatchObject({ sessionId: 'subject', value: 320 })
+    // The mile has no split, so it stays the GPS's.
+    expect(page.efforts!.mile!.seconds).toBeCloseTo(536.4, 1)
+  })
+
+  it("finds a run's own efforts once, for its row and both sets of records", () => {
+    seedRun('subject', SUBJECT_DATE, {})
+    seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
+    vi.mocked(fastestEffortsAlong).mockClear()
+    vi.mocked(fastestEfforts).mockClear()
+    expect(readWorkoutPage(q(), input('subject'))!.efforts!.fiveK).toMatchObject({ isBest: true })
+    expect(fastestEffortsAlong).toHaveBeenCalledTimes(1)
+    expect(fastestEfforts).not.toHaveBeenCalled()
+  })
+
+  it("reads no later workout's route for a type without efforts, and a run's for its bests", () => {
+    const summarised = (sessionId: string) => {
+      const query = q()
+      const spy = vi.spyOn(query, 'workoutRouteSummaries')
+      readWorkoutPage(query, input(sessionId))
+      const ids = spy.mock.calls.map(([call]) => call.sessions.map((s) => s.id))
+      spy.mockRestore()
+      return ids
+    }
+    seedRide('earlier-ride', '2026-09-01', {})
+    seedRide('ride', SUBJECT_DATE, {})
+    seedRide('later-ride', '2026-09-06', {})
+    expect(summarised('ride')).toEqual([['earlier-ride']])
+    // In the evening, so no run overlaps a ride and merges with it.
+    seedRun('earlier-run', '2026-09-01', {}, { hhmm: '18:00' })
+    seedRun('run', SUBJECT_DATE, {}, { hhmm: '18:00' })
+    seedRun('later-run', '2026-09-06', {}, { hhmm: '18:00' })
+    expect(summarised('run')).toEqual([['earlier-run', 'later-run']])
   })
 
   it('has no efforts without a route', () => {

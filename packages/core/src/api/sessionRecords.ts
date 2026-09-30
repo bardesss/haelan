@@ -119,27 +119,12 @@ export function sessionRecordsOf(sessions: readonly SessionForRecords[]): Sessio
 export function sessionForRecords(session: {
   id: string, localDate: string, startMs: number, endMs: number, attrs: unknown
 }, route?: readonly RoutePoint[]): SessionForRecords {
-  const attrs = typeof session.attrs === 'object' && session.attrs !== null && !Array.isArray(session.attrs)
-    ? session.attrs as Record<string, unknown>
-    : {}
+  const attrs = attrsOf(session.attrs)
 
   const summary = attrs['metricsSummary'] as { distanceMillimeters?: unknown } | null | undefined
   const distance = typeof summary?.distanceMillimeters === 'number' && summary.distanceMillimeters > 0
     ? summary.distanceMillimeters
     : null
-
-  // Exactly one kilometre, so every candidate is the same distance: a 400m lap would win a
-  // "fastest split" every time by being shorter rather than quicker.
-  const kilometreSeconds: number[] = []
-  const splits = Array.isArray(attrs['splits']) ? attrs['splits'] as unknown[] : []
-  for (const split of splits) {
-    const s = split as { splitType?: unknown, activeDuration?: unknown, metricsSummary?: { distanceMillimeters?: unknown } } | null
-    if (s === null || typeof s !== 'object') continue
-    if (s.splitType !== 'DISTANCE') continue
-    if (s.metricsSummary?.distanceMillimeters !== 1_000_000) continue
-    const seconds = Number.parseFloat(String(s.activeDuration ?? '').replace(/s$/, ''))
-    if (Number.isFinite(seconds) && seconds > 0) kilometreSeconds.push(seconds)
-  }
 
   const exerciseType = typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null
   return {
@@ -148,7 +133,39 @@ export function sessionForRecords(session: {
     exerciseType,
     durationMs: session.endMs - session.startMs,
     distanceMm: distance,
-    kilometreSeconds,
+    kilometreSeconds: kilometreSplitsOf(attrs).map((split) => split.seconds),
     efforts: route === undefined || exerciseType !== GPS_EFFORT_TYPE ? { km: null, mile: null, fiveK: null } : fastestEfforts(route),
   }
+}
+
+function attrsOf(attrs: unknown): Record<string, unknown> {
+  return typeof attrs === 'object' && attrs !== null && !Array.isArray(attrs) ? attrs as Record<string, unknown> : {}
+}
+
+/**
+ * Every split of a session's attrs that covered exactly one kilometre: its seconds, and how far
+ * into the session it began (the distance of every split before it). The kilometres
+ * sessionForRecords competes for fastest-km, so the workout page's kilometre can say where the
+ * split it prints lay.
+ *
+ * Exactly one kilometre, so every candidate is the same distance: a 400m lap would win a
+ * "fastest split" every time by being shorter rather than quicker.
+ */
+export function kilometreSplitsOf(sessionAttrs: unknown): { seconds: number, fromMeters: number }[] {
+  const found: { seconds: number, fromMeters: number }[] = []
+  const attrs = attrsOf(sessionAttrs)
+  const splits = Array.isArray(attrs['splits']) ? attrs['splits'] as unknown[] : []
+  let along = 0
+  for (const split of splits) {
+    const s = split as { splitType?: unknown, activeDuration?: unknown, metricsSummary?: { distanceMillimeters?: unknown } } | null
+    if (s === null || typeof s !== 'object') continue
+    const millimetres = s.metricsSummary?.distanceMillimeters
+    const fromMeters = along
+    if (typeof millimetres === 'number' && millimetres > 0) along += millimetres / 1000
+    if (s.splitType !== 'DISTANCE') continue
+    if (millimetres !== 1_000_000) continue
+    const seconds = Number.parseFloat(String(s.activeDuration ?? '').replace(/s$/, ''))
+    if (Number.isFinite(seconds) && seconds > 0) found.push({ seconds, fromMeters })
+  }
+  return found
 }
