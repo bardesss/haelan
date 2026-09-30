@@ -502,6 +502,20 @@ describe('the Sleep page: the nights, the stages, the mornings', () => {
     expect(yAxis.name ?? '').toBe('')
   })
 
+  const stageLabels = () => {
+    const host = cardFor('De nachten')!.querySelector<HTMLDivElement>('div[role="img"]')!
+    const axis = (echarts.getInstanceByDom(host)?.getOption() as { xAxis: { data: string[], axisLabel: { interval: (i: number) => boolean } }[] }).xAxis[0]!
+    return axis.data.filter((_, i) => axis.axisLabel.interval(i))
+  }
+
+  it('labels the stages by day number on a month and by month name on a year', async () => {
+    await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
+    expect(stageLabels()).toEqual(['1', '8', '15', '22', '29'])
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR }, 'nl')
+    expect(stageLabels()).toEqual(['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'])
+  })
+
   it('gives each stage\'s average and share in the legend, through the shared stage names', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH }, 'nl')
     const legend = [...cardFor('De nachten')!.querySelectorAll('.detail-legend li')].map((li) => li.textContent)
