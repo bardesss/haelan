@@ -60,7 +60,7 @@ export function Sleep() {
   const page = usePeriodSource(nightHref)
   const { controls, source } = page
   const query = useSleepPeriod({ range: controls.tab, anchor: controls.anchor, source })
-  const { range, heroDates, lastYear, periodKey, expanded, toggle, header, alone, gate } = usePeriodShell({
+  const { range, heroDates, lastYear, expanded, toggle, header, alone, gate } = usePeriodShell({
     title: t('sleep.title'), page, query, exportMetrics: EXPORT_METRICS, lastYearGroups: LAST_YEAR_GROUPS,
   })
 
