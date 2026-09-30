@@ -17,7 +17,7 @@ import { sourceLabel } from '../data/useSourceNames.js'
 import { useSession } from '../auth/session.js'
 import { localToday } from '../controls/range.js'
 import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/useAllTime.js'
-import { figureAs, formatFigureValue } from './detail/figureText.js'
+import { figureAs, formatFigureValue, noBreak } from './detail/figureText.js'
 
 /**
  * What only the whole archive can answer.
@@ -67,14 +67,14 @@ const onDate = formatLocalDate
  * A record's value as a person reads it, which is not always the number in the row.
  *
  * `distance` is stored in millimetres (METRICS.distance, precision 0), so the catalogue's own
- * formatter would render a ten kilometre day as "10,000,000". Every other surface in this app
- * converts at the point of display for exactly this metric; this is that conversion, in the one
- * place this page needs it. Every other metric goes through formatMetricValue so its precision
+ * formatter would render a ten kilometre day as "10,000,000". It reads as every day's distance does
+ * (formatFigureValue's millimetres: "41.8 km", the Activity page's), with no-break spaces like the
+ * session records beside it. Every other metric goes through formatMetricValue so its precision
  * comes off the catalogue rather than off a literal here.
  */
 function recordValue(metric: string, value: number, language: string, t: Translate): string {
-  if (metric === 'distance') return `${formatNumber(value / 1_000_000, 1, language, '')} ${t('activity.units.km')}`
-  return formatMetricValue(value, metric, language, '')
+  if (metric === 'distance') return formatFigureValue(figureAs('distance', 'millimeters'), value, language, t)
+  return noBreak(formatMetricValue(value, metric, language, ''))
 }
 
 /**

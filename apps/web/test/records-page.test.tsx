@@ -126,7 +126,8 @@ describe('the all-time page', () => {
         from: '2026-01-21', days: 235, sourceName: null,
       }],
     })
-    expect(text("[data-metric='distance'] .record-value")).toBe('10.0 km')
+    // A day's distance, as the Activity page prints one, with a no-break space like every figure beside it.
+    expect(text("[data-metric='distance'] .record-value")).toBe('10.0\u00a0km')
   })
 
   it('formats a million steps as a number a person reads, not as 1000000', () => {

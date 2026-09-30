@@ -11,6 +11,12 @@ import type { PointJudged, PointStanding } from '../../charts/base.js'
 // Inside one value a space never breaks ("1h 32m", "58 bpm"): a narrow card wraps between the words
 // of a sentence, never inside a figure.
 const NBSP = '\u00a0'
+
+/** A figure's text with every space in it made a no-break one (formatFigureValue's rule), for a
+ *  figure worded outside it: a row's "32 min", "412 kcal" or "25 m gained" never breaks inside. */
+export function noBreak(text: string): string {
+  return text.replaceAll(' ', NBSP)
+}
 // Inside a unit of two words ("/100 m"), so the unit reads as one (formatFigureValue's swim pace).
 const NARROW_NBSP = '\u202f'
 
@@ -89,7 +95,7 @@ export function formatFigureValue(
   language: string,
   t: Translate,
 ): string {
-  return figureValueText(figure, value, language, t).replaceAll(' ', NBSP)
+  return noBreak(figureValueText(figure, value, language, t))
 }
 
 function figureValueText(

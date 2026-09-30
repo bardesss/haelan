@@ -8,6 +8,7 @@ import type { ExerciseCategory } from '@haelan/core/exercise-category'
 import { Icon } from '../../components/icons.js'
 import { Link } from '../../router.js'
 import { sessionRateText, swimDistanceText } from './categoryText.js'
+import { figureAs, formatFigureValue, noBreak } from '../detail/figureText.js'
 import { workoutPath } from './workout/workoutText.js'
 
 /**
@@ -98,13 +99,13 @@ export function SessionRowView(props: SessionRowViewProps) {
   // them is never one of the fields this row has to omit.
   const durationMinutes = props.durationSeconds === null ? null : Math.round(props.durationSeconds / 60)
   const durationText = durationMinutes === null ? null
-    : `${formatNumber(durationMinutes, 0, language, '0')} ${t('activity.units.min')}`
+    : noBreak(`${formatNumber(durationMinutes, 0, language, '0')} ${t('activity.units.min')}`)
 
   const stats = [
     caloriesKcal === null ? null
-      : `${formatNumber(caloriesKcal, 0, language, '')} ${t('activity.units.kcalShort')}`,
+      : noBreak(`${formatNumber(caloriesKcal, 0, language, '')} ${t('activity.units.kcalShort')}`),
     averageHeartRateBpm === null ? null
-      : `${formatNumber(averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`,
+      : noBreak(`${formatNumber(averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`),
   ].filter((part): part is string => part !== null)
 
   // Distance, the category's rate and elevation gain only. workoutSummary also carries steps and
@@ -115,14 +116,16 @@ export function SessionRowView(props: SessionRowViewProps) {
   // reader actually came to a workout row to see (fix round 1 review).
   const detail = [
     props.dated === true ? formatWeekdayDate(localDate, language) : null,
+    // A session's distance as the workout page and Records print it (formatFigureValue: two
+    // decimals in km, metres under one), so one distance never reads two ways between them.
     distanceMeters === null ? null
       : category === 'swim' ? swimDistanceText(distanceMeters, language, t)
-        : `${formatNumber(distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
+        : formatFigureValue(figureAs('distance', 'meters'), distanceMeters, language, t),
     // The rate the category reads (a ride's speed, a swim's time per 100 m), never a pace per
     // kilometre on a sport that is not on foot; nothing for one with no rate.
     sessionRateText(category, { paceSecondsPerKm, speedMetersPerSecond }, language, t),
     elevationGainMeters === null ? null
-      : `${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
+      : noBreak(`${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`),
   ].filter((part): part is string => part !== null)
 
   // Struck through and kept, not filtered out: the Activity count above this list already drops

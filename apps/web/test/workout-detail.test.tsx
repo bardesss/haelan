@@ -1171,7 +1171,7 @@ describe('the workout page\'s day', () => {
     expect(text(card, '.today-workouts > .label')).toBe('Workouts')
     const link = card.querySelector<HTMLAnchorElement>('.today-workouts a.session-row-link')
     expect(text(link!, '.session-row-type')).toBe('Walking')
-    expect(text(link!, '.session-row-duration')).toBe('30 min')
+    expect(text(link!, '.session-row-duration')).toBe('30\u00a0min')
     expect(link?.getAttribute('href')).toBe('/activity/walk1')
   })
 
