@@ -102,6 +102,15 @@ function changeText(figure: PeriodFigure, change: PeriodChange & { value: number
   return formatFigureDifference(figure, change.value + change.delta, change.value, language, t)
 }
 
+/**
+ * A month by its name alone ("augustus", "August"), from its "YYYY-MM" or any date inside it, anchored
+ * at UTC so no zone moves it: the period before in a standout line, and a month's heading in an
+ * overview's grouped list.
+ */
+export function monthName(month: string, language: string): string {
+  return new Date(`${month.slice(0, 7)}-01T00:00:00Z`).toLocaleString(language, { month: 'long', timeZone: 'UTC' })
+}
+
 function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1
 }
@@ -112,7 +121,7 @@ function previousName(previous: PeriodChange, language: string, t: Translate): s
   const days = daysBetween(previous.from, previous.to)
   if (days <= 7) return t('period.standout.weekBefore')
   if (previous.from.slice(0, 7) === previous.to.slice(0, 7)) {
-    return new Date(`${previous.from}T00:00:00Z`).toLocaleString(language, { month: 'long', timeZone: 'UTC' })
+    return monthName(previous.from, language)
   }
   if (previous.from.endsWith('-01-01') && previous.to === `${previous.from.slice(0, 4)}-12-31`) return previous.from.slice(0, 4)
   return t('period.standout.quarterBefore')

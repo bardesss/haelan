@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  dayCountsLine, emphasise, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
+  dayCountsLine, emphasise, monthName, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
   thisPeriod, windowPhrase,
 } from '../src/pages/detail/periodText.js'
 import type { PeriodChange, PeriodFigure, PeriodStripPoint, PeriodWindow } from '../src/data/periodTypes.js'
@@ -53,6 +53,15 @@ describe('windowPhrase', () => {
     const year: PeriodWindow = { unit: 'year', count: 1, from: '2025-01-01', to: '2025-12-31' }
     expect(windowPhrase(year, t)).toBe('for a year, from 2025')
     expect(windowPhrase(year, tNl)).toBe('voor een jaar, uit 2025')
+  })
+})
+
+describe('monthName', () => {
+  it('names a month alone, from its key or a date inside it, in both languages', () => {
+    expect(monthName('2026-08', 'en')).toBe('August')
+    expect(monthName('2026-08-31', 'nl')).toBe('augustus')
+    // UTC-anchored: the first of a month never slips back to the month before.
+    expect(monthName('2026-01', 'en')).toBe('January')
   })
 })
 
