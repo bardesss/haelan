@@ -548,26 +548,29 @@ The recovery index for each day in a date range, oldest first - the same number 
 
 ### explain
 
-Walks one chain for a question and stops at the first link that accounts for it, so an agent does not have to stitch the other tools together and keep looking after the first sufficient answer. `stoppedAt` names the link that answered and `walked` every link checked on the way, so there is nothing further to walk. `finding` is one sentence about the data - an association with how the day was lived at most, never a cause, advice, a readiness verdict or a claim about the person's health - and `evidence` carries the numbers behind it, under the kind asked; a field a link never reached is null.
+Walks one chain for a question and stops at the first link that accounts for it, so an agent does not have to stitch the other tools together and keep looking after the first sufficient answer. `stoppedAt` names the link that answered and `walked` every link checked on the way, so there is nothing further to walk. `finding` is one sentence about the data - an association with how the day was lived at most, never a cause, advice, a readiness verdict, a suggestion for a next session or a claim about the person's health - and `evidence` carries the numbers behind it, under the kind asked; a field a link never reached is null. An argument the kind does not read is refused rather than ignored.
 
 `kind: empty` asks why `metric` has no reading on `localDate`. The links, in order: a reading is there after all (`thinBaseline` when its baseline is too thin to judge it against, `present` otherwise); the metric was excluded by hand that day; a sleep session that would have been that day's night was excluded; the night is filed under the next morning, the one it ended on; the `source` asked for has no row but the day does; nothing has ever reported the metric; the day is before its first reading; the day is after its last; no headline reading arrived that day at all; and last, other readings arrived but this one did not. A thin baseline is low confidence, not evidence of nothing, and a `filled` reading is an intraday average, not a measurement - say so in words.
 
-`kind: recovery` asks what the recovery index on `localDate` stands on - the same number recovery_index answers. The links, in order: `withheld`, a day that could not be scored, which is not a low score; `hrvFilledToday`, the day's own HRV is an intraday average, so the score is not a measurement throughout; `usual`, the score sits within this person's own normal; and `carriedBy`, the input that moved the score furthest in its own direction, with any that pulled the other way. An input's points are its share of the distance from 50 and do not add up to it when the inputs disagreed. An absent input, sleep on half its evidence and filled HRV inside the baseline are stated in the finding whichever link answers. `band` is distance from this person's own normal, not a readiness verdict. `metric`, `agg` and `source` are refused for this kind.
+`kind: recovery` asks what the recovery index on `localDate` stands on - the same number recovery_index answers. The links, in order: `withheld`, a day that could not be scored, which is not a low score; `hrvFilledToday`, the day's own HRV is an intraday average, so the score is not a measurement throughout; `usual`, the score sits within this person's own normal; and `carriedBy`, the input that moved the score furthest in its own direction, with any that pulled the other way. An input's points are its share of the distance from 50 and do not add up to it when the inputs disagreed. An absent input, sleep on half its evidence and filled HRV inside the baseline are stated in the finding whichever link answers. `band` is distance from this person's own normal, not a readiness verdict.
+
+`kind: workout` asks what stands out about the exercise session `sessionId` (from get_workouts) against this person's earlier sessions of its type - the same usual ranges the app's workout page draws, from up to twenty sessions in the 90 days before it. The links, in order: `excluded`, a session excluded by hand is not judged; `thinHistory`, too few earlier sessions for a usual, or no type at all; `hero`, the figure the page leads with (pace on foot, speed on a bike, time otherwise) outside its usual; `hardMinutes`, the minutes in the vigorous and peak zones outside theirs; `lastKilometre`, the last full kilometre against the session's own earlier kilometres; `otherFigure`, any other figure outside its usual; and `withinUsual`. These are facts about the session, never about a next one.
 
 **Input**
 
-- **kind** ('empty' | 'recovery')
-- **localDate** (string) — YYYY-MM-DD
-- **metric** (string, optional) — Required for `empty`, refused for `recovery`.
+- **kind** ('empty' | 'recovery' | 'workout')
+- **localDate** (string, optional) — YYYY-MM-DD. Required for `empty` and `recovery`, refused for `workout`.
+- **sessionId** (string, optional) — An exercise session id from get_workouts. Required for `workout`, refused otherwise.
+- **metric** (string, optional) — Required for `empty`, refused otherwise.
 - **agg** (string, optional) — `empty` only. Omitted, the metric's own default aggregate, the one get_daily uses.
 - **source** (string, optional) — A source id from describe_person to read one device on its own, or `merged` for only the days this app reconciled itself, or `provider` for only the days Google had already reconciled. Omitted answers the day rather than one device: the merged row where there is one, the provider row where there is not.
 
 **Output**
 
-- **kind** ('empty' | 'recovery')
+- **kind** ('empty' | 'recovery' | 'workout')
 - **finding** (string)
-- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy')
-- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy')
+- **stoppedAt** ('thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual')
+- **walked** (array of 'thinBaseline' | 'present' | 'dayMetricExcluded' | 'sessionExcluded' | 'nightFiledUnderMorning' | 'otherSource' | 'neverReported' | 'beforeFirstReport' | 'afterLastReport' | 'nothingThatDay' | 'notReportedThatDay' | 'withheld' | 'hrvFilledToday' | 'usual' | 'carriedBy' | 'excluded' | 'thinHistory' | 'hero' | 'hardMinutes' | 'lastKilometre' | 'otherFigure' | 'withinUsual')
 - **evidence** (object)
   - **empty** (object, nullable)
     - **metric** (string)
@@ -607,3 +610,27 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **of** (number)
     - **carriedBy** ('hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — The input that moved the score furthest in its own direction.
     - **pulledAgainst** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Inputs that moved the score the other way.
+  - **workout** (object, nullable)
+    - **sessionId** (string)
+    - **localDate** (string)
+    - **exerciseType** (string, nullable)
+    - **excluded** (boolean)
+    - **earlierSessions** (number, nullable) — How many earlier sessions of the type, in the 90 days before this one and not excluded, the usual ranges are drawn from (at most twenty).
+    - **hero** (string, nullable) — The figure the workout page leads with for this type.
+    - **figures** (array of object, nullable)
+      - **key** (string)
+      - **value** (number)
+      - **unit** (string)
+      - **usualLow** (number, nullable)
+      - **usualHigh** (number, nullable)
+      - **thin** (boolean, nullable)
+      - **standing** ('within' | 'above' | 'below', nullable) — Null when the usual is too thin to judge against, or absent.
+    - **peakMinutes** (number, nullable) — Minutes in the peak heart rate zone, from the session's own zone clocks.
+    - **lastKilometre** (object, nullable) — The last full kilometre split against the session's own earlier full kilometres. Null without one; `standing` null with fewer than three earlier ones.
+      - **seconds** (number)
+      - **usualLow** (number, nullable)
+      - **usualHigh** (number, nullable)
+      - **standing** ('within' | 'above' | 'below', nullable)
+      - **earlierKilometres** (number)
+    - **secondHalfFasterBySecondsPerKm** (number, nullable) — How much faster the second half of the splits went than the first, in s/km (negative: slower).
+    - **standsOut** (string, nullable) — The figure the walk stopped on, when it stopped on one.
