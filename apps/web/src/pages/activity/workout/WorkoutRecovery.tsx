@@ -3,26 +3,31 @@ import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
 import { FigureRows } from '../../../components/FigureRow.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
+import { formatFigureValue } from '../../detail/figureText.js'
 import { WorkoutFigureRow } from './WorkoutFigureRow.js'
 
 /**
  * Heart-rate recovery (the mockup's "Hartslagherstel"), its own card under the zones: how far heart
  * rate fell one and two minutes after the workout ended, each against the usual from the latest
  * workouts of the type. The server reads the falls and judges them; a larger fall is the better
- * one. Each row is left out without its value, the card without either. The approved mockup also
- * draws a strip under each and the two readings a fall is between; the page is sent neither.
+ * one. Each row is left out without its value, the card without either. Under each verdict, the
+ * two readings the fall is between ("from 146 to 122 bpm"), the minute means the server took it
+ * from. The approved mockup also draws a strip under each; the page is sent none.
  */
 export function WorkoutRecovery({ page }: { page: WorkoutPageData }): ReactNode {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Null from the server exactly when neither minute has a value.
   const recovery = page.heartRateRecovery
   if (recovery === null) return null
-  const { oneMinute, twoMinutes } = recovery
+  const { oneMinute, twoMinutes, readings } = recovery
+  const bpm = (value: number) => formatFigureValue(oneMinute, value, i18n.language, t)
+  const between = (after: number | null) => (after === null ? undefined
+    : t('activity.workout.page.recovery.between', { from: bpm(readings.endBpm), to: bpm(after) }))
   return (
     <Card span={12} label={t('activity.workout.page.recovery.label')}>
       <FigureRows>
-        {oneMinute.value !== null && <WorkoutFigureRow figure={oneMinute} label={t('activity.workout.page.recovery.oneMinute')} />}
-        {twoMinutes.value !== null && <WorkoutFigureRow figure={twoMinutes} label={t('activity.workout.page.recovery.twoMinutes')} />}
+        {oneMinute.value !== null && <WorkoutFigureRow figure={oneMinute} label={t('activity.workout.page.recovery.oneMinute')} note={between(readings.oneMinuteBpm)} />}
+        {twoMinutes.value !== null && <WorkoutFigureRow figure={twoMinutes} label={t('activity.workout.page.recovery.twoMinutes')} note={between(readings.twoMinutesBpm)} />}
       </FigureRows>
       <p className="dash-caption">{t('activity.workout.page.recovery.caption')}</p>
     </Card>

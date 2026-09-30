@@ -1,6 +1,6 @@
 import type { GlanceBaseline, GlanceFigure, GlanceStanding } from '../../src/data/useGlance.js'
 import type { PageFigure } from '../../src/data/useNightPage.js'
-import type { MinuteSeries, WorkoutFigure, WorkoutFigureKey, WorkoutPageData } from '../../src/data/useWorkoutPage.js'
+import type { MinuteSeries, PaceSeries, WorkoutFigure, WorkoutFigureKey, WorkoutPageData } from '../../src/data/useWorkoutPage.js'
 import type { WorkoutSessionDetail } from '../../src/data/useSessions.js'
 
 // One whole workout page (GET /p/:personId/workout/:sessionId) in the wire shape the route sends:
@@ -84,10 +84,12 @@ function glanceFigure(metric: string, unit: string, value: number, baseline: Gla
  * pace (seconds per km) has no minutes 12 and 13, the pause, and cadence starts a minute later, as
  * wall-clock minutes do on a run that starts part way through one. Neither lines up by index.
  */
-export const PACE_SERIES: MinuteSeries = {
+export const PACE_SERIES: PaceSeries = {
   unit: 'seconds_per_km',
   points: Array.from({ length: 34 }, (_, m) => m).filter((m) => m !== 12 && m !== 13)
     .map((m) => ({ elapsedSeconds: m * 60, value: m < 12 ? 332 : 318 })),
+  // The first of the 318s, the minute after the pause.
+  fastest: { secondsPerKm: 318, elapsedSeconds: 14 * 60 },
 }
 export const CADENCE_SERIES: MinuteSeries = {
   unit: 'steps_per_minute',
@@ -152,6 +154,7 @@ export function workoutPageFixture(): WorkoutPageData {
     heartRateRecovery: {
       oneMinute: dayFigure('heart_rate_recovery_1min', 'bpm', 'up', 25, band(22, 18, 27)),
       twoMinutes: dayFigure('heart_rate_recovery_2min', 'bpm', 'up', 41, band(34, 30, 38)),
+      readings: { endBpm: 146, oneMinuteBpm: 121, twoMinutesBpm: 105 },
     },
     // The night ending on the workout's own date, and that morning.
     before: {

@@ -1253,6 +1253,7 @@ button.week-bar-slot { cursor: pointer; }
 .figure-row-verdict { font-size: var(--font-size-xs); color: var(--text-muted); }
 .figure-row-verdict.better { color: var(--positive); }
 .figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
+.figure-row-note { font-size: var(--font-size-xs); color: var(--text-muted); }
 
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */

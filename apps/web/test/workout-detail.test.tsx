@@ -1074,6 +1074,9 @@ describe('the workout page\'s heart-rate recovery', () => {
       ['Drop after 1 minute', '25\u00a0bpm', 'within your usual 18 – 27\u00a0bpm'],
       ['Drop after 2 minutes', '41\u00a0bpm', 'above your usual 30 – 38\u00a0bpm'],
     ])
+    // The two readings each fall is between, under its verdict.
+    expect([...card.querySelectorAll('.figure-row')].map((row) => text(row, '.figure-row-verdict + .figure-row-note')))
+      .toEqual(['from 146\u00a0bpm to 121\u00a0bpm', 'from 146\u00a0bpm to 105\u00a0bpm'])
     const verdicts = [...card.querySelectorAll('.figure-row-verdict')].map((v) => v.className)
     expect(verdicts).toEqual(['figure-row-verdict', 'figure-row-verdict better'])
     expect(card.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('2')
@@ -1090,18 +1093,25 @@ describe('the workout page\'s heart-rate recovery', () => {
       ['Daling na 1 minuut', '25\u00a0bpm', 'binnen je gebruikelijke bereik 18 – 27\u00a0bpm'],
       ['Daling na 2 minuten', '41\u00a0bpm', 'boven je gebruikelijke bereik 30 – 38\u00a0bpm'],
     ])
+    expect(text(card, '.figure-row-note')).toBe('van 146\u00a0bpm naar 121\u00a0bpm')
   })
 
   it('leaves out the minute without a value, and the card without either', async () => {
     const page = workoutPageFixture()
     const recovery = page.heartRateRecovery!
-    const one = cardLabelled(await mount({ ...page, heartRateRecovery: { ...recovery, twoMinutes: { ...recovery.twoMinutes, value: null } } }), 'Heart-rate recovery')!
+    const one = cardLabelled(await mount({
+      ...page, heartRateRecovery: { ...recovery, twoMinutes: { ...recovery.twoMinutes, value: null }, readings: { ...recovery.readings, twoMinutesBpm: null } },
+    }), 'Heart-rate recovery')!
     expect(rowsIn(one).map(([label]) => label)).toEqual(['Drop after 1 minute'])
+    expect(one.querySelectorAll('.figure-row-note')).toHaveLength(1)
     expect(one.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('1')
     act(() => { root!.unmount() })
     root = createRoot(container!)
-    const two = cardLabelled(await mount({ ...page, heartRateRecovery: { ...recovery, oneMinute: { ...recovery.oneMinute, value: null } } }), 'Heart-rate recovery')!
+    const two = cardLabelled(await mount({
+      ...page, heartRateRecovery: { ...recovery, oneMinute: { ...recovery.oneMinute, value: null }, readings: { ...recovery.readings, oneMinuteBpm: null } },
+    }), 'Heart-rate recovery')!
     expect(rowsIn(two).map(([label]) => label)).toEqual(['Drop after 2 minutes'])
+    expect(text(two, '.figure-row-note')).toBe('from 146\u00a0bpm to 105\u00a0bpm')
     expect(two.querySelector('.detail-rows')?.getAttribute('data-columns')).toBe('1')
     act(() => { root!.unmount() })
     root = createRoot(container!)
@@ -1128,7 +1138,7 @@ describe('the workout page\'s pace and cadence', () => {
     const host = await mount(workoutPageFixture(), fullSession())
     expect(heads(host)).toEqual([
       ['Heart rate', 'highest 178\u00a0bpm'],
-      ['Pace', 'average 5:24\u00a0/km'],
+      ['Pace', 'fastest 5:18\u00a0/km at 14:00'],
       ['Cadence', 'average 172\u00a0/min'],
     ])
     const [heart, pace, cadence] = charts(host)
@@ -1207,6 +1217,13 @@ describe('the workout page\'s pace and cadence', () => {
     expect(host.querySelector('.workout-through-note')).toBeNull()
   })
 
+  it('heads pace with its average when the server names no fastest minute', async () => {
+    tracePoints = [reading(minute(1), 120)]
+    const page = workoutPageFixture()
+    const host = await mount({ ...page, through: { ...page.through, pace: { ...page.through.pace!, fastest: null } } }, fullSession())
+    expect(heads(host)[1]).toEqual(['Pace', 'average 5:24\u00a0/km'])
+  })
+
   it('draws a row without its average line when the page has no figure for it', async () => {
     tracePoints = [reading(minute(1), 120)]
     const page = workoutPageFixture()
@@ -1234,7 +1251,7 @@ describe('the workout page\'s pace and cadence', () => {
   it('words the rows in Dutch', async () => {
     tracePoints = [reading(minute(1), 120)]
     const host = await mount(workoutPageFixture(), fullSession(), 'nl')
-    expect(heads(host).slice(1)).toEqual([['Tempo', 'gemiddeld 5:24\u00a0/km'], ['Cadans', 'gemiddeld 172\u00a0/min']])
+    expect(heads(host).slice(1)).toEqual([['Tempo', 'snelste 5:18\u00a0/km na 14:00'], ['Cadans', 'gemiddeld 172\u00a0/min']])
     expect(caption(host)).toBe('op de tijd van de training zelf, 0:00 tot 34:00 · één pauze van 1:40 · tempo en cadans gladgestreken over drie minuten')
     expect(text(host, '.workout-through-note')).toBe('Het tempo komt uit de tijden van de 4 routepunten, de cadans uit de stappen per minuut.')
   })

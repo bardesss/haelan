@@ -13,7 +13,7 @@ import { useSourceTrace } from '../../../data/useSourceTrace.js'
 import { useSourceNames } from '../../../data/useSourceNames.js'
 import type { WorkoutSession, WorkoutSessionDetail } from '../../../data/useSessions.js'
 import type { IntradayPoint } from '../../../data/useIntraday.js'
-import type { MinuteSeries, WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
+import type { MinuteSeries, PaceSeries, WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import type { Translate } from '../../../format.js'
 import { formatFigureValue, formatStopwatch } from '../../detail/figureText.js'
 import { pausesOf } from './workoutText.js'
@@ -57,9 +57,10 @@ const SERIES_HEIGHT = 120
 /**
  * One series row's chart settings and words, memoised on the series: `single` reaches the chart's
  * build, and a fresh one every render would rebuild it. The average is the page's own figure for
- * the workout (the server's), never worked out from the series.
+ * the workout (the server's), never worked out from the series; so is pace's fastest minute, which
+ * the heading names when the server sent one, as the heart rate's heading names its highest.
  */
-function useSeriesRow(series: MinuteSeries | null, average: WorkoutFigure | undefined, key: 'pace' | 'cadence', startMs: number, sourceId: string) {
+function useSeriesRow(series: MinuteSeries | PaceSeries | null, average: WorkoutFigure | undefined, key: 'pace' | 'cadence', startMs: number, sourceId: string) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
   return useMemo(() => {
@@ -77,7 +78,11 @@ function useSeriesRow(series: MinuteSeries | null, average: WorkoutFigure | unde
           reference: { value: average.value, label: t('activity.workout.page.through.averageShort', { value: averageText }) },
         }),
       },
-      summary: averageText === null ? null : t('activity.workout.page.through.average', { value: averageText }),
+      summary: 'fastest' in series && series.fastest !== null
+        ? t('activity.workout.page.through.fastest', {
+          value: formatFigureValue(figure, series.fastest.secondsPerKm, language, t), time: formatElapsed(series.fastest.elapsedSeconds * 1000),
+        })
+        : averageText === null ? null : t('activity.workout.page.through.average', { value: averageText }),
     }
   }, [series, average, key, startMs, sourceId, language, t])
 }

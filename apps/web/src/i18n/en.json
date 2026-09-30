@@ -574,6 +574,7 @@
           "cadenceChart": "Cadence through the workout",
           "average": "average {{value}}",
           "averageShort": "avg {{value}}",
+          "fastest": "fastest {{value}} at {{time}}",
           "smoothed": {
             "pace": "pace smoothed over three minutes",
             "cadence": "cadence smoothed over three minutes",
@@ -603,6 +604,7 @@
           "label": "Heart-rate recovery",
           "oneMinute": "Drop after 1 minute",
           "twoMinutes": "Drop after 2 minutes",
+          "between": "from {{from}} to {{to}}",
           "caption": "from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it · band = your usual range"
         },
         "form": {

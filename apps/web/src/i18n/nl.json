@@ -574,6 +574,7 @@
           "cadenceChart": "Cadans door de training",
           "average": "gemiddeld {{value}}",
           "averageShort": "gem. {{value}}",
+          "fastest": "snelste {{value}} na {{time}}",
           "smoothed": {
             "pace": "tempo gladgestreken over drie minuten",
             "cadence": "cadans gladgestreken over drie minuten",
@@ -603,6 +604,7 @@
           "label": "Hartslagherstel",
           "oneMinute": "Daling na 1 minuut",
           "twoMinutes": "Daling na 2 minuten",
+          "between": "van {{from}} naar {{to}}",
           "caption": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit tot 10 trainingen van dit type ervoor · band = je gebruikelijke bereik"
         },
         "form": {
