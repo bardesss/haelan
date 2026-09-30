@@ -129,6 +129,8 @@ export interface WorkoutListRow {
   averageHeartRateBpm: number | null
   paceSecondsPerKm: number | null
   elevationGainMeters: number | null
+  /** Some figure on the row came from the phone's samples; absent from an older payload. */
+  filled?: boolean
   excluded: boolean
   /** The workout's rate as its category reads it, rounded (core's sessionRateOf); null for none,
    *  absent from a capture older than it. */

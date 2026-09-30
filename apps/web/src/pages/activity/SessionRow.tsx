@@ -72,6 +72,8 @@ export interface SessionRowViewProps {
   /** The session's rate as core sends it (sessions.ts's sessionRateOf); absent from an older payload. */
   rate?: SessionRate | null
   elevationGainMeters?: number | null
+  /** Some figure on the row came from the phone's samples (core's fillFromSamples.ts). */
+  filled?: boolean
   /** The date at the head of the second line ("Wed, Sep 30 · 8.7 km"), for a list with no date
    *  headings of its own (the Activity overview's workouts, the approved mockup's). */
   dated?: boolean
@@ -128,6 +130,11 @@ export function SessionRowView(props: SessionRowViewProps) {
   // one struck through) is what lets a reader see what they threw out, rather than wondering why a
   // session they remember is simply gone.
   const rowClassName = props.excluded ? 'session-row session-row-excluded' : 'session-row'
+  // A row the phone's samples filled says so once, in the workout page's own words, so none of its
+  // figures passes for the watch's own; with a filled rate, that the rate runs over the elapsed time.
+  const filledNote = props.filled === true || rate?.fromElapsed === true
+    ? t(rate?.fromElapsed === true ? 'activity.workout.page.filled.rate' : 'activity.workout.page.filled.figure')
+    : null
 
   return (
     // The row's own way into WorkoutDetail (M8b): the whole row is the target, not a link buried
@@ -161,6 +168,7 @@ export function SessionRowView(props: SessionRowViewProps) {
         {/* Omitted outright, not rendered empty: the fourth test pins a session with none of these
             fields to one line, and an empty div here would still be a second line, just a blank one. */}
         {detail.length > 0 && <div className="session-row-detail">{detail.join(SEPARATOR)}</div>}
+        {filledNote !== null && <div className="session-row-filled">{filledNote}</div>}
         {/* excludeReason can be null even when excluded is true (a person can exclude without
             typing a reason), so this falls back to a bare "Excluded" rather than printing "Excluded:
             " with nothing after the colon. */}
@@ -175,6 +183,8 @@ export function SessionRowView(props: SessionRowViewProps) {
     </Link>
   )
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
 /** A workout session as it reaches the row today: the merged session, read through workoutSummary. */
 export function SessionRow({ session }: { session: WorkoutSession }) {
@@ -193,6 +203,7 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       rate={session.rate ?? null}
       elevationGainMeters={summary.elevationGainMeters}
       localDate={session.localDate}
+      filled={isRecord(session.attrs) && session.attrs.filledFromSamples === true}
     />
   )
 }

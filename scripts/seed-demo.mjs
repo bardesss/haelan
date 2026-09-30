@@ -117,8 +117,13 @@ try {
   // lastDayUntilMs: the last day stops at the demo's own clock, the way a real archive's today
   // stops at its last sync. Without it the seed wrote that day whole, and the Dashboard, captured
   // at midday, said "Good afternoon" over "today until 23:00". See seedArchive's own comment.
+  // phoneWorkout: one walk the phone alone recorded, the day before the demo day, with no Google
+  // copy. Its page shows the figures filled from the phone's samples and, since this person is
+  // connected to Google below, the note that Google's own figures are still coming. Five payloads
+  // more than before, and no other payload changed (seed.test.ts proves both).
   const seeded = seedArchive({
     archive: instance.archive, personId: PERSON_ID, days, endMs, demoRoute: true, lastDayUntilMs: DEMO_CLOCK_MS,
+    phoneWorkout: true,
   })
 
   const report = runRebuild({

@@ -1,11 +1,24 @@
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import { WORKOUT_ROUTE } from '../../../routes.js'
+import type { Translate } from '../../../format.js'
+import type { WorkoutFigureKey, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 
 /** `WORKOUT_ROUTE`'s own `:sessionId` filled in, the same spelling NightRow.tsx's `nightPath`
  *  keeps for `NIGHT_ROUTE`: one function for every link to a workout, not a literal path typed
  *  again at each call site. */
 export function workoutPath(sessionId: string): string {
   return WORKOUT_ROUTE.replace(':sessionId', encodeURIComponent(sessionId))
+}
+
+/**
+ * What a figure the phone's samples filled says under it, so it never passes as the watch's own:
+ * "from your readings", and for a pace or a speed "from your readings, over the elapsed time",
+ * since a workout with no summary has no moving time to take a rate over. Undefined for a figure
+ * the watch recorded; the server names the filled ones (`page.filled`), the page only words them.
+ */
+export function filledNote(page: WorkoutPageData, key: WorkoutFigureKey, t: Translate): string | undefined {
+  if (!(page.filled ?? []).includes(key)) return undefined
+  return t(key === 'pace' || key === 'speed' ? 'activity.workout.page.filled.rate' : 'activity.workout.page.filled.figure')
 }
 
 /**

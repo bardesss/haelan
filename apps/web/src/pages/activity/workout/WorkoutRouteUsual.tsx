@@ -7,7 +7,7 @@ import { formatShortDate } from '../../../format.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { workoutStripOf } from '../../detail/figureText.js'
 import { WorkoutFigureRow } from './WorkoutFigureRow.js'
-import { bestMonth, workoutPath } from './workoutText.js'
+import { bestMonth, filledNote, workoutPath } from './workoutText.js'
 
 /**
  * "This route" (the mockup's "Deze route"), beside the fastest efforts under the route card: how
@@ -54,7 +54,8 @@ export function WorkoutRouteUsual({ page, span, onOpenWorkout }: {
       </p>
       <FigureRows>
         {rate !== null && (
-          <WorkoutFigureRow figure={rate} label={t(`activity.workout.page.figures.${rate.key}`)} withStrip inverse={rate.direction === 'down'} opens={opens} />
+          <WorkoutFigureRow figure={rate} label={t(`activity.workout.page.figures.${rate.key}`)} withStrip inverse={rate.direction === 'down'} opens={opens}
+            note={filledNote(page, rate.key, t)} />
         )}
         <WorkoutFigureRow figure={time} label={t(`activity.workout.page.figures.${time.key}`)} withStrip words="pace" inverse opens={opens} />
       </FigureRows>

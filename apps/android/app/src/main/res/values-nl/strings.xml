@@ -49,6 +49,10 @@
     <string name="sync_title">Synchronisatie</string>
     <string name="sync_body">Verstuurt wat er nieuw is sinds de laatste synchronisatie, of de laatste 30 dagen de eerste keer.</string>
     <string name="sync_action">Nu synchroniseren</string>
+    <string name="api_sync_action">Health API synchroniseren</string>
+    <string name="api_sync_started">Google-synchronisatie gestart</string>
+    <string name="api_sync_cooldown">Kan over %1$d s weer</string>
+    <string name="api_sync_busy">Er loopt al een synchronisatie</string>
     <string name="sync_working">Bezig met synchroniseren…</string>
     <string name="sync_none">Zet minimaal één gegevenstype aan.</string>
     <string name="sync_failed">Synchronisatie gestopt: %1$s</string>

@@ -8,7 +8,7 @@ import { formatNumber } from '../../../format.js'
 import type { WorkoutFigureKey, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
 import { WorkoutFigureRow } from './WorkoutFigureRow.js'
-import { pausesOf } from './workoutText.js'
+import { filledNote, pausesOf } from './workoutText.js'
 
 // The rest of the figures, in the mockup's order. Edwards' cardio load is among the four under the
 // hero; Banister's is this card's "Load (TRIMP)".
@@ -60,7 +60,7 @@ export function WorkoutMore({ page, detail, endMs }: {
           const verdict = elapsed ? elapsedParts.join(' · ') : key === 'swimLengths' ? poolVerdict : undefined
           return (
             <WorkoutFigureRow key={key} figure={figures[key]} label={t(`activity.workout.page.figures.${key}`)}
-              verdict={verdict} bare={elapsed} withStrip={key === 'vo2max'} />
+              verdict={verdict} bare={elapsed} withStrip={key === 'vo2max'} note={filledNote(page, key, t)} />
           )
         })}
       </FigureRows>

@@ -5,6 +5,7 @@ import { FigureRow, FigureRows } from '../../../components/FigureRow.js'
 import type { FigureRowStrip } from '../../../components/FigureRow.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/figureText.js'
+import { filledNote } from './workoutText.js'
 
 // The four figures under the hero, in the mockup's order.
 const MINIS = ['distance', 'movingTime', 'averageHeartRate', 'cardioLoad'] as const
@@ -37,8 +38,9 @@ export function WorkoutMinis({ page }: { page: WorkoutPageData }) {
       key, label, strip, figure,
       value: formatFigureValue(figure, figure.value, language, t),
       verdict: verdictLine(figure, language, t) ?? t('glance.usual.none'),
+      note: filledNote(page, key, t),
     }]
-  }), [figures, hero, language, t])
+  }), [page, figures, hero, language, t])
   if (rows.length === 0) return null
   // What the lines are, counted off the strips themselves (the longest, since a figure a session
   // did not record has fewer points), and the band named only when one is drawn.
@@ -53,9 +55,9 @@ export function WorkoutMinis({ page }: { page: WorkoutPageData }) {
     <Card span={12}>
       <div className="detail-minis">
         <FigureRows>
-          {rows.map(({ key, label, value, verdict, figure, strip }) => (
+          {rows.map(({ key, label, value, verdict, figure, strip, note }) => (
             <FigureRow key={key} label={label} value={value} verdict={verdict} judged={figure.judged} standing={figure.standing}
-              band={figure.baseline} mark={figure.value} strip={strip} />
+              band={figure.baseline} mark={figure.value} strip={strip} {...(note !== undefined && { note })} />
           ))}
         </FigureRows>
         {drawn.length > 0 && <p className="dash-caption">{caption}</p>}

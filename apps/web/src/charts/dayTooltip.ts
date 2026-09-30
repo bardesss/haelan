@@ -1,6 +1,6 @@
 import type { ECElementEvent } from 'echarts'
-import { escapeHtml, tip } from './base.js'
-import type { DayMarks } from './base.js'
+import { annotates, escapeHtml, tip } from './base.js'
+import type { Annotation, DayMarks } from './base.js'
 import type { Translate } from '../format.js'
 
 /**
@@ -16,7 +16,7 @@ export interface DayTooltipInput {
   /** The local dates `values` are indexed by. The x axis carries array positions, not dates. */
   labels: readonly string[]
   excluded: readonly string[]
-  annotations: readonly { date: string; text: string }[]
+  annotations: readonly Annotation[]
   marks: DayMarks
   trend: readonly (number | null)[] | undefined
   hasTrend: boolean
@@ -77,7 +77,7 @@ export function dayTooltip(
   // The same predicate the accessible table filters its rows by, not a second one assembled the
   // same way: under `episodic` a silent day is not a day this chart states anything about, but a
   // day the reader excluded or annotated keeps its row, and so keeps its readout.
-  if (episodic && value === null && !isExcluded && !annotations.some((a) => a.date === date)) return ''
+  if (episodic && value === null && !isExcluded && !annotations.some((a) => annotates(a, date, index))) return ''
 
   // "excluded", not "no reading", for a day the reader threw out: there was a reading, and the day
   // is blank because of something they did rather than because the device never reported.

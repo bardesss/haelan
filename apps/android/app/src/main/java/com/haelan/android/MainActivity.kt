@@ -90,6 +90,8 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     private lateinit var permCheck: ImageView
     private lateinit var permStatus: TextView
     private lateinit var syncButton: MaterialButton
+    private lateinit var apiSyncButton: MaterialButton
+    private lateinit var apiSyncStatus: TextView
     private lateinit var batteryStatus: TextView
 
     /**
@@ -216,6 +218,8 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         permCheck = findViewById(R.id.permCheck)
         permStatus = findViewById(R.id.permStatus)
         syncButton = findViewById(R.id.buttonSync)
+        apiSyncButton = findViewById(R.id.buttonApiSync)
+        apiSyncStatus = findViewById(R.id.apiSyncStatus)
         batteryStatus = findViewById(R.id.batteryStatus)
 
         val activityGroup = SyncGroup(
@@ -246,6 +250,7 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
             scope.launch { releaseNext() }
         }
         syncButton.setOnClickListener { scope.launch { startSync() } }
+        apiSyncButton.setOnClickListener { scope.launch { runApiSync() } }
         findViewById<MaterialButton>(R.id.buttonBattery).setOnClickListener { openBatterySettings() }
 
         buildRows(findViewById(R.id.rowsActivity), activityOptions)
@@ -747,6 +752,45 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         }
         val client = healthClient() ?: return
         SyncRun.start(this, client, SyncEngine.Session(server, personId, cookie), sending.map { it.key }.toSet())
+    }
+
+    /**
+     * The Health API sync tap: one request, one line under the button. Not a [SyncRun] - nothing
+     * here reads Health Connect, and the instance's run is the instance's to report - so it lives in
+     * this screen's scope and a rotation mid-request only loses the line, never the run it asked for.
+     *
+     * The button is off while the request is out, so a second tap cannot race the first into a 409
+     * it caused itself, and the line is cleared as it goes out, so an earlier answer is not read as
+     * this tap's. A 401 ends the session the way every other exchange on this screen ends it.
+     */
+    private suspend fun runApiSync() {
+        apiSyncButton.isEnabled = false
+        val answer = try {
+            ApiSync.tap(clearLine = {
+                apiSyncStatus.text = ""
+                apiSyncStatus.visibility = View.GONE
+            }) {
+                withContext(Dispatchers.IO) { InstanceClient.runApiSync(server, cookie) }
+            }
+        } finally {
+            apiSyncButton.isEnabled = true
+        }
+        if (answer is ApiSync.Answer.Failed) {
+            val error = answer.error
+            if (error is InstanceClient.InstanceHttpException && error.status == 401) {
+                SessionStore.clearSession(prefs())
+                goLogin(expired = true)
+                return
+            }
+        }
+        val line = ApiSync.lineFor(answer)
+        apiSyncStatus.text = when {
+            answer is ApiSync.Answer.Failed -> SyncRun.reasonFor(this, answer.error)
+            answer is ApiSync.Answer.Cooldown && line != null -> getString(line, answer.seconds)
+            line != null -> getString(line)
+            else -> return
+        }
+        apiSyncStatus.visibility = View.VISIBLE
     }
 
     /**

@@ -5,7 +5,7 @@ import { formatShortDate } from '../../../format.js'
 import type { WorkoutFigure, WorkoutPageData, RecordRef } from '../../../data/useWorkoutPage.js'
 import { formatFigureDifference, formatFigureRange, formatFigureValue } from '../../detail/figureText.js'
 import { exerciseCategory, rateOf } from '@haelan/core/exercise-category'
-import { bestMonth, workoutPath } from './workoutText.js'
+import { bestMonth, filledNote, workoutPath } from './workoutText.js'
 
 // The table's rows, in the mockup's order: the four measures the previous workout's values cover.
 // The first is the rate the category reads (rateOf, through the shared core map): a ride's speed,
@@ -69,6 +69,13 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
   const withBest = rows.some(({ key }) => bestOf(page, key) !== null)
   if (rows.length === 0 || (previous === null && !withUsual && !withBest)) return null
   const extra = withUsual && withBest ? 'usualBest' : withUsual ? 'usual' : withBest ? 'best' : null
+  // The figures of this workout the phone's samples filled, said once in the footnote rather than in
+  // each cell (PATTERNS.md, Cards: what a column means is its caption's and footnote's to say). A
+  // filled rate runs over the elapsed time, and the clause says so only when the table shows one.
+  const filledRows = rows.filter(({ key }) => filledNote(page, key, t) !== undefined).map(({ key }) => key)
+  const filledRate = filledRows.find((key) => key === 'pace' || key === 'speed')
+  const filledClause = filledRows.length === 0 ? null
+    : t(`activity.workout.page.compared.${filledRate === 'pace' ? 'filledPace' : filledRate === 'speed' ? 'filledSpeed' : 'filled'}`)
   const captionKey = previous === null ? 'captionAlone' : 'captionWith'
 
   return (
@@ -98,13 +105,18 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
             {rows.map(({ key, figure, value }) => {
               const before = previous?.values[key]
               const best = bestOf(page, key)
+              // A rate over the elapsed time beside one over moving time differs in kind: the previous
+              // value alone, with no difference that would compare unlike with unlike.
+              const unlike = key === filledRate
               return (
                 <tr key={key}>
                   <th scope="row">{t(`activity.workout.page.figures.${key}`)}</th>
-                  <td className="workout-compared-this">{formatFigureValue(figure, value, language, t)}</td>
+                  <td className="workout-compared-this">
+                    {formatFigureValue(figure, value, language, t)}
+                  </td>
                   {previous !== null && (
                     <td>
-                      {before === undefined ? absent : (
+                      {before === undefined ? absent : unlike ? formatFigureValue(figure, before, language, t) : (
                         <>
                           {/* A real space, so a screen reader says "5:36 /km -12 s", not one run-on word. One
                               run faster or slower than the last says nothing about a trend, so the
@@ -133,6 +145,7 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
       <p className="dash-caption workout-compared-footnote">
         {t('activity.workout.page.compared.caption')}
         {withBest && <span className="workout-compared-wide"> · {t('activity.workout.page.compared.captionBest')}</span>}
+        {filledClause !== null && ` · ${filledClause}`}
       </p>
     </Card>
   )

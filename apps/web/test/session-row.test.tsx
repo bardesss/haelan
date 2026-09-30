@@ -246,6 +246,37 @@ describe('SessionRowView', () => {
         .toBe('1.500\u00a0m · 2:40\u00a0/100\u202fm')
     })
 
+    // A row the phone's samples filled says so once, in the workout page's words, so none of its
+    // figures passes for the watch's own; a filled rate runs over the whole span, stops included
+    // (core's fillFromSamples.ts), and the one note says that too.
+    it('says once that a filled row is from your readings, and a filled rate over the elapsed time', () => {
+      const row = (props: Partial<React.ComponentProps<typeof SessionRowView>>, lng = 'en') => renderToStaticMarkup(
+        <I18nProvider lng={lng}>
+          <SessionRowView id="s1" type="RUNNING" startMs={0} durationSeconds={1800} distanceMeters={5100} caloriesKcal={300}
+            averageHeartRateBpm={123} excluded={false} localDate="2026-09-03" {...props} />
+        </I18nProvider>,
+      )
+      const filledRate = row({ filled: true, rate: { ...pace(353), fromElapsed: true } })
+      expect(filledRate).toContain('<div class="session-row-detail">5.1\u00a0km · 5:53\u00a0/km</div>')
+      expect(filledRate).toContain('<div class="session-row-filled">from your readings, over the elapsed time</div>')
+      expect(filledRate.match(/from your readings/g)).toHaveLength(1)
+      // A filled row with no rate (a lift, say): the calories and heart rate came from the samples.
+      expect(row({ type: 'WEIGHTLIFTING', distanceMeters: null, filled: true })).toContain('<div class="session-row-filled">from your readings</div>')
+      expect(row({ filled: true, rate: { ...pace(353), fromElapsed: true } }, 'nl'))
+        .toContain('<div class="session-row-filled">uit je metingen, over de verstreken tijd</div>')
+      // What the watch recorded says nothing.
+      expect(row({ rate: pace(353) })).not.toContain('session-row-filled')
+    })
+
+    it('marks a filled session through SessionRow off its attrs', () => {
+      const html = renderToStaticMarkup(
+        <I18nProvider lng="en">
+          <SessionRow session={run({ exerciseType: 'WALKING', metricsSummary: { steps: 4032 }, filledFromSamples: true })} />
+        </I18nProvider>,
+      )
+      expect(html).toContain('<div class="session-row-filled">from your readings</div>')
+    })
+
     it('prints no rate where the server sends none, an indoor bike or a lift', () => {
       expect(detail('STATIONARY_BIKE', { rate: null })).toBeNull()
       expect(detail('WEIGHTLIFTING', {})).toBeNull()

@@ -8,6 +8,7 @@ import { formatNumber } from '../../../format.js'
 import type { Translate } from '../../../format.js'
 import type { WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine } from '../../detail/figureText.js'
+import { filledNote } from './workoutText.js'
 
 const SECONDS_PER_MINUTE = 60
 
@@ -53,6 +54,8 @@ export function WorkoutZones({ detail, page }: { detail: WorkoutDetail, page: Wo
 
   const hard = page.figures.hardZoneMinutes
   const verdict = hard === undefined || hard.value === null ? null : verdictLine(hard, language, t)
+  // Zones the phone's samples filled say so, as every filled figure on the page does.
+  const filled = filledNote(page, 'hardZoneMinutes', t)
   const label = t('activity.workout.page.zones.label')
 
   return (
@@ -62,6 +65,7 @@ export function WorkoutZones({ detail, page }: { detail: WorkoutDetail, page: Wo
           <p className="workout-zones-verdict">
             <strong>{t('activity.workout.page.zones.hard', { value: formatFigureValue(hard, hard.value, language, t) })}</strong>
             {verdict !== null && ` · ${verdict}`}
+            {filled !== undefined && ` · ${filled}`}
           </p>
         )}
         <div className="workout-zones-bar">

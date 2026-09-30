@@ -448,6 +448,14 @@ describe('the Activity page: the workouts', () => {
     expect(card.querySelector('.activity-workout-filter')).toBeNull()
   })
 
+  // A row the phone's samples filled (the server's `filled`) says so once; the watch's own say nothing.
+  it('marks a filled row as from your readings', async () => {
+    const [first, ...rest] = ACTIVITY_PERIOD_MONTH.workouts
+    await renderAt(MONTH_URL, { period: month({ workouts: [{ ...first!, filled: true }, ...rest] }) })
+    expect(workoutRows()[0]!.querySelector('.session-row-filled')?.textContent).toBe('from your readings')
+    expect(cardFor('Workouts')!.querySelectorAll('.session-row-filled')).toHaveLength(1)
+  })
+
   it('takes a row of its own when expanded, the types widening with it', async () => {
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
     act(() => { showAll().click() })

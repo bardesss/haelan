@@ -4,7 +4,7 @@ import { sessions, overrides as overridesTable } from '../db/schema/index.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
 import { averageSpeedOf, durationSecondsOrNull, numberOrNull, paceOf, swimPaceOf, workoutSummary } from '../api/workoutSummary.ts'
 import { exerciseCategory, isIndoor, RATE_FIGURES, rateOf } from '../api/exerciseCategory.ts'
-import type { SessionRate } from '../api/exerciseCategory.ts'
+import type { RateKey, SessionRate } from '../api/exerciseCategory.ts'
 
 // Named WorkoutSession rather than a generic SessionRow: the reader also serves readSleepNights'
 // underlying rows for kind 'sleep', but a workout list is its most interesting caller.
@@ -87,7 +87,23 @@ export function sessionRateOf(attrs: unknown): SessionRate | null {
   }
   if (value === null || value <= 0) return null
   const { unit, precision } = RATE_FIGURES[key]
-  return { key, unit, value: Number(value.toFixed(precision)) }
+  const rate = { key, unit, value: Number(value.toFixed(precision)) }
+  return rateFilledFromElapsed(attrs, key) ? { ...rate, fromElapsed: true } : rate
+}
+
+/** The metricsSummary field fillFromSamples writes a rate into, per rate it fills. */
+const FILLED_RATE_FIELDS: Partial<Record<RateKey, string>> = {
+  pace: 'averagePaceSecondsPerMeter', speed: 'averageSpeedMillimetersPerSecond',
+}
+
+/**
+ * Answers: whether this rate was filled from the phone's samples, distance over elapsed time
+ * (fillFromSamples.ts lists what it filled in `attrs.filled`). A swim's pace is never filled.
+ */
+export function rateFilledFromElapsed(attrs: unknown, key: RateKey): boolean {
+  const field = FILLED_RATE_FIELDS[key]
+  const filled = typeof attrs === 'object' && attrs !== null ? (attrs as { filled?: unknown }).filled : undefined
+  return field !== undefined && Array.isArray(filled) && filled.includes(field)
 }
 
 /**

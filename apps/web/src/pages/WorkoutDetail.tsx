@@ -144,7 +144,8 @@ export function WorkoutDetail() {
         <WorkoutDay page={page} note={detail.notes} />
         <WorkoutBefore page={page} span={sideSpan} />
         <WorkoutAfter page={page} span={sideSpan} />
-        <WorkoutAbout session={query.data} detail={detail} exerciseType={page.exerciseType} onAnnotate={() => setAnnotating(true)} />
+        <WorkoutAbout session={query.data} detail={detail} exerciseType={page.exerciseType} pending={page.pending === true}
+          onAnnotate={() => setAnnotating(true)} />
       </div>
       {annotating && (
         <AnnotatePanel

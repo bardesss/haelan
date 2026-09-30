@@ -11,7 +11,10 @@ import { figureAs, formatFigureValue } from '../detail/figureText.js'
  * through formatFigureValue, the workout page's own formatter for each of the three.
  */
 export function sessionRateText(rate: SessionRate | null, language: string, t: Translate): string | null {
-  return rate === null ? null : formatFigureValue(figureAs(rate.key, rate.unit), rate.value, language, t)
+  if (rate === null) return null
+  // A rate the phone's samples filled (`fromElapsed`) is worded by the row's one note about what
+  // was filled (SessionRowView), not here as well.
+  return formatFigureValue(figureAs(rate.key, rate.unit), rate.value, language, t)
 }
 
 /** A swim's distance, in whole metres however far it went ("1,500 m"): a pool counts in metres. */

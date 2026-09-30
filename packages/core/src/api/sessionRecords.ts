@@ -186,13 +186,17 @@ export function sessionForRecords(session: {
 }, route?: readonly RoutePoint[]): SessionForRecords {
   const attrs = attrsOf(session.attrs)
 
+  // A figure filled from samples (query/fillFromSamples.ts) is an estimate, and an estimate never
+  // sets a record: read as if the workout had not recorded it.
+  const filled = Array.isArray(attrs['filled']) ? attrs['filled'] as unknown[] : []
   const summary = attrs['metricsSummary'] as { distanceMillimeters?: unknown } | null | undefined
   const distance = typeof summary?.distanceMillimeters === 'number' && summary.distanceMillimeters > 0
+    && !filled.includes('distanceMillimeters')
     ? summary.distanceMillimeters
     : null
 
   // workoutSummary's own reading of the climb, the one the workout page's figure prints; a zero is no climb.
-  const climb = workoutSummary(attrs).elevationGainMeters
+  const climb = filled.includes('elevationGainMillimeters') ? null : workoutSummary(attrs).elevationGainMeters
   const elevation = climb !== null && climb > 0 ? climb : null
 
   const exerciseType = typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null

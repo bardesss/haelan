@@ -10,7 +10,7 @@ import type { Translate } from '../../../format.js'
 import { useOpensDay } from '../../dashboard/cardShared.js'
 import type { WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/figureText.js'
-import { bestMonth, workoutPath } from './workoutText.js'
+import { bestMonth, filledNote, workoutPath } from './workoutText.js'
 
 /**
  * How far this workout's rate lies from the previous one's, as printed and without its sign, and
@@ -47,6 +47,12 @@ function previousLine(page: WorkoutPageData, hero: WorkoutFigure, language: stri
   if (previous === null) return null
   const date = formatSessionDateHeading(previous.localDate, language)
   const { key } = hero
+  // A rate the phone's samples filled runs over the elapsed time, the previous one's over moving
+  // time: unlike with unlike, so its value alone, as the rank is withheld for the same reason.
+  const before = key === 'pace' || key === 'speed' ? previous.values[key] : undefined
+  if (before !== undefined && filledNote(page, key, t) !== undefined) {
+    return t('activity.workout.page.previousValue', { value: formatFigureValue(hero, before, language, t), date })
+  }
   const apart = key === 'pace' || key === 'speed' || key === 'swimPace' ? rateDifference(hero, previous.values[key], language, t) : null
   if (apart === null) return t('activity.workout.page.previousOnly', { date })
   if (apart.faster === null) return t('activity.workout.page.previousSame', { date })
@@ -121,6 +127,17 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   // them could be reached. The one already open is this session, not this day (useOpensDay's
   // `current`), so a same-day sibling still opens.
   const opens = useOpensDay(page.sessionId, onOpenWorkout, 'workout')
+  // A filled rate's own dot, among rates the watch took over moving time, carries the same words
+  // as the line under the verdict: the strip's annotation for this session's own point, found by
+  // its id rather than its date, since a same-type sibling on the same day is a dot of its own and
+  // was not filled. It marks the dot and its row in the screen reader's table alike. Memoised for
+  // the reason the strip is.
+  const filledWords = hero === undefined ? undefined : filledNote(page, hero.key, t)
+  const ownIndex = strip === null ? -1 : strip.ids.indexOf(page.sessionId)
+  const annotations = useMemo(
+    () => (filledWords === undefined || ownIndex === -1 ? undefined : [{ date: page.localDate, text: filledWords, index: ownIndex }]),
+    [filledWords, page.localDate, ownIndex],
+  )
   if (hero === undefined || hero.value === null) return null
   const label = t(`activity.workout.page.figures.${hero.key}`)
   const verdict = verdictLine(hero, language, t)
@@ -135,7 +152,12 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   const ranked = serverRank !== null && comparison.reason === null && band !== undefined ? serverRank : null
   const rank = ranked === null ? null
     : t(ranked.better === ranked.of ? 'activity.workout.comparison.rankAll' : 'activity.workout.comparison.rank', { better: ranked.better, of: ranked.of })
-  const previous = previousLine(page, hero, language, t)
+  // A rate the phone's samples filled says so under the verdict, and the previous line, which sets
+  // it beside a rate the watch took over moving time, says which of the two this one is.
+  const filled = filledWords
+  const previousWords = previousLine(page, hero, language, t)
+  const previous = previousWords === null || filled === undefined || !(hero.key === 'pace' || hero.key === 'speed')
+    ? previousWords : `${previousWords} · ${t('activity.workout.page.filled.previous')}`
   const best = bestLine(page, hero, language, t)
   // A pace strip is drawn upside down so a faster run sits higher; the caption says so, since a
   // reader of any other strip on the page takes higher to mean more. It counts the earlier
@@ -155,6 +177,7 @@ export function WorkoutHero({ page, onOpenWorkout }: {
           {verdict !== null && (
             <p id={verdictId} className={tone === null ? 'detail-verdict' : `detail-verdict ${tone}`}>{verdict}</p>
           )}
+          {filled !== undefined && <p className="workout-hero-line workout-hero-filled">{filled}</p>}
           {rank !== null && <p className="workout-hero-line workout-hero-rank">{rank}</p>}
           {previous !== null && <p className="workout-hero-line workout-hero-previous">{previous}</p>}
           {best !== null && <p className="workout-hero-line workout-hero-best">{best}</p>}
@@ -170,7 +193,8 @@ export function WorkoutHero({ page, onOpenWorkout }: {
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={hero.metric}
                 formatValue={formatValue} baseline={band} bands={strip.bands} bandLabels={bandLabels}
                 pointStandings={strip.pointStandings} pointJudged={strip.pointJudged}
-                height={64} dots tableToggle={false} inverse={inverse} pointIds={strip.ids} {...opens} />
+                height={64} dots tableToggle={false} inverse={inverse} pointIds={strip.ids} {...opens}
+                {...(annotations !== undefined && { annotations })} />
             </BasisContext.Provider>
             <p id={captionId} className="dash-caption">{caption}</p>
           </div>
