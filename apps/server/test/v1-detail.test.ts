@@ -462,7 +462,7 @@ describe('GET /workout/:sessionId', () => {
 
   // Three runs over one straight 6 km course at 3 m/s: the fastest kilometre is 333.33 s, the mile
   // 536.4, the 5 km 1666.67, and the two moving times are fractional; every one is sent whole.
-  it('sends the same-route time, the previous time and the efforts in whole seconds', async () => {
+  it('sends the same-route time and pace, the previous time and the efforts in whole seconds and metres', async () => {
     const h = await withServer()
     harness = h
     h.clock.nowMs = NOW_MS
@@ -470,8 +470,8 @@ describe('GET /workout/:sessionId', () => {
     seedSource(h, 'watch')
     const db = h.app.haelan.instance.db
     const metresPerDegree = (6_371_000 * Math.PI) / 180
-    const routed = (id: string, localDate: string, activeDuration: string) => {
-      seedRun(h, { id, sourceId: 'watch', localDate, pace: 300, activeDuration })
+    const routed = (id: string, localDate: string, activeDuration: string, pace = 300) => {
+      seedRun(h, { id, sourceId: 'watch', localDate, pace, activeDuration })
       const startMs = at(localDate, '07:00')
       db.insert(schema.sessionRoutes).values(Array.from({ length: 21 }, (_, i) => ({
         id: `${id}-${i}`, sessionId: id, ordinal: i, atMs: startMs + i * 100_000,
@@ -480,7 +480,7 @@ describe('GET /workout/:sessionId', () => {
       }))).run()
     }
     routed('earlier', '2026-09-01', '1800.6s')
-    routed('subject', '2026-09-04', '1700.4s')
+    routed('subject', '2026-09-04', '1700.4s', 300.4)
     const body = (await get(h, token, '/workout/subject')).json()
     expect(body.sameRoute.previous.seconds).toBe(1801)
     expect(body.sameRoute.time.value).toBe(1700)
@@ -492,6 +492,15 @@ describe('GET /workout/:sessionId', () => {
     for (const key of ['km', 'mile', 'fiveK']) {
       expect(Number.isInteger(body.efforts[key].best.value)).toBe(true)
     }
+    // The pace on the route at the pace figure's precision; where each stretch began in whole
+    // metres (the mile's first window starts 190.66 m in); the earlier run's efforts, the bests
+    // this one set itself against, in whole seconds.
+    expect(body.sameRoute.pace.value).toBe(300)
+    expect(body.sameRoute.pace.strip.map((p: { value: number }) => p.value)).toEqual([300, 300])
+    expect(body.efforts.mile.fromMeters).toBe(191)
+    expect(body.efforts.km.fromMeters).toBe(200)
+    expect(body.efforts.km.previousBest).toMatchObject({ sessionId: 'earlier', value: 333 })
+    expect(body.efforts.mile.previousBest.value).toBe(536)
     // The route the times come from stays on the server.
     expect(JSON.stringify(body)).not.toMatch(/latitude|longitude/)
   })

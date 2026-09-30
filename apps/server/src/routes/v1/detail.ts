@@ -128,12 +128,15 @@ function roundMinuteSeries<T extends MinuteSeries>(series: T | null): T | null {
   return series === null ? null : { ...series, points: series.points.map((p) => ({ ...p, value: Number(p.value.toFixed(0)) })) }
 }
 
-/** One fastest effort in whole seconds, its Records best as `best.fastestKmSeconds` is sent. */
+/** One fastest effort in whole seconds and whole metres, its Records bests as `best.fastestKmSeconds` is sent. */
 function roundEffort(effort: NonNullable<WorkoutPage['efforts']>['km']): NonNullable<WorkoutPage['efforts']>['km'] {
   return effort === null ? null : {
     ...effort,
     seconds: Number(effort.seconds.toFixed(0)),
+    // Whole metres along the route, as a distance figure is sent.
+    fromMeters: Number(effort.fromMeters.toFixed(0)),
     best: effort.best === null ? null : { ...effort.best, value: Number(effort.best.value.toFixed(0)) },
+    previousBest: effort.previousBest === null ? null : { ...effort.previousBest, value: Number(effort.previousBest.value.toFixed(0)) },
   }
 }
 
@@ -194,6 +197,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     sameRoute: sameRoute === null ? null : {
       ...sameRoute,
       time: roundWorkoutFigure(sameRoute.time),
+      pace: sameRoute.pace === null ? null : roundWorkoutFigure(sameRoute.pace),
       previous: sameRoute.previous === null ? null : { ...sameRoute.previous, seconds: whole(sameRoute.previous.seconds) },
     },
     efforts: efforts === null ? null : {
