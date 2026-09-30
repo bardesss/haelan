@@ -58,7 +58,8 @@ export function FigureRows({ max, side = false, children }: { max?: 1 | 2 | 3 | 
  * rather than once there and again from a hidden copy.
  *
  * `note` is a plain line under the verdict saying what the figure is or where it came from ("after
- * falling asleep, at 23:01"); it never takes the verdict's tone, since it judges nothing.
+ * falling asleep, at 23:01"; an overview page's day counts, a total's per-day average); it never
+ * takes the verdict's tone, since it judges nothing.
  */
 export function FigureRow({ label, value, verdict, judged, standing, band, mark, strip, note }: {
   label: string, value: string, verdict: string, judged: 'better' | 'worse' | null

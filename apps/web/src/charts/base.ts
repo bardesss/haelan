@@ -24,6 +24,8 @@ export const SYMBOL = {
   nap: 6,
   excluded: 7,
   noData: 3,
+  // The schedule's bedtime-outside-its-usual dot (SleepSchedule), a radius: just wider than the span it sits on.
+  bedOut: 4,
 } as const
 
 export const AXIS_FONT_SIZE = 12

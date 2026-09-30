@@ -11,6 +11,7 @@ import { Dashboard } from '../src/pages/Dashboard.js'
 import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
+import { SLEEP_PERIOD_MONTH } from './fixtures/sleepPeriod.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
 import { Nutrition } from '../src/pages/Nutrition.js'
@@ -206,6 +207,9 @@ function stubFetch(
         reduction: null,
       })
     }
+    // The Sleep overview's one read (M10b): its own synthetic fixture rather than DAYS, the way the
+    // glance below has its own. A month's body answers the week asked for; nothing here reads its range.
+    if (url.includes('/sleep/period')) return json(SLEEP_PERIOD_MONTH)
     if (url.includes('/sleep/nights')) {
       const start = Date.parse('2026-08-12T23:00:00Z')
       return json({
@@ -425,6 +429,14 @@ const IS_CHART_PAGE: Record<string, boolean> = {
   Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
+// Whether a chart page draws change badges. Sleep stopped in M10b: an overview page leads with the
+// period against its usual and says the change against the period before in words, and every
+// first-half/second-half percentage went (sleep-page.test.tsx holds it to drawing none).
+const HAS_DELTAS: Record<string, boolean> = {
+  Activity: true, Recovery: true, Sleep: false, Health: true, Weight: true,
+  Nutrition: false, Notes: false, Settings: false, Account: false,
+}
+
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
 // live. Asserting against the whole page cannot tell a chart's table apart from a card's basis
 // line, which is how "translates absence words" passed while every chart table stayed English.
@@ -542,7 +554,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // So: every card that draws a delta must state a window somewhere inside itself. That is
   // stronger than the count in the way that matters (it checks the sentence is in the same card as
   // the badge, which the page-wide count never did) and weaker only in allowing badges to share.
-  it.skipIf(IS_CHART_PAGE[_name] === false)('states the window every delta compared', () => {
+  it.skipIf(HAS_DELTAS[_name] === false)('states the window every delta compared', () => {
     // Cards do not nest, so splitting on the opening tag gives one chunk per card.
     const cards = html.split('<section class="card').slice(1)
     const WINDOW = /change is the mean of the last (\d+) readings against the first (\d+)/g

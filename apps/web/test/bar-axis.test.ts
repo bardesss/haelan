@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { barLabelInterval, barDateLabels } from '../src/charts/barAxis.js'
+import { barLabelInterval, barDateLabels, periodAxisLabels, stepAxisMax } from '../src/charts/barAxis.js'
 
 describe('the bar chart x label interval', () => {
   // echarts' `axisLabel.interval` is the count of labels to SKIP between drawn ones, so 0 draws
@@ -57,5 +57,46 @@ describe('the bar chart x axis date label', () => {
 
   it('is empty for an empty range', () => {
     expect(barDateLabels([])).toEqual([])
+  })
+})
+
+// Every date from `from` to `to`, inclusive.
+const datesIn = (from: string, to: string): string[] => {
+  const out: string[] = []
+  for (let at = Date.parse(`${from}T00:00:00Z`); at <= Date.parse(`${to}T00:00:00Z`); at += 86_400_000) out.push(new Date(at).toISOString().slice(0, 10))
+  return out
+}
+
+describe("an overview chart's x labels", () => {
+  it("names a week's weekdays, every one", () => {
+    const week = datesIn('2026-09-14', '2026-09-20')
+    expect(periodAxisLabels(week, 'week', 'nl')).toEqual({ data: ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'], shown: Array(7).fill(true) })
+    expect(periodAxisLabels(week, 'week', 'en').data).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+  })
+
+  it("numbers a month's days and prints every seventh from the first", () => {
+    const axis = periodAxisLabels(datesIn('2026-08-01', '2026-08-31'), 'month', 'nl')
+    expect(axis.data.slice(0, 3)).toEqual(['1', '2', '3'])
+    expect(axis.data.filter((_, i) => axis.shown[i])).toEqual(['1', '8', '15', '22', '29'])
+  })
+
+  it('names each month under the first week that starts in it, on 3 months and a year', () => {
+    // A quarter's weeks, the first clipped to the period's first day.
+    const weeks = ['2026-07-01', '2026-07-06', '2026-07-13', '2026-07-20', '2026-07-27', '2026-08-03', '2026-08-10', '2026-08-31', '2026-09-07']
+    const axis = periodAxisLabels(weeks, '3months', 'nl')
+    expect(axis.data.filter((_, i) => axis.shown[i])).toEqual(['jul', 'aug', 'sep'])
+    expect(axis.shown.slice(0, 2)).toEqual([true, false])
+    expect(periodAxisLabels(['2025-01-01', '2025-03-03'], 'year', 'en').data).toEqual(['Jan', 'Mar'])
+  })
+})
+
+describe("a stepped value axis's top", () => {
+  it('ends on the data a quarter step or less past a step, and on the next step otherwise', () => {
+    expect(stepAxisMax(485, 240)).toBe(485)
+    expect(stepAxisMax(540, 240)).toBe(540)
+    expect(stepAxisMax(541, 240)).toBe(720)
+    expect(stepAxisMax(470, 240)).toBe(480)
+    expect(stepAxisMax(100, 240)).toBe(240)
+    expect(stepAxisMax(0, 240)).toBe(240)
   })
 })

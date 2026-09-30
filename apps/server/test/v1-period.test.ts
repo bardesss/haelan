@@ -251,9 +251,10 @@ describe('roundSleepPeriod', () => {
         point('2026-09-01', 400.6, band(401, 401, 401), 'below', 'worse'),
       ],
     })
+    // Signed minutes from the wake day's midnight, as stored (derive/sleep.ts): 23:00 is -60.
     const bedtime = figure({
-      metric: 'sleep_bedtime_minutes', direction: 'neutral', value: 1380.4, total: null, usual: null, standing: null, judged: null,
-      daily: [point('2026-08-31', 1380.4, null, null, null), point('2026-09-01', 1381.6, null, null, null)],
+      metric: 'sleep_bedtime_minutes', direction: 'neutral', value: -59.6, total: null, usual: null, standing: null, judged: null,
+      daily: [point('2026-08-31', -59.6, null, null, null), point('2026-09-01', -58.4, null, null, null)],
     })
     const period: SleepPeriod = {
       period: HEADER, hero,
@@ -264,14 +265,19 @@ describe('roundSleepPeriod', () => {
       stages: { deep: null, light: null, rem: null, awake: null, shares: { deep: 0.20049, light: 0.5, rem: 0.2, awake: 0.09951 } },
       schedule: {
         bedtime, waketime: null, variability: null,
-        sides: { weekday: { bedtimeMinutes: 1380.4, waketimeMinutes: 420.6, nights: 5 }, weekend: null },
+        sides: { weekday: { bedtimeMinutes: -59.6, waketimeMinutes: 420.6, nights: 5 }, weekend: null },
       },
-      balance: { zeroLine: { minutes: 400.4, source: 'baseline' }, values: [0, 0.2], total: 0.2 },
+      balance: {
+        zeroLine: { minutes: 400.4, source: 'baseline' }, values: [0, 0.2], total: 0.2,
+        weekly: [{ from: '2026-08-31', to: '2026-09-01', value: 0.2 }],
+      },
       mornings: [], more: [],
+      // The weekend flags are deliberately not these dates' own: the route passes a date's flag through.
       nights: [
-        { localDate: '2026-09-01', sourceId: 'watch', asleepMinutes: 400.6, bedtimeMinutes: 1381.6, waketimeMinutes: null, standing: 'below', judged: 'worse', good: false },
-        { localDate: '2026-08-31', sourceId: 'watch', asleepMinutes: 400.4, bedtimeMinutes: 1380.4, waketimeMinutes: null, standing: 'above', judged: 'better', good: true },
+        { localDate: '2026-09-01', sourceId: 'watch', asleepMinutes: 400.6, bedtimeMinutes: -58.4, waketimeMinutes: null, standing: 'below', judged: 'worse', good: false, weekend: true },
+        { localDate: '2026-08-31', sourceId: 'watch', asleepMinutes: 400.4, bedtimeMinutes: -59.6, waketimeMinutes: null, standing: 'above', judged: 'better', good: true, weekend: false },
       ],
+      months: [{ month: '2026-09', nights: 1, asleepMinutes: 400.6 }, { month: '2026-08', nights: 1, asleepMinutes: 400.4 }],
     }
     const rounded = roundSleepPeriod(period)
     expect(rounded.high).toEqual({ localDate: '2026-09-01', value: 401, good: false })
@@ -279,14 +285,35 @@ describe('roundSleepPeriod', () => {
     expect(rounded.previous).toMatchObject({ value: 391, delta: 9 })
     expect(rounded.yearEarlier).toMatchObject({ value: null, delta: null })
     expect(rounded.stages.shares).toEqual({ deep: 0.2, light: 0.5, rem: 0.2, awake: 0.1 })
-    expect(rounded.schedule.sides.weekday).toEqual({ bedtimeMinutes: 1380, waketimeMinutes: 421, nights: 5 })
-    expect(rounded.balance).toEqual({ zeroLine: { minutes: 400, source: 'baseline' }, values: [0, 1], total: 1 })
+    expect(rounded.schedule.sides.weekday).toEqual({ bedtimeMinutes: -60, waketimeMinutes: 421, nights: 5 })
+    expect(rounded.balance).toEqual({
+      zeroLine: { minutes: 400, source: 'baseline' }, values: [0, 1], total: 1,
+      weekly: [{ from: '2026-08-31', to: '2026-09-01', value: 1 }],
+    })
     expect(rounded.nights).toEqual([
-      { localDate: '2026-09-01', sourceId: 'watch', asleepMinutes: 401, bedtimeMinutes: 1382, waketimeMinutes: null, standing: 'within', judged: null, good: false },
-      { localDate: '2026-08-31', sourceId: 'watch', asleepMinutes: 400, bedtimeMinutes: 1380, waketimeMinutes: null, standing: 'within', judged: null, good: false },
+      { localDate: '2026-09-01', sourceId: 'watch', asleepMinutes: 401, bedtimeMinutes: -58, waketimeMinutes: null, standing: 'within', judged: null, good: false, weekend: true },
+      { localDate: '2026-08-31', sourceId: 'watch', asleepMinutes: 400, bedtimeMinutes: -60, waketimeMinutes: null, standing: 'within', judged: null, good: false, weekend: false },
     ])
-    expect(rounded.figures[0]!.value).toBe(1380)
+    expect(rounded.months).toEqual([{ month: '2026-09', nights: 1, asleepMinutes: 401 }, { month: '2026-08', nights: 1, asleepMinutes: 400 }])
+    expect(rounded.figures[0]!.value).toBe(-60)
     expect(roundSleepPeriod({ ...period, balance: null }).balance).toBeNull()
+  })
+
+  it("rounds a month's mean of the rounded nights to the hero's precision", () => {
+    const hero = figure({
+      daily: [point('2026-09-01', 400.4, null, null, null), point('2026-09-02', 400.6, null, null, null)],
+    })
+    const empty = { deep: null, light: null, rem: null, awake: null, shares: null }
+    const period: SleepPeriod = {
+      period: HEADER, hero, high: null,
+      previous: { from: '2026-08-24', to: '2026-08-30', value: null, delta: null },
+      yearEarlier: { from: '2025-08-31', to: '2025-09-06', value: null, delta: null },
+      figures: [], stages: empty,
+      schedule: { bedtime: null, waketime: null, variability: null, sides: { weekday: null, weekend: null } },
+      balance: null, mornings: [], more: [], nights: [], months: [],
+    }
+    // 400 and 401 average 400.5, sent whole.
+    expect(roundSleepPeriod(period).months).toEqual([{ month: '2026-09', nights: 2, asleepMinutes: 401 }])
   })
 })
 

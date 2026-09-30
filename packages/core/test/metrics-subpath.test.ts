@@ -52,15 +52,13 @@ describe('the @haelan/core/metrics subpath', () => {
     // workoutComparison.ts makes, into workout-summary.ts; split-heart-rate.test.ts allow-lists
     // the two imports splitHeartRate.ts makes, into workoutSummary.ts and cardioLoad.ts;
     // source-cadence-subpath.test.ts allow-lists an empty list, since that module is arithmetic
-    // over dates and imports nothing at all; and nights-subpath.test.ts holds ./nights, the
+    // over dates and imports nothing at all; nights-subpath.test.ts holds ./nights, the
     // one-night-per-date rule the glance and apps/web share, to the same empty list;
-    // status-panel-subpath.test.ts holds ./status-panel, whose 30-day default rule the server's
-    // panel and the source list's switch share, to that empty list too; and
-    // sleep-balance-subpath.test.ts holds ./sleep-balance, the balance rule the Sleep page and
-    // the night page share, to the same empty list.
+    // and status-panel-subpath.test.ts holds ./status-panel, whose 30-day default rule the server's
+    // panel and the source list's switch share, to that empty list too.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './cardio-load', './coverage-signal', './event-kinds', './metric-data-type', SUBPATH,
-      './nights', './recovery-index', './sleep-balance', './source-cadence', './split-heart-rate', './status-panel', './target-key', './training-load',
+      './nights', './recovery-index', './source-cadence', './split-heart-rate', './status-panel', './target-key', './training-load',
       './workout-comparison', './workout-summary',
     ])
   })

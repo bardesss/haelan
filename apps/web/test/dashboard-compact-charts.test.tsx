@@ -144,6 +144,44 @@ describe('Sparkline dots', () => {
     expect((series.data.at(-1) as { itemStyle: { color: string } }).itemStyle.color).toBe(NEGATIVE)
   })
 
+  // An overview page's hero (PATTERNS.md's "Overview pages"): a good day's dot carries a ring, a
+  // silent hollow circle in the positive colour drawn under the dots so the dot sits inside it.
+  function ringOption(o: { marks?: readonly ('good' | undefined)[], dots?: boolean } = {}) {
+    mount(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
+      dots={o.dots ?? true} pointStandings={standings} pointMarks={o.marks} tableToggle={false} />)
+    return seriesOf(lastOption) as (LineSeries & { silent?: boolean })[]
+  }
+
+  it('rings the days marked good, under the dots, and leaves the dots themselves as they were', () => {
+    const series = ringOption({ marks: [undefined, 'good', undefined, undefined, 'good', undefined, 'good'] })
+    expect(series).toHaveLength(2)
+    const [rings, dots] = series as [LineSeries & { silent?: boolean }, LineSeries]
+    expect(rings.silent).toBe(true)
+    // Day 4 has no value, so nothing to ring.
+    const drawn = rings.data.map((d) => (d === null ? null : (d as { itemStyle: { borderColor: string, color: string } }).itemStyle))
+    expect(drawn.map((style) => style?.borderColor ?? null)).toEqual([null, POSITIVE, null, null, null, null, POSITIVE])
+    expect(drawn[1]!.color).toBe('transparent')
+    // Wider than the dot it rings, the latest's included.
+    const ringSize = (i: number) => (rings.data[i] as { symbolSize: number }).symbolSize
+    const dotSize = (i: number) => (dots.data[i] as { symbolSize: number }).symbolSize
+    expect(ringSize(1)).toBeGreaterThan(dotSize(1))
+    expect(ringSize(6)).toBeGreaterThan(dotSize(6))
+    expect(dots.data.map((d) => (d === null ? null : (d as { value: number }).value))).toEqual(values)
+  })
+
+  it('draws no ring series with no day marked good, or without dots', () => {
+    expect(ringOption({ marks: [undefined, undefined, undefined, undefined, undefined, undefined, undefined] })).toHaveLength(1)
+    expect(ringOption()).toHaveLength(1)
+    expect(ringOption({ marks: ['good', 'good', 'good', 'good', 'good', 'good', 'good'], dots: false })).toHaveLength(1)
+  })
+
+  it('widens the grid for a ringed day at the edge of the strip', () => {
+    ringOption()
+    const plain = (lastOption!.grid as { right: number }).right
+    ringOption({ marks: ['good', undefined, undefined, undefined, undefined, undefined, undefined] })
+    expect((lastOption!.grid as { right: number }).right).toBeGreaterThan(plain)
+  })
+
   it('without dots, hands echarts the plain values it always has', () => {
     const series = dotOption({ dots: false })
     expect(series.data).toEqual(values)

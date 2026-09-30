@@ -4,29 +4,11 @@ import { Card } from '../../../components/Card.js'
 import { BasisContext } from '../../../components/basis.js'
 import { SleepSchedule } from '../../../charts/SleepSchedule.js'
 import { BalanceBars } from '../../../charts/BalanceBars.js'
-import { inWindow, withinSchedule, WIDE_WINDOW } from '../../../charts/schedule.js'
+import { placedUsualBand, withinSchedule, WIDE_WINDOW } from '../../../charts/schedule.js'
 import { formatDuration, formatSignedDuration } from '../../../format.js'
-import type { GlanceBaseline } from '../../../data/useGlance.js'
 import type { NightPageData } from '../../../data/useNightPage.js'
-import { formatFigureRange, formatFigureValue } from '../../detail/figureText.js'
+import { variedLine } from '../../detail/figureText.js'
 import { verdictTone } from '../../../components/FigureRow.js'
-
-/**
- * A usual bed or wake range placed in the schedule's frame: shifted by the whole day `anchorRaw`
- * would be shifted by (inWindow's rule), then kept its own width, so a range straddling midnight
- * stays one span. Null for a thin or absent usual, which draws no band (FigureRow's rule for a bar).
- *
- * The wake range is anchored on the usual bedtime rather than on itself: a wake time is placed as
- * its night's bed plus the night's length (withinSchedule), so it moves by whatever day its bedtime
- * moved by, and a wake range shifted on its own terms would land a day away from the bars it
- * describes. 1440 stands in with no usual bedtime to anchor on, the shift every night that ended
- * this morning takes anyway (napInWindow's same fallback).
- */
-function placedBand(baseline: GlanceBaseline | null, anchorRaw: number | null): { low: number, high: number } | null {
-  if (baseline === null || baseline.thin) return null
-  const shift = anchorRaw === null ? 1440 : inWindow(anchorRaw, WIDE_WINDOW) - anchorRaw
-  return { low: baseline.low + shift, high: baseline.high + shift }
-}
 
 /**
  * The week around this night: its schedule beside its balance, the mockup's "Slaapschema" and
@@ -70,8 +52,8 @@ export function NightWeek({ page }: { page: NightPageData }) {
   const bedBaseline = figures.bedtime.baseline
   const wakeBaseline = figures.waketime.baseline
   const usualBands = useMemo(() => {
-    const bed = placedBand(bedBaseline, bedBaseline?.low ?? null)
-    const wake = placedBand(wakeBaseline, bedBaseline?.center ?? null)
+    const bed = placedUsualBand(bedBaseline, bedBaseline?.low ?? null)
+    const wake = placedUsualBand(wakeBaseline, bedBaseline?.center ?? null)
     return [bed, wake].filter((band): band is { low: number, high: number } => band !== null)
   }, [bedBaseline, wakeBaseline])
 
@@ -83,15 +65,10 @@ export function NightWeek({ page }: { page: NightPageData }) {
   // week · usually ±20–35 min": the usual half only when there is a real one to name.
   const variability = figures.bedtimeVariability
   const variabilityTone = verdictTone(variability.judged, variability.standing)
-  const variabilityValue = formatFigureValue(variability, variability.value, language, t)
-  const variabilityBand = variability.baseline !== null && !variability.baseline.thin ? variability.baseline : null
-  // The usual in the one range format every page prints (formatFigureRange): spaced dash, the unit
-  // once after the high.
-  const variabilityRange = variabilityBand === null ? null
-    : formatFigureRange(variability, variabilityBand.low, variabilityBand.high, language, t)
-  const variabilityLine = variabilityRange === null
-    ? t('sleep.night.week.variability', { value: variabilityValue })
-    : t('sleep.night.week.variabilityUsual', { value: variabilityValue, low: variabilityRange.low, high: variabilityRange.high })
+  // The usual in the one range format every page prints (formatFigureRange, through variedLine):
+  // spaced dash, the unit once after the high.
+  const variabilityLine = variedLine(variability, variability.baseline,
+    { plain: 'sleep.night.week.variability', usual: 'sleep.night.week.variabilityUsual' }, language, t)
 
   const zeroLineValue = formatDuration(balance.zeroLine.minutes, language)
   const target = balance.zeroLine.source === 'target'

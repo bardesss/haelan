@@ -1,3 +1,6 @@
+// @vitest-environment happy-dom
+//
+// happy-dom for the note test, which parses the markup to ask what the note sits inside.
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { I18nProvider } from '../src/i18n/index.js'
@@ -18,6 +21,18 @@ describe('FigureRow', () => {
     expect(render(<FigureRow label="a" value="1" verdict="v" judged="worse" band={BAND} mark={64} />)).toContain('figure-row-verdict worse')
     expect(render(<FigureRow label="a" value="1" verdict="v" judged="better" band={BAND} mark={110} />)).toContain('figure-row-verdict better')
     expect(render(<FigureRow label="a" value="1" verdict="v" judged={null} band={BAND} mark={80} />)).toContain('class="figure-row-verdict"')
+  })
+  // A note (an overview page's day counts) sits under the verdict, plain: only the verdict's own
+  // words take its tone. Without one, the row is exactly what it was.
+  it('prints a note under the verdict, outside its tone, and nothing without one', () => {
+    const host = document.createElement('div')
+    host.innerHTML = render(<FigureRow label="a" value="1" verdict="shorter than usual" note="3 of 30 nights usual" judged="worse" band={BAND} mark={64} />)
+    expect(host.querySelector('.figure-row-verdict.worse')?.textContent).toBe('shorter than usual')
+    const note = host.querySelector('.figure-row-note')
+    expect(note?.textContent).toBe('3 of 30 nights usual')
+    expect(note?.closest('.worse')).toBeNull()
+    expect(note?.className).toBe('figure-row-note')
+    expect(render(<FigureRow label="a" value="1" verdict="v" judged="worse" band={BAND} mark={64} />)).not.toContain('figure-row-note')
   })
   // The dashboard's rule: judged keeps its colour; a figure judged neither way but outside its
   // usual takes the "outside usual" mark (is-out), its words and its mark both.

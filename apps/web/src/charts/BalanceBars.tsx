@@ -7,6 +7,7 @@ import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatLocalDate, formatSignedDuration } from '../format.js'
 import { barLabelInterval, barDateLabels } from './barAxis.js'
+import type { PeriodAxis } from './barAxis.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
 
@@ -40,7 +41,7 @@ const ZERO_LINE_NAME = 'zero'
  */
 export function BalanceBars({
   values, labels, label, unit, formatValue,
-  height = 130, annotations = EMPTY, excluded = EMPTY, onPointClick,
+  height = 130, annotations = EMPTY, excluded = EMPTY, onPointClick, axis,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: see DailyBars' own comment on this same prop for why a sparse pair is not enough
@@ -61,6 +62,8 @@ export function BalanceBars({
   annotations?: { date: string; text: string }[]
   excluded?: string[]
   onPointClick?: (localDate: string) => void
+  /** The x labels an overview page prints (periodAxisLabels), in place of the dates; keep it stable. */
+  axis?: PeriodAxis
 }) {
   const { t, i18n } = useTranslation()
 
@@ -131,9 +134,9 @@ export function BalanceBars({
         // carries is what a reader reads. barDateLabels switches to MM-DD once the range crosses a
         // second calendar month, so a quarter or a year does not repeat the same handful of
         // day-of-month numbers with nothing to tell them apart.
-        data: barDateLabels(labels),
+        data: axis?.data ?? barDateLabels(labels),
         ...base.labelledAxis,
-        axisLabel: { ...base.axisLabel, interval: barLabelInterval(labels.length) },
+        axisLabel: { ...base.axisLabel, interval: axis === undefined ? barLabelInterval(labels.length) : (index: number) => axis.shown[index] === true },
       },
       yAxis: {
         type: 'value' as const,
@@ -203,7 +206,7 @@ export function BalanceBars({
         },
       }],
     }
-  }, [values, labels, marks, extent])
+  }, [values, labels, marks, extent, axis])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
