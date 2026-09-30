@@ -160,7 +160,7 @@ function dayBefore(q: PersonQuery, localDate: string, input: NightPageInput): Ni
     localDate: day,
     steps: pageFigureOf(dailyFigure(dayCtx, { metric: 'steps', agg: 'sum', on: day, partial: false, asOfMs: null }), false),
     activeMinutes: pageFigureOf(activeMinutesFigure(dayCtx), false),
-    workouts: q.sessions({ kind: 'exercise', from: day, to: day }),
+    workouts: q.sessions({ kind: 'exercise', from: day, to: day, fill: true }),
   }
 }
 

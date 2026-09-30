@@ -633,7 +633,8 @@ export function splitTrendOf(splits: readonly WorkoutSplit[], rate: 'pace' | 'sp
 }
 
 export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): WorkoutPage | null {
-  const session = q.sessionById({ sessionId: input.sessionId })
+  // The subject is filled (fillFromSamples.ts); every read of its history below stays as recorded.
+  const session = q.sessionById({ sessionId: input.sessionId, fill: true })
   if (session === null || session.kind !== 'exercise') return null
   const subject = readingOf(session, {
     banister: q.cardioLoad({ sessionId: session.id })?.banister ?? null,

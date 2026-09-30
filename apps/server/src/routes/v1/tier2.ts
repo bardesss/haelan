@@ -199,7 +199,8 @@ export function registerTier2Routes(app: FastifyInstance): void {
     //
     // `latest` is not exposed: a caller wanting one session should say so with `limit=1` against
     // this same list rather than gain a second, narrower parameter to keep in sync with it.
-    const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source, type })
+    // Filled: a list displays its rows (fillFromSamples.ts).
+    const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source, type, fill: true })
     const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
     return sendHashed(reply, request, page)
   })
@@ -224,7 +225,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     // another: the answer's own `id` is then the primary's, not the one in the path. Answered in
     // place rather than redirected, so a link made before the merge keeps working with no second
     // round trip, and everything joined below is read for the merged workout rather than the copy.
-    const session: WorkoutSession | null = personQuery.sessionById({ sessionId })
+    const session: WorkoutSession | null = personQuery.sessionById({ sessionId, fill: true })
     // 404 for an id that names nothing and for one belonging to somebody else alike. readSession
     // is scoped by person, so this handler never learns which of the two it is, and therefore
     // cannot leak the difference: a 403 would confirm the id exists.
@@ -242,7 +243,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     // the list route would be the worst version of this mistake, not a milder one.
     return sendHashed(reply, request, {
       ...session,
-      cardioLoad: personQuery.cardioLoad({ sessionId }),
+      cardioLoad: personQuery.cardioLoad({ sessionId, fill: true }),
       // Never null here: `session` above already resolved this exact id, and workoutSplits cannot
       // answer null for an id sessionById just answered a row for.
       ...personQuery.workoutSplits({ sessionId })!,

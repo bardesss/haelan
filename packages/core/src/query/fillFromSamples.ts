@@ -16,6 +16,10 @@ import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
  * time and the figures read from heart rate samples. The samples the phone sent beside it already
  * hold most of those figures, so the merged read fills them in.
  *
+ * **Only on request.** The merged readers call this only for a read that displays its rows
+ * (`fill`); history and baseline reads never do, so an estimate never enters a usual, a comparison
+ * or a record.
+ *
  * **Only a bare row.** A row whose merged attrs carry any metricsSummary has a Google payload
  * behind it and is answered untouched: a Google value always beats a filled one, and filling
  * field by field into Google's summary would mix a device's figures with estimates. This runs
@@ -35,10 +39,14 @@ import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
  *
  * Edwards load and the hard-zone minutes follow from the zones where they are read.
  *
- * **Marked.** `attrs.filledFromSamples` is true and `attrs.filled` lists the metricsSummary keys
- * that came from samples, so the page can say the watch's figures are still coming and records can
- * refuse an estimate (sessionRecords.ts). A bare row with no samples at all is returned unmarked:
- * nothing on it came from samples.
+ * **Marked.** Every bare row gets `attrs.awaitingSummary: true`, filled or not (no samples, or a
+ * span too long to read), so the page can say the watch's figures are still coming. Where
+ * something was filled, `attrs.filledFromSamples` is true and `attrs.filled` lists the
+ * metricsSummary keys that came from samples, so a figure can say where it came from and records
+ * can refuse an estimate (sessionRecords.ts).
+ *
+ * **Over `[startMs, endMs)`.** A sample is keyed on the start of its interval (a heart rate minute
+ * on the minute's start), so one starting at the workout's end belongs to the time after it.
  *
  * **Cost.** One intraday read per metric for each bare row (a second for a metric the workout's own
  * source did not record), and none for a merged one. Bare rows are only the most recent phone
@@ -51,12 +59,18 @@ export function fillFromSamples(db: DbOrTx, input: { personId: string, session: 
   if (typeof attrs !== 'object' || attrs === null || Array.isArray(attrs)) return session
   const record = attrs as Record<string, unknown>
   if (record.metricsSummary !== null && record.metricsSummary !== undefined) return session
-  const { startMs, endMs } = session
+  const awaiting = { ...record, awaitingSummary: true }
+  const unfilled = { ...session, attrs: awaiting }
+  const { startMs } = session
+  // Half open: readIntradayWindow includes its end, so read to the last millisecond before the
+  // workout's. A zero-length or reversed row reads an empty window and so fills nothing, which is
+  // also what keeps the elapsed-time division below off a zero.
+  const endMs = session.endMs - 1
   // The intraday window's own cap: a span longer than any workout is not one to sum samples over.
-  if (!(endMs > startMs) || endMs - startMs > INTRADAY_WINDOW_MAX_MS) return session
+  if (session.endMs - startMs > INTRADAY_WINDOW_MAX_MS) return unfilled
 
   const summary: Record<string, unknown> = {}
-  const sum = (metric: string) => sumOverSession(db, { personId, metric, session })
+  const sum = (metric: string) => sumOverSession(db, { personId, metric, startMs, endMs, sourceId: session.sourceId })
   const steps = sum('steps')
   if (steps !== null) summary.steps = steps
   const distance = sum('distance')
@@ -66,7 +80,8 @@ export function fillFromSamples(db: DbOrTx, input: { personId: string, session: 
 
   const { minutes } = readSessionHeartRateMinutes(db, { personId, startMs, endMs, sessionSourceId: session.sourceId })
   if (minutes.length > 0) {
-    summary.averageHeartRateBeatsPerMinute = minutes.reduce((total, m) => total + m.bpm, 0) / minutes.length
+    // Whole bpm, the provider's own shape for it.
+    summary.averageHeartRateBeatsPerMinute = Math.round(minutes.reduce((total, m) => total + m.bpm, 0) / minutes.length)
     const bounds = readWorkoutZoneBounds(db, { personId, session })
     if (bounds !== null) {
       const zones = zoneSecondsFromMinutes(minutes, bounds)
@@ -81,14 +96,14 @@ export function fillFromSamples(db: DbOrTx, input: { personId: string, session: 
   // Over elapsed time: moving time is unknown without pauses, and stays null.
   const rate = rateOf(exerciseCategory(typeof record.exerciseType === 'string' ? record.exerciseType : null))
   if (distance !== null && distance > 0) {
-    const elapsedSeconds = (endMs - startMs) / 1000
+    const elapsedSeconds = (session.endMs - startMs) / 1000
     if (rate === 'pace') summary.averagePaceSecondsPerMeter = elapsedSeconds / (distance / 1000)
     if (rate === 'speed') summary.averageSpeedMillimetersPerSecond = distance / elapsedSeconds
   }
 
   const filled = Object.keys(summary)
-  if (filled.length === 0) return session
-  const filledAttrs = { ...record, metricsSummary: summary, filledFromSamples: true, filled }
+  if (filled.length === 0) return unfilled
+  const filledAttrs = { ...awaiting, metricsSummary: summary, filledFromSamples: true, filled }
   return { ...session, attrs: filledAttrs, rate: sessionRateOf(filledAttrs) }
 }
 
@@ -98,13 +113,15 @@ export function fillFromSamples(db: DbOrTx, input: { personId: string, session: 
  * dropped. The workout's own source first; else the single other source with the most readings.
  * Null when nothing was recorded.
  */
-function sumOverSession(db: DbOrTx, input: { personId: string, metric: string, session: WorkoutSession }): number | null {
-  const { personId, metric, session } = input
+function sumOverSession(db: DbOrTx, input: {
+  personId: string, metric: string, startMs: number, endMs: number, sourceId: string
+}): number | null {
+  const { personId, metric, startMs, endMs } = input
   const read = (sourceId?: string) => readIntradayWindow(db, {
-    personId, metric, startMs: session.startMs, endMs: session.endMs, points: NO_THINNING, sourceId,
+    personId, metric, startMs, endMs, points: NO_THINNING, sourceId,
   }).points.filter((p) => !p.excluded && p.mean !== null)
 
-  let points = read(session.sourceId)
+  let points = read(input.sourceId)
   if (points.length === 0) {
     const bySource = new Map<string, typeof points>()
     for (const p of read()) bySource.set(p.sourceId, [...(bySource.get(p.sourceId) ?? []), p])

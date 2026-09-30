@@ -711,6 +711,10 @@ export class PersonQuery {
    * `type` and `last` exist for one question an agent asks constantly and the list form answers
    * badly: the last run. Both are validated here rather than in the reader, because this is the
    * boundary an HTTP query string and a model's tool arguments arrive at.
+   *
+   * `fill` is for a read that displays its rows: a merged workout still waiting for Google's copy is
+   * then filled from its own samples (fillFromSamples.ts). A history or baseline read leaves it out,
+   * so an estimate never enters a usual, a comparison or a record. Only the merged read fills.
    */
   sessions(input: {
     kind: 'sleep' | 'exercise'
@@ -719,6 +723,7 @@ export class PersonQuery {
     sourceId?: string
     type?: string
     last?: number
+    fill?: boolean
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
@@ -744,6 +749,7 @@ export class PersonQuery {
         type: input.type,
         last: input.last,
         rule: mergeRuleFor(this.#db, this.#personId),
+        fill: input.fill ?? false,
       })
     }
     return readSessions(this.#db, {
@@ -768,13 +774,16 @@ export class PersonQuery {
    * answers for it, even when the id names an alternate (mergedWorkoutFor says why old links need
    * that). cardioLoad, workoutSplits and workoutRoute below all start here, so each of them reads
    * the merged workout too rather than one copy of it.
+   *
+   * `fill` as on `sessions`: the workout page's subject and the by-id route pass it; the readers
+   * below do not.
    */
-  sessionById(input: { sessionId: string }): WorkoutSession | null {
+  sessionById(input: { sessionId: string, fill?: boolean }): WorkoutSession | null {
     if (input.sessionId.trim() === '') throw new ConfigError('sessionId is required')
     const session = readSession(this.#db, { personId: this.#personId, sessionId: input.sessionId })
     if (session === null || session.kind !== 'exercise') return session
     return mergedWorkoutFor(this.#db, {
-      personId: this.#personId, session, rule: mergeRuleFor(this.#db, this.#personId),
+      personId: this.#personId, session, rule: mergeRuleFor(this.#db, this.#personId), fill: input.fill ?? false,
     })
   }
 
@@ -783,8 +792,11 @@ export class PersonQuery {
    *
    * Null for a session id naming nothing, which is the same answer `sessionById` gives and for the
    * same reason: this reader cannot tell an unknown id from somebody else's, and must not.
+   *
+   * `fill` as on `sessionById`, for the by-id route, so the Edwards load it carries beside a
+   * workout still waiting for Google's copy reads the same filled zones the workout does.
    */
-  cardioLoad(input: { sessionId: string }): CardioLoad | null {
+  cardioLoad(input: { sessionId: string, fill?: boolean }): CardioLoad | null {
     const session = this.sessionById(input)
     if (session === null) return null
     return readWorkoutCardioLoad(this.#db, { personId: this.#personId, session })

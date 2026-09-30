@@ -217,7 +217,8 @@ export function readActivityPeriod(q: PersonQuery, input: ActivityPeriodInput): 
 
   // Today's workouts are listed, though no figure counts today.
   const listTo = minDate(today, bounds.to)
-  const workouts = q.sessions({ kind: 'exercise', from: bounds.from, to: listTo, sourceId: source })
+  // The period's own rows are displayed, so filled; the earlier blocks below only count types.
+  const workouts = q.sessions({ kind: 'exercise', from: bounds.from, to: listTo, sourceId: source, fill: true })
     .map(rowOf).sort((a, b) => b.startMs - a.startMs)
   const counted = workouts.filter((w) => !w.excluded)
   const { blocks } = earlierBlocks(range, bounds)

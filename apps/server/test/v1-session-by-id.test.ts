@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { insertSample, schema } from '@haelan/core'
+import { DERIVATION_VERSION, insertSample, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -52,6 +52,34 @@ function seedOfKind(h: Harness, input: { id: string, kind: 'sleep' | 'exercise' 
 }
 
 describe('GET /sessions/:sessionId', () => {
+  it('fills a workout still waiting for the Google copy from its samples, the load beside it and the list alike', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    // A phone-only treadmill run, as the companion stores it: every key, no metricsSummary.
+    seedWorkout(harness, { id: 'bare', sourceId: 'phone', attrs: { exerciseType: 'TREADMILL', metricsSummary: null } })
+    const startMs = Date.parse('2026-08-18T09:00:00Z') - OFFSET_MINUTES * 60_000
+    for (let i = 0; i < 60; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(db, { personId: 'p1', sourceId: 'phone', metric: 'heart_rate', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET_MINUTES, agg, value: 150 })
+      }
+      insertSample(db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET_MINUTES, value: 100 })
+    }
+    for (const [zone, value] of [['light', 113], ['moderate', 137], ['vigorous', 162], ['peak', 187]] as const) {
+      db.insert(schema.daily).values({
+        personId: 'p1', localDate: '2026-08-18', metric: `heart_rate_zone_${zone}_max_bpm`, agg: 'last', source: 'merged', value,
+        coverage: 1, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+
+    const session = (await get(harness, token, '/sessions/bare')).json()
+    expect(session.attrs).toMatchObject({ awaitingSummary: true, filledFromSamples: true, metricsSummary: { steps: 6000, averageHeartRateBeatsPerMinute: 150 } })
+    // Sixty minutes at 150 bpm, all vigorous: 3 * 60.
+    expect(session.cardioLoad.edwards).toBe(180)
+
+    const list = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-18&to=2026-08-18')).json()
+    expect(list.items[0].attrs).toMatchObject({ awaitingSummary: true, metricsSummary: { steps: 6000 } })
+  })
+
   it('answers the session itself, not a one-item list', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedWorkout(harness, {

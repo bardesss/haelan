@@ -43,7 +43,10 @@ import type { WorkoutSession } from './sessions.ts'
  *
  * **Filling.** A workout with no metricsSummary left after merging is a phone copy whose Google copy
  * has not arrived; the two readers below fill it from its own samples (fillFromSamples.ts), after
- * the merge, so a Google value always wins. mergeWorkouts itself stays pure and unfilled.
+ * the merge, so a Google value always wins, and only when the caller asks (`fill`): a read that
+ * displays its rows does, a history or baseline read does not, so an estimate never becomes part of
+ * a usual, a comparison or a record, and a workout Google never receives is not refilled on every
+ * history read. mergeWorkouts itself stays pure and unfilled.
  */
 
 /** What a merged read needs besides the rows: the ranking and the overlap threshold. */
@@ -167,6 +170,8 @@ export function readMergedWorkouts(db: DbOrTx, input: {
   type?: string
   last?: number
   rule: MergeRule
+  /** Fill a workout still waiting for Google's copy from its samples; only for rows a read displays. */
+  fill?: boolean
 }): WorkoutSession[] {
   const raw = readSessions(db, {
     personId: input.personId,
@@ -180,6 +185,7 @@ export function readMergedWorkouts(db: DbOrTx, input: {
     ? inRange
     : inRange.filter((w) => workoutSummary(w.attrs).exerciseType === input.type)
   const answered = input.last === undefined ? matched : matched.slice(-input.last)
+  if (input.fill !== true) return answered
   // Last, so only a workout this read answers pays for its samples (fillFromSamples.ts).
   return answered.map((session) => fillFromSamples(db, { personId: input.personId, session }))
 }
@@ -197,6 +203,8 @@ export function mergedWorkoutFor(db: DbOrTx, input: {
   personId: string
   session: WorkoutSession
   rule: MergeRule
+  /** As readMergedWorkouts' `fill`. */
+  fill?: boolean
 }): WorkoutSession {
   const { session } = input
   if (session.kind !== 'exercise') return session
@@ -208,5 +216,5 @@ export function mergedWorkoutFor(db: DbOrTx, input: {
   })
   const merged = mergeWorkouts(around, input.rule)
   const found = merged.find((w) => w.id === session.id || w.alternateIds.includes(session.id)) ?? session
-  return fillFromSamples(db, { personId: input.personId, session: found })
+  return input.fill === true ? fillFromSamples(db, { personId: input.personId, session: found }) : found
 }

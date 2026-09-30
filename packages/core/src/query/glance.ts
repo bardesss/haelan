@@ -548,7 +548,7 @@ export function readDay(ctx: GlanceContext): GlanceDay {
     heartRate: { points: heart.points, asOfMs: heartAsOf, offsetMinutes: heart.offsetMinutes, staleSources: staleFeeding(ctx, heartFeeding) },
     // Filed under the date a workout ended on, the same key the Activity list groups by, so a run
     // that crosses midnight is today's once it is over rather than yesterday's.
-    workouts: ctx.q.sessions({ kind: 'exercise', from: ctx.today, to: ctx.today }),
+    workouts: ctx.q.sessions({ kind: 'exercise', from: ctx.today, to: ctx.today, fill: true }),
   }
 }
 
