@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { ConfigError, kilometreSplitsOf, standingOf, usualOf } from '@haelan/core'
 import type { PersonQuery, WorkoutFigure, WorkoutFigureKey, WorkoutPage } from '@haelan/core'
 import { workoutDetail } from '@haelan/core/workout-summary'
+import { exerciseCategory, rateOf } from '@haelan/core/exercise-category'
 
 /**
  * `explain`'s `workout` chain: what stands out about one exercise session against this person's own
@@ -56,7 +57,8 @@ export const WORKOUT_EVIDENCE = z.object({
     earlierKilometres: z.number(),
   }).nullable().describe(
     'The last full kilometre split against the session\'s own earlier full kilometres. Null without '
-    + 'one; `standing` null with fewer than three earlier ones.',
+    + 'one, and for a category that reads no pace (a ride reads in speed, a swim per 100 m); `standing` '
+    + 'null with fewer than three earlier ones.',
   ),
   secondHalfFasterBySecondsPerKm: z.number().nullable().describe(
     'How much faster the second half of the splits went than the first, in s/km (negative: slower).',
@@ -79,7 +81,7 @@ interface Context {
 type Link = (c: Context) => string | null
 
 const NAMES: Partial<Record<WorkoutFigureKey, string>> = {
-  pace: 'pace', speed: 'speed', distance: 'distance', movingTime: 'moving time', elapsed: 'time',
+  pace: 'pace', speed: 'speed', swimPace: 'pace per 100 m', distance: 'distance', movingTime: 'moving time', elapsed: 'time',
   averageHeartRate: 'average heart rate', highestHeartRate: 'highest heart rate', cardioLoad: 'cardio load',
   banister: 'cardio load', calories: 'calories', steps: 'steps', activeZoneMinutes: 'active zone minutes',
   elevationGain: 'elevation gain', hardZoneMinutes: 'minutes in the vigorous and peak zones', cadence: 'cadence',
@@ -99,6 +101,7 @@ function clock(seconds: number): string {
 function show(unit: string, precision: number, value: number): string {
   switch (unit) {
     case 'seconds_per_km': return `${clock(value)}/km`
+    case 'seconds_per_100m': return `${clock(value)}/100m`
     case 'meters_per_second': return `${(value * 3.6).toFixed(1)} km/h`
     case 'meters': return value >= 1000 ? `${(value / 1000).toFixed(2)} km` : `${value.toFixed(precision)} m`
     case 'seconds': return clock(value)
@@ -108,12 +111,17 @@ function show(unit: string, precision: number, value: number): string {
   }
 }
 
+// The units a rate is sent in (the page's FIGURES): a time per distance, or a speed.
+const RATE_UNITS: ReadonlySet<string> = new Set(['seconds_per_km', 'seconds_per_100m', 'meters_per_second'])
+
 // Which way a figure sits, in words that describe it rather than grade it: a lower pace is faster, a
 // longer distance is longer, and nothing is "better" - the judged field the page carries is left out.
-function outside(key: WorkoutFigureKey, standing: 'above' | 'below'): string {
+// A rate reads faster or slower by the direction its figure carries: a time per distance runs down
+// (a pace, a swim's pace per 100 m), a speed up.
+function outside(figure: WorkoutFigure, standing: 'above' | 'below'): string {
   const up = standing === 'above'
-  if (key === 'pace') return up ? 'slower' : 'faster'
-  if (key === 'speed') return up ? 'faster' : 'slower'
+  const key = figure.key
+  if (RATE_UNITS.has(figure.unit)) return up === (figure.direction === 'up') ? 'faster' : 'slower'
   if (key === 'distance' || key === 'movingTime' || key === 'elapsed') return up ? 'longer' : 'shorter'
   return up ? 'higher' : 'lower'
 }
@@ -123,7 +131,7 @@ const typeWords = (type: string | null): string => (type === null ? 'workout' : 
 function figureSentence(c: Context, figure: WorkoutFigure): string {
   const range = `${show(figure.unit, figure.precision, figure.baseline!.low)} to ${show(figure.unit, figure.precision, figure.baseline!.high)}`
   return `This ${typeWords(c.evidence.exerciseType)} session on ${c.evidence.localDate}: ${NAMES[figure.key] ?? figure.key} `
-    + `${show(figure.unit, figure.precision, figure.value!)}, ${outside(figure.key, figure.standing as 'above' | 'below')} than `
+    + `${show(figure.unit, figure.precision, figure.value!)}, ${outside(figure, figure.standing as 'above' | 'below')} than `
     + `the usual ${range} over its ${c.evidence.earlierSessions} earlier sessions of the type.`
 }
 
@@ -238,7 +246,9 @@ function readPage(q: PersonQuery, c: Context, localDate: string, nowMs: number, 
   }]))
   const peak = workoutDetail(attrs).zones?.peakSeconds ?? null
   e.peakMinutes = peak === null ? null : Math.round(peak / 60)
-  e.lastKilometre = lastKilometreOf(attrs)
+  // Only a category that reads a pace narrates a kilometre as the time it took: a ride reads in
+  // speed everywhere, so its kilometre splits are not a clock time here either.
+  e.lastKilometre = rateOf(exerciseCategory(page.exerciseType)) === 'pace' ? lastKilometreOf(attrs) : null
   // A ride's trend comes in speed, every other category's in pace (the page's own split trend, by the
   // category's rate); each lands in its own field so neither is read in the other's unit.
   const trend = page.splitTrend
