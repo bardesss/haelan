@@ -1,36 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useCallback, useState } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { navigate, withQuery } from '../router.js'
 import { Card } from '../components/Card.js'
-import { Loading } from '../components/Loading.js'
-import { ErrorState } from '../components/ErrorState.js'
 import { EmptyState } from '../components/EmptyState.js'
-import { ControlRow } from '../components/ControlRow.js'
-import { PageHeader } from '../components/PageHeader.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
-import { usePageControls } from '../controls/usePageControls.js'
-import { ALL_SOURCES, resolveSource } from '../controls/source.js'
-import { useSession } from '../auth/session.js'
 import { useActivityPeriod } from '../data/usePeriodRead.js'
 import type { PeriodFigure, PeriodStripPoint } from '../data/periodTypes.js'
-import { useSourceNames } from '../data/useSourceNames.js'
-import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { exportPathFor } from '../data/pageShell.js'
 import { formatLocalDateRange } from '../format.js'
 import { formatLongDate } from './dashboard/glanceText.js'
-import { formatFigureValue } from './detail/figureText.js'
-import { pointVerdictWords, standoutLines, thisPeriod } from './detail/periodText.js'
-import { verdictTone } from '../charts/base.js'
+import { standoutLines, thisPeriod } from './detail/periodText.js'
 import { PeriodHero } from './period/PeriodHero.js'
 import { PeriodFigureRows } from './period/PeriodFigureRows.js'
 import { PointPanel } from './period/PointPanel.js'
-import type { PointPanelRow } from './period/PointPanel.js'
 import { LIST_VISIBLE } from './period/ExpandableList.js'
-import { periodLine } from './period/periodLine.js'
+import { pointRow, usePeriodShell, usePeriodSource } from './period/usePeriodPage.js'
 import { useActivityLabel, useActivityName } from './activity/period/labels.js'
 import { ActivityHeatmapCard } from './activity/period/ActivityHeatmapCard.js'
 import { ActivityIntensity, hasIntensity } from './activity/period/ActivityIntensity.js'
@@ -51,7 +37,6 @@ const EXPORT_METRICS = [
 // Compare with last year reads steps alone: the hero's strip is the one line it overlays.
 const STEPS = 'steps'
 const LAST_YEAR_GROUPS: readonly MetricGroup[] = [{ agg: 'sum', metrics: [STEPS] }]
-const NO_DATES: string[] = Object.freeze([]) as never[]
 // The figures a day's panel lists under its steps, the brief's: active minutes and distance.
 const PANEL_METRICS: readonly string[] = ['active_minutes', 'distance']
 const WORKOUT_TIME = 'workout_minutes'
@@ -68,65 +53,27 @@ const dayHref = (localDate: string) => withQuery('/', { day: localDate })
  * /series is asked only for the comparison with last year, while it is on.
  *
  * The Day tab is no period: it opens the dashboard on that day. The dashboard reads no source, so
- * none is carried.
- *
- * The source is resolved against the sources this person has before anything is asked (the rule
- * every page keeps): the server answers an unknown one with a 400, and a stale link should read as
- * all sources, not as an error.
+ * none is carried. The header, the source, the comparison with last year, the list's expansion and
+ * the states before there is a period to draw are the overview pages' shared shell
+ * (usePeriodSource, usePeriodShell).
  */
 export function Activity() {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const session = useSession()
-  const controls = usePageControls()
-  const { sources: named, nameOf } = useSourceNames()
-  const sources = useMemo(() => named.map((source) => source.id), [named])
-  const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
-  const resolved = { ...controls, source }
-  const range = { from: controls.from, to: controls.to, source }
-  const isDay = controls.tab === 'day'
-
-  const dayTarget = isDay ? dayHref(controls.anchor) : null
-  useEffect(() => {
-    if (dayTarget !== null) navigate(dayTarget, { replace: true })
-  }, [dayTarget])
-
+  const page = usePeriodSource(dayHref)
+  const { controls, source } = page
   const query = useActivityPeriod({ range: controls.tab, anchor: controls.anchor, source })
-  const data = query.data
+  const { lastYear, periodKey, expanded, toggle, header, alone, gate } = usePeriodShell({
+    title: t('activity.title'), page, query, exportMetrics: EXPORT_METRICS, lastYearGroups: LAST_YEAR_GROUPS,
+  })
 
   const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
-
-  const heroDates = useMemo(() => data?.hero.daily.map((point) => point.from) ?? NO_DATES, [data])
-  // Ended at historicalTo: a month six days old is set against the same six days a year earlier.
-  // Asked on Week and Month only: on 3 months and Year the strip is weekly and draws no overlay.
-  const overlaid = controls.tab === 'week' || controls.tab === 'month'
-  const lastYear = useLastYear(LAST_YEAR_GROUPS, { ...range, to: controls.historicalTo }, heroDates, controls.compareYear === true && overlaid)
-
-  // The list's expansion belongs to the period it was opened in: a new period opens collapsed.
-  const periodKey = `${controls.tab}:${controls.from}:${source}`
-  const [expandedFor, setExpandedFor] = useState<string | null>(null)
-  const expanded = expandedFor === periodKey
-  const toggle = useCallback(() => setExpandedFor((open) => (open === periodKey ? null : periodKey)), [periodKey])
-
   const labelOf = useActivityLabel()
   const nameOfMetric = useActivityName()
-  const personId = session.data?.personId
-  const exportPath = personId !== undefined ? exportPathFor(personId, EXPORT_METRICS, 'sum', range) : undefined
-  const sourceName = source === ALL_SOURCES ? t('controlRow.sourceAll') : nameOf(source)
   const openDay = useCallback((localDate: string) => navigate(dayHref(localDate)), [])
 
-  const header = (
-    <>
-      <PageHeader title={t('activity.title')} line={periodLine(controls.from, controls.to, sourceName, language)} />
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} yearCompare />
-    </>
-  )
-  // A detail page's root (PATTERNS.md's page shell), for its card-label gap and width, in every state.
-  const alone = (body: ReactNode) => <div className="detail-page">{header}<div className="grid"><Card span={12}>{body}</Card></div></div>
-
-  if (isDay) return <div className="detail-page">{header}</div>
-  if (query.isError) return alone(<ErrorState onRetry={() => void query.refetch()} error={query.error} />)
-  if (data === undefined) return alone(<Loading />)
+  const { data } = query
+  if (gate !== null || data === undefined) return gate
   if (data.hero.days === 0 && data.workouts.length === 0) {
     return alone(<EmptyState title={t('activity.sessions.emptyPeriodTitle')} detail={t('activity.sessions.emptyPeriodDetail')} />)
   }
@@ -135,11 +82,7 @@ export function Activity() {
   const weekly = hero.weekly !== null
   const period = thisPeriod(data.period.range, t)
 
-  // A point's row: its figure's value and that point's own verdict, in its tone (the server's).
-  const rowOf = (figure: PeriodFigure, point: PeriodStripPoint): PointPanelRow => ({
-    label: nameOfMetric(figure.metric), value: formatFigureValue(figure, point.value, language, t),
-    verdict: pointVerdictWords(point.standing, figure.unit, t), tone: verdictTone(point.judged, point.standing),
-  })
+  const rowOf = (figure: PeriodFigure, point: PeriodStripPoint) => pointRow(figure, point, nameOfMetric(figure.metric), language, t)
 
   // A day's panel: its steps, active minutes and distance from the figures' own daily points, each
   // with that day's verdict, the way to the day on the dashboard, and the day-metric exclude and

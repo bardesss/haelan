@@ -1,38 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
-import { navigate } from '../router.js'
 import { Card } from '../components/Card.js'
-import { Loading } from '../components/Loading.js'
-import { ErrorState } from '../components/ErrorState.js'
 import { EmptyState } from '../components/EmptyState.js'
-import { ControlRow } from '../components/ControlRow.js'
-import { PageHeader } from '../components/PageHeader.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
-import { usePageControls } from '../controls/usePageControls.js'
-import { ALL_SOURCES, resolveSource } from '../controls/source.js'
-import { useSession } from '../auth/session.js'
 import { useSleepPeriod } from '../data/useSleepPeriod.js'
 import type { PeriodFigure, PeriodStripPoint } from '../data/periodTypes.js'
-import { useSourceNames } from '../data/useSourceNames.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { annotationsFor, overridesByMetric } from '../data/chartAnnotations.js'
-import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { exportPathFor } from '../data/pageShell.js'
 import { formatClock, formatLocalDateRange } from '../format.js'
-import { formatFigureValue } from './detail/figureText.js'
 import { formatLongDate } from './dashboard/glanceText.js'
-import { pointVerdictWords, standoutLines, thisPeriod } from './detail/periodText.js'
-import { verdictTone } from '../charts/base.js'
+import { standoutLines, thisPeriod } from './detail/periodText.js'
 import { PeriodHero } from './period/PeriodHero.js'
 import { PeriodFigureRows } from './period/PeriodFigureRows.js'
 import { PointPanel } from './period/PointPanel.js'
-import type { PointPanelRow } from './period/PointPanel.js'
 import { LIST_VISIBLE } from './period/ExpandableList.js'
-import { periodLine } from './period/periodLine.js'
+import { pointRow, usePeriodShell, usePeriodSource } from './period/usePeriodPage.js'
 import { useNightHref } from './sleep/NightRow.js'
 import { useSleepLabel } from './sleep/period/labels.js'
 import { SleepStages } from './sleep/period/SleepStages.js'
@@ -51,7 +36,6 @@ const EXPORT_METRICS = [
 // Compare with last year reads time asleep alone: the hero's strip is the one line it overlays.
 const LAST_YEAR_GROUPS: readonly MetricGroup[] = [{ agg: 'sum', metrics: ['sleep_asleep_minutes'] }]
 const ASLEEP = 'sleep_asleep_minutes'
-const NO_DATES: string[] = Object.freeze([]) as never[]
 
 // The figures a night's panel lists under its time asleep, the mockup's: efficiency, deep sleep, bedtime.
 const PANEL_METRICS: readonly string[] = ['sleep_efficiency', 'sleep_deep_minutes', 'sleep_bedtime_minutes']
@@ -64,33 +48,21 @@ const PANEL_METRICS: readonly string[] = ['sleep_efficiency', 'sleep_deep_minute
  * pages"). /sleep/nights is asked only on Week and Month, for the naps on the schedule chart, and
  * /series only for the comparison with last year, while it is on.
  *
- * The Day tab is no period: it opens that date's night page, keeping the reader's source.
- *
- * The source is resolved against the sources this person has before anything is asked (the rule
- * every page keeps): the server answers an unknown one with a 400, and a stale link should read as
- * all sources, not as an error.
+ * The Day tab is no period: it opens that date's night page, keeping the reader's source. The
+ * header, the source, the comparison with last year, the list's expansion and the states before
+ * there is a period to draw are the overview pages' shared shell (usePeriodSource, usePeriodShell).
  */
 export function Sleep() {
   const { t, i18n } = useTranslation()
   const language = i18n.language
-  const session = useSession()
-  const controls = usePageControls()
-  const { sources: named, nameOf } = useSourceNames()
-  const sources = useMemo(() => named.map((source) => source.id), [named])
-  const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
-  const resolved = { ...controls, source }
-  const range = { from: controls.from, to: controls.to, source }
-  const isDay = controls.tab === 'day'
-
   // The night page for a date, keeping the source the reader named in the URL (useOpenNight's rule).
   const nightHref = useNightHref()
-  const dayTarget = isDay ? nightHref(controls.anchor) : null
-  useEffect(() => {
-    if (dayTarget !== null) navigate(dayTarget, { replace: true })
-  }, [dayTarget])
-
+  const page = usePeriodSource(nightHref)
+  const { controls, source } = page
   const query = useSleepPeriod({ range: controls.tab, anchor: controls.anchor, source })
-  const data = query.data
+  const { range, heroDates, lastYear, periodKey, expanded, toggle, header, alone, gate } = usePeriodShell({
+    title: t('sleep.title'), page, query, exportMetrics: EXPORT_METRICS, lastYearGroups: LAST_YEAR_GROUPS,
+  })
 
   const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
   const overridesQuery = useAnnotations(range)
@@ -98,35 +70,10 @@ export function Sleep() {
     () => annotationsFor(overridesByMetric(overridesQuery.overrides.data?.items ?? []), ASLEEP),
     [overridesQuery.overrides.data],
   )
-
-  const heroDates = useMemo(() => data?.hero.daily.map((point) => point.from) ?? NO_DATES, [data])
-  // Ended at historicalTo: a month six days old is set against the same six days a year earlier.
-  // Asked on Week and Month only: on 3 months and Year the strip is weekly and draws no overlay.
-  const overlaid = controls.tab === 'week' || controls.tab === 'month'
-  const lastYear = useLastYear(LAST_YEAR_GROUPS, { ...range, to: controls.historicalTo }, heroDates, controls.compareYear === true && overlaid)
-
-  // The list's expansion belongs to the period it was opened in: a new period opens collapsed.
-  const periodKey = `${controls.tab}:${controls.from}:${source}`
-  const [expandedFor, setExpandedFor] = useState<string | null>(null)
-  const expanded = expandedFor === periodKey
-
   const labelOf = useSleepLabel()
-  const personId = session.data?.personId
-  const exportPath = personId !== undefined ? exportPathFor(personId, EXPORT_METRICS, 'sum', range) : undefined
-  const sourceName = source === ALL_SOURCES ? t('controlRow.sourceAll') : nameOf(source)
 
-  const header = (
-    <>
-      <PageHeader title={t('sleep.title')} line={periodLine(controls.from, controls.to, sourceName, language)} />
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} yearCompare />
-    </>
-  )
-  // A detail page's root (PATTERNS.md's page shell), for its card-label gap and width, in every state.
-  const alone = (body: ReactNode) => <div className="detail-page">{header}<div className="grid"><Card span={12}>{body}</Card></div></div>
-
-  if (isDay) return <div className="detail-page">{header}</div>
-  if (query.isError) return alone(<ErrorState onRetry={() => void query.refetch()} error={query.error} />)
-  if (data === undefined) return alone(<Loading />)
+  const { data } = query
+  if (gate !== null || data === undefined) return gate
   if (data.hero.days === 0) return alone(<EmptyState title={t('sleep.nights.emptyTitle')} detail={t('sleep.nights.emptyDetail')} />)
 
   const { hero } = data
@@ -135,11 +82,7 @@ export function Sleep() {
   const period = thisPeriod(data.period.range, t)
   const nightOn = new Map(data.nights.map((night) => [night.localDate, night]))
 
-  // A point's row: its figure's value and that point's own verdict, in its tone (the server's).
-  const rowOf = (figure: PeriodFigure, point: PeriodStripPoint): PointPanelRow => ({
-    label: labelOf(figure.metric), value: formatFigureValue(figure, point.value, language, t),
-    verdict: pointVerdictWords(point.standing, figure.unit, t), tone: verdictTone(point.judged, point.standing),
-  })
+  const rowOf = (figure: PeriodFigure, point: PeriodStripPoint) => pointRow(figure, point, labelOf(figure.metric), language, t)
 
   // A day's panel, the approved mockup's: the night's bed and wake under its date, then its time
   // asleep, efficiency, deep sleep and bedtime, each with that night's verdict, the way to its page,
@@ -205,8 +148,8 @@ export function Sleep() {
             nightsRange={{ from: data.period.from, to: data.period.to, source }} />
         )}
         {listShown && (
-          <SleepNightsList nights={data.nights} months={data.months} range={data.period.range} longest={data.high?.localDate ?? null} span={nightsSpan} expanded={expanded}
-            onToggle={() => setExpandedFor(expanded ? null : periodKey)} />
+          <SleepNightsList nights={data.nights} months={data.months} range={data.period.range} longest={data.high?.localDate ?? null}
+            span={nightsSpan} expanded={expanded} onToggle={toggle} />
         )}
         {balanceShown && data.balance !== null && (
           <SleepBalanceCard balance={data.balance} range={data.period.range} dates={heroDates} nights={hero.days} span={morningSpan}
