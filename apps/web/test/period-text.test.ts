@@ -303,7 +303,8 @@ describe('periodValueLine', () => {
   })
 
   it("prints a per-period figure's total, with nothing under it", () => {
-    const naps = figure({ metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 3.4, total: 3 })
+    // Three naps so far, a pace of 4.2 over the period: the value printed is the three.
+    const naps = figure({ metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 4.2, total: 3 })
     expect(periodValueLine(naps, 'en', t)).toEqual({ value: '3', under: null })
   })
 
