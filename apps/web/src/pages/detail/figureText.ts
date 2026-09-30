@@ -109,9 +109,11 @@ function figureValueText(
     // The period reads' stored distances (METRICS: distance and altitude_gain in millimetres): a climb
     // in whole metres, a distance in kilometres, to one decimal below a hundred ("6.1 km", "41.8
     // km") and whole above ("183 km", "2,084 km"), the approved Activity mockup's. Converted units,
-    // so their own precision rather than the stored unit's.
+    // so their own precision rather than the stored unit's. Each by name: height is millimetres too,
+    // and is neither, so any other reads as the plain number the default gives.
     case 'millimeters': {
       if (figure.metric === 'altitude_gain') return `${formatNumber(value / 1000, 0, language, absent)} ${t('activity.units.meters')}`
+      if (figure.metric !== 'distance') return formatNumber(value, figure.precision, language, absent)
       const km = value / 1_000_000
       return `${formatNumber(km, Math.abs(km) < 100 ? 1 : 0, language, absent)} ${t('activity.units.km')}`
     }

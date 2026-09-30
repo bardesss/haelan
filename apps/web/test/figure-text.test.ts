@@ -221,6 +221,10 @@ describe('a stored millimetre distance', () => {
   it('reads a climb in whole metres', () => {
     expect(formatFigureValue(figure({ metric: 'altitude_gain', unit: 'millimeters' }), 420_400, 'en', t)).toBe('420 m')
   })
+
+  it('reads any other millimetre figure as its plain number, never as a distance', () => {
+    expect(formatFigureValue(figure({ metric: 'height', unit: 'millimeters' }), 1_780_000, 'en', t)).toBe('1,780,000')
+  })
 })
 
 describe('a usual that is a single value', () => {
