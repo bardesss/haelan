@@ -580,7 +580,10 @@ describe('GET /workout/:sessionId', () => {
     harness = await withServer()
     harness.clock.nowMs = NOW_MS
     const token = await harness.signIn()
-    seedSource(harness, 'phone')
+    // A companion upload's source, as describe() files it (ingest.ts): only a phone promises figures.
+    harness.app.haelan.instance.db.insert(schema.sources).values({
+      id: 'phone', personId: 'p1', externalId: 'HEALTH_CONNECT:com.haelan.android', displayName: 'phone', kind: 'app', createdAtMs: 0,
+    }).run()
     seedRun(harness, { id: 'summarised', sourceId: 'phone', localDate: '2026-09-03', pace: 300 })
     const startMs = at('2026-09-04', '07:00')
     const db = harness.app.haelan.instance.db

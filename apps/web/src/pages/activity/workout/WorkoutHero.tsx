@@ -121,6 +121,14 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   // them could be reached. The one already open is this session, not this day (useOpensDay's
   // `current`), so a same-day sibling still opens.
   const opens = useOpensDay(page.sessionId, onOpenWorkout, 'workout')
+  // A filled rate's own dot, among rates the watch took over moving time, carries the same words
+  // as the line under the verdict: the strip's annotation for its date, which marks the dot and
+  // its row in the screen reader's table alike. Memoised for the reason the strip is.
+  const filledWords = hero === undefined ? undefined : filledNote(page, hero.key, t)
+  const annotations = useMemo(
+    () => (filledWords === undefined ? undefined : [{ date: page.localDate, text: filledWords }]),
+    [filledWords, page.localDate],
+  )
   if (hero === undefined || hero.value === null) return null
   const label = t(`activity.workout.page.figures.${hero.key}`)
   const verdict = verdictLine(hero, language, t)
@@ -137,7 +145,7 @@ export function WorkoutHero({ page, onOpenWorkout }: {
     : t(ranked.better === ranked.of ? 'activity.workout.comparison.rankAll' : 'activity.workout.comparison.rank', { better: ranked.better, of: ranked.of })
   // A rate the phone's samples filled says so under the verdict, and the previous line, which sets
   // it beside a rate the watch took over moving time, says which of the two this one is.
-  const filled = filledNote(page, hero.key, t)
+  const filled = filledWords
   const previousWords = previousLine(page, hero, language, t)
   const previous = previousWords === null || filled === undefined || !(hero.key === 'pace' || hero.key === 'speed')
     ? previousWords : `${previousWords} · ${t('activity.workout.page.filled.previous')}`
@@ -176,7 +184,8 @@ export function WorkoutHero({ page, onOpenWorkout }: {
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric={hero.metric}
                 formatValue={formatValue} baseline={band} bands={strip.bands} bandLabels={bandLabels}
                 pointStandings={strip.pointStandings} pointJudged={strip.pointJudged}
-                height={64} dots tableToggle={false} inverse={inverse} pointIds={strip.ids} {...opens} />
+                height={64} dots tableToggle={false} inverse={inverse} pointIds={strip.ids} {...opens}
+                {...(annotations !== undefined && { annotations })} />
             </BasisContext.Provider>
             <p id={captionId} className="dash-caption">{caption}</p>
           </div>

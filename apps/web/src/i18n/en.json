@@ -633,7 +633,7 @@
         "filled": {
           "figure": "from your readings",
           "rate": "from your readings, over the elapsed time",
-          "previous": "this one over the elapsed time"
+          "previous": "this one measured over the elapsed time"
         },
         "secondsPer100m": "{{value}} s/100 m"
       }

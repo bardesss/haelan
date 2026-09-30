@@ -1,12 +1,11 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import { Card } from '../../../components/Card.js'
 import { useSourceNames } from '../../../data/useSourceNames.js'
 import { exerciseTypeLabel } from '../../../data/exerciseTypeLabel.js'
-import { useRunSync, useStatusPanel } from '../../../data/useStatusPanel.js'
-import { ApiError } from '../../../api/client.js'
+import { syncButtonState, syncRefusal, useRunSync, useStatusSnapshot } from '../../../data/useStatusPanel.js'
 import type { WorkoutSessionDetail } from '../../../data/useSessions.js'
 import { gpsSentenceKey } from './workoutText.js'
 
@@ -96,9 +95,12 @@ export function WorkoutAbout({ session, detail, exerciseType, pending = false, o
 
 /**
  * "Your watch's figures arrive with the next sync", and a button that starts one now: the status
- * panel's own sync (useRunSync), worded as the panel words it. The button says "Syncing…" while a
- * run goes and "Synced just now" through the server's minute of cooldown after one, a 429 included,
- * both disabled; a run already going (409) or any other refusal gets the panel's line beside it.
+ * panel's own sync (useRunSync), by the panel's own rules (syncButtonState, syncRefusal). The
+ * button says "Syncing…" while a run goes and "Synced just now" through the server's minute of
+ * cooldown after one, both disabled; a run already going (409) or any other refusal gets the
+ * panel's line beside it. The status is the shell's (useStatusSnapshot), read with no poll of its
+ * own. A refusal belongs to the moment it was said: a run starting or finishing forgets it, so a
+ * "A sync is already running." never outlives that run.
  *
  * Nothing here waits for the run: a finished run refreshes this person's data, this page with it
  * (useRunSync for a run over before the status is re-read, the shell's useRefreshOnSyncFinish for
@@ -106,20 +108,28 @@ export function WorkoutAbout({ session, detail, exerciseType, pending = false, o
  */
 function PendingSync(): ReactNode {
   const { t } = useTranslation()
-  const status = useStatusPanel()
+  const status = useStatusSnapshot()
   const runSync = useRunSync()
   const sync = status.data?.sync ?? null
-  const refusal = runSync.error instanceof ApiError ? runSync.error.status : null
-  const running = runSync.isPending || sync?.running === true
-  const coolingDown = !running && (refusal === 429 || (sync?.cooldownRemainingMs ?? 0) > 0)
-  const label = running ? t('status.sync.running') : coolingDown ? t('status.sync.cooldown') : t('status.sync.run')
-  // As StatusControl reads a refusal: 429 is said by the button, 409 is a run already going.
-  const outcome = !runSync.isError || refusal === 429 ? '' : refusal === 409 ? t('status.sync.alreadyRunning') : t('status.sync.didNotStart')
+  const { label, disabled } = syncButtonState(sync, runSync.isPending)
+  const refusal = syncRefusal(runSync)
+  const outcome = refusal === null ? '' : t(`status.sync.${refusal}`)
+  // Forget the press's result when a run starts or one finishes. Keyed on what the status says,
+  // so the first read is a baseline and never a change.
+  const resetRun = runSync.reset
+  const running = sync?.running === true
+  const finishedAt = sync?.lastFinishedAtMs ?? null
+  const seen = useRef<{ running: boolean, finishedAt: number | null } | null>(null)
+  useEffect(() => {
+    const was = seen.current
+    seen.current = { running, finishedAt }
+    if (was !== null && ((running && !was.running) || finishedAt !== was.finishedAt)) resetRun()
+  }, [running, finishedAt, resetRun])
   return (
     <>
       {t('activity.workout.page.about.pending')}{' '}
-      <button type="button" className="button workout-sync-now" disabled={running || coolingDown} onClick={() => runSync.mutate()}>
-        {label}
+      <button type="button" className="button workout-sync-now" disabled={disabled} onClick={() => runSync.mutate()}>
+        {t(`status.sync.${label}`)}
       </button>
       {outcome !== '' && ' '}
       <span className="workout-sync-outcome" role="status">{outcome}</span>

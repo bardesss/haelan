@@ -633,7 +633,7 @@
         "filled": {
           "figure": "uit je metingen",
           "rate": "uit je metingen, over de verstreken tijd",
-          "previous": "deze over de verstreken tijd"
+          "previous": "deze gemeten over de verstreken tijd"
         },
         "secondsPer100m": "{{value}} s/100 m"
       }

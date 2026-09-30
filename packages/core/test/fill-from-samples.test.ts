@@ -52,8 +52,13 @@ let t: TestDatabase
 beforeEach(() => {
   t = createTestDatabase()
   seedPerson(t.db, 'p1')
+  // The phone's externalId as describe() builds it for a companion upload (ingest.ts), Google's as
+  // it builds one for a watch: only the first is a phone source.
+  const externalIds: Record<string, string> = {
+    google: 'FITBIT:Pixel Watch 3', phone: 'HEALTH_CONNECT:com.haelan.android', scale: 'HEALTH_CONNECT:com.scale.app',
+  }
   for (const id of ['google', 'phone', 'scale']) {
-    t.db.insert(sources).values({ id, personId: 'p1', externalId: id, displayName: id, kind: 'app', createdAtMs: 0 }).run()
+    t.db.insert(sources).values({ id, personId: 'p1', externalId: externalIds[id]!, displayName: id, kind: 'app', createdAtMs: 0 }).run()
   }
   t.db.insert(sourcePriority).values([
     { personId: 'p1', metric: 'exercise', sourceId: 'google', rank: 0 },
@@ -205,6 +210,18 @@ describe('fillFromSamples, through the merged reads', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
     const run = q().sessionById({ sessionId: 'phone-run', fill: true })!
     expect(run.attrs).toEqual({ ...PHONE_TREADMILL, awaitingSummary: true })
+  })
+
+  // A Google exercise can arrive without a summary (one logged by hand, say); no copy of it is on
+  // its way, so it never promises figures, though its samples still fill what they can.
+  it('never marks a bare row from a source that is not a phone as awaiting its summary', () => {
+    insertSession({ id: 'google-log', sourceId: 'google', attrs: PHONE_TREADMILL })
+    const bare = q().sessionById({ sessionId: 'google-log', fill: true })!
+    expect(bare.attrs).toEqual(PHONE_TREADMILL)
+    seedSamples('google')
+    const filled = q().sessionById({ sessionId: 'google-log', fill: true })!
+    expect(filled.attrs).toMatchObject({ filledFromSamples: true })
+    expect(filled.attrs).not.toHaveProperty('awaitingSummary')
   })
 
   it('counts nothing that starts at the end of the workout: the window is [start, end)', () => {
@@ -420,6 +437,23 @@ describe('the workout page says what is still coming and what was filled', () =>
     expect(summarised.pending).toBe(false)
     expect(summarised.filled).toEqual([])
     expect(summarised.rank).not.toBeNull()
+  })
+
+  it('is not pending for a phone run merged with its Google copy, opened by either id', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    insertSession({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_TREADMILL })
+    seedSamples()
+    for (const id of ['phone-run', 'google-run']) {
+      const merged = page(id)
+      expect(merged.sessionId).toBe('google-run')
+      expect(merged.pending).toBe(false)
+      expect(merged.filled).toEqual([])
+    }
+  })
+
+  it('is not pending for a bare Google exercise, which has no copy on its way', () => {
+    insertSession({ id: 'google-log', sourceId: 'google', attrs: PHONE_TREADMILL })
+    expect(page('google-log').pending).toBe(false)
   })
 
   it('marks a bare page with no samples at all pending, with nothing filled', () => {

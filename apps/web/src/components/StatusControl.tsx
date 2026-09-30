@@ -4,12 +4,11 @@ import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { StatusPanel } from './StatusPanel.js'
 import type { SyncOutcome } from './StatusPanel.js'
-import { ApiError } from '../api/client.js'
 import { useSession } from '../auth/session.js'
 import { useRoute, scrollToHashTarget } from '../router.js'
 import { localToday } from '../controls/range.js'
 import { useIsPhone } from '../ui/breakpoint.js'
-import { useStatusPanel, useRunSync, useRefreshOnSyncFinish } from '../data/useStatusPanel.js'
+import { useStatusPanel, useRunSync, useRefreshOnSyncFinish, syncRefusal } from '../data/useStatusPanel.js'
 import { placementFor } from '../ui/placement.js'
 import type { Placement } from '../ui/placement.js'
 
@@ -74,15 +73,9 @@ export function StatusControl() {
   const [watched, setWatched] = useState(false)
   useEffect(() => { if (running && open) setWatched(true) }, [running, open])
 
-  const outcome: SyncOutcome | null = runSync.error instanceof ApiError
-    // 429 is the server's minute of cooldown after a run, which means a run just finished: the
-    // true answer is "Synced just now", not a failure - and the button already says exactly that,
-    // disabled, once useRunSync's onError has re-read the status the 429 proved stale. A result
-    // line saying it as well put the same words in the panel twice, one under the other, so a
-    // 429 has no line at all and the button carries the cooldown alone. 409 is a run already
-    // going, or the instance shutting down; either way nothing new was started by this press.
-    ? runSync.error.status === 429 ? null : runSync.error.status === 409 ? 'alreadyRunning' : 'didNotStart'
-    : runSync.isError ? 'didNotStart'
+  // A refused press first, worded by the rule the workout page's sync button shares (syncRefusal:
+  // a 429 has no line, since the button says it); then the run this panel watched.
+  const outcome: SyncOutcome | null = runSync.isError ? syncRefusal(runSync)
       : watched && sync !== null && !sync.running && sync.lastFinishedAtMs !== null
         ? (sync.lastFailed ?? 0) > 0 ? 'failed' : sync.lastRowsWritten === 0 ? 'nothingNew' : 'newData'
         : null

@@ -6,6 +6,19 @@ import { sessionRateOf } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { zoneSecondsFromMinutes } from '../api/cardioLoad.ts'
 import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
+import { getSource } from '../store/sources.ts'
+
+/**
+ * The start of every Health Connect source's externalId: sources.ts's describe() joins the
+ * payload's platform first, and the companion's uploads name HEALTH_CONNECT (ingest.ts).
+ */
+export const PHONE_SOURCE_PREFIX = 'HEALTH_CONNECT:'
+
+// Answers: whether the row's source is a phone's, the only kind whose bare workout has a Google
+// copy still to come.
+function fromPhone(db: DbOrTx, personId: string, sourceId: string): boolean {
+  return getSource(db, personId, sourceId)?.externalId.startsWith(PHONE_SOURCE_PREFIX) === true
+}
 
 /**
  * A phone-only workout, filled from its own samples until Google's copy arrives.
@@ -39,8 +52,11 @@ import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
  *
  * Edwards load and the hard-zone minutes follow from the zones where they are read.
  *
- * **Marked.** Every bare row gets `attrs.awaitingSummary: true`, filled or not (no samples, or a
- * span too long to read), so the page can say the watch's figures are still coming. Where
+ * **Marked.** Every bare row from a phone (a Health Connect source: PHONE_SOURCE_PREFIX) gets
+ * `attrs.awaitingSummary: true`, filled or not (no samples, or a span too long to read), so the
+ * page can say the watch's figures are still coming. A bare row from any other source, a Google
+ * exercise logged without a summary, has no copy on its way and is never marked: it would
+ * promise figures forever. Where
  * something was filled, `attrs.filledFromSamples` is true and `attrs.filled` lists the
  * metricsSummary keys that came from samples, so a figure can say where it came from and records
  * can refuse an estimate (sessionRecords.ts).
@@ -59,7 +75,7 @@ export function fillFromSamples(db: DbOrTx, input: { personId: string, session: 
   if (typeof attrs !== 'object' || attrs === null || Array.isArray(attrs)) return session
   const record = attrs as Record<string, unknown>
   if (record.metricsSummary !== null && record.metricsSummary !== undefined) return session
-  const awaiting = { ...record, awaitingSummary: true }
+  const awaiting = fromPhone(db, personId, session.sourceId) ? { ...record, awaitingSummary: true } : record
   const unfilled = { ...session, attrs: awaiting }
   const { startMs } = session
   // Half open: readIntradayWindow includes its end, so read to the last millisecond before the

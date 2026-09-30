@@ -12,6 +12,7 @@ import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { sourceNamesKey } from '../src/data/useSourceNames.js'
+import { statusKey } from '../src/data/useStatusPanel.js'
 import { workoutPageKey } from '../src/data/useWorkoutPage.js'
 import type { WorkoutPageData } from '../src/data/useWorkoutPage.js'
 import type { WorkoutSessionDetail } from '../src/data/useSessions.js'
@@ -92,6 +93,8 @@ let fetched: string[] = []
 // The answer to the sync button's POST /api/sync/run, and the status the page reads beside it.
 let syncAnswer: Answer = { status: 202, body: { started: true } }
 let statusAnswer: unknown = {}
+// The last mount's client, so a test can stand in for the shell's status poll.
+let mounted: QueryClient | null = null
 
 function stubFetch(page: Answer): void {
   const original = globalThis.fetch
@@ -112,7 +115,7 @@ function stubFetch(page: Answer): void {
   }) as typeof fetch
   restoreFetch = () => {
     globalThis.fetch = original; tracePoints = []; traceReduction = null; fetched = []
-    syncAnswer = { status: 202, body: { started: true } }; statusAnswer = {}
+    syncAnswer = { status: 202, body: { started: true } }; statusAnswer = {}; mounted = null
   }
 }
 
@@ -122,6 +125,7 @@ async function mount(
 ): Promise<HTMLDivElement> {
   stubFetch(answer)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  mounted = client
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(sourceNamesKey('p1'), { items: [] })
   if (seedSession) client.setQueryData(queryKeys.resource('p1', 'session', { sessionId: WORKOUT_ID }), session)
@@ -1802,12 +1806,23 @@ describe('a workout still waiting for the watch\'s figures', () => {
     await pumpUntil(() => syncButton(host) === null, 'the summarised page to drop the note')
   })
 
-  it('says it synced just now when the server refuses the press for its cooldown', async () => {
+  // A 429 is the server's minute after a run. The button says so for as long as the status reports
+  // the cooldown, and comes back once it reports the minute over, never held by the refusal itself.
+  it('says it synced just now through the cooldown a refused press re-reads, and comes back after it', async () => {
     syncAnswer = { status: 429, body: { error: { kind: 'transient', code: 'cooldown', message: 'wait' } } }
+    // A status already past its last run's minute when the page opened, so no run starts or ends
+    // below and nothing but the cooldown itself can bring the button back.
+    statusAnswer = { sync: { running: false, lastFinishedAtMs: 1_000, lastRowsWritten: 0, lastFailed: 0, cooldownRemainingMs: 0 } }
     const host = await mount(pending())
+    statusAnswer = { sync: { running: false, lastFinishedAtMs: 1_000, lastRowsWritten: 0, lastFailed: 0, cooldownRemainingMs: 40_000 } }
     await press(host, () => syncButton(host)!.textContent === 'Synced just now', 'the button to say it synced just now')
     expect(syncButton(host)!.disabled).toBe(true)
     expect(text(about(host), '.workout-sync-outcome')).toBe('')
+    // The shell's poll lands once the minute is over.
+    statusAnswer = { sync: { running: false, lastFinishedAtMs: 1_000, lastRowsWritten: 0, lastFailed: 0, cooldownRemainingMs: 0 } }
+    await act(async () => { await mounted!.invalidateQueries({ queryKey: statusKey('p1') }) })
+    await pumpUntil(() => syncButton(host)!.textContent === 'Sync now', 'the button to come back')
+    expect(syncButton(host)!.disabled).toBe(false)
   })
 
   it('says a sync is already running when the server answers busy', async () => {
@@ -1816,6 +1831,10 @@ describe('a workout still waiting for the watch\'s figures', () => {
     await press(host, () => text(about(host), '.workout-sync-outcome') !== '', 'the refusal to be worded')
     expect(text(about(host), '.workout-sync-outcome')).toBe('A sync is already running.')
     expect(syncButton(host)!.textContent).toBe('Sync now')
+    // That run ending forgets the refusal: the line does not outlive the run it spoke of.
+    statusAnswer = { sync: { running: false, lastFinishedAtMs: Date.now(), lastRowsWritten: 0, lastFailed: 0, cooldownRemainingMs: 0 } }
+    await act(async () => { await mounted!.invalidateQueries({ queryKey: statusKey('p1') }) })
+    await pumpUntil(() => text(about(host), '.workout-sync-outcome') === '', 'the refusal to be forgotten')
   })
 
   it('says the sync did not start on any other refusal', async () => {
@@ -1829,7 +1848,10 @@ describe('a workout still waiting for the watch\'s figures', () => {
     const host = await mount(pending(['pace', 'distance', 'averageHeartRate', 'cardioLoad', 'calories', 'steps', 'hardZoneMinutes']), fullSession())
     // The hero: its own line under the verdict, and the previous line says which of the two it is.
     expect(text(host, '.workout-hero-filled')).toBe('from your readings, over the elapsed time')
-    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1 · this one over the elapsed time')
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1 · this one measured over the elapsed time')
+    // The strip's own dot for it, and its row in the screen reader's table, say the same.
+    const heroRow = [...host.querySelectorAll('.detail-hero tr')].find((row) => row.textContent!.includes('from your readings'))
+    expect(heroRow?.textContent).toContain('from your readings, over the elapsed time')
     // The four figures under it, each filled one with the note and the one the watch gave without.
     const notes = [...host.querySelectorAll('.detail-minis .figure-row')].map((row) => [
       text(row, '.figure-row-label'), text(row, '.figure-row-note') ?? null,
@@ -1864,7 +1886,7 @@ describe('a workout still waiting for the watch\'s figures', () => {
     expect(text(card, '.detail-about-line'))
       .toBe('Opgenomen door watch · de cijfers van je horloge komen met de volgende synchronisatie Nu synchroniseren · uitsluiten of een notitie toevoegen')
     expect(text(host, '.workout-hero-filled')).toBe('uit je metingen, over de verstreken tijd')
-    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km sneller dan de vorige, dinsdag 1 september · deze over de verstreken tijd')
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km sneller dan de vorige, dinsdag 1 september · deze gemeten over de verstreken tijd')
     expect(text(host.querySelector('.detail-minis .figure-row')!, '.figure-row-note')).toBe('uit je metingen')
   })
 })

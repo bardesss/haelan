@@ -18,7 +18,8 @@ async function get(h: Harness, token: string, path: string, personId = 'p1') {
 
 function seedSource(h: Harness, personId: string, sourceId: string): void {
   h.app.haelan.instance.db.insert(schema.sources).values({
-    id: sourceId, personId, externalId: sourceId, displayName: sourceId,
+    // The phone's externalId as describe() builds it for a companion upload: a phone source.
+    id: sourceId, personId, externalId: sourceId === 'phone' ? 'HEALTH_CONNECT:com.haelan.android' : sourceId, displayName: sourceId,
     kind: 'device', createdAtMs: 0,
   }).onConflictDoNothing().run()
 }
