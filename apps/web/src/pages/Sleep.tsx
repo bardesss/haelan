@@ -186,7 +186,7 @@ export function Sleep() {
             nightsRange={{ from: data.period.from, to: data.period.to, source }} />
         )}
         {listShown && (
-          <SleepNightsList nights={data.nights} range={data.period.range} longest={data.high?.localDate ?? null} span={nightsSpan} expanded={expanded}
+          <SleepNightsList nights={data.nights} months={data.months} range={data.period.range} longest={data.high?.localDate ?? null} span={nightsSpan} expanded={expanded}
             onToggle={() => setExpandedFor(expanded ? null : periodKey)} />
         )}
         {balanceShown && data.balance !== null && (

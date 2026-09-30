@@ -73,6 +73,19 @@ describe('ExpandableList', () => {
     expect(button?.getAttribute('aria-expanded')).toBe('true')
   })
 
+  it('groups the first items too when asked, each heading with its aside', () => {
+    const host = render({
+      expanded: false, groupOf: (night) => night.slice(0, 7), groupCollapsed: true,
+      groupAside: (month) => (month === '2026-09' ? 'ten nights' : null),
+    })
+    const headings = [...host.querySelectorAll('.period-list-heading')]
+    expect(headings.map((h) => h.querySelector('.period-list-name')?.textContent)).toEqual(['2026-09'])
+    expect(headings[0]!.querySelector('.period-list-aside')?.textContent).toBe('ten nights')
+    expect(nights(host)).toEqual(NIGHTS.slice(0, 7))
+    const plain = render({ expanded: false, groupOf: (night) => night.slice(0, 7) })
+    expect(plain.querySelector('.period-list-heading')).toBeNull()
+  })
+
   it('names a group by its key without a label', () => {
     const host = render({ expanded: true, groupOf: (night) => night.slice(0, 7) })
     expect([...host.querySelectorAll('h3')].map((heading) => heading.textContent)).toEqual(['2026-09', '2026-08'])

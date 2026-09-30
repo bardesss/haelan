@@ -355,7 +355,7 @@ describe('the Sleep page: sections', () => {
     expect(cardFor('Nights')!.querySelector('.period-list-heading')).toBeNull()
   })
 
-  it('draws weekly points on a year, and groups the expanded list by month', async () => {
+  it('draws weekly points on a year, and groups the list by month', async () => {
     await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR })
     expect(sparklines.get(HERO)!.values).toHaveLength(SLEEP_PERIOD_YEAR.hero.weekly!.length)
     expect([...cardFor(HERO)!.querySelectorAll('.period-hero-captions .dash-caption')].map((caption) => caption.textContent))
@@ -373,11 +373,27 @@ describe('the Sleep page: sections', () => {
       .toEqual(['Bedtime', 'Wake time'])
     expect(cardFor('Sleep schedule')!.querySelector('.schedule-sentences p')?.textContent).toMatch(/^Bedtime varied ±\d+\smin this year/)
     expect(sparklines.get('Bedtime')!.values).toHaveLength(SLEEP_PERIOD_YEAR.schedule.bedtime!.weekly!.length)
-    expect(cardFor('Nights')!.querySelector('.period-list-heading')).toBeNull()
+    // Collapsed, the seven newest nights are December's, under its header and the server's summary.
+    const headings = () => [...cardFor('Nights')!.querySelectorAll('.period-list-heading')]
+      .map((h) => [h.querySelector('.period-list-name')?.textContent, h.querySelector('.period-list-aside')?.textContent ?? null])
+    expect(headings()).toEqual([['December', `28 nights · avg. 7h${NB}00m`]])
     act(() => { cardFor('Nights')!.querySelector<HTMLButtonElement>('.period-list-toggle')!.click() })
-    const headings = [...cardFor('Nights')!.querySelectorAll('.period-list-heading')].map((h) => h.textContent)
-    expect(headings[0]).toBe('December 2025')
-    expect(headings).toHaveLength(12)
+    expect(headings()[0]).toEqual(['December', `28 nights · avg. 7h${NB}00m`])
+    expect(headings()).toHaveLength(12)
+    expect(headings()[11]).toEqual(['January', `29 nights · avg. 7h${NB}01m`])
+  })
+
+  it('heads each month in Dutch, and with no average says only how many nights', async () => {
+    await renderAt(YEAR_URL, { period: SLEEP_PERIOD_YEAR }, 'nl')
+    const heading = () => cardFor('Nachten')!.querySelector('.period-list-heading')!
+    expect(heading().querySelector('.period-list-name')?.textContent).toBe('december')
+    expect(heading().querySelector('.period-list-aside')?.textContent).toBe(`28 nachten · gem. 7u${NB}00m`)
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(YEAR_URL, { period: { ...SLEEP_PERIOD_YEAR, months: [{ month: '2025-12', nights: 1, asleepMinutes: null }] } }, 'nl')
+    expect(heading().querySelector('.period-list-aside')?.textContent).toBe('1 nacht')
+    act(() => { root?.unmount() }); root = createRoot(container!)
+    await renderAt(YEAR_URL, { period: { ...SLEEP_PERIOD_YEAR, months: [] } }, 'nl')
+    expect(heading().querySelector('.period-list-aside')).toBeNull()
   })
 
   it('writes the hour as "u" in Dutch, and the verdict in the catalogue\'s words', async () => {

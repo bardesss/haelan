@@ -732,7 +732,15 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .period-list { display: flex; flex-direction: column; align-items: flex-start; }
 .period-list-items { align-self: stretch; min-width: 0; }
 .period-list-expanded { columns: 3 18rem; column-gap: var(--space-4); }
-.period-list-heading { margin: var(--space-3) 0 var(--space-1); break-after: avoid; }
+/* A group's heading, the year mockup's month header: its name bold on the left, a quiet summary on
+   the right, a rule under both. */
+.period-list-heading {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 var(--space-3);
+  margin: var(--space-3) 0 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-sm); font-weight: inherit; color: var(--text-primary); break-after: avoid;
+}
+.period-list-name { font-weight: var(--weight-bold); }
+.period-list-aside { font-size: var(--font-size-xs); color: var(--text-secondary); }
 .period-list-group:first-child .period-list-heading { margin-top: 0; }
 .period-list-toggle { margin-top: var(--space-3); }
 @media (max-width: 620px) {

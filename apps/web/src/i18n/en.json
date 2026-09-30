@@ -737,7 +737,11 @@
       "caption": "newest first · the dot is that night's verdict",
       "longest": "your longest",
       "showAll_one": "Show all {{count}} night",
-      "showAll_other": "Show all {{count}} nights"
+      "showAll_other": "Show all {{count}} nights",
+      "monthSummary_one": "1 night · avg. {{average}}",
+      "monthSummary_other": "{{count}} nights · avg. {{average}}",
+      "monthNights_one": "1 night",
+      "monthNights_other": "{{count}} nights"
     },
     "night": {
       "when": "Bedtime {{bed}} · wake time {{wake}} · {{source}}",

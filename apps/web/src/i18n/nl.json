@@ -737,7 +737,11 @@
       "caption": "de nieuwste eerst · de stip is de verdict van die nacht",
       "longest": "je langste",
       "showAll_one": "Toon alle {{count}} nacht",
-      "showAll_other": "Toon alle {{count}} nachten"
+      "showAll_other": "Toon alle {{count}} nachten",
+      "monthSummary_one": "1 nacht · gem. {{average}}",
+      "monthSummary_other": "{{count}} nachten · gem. {{average}}",
+      "monthNights_one": "1 nacht",
+      "monthNights_other": "{{count}} nachten"
     },
     "night": {
       "when": "Naar bed {{bed}} · wakker geworden {{wake}} · {{source}}",
