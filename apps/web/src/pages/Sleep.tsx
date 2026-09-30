@@ -22,8 +22,9 @@ import { annotationsFor, overridesByMetric } from '../data/chartAnnotations.js'
 import { useLastYear } from '../data/lastYear.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { exportPathFor } from '../data/pageShell.js'
-import { formatClock, formatLocalDateRange, formatLongWeekdayDate } from '../format.js'
+import { formatClock, formatLocalDateRange } from '../format.js'
 import { formatFigureValue } from './detail/figureText.js'
+import { formatLongDate } from './dashboard/glanceText.js'
 import { pointVerdictWords, standoutLines, thisPeriod } from './detail/periodText.js'
 import { verdictTone } from '../charts/base.js'
 import { PeriodHero } from './period/PeriodHero.js'
@@ -160,7 +161,7 @@ export function Sleep() {
       return own === undefined || own.value === null ? [] : [rowOf(figure, own)]
     })]
     return (
-      <PointPanel title={formatLongWeekdayDate(point.from, language)} subtitle={times.length === 0 ? null : times.join(' · ')} rows={rows}
+      <PointPanel title={formatLongDate(point.from, language)} subtitle={times.length === 0 ? null : times.join(' · ')} rows={rows}
         open={{ to: nightHref(point.from), text: t('sleep.openNight') }}
         onAnnotate={() => { close(); setAnnotateTarget({ scope: 'day_metric', localDate: point.from, metric: ASLEEP }) }}
         onClose={close} />
