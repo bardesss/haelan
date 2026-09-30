@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/bardesss/haelan/compare/android-v0.8.0...android-v0.9.0) (2026-09-30)
+
+
+### Features
+
+* records and workout figures per sport ([#424](https://github.com/bardesss/haelan/issues/424)) ([f8ce39c](https://github.com/bardesss/haelan/commit/f8ce39c2db206d076b6c9e2d6569b737b5e1e2d6))
+
 ## [0.8.0](https://github.com/bardesss/haelan/compare/android-v0.7.1...android-v0.8.0) (2026-09-29)
 
 
