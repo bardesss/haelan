@@ -54,6 +54,9 @@ import { fileURLToPath } from 'node:url'
  * "no recorded response". At 371 days: 957 files, 9 686 369 bytes (9.2 MB), 62% of the ceiling
  * below, which is left where it was.
  *
+ * Re-measured 2026-09-30 with a routed ride loop (two ride routes beside the three run routes), a
+ * trail run and a treadmill run: 787 files, 8 826 480 bytes (8.4 MB), 56% of the ceiling below.
+ *
  * MAX_CAPTURE_BYTES is roughly 1.5x the 2026-09-23 measurement (10 446 037 * 1.5 = 15 669 055.5, rounded
  * up): a ceiling that catches a runaway (a route that starts recording every source separately,
  * say, or a metric catalogue that grows sharply), not one that trips on the ordinary growth a new
