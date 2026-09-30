@@ -32,8 +32,9 @@ export function hasBefore(page: WorkoutPageData): boolean {
  * Before (the mockup's "Daarvoor"), in the shared side layout (SideCard): the night that ended on
  * the workout's own date, the recovery index that morning and its resting heart rate, each against
  * its usual, and a `.card-link` to that night's own page. Which night is the server's pairing
- * (`page.before`). The approved mockup draws time asleep, the index and resting heart rate, not
- * deep sleep, so the night's deep sleep is sent and not drawn. Absent when none has a value.
+ * (`page.before`); the link sits only beside a drawn night row, as Daarna's does. The approved
+ * mockup draws time asleep, the index and resting heart rate, not deep sleep, so the night's deep
+ * sleep is sent and not drawn. Absent when none has a value.
  */
 export function WorkoutBefore({ page, span }: { page: WorkoutPageData, span: 6 | 12 }): ReactNode {
   const { t } = useTranslation()
@@ -46,7 +47,7 @@ export function WorkoutBefore({ page, span }: { page: WorkoutPageData, span: 6 |
         {recovery !== null && <WorkoutFigureRow figure={indexFigure(recovery.index)} label={t('activity.workout.page.before.recoveryIndex')} />}
         {restingHeartRate !== null && <WorkoutFigureRow figure={restingHeartRate} label={t('activity.workout.page.before.restingHeartRate')} />}
       </FigureRows>
-      {night !== null && <Link to={nightPath(night.localDate)} className="card-link">{t('activity.workout.page.before.night')}</Link>}
+      {night !== null && night.asleep.value !== null && <Link to={nightPath(night.localDate)} className="card-link">{t('activity.workout.page.before.night')}</Link>}
     </SideCard>
   )
 }

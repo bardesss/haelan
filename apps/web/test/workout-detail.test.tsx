@@ -1037,6 +1037,8 @@ describe('the workout page\'s before', () => {
     const other = cardLabelled(await mount({ ...page, before: { ...page.before, night: noSleep, restingHeartRate: null } }), 'Before')!
     expect(rowsIn(other).map(([label]) => label)).toEqual(['Recovery index'])
     expect(other.querySelector('.detail-side-rows')?.getAttribute('data-columns')).toBe('1')
+    // A night with no time asleep draws no night row, so there is no night to link to either.
+    expect(other.querySelector('a.card-link')).toBeNull()
   })
 
   it('is left out with nothing to show, and Afterwards takes the whole row', async () => {
