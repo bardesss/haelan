@@ -385,7 +385,7 @@ describe('the fill is opt-in, per read', () => {
     expect(calls.filter((input) => input.metric === 'active_energy')).toHaveLength(1)
   })
 
-  it('fills the rows each displaying read lists: the day on the dashboard and on the night page, and the period', () => {
+  it('fills the rows each displaying read lists: the day on the dashboard, on the workout and night pages, and the period', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
     seedSamples()
     // A second workout the same day, later on, so the workout page lists the first beside it.
@@ -406,9 +406,16 @@ describe('the fill is opt-in, per read', () => {
 
     const run = (list: readonly { id: string, attrs: unknown }[]) => list.find((w) => w.id === 'phone-run')!
     expect(filledOf(run(readDay(contextFor(q(), { today: DATE, nowMs: NOW, nameOf: (id) => id })).workouts))).toBe(true)
-    // The workout page lists the day's other workouts as recorded: filling them would fill its own
-    // subject a second time, since that list is read with the subject in it.
-    expect(filledOf(run(readWorkoutPage(q(), { sessionId: 'phone-later', today: DATE, nowMs: NOW, nameOf: (id) => id })!.day.otherWorkouts))).toBe(false)
+    // The workout page fills the day's other workouts, each once the subject is out of the list
+    // (the subject is filled once: the test above counts its reads).
+    vi.mocked(readIntradayWindow).mockClear()
+    const later = readWorkoutPage(q(), { sessionId: 'phone-later', today: DATE, nowMs: NOW, nameOf: (id) => id })!
+    expect(filledOf(run(later.day.otherWorkouts))).toBe(true)
+    // Energy from the run's own source is read by the fill alone: once for the subject, once for
+    // the run beside it, never twice for either.
+    const energy = vi.mocked(readIntradayWindow).mock.calls
+      .filter(([, input]) => input.metric === 'active_energy' && input.sourceId === 'phone').map(([, input]) => input.startMs)
+    expect(energy.sort()).toEqual([START, laterMs])
     expect(filledOf(run(readNightPage(q(), {
       localDate: '2026-09-21', today: '2026-09-21', nowMs: NOW + DAY_MS, nameOf: (id) => id, sleepTargetMinutes: 480, sleepUseBaseline: true,
     })!.day.workouts))).toBe(true)

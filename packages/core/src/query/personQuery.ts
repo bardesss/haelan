@@ -34,6 +34,7 @@ import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { mergedWorkoutFor, mergeRuleFor, readMergedWorkouts } from './mergedWorkouts.ts'
+import { fillFromSamples } from './fillFromSamples.ts'
 import { readRouteSummaries, readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute, readWorkoutZoneBounds } from './workoutDerived.ts'
 import type { CardioLoad, ZoneBounds } from '../api/cardioLoad.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
@@ -785,6 +786,16 @@ export class PersonQuery {
     return mergedWorkoutFor(this.#db, {
       personId: this.#personId, session, rule: mergeRuleFor(this.#db, this.#personId), fill: input.fill ?? false,
     })
+  }
+
+  /**
+   * One merged workout the caller already holds, filled from its samples as a displaying read
+   * fills it (fillFromSamples.ts). For a list read unfilled and then narrowed: the workout page's
+   * day reads its workouts with the subject among them, and filling the list before dropping the
+   * subject would fill the subject a second time.
+   */
+  fillWorkout(session: WorkoutSession): WorkoutSession {
+    return fillFromSamples(this.#db, { personId: this.#personId, session })
   }
 
   /**

@@ -610,7 +610,10 @@ function dayOf(q: PersonQuery, subject: WorkoutSession, input: WorkoutPageInput,
   return {
     steps: pageFigureOf(dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: localDate, partial: localDate === input.today, asOfMs: null }), false),
     activeMinutes: pageFigureOf(activeMinutesFigure(ctx), false),
-    otherWorkouts: q.sessions({ kind: 'exercise', from: localDate, to: localDate }).filter((s) => s.id !== subject.id),
+    // Read unfilled and filled one by one once the subject is out: filling the whole list would
+    // fill the subject, already filled above, a second time.
+    otherWorkouts: q.sessions({ kind: 'exercise', from: localDate, to: localDate })
+      .filter((s) => s.id !== subject.id).map((s) => q.fillWorkout(s)),
   }
 }
 
