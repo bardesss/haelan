@@ -26,6 +26,10 @@ const CHART_SOURCES = {
   zoneModerate: 'zone-moderate',
   zoneVigorous: 'zone-vigorous',
   zonePeak: 'zone-peak',
+  // The activity page's intensity steps, light to vigorous.
+  activityLight: 'activity-light',
+  activityModerate: 'activity-moderate',
+  activityVigorous: 'activity-vigorous',
   band: 'band-baseline',
   excluded: 'state-excluded',
   noData: 'state-no-data',
