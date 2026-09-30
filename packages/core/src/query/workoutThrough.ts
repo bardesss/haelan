@@ -45,7 +45,10 @@ function smoothed(byMinute: ReadonlyMap<number, number>, unit: string): MinuteSe
  * A stretch between two fixes is spread evenly over the time between them, so one that crosses a
  * minute boundary counts in both minutes for its share. A minute the fixes only partly span (the
  * last one, or one side of a dropout) is read over the seconds they do span, the 50 m scaled to
- * match, rather than as a whole minute that went slowly. Null too when no minute qualifies.
+ * match, rather than as a whole minute that went slowly. A stretch slower than the 50 m a minute
+ * counts for nothing at all, neither its metres nor its seconds: a pause is left out of the minutes
+ * it touches, so the minute the run resumed in reads the pace it resumed at, and a minute that was
+ * all pause is a gap. Null too when no minute qualifies.
  * Fixes outside [startMs, endMs) count for nothing, so pace never runs past the trace's own axis.
  * `fastest` is the minute with the lowest smoothed pace, the earlier of a tie.
  */
@@ -59,6 +62,9 @@ export function paceSeries(route: readonly { atMs: number, latitude: number, lon
     const span = b.atMs - a.atMs
     if (span <= 0) continue
     const distance = haversineMetres(a, b)
+    // Slower than the gap's own rate is standing still: a pause the phone logged as one long
+    // stretch, which spread evenly would read as a slow minute on either side of it.
+    if (distance < PACE_GAP_METRES * (span / MINUTE_MS)) continue
     const until = Math.min(b.atMs, endMs)
     let from = Math.max(a.atMs, startMs)
     while (from < until) {

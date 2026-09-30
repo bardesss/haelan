@@ -64,6 +64,20 @@ describe('paceSeries', () => {
     expect(series.points[1]!.value).toBeCloseTo(1000 / 3, 1)
   })
 
+  it('leaves a pause out of the minutes it touches, and a minute all pause out altogether', () => {
+    // A minute at 3 m/s, a pause the phone logged as one stretch from 60 s to 150 s, then 90 s more
+    // at 3 m/s. The third minute is 30 s paused and 30 s running: it reads the running, not 90 m
+    // over a whole minute (666 s/km), and the second minute, all pause, is a gap.
+    const running = route(Array(6).fill(3))
+    const stopped = running.at(-1)!
+    const resumed = route(Array(9).fill(3)).map((fix) => ({
+      atMs: fix.atMs + 150_000, latitude: stopped.latitude + (fix.latitude - 52), longitude: 5,
+    }))
+    const series = paceSeries([...running, ...resumed], START, HOUR_ON)!
+    expect(series.points.map((p) => p.elapsedSeconds)).toEqual([0, 120, 180])
+    for (const p of series.points) expect(p.value).toBeCloseTo(1000 / 3, 1)
+  })
+
   it('leaves out every fix after the end, and the part of a stretch past it', () => {
     // Seventy seconds at 3 m/s, ended at 65 s: the second minute is five seconds of the stretch
     // across the end, the fix at 70 s counts for nothing.
