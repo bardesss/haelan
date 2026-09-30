@@ -310,10 +310,16 @@ function recoveryFor(rr: () => number, o: { endMs: number, lastBpm: number, rest
   })
 }
 
-// How many of the most recent runs carry a route, when the caller asked for routes at all. Bounded
+// How many runs carry a route, when the caller asked for routes at all: the last run and the most
+// recent earlier ones of nearly its length (ROUTED_RUN_LENGTH_TOLERANCE), so the last run's page
+// finds them as the same route and draws "Deze route". Bounded
 // by the demo capture's size ceiling (scripts/capture-demo.mjs's MAX_CAPTURE_BYTES): a route costs
 // the capture some 30 KB for each routed run whose page the demo mounts, measured 2026-09-29.
 const ROUTED_RUNS = 3
+// How close in length an earlier run must be to the last to share its loop. Two circles through one
+// start put their quarter points Δr·√2 apart, so at 5 % of a 10 km loop that is some 110 m, inside
+// routeMatch.ts's 150 m, where its own 10 % tolerance would put them some 220 m apart.
+const ROUTED_RUN_LENGTH_TOLERANCE = 0.05
 // A GPS fix every ten seconds of moving time: dense enough that the kilometre marks and the
 // height profile read smoothly, coarse enough to stay inside that ceiling.
 const ROUTE_STEP_SECONDS = 10
@@ -549,9 +555,11 @@ function workoutReadingFor(wr: () => number, o: {
 // A demo route, opted into only by scripts/seed-demo.mjs via SeedArchiveInput's `demoRoute` below -
 // never by default, which is what packages/core/test/seed.test.ts's "seeds no workout route" pins.
 // A perfect circle as long as the run, not a captured trace: real GPS never closes on itself to the
-// metre, so this shape could not be mistaken for a run anyone actually took. Centred on latitude
-// zero, longitude zero - open ocean off the coast of west Africa, nowhere near this household's
-// Amsterdam offset and not a neighbourhood a stranger could place. Built from the run's own splits
+// metre, so this shape could not be mistaken for a run anyone actually took. Every circle starts and
+// ends at latitude zero, longitude zero and runs the same way round, its centre west of there by its
+// own radius - open ocean off the coast of west Africa, nowhere near this household's Amsterdam
+// offset and not a neighbourhood a stranger could place. One start for every routed run, so runs of
+// nearly one length are the same route to routeMatch.ts. Built from the run's own splits
 // and trigonometry, with no draw from any stream, so a fix sits where the splits say the runner
 // was: the page's kilometre marks land on the split boundaries. One hill, as high as the run's
 // elevation gain, so the height profile and the figure agree.
@@ -575,7 +583,7 @@ function syntheticRoute(o: {
     route.push({
       time: new Date(o.pause !== null && atMs > o.pause.startMs ? atMs + o.pause.ms : atMs).toISOString(),
       latitude: Number((radiusDegrees * Math.sin(angle)).toFixed(6)),
-      longitude: Number((radiusDegrees * Math.cos(angle)).toFixed(6)),
+      longitude: Number((radiusDegrees * Math.cos(angle) - radiusDegrees).toFixed(6)),
       altitudeMetres: Number((2 + o.elevationMeters * Math.sin(angle / 2) ** 2).toFixed(1)),
     })
     if (active === o.activeSeconds) return route
@@ -666,8 +674,9 @@ export interface SeedArchiveInput {
   endMs: number
   seed?: number
   /**
-   * Task 8, opt-in and false by default: gives the last ROUTED_RUNS runs in the span a
-   * syntheticRoute (above), each on a companion copy of the run. Off by default so every other
+   * Task 8, opt-in and false by default: gives the last run in the span, and up to ROUTED_RUNS - 1
+   * recent earlier runs of nearly its length, a syntheticRoute (above), each on a companion copy
+   * of the run. Off by default so every other
    * caller of this generator - including packages/core/test/seed.test.ts's own "seeds no workout
    * route" - keeps proving what Task 7 proved, that a real route cannot reach the demo through the
    * ordinary capture path.
@@ -1173,8 +1182,18 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   // archive as the phone's copy of the same workout, which the app merges with Google's on read.
   // So each routed run is a second, companion point over the run's own span, carrying the interval,
   // the type and the route and nothing the companion sync does not send.
+  // The last run, and the most recent earlier runs of nearly its length: chosen by what the stream
+  // already drew, with no draw of their own, so routing changes nothing else the demo holds.
+  const lengthOf = (run: (typeof keptRuns)[number]) => run.reading.progress.at(-1)!.meters
+  const lastRun = keptRuns.at(-1)
+  const routedRuns = !input.demoRoute || lastRun === undefined ? [] : [
+    ...keptRuns.slice(0, -1)
+      .filter((run) => Math.abs(lengthOf(run) - lengthOf(lastRun)) <= ROUTED_RUN_LENGTH_TOLERANCE * lengthOf(lastRun))
+      .slice(-(ROUTED_RUNS - 1)),
+    lastRun,
+  ]
   if (input.demoRoute) {
-    for (const run of keptRuns.slice(-ROUTED_RUNS)) {
+    for (const run of routedRuns) {
       put(EXERCISE, run.startMs, run.endMs, [exercisePoint({
         name: `${run.name}-phone`,
         startTime: new Date(run.startMs).toISOString(),
