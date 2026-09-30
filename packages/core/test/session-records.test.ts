@@ -88,6 +88,17 @@ describe('sessionRecordsOf', () => {
     expect(sessionRecordsOf([session({ efforts: { km: 300, mile: null, fiveK: null } })]).map((r) => r.kind))
       .toEqual(['longest', 'furthest', 'fastest-km'])
   })
+
+  it('picks the fastest holders in whole seconds, so a tie on screen goes to the earlier run', () => {
+    // Both print 4:01 (and 8:01, 25:01); fractional, the later run would take all three.
+    const records = sessionRecordsOf([
+      session({ sessionId: 'early', localDate: '2026-02-01', efforts: { km: 241.4, mile: 481.4, fiveK: 1501.4 } }),
+      session({ sessionId: 'late', localDate: '2026-03-01', efforts: { km: 241.2, mile: 481.2, fiveK: 1501.2 } }),
+    ])
+    expect(records.find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'early', value: 241 })
+    expect(records.find((r) => r.kind === 'fastest-mile')).toMatchObject({ sessionId: 'early', value: 481 })
+    expect(records.find((r) => r.kind === 'fastest-5k')).toMatchObject({ sessionId: 'early', value: 1501 })
+  })
 })
 
 describe('sessionForRecords', () => {

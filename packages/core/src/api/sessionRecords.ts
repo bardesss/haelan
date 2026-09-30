@@ -50,7 +50,7 @@ export interface SessionRecord {
   sessionId: string
   localDate: string
   exerciseType: string | null
-  /** Milliseconds for `longest`, millimetres for `furthest`, seconds for each `fastest-*`. */
+  /** Milliseconds for `longest`, millimetres for `furthest`, whole seconds for each `fastest-*`. */
   value: number
 }
 
@@ -93,12 +93,16 @@ export function sessionRecordsOf(sessions: readonly SessionForRecords[]): Sessio
   // splits and the GPS: the splits only ever time each kilometre from the start, while the GPS
   // finds the fastest one wherever it began, so neither alone is the fastest the session ran.
   const fewer = (a: number, b: number) => a < b
+  // In whole seconds, as they are printed, before a holder is picked: a GPS effort is fractional,
+  // and 241.4 s against a later 241.2 s would hand the later run a record both pages print as 4:01.
+  // Whole, the two tie and the earlier run keeps it.
+  const whole = (seconds: number | null) => (seconds === null ? null : Math.round(seconds))
   best('fastest-km', (s) => {
     const candidates = [...s.kilometreSeconds, ...(s.efforts.km === null ? [] : [s.efforts.km])]
-    return candidates.length === 0 ? null : Math.min(...candidates)
+    return candidates.length === 0 ? null : whole(Math.min(...candidates))
   }, fewer)
-  best('fastest-mile', (s) => s.efforts.mile, fewer)
-  best('fastest-5k', (s) => s.efforts.fiveK, fewer)
+  best('fastest-mile', (s) => whole(s.efforts.mile), fewer)
+  best('fastest-5k', (s) => whole(s.efforts.fiveK), fewer)
 
   return records
 }

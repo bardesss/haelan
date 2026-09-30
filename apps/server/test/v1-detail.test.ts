@@ -490,9 +490,11 @@ describe('GET /workout/:sessionId', () => {
     expect(body.efforts.km.seconds).toBe(333)
     expect(body.efforts.mile.seconds).toBe(536)
     expect(body.efforts.fiveK.seconds).toBe(1667)
-    for (const key of ['km', 'mile', 'fiveK']) {
-      expect(Number.isInteger(body.efforts[key].best.value)).toBe(true)
-    }
+    // The Records bests, whole from core: the earlier run's, since the two are equal once printed
+    // and a tie goes to the earlier run.
+    expect(body.efforts.km.best).toMatchObject({ sessionId: 'earlier', value: 333 })
+    expect(body.efforts.mile.best.value).toBe(536)
+    expect(body.efforts.fiveK.best.value).toBe(1667)
     // The pace on the route at the pace figure's precision; where each stretch began in whole
     // metres (the mile's first window starts 190.66 m in); the earlier run's efforts, the bests
     // this one set itself against, in whole seconds.

@@ -22,10 +22,8 @@ interface PersonParams { personId: string }
 export function registerAllTimeRoutes(app: FastifyInstance): void {
   app.get<{ Params: PersonParams }>('/p/:personId/all-time', async (request, reply) => {
     const result: AllTime = personQueryOf(request).allTime()
-    return sendHashed(reply, request, {
-      ...result,
-      // The fastest ones are seconds, and a GPS effort is fractional; sent whole, as the workout page's are.
-      sessionRecords: result.sessionRecords.map((r) => (r.kind.startsWith('fastest-') ? { ...r, value: Number(r.value.toFixed(0)) } : r)),
-    })
+    // The fastest records arrive in whole seconds: core rounds them before it picks a holder
+    // (sessionRecords.ts), so a tie on screen is a tie in the decision too.
+    return sendHashed(reply, request, result)
   })
 }

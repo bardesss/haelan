@@ -194,7 +194,8 @@ describe('readAllTime', () => {
       sessionId: 'far', value: 12_850_000,
     })
     expect(sessionRecords.find((r) => r.kind === 'fastest-km')).toMatchObject({
-      sessionId: 'far', value: 308.5,
+      // The 308.5 s split, in whole seconds as every fastest record is (sessionRecords.ts).
+      sessionId: 'far', value: 309,
     })
   })
 
@@ -238,9 +239,9 @@ describe('readAllTime', () => {
     let sessionRecords: ReturnType<typeof readAllTime>['sessionRecords'] = []
     expect(countRouteReads(() => { sessionRecords = readAllTime(test.db, 'p1').sessionRecords })).toBe(1)
     expect(sessionRecords.find((r) => r.kind === 'fastest-km')).toMatchObject({ sessionId: 'quick-km' })
-    expect(sessionRecords.find((r) => r.kind === 'fastest-km')!.value).toBeCloseTo(250, 6)
+    expect(sessionRecords.find((r) => r.kind === 'fastest-km')!.value).toBe(250)
     expect(sessionRecords.find((r) => r.kind === 'fastest-mile')).toMatchObject({ sessionId: 'long-run' })
-    expect(sessionRecords.find((r) => r.kind === 'fastest-5k')!.value).toBeCloseTo(5000 / 3, 1)
+    expect(sessionRecords.find((r) => r.kind === 'fastest-5k')!.value).toBe(1667)
   })
 
   it('takes no GPS record off a ride, and reads no ride route at all', () => {
