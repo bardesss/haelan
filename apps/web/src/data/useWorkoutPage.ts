@@ -63,9 +63,6 @@ export type PreviousKey = 'pace' | 'speed' | 'swimPace' | 'distance' | 'movingTi
 
 export interface RecordRef { value: number, sessionId: string, localDate: string }
 
-/** A distance a category's fastest efforts are read over (fastestEfforts.ts's EFFORT_DISTANCES_BY_CATEGORY keys, e.g. '1k' or '20k'). */
-export type EffortKey = string
-
 /** One fastest effort beside the Records best of its kind and the best before this workout
  *  (workoutPage.ts's efforts entry): whole seconds, and whole metres along the route to where the
  *  stretch began. */
@@ -130,8 +127,9 @@ export interface WorkoutPageData {
    *  1 km to marathon, a ride's 20 to 100 km), keyed by distance, in whole seconds, each beside the
    *  category's Records best (`isBest` when that best is this workout); null for a distance the
    *  route is shorter than, and null altogether without a route, for a category with no distances,
-   *  or for a type that holds no speed record. */
-  efforts: Record<EffortKey, WorkoutEffort | null> | null
+   *  or for a type that holds no speed record. Keyed by fastestEfforts.ts's
+   *  EFFORT_DISTANCES_BY_CATEGORY keys ('1k', '20k'). */
+  efforts: Record<string, WorkoutEffort | null> | null
   /** The quick log for the day this workout was done on (routes/v1/detail.ts: the workout's own localDate). */
   log: DayLog
 }
