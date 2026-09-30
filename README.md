@@ -48,7 +48,7 @@ catching them is a standing part of how the project is built rather than a past 
 <!-- screenshots:start -->
 ![The Hælan dashboard, a Log button beside the day arrows in its header: last night's time asleep and sleep stages, the seven-night strip against your usual, beside a recovery score between resting heart rate and HRV gauges; today's steps with their pace against your usual, active minutes, heart rate and workouts, beside the week's totals and averages.](assets/screenshots/dashboard.png)
 
-![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
+![The Activity page for a month: the day's average steps against the usual for a month, with how many days were usual, fewer or more and the busiest day, above active minutes per week, distance, floors and active energy, each against its own usual.](assets/screenshots/activity.png)
 
 <sub>Dashboard and Activity above; [Quick logging](assets/screenshots/log-panel.png),
 [Sleep](assets/screenshots/sleep.png), [Recovery](assets/screenshots/recovery.png) and
@@ -67,18 +67,39 @@ mirror is the only place minute-level history stays available at that resolution
 ### 📊 Nine pages of it
 
 Dashboard, Records, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with
-stages and nap detection, resting heart rate and HRV, SpO2 with its confidence interval, an
-activity heatmap and a workout list, and a page behind every workout in that list: splits, heart rate zones, running
-dynamics, the trace from the device that recorded it, and the exclude control that used to exist
-only on the server. Sleep carries the same kind of page behind every night: its stages, the naps
-outside that night's span, the overnight heart rate, SpO2 and HRV traces, and an exclude control
-for each session the night was assembled from. There is also an intraday chart, a weight trend, and
-period-over-period insight cards that withhold themselves, each with its own reason, when the data
-behind them is thin.
+stages and nap detection, resting heart rate and HRV, SpO2 with its confidence interval, steps,
+active minutes and every workout, with a page behind each night and each workout. There is also an
+intraday chart, a weight trend, and period-over-period insight cards that withhold themselves, each
+with its own reason, when the data behind them is thin.
+
+Sleep and Activity read a week, a month, three months or a year as a period. Each figure is the
+period's average, or its total where a sum means something, set against the usual for a period of
+that length, with the verdict in words: how many days were usual, lower or higher, the longest
+night or busiest day, and the change against the period before. On three months and a year the
+strips draw one point per week. Sleep adds the stages and their shares, the schedule with weekday
+against weekend, the sleep balance and the mornings after; Activity adds the intensity split, zone
+minutes, the workouts with each type's count against its usual, cardio load and the VO2 max trend.
+
+A night's page sets time asleep, efficiency, deep sleep, REM and bedtime against their usual ranges,
+and draws the stages on one time axis with the heart rate, HRV and SpO2 traces. It says when the
+first deep sleep and the first REM began and how many cycles the night held, how far the sleeping
+heart rate dipped below that day's resting heart rate, and opens the morning after with one
+sentence naming what sat outside its usual overnight. Each session the night was assembled from
+has its own exclude control.
+
+A workout's page sets every figure against earlier workouts of the same type, and follows the
+sport: pace for a run or walk, speed for a ride, pace per 100 m for a swim, with cadence and running
+form only where they mean something. Heart rate runs through the session with the pace or speed
+and cadence lines beneath it, heart-rate recovery is read one and two minutes after the end, and
+the night before sits beside the night after. A workout recorded with a GPS route is also set
+against earlier times on the same route, and a run names its fastest 1 km, mile and 5 km.
 
 Records is the one page that ignores the range entirely, because the questions on it cannot be
-asked of a window: the best day on record for each metric, an Eddington number, and a timeline of
-milestones. Each figure states the span it was computed over rather than claiming the whole
+asked of a window: the best day on record for each metric, an Eddington number, a timeline of
+milestones, and one card per sport with its longest, furthest and fastest sessions, from a run's
+fastest kilometre to its fastest marathon and a ride's fastest 100 km. A treadmill or an indoor
+bike never sets a distance or speed record, and neither does a distance estimated from a phone's
+own readings. Each figure states the span it was computed over rather than claiming the whole
 archive, since a metric's history can begin long after the archive's does.
 English and Dutch throughout. Nutrition is the one page with nothing on it: this household has
 never logged food, and the API's Food type carries no timestamp to file a meal under, so the page
@@ -86,9 +107,13 @@ says so rather than inventing a data model to have something to draw.
 
 ### 📐 Personal baselines
 
-A reading is shown against your own 60 day baseline, because "96 bpm" carries no information on
-its own and "1.4 standard deviations above your baseline" does. A baseline computed from too few
-days is flagged as thin rather than quietly presented as one.
+A reading is shown against your own usual, because "96 bpm" carries no information on its own and
+"1.4 standard deviations above your baseline" does. On the dashboard and a night's page that is
+your own last 60 days, and the recovery index keeps its 60 day baseline wherever it appears. A
+workout stands against earlier workouts of the same type. The Sleep and Activity pages compare a
+period with periods of the same length: a month with the twelve months before it, a week with the
+twelve weeks before, and an earlier period counts only when most of its days have data. A baseline
+computed from too few days is flagged as thin rather than quietly presented as one.
 
 ### 📝 Context a stateless dashboard cannot have
 
@@ -118,6 +143,13 @@ ended, with no column for the arguments themselves; a call made over stdio is no
 fresh for the call and thrown away after, holding one person's rows in seven tables and none of
 the ones that could name a password or another member.
 
+`explain` answers a question by walking one chain and stopping at the first link that accounts for
+it, naming that link and every one it checked. It has five kinds: why a metric has no reading on a
+day, what a day's recovery index stands on, what stands out about one workout, what on a finished
+day sits away from your usual and what was lived beside it, and why a period comparison came back
+as not enough data. Its answers describe the data and stop there: an association at most, never a
+cause or advice.
+
 ## The Android companion app
 
 An instance reads a household's data through Google's Health API. A household where every member
@@ -145,8 +177,24 @@ through any day that has data. It opens at once on the last glance it saw, kept 
 and refreshes when you pull, come back to it, finish a sync or pass midnight; when the instance cannot be
 reached it says since when it is showing what it shows. The `+` logs how the day felt, what happened and
 the day's note, the same panel as on the web, and tapping a card opens the page behind it inside the app,
-already signed in. Sync, permissions and signing out sit behind the account icon. The glance needs an
-instance of 2.13.0 or later, and says so on an older one.
+already signed in. Sync, permissions and signing out sit behind the account icon, where the sync
+card also carries **Sync Health API**: for a household that connects Google as well, it asks the
+instance to fetch your Google data now rather than at its next scheduled run, and says when a sync
+is already running or when to try again. The glance needs an instance of 2.13.0 or later, and says
+so on an older one.
+
+### One workout, whichever device sent it
+
+A watch that syncs to both Google and Health Connect sends every workout twice. The instance reads
+the two copies as one workout: the copy first in your source priority, with any figure it lacks
+taken from the other.
+
+A workout only the phone has sent so far, because Google's copy has not synced yet, is filled from
+the phone's own readings in the meantime: steps, distance, energy, average heart rate, the
+heart-rate zones, and a pace or speed over the elapsed time, since the phone's copy carries no
+pauses. Each filled figure says it came from your readings, and the workout's page says the watch's
+figures arrive with the next sync, with a button to start one. Google's figures take over the moment
+its copy arrives, and a filled distance never sets a record.
 
 ### Workout routes
 
@@ -490,10 +538,13 @@ and the server makes no request at all.
 
 ## Roadmap
 
-Five milestones are done and the sixth is finishing: the store and sync engine, the derivation
-layer, eight dashboard pages, then packaging, people, backups and the upgrade path. The agent
-surface ships too: an MCP server with typed tools, reachable over stdio and over HTTP behind a
-per-account token, including `sql_query` behind its own sandbox.
+Nine milestones are done: the store and sync engine, the derivation layer, the dashboard pages,
+the agent surface, packaging with people, backups and the upgrade path, the all-time Records page,
+the small screen, the night and workout detail pages, and the glance with its native screen on the
+phone. The agent surface is an MCP server with typed tools, reachable over stdio and over HTTP
+behind a per-account token, including `sql_query` behind its own sandbox. The tenth, M10, is under
+way: it redesigns the screens page by page so every figure stands against its usual, and the night
+and workout pages and the Sleep and Activity pages are done.
 
 **[ROADMAP.md](ROADMAP.md)** has the table, every milestone's pull request, and why the order is
 what it is.
