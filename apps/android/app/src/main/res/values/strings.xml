@@ -56,6 +56,10 @@
     <string name="sync_title">Sync</string>
     <string name="sync_body">Sends what is new since the last sync, or the last 30 days the first time.</string>
     <string name="sync_action">Sync now</string>
+    <string name="api_sync_action">Sync Health API</string>
+    <string name="api_sync_started">Google sync started</string>
+    <string name="api_sync_cooldown">Try again in %1$d s</string>
+    <string name="api_sync_busy">A sync is already running</string>
     <string name="sync_working">Syncing…</string>
     <!-- The sync no longer writes a log: the three bars say how far along it is, and the two sentences that
          remain are the ones that must reach whoever presses the button (nothing to send, and the
