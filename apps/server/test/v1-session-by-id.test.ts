@@ -1,10 +1,10 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, insertSample, schema } from '@haelan/core'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { DERIVATION_VERSION, PersonQuery, insertSample, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
 let harness: Harness | null = null
-afterEach(async () => { await harness?.cleanup(); harness = null })
+afterEach(async () => { vi.restoreAllMocks(); await harness?.cleanup(); harness = null })
 
 const OFFSET_MINUTES = 120
 
@@ -72,10 +72,13 @@ describe('GET /sessions/:sessionId', () => {
       }).run()
     }
 
+    const byId = vi.spyOn(PersonQuery.prototype, 'sessionById')
     const session = (await get(harness, token, '/sessions/bare')).json()
     expect(session.attrs).toMatchObject({ awaitingSummary: true, filledFromSamples: true, metricsSummary: { steps: 6000, averageHeartRateBeatsPerMinute: 150 } })
     // Sixty minutes at 150 bpm, all vigorous: 3 * 60.
     expect(session.cardioLoad.edwards).toBe(180)
+    // Filled once: the load is read off the session the route already filled, not a second fill of its id.
+    expect(byId.mock.calls.filter(([input]) => input.fill === true)).toHaveLength(1)
 
     const list = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-18&to=2026-08-18')).json()
     expect(list.items[0].attrs).toMatchObject({ awaitingSummary: true, metricsSummary: { steps: 6000 } })

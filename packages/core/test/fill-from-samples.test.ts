@@ -143,7 +143,7 @@ describe('fillFromSamples, through the merged reads', () => {
     expect(workoutDetail(run.attrs).zones).toEqual({ lightSeconds: 600, moderateSeconds: 600, vigorousSeconds: 600, peakSeconds: 0 })
     // Moving time stays unknown: pauses are.
     expect(workoutDetail(run.attrs).activeDurationSeconds).toBeNull()
-    expect(q().cardioLoad({ sessionId: 'phone-run', fill: true })!.edwards).toBe(60)
+    expect(q().cardioLoad({ session: run })!.edwards).toBe(60)
     expect(run.attrs).toMatchObject({ filledFromSamples: true, awaitingSummary: true })
     expect([...(run.attrs as { filled: string[] }).filled].sort()).toEqual([
       'averageHeartRateBeatsPerMinute', 'averagePaceSecondsPerMeter', 'caloriesKcal', 'distanceMillimeters',

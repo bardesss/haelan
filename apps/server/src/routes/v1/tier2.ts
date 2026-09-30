@@ -243,7 +243,8 @@ export function registerTier2Routes(app: FastifyInstance): void {
     // the list route would be the worst version of this mistake, not a milder one.
     return sendHashed(reply, request, {
       ...session,
-      cardioLoad: personQuery.cardioLoad({ sessionId, fill: true }),
+      // The session filled above, not the id read and filled again.
+      cardioLoad: personQuery.cardioLoad({ session }),
       // Never null here: `session` above already resolved this exact id, and workoutSplits cannot
       // answer null for an id sessionById just answered a row for.
       ...personQuery.workoutSplits({ sessionId })!,

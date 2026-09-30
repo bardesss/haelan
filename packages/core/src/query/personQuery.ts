@@ -804,11 +804,12 @@ export class PersonQuery {
    * Null for a session id naming nothing, which is the same answer `sessionById` gives and for the
    * same reason: this reader cannot tell an unknown id from somebody else's, and must not.
    *
-   * `fill` as on `sessionById`, for the by-id route, so the Edwards load it carries beside a
-   * workout still waiting for Google's copy reads the same filled zones the workout does.
+   * Or for a `session` the caller already read: the by-id route passes the workout it filled, so
+   * the Edwards load beside a workout still waiting for Google's copy reads the same filled zones
+   * the workout does, without reading and filling it a second time.
    */
-  cardioLoad(input: { sessionId: string, fill?: boolean }): CardioLoad | null {
-    const session = this.sessionById(input)
+  cardioLoad(input: { sessionId: string } | { session: WorkoutSession }): CardioLoad | null {
+    const session = 'session' in input ? input.session : this.sessionById(input)
     if (session === null) return null
     return readWorkoutCardioLoad(this.#db, { personId: this.#personId, session })
   }
