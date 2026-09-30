@@ -204,6 +204,44 @@ describe('SessionRowView', () => {
     expect(view({ dated: true })).toContain('<div class="session-row-detail">do 3 sep</div>')
   })
 
+  // The rate a category reads (PATTERNS.md, "Per sport"), off the row's one pace: a pace per km on
+  // foot, a speed on a bike, the time per 100 m in the water, and nothing for a sport with no rate.
+  describe('the rate by category', () => {
+    const detail = (type: string, props: Partial<React.ComponentProps<typeof SessionRowView>>) => {
+      const match = /<div class="session-row-detail">([^<]*)<\/div>/.exec(view({ type, ...props }))
+      return match?.[1] ?? null
+    }
+
+    it('reads a run and a walk as a pace per kilometre', () => {
+      expect(detail('RUNNING', { distanceMeters: 5000, paceSecondsPerKm: 324 })).toBe('5,0 km · 5:24\u00a0/km')
+      expect(detail('HIKING', { paceSecondsPerKm: 720 })).toBe('12:00\u00a0/km')
+    })
+
+    it('reads a ride as a speed, in km/u in Dutch, never as a pace', () => {
+      // 120 s a km is 30 km an hour.
+      expect(detail('BIKING', { distanceMeters: 30_000, paceSecondsPerKm: 120 })).toBe('30,0 km · 30,0\u00a0km/u')
+      const english = renderToStaticMarkup(
+        <I18nProvider lng="en">
+          <SessionRowView id="s1" type="SPINNING" startMs={0} durationSeconds={3600} distanceMeters={null} caloriesKcal={null}
+            averageHeartRateBpm={null} excluded={false} localDate="2026-09-03" paceSecondsPerKm={144} />
+        </I18nProvider>,
+      )
+      expect(english).toContain('<div class="session-row-detail">25.0\u00a0km/h</div>')
+    })
+
+    it('reads a swim as the time per 100 m, its distance in metres', () => {
+      // 1200 s a km is 2:00 each 100 m.
+      expect(detail('SWIMMING_POOL', { distanceMeters: 1500, paceSecondsPerKm: 1200 }))
+        .toBe('1.500\u00a0m · 2:00\u00a0/100\u202fm')
+    })
+
+    it('prints no rate for a category that reads none, and no speed off a zero pace', () => {
+      expect(detail('CARDIO_WORKOUT', { paceSecondsPerKm: 400 })).toBeNull()
+      expect(detail('WEIGHTLIFTING', { paceSecondsPerKm: 400 })).toBeNull()
+      expect(detail('BIKING', { paceSecondsPerKm: 0 })).toBeNull()
+    })
+  })
+
   it('renders a row without a duration, with no duration span and no zero', () => {
     const html = view({ durationSeconds: null })
     expect(html).toContain('session-row-type')

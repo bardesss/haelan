@@ -14,7 +14,7 @@
  * reader parses each session through `sessionForRecords` below and drops excluded sessions before
  * calling this; see `query/allTime.ts` and `query/workoutPage.ts`.
  */
-import { countsForDistanceRecords, exerciseCategory } from './exerciseCategory.ts'
+import { countsForDistanceRecords, exerciseCategory, RECORD_CATEGORY_ORDER } from './exerciseCategory.ts'
 import type { ExerciseCategory } from './exerciseCategory.ts'
 import { effortDistancesOf, fastestEfforts } from './fastestEfforts.ts'
 import type { Efforts } from './fastestEfforts.ts'
@@ -125,7 +125,7 @@ function valueOf(kind: SessionRecordKind, session: SessionForRecords): number | 
  * Omitted rather than reported as zero or null: a household that only lifts has a longest
  * session and no distance at all, and a card reading "furthest: none" is worse than no card.
  * Ties go to the earlier session, the same rule `recordOf` applies to a day - a record is when
- * you first did it. Listed category by category in RECORD_KINDS_BY_CATEGORY's order, each in its
+ * you first did it. Listed category by category in RECORD_CATEGORY_ORDER, each in its
  * kinds' order.
  */
 export function sessionRecordsOf(sessions: readonly SessionForRecords[]): SessionRecord[] {
@@ -138,7 +138,8 @@ export function sessionRecordsOf(sessions: readonly SessionForRecords[]): Sessio
   }
 
   const records: SessionRecord[] = []
-  for (const [category, kinds] of Object.entries(RECORD_KINDS_BY_CATEGORY) as [ExerciseCategory, readonly SessionRecordKind[]][]) {
+  for (const category of RECORD_CATEGORY_ORDER) {
+    const kinds = RECORD_KINDS_BY_CATEGORY[category]
     const members = byCategory.get(category) ?? []
     for (const kind of kinds) {
       // Lower is better for the fastest ones, and only for them.

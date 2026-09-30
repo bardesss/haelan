@@ -41,6 +41,13 @@ const SMALL_UNITS: Readonly<Record<string, { factor: number, precision: number, 
   verticalOscillation: { factor: 100, precision: 1, unit: 'activity.units.cm' },
 }
 
+// Distances that read in whole metres however far they run, keyed on the figure as SMALL_UNITS is,
+// since every other distance in metres turns to kilometres past a thousand: a record's climb
+// ("1,250 m", never "1.25 km") and a swim's distance, whose pool and pace are both counted in
+// metres ("1,500 m"). The Records page and the session rows name these two; the workout page's own
+// figures keep their keys.
+const WHOLE_METRES: ReadonlySet<string> = new Set(['climb', 'swimDistance'])
+
 // A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading
 // zero on the minutes, an hour digit only once there is one to show. workoutPage.ts's `pace`
 // (seconds per kilometre) and its true durations (`movingTime`, `elapsed`) share this shape; the
@@ -108,7 +115,8 @@ function figureValueText(
     case 'meters_per_second': return `${formatNumber(value * 3.6, 1, language, absent)} ${t('activity.units.kmh')}`
     // Kilometres once the distance clears four digits of metres, at two decimals - also a
     // converted unit, so also its own fixed precision rather than the figure's stored-unit one.
-    case 'meters': return value >= 1000
+    case 'meters': if (WHOLE_METRES.has(figure.metric)) return `${formatNumber(value, 0, language, absent)} ${t('activity.units.meters')}`
+      return value >= 1000
       ? `${formatNumber(value / 1000, 2, language, absent)} ${t('activity.units.km')}`
       : `${formatNumber(value, figure.precision, language, absent)} ${t('activity.units.meters')}`
     case 'seconds': return formatStopwatch(value)

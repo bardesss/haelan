@@ -1668,11 +1668,31 @@
       },
       "run": "{{days}} days in a row with a step count"
     },
+    "categories": {
+      "run": "Running",
+      "ride": "Cycling",
+      "walk": "Walking",
+      "swim": "Swimming",
+      "strength": "Strength",
+      "cardio": "Cardio",
+      "other": "Other"
+    },
     "sessions": {
-      "label": "Best single session",
-      "basis": "Read from the workouts themselves, not from a day of them.",
-      "longest": "Longest session",
-      "furthest": "Furthest session",
+      "longestOf": {
+        "run": "Longest run",
+        "ride": "Longest ride",
+        "walk": "Longest walk",
+        "swim": "Longest swim",
+        "strength": "Longest session",
+        "cardio": "Longest session",
+        "other": "Longest session"
+      },
+      "furthestOf": {
+        "run": "Furthest run",
+        "ride": "Furthest ride",
+        "walk": "Furthest walk",
+        "swim": "Furthest swim"
+      },
       "most-climb": "Most climb",
       "fastest-1k": "Fastest kilometre",
       "fastest-mile": "Fastest mile",

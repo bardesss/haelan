@@ -1668,11 +1668,31 @@
       },
       "run": "{{days}} dagen op rij met een stappenteller"
     },
+    "categories": {
+      "run": "Hardlopen",
+      "ride": "Fietsen",
+      "walk": "Wandelen",
+      "swim": "Zwemmen",
+      "strength": "Kracht",
+      "cardio": "Cardio",
+      "other": "Overig"
+    },
     "sessions": {
-      "label": "Beste losse sessie",
-      "basis": "Gelezen uit de trainingen zelf, niet uit een dag vol trainingen.",
-      "longest": "Langste sessie",
-      "furthest": "Verste sessie",
+      "longestOf": {
+        "run": "Langste loop",
+        "ride": "Langste rit",
+        "walk": "Langste wandeling",
+        "swim": "Langste zwemtraining",
+        "strength": "Langste sessie",
+        "cardio": "Langste sessie",
+        "other": "Langste sessie"
+      },
+      "furthestOf": {
+        "run": "Verste loop",
+        "ride": "Verste rit",
+        "walk": "Verste wandeling",
+        "swim": "Verste zwemtraining"
+      },
       "most-climb": "Meeste klim",
       "fastest-1k": "Snelste kilometer",
       "fastest-mile": "Snelste mijl",

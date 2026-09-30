@@ -212,6 +212,19 @@ describe('sessionRecordsOf, per category', () => {
     expect(records.find((r) => r.kind === 'furthest')).toMatchObject({ sessionId: 'early', value: 10_000 })
   })
 
+  it('lists the records category by category, run, ride, walk, swim, then the rest', () => {
+    const records = sessionRecordsOf([
+      session({ sessionId: 'o', exerciseType: 'SPORT' }),
+      session({ sessionId: 'c', exerciseType: 'CARDIO_WORKOUT' }),
+      session({ sessionId: 's', exerciseType: 'SWIMMING_POOL' }),
+      session({ sessionId: 'k', exerciseType: 'WEIGHTLIFTING' }),
+      session({ sessionId: 'w', exerciseType: 'WALKING' }),
+      session({ sessionId: 'b', exerciseType: 'BIKING' }),
+      session({ sessionId: 'r', exerciseType: 'RUNNING' }),
+    ])
+    expect([...new Set(records.map((r) => r.category))]).toEqual(['run', 'ride', 'walk', 'swim', 'strength', 'cardio', 'other'])
+  })
+
   it("names each category's kinds, in the order a page lists them", () => {
     expect(RECORD_KINDS_BY_CATEGORY).toEqual({
       run: ['longest', 'furthest', 'most-climb', 'fastest-1k', 'fastest-mile', 'fastest-5k', 'fastest-10k', 'fastest-half', 'fastest-marathon'],

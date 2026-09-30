@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EXERCISE_TYPES } from '../src/api/enums.ts'
 import {
-  EXERCISE_CATEGORIES, countsForDistanceRecords, exerciseCategory, isIndoor, rateOf,
+  EXERCISE_CATEGORIES, PLAIN_TYPE, RECORD_CATEGORY_ORDER, countsForDistanceRecords, exerciseCategory, isIndoor, rateOf,
 } from '../src/api/exerciseCategory.ts'
 
 describe('the exercise category map', () => {
@@ -99,5 +99,21 @@ describe('rateOf', () => {
     expect(rateOf('strength')).toBeNull()
     expect(rateOf('cardio')).toBeNull()
     expect(rateOf('other')).toBeNull()
+  })
+})
+
+describe('RECORD_CATEGORY_ORDER', () => {
+  it('lists every category once, the sports with distances first', () => {
+    expect(RECORD_CATEGORY_ORDER).toEqual(['run', 'ride', 'walk', 'swim', 'strength', 'cardio', 'other'])
+    expect([...RECORD_CATEGORY_ORDER].sort()).toEqual([...EXERCISE_CATEGORIES].sort())
+  })
+})
+
+describe('PLAIN_TYPE', () => {
+  it('names a plain type only where one is the category, and each in its own category', () => {
+    expect(PLAIN_TYPE).toEqual({ run: 'RUNNING', ride: 'BIKING', walk: 'WALKING', swim: 'SWIMMING', strength: null, cardio: null, other: null })
+    for (const [category, type] of Object.entries(PLAIN_TYPE)) {
+      if (type !== null) expect(exerciseCategory(type)).toBe(category)
+    }
   })
 })

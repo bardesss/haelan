@@ -15,6 +15,28 @@ export const EXERCISE_CATEGORIES = ['run', 'walk', 'ride', 'swim', 'strength', '
 export type ExerciseCategory = (typeof EXERCISE_CATEGORIES)[number]
 
 /**
+ * The order a page lists the categories' records in: the sports with distances first, the busiest
+ * of them leading, then the ones that keep only a longest session. sessionRecordsOf sends them in
+ * this order and the Records page draws its cards in it.
+ */
+export const RECORD_CATEGORY_ORDER: readonly ExerciseCategory[] = ['run', 'ride', 'walk', 'swim', 'strength', 'cardio', 'other']
+
+/**
+ * The type a category is named after, whose label would only repeat the category's own: a Records
+ * row under "Running" names its type only when it was something else (a trail run, a treadmill).
+ * Null where no one type is the category's plain form, so every type there is named.
+ */
+export const PLAIN_TYPE: Readonly<Record<ExerciseCategory, string | null>> = {
+  run: 'RUNNING',
+  ride: 'BIKING',
+  walk: 'WALKING',
+  swim: 'SWIMMING',
+  strength: null,
+  cardio: null,
+  other: null,
+}
+
+/**
  * Written out rather than inferred from the name: `SPORT` contains no clue, `STROLLER_WALK` is a
  * walk and `TREADMILL` is a run. A type absent here is `other`, and exercise-category.test.ts goes
  * red for any enum value that is neither listed here nor deliberately `other`.

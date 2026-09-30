@@ -7,7 +7,7 @@ import { exerciseCategory } from '@haelan/core/exercise-category'
 import type { ExerciseCategory } from '@haelan/core/exercise-category'
 import { Icon } from '../../components/icons.js'
 import { Link } from '../../router.js'
-import { formatPace } from './pace.js'
+import { sessionRateText, swimDistanceText } from './categoryText.js'
 import { workoutPath } from './workout/workoutText.js'
 
 /**
@@ -104,7 +104,7 @@ export function SessionRowView(props: SessionRowViewProps) {
       : `${formatNumber(averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`,
   ].filter((part): part is string => part !== null)
 
-  // Distance, pace and elevation gain only. workoutSummary also carries steps and
+  // Distance, the category's rate and elevation gain only. workoutSummary also carries steps and
   // activeZoneMinutes, but activeZoneMinutes alone covers 167 of 192 sessions, which would make
   // this line a routine five figures on the common case rather than the one to three the two line
   // design was scoped for. Steps on a run restates distance and active zone minutes restates the
@@ -113,9 +113,11 @@ export function SessionRowView(props: SessionRowViewProps) {
   const detail = [
     props.dated === true ? formatWeekdayDate(localDate, language) : null,
     distanceMeters === null ? null
-      : `${formatNumber(distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
-    paceSecondsPerKm === null ? null
-      : `${formatPace(paceSecondsPerKm, language)} ${t('activity.units.paceSuffix')}`,
+      : category === 'swim' ? swimDistanceText(distanceMeters, language, t)
+        : `${formatNumber(distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
+    // The rate the category reads (a ride's speed, a swim's time per 100 m), never a pace per
+    // kilometre on a sport that is not on foot; nothing for one with no rate.
+    sessionRateText(category, paceSecondsPerKm, language, t),
     elevationGainMeters === null ? null
       : `${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
   ].filter((part): part is string => part !== null)
