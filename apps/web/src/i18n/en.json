@@ -582,6 +582,9 @@
           "fastestBy": "your fastest {{distance}} ever, {{delta}} faster than in {{month}}",
           "seconds": "{{value}} s",
           "caption": "from the distance along the GPS route · counts towards Records",
+          "captionSplit": "{{distance}}: your watch's split",
+          "captionRestGps": "the rest from the distance along the GPS route",
+          "captionRecords": "counts towards Records",
           "view": "View records"
         },
         "through": {

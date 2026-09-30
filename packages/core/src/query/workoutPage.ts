@@ -95,15 +95,18 @@ export interface WorkoutPage {
   } | null
   /**
    * The fastest kilometre, mile and 5 km inside the route (the kilometre a split when a split beat
-   * the GPS, as Records takes it), each beside the Records best of the type
+   * the GPS, as Records takes it, and `source` says which), each beside the Records best of the type
    * up to today (as `best` reads it) and the best set before this workout (`previousBest`, what a
    * new best beat); `fromMeters` is how far along the route the stretch began. Null for a distance
    * the route is shorter than, and null altogether without a route.
    */
   efforts: Record<EffortKey, {
-    seconds: number, fromMeters: number, best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean
+    seconds: number, fromMeters: number, source: EffortSource, best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean
   } | null> | null
 }
+
+/** Where an effort's time came from: the GPS route, or (a kilometre only) the watch's own split. */
+export type EffortSource = 'gps' | 'split'
 
 export interface WorkoutPageInput { sessionId: string, today: string, nowMs: number, nameOf: (id: string) => string }
 
@@ -366,9 +369,12 @@ function effortsOf(
   subject: Reading, own: Record<EffortKey, Effort | null> | null, records: readonly SessionRecord[], earlier: readonly SessionRecord[],
 ): WorkoutPage['efforts'] {
   if (own === null) return null
-  const km = [...(own.km === null ? [] : [own.km]), ...kilometreSplitsOf(subject.session.attrs)]
-    .reduce<Effort | null>((best, e) => (best === null || e.seconds < best.seconds ? e : best), null)
-  const fastest = { ...own, km }
+  const sourced = (effort: Effort | null, source: EffortSource) => (effort === null ? null : { ...effort, source })
+  const km = [
+    ...(own.km === null ? [] : [sourced(own.km, 'gps')!]),
+    ...kilometreSplitsOf(subject.session.attrs).map((split) => sourced(split, 'split')!),
+  ].reduce<(Effort & { source: EffortSource }) | null>((best, e) => (best === null || e.seconds < best.seconds ? e : best), null)
+  const fastest = { km, mile: sourced(own.mile, 'gps'), fiveK: sourced(own.fiveK, 'gps') }
   const refOf = (all: readonly SessionRecord[], key: EffortKey): RecordRef | null => {
     const record = all.find((r) => r.kind === EFFORT_KINDS[key])
     return record === undefined ? null : { value: record.value, sessionId: record.sessionId, localDate: record.localDate }
@@ -378,7 +384,7 @@ function effortsOf(
     const effort = fastest[key]
     const best = refOf(records, key)
     efforts[key] = effort === null ? null : {
-      seconds: effort.seconds, fromMeters: effort.fromMeters,
+      seconds: effort.seconds, fromMeters: effort.fromMeters, source: effort.source,
       best, previousBest: refOf(earlier, key), isBest: best?.sessionId === subject.session.id,
     }
   }

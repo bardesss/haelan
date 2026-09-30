@@ -582,6 +582,9 @@
           "fastestBy": "je snelste {{distance}} ooit, {{delta}} sneller dan in {{month}}",
           "seconds": "{{value}} s",
           "caption": "uit de afstand langs de gps-route · telt mee in Records",
+          "captionSplit": "{{distance}}: de split van je horloge",
+          "captionRestGps": "de rest uit de afstand langs de gps-route",
+          "captionRecords": "telt mee in Records",
           "view": "Bekijk records"
         },
         "through": {

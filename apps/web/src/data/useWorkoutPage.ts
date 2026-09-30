@@ -63,7 +63,8 @@ export type EffortKey = 'km' | 'mile' | 'fiveK'
 /** One fastest effort beside the Records best of its kind and the best before this workout
  *  (workoutPage.ts's efforts entry): whole seconds, and whole metres along the route to where the
  *  stretch began. */
-export interface WorkoutEffort { seconds: number, fromMeters: number, best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean }
+/** One fastest effort; `source` is where its time came from: the GPS route, or for a kilometre the watch's own split when that was quicker (workoutPage.ts's EffortSource). */
+export interface WorkoutEffort { seconds: number, fromMeters: number, source: 'gps' | 'split', best: RecordRef | null, previousBest: RecordRef | null, isBest: boolean }
 
 export interface WorkoutPageData {
   sessionId: string

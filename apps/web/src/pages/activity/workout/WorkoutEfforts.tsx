@@ -61,6 +61,14 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
       delta: delta < 60 ? t('activity.workout.page.efforts.seconds', { value: delta }) : formatStopwatch(delta),
     })
   }
+  // Where the times came from, row by row: the GPS route for all of them, unless a kilometre is the
+  // watch's split that beat it (the server's `source`, Records' own rule), which is then named.
+  const splits = rows.filter(({ effort }) => effort.source === 'split')
+  const footnote = splits.length === 0 ? t('activity.workout.page.efforts.caption') : [
+    ...splits.map(({ distance }) => t('activity.workout.page.efforts.captionSplit', { distance })),
+    ...(splits.length < rows.length ? [t('activity.workout.page.efforts.captionRestGps')] : []),
+    t('activity.workout.page.efforts.captionRecords'),
+  ].join(' · ')
   return (
     <Card span={span} label={t('activity.workout.page.efforts.label')}>
       <div className="table-scroll">
@@ -93,7 +101,7 @@ export function WorkoutEfforts({ page, span }: { page: WorkoutPageData, span: 6 
       {rows.filter(({ effort }) => effort.isBest).map((row) => (
         <p key={row.key} className="workout-hero-line">{`${MARK} ${bestLine(row)}`}</p>
       ))}
-      <p className="dash-caption workout-compared-footnote">{t('activity.workout.page.efforts.caption')}</p>
+      <p className="dash-caption workout-compared-footnote">{footnote}</p>
       <Link to="/records" className="card-link">{t('activity.workout.page.efforts.view')}</Link>
     </Card>
   )

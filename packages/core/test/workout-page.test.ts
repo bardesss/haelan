@@ -828,6 +828,7 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     const page = readWorkoutPage(q(), input('subject'))!
     expect(page.efforts!.km!.seconds).toBeCloseTo(1000 / 3, 1)
     expect(page.efforts!.km!.isBest).toBe(false)
+    expect(page.efforts!.km!.source).toBe('gps')
     expect(page.efforts!.km!.best).toMatchObject({ sessionId: 'quick', localDate: '2026-09-01' })
     expect(page.efforts!.km!.best!.value).toBeCloseTo(250, 6)
     expect(page.efforts!.mile).toMatchObject({ isBest: true, best: { sessionId: 'subject' } })
@@ -882,10 +883,11 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
     seedRun('subject', SUBJECT_DATE, { splits: [{ distance: 1000, seconds: 340 }, { distance: 1000, seconds: 320 }, { distance: 1000, seconds: 345 }] })
     seedRoute('subject', SUBJECT_DATE, { fixes: 200 })
     const page = readWorkoutPage(q(), input('subject'))!
-    expect(page.efforts!.km).toMatchObject({ seconds: 320, fromMeters: 1000, isBest: true, best: { sessionId: 'subject', value: 320 } })
+    expect(page.efforts!.km).toMatchObject({ seconds: 320, fromMeters: 1000, source: 'split', isBest: true, best: { sessionId: 'subject', value: 320 } })
     expect(page.best.fastestKmSeconds).toMatchObject({ sessionId: 'subject', value: 320 })
     // The mile has no split, so it stays the GPS's.
     expect(page.efforts!.mile!.seconds).toBeCloseTo(536.4, 1)
+    expect(page.efforts!.mile!.source).toBe('gps')
   })
 
   it("finds a run's own efforts once, for its row and both sets of records", () => {

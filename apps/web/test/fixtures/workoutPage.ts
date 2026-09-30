@@ -217,17 +217,17 @@ export function workoutPageFixture(): WorkoutPageData {
     // the August best it beat.
     efforts: {
       km: {
-        seconds: 296, fromMeters: 3400, isBest: false,
+        seconds: 296, fromMeters: 3400, source: 'gps', isBest: false,
         best: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
         previousBest: { value: 290, sessionId: 'run-june', localDate: '2026-06-14' },
       },
       mile: {
-        seconds: 479, fromMeters: 3200, isBest: false,
+        seconds: 479, fromMeters: 3200, source: 'gps', isBest: false,
         best: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
         previousBest: { value: 471, sessionId: 'run-june', localDate: '2026-06-14' },
       },
       fiveK: {
-        seconds: 1602, fromMeters: 180, isBest: true,
+        seconds: 1602, fromMeters: 180, source: 'gps', isBest: true,
         best: { value: 1602, sessionId: WORKOUT_ID, localDate: WORKOUT_DATE },
         previousBest: { value: 1614, sessionId: 'run-august', localDate: '2026-08-15' },
       },

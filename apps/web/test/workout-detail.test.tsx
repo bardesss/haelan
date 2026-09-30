@@ -849,15 +849,38 @@ describe('the workout page\'s fastest efforts', () => {
     const card = cardLabelled(await mount({
       ...page,
       efforts: {
-        km: { seconds: 296, fromMeters: 0, best: mine(296), previousBest: null, isBest: true },
-        mile: { seconds: 479, fromMeters: 0, best: null, previousBest: null, isBest: false },
-        fiveK: { seconds: 1602, fromMeters: 0, best: mine(1602), previousBest: { value: 1667, sessionId: 'old', localDate: '2025-10-01' }, isBest: true },
+        km: { seconds: 296, fromMeters: 0, source: 'gps', best: mine(296), previousBest: null, isBest: true },
+        mile: { seconds: 479, fromMeters: 0, source: 'gps', best: null, previousBest: null, isBest: false },
+        fiveK: { seconds: 1602, fromMeters: 0, source: 'gps', best: mine(1602), previousBest: { value: 1667, sessionId: 'old', localDate: '2025-10-01' }, isBest: true },
       },
     }, fullSession()), 'Fastest efforts')!
     expect(efforts(card).slice(1).map((row) => [row[0], row[1], row[3]]))
       .toEqual([['1 km', '4:56 ✦', 'this workout'], ['1 mile', '7:59', '—'], ['5 km', '26:42 ✦', 'this workout']])
     expect([...card.querySelectorAll('.workout-hero-line')].map((line) => line.textContent))
       .toEqual(['✦ your fastest 1 km ever', '✦ your fastest 5 km ever, 1:05 faster than in October 2025'])
+  })
+
+  it("names the watch's split in the footnote for a kilometre that is one, and the GPS for the rest", async () => {
+    const page = workoutPageFixture()
+    const km = { ...page.efforts!.km!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, km } }, fullSession()), 'Fastest efforts')!
+    expect(text(card, '.workout-compared-footnote'))
+      .toBe("1 km: your watch's split · the rest from the distance along the GPS route · counts towards Records")
+  })
+
+  it('leaves the GPS out of the footnote when the split kilometre is the only row', async () => {
+    const page = workoutPageFixture()
+    const km = { ...page.efforts!.km!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { km, mile: null, fiveK: null } }, fullSession()), 'Fastest efforts')!
+    expect(text(card, '.workout-compared-footnote')).toBe("1 km: your watch's split · counts towards Records")
+  })
+
+  it('names the split in Dutch too', async () => {
+    const page = workoutPageFixture()
+    const km = { ...page.efforts!.km!, source: 'split' as const }
+    const card = cardLabelled(await mount({ ...page, efforts: { ...page.efforts!, km } }, fullSession(), 'nl'), 'Snelste stukken')!
+    expect(text(card, '.workout-compared-footnote'))
+      .toBe('1 km: de split van je horloge · de rest uit de afstand langs de gps-route · telt mee in Records')
   })
 
   it('says no margin over a best before it that prints the same', async () => {
