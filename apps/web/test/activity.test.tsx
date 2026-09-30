@@ -25,8 +25,18 @@ vi.mock('../src/charts/Sparkline.js', () => ({
   },
 }))
 
-// The bars, the zone bar and the heatmap draw for real, and echarts.init throws "missing chart
-// token" without these.
+// The heatmap, stubbed the same way: a test reads the scale, the good day and the click it was handed.
+type HeatmapProps = { label: string, max: number, good?: string | null, days: { date: string }[], onPointClick?: (localDate: string) => void }
+const { heatmaps } = vi.hoisted(() => ({ heatmaps: [] as HeatmapProps[] }))
+vi.mock('../src/charts/ActivityHeatmap.js', () => ({
+  ActivityHeatmap: (props: HeatmapProps) => {
+    heatmaps.push(props)
+    return <div role="img" aria-label={props.label} />
+  },
+}))
+
+// The bars and the zone bar draw for real, and echarts.init throws "missing chart token" without
+// these.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 let container: HTMLDivElement | null = null
@@ -38,6 +48,7 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   sparklines.clear()
+  heatmaps.length = 0
 })
 
 afterEach(() => {
@@ -293,6 +304,24 @@ describe('the Activity page: sections', () => {
     expect(card.querySelector('div[role="img"][aria-label="Steps per day"]')).not.toBeNull()
     expect(card.querySelector(':scope > .dash-caption')?.textContent)
       .toBe('every day this year · a square per day, a column per week · tap a day to open it')
+    const heatmap = heatmaps.at(-1)!
+    expect(heatmap.days).toHaveLength(365)
+    // The scale runs to the server's busiest day; not a good one, so nothing is ringed.
+    expect([heatmap.max, heatmap.good]).toEqual([ACTIVITY_PERIOD_YEAR.high!.value, null])
+    act(() => { heatmap.onPointClick!('2025-03-04') })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(`${window.location.pathname}${window.location.search}`).toBe('/?day=2025-03-04')
+  })
+
+  it("rings the busiest day on the heatmap when the server judged it good, and the caption names it ✦, in both languages", async () => {
+    const period = { ...ACTIVITY_PERIOD_YEAR, high: { ...ACTIVITY_PERIOD_YEAR.high!, good: true } }
+    await renderAt(YEAR_URL, { period })
+    expect(heatmaps.at(-1)!.good).toBe(ACTIVITY_PERIOD_YEAR.high!.localDate)
+    expect(cardFor('Steps per day')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('every day this year · a square per day, a column per week · ✦ your busiest day · tap a day to open it')
+    await renderAt(YEAR_URL, { period }, 'nl')
+    expect(cardFor('Stappen per dag')!.querySelector(':scope > .dash-caption')?.textContent)
+      .toBe('elke dag dit jaar · een vakje per dag, een kolom per week · ✦ je drukste dag · tik op een dag om hem te openen')
   })
 
   it('draws the heatmap on 3 months too', async () => {
@@ -411,11 +440,12 @@ describe('the Activity page: the workouts', () => {
     expect(cardFor('Workouts')!.querySelector('.period-list-heading')).toBeNull()
   })
 
-  it('filters the expanded list by type, counted as the server counts, and clears it on closing', async () => {
+  it('filters the expanded list by type, and clears it on closing', async () => {
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
     act(() => { showAll().click() })
     const chips = () => [...cardFor('Workouts')!.querySelectorAll<HTMLButtonElement>('.activity-workout-filter .segment')]
-    expect(chips().map((chip) => chip.textContent)).toEqual(['All 9', 'Biking 3', 'Running 3', 'Walking 3'])
+    // "All" names the rows it shows, the excluded one among them; each type its count as the server counts.
+    expect(chips().map((chip) => chip.textContent)).toEqual(['All 10', 'Biking 3', 'Running 3', 'Walking 3'])
     expect(chips()[0]!.getAttribute('aria-pressed')).toBe('true')
     act(() => { chips()[2]!.click() })
     const running = ACTIVITY_PERIOD_MONTH.workouts.filter((w) => w.type === 'RUNNING')
@@ -428,10 +458,28 @@ describe('the Activity page: the workouts', () => {
     expect(workoutRows()).toHaveLength(7)
   })
 
-  it('groups the list by month on a year, collapsed as well', async () => {
+  it("groups the list by month on a year, collapsed as well, each month's workouts counted on the right", async () => {
     await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR })
-    const headings = [...cardFor('Workouts')!.querySelectorAll('.period-list-name')].map((name) => name.textContent)
-    expect(headings[0]).toBe('December')
+    const card = cardFor('Workouts')!
+    // Collapsed: seven rows under their month headings, and the list not opened.
+    expect(workoutRows()).toHaveLength(7)
+    expect(card.querySelector('.period-list-expanded')).toBeNull()
+    expect(showAll().getAttribute('aria-expanded')).toBe('false')
+    expect([...card.querySelectorAll('.period-list-heading')].map((h) => h.textContent)).toEqual(['December7 workouts'])
+    await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR }, 'nl')
+    expect(cardFor('Trainingen')!.querySelector('.period-list-aside')?.textContent).toBe('7 trainingen')
+  })
+
+  it('names no count on a month with only excluded workouts', async () => {
+    await renderAt(YEAR_URL, { period: { ...ACTIVITY_PERIOD_YEAR, workoutMonths: ACTIVITY_PERIOD_YEAR.workoutMonths.slice(1) } })
+    const heading = cardFor('Workouts')!.querySelector('.period-list-heading')!
+    expect(heading.querySelector('.period-list-name')?.textContent).toBe('December')
+    expect(heading.querySelector('.period-list-aside')).toBeNull()
+  })
+
+  it("prints a workout's pace and climb on its row", async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(workoutRows()[0]!.querySelector('.session-row-detail')?.textContent).toBe('Sat, Aug 29 · 3.0 km · 9:00 /km · 25 m gained')
   })
 
   it('opens collapsed again in a new period', async () => {
@@ -457,11 +505,16 @@ describe('the Activity page: by type', () => {
     ])
   })
 
-  it('colours a count outside its usual as out, judged neither way', async () => {
-    await renderAt(MONTH_URL, { period: month({ types: types({ standing: 'above' }) }) })
-    const verdict = cardFor('By type')!.querySelector('.activity-type-verdict')!
-    expect(verdict.textContent).toBe('above your usual 2 – 3')
-    expect(verdict.className).toBe('activity-type-verdict is-out')
+  it('colours more workouts of a type than usual green and fewer red, as the server judges them', async () => {
+    const [first, second] = ACTIVITY_PERIOD_MONTH.types
+    await renderAt(MONTH_URL, { period: month({ types: [
+      { ...first!, standing: 'above', judged: 'better' }, { ...second!, standing: 'below', judged: 'worse' },
+    ] }) })
+    const verdicts = [...cardFor('By type')!.querySelectorAll('.activity-type-verdict')]
+    expect(verdicts.map((v) => [v.textContent, v.className])).toEqual([
+      ['above your usual 2 – 3', 'activity-type-verdict better'],
+      ['below your usual 2 – 3', 'activity-type-verdict worse'],
+    ])
   })
 
   it('gives no verdict while the period is running, or on a thin usual, and says when there is no usual', async () => {
@@ -488,6 +541,13 @@ describe('the Activity page: by type', () => {
     root = createRoot(container!)
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH }, 'nl')
     expect(rowNamed('Per soort', 'VO₂max')!.querySelector('.figure-row-verdict')?.textContent).toBe('stijgend · was 40 in mei')
+  })
+
+  it('draws no verdict line for a VO₂max with no trend', async () => {
+    await renderAt(MONTH_URL, { period: month({ vo2max: { ...ACTIVITY_PERIOD_MONTH.vo2max!, trend: null, earlier: null, earlierDate: null } }) })
+    const vo2 = rowNamed('By type', 'VO₂max')!
+    expect(vo2.querySelector('.figure-row-value')?.textContent).toBe('42.5')
+    expect(vo2.querySelector('.figure-row-verdict')).toBeNull()
   })
 
   it.each<[string, Partial<ActivityPeriodData['vo2max'] & object>, string]>([

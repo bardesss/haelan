@@ -620,7 +620,8 @@
       },
       "heatmap": {
         "label": "Stappen per dag",
-        "caption": "elke dag {{period}} · een vakje per dag, een kolom per week · tik op een dag om hem te openen"
+        "caption": "elke dag {{period}} · een vakje per dag, een kolom per week · tik op een dag om hem te openen",
+        "captionGood": "elke dag {{period}} · een vakje per dag, een kolom per week · ✦ je drukste dag · tik op een dag om hem te openen"
       },
       "more": "Meer over bewegen"
     }

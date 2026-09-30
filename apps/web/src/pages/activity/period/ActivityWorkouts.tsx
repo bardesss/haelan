@@ -2,10 +2,10 @@ import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import { Card } from '../../../components/Card.js'
-import type { PeriodFigure, PeriodRange, TypeTotal, WorkoutListRow } from '../../../data/periodTypes.js'
+import type { PeriodFigure, PeriodRange, TypeTotal, WorkoutListRow, WorkoutMonth } from '../../../data/periodTypes.js'
 import { exerciseTypeLabel } from '../../../data/exerciseTypeLabel.js'
 import { formatFigureValue } from '../../detail/figureText.js'
-import { thisPeriod } from '../../detail/periodText.js'
+import { monthName, thisPeriod } from '../../detail/periodText.js'
 import { ExpandableList, LIST_VISIBLE } from '../../period/ExpandableList.js'
 import { SessionRowView } from '../SessionRow.js'
 
@@ -21,6 +21,7 @@ const grouped = (range: PeriodRange) => range === '3months' || range === 'year'
 const render = (workout: WorkoutListRow): ReactNode => (
   <SessionRowView id={workout.id} type={workout.type} startMs={workout.startMs} durationSeconds={workout.durationSeconds}
     distanceMeters={workout.distanceMeters} caloriesKcal={workout.caloriesKcal} averageHeartRateBpm={workout.averageHeartRateBpm}
+    paceSecondsPerKm={workout.paceSecondsPerKm} elevationGainMeters={workout.elevationGainMeters}
     excluded={workout.excluded} localDate={workout.localDate} dated />
 )
 
@@ -28,13 +29,15 @@ const render = (workout: WorkoutListRow): ReactNode => (
  * "Trainingen": the period's workouts, newest first as the server sends them, excluded ones
  * included and struck through (SessionRowView), under a caption with the server's count and the
  * period's workout time, the seven most recent and the rest behind "Show all 12 workouts"
- * (ExpandableList). On 3 months and Year the list is grouped by month. Expanded, it offers a filter
- * by type, the approved mockup's row of chips ("All 12", "Running 5"), each counted as the server
- * counts it (`workoutCount`, `types`). The page owns `expanded`, since the card's width follows it;
+ * (ExpandableList). On 3 months and Year the list is grouped by month, each month's header naming
+ * its workouts on the right as the server counts them (`workoutMonths`, "11 workouts"). Expanded, it
+ * offers a filter by type, the approved mockup's row of chips: "All 12" names the rows it shows,
+ * excluded ones among them, and each type its count as the server counts it (`types`). The page owns `expanded`, since the card's width follows it;
  * the filter is the list's own, and a new period (the page keys this card by it) starts on all.
  */
-export function ActivityWorkouts({ workouts, types, workoutCount, workoutTime, range, span, expanded, onToggle }: {
+export function ActivityWorkouts({ workouts, workoutMonths, types, workoutCount, workoutTime, range, span, expanded, onToggle }: {
   workouts: WorkoutListRow[]
+  workoutMonths: WorkoutMonth[]
   types: TypeTotal[]
   workoutCount: number
   /** The period's `workout_minutes` figure, whose total the caption names, or null. */
@@ -66,8 +69,12 @@ export function ActivityWorkouts({ workouts, types, workoutCount, workoutTime, r
     () => (filter === ALL ? workouts : workouts.filter((workout) => typeValue(workout.type) === filter)),
     [workouts, filter],
   )
-  const monthLabel = useCallback((month: string) => new Date(`${month}-01T00:00:00Z`)
-    .toLocaleString(language, { month: 'long', timeZone: 'UTC' }), [language])
+  const monthLabel = useCallback((month: string) => monthName(month, language), [language])
+  // A month holding only excluded workouts counts none, and its header names no count.
+  const monthAside = useCallback((month: string) => {
+    const counted = workoutMonths.find((m) => m.month === month)
+    return counted === undefined ? null : t('activity.period.workouts.count', { count: counted.count })
+  }, [workoutMonths, t])
   const showAll = useCallback((count: number) => t('activity.period.workouts.showAll', { count }), [t])
 
   const period = thisPeriod(range, t)
@@ -86,7 +93,7 @@ export function ActivityWorkouts({ workouts, types, workoutCount, workoutTime, r
       {filtering && (
         <div className="segmented activity-workout-filter" role="group" aria-label={t('activity.period.workouts.filter')}>
           <button type="button" className="segment" aria-pressed={filter === ALL} onClick={() => setFilter(ALL)}>
-            {t('activity.period.workouts.all', { count: workoutCount })}
+            {t('activity.period.workouts.all', { count: workouts.length })}
           </button>
           {options.map((option) => {
             const name = exerciseTypeLabel(t, option.type)
@@ -101,7 +108,8 @@ export function ActivityWorkouts({ workouts, types, workoutCount, workoutTime, r
       <p className="dash-caption night-list-caption">{caption}</p>
       <ExpandableList items={items} keyOf={keyOf} render={render} expanded={expanded} onToggle={toggle} showAll={showAll}
         visible={filter === ALL ? LIST_VISIBLE : 0}
-        groupOf={byMonth ? monthOf : undefined} groupLabel={byMonth ? monthLabel : undefined} groupCollapsed={byMonth} />
+        groupOf={byMonth ? monthOf : undefined} groupLabel={byMonth ? monthLabel : undefined}
+        groupAside={byMonth ? monthAside : undefined} groupCollapsed={byMonth} />
     </Card>
   )
 }

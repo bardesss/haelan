@@ -195,7 +195,7 @@ export function Activity() {
             <p className="dash-caption">{weekly ? t('activity.period.lines.weekly') : t('activity.period.lines.daily', { period })}</p>
           </Card>
         )}
-        <ActivityHeatmapCard steps={hero} range={data.period.range} onOpenDay={openDay} />
+        <ActivityHeatmapCard steps={hero} high={data.high} range={data.period.range} onOpenDay={openDay} />
         {hasIntensity(data.intensity) && <ActivityIntensity intensity={data.intensity} range={data.period.range} />}
         {zonesShown && (
           <ActivityZoneMinutes zones={data.zoneMinutes} total={data.more.find((figure) => figure.metric === ZONE_MINUTES_METRIC) ?? null}
@@ -203,7 +203,7 @@ export function Activity() {
         )}
         {heartShown && <ActivityHeartZones zones={data.heartRateZones} maxHeartRate={data.maxHeartRate} range={data.period.range} span={zoneSpan} />}
         {listShown && (
-          <ActivityWorkouts key={periodKey} workouts={data.workouts} types={data.types} workoutCount={data.workoutCount}
+          <ActivityWorkouts key={periodKey} workouts={data.workouts} workoutMonths={data.workoutMonths} types={data.types} workoutCount={data.workoutCount}
             workoutTime={data.more.find((figure) => figure.metric === WORKOUT_TIME) ?? null}
             range={data.period.range} span={workoutSpan} expanded={expanded} onToggle={toggle} />
         )}

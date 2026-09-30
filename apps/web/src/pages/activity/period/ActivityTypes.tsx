@@ -9,6 +9,7 @@ import { exerciseCategory } from '../../../data/exerciseCategory.js'
 import { formatNumber } from '../../../format.js'
 import type { Translate } from '../../../format.js'
 import { verdictLine } from '../../detail/figureText.js'
+import { monthName } from '../../detail/periodText.js'
 import { PeriodFigureRows } from '../../period/PeriodFigureRows.js'
 import { CATEGORY_ICONS } from '../SessionRow.js'
 import { minutesText, useActivityLabel } from './labels.js'
@@ -24,8 +25,8 @@ export function hasTypes(types: TypeTotal[], cardioLoad: PeriodFigure | null, vo
 /**
  * A type's count against its usual count for a period this long, in the verdict catalogue's words
  * ("above your usual 3 – 4"), or "no usual yet" without one. Nothing where the server did not
- * judge it (a running period, or a thin usual). A count is judged neither way, so its tone is the
- * dashboard's is-out outside the usual (verdictTone).
+ * judge it (a running period, or a thin usual). The server judges more of a type than usual the
+ * better side (`judged`), so above reads green and below red (verdictTone), the approved mockup's.
  */
 function typeVerdict(type: TypeTotal, language: string, t: Translate): string | null {
   if (type.usualCount === null) return t('glance.usual.none')
@@ -47,14 +48,14 @@ function typeAmount(type: TypeTotal, language: string, t: Translate): string {
 
 /**
  * The VO₂max's trend in words, after its latest value ("rising · was 40 in May", "steady at 42"),
- * the server's `trend` against the reading about three months before; empty with no trend.
+ * the server's `trend` against the reading about three months before; null with no trend, so the
+ * row draws no verdict line at all.
  */
-function vo2Words(vo2: Vo2Trend, language: string, t: Translate): string {
+function vo2Words(vo2: Vo2Trend, language: string, t: Translate): string | null {
   const value = (n: number) => formatNumber(n, Number.isInteger(n) ? 0 : 1, language, t('common.absent'))
-  if (vo2.trend === null) return ''
+  if (vo2.trend === null) return null
   if (vo2.trend === 'steady' || vo2.earlier === null || vo2.earlierDate === null) return t('activity.period.vo2.steady', { latest: value(vo2.latest) })
-  const month = new Date(`${vo2.earlierDate}T00:00:00Z`).toLocaleString(language, { month: 'long', timeZone: 'UTC' })
-  return t(`activity.period.vo2.${vo2.trend}`, { earlier: value(vo2.earlier), month })
+  return t(`activity.period.vo2.${vo2.trend}`, { earlier: value(vo2.earlier), month: monthName(vo2.earlierDate, language) })
 }
 
 /**
@@ -84,7 +85,7 @@ export function ActivityTypes({ types, cardioLoad, vo2max, range, span }: {
           <ul className="activity-types">
             {types.map((type) => {
               const verdict = typeVerdict(type, language, t)
-              const tone = type.usualCount === null ? null : verdictTone(null, type.standing)
+              const tone = type.usualCount === null ? null : verdictTone(type.judged, type.standing)
               const category = exerciseCategory(type.type)
               return (
                 <li key={type.type ?? ''} className="activity-type">

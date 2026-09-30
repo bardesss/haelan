@@ -620,7 +620,8 @@
       },
       "heatmap": {
         "label": "Steps per day",
-        "caption": "every day {{period}} · a square per day, a column per week · tap a day to open it"
+        "caption": "every day {{period}} · a square per day, a column per week · tap a day to open it",
+        "captionGood": "every day {{period}} · a square per day, a column per week · ✦ your busiest day · tap a day to open it"
       },
       "more": "More about moving"
     }
