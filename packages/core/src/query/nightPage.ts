@@ -4,7 +4,7 @@
 import { shiftLocalDate } from '../derive/localDay.ts'
 import type { PersonQuery } from './personQuery.ts'
 import { activeMinutesFigure, contextFor, dailyFigure, readRecovery } from './glance.ts'
-import type { GlanceContext, GlanceNav, GlanceRecovery } from './glance.ts'
+import type { GlanceContext, GlanceNav, GlanceRecovery, GlanceStanding } from './glance.ts'
 import { baselineWindow, BASELINE_MIN_DAYS } from './baseline.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { recoveryWindowStart, sleepWeekSeries } from '../api/recoveryIndex.ts'
@@ -14,8 +14,9 @@ import { balanceOf, balanceZeroLine } from '../api/sleepBalance.ts'
 import type { ZeroLine } from '../api/sleepBalance.ts'
 import { figureFromValues, pageFigureOf } from './pageFigure.ts'
 import type { PageFigure } from './pageFigure.ts'
-import { nightTrace } from './nightTraces.ts'
-import type { NightTrace } from './nightTraces.ts'
+import { nightTrace, nightTraceHistory } from './nightTraces.ts'
+import type { NightTrace, NightTraceStat } from './nightTraces.ts'
+import { stageTimingOf } from './stageTiming.ts'
 import type { Night } from './sleepNights.ts'
 import type { WorkoutSession } from './sessions.ts'
 
@@ -39,6 +40,13 @@ export interface NightPage {
   stagePercent: { deep: number | null, light: number | null, rem: number | null }
   balance: { zeroLine: ZeroLine, nights: { localDate: string, difference: number | null }[], total: number }
   traces: { heartRate: NightTrace, hrv: NightTrace, spo2: NightTrace }
+  /**
+   * How long after falling asleep the first deep and REM sleep began, and how many REM episodes;
+   * with the instants the first deep and REM segment began. Null on a classic night.
+   */
+  stageTiming: { firstDeep: PageFigure, firstRem: PageFigure, cycles: PageFigure, firstDeepAtMs: number | null, firstRemAtMs: number | null }
+  /** Of the morning's judged figures, how many sat outside their usual. */
+  morningSummary: MorningSummary
   morning: {
     /** The index and its band; the two figures below are the same readings, judged. */
     recovery: GlanceRecovery
@@ -48,8 +56,27 @@ export interface NightPage {
     spo2: PageFigure
     skinTemperature: PageFigure
     skinTemperatureDeviation: number | null
+    /** How far the heart rate fell below the morning's resting rate while asleep, in percent of the resting rate. */
+    heartRateDip: PageFigure
   }
   day: { localDate: string, steps: PageFigure, activeMinutes: PageFigure, workouts: WorkoutSession[] }
+}
+
+export interface MorningSummary { outside: number, of: number }
+
+/** Counts the judged morning figures (standing !== null) and those outside (above/below). */
+export function morningSummaryOf(figures: readonly { standing: GlanceStanding | null }[]): MorningSummary {
+  const judged = figures.filter((f) => f.standing !== null)
+  return { outside: judged.filter((f) => f.standing !== 'within').length, of: judged.length }
+}
+
+/**
+ * The summary over a page's morning figures. The one list of what counts, shared with the route,
+ * which calls it again over the rounded figures. The recovery index is left out: readRecovery
+ * never judges it (it is already a distance from the person's own baselines), so it could never count.
+ */
+export function morningSummaryOfMorning(m: Pick<NightPage['morning'], 'restingHeartRate' | 'hrv' | 'breathing' | 'spo2' | 'skinTemperature' | 'heartRateDip'>): MorningSummary {
+  return morningSummaryOf([m.restingHeartRate, m.hrv, m.breathing, m.spo2, m.skinTemperature, m.heartRateDip])
 }
 
 // Answers: which sleep session speaks for a night's provider summary - the main sleep, else the first.
@@ -73,6 +100,44 @@ function summaryFigures(q: PersonQuery, night: Night, history: readonly Night[],
     awakenings: figure('sleep_awakenings', 'awakenings', 'count', 'down'),
     minutesAfterWakeUp: figure('sleep_after_wake_minutes', 'minutesAfterWakeUp', 'minutes', 'neutral'),
   }
+}
+
+// Answers: when the first deep and REM sleep came and how many REM episodes there were, each against the nights before.
+function stageTimingFigures(night: Night, history: readonly Night[]): NightPage['stageTiming'] {
+  const own = stageTimingOf(night.segments)
+  const earlier = history.map((n) => stageTimingOf(n.segments))
+  const figure = (metric: string, key: 'firstDeepMinutes' | 'firstRemMinutes' | 'cycles', unit: string) => figureFromValues({
+    metric, unit, precision: 0, direction: 'neutral', value: own[key], minN: BASELINE_MIN_DAYS,
+    history: earlier.flatMap((t) => (t[key] === null ? [] : [t[key]])),
+  })
+  return {
+    firstDeep: figure('sleep_first_deep_minutes', 'firstDeepMinutes', 'minutes'),
+    firstRem: figure('sleep_first_rem_minutes', 'firstRemMinutes', 'minutes'),
+    cycles: figure('sleep_cycles', 'cycles', 'count'),
+    firstDeepAtMs: own.firstDeepAtMs,
+    firstRemAtMs: own.firstRemAtMs,
+  }
+}
+
+const dipPercent = (resting: number, lowest: number) => ((resting - lowest) / resting) * 100
+
+// Answers: how far the heart rate fell below the morning's resting rate while asleep, as a percent
+// of that resting rate ((resting - lowest) / resting x 100), against the same on the nights before. The lowest readings are the heart-rate trace's own history
+// stats, aligned with `history`, so no night's window is read a second time here.
+function heartRateDip(
+  q: PersonQuery, resting: number | null, lowest: number | null,
+  history: readonly Night[], historyStats: readonly NightTraceStat[], window: { from: string, to: string },
+): PageFigure {
+  const restingOn = new Map(q.series({ metric: 'resting_heart_rate', agg: 'last', from: window.from, to: window.to })
+    .points.map((p) => [p.localDate, p.value]))
+  const earlier = historyStats.flatMap((stat, i) => {
+    const r = restingOn.get(history[i]!.localDate)
+    return r === undefined || r <= 0 || stat.lowest === null ? [] : [dipPercent(r, stat.lowest.value)]
+  })
+  return figureFromValues({
+    metric: 'sleep_heart_rate_dip', unit: 'percent', precision: 0, direction: 'up', minN: BASELINE_MIN_DAYS,
+    value: resting === null || resting <= 0 || lowest === null ? null : dipPercent(resting, lowest), history: earlier,
+  })
 }
 
 // Answers: how much bedtime moved over the week ending on this night, against the same statistic on earlier nights.
@@ -134,6 +199,16 @@ export function readNightPage(q: PersonQuery, input: NightPageInput): NightPage 
   const balanced = balanceOf(strip.map((d) => d.value), zeroLine.minutes)
   const skinBaseline = skinTemperature.baseline
   const recovery = readRecovery(ctx)
+  const heartRateHistory = nightTraceHistory(q, 'heart_rate', history)
+  const heartRate = nightTrace(q, 'heart_rate', night, history, heartRateHistory)
+  const restingHeartRate = pageFigureOf(recovery.restingHeartRate, true)
+  const hrv = pageFigureOf(recovery.hrv, true)
+  const breathing = figure('sleep_respiratory_rate', 'last')
+  const spo2 = figure('daily_spo2', 'last')
+  // Only a resting heart rate recorded on the night's own date, as each history night's is; the
+  // glance's fallback to the day before would measure tonight against a different morning.
+  const restingTonight = recovery.restingHeartRate.asOfDate === localDate ? restingHeartRate.value : null
+  const dip = heartRateDip(q, restingTonight, heartRate.stat.lowest?.value ?? null, history, heartRateHistory, window)
 
   return {
     localDate,
@@ -162,21 +237,24 @@ export function readNightPage(q: PersonQuery, input: NightPageInput): NightPage 
       total: balanced.total,
     },
     traces: {
-      heartRate: nightTrace(q, 'heart_rate', night, history),
+      heartRate,
       hrv: nightTrace(q, 'hrv', night, history),
       spo2: nightTrace(q, 'spo2', night, history),
     },
+    stageTiming: stageTimingFigures(night, history),
+    morningSummary: morningSummaryOfMorning({ restingHeartRate, hrv, breathing, spo2, skinTemperature, heartRateDip: dip }),
     morning: {
       recovery,
       // The glance's figures carry no direction or verdict of their own; as page figures they are
       // judged like every other figure here, a higher resting heart rate worse, a lower HRV worse.
-      restingHeartRate: pageFigureOf(recovery.restingHeartRate, true),
-      hrv: pageFigureOf(recovery.hrv, true),
-      breathing: figure('sleep_respiratory_rate', 'last'),
-      spo2: figure('daily_spo2', 'last'),
+      restingHeartRate,
+      hrv,
+      breathing,
+      spo2,
       skinTemperature,
       skinTemperatureDeviation: skinTemperature.value === null || skinBaseline === null || skinBaseline.thin
         ? null : skinTemperature.value - skinBaseline.center,
+      heartRateDip: dip,
     },
     day: dayBefore(q, localDate, input),
   }

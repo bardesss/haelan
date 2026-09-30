@@ -567,11 +567,45 @@
           "pauses_other": "{{count}} pauzes, samen {{duration}}",
           "heartRate": "Hartslag",
           "highest": "hoogste {{value}} na {{time}}",
-          "highestOnly": "hoogste {{value}}"
+          "highestOnly": "hoogste {{value}}",
+          "pace": "Tempo",
+          "cadence": "Cadans",
+          "paceChart": "Tempo door de training",
+          "cadenceChart": "Cadans door de training",
+          "average": "gemiddeld {{value}}",
+          "averageShort": "gem. {{value}}",
+          "fastest": "snelste {{value}} na {{time}}",
+          "smoothed": {
+            "pace": "tempo gladgestreken over drie minuten",
+            "cadence": "cadans gladgestreken over drie minuten",
+            "both": "tempo en cadans gladgestreken over drie minuten"
+          },
+          "noRoute": "zonder route geen tempolijn",
+          "from": {
+            "pace_one": "Het tempo komt uit de tijden van het ene routepunt.",
+            "pace_other": "Het tempo komt uit de tijden van de {{count}} routepunten.",
+            "cadence": "De cadans komt uit de stappen per minuut.",
+            "both_one": "Het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
+            "both_other": "Het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+          },
+          "fromAfter": {
+            "pace_one": "het tempo komt uit de tijden van het ene routepunt.",
+            "pace_other": "het tempo komt uit de tijden van de {{count}} routepunten.",
+            "cadence": "de cadans komt uit de stappen per minuut.",
+            "both_one": "het tempo komt uit de tijden van het ene routepunt, de cadans uit de stappen per minuut.",
+            "both_other": "het tempo komt uit de tijden van de {{count}} routepunten, de cadans uit de stappen per minuut."
+          }
         },
         "zones": {
           "label": "Hartslagzones",
           "hard": "{{value}} intensief of piek"
+        },
+        "recovery": {
+          "label": "Hartslagherstel",
+          "oneMinute": "Daling na 1 minuut",
+          "twoMinutes": "Daling na 2 minuten",
+          "between": "van {{from}} naar {{to}}",
+          "caption": "uit je hartslag in de minuten na het stoppen · gebruikelijk uit tot 10 trainingen van dit type ervoor"
         },
         "form": {
           "label": "Loopvorm",
@@ -590,6 +624,14 @@
           "steps": "Stappen",
           "activeMinutes": "Actieve minuten",
           "workouts": "Trainingen"
+        },
+        "before": {
+          "label": "Daarvoor",
+          "caption": "de nacht voor deze training en die ochtend",
+          "asleep": "Tijd in slaap",
+          "recoveryIndex": "Herstelindex",
+          "restingHeartRate": "Rusthartslag",
+          "night": "Bekijk de nacht"
         },
         "after": {
           "label": "Daarna",
@@ -871,7 +913,12 @@
       },
       "through": {
         "label": "De nacht",
-        "share": "{{duration}} · {{percent}} %"
+        "share": "{{duration}} · {{percent}} %",
+        "firstDeep": "Eerste diepe slaap",
+        "firstRem": "Eerste REM",
+        "cycles": "Slaapcycli",
+        "afterOnset": "na het inslapen, om {{clock}}",
+        "cycleNote": "een cyclus: licht, diep en REM, ongeveer 90 min"
       },
       "traces": {
         "heart_rate": "Hartslag",
@@ -886,7 +933,8 @@
         "lowest": "laagste {{value}} om {{time}}",
         "highest": "hoogste {{value}} om {{time}}",
         "caption": "band = je gebruikelijke bereik · zelfde tijdas als de fasen",
-        "hrvChart": "HRV in de nacht"
+        "hrvChart": "HRV in de nacht",
+        "dipBelow": "{{dip}} onder je rusthartslag"
       },
       "sessions": {
         "excluded": "Uitgesloten",
@@ -906,6 +954,7 @@
         "label": "De ochtend erna",
         "labelDated": "Herstel op {{date}}",
         "restingHeartRate": "Rusthartslag",
+        "heartRateDip": "Hartslagdaling in slaap",
         "hrv": "HRV",
         "hrvChart": "HRV vanochtend",
         "breathing": "Ademhaling in slaap",
@@ -919,6 +968,23 @@
           "respiratoryRate": "ademhaling",
           "sleep": "slaap",
           "bedtime": "bedtijd"
+        },
+        "summary": "'s Nachts {{outside}} van {{of}} buiten je gebruikelijke bereik:",
+        "summaryAll": "'s Nachts alle {{of}} binnen je gebruikelijke bereik",
+        "dipNote": "laagste {{lowest}} tegenover rusthartslag {{resting}}",
+        "summaryOutside": "{{name}} {{direction}}",
+        "summaryWithin": "{{names}} binnen",
+        "direction": {
+          "above": "hoger",
+          "below": "lager"
+        },
+        "names": {
+          "restingHeartRate": "hartslag",
+          "hrv": "HRV",
+          "heartRateDip": "hartslagdaling",
+          "spo2": "zuurstof",
+          "breathing": "ademhaling",
+          "skinTemperature": "huidtemperatuur"
         }
       },
       "day": {

@@ -16,9 +16,11 @@ const NBSP = '\u00a0'
 // where "0h 12m" puts an empty hour in front of it. Time asleep, the stages, time in bed and time
 // awake stay durations, since those do run to hours. A workout's minutes in the hard zones
 // (workoutPage.ts's `hardZoneMinutes`) is the same kind: "15 min hard or peak", and so are its
-// active zone minutes ("43 min").
+// active zone minutes ("43 min"). So is the time to a night's first deep sleep ("52 min"), where
+// the time to its first REM sleep does run to hours ("2h 55m") and stays a duration.
 const SHORT_SPANS: ReadonlySet<string> = new Set([
   'active_minutes', 'sleep_latency_minutes', 'sleep_after_wake_minutes', 'sleep_bedtime_variability',
+  'sleep_first_deep_minutes',
   'hardZoneMinutes', 'activeZoneMinutes',
 ])
 
@@ -38,7 +40,7 @@ const SMALL_UNITS: Readonly<Record<string, { factor: number, precision: number, 
 // one sub-second figure that also carries the 'seconds' unit (`groundContact`) reads in
 // milliseconds instead (SMALL_UNITS above).
 // Named apart from charts/elapsed.ts's formatElapsed, which takes milliseconds.
-function formatStopwatch(totalSeconds: number): string {
+export function formatStopwatch(totalSeconds: number): string {
   const total = Math.round(totalSeconds)
   const hours = Math.floor(total / 3600)
   const minutes = Math.floor((total % 3600) / 60)

@@ -5,7 +5,7 @@ import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import type { PageFigure } from './useNightPage.js'
 import type { DayLog } from './useNightPage.js'
-import type { GlanceStanding } from './useGlance.js'
+import type { GlanceRecovery, GlanceStanding } from './useGlance.js'
 import type { WorkoutSession } from './useSessions.js'
 
 // Mirrors the wire shape of packages/core/src/query/workoutPage.ts's WorkoutPage, after
@@ -48,6 +48,13 @@ export interface WorkoutComparison {
   cardioLoad: ComparisonFacet | null
 }
 
+/** One value a minute on the workout's own clock, each placed by its own `elapsedSeconds` (a
+ *  minute with no value is simply not there), in `unit` (workoutThrough.ts's MinuteSeries). */
+export interface MinuteSeries { unit: string, points: { elapsedSeconds: number, value: number }[] }
+
+/** Pace, with its fastest minute: the lowest smoothed seconds per km and when it came (workoutThrough.ts's PaceSeries). */
+export interface PaceSeries extends MinuteSeries { fastest: { secondsPerKm: number, elapsedSeconds: number } | null }
+
 export interface RecordRef { value: number, sessionId: string, localDate: string }
 
 export interface WorkoutPageData {
@@ -63,6 +70,18 @@ export interface WorkoutPageData {
   best: { fastestKmSeconds: RecordRef | null, furthestMeters: RecordRef | null, longestMs: RecordRef | null }
   day: { steps: PageFigure, activeMinutes: PageFigure, otherWorkouts: WorkoutSession[] }
   after: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, restingHeartRate: PageFigure | null }
+  /** How far heart rate fell one and two minutes after the end, in whole bpm, each judged against
+   *  the latest ten workouts of the type, and the minute means each fall is between (`readings`,
+   *  whole bpm, null for a minute with no reading); null when neither minute had a reading. */
+  heartRateRecovery: {
+    oneMinute: PageFigure, twoMinutes: PageFigure
+    readings: { endBpm: number, oneMinuteBpm: number | null, twoMinutesBpm: number | null }
+  } | null
+  /** The night ending on the workout's own date and that morning's recovery; null for each with no value. */
+  before: { night: { localDate: string, asleep: PageFigure, deep: PageFigure } | null, recovery: GlanceRecovery | null, restingHeartRate: PageFigure | null }
+  /** Pace (seconds per km, from the route) and cadence (steps per minute, from the workout's own
+   *  device's steps) a minute at a time, whole numbers; null for each the workout cannot give. */
+  through: { pace: PaceSeries | null, cadence: MinuteSeries | null }
   /** Whole seconds per km the second half of the automatic splits was faster than the first,
    *  negative when slower; null below two usable splits (workoutPage.ts's splitTrendOf). */
   splitTrend: { secondHalfFasterBySecondsPerKm: number } | null

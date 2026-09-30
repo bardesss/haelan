@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
-import { balanceOf, ConfigError, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
-import type { GlanceRecovery, MinuteSeries, NightPage, NightTrace, WorkoutPage } from '@haelan/core'
+import { balanceOf, ConfigError, morningSummaryOfMorning, readDayLog, requireDate, shiftLocalDate } from '@haelan/core'
+import type { GlanceRecovery, MinuteSeries, NightPage, NightTrace, PaceSeries, WorkoutPage } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
   personAndToday, personIdOf, personQueryOf, roundFigure, roundMetricValue, roundMetricValueOrNull, roundPageFigure,
@@ -66,9 +66,27 @@ function roundNightPage(page: NightPage): NightPage {
   const balanced = balanceOf(strip.map((d) => d.value), zeroMinutes)
   const skinTemperature = roundPageFigure(page.morning.skinTemperature)
   const skinBaseline = skinTemperature.baseline
+  const morning = {
+    restingHeartRate: roundPageFigure(page.morning.restingHeartRate),
+    hrv: roundPageFigure(page.morning.hrv),
+    breathing: roundPageFigure(page.morning.breathing),
+    spo2: roundPageFigure(page.morning.spo2),
+    skinTemperature,
+    heartRateDip: roundPageFigure(page.morning.heartRateDip),
+  }
   return {
     ...page,
     figures,
+    stageTiming: {
+      firstDeep: roundPageFigure(page.stageTiming.firstDeep),
+      firstRem: roundPageFigure(page.stageTiming.firstRem),
+      cycles: roundPageFigure(page.stageTiming.cycles),
+      // Instants, sent as they are, like the night's own start and end.
+      firstDeepAtMs: page.stageTiming.firstDeepAtMs,
+      firstRemAtMs: page.stageTiming.firstRemAtMs,
+    },
+    // Judged again on the rounded figures: a dip that rounds onto its band edge is within.
+    morningSummary: morningSummaryOfMorning(morning),
     stagePercent: {
       deep: roundPercent(page.stagePercent.deep),
       light: roundPercent(page.stagePercent.light),
@@ -86,11 +104,7 @@ function roundNightPage(page: NightPage): NightPage {
     },
     morning: {
       recovery: roundRecovery(page.morning.recovery),
-      restingHeartRate: roundPageFigure(page.morning.restingHeartRate),
-      hrv: roundPageFigure(page.morning.hrv),
-      breathing: roundPageFigure(page.morning.breathing),
-      spo2: roundPageFigure(page.morning.spo2),
-      skinTemperature,
+      ...morning,
       // Core's null rules, on the rounded pair; rounded once more because 33.5 - 33.0 in floating
       // point need not come out exactly 0.5.
       skinTemperatureDeviation: skinTemperature.value === null || skinBaseline === null || skinBaseline.thin
@@ -110,7 +124,7 @@ function roundWorkoutNight(night: WorkoutPage['after']['night']): WorkoutPage['a
 }
 
 /** A minute series under the trace, each value whole: seconds per km as the pace figure is sent, steps per minute as cadence is. */
-function roundMinuteSeries(series: MinuteSeries | null): MinuteSeries | null {
+function roundMinuteSeries<T extends MinuteSeries>(series: T | null): T | null {
   return series === null ? null : { ...series, points: series.points.map((p) => ({ ...p, value: Number(p.value.toFixed(0)) })) }
 }
 
@@ -121,6 +135,14 @@ function roundEffort(effort: NonNullable<WorkoutPage['efforts']>['km']): NonNull
     seconds: Number(effort.seconds.toFixed(0)),
     best: effort.best === null ? null : { ...effort.best, value: Number(effort.best.value.toFixed(0)) },
   }
+}
+
+/** Pace's series as roundMinuteSeries sends it, its fastest minute whole seconds per km, as its point is. */
+function roundPaceSeries(series: PaceSeries | null): PaceSeries | null {
+  const rounded = roundMinuteSeries(series)
+  if (rounded === null || rounded.fastest === null) return rounded
+  const { secondsPerKm, elapsedSeconds } = rounded.fastest
+  return { ...rounded, fastest: { secondsPerKm: Number(secondsPerKm.toFixed(0)), elapsedSeconds: Number(elapsedSeconds.toFixed(0)) } }
 }
 
 /**
@@ -165,6 +187,8 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     },
     heartRateRecovery: heartRateRecovery === null ? null : {
       oneMinute: roundPageFigure(heartRateRecovery.oneMinute), twoMinutes: roundPageFigure(heartRateRecovery.twoMinutes),
+      // Already whole bpm: core rounds each minute before taking the fall between them.
+      readings: heartRateRecovery.readings,
     },
     // The course time as a figure, the previous time and every effort in whole seconds, as pace is.
     sameRoute: sameRoute === null ? null : {
@@ -175,7 +199,7 @@ function roundWorkoutPage(page: WorkoutPage): WorkoutPage {
     efforts: efforts === null ? null : {
       km: roundEffort(efforts.km), mile: roundEffort(efforts.mile), fiveK: roundEffort(efforts.fiveK),
     },
-    through: { pace: roundMinuteSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
+    through: { pace: roundPaceSeries(through.pace), cadence: roundMinuteSeries(through.cadence) },
     // Whole seconds per km, as the pace figure is sent; whole bpm, as every heart rate is.
     splitTrend: splitTrend === null ? null : { secondHalfFasterBySecondsPerKm: whole(splitTrend.secondHalfFasterBySecondsPerKm) },
     zoneBounds: zoneBounds === null ? null : {

@@ -268,11 +268,12 @@ export { figureDirection, standingOf } from './query/glance.ts'
 // the judged figure shape both detail pages share. `judge` is exported as well, for the HTTP route
 // that serves the page.
 export type { NightPage, NightPageInput } from './query/nightPage.ts'
+export { morningSummaryOfMorning } from './query/nightPage.ts'
 export type {
   WorkoutPage, WorkoutPageInput, WorkoutFigure, WorkoutFigureKey, WorkoutStripPoint, RecordRef,
 } from './query/workoutPage.ts'
 export { WORKOUT_BAND_MIN, WORKOUT_STRIP } from './query/workoutPage.ts'
-export type { MinuteSeries } from './query/workoutThrough.ts'
+export type { MinuteSeries, PaceSeries } from './query/workoutThrough.ts'
 export type { PageFigure, Judged } from './query/pageFigure.ts'
 export { FIGURE_METRIC_ALIAS, judge } from './query/pageFigure.ts'
 export type { NightTrace, NightTraceStat } from './query/nightTraces.ts'

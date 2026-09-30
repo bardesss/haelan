@@ -32,6 +32,18 @@ describe('paceSeries', () => {
     expect(series.points[3]!.value).toBeCloseTo(250, 1)
   })
 
+  it('names the fastest minute by its smoothed pace, and the earlier of a tie', () => {
+    // 3, 4, 4, 4, 3 m/s: the middle minute alone smooths to 250 s/km.
+    const middle = paceSeries(route([...Array(6).fill(3), ...Array(18).fill(4), ...Array(6).fill(3)]), START, HOUR_ON)!
+    expect(middle.fastest!.elapsedSeconds).toBe(120)
+    expect(middle.fastest!.secondsPerKm).toBeCloseTo(250, 1)
+    expect(middle.fastest!.secondsPerKm).toBe(Math.min(...middle.points.map((p) => p.value)))
+    // 4, 4, 3, 3, 4, 4 m/s: the first two and the last two minutes both smooth to 250.
+    const tie = paceSeries(route([...Array(12).fill(4), ...Array(12).fill(3), ...Array(12).fill(4)]), START, HOUR_ON)!
+    expect(tie.points.at(-1)!.value).toBeCloseTo(250, 1)
+    expect(tie.fastest!.elapsedSeconds).toBe(0)
+  })
+
   it('draws a minute of just over 50 m and leaves out one of just under', () => {
     const series = paceSeries(route([...Array(6).fill(51 / 60), ...Array(6).fill(49 / 60)]), START, HOUR_ON)!
     expect(series.points.map((p) => p.elapsedSeconds)).toEqual([0])
@@ -50,6 +62,20 @@ describe('paceSeries', () => {
     const series = paceSeries(route(Array(7).fill(3)), START, HOUR_ON)!
     expect(series.points.map((p) => p.elapsedSeconds)).toEqual([0, 60])
     expect(series.points[1]!.value).toBeCloseTo(1000 / 3, 1)
+  })
+
+  it('leaves a pause out of the minutes it touches, and a minute all pause out altogether', () => {
+    // A minute at 3 m/s, a pause the phone logged as one stretch from 60 s to 150 s, then 90 s more
+    // at 3 m/s. The third minute is 30 s paused and 30 s running: it reads the running, not 90 m
+    // over a whole minute (666 s/km), and the second minute, all pause, is a gap.
+    const running = route(Array(6).fill(3))
+    const stopped = running.at(-1)!
+    const resumed = route(Array(9).fill(3)).map((fix) => ({
+      atMs: fix.atMs + 150_000, latitude: stopped.latitude + (fix.latitude - 52), longitude: 5,
+    }))
+    const series = paceSeries([...running, ...resumed], START, HOUR_ON)!
+    expect(series.points.map((p) => p.elapsedSeconds)).toEqual([0, 120, 180])
+    for (const p of series.points) expect(p.value).toBeCloseTo(1000 / 3, 1)
   })
 
   it('leaves out every fix after the end, and the part of a stretch past it', () => {

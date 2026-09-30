@@ -10,7 +10,7 @@ export type ChartTable = {
 }
 
 // Accessible chart: a name, the card's basis line as description, and the same numbers as a table.
-export function ChartFigure({ label, table, host, style, tap, tableToggle = true, tapWords }: {
+export function ChartFigure({ label, table, host, style, tap, tableToggle = true, tapWords, tableShown, tableId: ownTableId }: {
   label: string
   table: ChartTable
   host: RefObject<HTMLDivElement | null>
@@ -34,14 +34,25 @@ export function ChartFigure({ label, table, host, style, tap, tableToggle = true
    * the dashboard's strips open the day (Sparkline's `opensDay`). Undefined is the annotate words.
    */
   tapWords?: { idle: string, named: (name: string) => string }
+  /**
+   * Set, the table is shown or hidden by a control outside this figure, one for several charts
+   * stacked in one card (a workout's heart rate, pace and cadence), and this figure draws no
+   * control of its own; `tableId` is then the table's id, for that control's aria-controls.
+   */
+  tableShown?: boolean
+  tableId?: string
 }) {
   const describedBy = useBasisId()
   const { t } = useTranslation()
   // Component state, not localStorage, following HeartRateRange's own band toggle and the reason
   // given there: this is a fact about the view rather than about the reader, and nothing asks it to
   // survive a navigation.
-  const [shown, setShown] = useState(false)
-  const tableId = useId()
+  const [ownShown, setShown] = useState(false)
+  const generatedId = useId()
+  const tableId = ownTableId ?? generatedId
+  const controlled = tableShown !== undefined
+  const shown = tableShown ?? ownShown
+  const toggle = tableToggle && !controlled
 
   return (
     // The margin reset is a class (.chart-figure), not an inline style: inline, it beat the detail
@@ -62,7 +73,7 @@ export function ChartFigure({ label, table, host, style, tap, tableToggle = true
         about the desktop. Below it the two controls sit at opposite ends and are allowed to wrap,
         because "Annotate 12 September" beside "Show numbers" is most of a 375px card.
       */}
-      {(tableToggle || tap) && <div style={tap
+      {(toggle || tap) && <div style={tap
         ? { display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', flexWrap: 'wrap' }
         : { display: 'flex', justifyContent: 'flex-end' }}>
         {/*
@@ -77,7 +88,7 @@ export function ChartFigure({ label, table, host, style, tap, tableToggle = true
               : tapWords?.named(tap.name) ?? t('charts.annotate.point', { point: tap.name })}
           </button>
         )}
-        {tableToggle && (
+        {toggle && (
           <button type="button" className="chart-table-toggle" aria-expanded={shown} aria-controls={tableId}
             aria-label={t(shown ? 'charts.tableToggle.hideFor' : 'charts.tableToggle.showFor', { label })}
             onClick={() => setShown((current) => !current)}>

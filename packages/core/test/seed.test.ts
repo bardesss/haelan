@@ -398,6 +398,28 @@ describe('seedArchive', () => {
     expect(routed.map((p) => p.exercise.interval.startTime as string).sort()).toEqual(runStarts.slice(-routed.length))
   })
 
+  // The hourly day curve, the night's readings, a workout's own and the minutes after it are four
+  // writers of one heart-rate series, each told to stay out of the others' minutes. Two readings in
+  // one minute would be averaged into one stored row, so a recovery minute a night reading shared
+  // would read a fall that neither gave. Over the demo's own length, so every morning workout the
+  // demo draws is met.
+  it('never writes two heart-rate readings into one minute, over the demo\'s year', () => {
+    const minutes = new Map<number, number>()
+    const archive = {
+      put: (row: { dataType: string, body: string }) => {
+        if (row.dataType !== 'heart-rate') return
+        for (const m of row.body.matchAll(/"physicalTime":"([^"]+)"/g)) {
+          const minute = Math.floor(Date.parse(m[1]!) / 60_000)
+          minutes.set(minute, (minutes.get(minute) ?? 0) + 1)
+        }
+      },
+    }
+    seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 365, endMs: END, demoRoute: true })
+    expect(minutes.size).toBeGreaterThan(0)
+    const doubled = [...minutes].filter(([, n]) => n > 1).map(([minute]) => new Date(minute * 60_000).toISOString())
+    expect(doubled).toEqual([])
+  }, 60_000)
+
   describe('lastDayUntilMs', () => {
     // A stand-in archive that keeps every put in order, so two runs can be compared put by put.
     interface Put { dataType: string, windowStartMs: number, body: string }

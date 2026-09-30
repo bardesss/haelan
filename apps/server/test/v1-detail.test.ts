@@ -44,7 +44,7 @@ function seedNight(h: Harness, localDate: string, asleep: number): void {
     startMs, startOffsetMinutes: OFFSET, endMs, endOffsetMinutes: OFFSET, localDate, rawPayloadId: null,
     attrs: JSON.stringify({ type: null, mainSleep: true, stagesStatus: 'SUCCEEDED', summary: { minutesInSleepPeriod: '480' } }),
   }).run()
-  db.insert(schema.sessionSegments).values({ id: `${id}-1`, sessionId: id, stage: 'light', startMs, endMs }).run()
+  db.insert(schema.sessionSegments).values({ id: `${id}-1`, sessionId: id, stage: 'LIGHT', startMs, endMs }).run()
   seedDaily(h, localDate, 'sleep_asleep_minutes', 'sum', asleep)
 }
 
@@ -154,6 +154,81 @@ describe('GET /night/:localDate', () => {
     expect(skinTemperature.value).toBe(33.5)
     expect(skinTemperature.baseline.center).toBe(33)
     expect(body.morning.skinTemperatureDeviation).toBe(0.5)
+  })
+
+  // Twenty nights whose heart rate falls to 44 under a resting rate of 50, a dip of 12 %, and a
+  // night that falls to 44 under 50.17, a dip of 12.3 %. Core judges it above its flat band of 12;
+  // on the wire it is 12, so it must read within, and the summary must count it as judged but not
+  // as outside.
+  it('re-judges the heart-rate dip on the wire, and the morning summary with it', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    const lowest = (localDate: string) => insertSample(harness!.app.haelan.instance.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '03:00'), tzOffsetMinutes: OFFSET, value: 44,
+    })
+    for (let i = 1; i <= 20; i += 1) {
+      const date = shiftLocalDate(NIGHT, -i)
+      seedNight(harness, date, 400)
+      lowest(date)
+      seedDaily(harness, date, 'resting_heart_rate', 'last', 50)
+    }
+    seedNight(harness, NIGHT, 400)
+    lowest(NIGHT)
+    seedDaily(harness, NIGHT, 'resting_heart_rate', 'last', 50.17)
+
+    const body = (await get(harness, token, `/night/${NIGHT}`)).json()
+    expect(body.morning.heartRateDip).toMatchObject({ unit: 'percent', value: 12, standing: 'within', judged: null })
+    expect(body.morning.heartRateDip.baseline).toMatchObject({ center: 12, low: 12, high: 12 })
+    // Twenty nights are too few for a usual resting rate, so the dip is the one judged figure.
+    expect(body.morningSummary).toEqual({ outside: 0, of: 1 })
+  })
+
+  // First deep sleep 52.6 minutes after onset is sent as 53, like every other whole-number figure;
+  // the instant it began is sent as it is.
+  it('sends the stage timing rounded', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedNight(harness, NIGHT, 400)
+    const start = at(shiftLocalDate(NIGHT, -1), '23:00')
+    harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+      id: 'deep-1', sessionId: `night-${NIGHT}`, stage: 'DEEP', startMs: start + 52.6 * 60_000, endMs: start + 100 * 60_000,
+    }).run()
+
+    // First REM 172.6 minutes in. Fourteen nights before it give the first REM and the cycle count
+    // each a baseline, whose centres (a mean of counts, a mean of minutes) are fractional.
+    harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+      id: 'rem-1', sessionId: `night-${NIGHT}`, stage: 'REM', startMs: start + 172.6 * 60_000, endMs: start + 200 * 60_000,
+    }).run()
+    for (let i = 1; i <= 14; i += 1) {
+      const date = shiftLocalDate(NIGHT, -i)
+      seedNight(harness, date, 400)
+      const night = at(shiftLocalDate(date, -1), '23:00')
+      const episodes = i % 3 === 0 ? 2 : 1
+      harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+        id: `deep-${date}`, sessionId: `night-${date}`, stage: 'DEEP', startMs: night + (30 + i * 0.4) * 60_000, endMs: night + 60 * 60_000,
+      }).run()
+      for (let e = 0; e < episodes; e += 1) {
+        harness.app.haelan.instance.db.insert(schema.sessionSegments).values({
+          id: `rem-${date}-${e}`, sessionId: `night-${date}`, stage: 'REM',
+          startMs: night + (100 + e * 120 + i * 0.4) * 60_000, endMs: night + (110 + e * 120 + i * 0.4) * 60_000,
+        }).run()
+      }
+    }
+
+    const { stageTiming } = (await get(harness, token, `/night/${NIGHT}`)).json()
+    expect(stageTiming.firstDeep.value).toBe(53)
+    expect(stageTiming.firstDeepAtMs).toBe(start + 52.6 * 60_000)
+    expect(stageTiming.firstRem.value).toBe(173)
+    expect(stageTiming.firstRemAtMs).toBe(start + 172.6 * 60_000)
+    expect(stageTiming.cycles.value).toBe(1)
+    for (const key of ['firstDeep', 'firstRem', 'cycles']) {
+      expect(stageTiming[key].baseline, key).not.toBeNull()
+      expect(Number.isInteger(stageTiming[key].baseline.center), `${key} centre`).toBe(true)
+    }
   })
 
   // Each strip day is judged against its own day's band, and re-judged on the wire as the headline
@@ -293,9 +368,11 @@ describe('GET /workout/:sessionId', () => {
     expect(body.zoneBounds).toEqual({ moderateMin: 113, vigorousMin: 137, peakMin: 162, max: 187 })
   })
 
-  // Five earlier runs that each fell 20.3 bpm make a usual of exactly 20.3 (no spread), and core
-  // calls the subject's 20.4 above it, a better recovery. On the wire both are 20, so the page
-  // must say within and claim no verdict, or it shows "20, better than your usual 20".
+  // Core takes each fall between whole-bpm readings, so every fall is whole, but their usual is
+  // not: four earlier runs that fell 20 and one that fell 21 make a usual of 20.2 with a band that
+  // ends near 20.65, and core calls the subject's 21 above it, a better recovery. On the wire the
+  // band's top is 21, so the page must say within and claim no verdict, or it shows "21, better
+  // than your usual 20 - 21".
   it('sends heart-rate recovery rounded, re-judged on the rounded numbers', async () => {
     harness = await withServer()
     harness.clock.nowMs = NOW_MS
@@ -309,13 +386,29 @@ describe('GET /workout/:sessionId', () => {
     for (let i = 0; i < 5; i += 1) {
       const localDate = shiftLocalDate('2026-09-04', -3 * (5 - i))
       seedRun(harness, { id: `run-${i}`, sourceId: 'watch', localDate, pace: 310 })
-      seedAfter(localDate, [160, 150, 139.7, 128.2])
+      seedAfter(localDate, [160, 150, i === 4 ? 139 : 140, 128.2])
     }
     seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 300 })
-    seedAfter('2026-09-04', [160, 150, 139.6, 120.4])
+    seedAfter('2026-09-04', [160, 150, 139, 120.4])
     const { heartRateRecovery } = (await get(harness, token, '/workout/subject')).json()
-    expect(heartRateRecovery.oneMinute).toMatchObject({ value: 20, baseline: { center: 20, low: 20, high: 20 }, standing: 'within', judged: null })
+    expect(heartRateRecovery.oneMinute).toMatchObject({ value: 21, baseline: { center: 20, low: 20, high: 21 }, standing: 'within', judged: null })
     expect(heartRateRecovery.twoMinutes).toMatchObject({ value: 40, baseline: { center: 32 }, standing: 'above', judged: 'better' })
+  })
+
+  it('sends the readings a recovery falls between in whole bpm, and none for a minute without one', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedRun(harness, { id: 'subject', sourceId: 'watch', localDate: '2026-09-04', pace: 300 })
+    // The last full minute, the end's own minute, then only the minute one after it.
+    for (const [i, bpm] of [160.4, 150, 139.6].entries()) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(harness.app.haelan.instance.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at('2026-09-04', '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
+      }
+    }
+    const { heartRateRecovery } = (await get(harness, token, '/workout/subject')).json()
+    expect(heartRateRecovery.readings).toEqual({ endBpm: 160, oneMinuteBpm: 140, twoMinutesBpm: null })
   })
 
   // The night before, its morning's recovery and resting heart rate, each at its own precision.
@@ -360,6 +453,10 @@ describe('GET /workout/:sessionId', () => {
     }
     const { through } = (await get(harness, token, '/workout/subject')).json()
     expect(through.pace.points.map((p: { value: number }) => p.value)).toEqual([333, 333, 333])
+    // Every minute is 333.3 give or take a float's last digit, so which one is fastest is noise;
+    // what is sent is whole, and one of the three.
+    expect(through.pace.fastest.secondsPerKm).toBe(333)
+    expect([0, 60, 120]).toContain(through.pace.fastest.elapsedSeconds)
     expect(through.cadence.points.map((p: { value: number }) => p.value)).toEqual([171, 171, 171, 171, 171])
   })
 

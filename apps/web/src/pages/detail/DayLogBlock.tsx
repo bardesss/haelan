@@ -50,15 +50,20 @@ export function DayLogBlock({ log, note = null }: { log: DayLog, note?: string |
 }
 
 /**
- * The card a detail page's side section wears (the night's "Die dag", the workout's "Die dag" and
- * "Daarna"): the card's label, then a narrow column saying which day or night the section is about
- * beside the section's own rows, stacked where the grid collapses. One layout for every such
- * section, so the two detail pages cannot draw the same kind of card two ways.
+ * The card a detail page's side section wears (the night's "Die dag", the workout's "Die dag",
+ * "Daarvoor" and "Daarna"): the card's label, then a narrow column saying which day or night the
+ * section is about beside the section's own rows, stacked where the grid collapses. One layout for
+ * every such section, so the two detail pages cannot draw the same kind of card two ways.
+ *
+ * `span={6}` is half a row, for two side cards set beside each other (the workout's before and
+ * after); there the caption sits over the rows rather than beside them, as it does below 900px,
+ * since a quarter of half a card is too narrow for a sentence. The caller picks the span, so a
+ * pair whose other half is missing goes back to the full row (uniform spans per run).
  */
-export function SideCard({ label, caption, children }: { label: string, caption: string, children: ReactNode }) {
+export function SideCard({ label, caption, span = 12, children }: { label: string, caption: string, span?: 6 | 12, children: ReactNode }) {
   return (
-    <Card span={12} label={label}>
-      <div className="detail-side">
+    <Card span={span} label={label}>
+      <div className={span === 6 ? 'detail-side detail-side-stacked' : 'detail-side'}>
         <p className="detail-side-caption">{caption}</p>
         <div className="detail-side-body">{children}</div>
       </div>
