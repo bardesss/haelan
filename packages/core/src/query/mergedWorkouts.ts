@@ -6,6 +6,7 @@ import { loadPriority } from '../store/sourcePriority.ts'
 import { SettingsStore } from '../store/settings.ts'
 import { workoutSummary } from '../api/workoutSummary.ts'
 import { readSessions, sessionRateOf } from './sessions.ts'
+import { fillFromSamples } from './fillFromSamples.ts'
 import type { WorkoutSession } from './sessions.ts'
 
 /**
@@ -39,6 +40,10 @@ import type { WorkoutSession } from './sessions.ts'
  * list's decision, not something to average. Joined detail follows the same first-non-null order
  * where it is read (readWorkoutRoute walks `[id, ...alternateIds]`; cardio load and splits read
  * the merged attrs).
+ *
+ * **Filling.** A workout with no metricsSummary left after merging is a phone copy whose Google copy
+ * has not arrived; the two readers below fill it from its own samples (fillFromSamples.ts), after
+ * the merge, so a Google value always wins. mergeWorkouts itself stays pure and unfilled.
  */
 
 /** What a merged read needs besides the rows: the ranking and the overlap threshold. */
@@ -174,7 +179,9 @@ export function readMergedWorkouts(db: DbOrTx, input: {
   const matched = input.type === undefined
     ? inRange
     : inRange.filter((w) => workoutSummary(w.attrs).exerciseType === input.type)
-  return input.last === undefined ? matched : matched.slice(-input.last)
+  const answered = input.last === undefined ? matched : matched.slice(-input.last)
+  // Last, so only a workout this read answers pays for its samples (fillFromSamples.ts).
+  return answered.map((session) => fillFromSamples(db, { personId: input.personId, session }))
 }
 
 /**
@@ -200,5 +207,6 @@ export function mergedWorkoutFor(db: DbOrTx, input: {
     to: shiftLocalDate(session.localDate, 1),
   })
   const merged = mergeWorkouts(around, input.rule)
-  return merged.find((w) => w.id === session.id || w.alternateIds.includes(session.id)) ?? session
+  const found = merged.find((w) => w.id === session.id || w.alternateIds.includes(session.id)) ?? session
+  return fillFromSamples(db, { personId: input.personId, session: found })
 }
