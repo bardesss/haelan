@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { annotationsByDate } from '../src/charts/base.js'
+import { annotationsByDate, dayMarks } from '../src/charts/base.js'
 
 describe('annotationsByDate', () => {
   it('passes a single annotation through unchanged', () => {
@@ -31,5 +31,19 @@ describe('annotationsByDate', () => {
 
   it('returns an empty array for no annotations', () => {
     expect(annotationsByDate([])).toEqual([])
+  })
+})
+
+describe('dayMarks', () => {
+  it('marks the point an annotation names by index, not the last point on its date', () => {
+    // Two workouts of one type on one day share a date; looking the date up lands on the later one.
+    const marks = dayMarks({
+      dates: ['2026-09-05', '2026-09-05'],
+      values: [10, 12],
+      excluded: [],
+      annotations: [{ date: '2026-09-05', index: 0, text: 'filled' }],
+      excludedText: '',
+    })
+    expect(marks.atDate).toEqual([{ date: '2026-09-05', index: 0, excluded: false, text: 'filled' }])
   })
 })
