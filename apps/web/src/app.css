@@ -632,7 +632,6 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .workout-about-body { display: flex; flex-direction: column; gap: var(--space-2); }
 .workout-about-body .workout-actions { justify-content: flex-start; }
 /* A value the phone's samples filled, its note on a line of its own under it in the table. */
-.workout-compared-filled { display: block; }
 /* The pending clause's sync button sits in the About line's text, not on a line of its own. */
 .detail-about-line .workout-sync-now { vertical-align: baseline; margin-left: var(--space-1); }
 /* A refused press, said beside the button a shade stronger than the line it sits in. Never hidden
@@ -1973,6 +1972,11 @@ button.week-bar-slot { cursor: pointer; }
    "this text is gone" and the reason is the opposite, the one line explaining why. */
 .session-row-excluded { color: var(--text-faint); text-decoration: line-through; }
 .session-row-excluded-reason { font-size: var(--font-size-xs); color: var(--text-faint); text-decoration: none; margin-top: var(--space-1); }
+/* A row the phone's samples filled, said once under the figures it covers, aligned with them. */
+.session-row-filled {
+  font-size: var(--font-size-xs); color: var(--text-faint);
+  margin-top: var(--space-1); padding-left: calc(18px + var(--space-3));
+}
 
 /* The row itself keeps every rule it had; the link exists to make the whole row a target and to
    stop the browser underlining and recolouring the text inside it. surface-hover is the same

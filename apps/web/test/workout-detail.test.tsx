@@ -1848,7 +1848,8 @@ describe('a workout still waiting for the watch\'s figures', () => {
     const host = await mount(pending(['pace', 'distance', 'averageHeartRate', 'cardioLoad', 'calories', 'steps', 'hardZoneMinutes']), fullSession())
     // The hero: its own line under the verdict, and the previous line says which of the two it is.
     expect(text(host, '.workout-hero-filled')).toBe('from your readings, over the elapsed time')
-    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1 · this one measured over the elapsed time')
+    // A pace over the elapsed time beside one over moving time: the previous value alone, no difference.
+    expect(text(host, '.workout-hero-previous')).toBe('The previous one: 5:36\u00a0/km, Tuesday, September 1 · this one measured over the elapsed time')
     // The strip's own dot for it, and its row in the screen reader's table, say the same.
     const heroRow = [...host.querySelectorAll('.detail-hero tr')].find((row) => row.textContent!.includes('from your readings'))
     expect(heroRow?.textContent).toContain('from your readings, over the elapsed time')
@@ -1862,10 +1863,16 @@ describe('a workout still waiting for the watch\'s figures', () => {
     const more = cardLabelled(host, 'More about this workout')!
     const moreNotes = Object.fromEntries([...more.querySelectorAll('.figure-row')].map((row) => [text(row, '.figure-row-label'), text(row, '.figure-row-note') ?? null]))
     expect(moreNotes).toMatchObject({ Calories: 'from your readings', Steps: 'from your readings', 'Highest heart rate': null })
-    // The comparison table marks each cell of this workout that was filled.
-    expect([...host.querySelectorAll('.workout-compared tbody tr')].map((row) => text(row, '.workout-compared-filled') ?? null)).toEqual([
-      'from your readings, over the elapsed time', 'from your readings', 'from your readings', 'from your readings',
-    ])
+    // The comparison table says it once, in its footnote, and no cell repeats it.
+    const compared = host.querySelector('.workout-compared')!
+    expect(compared.textContent).not.toContain('from your readings')
+    expect(text(host, '.workout-compared-footnote'))
+      .toBe('This type only · your best from Records · this workout from your readings, its pace over the elapsed time')
+    // The previous pace alone, with no difference beside it; the other rows keep theirs.
+    const previousCells = [...compared.querySelectorAll('tbody tr')].map((row) => row.querySelectorAll('td')[1]!)
+    expect(previousCells[0]!.textContent).toBe('5:36\u00a0/km')
+    expect(previousCells[0]!.querySelector('.workout-diff')).toBeNull()
+    expect(previousCells.slice(1).every((cell) => cell.querySelector('.workout-diff') !== null)).toBe(true)
     expect(text(host, '.workout-zones-verdict')).toBe('15\u00a0min vigorous or peak · above your usual 8 – 14\u00a0min · from your readings')
     // The same route's rate row.
     expect(text(cardLabelled(host, 'This route')!, '.figure-row-note')).toBe('from your readings, over the elapsed time')
@@ -1874,7 +1881,7 @@ describe('a workout still waiting for the watch\'s figures', () => {
   it('marks nothing the watch recorded itself', async () => {
     const host = await mount(pending(), fullSession())
     expect(host.querySelector('.workout-hero-filled')).toBeNull()
-    expect(host.querySelectorAll('.workout-compared-filled')).toHaveLength(0)
+    expect(text(host, '.workout-compared-footnote')).toBe('This type only · your best from Records')
     expect(host.textContent).not.toContain('from your readings')
     expect(host.textContent).not.toContain('elapsed time')
     expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1')
@@ -1886,7 +1893,46 @@ describe('a workout still waiting for the watch\'s figures', () => {
     expect(text(card, '.detail-about-line'))
       .toBe('Opgenomen door watch · de cijfers van je horloge komen met de volgende synchronisatie Nu synchroniseren · uitsluiten of een notitie toevoegen')
     expect(text(host, '.workout-hero-filled')).toBe('uit je metingen, over de verstreken tijd')
-    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km sneller dan de vorige, dinsdag 1 september · deze gemeten over de verstreken tijd')
+    expect(text(host, '.workout-hero-previous')).toBe('De vorige: 5:36\u00a0/km, dinsdag 1 september · deze gemeten over de verstreken tijd')
     expect(text(host.querySelector('.detail-minis .figure-row')!, '.figure-row-note')).toBe('uit je metingen')
+    expect(text(host, '.workout-compared-footnote'))
+      .toBe('Alleen dit type · je beste uit Records · deze training uit je metingen, het tempo over de verstreken tijd')
+  })
+
+  it('says only what was filled in the footnote: no rate clause when the rate was recorded', async () => {
+    const host = await mount(pending(['distance', 'averageHeartRate']), fullSession())
+    expect(text(host, '.workout-compared-footnote')).toBe('This type only · your best from Records · this workout from your readings')
+    // The pace is the watch's own, so its difference from the previous one stands.
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1')
+    const nl = await mount(pending(['distance']), fullSession(), 'nl')
+    expect(text(nl, '.workout-compared-footnote')).toBe('Alleen dit type · je beste uit Records · deze training uit je metingen')
+  })
+
+  it('names a filled speed in the footnote as the speed, in both languages', async () => {
+    const ride = (): WorkoutPageData => {
+      const page = pending(['speed', 'distance'])
+      const pace = page.figures.pace!
+      const speed = { ...pace, key: 'speed' as const, unit: 'meters_per_second', direction: 'up' as const, value: 7.5, precision: 2 }
+      const figures = { ...page.figures, speed }
+      delete figures.pace
+      return { ...page, exerciseType: 'BIKING', hero: 'speed', figures, previous: { ...page.previous!, values: { speed: 7, distance: 5000 } } }
+    }
+    const en = await mount(ride(), fullSession())
+    expect(text(en, '.workout-compared-footnote')).toContain('this workout from your readings, its speed over the elapsed time')
+    const nl = await mount(ride(), fullSession(), 'nl')
+    expect(text(nl, '.workout-compared-footnote')).toContain('deze training uit je metingen, de snelheid over de verstreken tijd')
+  })
+
+  // Two runs on one day: the strip's dot for the other one is not this workout's, and was not filled.
+  it('marks this workout\'s own dot on the strip, never a same-day sibling\'s', async () => {
+    const page = pending(['pace'])
+    const pace = page.figures.pace!
+    const last = pace.strip.length - 1
+    const strip = pace.strip.map((point, i) => (i === last - 1 ? { ...point, localDate: page.localDate, sessionId: 'same-day-sibling' } : point))
+    const host = await mount({ ...page, figures: { ...page.figures, pace: { ...pace, strip } } }, fullSession())
+    const rows = [...host.querySelectorAll('.detail-hero tbody tr')]
+    const marked = rows.filter((row) => row.textContent!.includes('from your readings'))
+    expect(marked).toHaveLength(1)
+    expect(marked[0]).toBe(rows[last])
   })
 })

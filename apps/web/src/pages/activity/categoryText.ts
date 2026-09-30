@@ -12,10 +12,9 @@ import { figureAs, formatFigureValue } from '../detail/figureText.js'
  */
 export function sessionRateText(rate: SessionRate | null, language: string, t: Translate): string | null {
   if (rate === null) return null
-  const text = formatFigureValue(figureAs(rate.key, rate.unit), rate.value, language, t)
-  // A rate the phone's samples filled runs over the whole span, stops included (core's
-  // fillFromSamples.ts): said, so it never passes for the watch's own.
-  return rate.fromElapsed === true ? t('activity.sessions.rateElapsed', { rate: text }) : text
+  // A rate the phone's samples filled (`fromElapsed`) is worded by the row's one note about what
+  // was filled (SessionRowView), not here as well.
+  return formatFigureValue(figureAs(rate.key, rate.unit), rate.value, language, t)
 }
 
 /** A swim's distance, in whole metres however far it went ("1,500 m"): a pool counts in metres. */

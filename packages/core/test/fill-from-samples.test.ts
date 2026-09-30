@@ -436,7 +436,8 @@ describe('the Activity period', () => {
 
     for (const range of ['week', 'month'] as const) {
       const period = readActivityPeriod(q(), { range, anchor: DATE, today: DATE })
-      expect(period.workouts.find((w) => w.id === 'phone-run')!.distanceMeters).toBe(5100)
+      expect(period.workouts.find((w) => w.id === 'phone-run')).toMatchObject({ distanceMeters: 5100, filled: true })
+      expect(period.workouts.find((w) => w.id === 'google-run')!.filled).toBe(false)
       const treadmill = period.types.find((t) => t.type === 'TREADMILL')!
       // Google's 4 km alone: the filled 5.1 km is listed, never summed.
       expect(treadmill.distanceMeters).toBe(4000)
@@ -450,7 +451,7 @@ describe('the Activity period', () => {
     for (const range of ['3months', 'year'] as const) {
       vi.mocked(readIntradayWindow).mockClear()
       const period = readActivityPeriod(q(), { range, anchor: DATE, today: DATE })
-      expect(period.workouts.find((w) => w.id === 'phone-run')!.distanceMeters).toBeNull()
+      expect(period.workouts.find((w) => w.id === 'phone-run')).toMatchObject({ distanceMeters: null, filled: false })
       expect(vi.mocked(readIntradayWindow)).not.toHaveBeenCalled()
     }
   })

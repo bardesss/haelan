@@ -47,6 +47,12 @@ function previousLine(page: WorkoutPageData, hero: WorkoutFigure, language: stri
   if (previous === null) return null
   const date = formatSessionDateHeading(previous.localDate, language)
   const { key } = hero
+  // A rate the phone's samples filled runs over the elapsed time, the previous one's over moving
+  // time: unlike with unlike, so its value alone, as the rank is withheld for the same reason.
+  const before = key === 'pace' || key === 'speed' ? previous.values[key] : undefined
+  if (before !== undefined && filledNote(page, key, t) !== undefined) {
+    return t('activity.workout.page.previousValue', { value: formatFigureValue(hero, before, language, t), date })
+  }
   const apart = key === 'pace' || key === 'speed' || key === 'swimPace' ? rateDifference(hero, previous.values[key], language, t) : null
   if (apart === null) return t('activity.workout.page.previousOnly', { date })
   if (apart.faster === null) return t('activity.workout.page.previousSame', { date })
@@ -122,12 +128,15 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   // `current`), so a same-day sibling still opens.
   const opens = useOpensDay(page.sessionId, onOpenWorkout, 'workout')
   // A filled rate's own dot, among rates the watch took over moving time, carries the same words
-  // as the line under the verdict: the strip's annotation for its date, which marks the dot and
-  // its row in the screen reader's table alike. Memoised for the reason the strip is.
+  // as the line under the verdict: the strip's annotation for this session's own point, found by
+  // its id rather than its date, since a same-type sibling on the same day is a dot of its own and
+  // was not filled. It marks the dot and its row in the screen reader's table alike. Memoised for
+  // the reason the strip is.
   const filledWords = hero === undefined ? undefined : filledNote(page, hero.key, t)
+  const ownIndex = strip === null ? -1 : strip.ids.indexOf(page.sessionId)
   const annotations = useMemo(
-    () => (filledWords === undefined ? undefined : [{ date: page.localDate, text: filledWords }]),
-    [filledWords, page.localDate],
+    () => (filledWords === undefined || ownIndex === -1 ? undefined : [{ date: page.localDate, text: filledWords, index: ownIndex }]),
+    [filledWords, page.localDate, ownIndex],
   )
   if (hero === undefined || hero.value === null) return null
   const label = t(`activity.workout.page.figures.${hero.key}`)

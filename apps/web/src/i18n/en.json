@@ -370,8 +370,7 @@
       "emptyPeriodTitle": "No activities recorded in this period.",
       "emptyPeriodDetail": "Nothing has synced for these dates yet.",
       "excluded": "Excluded: {{reason}}",
-      "excludedNoReason": "Excluded",
-      "rateElapsed": "{{rate}} over the elapsed time"
+      "excludedNoReason": "Excluded"
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
@@ -449,6 +448,7 @@
         "previousSlower": "{{difference}} slower than the previous one, {{date}}",
         "previousSame": "As fast as the previous one, {{date}}",
         "previousOnly": "The previous one: {{date}}",
+        "previousValue": "The previous one: {{value}}, {{date}}",
         "view": "View the previous one",
         "secondsPerKm": "{{value}} s/km",
         "bestFastestKm": "Your best: fastest kilometre {{value}} ({{month}})",
@@ -464,6 +464,9 @@
           "bestLongest": "longest {{value}} · {{month}}",
           "caption": "This type only",
           "captionBest": "your best from Records",
+          "filled": "this workout from your readings",
+          "filledPace": "this workout from your readings, its pace over the elapsed time",
+          "filledSpeed": "this workout from your readings, its speed over the elapsed time",
           "tableCaption": "This workout beside the previous one of its type",
           "tableCaptionAlone": "This workout",
           "captionWith": {

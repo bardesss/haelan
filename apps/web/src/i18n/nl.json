@@ -370,8 +370,7 @@
       "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",
       "emptyPeriodDetail": "Er is nog niets gesynchroniseerd voor deze datums.",
       "excluded": "Uitgesloten: {{reason}}",
-      "excludedNoReason": "Uitgesloten",
-      "rateElapsed": "{{rate}} over de verstreken tijd"
+      "excludedNoReason": "Uitgesloten"
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
@@ -449,6 +448,7 @@
         "previousSlower": "{{difference}} langzamer dan de vorige, {{date}}",
         "previousSame": "Even snel als de vorige, {{date}}",
         "previousOnly": "De vorige: {{date}}",
+        "previousValue": "De vorige: {{value}}, {{date}}",
         "view": "Bekijk de vorige",
         "secondsPerKm": "{{value}} s/km",
         "bestFastestKm": "Je beste: snelste kilometer {{value}} ({{month}})",
@@ -464,6 +464,9 @@
           "bestLongest": "langste {{value}} · {{month}}",
           "caption": "Alleen dit type",
           "captionBest": "je beste uit Records",
+          "filled": "deze training uit je metingen",
+          "filledPace": "deze training uit je metingen, het tempo over de verstreken tijd",
+          "filledSpeed": "deze training uit je metingen, de snelheid over de verstreken tijd",
           "tableCaption": "Deze training naast de vorige van dit type",
           "tableCaptionAlone": "Deze training",
           "captionWith": {
