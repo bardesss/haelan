@@ -826,6 +826,28 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 .detail-legend-key[data-schedule="weekend"] { background: var(--chart-stage-rem); }
 .detail-legend-key[data-schedule="out"] { background: var(--negative); border-radius: 50%; }
 .detail-legend-key[data-schedule="usual"] { background: var(--chart-band-baseline); }
+/* The Activity page's legends (activity/period): the intensity bands in the activity steps, and the
+   zone minutes in the heart-rate zones that earn them (fat burn moderate, cardio vigorous, peak). */
+.detail-legend-key[data-activity="light"] { background: var(--chart-activity-light); }
+.detail-legend-key[data-activity="moderate"] { background: var(--chart-activity-moderate); }
+.detail-legend-key[data-activity="vigorous"] { background: var(--chart-activity-vigorous); }
+.detail-legend-key[data-azm="fatBurn"] { background: var(--chart-zone-moderate); }
+.detail-legend-key[data-azm="cardio"] { background: var(--chart-zone-vigorous); }
+.detail-legend-key[data-azm="peak"] { background: var(--chart-zone-peak); }
+/* A half card's own figure in display type over its chart (the zone minutes, the heart-rate zones). */
+.activity-card-lead { margin-bottom: var(--space-3); }
+.activity-card-lead .detail-verdict { margin-top: var(--space-1); }
+/* The workouts' type chips, over the expanded list. */
+.activity-workout-filter { margin-bottom: var(--space-2); }
+/* "Per soort": a row per type, its icon, name and amount on one line, its verdict under the name. */
+.activity-types { list-style: none; margin: var(--space-1) 0 var(--space-3); padding: 0; }
+.activity-type { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
+.activity-type:last-child { border-bottom: 0; }
+.activity-type-name { font-weight: var(--weight-bold); min-width: 0; }
+.activity-type-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.activity-type-verdict { grid-column: 2 / 4; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.activity-type-verdict.better { color: var(--positive); }
+.activity-type-verdict.worse, .activity-type-verdict.is-out { color: var(--negative); }
 /* The schedule's two sentences, the card's first lines, the chart under them. */
 .schedule-sentences { margin-bottom: var(--space-2); }
 .schedule-sentences > p { margin: 0; }
@@ -869,7 +891,7 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
 }
 /* One box per tile. Without it the grid's children are StatTile's own three elements rather than
    its tiles, and auto-fit flows label, value and basis into separate columns. min-width: 0 for the
-   same reason .session-list carries it: a grid child defaults to min-content and a long label would
+   same reason .today-workouts carries it: a grid child defaults to min-content and a long label would
    push the track wider than its share. */
 .workout-dynamic-tile { min-width: 0; }
 
@@ -927,17 +949,9 @@ h2.label { margin: 0; }
 .empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 
-/* The training load card's own three. Its gate is NOT .empty: .empty means a metric card had no
-   data to draw, while this says a DERIVED statistic has not enough worn days to be computed yet,
-   which is a statement about the archive rather than about the card. activity.test.tsx asserts on
-   .empty meaning only the first of those, and it is right to. */
-.training-load-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
-.training-load-ratio { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
-.training-load-target { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
-
-/* The recovery index tile's own gate, following .training-load-empty's own comment above: not
-   .empty, because this says the derived score has not enough recent history to compare against,
-   not that the card's underlying metrics had no rows. */
+/* The recovery index tile's own gate. Not .empty: .empty means a metric card had no data to draw,
+   while this says the derived score has not enough recent history to compare against, which is a
+   statement about the archive rather than about the card. */
 .recovery-index-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
 /* RecoveryIndexCard.tsx's own attribution list, below the sparkline: a plain list rather than a
    table (each row is one input's own name against its own points, not a value under a shared
@@ -1886,7 +1900,9 @@ button.week-bar-slot { cursor: pointer; }
 /* Wraps session-row-type and session-row-duration (plus an sr-only date, invisible either way) so
    the gap between them comes from layout rather than a literal space character joining two spans
    with nothing else to tell them apart. */
-.session-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+/* It wraps as whole pieces: on a phone a long type pushes its duration to the next line whole
+   ("54 min"), never splitting it into "54" and "min". */
+.session-row-primary { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); min-width: 0; }
 /* The category mark. Centred against the line rather than sitting on its baseline, which a glyph
    has no business doing, and muted: it is there to be scanned past, not read. */
 .session-row-icon { display: inline-flex; align-self: center; color: var(--text-muted); flex: none; }
@@ -1910,7 +1926,7 @@ button.week-bar-slot { cursor: pointer; }
 /* The secondary half beside it: text-secondary and font-size-xs are the same pairing
    .stepper-label already uses for a label that supports the element next to it rather than
    standing on its own. */
-.session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); }
+.session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); white-space: nowrap; }
 .session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Indented to the name's own column by hand, because it sits outside the row's grid: the glyph's
    width plus the grid's gap, which is what puts it under the type rather than under the mark. */
@@ -1937,33 +1953,10 @@ button.week-bar-slot { cursor: pointer; }
 .session-row-link:hover .session-row { background: var(--surface-hover); }
 .session-row-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-/* SessionList.tsx's own root: min-width: 0 so a row's own flex children can actually shrink
-   inside the card's grid column rather than pushing it wide, the same reason .card itself carries
-   this. */
-.session-list { min-width: 0; }
-/* The Dashboard's list of today's workouts (TodayWorkouts.tsx): the same SessionRows as
-   .session-list, so the same min-width: 0 for the same reason. */
+/* The Dashboard's list of today's workouts (TodayWorkouts.tsx): min-width: 0 so a row's own flex
+   children can actually shrink inside the card's grid column rather than pushing it wide, the same
+   reason .card itself carries this. */
 .today-workouts { min-width: 0; }
-/* The count sits opposite the type filter (when there is one) rather than above the rows it
-   describes, the same header row shape .card's own .label plays elsewhere. */
-.session-list-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
-.session-list-count { font-size: var(--font-size-xs); color: var(--text-muted); }
-/* One .session-date-group per run of consecutive same-day rows; the gap between groups is what
-   separates one day's rows from the next now that nothing else does (a border would repeat the
-   one every .session-row already carries between rows within a day). */
-.session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
-.session-date-group { min-width: 0; }
-/* The date and its totals on one line, with a rule under them, so a day reads as a group rather
-   than as a loose run of rows following a quiet label. */
-.session-date-heading {
-  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3);
-  font-weight: var(--weight-medium); color: var(--text-primary);
-  margin: 0 0 var(--space-1); padding-bottom: var(--space-1);
-  border-bottom: 1px solid var(--border-subtle);
-}
-/* The two halves carry their own size rather than inheriting one and overriding it, since the
-   heading is a flex container: its own font-size sets nothing here beyond what these two say. */
-.session-date-label { font-size: var(--font-size-sm); }
 
 /* NightRow.tsx: a night in the Sleep page's list (M10b; M8c's list before it), one row per night
    with the date as its first column; the rows' own bottom borders separate them, as .record-row's do. */
@@ -1981,6 +1974,8 @@ button.week-bar-slot { cursor: pointer; }
 .night-row-dot.worse, .night-row-dot.is-out { background: var(--negative); }
 /* The good-night mark (PATTERNS.md): quiet, in the positive tone, never a badge. */
 .night-row-good { color: var(--positive); }
+/* The ✦ on an overview hero's good high point, in the nights list's colour. */
+.period-good { color: var(--positive); }
 .night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 6.5rem; }
 /* Copied from .session-row-link's own hover/focus rules, unchanged, so the two lists behave
    identically under a keyboard: same surface-hover on hover, same inward focus ring. */
@@ -2090,7 +2085,7 @@ button.week-bar-slot { cursor: pointer; }
    reader can already see going wrong, and this one describes something that will look fine for
    months. It is not muted, and it does not sit below the button. */
 /* min-width: 0 so the two .copy-value fields inside can scroll their own long URLs rather than
-   stretching this section past the card, the same reason .session-list carries it. */
+   stretching this section past the card, the same reason .today-workouts carries it. */
 .instance-url { min-width: 0; }
 .instance-url-warning {
   font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  dayCountsLine, emphasise, monthName, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
+  asPrinted, dayCountsLine, emphasise, monthName, periodDeviationLine, periodStripOf, periodValueLine, periodVerdictLine, plainText, standoutLines,
   thisPeriod, windowPhrase,
 } from '../src/pages/detail/periodText.js'
 import type { PeriodChange, PeriodFigure, PeriodStripPoint, PeriodWindow } from '../src/data/periodTypes.js'
@@ -25,6 +25,7 @@ function figure(overrides: Partial<PeriodFigure> = {}): PeriodFigure {
     metric: 'sleep_asleep_minutes', unit: 'minutes', precision: 0, direction: 'up', per: 'day',
     value: 420, total: null, days: 30,
     usual: { center: 430, low: 410, high: 450, thin: false, window: MONTH, periods: 12 },
+    usualTotal: null, totalStanding: null, totalJudged: null,
     standing: 'within', judged: null, reason: null,
     counts: { within: 24, above: 3, below: 3, unjudged: 0 },
     daily: [], weekly: null, ...overrides,
@@ -104,6 +105,16 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine(f, 'nl', tNl, { window: true })).toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een jaar, uit 2025`)
   })
 
+  it("says a per-week figure's range is a week's worth", () => {
+    const active = figure({
+      metric: 'active_minutes', per: 'week', value: 230,
+      usual: { center: 235, low: 190, high: 280, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(active, 'en', t)).toBe(`within your usual 190 – 280${NB}min per week`)
+    expect(periodVerdictLine(active, 'nl', tNl, { window: true }))
+      .toBe(`binnen je gebruikelijke bereik 190 – 280${NB}min per week voor een maand, afgelopen 12 maanden`)
+  })
+
   it("says a per-period figure's range is a period's worth, before the window", () => {
     const naps = figure({
       metric: 'sleep_nap_count', unit: 'count', direction: 'neutral', per: 'period', value: 3, total: 3,
@@ -143,6 +154,64 @@ describe('periodVerdictLine', () => {
     expect(periodVerdictLine(year, 'nl', tNl)).toBe('tot nu toe; gebruikelijk 0 per jaar')
   })
 
+  it("judges a total by its total against the usual for a whole period's, and says the range is a period's", () => {
+    // 146 km against a usual total of 146 - 152 km; the average's own verdict would be 'below'.
+    const distance = figure({
+      metric: 'distance', unit: 'millimeters', value: 5_000_000, total: 146_000_000, standing: 'below', judged: 'worse',
+      usual: { center: 5_300_000, low: 5_200_000, high: 5_400_000, thin: false, window: MONTH, periods: 12 },
+      usualTotal: { center: 149_000_000, low: 146_000_000, high: 152_000_000, thin: false, window: MONTH, periods: 12 },
+      totalStanding: 'within', totalJudged: null,
+    })
+    expect(periodVerdictLine(distance, 'en', t)).toBe(`within your usual 146 – 152${NB}km for a month`)
+    expect(periodVerdictLine(distance, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor een maand`)
+    // The window phrase names the length itself.
+    expect(periodVerdictLine(distance, 'en', t, { window: true })).toBe(`within your usual 146 – 152${NB}km for a month, last 12 months`)
+    const year = { ...distance, usualTotal: { ...distance.usualTotal!, window: { unit: 'year' as const, count: 1, from: '2025-01-01', to: '2025-12-31' } } }
+    expect(periodVerdictLine(year, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor een jaar`)
+    const week = { ...distance, usualTotal: { ...distance.usualTotal!, window: { unit: 'week' as const, count: 12, from: '2026-05-04', to: '2026-07-26' } } }
+    expect(periodVerdictLine(week, 'en', t)).toBe(`within your usual 146 – 152${NB}km for a week`)
+    const quarter = { ...distance, usualTotal: { ...distance.usualTotal!, window: { unit: 'quarter' as const, count: 4, from: '2025-07-01', to: '2026-06-30' } } }
+    expect(periodVerdictLine(quarter, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 146 – 152${NB}km voor 3 maanden`)
+  })
+
+  it("says the range is per day where a finished period's total has no usual of its own", () => {
+    // usualTotal null: the total is printed beside the average's verdict and range.
+    const distance = figure({
+      metric: 'distance', unit: 'millimeters', value: 6_100_000, total: 183_000_000, standing: 'below', judged: 'worse',
+      usual: { center: 6_100_000, low: 5_800_000, high: 6_400_000, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(periodVerdictLine(distance, 'en', t)).toBe(`below your usual 5.8 – 6.4${NB}km per day`)
+    expect(periodVerdictLine(distance, 'nl', tNl)).toBe(`onder je gebruikelijke bereik 5,8 – 6,4${NB}km per dag`)
+  })
+
+  it("words a running period's total as so far beside the usual for a whole period's", () => {
+    const distance = figure({
+      metric: 'distance', unit: 'millimeters', value: 5_000_000, total: 80_000_000, standing: 'within',
+      usualTotal: { center: 149_000_000, low: 146_000_000, high: 152_000_000, thin: false, window: MONTH, periods: 12 },
+      totalStanding: null, totalJudged: null,
+    })
+    expect(periodVerdictLine(distance, 'en', t)).toBe(`so far; usual 146 – 152${NB}km a month`)
+    expect(periodVerdictLine(distance, 'nl', tNl)).toBe(`tot nu toe; gebruikelijk 146 – 152${NB}km per maand`)
+  })
+
+  it('judges a figure the page prints as an average by its average, whatever usual for a total it carries', () => {
+    const energy = figure({
+      metric: 'active_energy', unit: 'kcal', value: 500, total: 15_000, standing: 'within',
+      usual: { center: 500, low: 480, high: 520, thin: false, window: MONTH, periods: 12 },
+      usualTotal: { center: 15_000, low: 20_000, high: 21_000, thin: false, window: MONTH, periods: 12 },
+      totalStanding: 'below', totalJudged: 'worse',
+    })
+    expect(asPrinted(energy)).toBe(energy)
+    expect(periodVerdictLine(energy, 'en', t)).toBe(`within your usual 480 – 520${NB}kcal`)
+    // A total without a usual for its total keeps its average's verdict too.
+    const floors = figure({
+      metric: 'floors', unit: 'count', value: 10, total: 300, standing: 'within',
+      usual: { center: 10, low: 9, high: 11, thin: false, window: MONTH, periods: 12 },
+    })
+    expect(asPrinted(floors)).toBe(floors)
+    expect(periodVerdictLine(floors, 'en', t)).toBe('within your usual 9 – 11 per day')
+  })
+
   it('prints a reason the same with the window asked for', () => {
     expect(periodVerdictLine(figure({ reason: 'thin-usual', standing: null }), 'en', t, { window: true })).toBe('not enough history for a usual yet')
   })
@@ -156,6 +225,12 @@ describe('periodVerdictLine', () => {
 })
 
 describe('dayCountsLine', () => {
+  it("counts active minutes' days as more and fewer, where sleep minutes are longer and shorter", () => {
+    const f = figure({ metric: 'active_minutes', counts: { within: 24, above: 3, below: 2, unjudged: 1 } })
+    expect(dayCountsLine(f, 'day', t)).toBe('24 of 30 days usual · 3 more · 2 fewer')
+    expect(dayCountsLine(f, 'day', tNl)).toBe('24 van 30 dagen gebruikelijk · 3 meer · 2 minder')
+  })
+
   it('counts a minutes figure\'s nights as longer and shorter', () => {
     const f = figure({ counts: { within: 24, above: 3, below: 2, unjudged: 1 } })
     expect(dayCountsLine(f, 'night', t)).toBe('24 of 30 nights usual · 3 longer · 2 shorter')
@@ -219,9 +294,21 @@ describe('standoutLines', () => {
     const en = standoutLines({ ...o, language: 'en', t })
     expect(plain(en)).toEqual([`longest: 8h${NB}21m on Sun, Aug 23 ✦`, `+0h${NB}23m against July`])
     expect(strong(en)).toEqual([[`8h${NB}21m`], [`+0h${NB}23m`]])
+    expect(en.map((line) => line.filter((run) => run.good === true).map((run) => run.text))).toEqual([['✦'], []])
     const nl = standoutLines({ ...o, language: 'nl', t: tNl })
     expect(plain(nl)).toEqual([`je langste: 8u${NB}21m op zo 23 aug ✦`, `+0u${NB}23m tegenover juli`])
     expect(strong(nl)).toEqual([[`8u${NB}21m`], [`+0u${NB}23m`]])
+  })
+
+  it('says a change is a day\'s worth with perDay, against the month before and a year earlier', () => {
+    const steps = figure({ metric: 'steps', unit: 'count', value: 8241 })
+    const o = {
+      figure: steps, high: null, previous: { from: '2026-08-01', to: '2026-08-31', value: 7629, delta: 612 },
+      yearEarlier: { from: '2025-09-01', to: '2025-09-30', value: 7900, delta: 341 }, highWord: 'busiest' as const, perDay: true,
+    }
+    expect(plain(standoutLines({ ...o, language: 'en', t }))).toEqual(['+612 a day against August', '+341 a day against last year'])
+    expect(plain(standoutLines({ ...o, language: 'nl', t: tNl }))).toEqual(['+612 per dag tegenover augustus', '+341 per dag tegenover vorig jaar'])
+    expect(plain(standoutLines({ ...o, perDay: false, language: 'en', t }))).toEqual(['+612 against August', '+341 against last year'])
   })
 
   it('leaves the ✦ off a high that is not good', () => {
@@ -330,8 +417,8 @@ describe('periodStripOf', () => {
 describe('periodValueLine', () => {
   it('prints a total with its per-day average under it', () => {
     const f = figure({ metric: 'distance', unit: 'meters', precision: 0, value: 5200, total: 156000 })
-    expect(periodValueLine(f, 'en', t)).toEqual({ value: `156.00${NB}km`, under: `5.20${NB}km per day` })
-    expect(periodValueLine(f, 'nl', tNl)).toEqual({ value: `156,00${NB}km`, under: `5,20${NB}km per dag` })
+    expect(periodValueLine(f, 'en', t)).toEqual({ value: `156.00${NB}km`, under: `5.20${NB}km per day on average` })
+    expect(periodValueLine(f, 'nl', tNl)).toEqual({ value: `156,00${NB}km`, under: `5,20${NB}km per dag gemiddeld` })
   })
 
   it('prints the sleep hero\'s average, not the total the server also sends', () => {

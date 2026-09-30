@@ -7,8 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { CARDIO_LOAD_METRIC } from '@haelan/core/cardio-load'
-import { Activity } from '../src/pages/Activity.js'
+import { Recovery } from '../src/pages/Recovery.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
@@ -17,9 +16,10 @@ import { seriesPoint, insightBody } from './metricCoverage.js'
 // without the chart tokens happy-dom never applies.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
-// Activity rather than the Dashboard this file first mounted: the Dashboard became the glance in
-// M9b and reads one payload with no range at all, so the clamp has nothing to act on there. Activity
-// still reads /series through usePageControls, which is where the clamp lives.
+// Recovery rather than the Dashboard this file first mounted, or Activity after it: the Dashboard
+// became the glance in M9b and Activity an overview over one period read in M10b, and neither reads
+// a range's series, so the clamp has nothing to act on there. Recovery still reads /series through
+// usePageControls, which is where the clamp lives.
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -28,7 +28,7 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  window.history.replaceState(null, '', '/activity?range=month&on=2026-09-15')
+  window.history.replaceState(null, '', '/recovery?range=month&on=2026-09-15')
 })
 
 afterEach(() => {
@@ -97,17 +97,18 @@ function stubFetch(seen: string[], googleConnected: boolean): () => void {
 }
 
 /**
- * The series requests the page's own cards send, without the one TrainingLoadCard sends for
- * itself. That card asks over a window fixed by the metric's own definition (useTrainingLoad's
- * chronicWindowStart, 28 days back from `on`), so its `from` is deliberately neither the tab start
+ * The series requests the page's range-following cards send, without the ones that ask over a
+ * window fixed by their own definition: Recovery's recovery index reads its inputs over a lookback
+ * that starts well before the tab (readRecoveryInput's window, the exception the Dashboard this file
+ * used to mount had in its recovery index tile), so its `from` is deliberately neither the tab start
  * nor the history start. Both assertions below are about what the range-following cards ask for,
  * and a card that asks for something else is a separate, real cost rather than a clamp that failed.
- * (The Dashboard this file used to mount had the same exception in its recovery index tile.)
  *
- * Filtered on the one metric only that card carries.
+ * Filtered on a `from` before the tab start (2026-09-01), which no range-following card sends.
  */
+const TAB_START = '2026-09-01'
 const cardSeries = (seen: string[]): string[] => seen.filter((u) =>
-  u.includes('/series') && !u.includes(`metric=${CARDIO_LOAD_METRIC}`))
+  u.includes('/series') && (new URLSearchParams(u.split('?')[1] ?? '').get('from') ?? '') >= TAB_START)
 
 describe('a phone-only history start', () => {
   // An all time card on a phone-only instance must not show a 30 day
@@ -117,7 +118,7 @@ describe('a phone-only history start', () => {
   it('moves every card series request onto the history start', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen, false)
-    const { client, tree } = withQuery(<Activity />)
+    const { client, tree } = withQuery(<Recovery />)
     act(() => { root?.render(tree) })
     await flush(client, () => container!.innerHTML)
 
@@ -137,7 +138,7 @@ describe('a phone-only history start', () => {
   it('leaves the tab window alone when Google is also connected', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen, true)
-    const { client, tree } = withQuery(<Activity />)
+    const { client, tree } = withQuery(<Recovery />)
     act(() => { root?.render(tree) })
     await flush(client, () => container!.innerHTML)
 

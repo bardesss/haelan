@@ -100,6 +100,8 @@ it('names the value axis in the stored unit by default', () => {
   const option = mount() as unknown as { yAxis: { name?: string, interval?: number, axisLabel: { formatter: (v: number) => string } } }
   expect(option.yAxis.name).toBe('min')
   expect(option.yAxis.interval).toBeUndefined()
+  // Three ticks, not echarts' crowded five.
+  expect((option.yAxis as unknown as { splitNumber?: number }).splitNumber).toBe(2)
 })
 
 it('takes a caller\'s own ticks and labels, and then prints no axis name', () => {

@@ -115,8 +115,8 @@ export function formatLocalDateRange(from: string, to: string, language: string)
 
 /**
  * The full weekday and date of a local calendar date, e.g. "donderdag 27 augustus" in Dutch. Two
- * call sites share this: SessionList's own heading above a run of same-day rows, and, hidden
- * under `sr-only`, SessionRow's per-row date now that the heading carries the visible one. Both
+ * call sites share this: a caller's heading above a run of same-day rows, and, hidden
+ * under `sr-only`, SessionRow's per-row date where a heading carries the visible one. Both
  * going through the one function is what keeps them from ever naming a different day for the same
  * session; formatLocalDate above is not reused here because its `dateStyle: 'medium'` gives no way
  * to ask for a weekday or drop the year, both of which this shape needs.

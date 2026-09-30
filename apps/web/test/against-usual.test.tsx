@@ -86,8 +86,7 @@ describe('the note a card renders', () => {
     expect(html).toContain('80 min below your 60-day average')
   })
 
-  // No colour and no verdict, for the reason TrainingLoadCard states about its own figure: a
-  // personal archive is not licensed to tell somebody a low number is bad.
+  // No colour and no verdict: a personal archive is not licensed to tell somebody a low number is bad.
   it('passes no judgement on the direction', () => {
     const html = render(
       <AgainstUsualNote value={340} baseline={baseline()} metric="sleep_asleep_minutes" unit="min" />,
