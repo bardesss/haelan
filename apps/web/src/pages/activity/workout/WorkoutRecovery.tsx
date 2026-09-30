@@ -26,13 +26,16 @@ export function WorkoutRecovery({ page }: { page: WorkoutPageData }): ReactNode 
     const { low, high } = formatFigureRange(oneMinute, readings.endBpm, after, i18n.language, t)
     return t('activity.workout.page.recovery.between', { from: low, to: high })
   }
+  // The band is named only when a row draws one: a thin usual draws no bar (FigureRow).
+  const drawsBand = [oneMinute, twoMinutes].some((f) => f.value !== null && f.baseline !== null && !f.baseline.thin)
+  const caption = [t('activity.workout.page.recovery.caption'), ...(drawsBand ? [t('activity.workout.page.stripBand')] : [])].join(' · ')
   return (
     <Card span={12} label={t('activity.workout.page.recovery.label')}>
       <FigureRows>
         {oneMinute.value !== null && <WorkoutFigureRow figure={oneMinute} label={t('activity.workout.page.recovery.oneMinute')} note={between(readings.oneMinuteBpm)} />}
         {twoMinutes.value !== null && <WorkoutFigureRow figure={twoMinutes} label={t('activity.workout.page.recovery.twoMinutes')} note={between(readings.twoMinutesBpm)} />}
       </FigureRows>
-      <p className="dash-caption">{t('activity.workout.page.recovery.caption')}</p>
+      <p className="dash-caption">{caption}</p>
     </Card>
   )
 }

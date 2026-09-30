@@ -726,7 +726,7 @@ describe('the workout page\'s trace', () => {
     expect(text(card, '.label')).toBe('Through the workout')
     // Label, then the chart, then what the axis is under it: the card's first line is its label.
     expect(card.querySelector('.basis')).toBeNull()
-    expect(text(card, '.workout-through + .dash-caption')).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40 · pace and cadence smoothed over three minutes')
+    expect(text(card, '.workout-through ~ .dash-caption')).toBe('on the workout\'s own clock, 0:00 to 34:00 · one pause of 1:40 · pace and cadence smoothed over three minutes')
     expect(text(host, '.workout-through-summary')).toBe('highest 178\u00a0bpm at 26:30')
     const option = optionIn(host, '.workout-through-chart')
     expect(option.xAxis[0]).toMatchObject({ type: 'value', min: 0, max: 34 * 60_000, interval: 5 * 60_000 })
@@ -743,7 +743,7 @@ describe('the workout page\'s trace', () => {
       tracePoints = [reading(minute(10), 150), reading(minute(33), 160)]
       const host = await mount(workoutPageFixture(), withEvents(events))
       const card = host.querySelector('.workout-through')!.closest('.card')!
-      expect(text(card, '.workout-through + .dash-caption')).toBe("on the workout's own clock, 0:00 to 34:00 · pace and cadence smoothed over three minutes")
+      expect(text(card, '.workout-through ~ .dash-caption')).toBe("on the workout's own clock, 0:00 to 34:00 · pace and cadence smoothed over three minutes")
       const option = echarts.getInstanceByDom(host.querySelector<HTMLDivElement>('.workout-through-chart [role="img"]')!)!
         .getOption() as { series: { markArea?: { data: { xAxis?: number }[][] }, markLine?: unknown }[] }
       expect(option.series.some((series) => series.markArea?.data[0]?.[0]?.xAxis !== undefined)).toBe(false)
@@ -1117,6 +1117,25 @@ describe('the workout page\'s heart-rate recovery', () => {
     root = createRoot(container!)
     expect(cardLabelled(await mount({ ...page, heartRateRecovery: null }), 'Heart-rate recovery')).toBeUndefined()
   })
+
+  it('names the band only when a drawn row has one: not over two thin usuals, nor over a lone thin row', async () => {
+    const page = workoutPageFixture()
+    const recovery = page.heartRateRecovery!
+    const thin = <F extends { baseline: { thin: boolean } | null }>(f: F): F => ({ ...f, baseline: { ...f.baseline!, thin: true } })
+    const both = cardLabelled(await mount({
+      ...page, heartRateRecovery: { ...recovery, oneMinute: thin(recovery.oneMinute), twoMinutes: thin(recovery.twoMinutes) },
+    }), 'Heart-rate recovery')!
+    expect(text(both, '.detail-rows + .dash-caption')).toBe(
+      'from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    // The two-minute row's band would count, but the row is not drawn without its value.
+    const lone = cardLabelled(await mount({
+      ...page, heartRateRecovery: { ...recovery, oneMinute: thin(recovery.oneMinute), twoMinutes: { ...recovery.twoMinutes, value: null } },
+    }), 'Heart-rate recovery')!
+    expect(text(lone, '.detail-rows + .dash-caption')).toBe(
+      'from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it')
+  })
 })
 
 describe('the workout page\'s pace and cadence', () => {
@@ -1131,7 +1150,7 @@ describe('the workout page\'s pace and cadence', () => {
     .map((head) => [text(head, '.label') ?? '', text(head, '.workout-through-summary') ?? null])
   // The one source's line: its min, range and mean series come first, the mean third.
   const line = (option: SeriesOption) => option.series[2]!.data!
-  const caption = (host: ParentNode) => text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through + .dash-caption')
+  const caption = (host: ParentNode) => text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through ~ .dash-caption')
 
   it('draws pace upside down and cadence under the heart rate, each minute at its own elapsed time', async () => {
     tracePoints = [reading(minute(1), 120), reading(minute(20), 150)]
@@ -1167,6 +1186,39 @@ describe('the workout page\'s pace and cadence', () => {
     // Shorter than the heart rate's 170, the rows under it.
     const heights = [...host.querySelectorAll<HTMLDivElement>('.workout-through-chart [role="img"]')].map((chart) => chart.style.height)
     expect(heights).toEqual(['170px', '120px', '120px'])
+    // Three labels on each slim row's value axis, the heart rate's echarts default of five.
+    const splits = [heart, pace, cadence].map((o) => (o as unknown as { yAxis: { splitNumber?: number }[] }).yAxis[0]!.splitNumber)
+    expect(splits).toEqual([5, 2, 2])
+    // A chart without its time labels keeps no room under it for them.
+    const bottoms = [heart, pace, cadence].map((o) => (o as unknown as { grid: { bottom: number }[] }).grid[0]!.bottom)
+    expect(bottoms).toEqual([6, 6, 24])
+  })
+
+  it('shows the three tables from one control under the stacked charts, and a lone chart keeps its own', async () => {
+    tracePoints = [reading(minute(1), 120), reading(minute(20), 150)]
+    const host = await mount(workoutPageFixture(), fullSession())
+    const card = host.querySelector('.workout-through')!.closest('.card')!
+    const toggles = [...card.querySelectorAll<HTMLButtonElement>('.chart-table-toggle')]
+    expect(toggles).toHaveLength(1)
+    const [toggle] = toggles
+    // After the charts, before the caption, where the mockup puts it.
+    expect(toggle!.parentElement!.previousElementSibling).toBe(card.querySelector('.workout-through'))
+    expect(toggle!.parentElement!.nextElementSibling).toBe(card.querySelector('.dash-caption'))
+    expect(toggle!.getAttribute('aria-label')).toBe('Show numbers for Through the workout')
+    const tables = toggle!.getAttribute('aria-controls')!.split(' ').map((id) => document.getElementById(id))
+    expect(tables.map((table) => table?.closest('.workout-through-chart') ?? null))
+      .toEqual([...card.querySelectorAll('.workout-through-chart')])
+    expect(tables.map((table) => table!.className)).toEqual(['sr-only', 'sr-only', 'sr-only'])
+    act(() => { toggle!.click() })
+    expect(tables.map((table) => table!.className)).toEqual(['chart-table', 'chart-table', 'chart-table'])
+    expect(toggle!.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle!.textContent).toBe('Hide numbers')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const strength = await mount(strengthPageFixture(), strengthSessionFixture())
+    const lone = strength.querySelector('.workout-through')!.closest('.card')!
+    expect(lone.querySelector('.workout-through-toggle')).toBeNull()
+    expect(lone.querySelectorAll('.workout-through-chart .chart-table-toggle')).toHaveLength(1)
   })
 
   it('draws no pace without a route, and says so under a workout that covers a distance', async () => {

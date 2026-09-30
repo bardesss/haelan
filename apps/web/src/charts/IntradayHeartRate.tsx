@@ -195,6 +195,9 @@ type Props = {
   xLabels?: boolean
   /** Full mode's height in px; 170 unset. */
   height?: number
+  /** ChartFigure's own: set, the table is shown by one control for several charts, not this chart's. */
+  tableShown?: boolean
+  tableId?: string
 }
 
 /**
@@ -276,7 +279,7 @@ const COMPACT_HEIGHT = 84
 export function IntradayHeartRate({
   points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
   compact = false, startMs, endMs, spans = NO_SPANS, offsetMinutes = null, timeZone,
-  axis = 'clock', usualBand, zoneBands, single, xLabels = true, height = 170,
+  axis = 'clock', usualBand, zoneBands, single, xLabels = true, height = 170, tableShown, tableId,
 }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
@@ -370,7 +373,9 @@ export function IntradayHeartRate({
     // not a colour scheme chosen for its own sake.
     const colors = [tokens.series, tokens.seriesAlt, ...scaleStops(tokens)]
     return {
-      grid: compact ? { left: 0, right: 0, top: 4, bottom: 4 } : base.grid({ top: 18 }),
+      // Without its time labels a stacked chart keeps no room for them, so the row under it sits
+      // close, as the approved mockup stacks them.
+      grid: compact ? { left: 0, right: 0, top: 4, bottom: 4 } : base.grid({ top: 18, ...(!xLabels && { bottom: 6 }) }),
       tooltip: {
         ...base.tooltip,
         trigger: 'axis' as const,
@@ -440,6 +445,9 @@ export function IntradayHeartRate({
           ? { type: 'value' as const, scale: true, show: false }
           : { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel }),
         ...(!compact && single !== undefined && {
+          // A slim row under the heart rate: two steps (three labels), as the approved mockup
+          // draws it, where echarts' default five crowded a 120px row into overlapping labels.
+          splitNumber: 2,
           axisLabel: { ...base.axisLabel, formatter: (value: number) => single.formatAxis(value) },
           inverse: single.inverse === true,
         }),
@@ -595,7 +603,7 @@ export function IntradayHeartRate({
   const { host, style, tap } = useChart(build, compact ? COMPACT_HEIGHT : height, onPointClick ? { onClick, describe } : undefined)
   const absent = t('charts.absence.noReading')
   return (
-    <ChartFigure label={label} host={host} style={style} tap={tap} tableToggle={!compact}
+    <ChartFigure label={label} host={host} style={style} tap={tap} tableToggle={!compact} tableShown={tableShown} tableId={tableId}
       table={single !== undefined ? {
         columns: [t('charts.columns.time'), single.column],
         rows: points.map((p) => [tick(p.utcMs), p.mean === null ? absent : single.formatValue(p.mean)]),

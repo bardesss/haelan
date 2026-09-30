@@ -605,7 +605,7 @@
           "oneMinute": "Drop after 1 minute",
           "twoMinutes": "Drop after 2 minutes",
           "between": "from {{from}} to {{to}}",
-          "caption": "from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it · band = your usual range"
+          "caption": "from your heart rate in the minutes after you stopped · usual from up to 10 workouts of this type before it"
         },
         "form": {
           "label": "Running form",

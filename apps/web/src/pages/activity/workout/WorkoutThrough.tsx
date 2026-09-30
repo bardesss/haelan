@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import { Card } from '../../../components/Card.js'
@@ -112,6 +112,10 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
   const language = i18n.language
   const { nameOf } = useSourceNames()
   const headId = useId()
+  const tableIds = useId()
+  // One show-numbers control for the card when it stacks two charts or more, as the approved
+  // mockup draws it: a control under each chart put a line between rows meant to read as one.
+  const [tablesShown, setTablesShown] = useState(false)
   const trace = useSourceTrace({
     metric: 'heart_rate', startMs: session.startMs, endMs: session.endMs,
     sessionSourceId: session.sourceId, chosenSource,
@@ -167,6 +171,10 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
   const seriesFrom = both === null ? null
     : t(`activity.workout.page.through.${note === null ? 'from' : 'fromAfter'}.${both}`, { count: routePoints })
   const noteLine = note === null ? seriesFrom : seriesFrom === null ? note : `${note}; ${seriesFrom}`
+  // Each drawn chart's table id, in the order drawn; one chart alone keeps its own control.
+  const tables = [hasTrace && 'heart', pace !== null && 'pace', cadence !== null && 'cadence']
+    .flatMap((row) => (row === false ? [] : [`${tableIds}-${row}`]))
+  const shared = tables.length > 1 ? { tableShown: tablesShown } : {}
 
   return (
     <Card span={12} label={label}>
@@ -183,20 +191,30 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
                   label={t('activity.workout.trace.label')}
                   offsetMinutes={session.startOffsetMinutes}
                   startMs={session.startMs} endMs={session.endMs} axis="elapsed" xLabels={both === null}
-                  spans={pauses.spans} eventMarks={pauses.marks} zoneBands={zoneBands} />
+                  spans={pauses.spans} eventMarks={pauses.marks} zoneBands={zoneBands}
+                  tableId={`${tableIds}-heart`} {...shared} />
               </BasisContext.Provider>
             </div>
           </>
         )}
         {pace !== null && (
           <SeriesRow row={pace} label={t('activity.workout.page.through.pace')} chartLabel={t('activity.workout.page.through.paceChart')}
-            session={session} spans={pauses.spans} xLabels={cadence === null} />
+            session={session} spans={pauses.spans} xLabels={cadence === null} tableId={`${tableIds}-pace`} shared={shared} />
         )}
         {cadence !== null && (
           <SeriesRow row={cadence} label={t('activity.workout.page.through.cadence')} chartLabel={t('activity.workout.page.through.cadenceChart')}
-            session={session} spans={pauses.spans} xLabels />
+            session={session} spans={pauses.spans} xLabels tableId={`${tableIds}-cadence`} shared={shared} />
         )}
       </div>
+      {tables.length > 1 && (
+        <div className="workout-through-toggle">
+          <button type="button" className="chart-table-toggle" aria-expanded={tablesShown} aria-controls={tables.join(' ')}
+            aria-label={t(tablesShown ? 'charts.tableToggle.hideFor' : 'charts.tableToggle.showFor', { label })}
+            onClick={() => setTablesShown((current) => !current)}>
+            {t(tablesShown ? 'charts.tableToggle.hide' : 'charts.tableToggle.show')}
+          </button>
+        </div>
+      )}
       {/* What the axis is, under the chart it describes, so the card's first line is its label. */}
       <p className="dash-caption">{basis}</p>
       {noteLine !== null && <p className="workout-through-note">{noteLine}</p>}
@@ -205,13 +223,15 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
 }
 
 /** One row under the heart rate: its name and average at the left, its chart on the shared axis. */
-function SeriesRow({ row, label, chartLabel, session, spans, xLabels }: {
+function SeriesRow({ row, label, chartLabel, session, spans, xLabels, tableId, shared }: {
   row: NonNullable<ReturnType<typeof useSeriesRow>>
   label: string
   chartLabel: string
   session: WorkoutSession
   spans: readonly { startMs: number, endMs: number }[]
   xLabels: boolean
+  tableId: string
+  shared: { tableShown?: boolean }
 }) {
   const headId = useId()
   return (
@@ -224,7 +244,7 @@ function SeriesRow({ row, label, chartLabel, session, spans, xLabels }: {
         <BasisContext.Provider value={headId}>
           <IntradayHeartRate points={row.points} reduction={null} label={chartLabel}
             offsetMinutes={session.startOffsetMinutes} startMs={session.startMs} endMs={session.endMs} axis="elapsed"
-            spans={spans} single={row.single} xLabels={xLabels} height={SERIES_HEIGHT} />
+            spans={spans} single={row.single} xLabels={xLabels} height={SERIES_HEIGHT} tableId={tableId} {...shared} />
         </BasisContext.Provider>
       </div>
     </>
