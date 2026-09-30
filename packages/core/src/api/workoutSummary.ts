@@ -302,19 +302,6 @@ function eventsFrom(value: unknown): WorkoutEvent[] {
 }
 
 /**
- * Everything a detail page needs from a session's attrs that workoutSummary does not already
- * answer. Lives here, and not in a module of its own, because workoutSummary.ts's opening line
- * claims to be the only module allowed to open a WorkoutSession's attrs, and a second reader
- * elsewhere would quietly retire that rule rather than change it.
- *
- * The same discipline applies throughout: presence is tested before a value is coerced, a
- * recorded zero survives, and a field the provider never sent stays null rather than becoming a
- * printed zero. See workoutSummary's own comment for why that distinction is the point.
- *
- * hasGps is the one field this function does not resolve to false on an absent metadata object:
- * see its own comment on WorkoutDetail for why absence has to survive as null.
- */
-/**
  * A session's average speed in metres per second: the device's own where it recorded one, else,
  * where `worksOut` (a ride), its distance over its moving time; null without either. The one rule
  * the workout page's speed figure and a list row's ride speed share, so the row prints what the
@@ -328,6 +315,19 @@ export function averageSpeedOf(
   return distanceMeters / movingSeconds
 }
 
+/**
+ * Everything a detail page needs from a session's attrs that workoutSummary does not already
+ * answer. Lives here, and not in a module of its own, because workoutSummary.ts's opening line
+ * claims to be the only module allowed to open a WorkoutSession's attrs, and a second reader
+ * elsewhere would quietly retire that rule rather than change it.
+ *
+ * The same discipline applies throughout: presence is tested before a value is coerced, a
+ * recorded zero survives, and a field the provider never sent stays null rather than becoming a
+ * printed zero. See workoutSummary's own comment for why that distinction is the point.
+ *
+ * hasGps is the one field this function does not resolve to false on an absent metadata object:
+ * see its own comment on WorkoutDetail for why absence has to survive as null.
+ */
 export function workoutDetail(attrs: unknown): WorkoutDetail {
   const record = isRecord(attrs) ? attrs : {}
   const metrics = isRecord(record.metricsSummary) ? record.metricsSummary : {}
