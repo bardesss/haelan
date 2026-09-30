@@ -357,6 +357,7 @@
       "SPINNING": "Spinning",
       "BIKING": "Biking",
       "TREADMILL": "Treadmill",
+      "TRAIL_RUN": "Trail run",
       "HIKING": "Hiking",
       "WEIGHTLIFTING": "Weightlifting",
       "STROLLER_WALK": "Stroller walk",
@@ -580,6 +581,7 @@
           "oneMinute": "Drop after 1 minute",
           "twoMinutes": "Drop after 2 minutes",
           "between": "from {{from}} to {{to}}",
+          "caption_zero": "from your heart rate in the minutes after you stopped · no workout of this type before it to take a usual from",
           "caption_one": "from your heart rate in the minutes after you stopped · usual from {{count}} workout of this type before it",
           "caption_other": "from your heart rate in the minutes after you stopped · usual from {{count}} workouts of this type before it"
         },

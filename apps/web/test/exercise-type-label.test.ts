@@ -21,7 +21,9 @@ describe('exerciseTypeLabel', () => {
       'HOUSEHOLD_CHORES']) {
       expect(SEEDED_EXERCISE_TYPES, type).toContain(type)
     }
-    expect(SEEDED_EXERCISE_TYPES, 'the list and the census above are the same thirteen').toHaveLength(13)
+    // And the demo's trail run (seed.ts's RELABELLED_RUNS), which Records names on a Dutch page.
+    expect(SEEDED_EXERCISE_TYPES).toContain('TRAIL_RUN')
+    expect(SEEDED_EXERCISE_TYPES, 'the census above and the demo\'s trail run, fourteen').toHaveLength(14)
   })
 
   // The API declares 182 types and this app seeds thirteen. The other 169 must still be readable:

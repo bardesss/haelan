@@ -1324,6 +1324,13 @@ describe('the workout page\'s heart-rate recovery', () => {
     expect(text(nl, '.detail-rows + .dash-caption')).toContain('gebruikelijk uit 1 training van dit type ervoor')
   })
 
+  it('says there is no earlier workout of the type rather than a usual from 0, for the first of its type', async () => {
+    const page = workoutPageFixture()
+    const none = cardLabelled(await mount({ ...page, heartRateRecovery: { ...page.heartRateRecovery!, history: 0 } }, workoutSessionFixture(), 'nl'), 'Hartslagherstel')!
+    expect(text(none, '.detail-rows + .dash-caption')).toContain('nog geen training van dit type ervoor voor een gebruikelijke waarde')
+    expect(text(none, '.detail-rows + .dash-caption')).not.toContain('uit 0')
+  })
+
   it('leaves out the minute without a value, and the card without either', async () => {
     const page = workoutPageFixture()
     const recovery = page.heartRateRecovery!

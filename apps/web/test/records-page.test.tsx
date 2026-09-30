@@ -407,8 +407,8 @@ describe('the all-time page', () => {
     }, 'nl')
     expect(text("[data-category='run'][data-record='longest'] .record-source")).toBe('Loopband')
     expect(text("[data-category='run'][data-record='furthest'] .record-source")).toBe('')
-    // Not a seeded type, so humanised, as a session row does.
-    expect(text("[data-category='run'][data-record='most-climb'] .record-source")).toBe('Trail run')
+    // Seeded since the demo holds one, so in Dutch rather than the humanised English.
+    expect(text("[data-category='run'][data-record='most-climb'] .record-source")).toBe('Trailrun')
     // A category with no one plain type names every type.
     expect(text("[data-category='cardio'][data-record='longest'] .record-source")).toBe('Cardiotraining')
   })
