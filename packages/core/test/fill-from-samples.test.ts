@@ -140,7 +140,7 @@ describe('fillFromSamples, through the merged reads', () => {
       'heartRateZoneDurations', 'steps',
     ])
     // The list row's rate is read again off the filled attrs.
-    expect(run.rate).toEqual({ key: 'pace', unit: 'seconds_per_km', value: 353 })
+    expect(run.rate).toEqual({ key: 'pace', unit: 'seconds_per_km', value: 353, fromElapsed: true })
 
     // The list answers the same filled row.
     const [listed] = q().sessions({ kind: 'exercise', from: DATE, to: DATE, fill: true })
@@ -153,7 +153,7 @@ describe('fillFromSamples, through the merged reads', () => {
     const ride = q().sessionById({ sessionId: 'phone-ride', fill: true })!
     expect((ride.attrs as { metricsSummary: Record<string, unknown> }).metricsSummary.averageSpeedMillimetersPerSecond).toBeCloseTo(5_100_000 / 1800, 6)
     expect(workoutSummary(ride.attrs).paceSecondsPerKm).toBeNull()
-    expect(ride.rate).toEqual({ key: 'speed', unit: 'meters_per_second', value: 2.83 })
+    expect(ride.rate).toEqual({ key: 'speed', unit: 'meters_per_second', value: 2.83, fromElapsed: true })
   })
 
   it('keeps the Google copy\'s values once the two have merged, and marks nothing', () => {
@@ -373,5 +373,73 @@ describe('the fill is opt-in, per read', () => {
     })!.day.workouts))).toBe(true)
     const row = readActivityPeriod(q(), { range: 'week', anchor: DATE, today: DATE }).workouts.find((w) => w.id === 'phone-run')!
     expect(row.distanceMeters).toBe(5100)
+  })
+})
+
+describe('the workout page says what is still coming and what was filled', () => {
+  const NOW = Date.parse('2026-09-20T12:00:00Z')
+  const DAY_MS = 24 * 60 * MINUTE
+  const page = (sessionId: string) => readWorkoutPage(q(), { sessionId, today: DATE, nowMs: NOW, nameOf: (id) => id })!
+
+  /** Six earlier treadmill runs Google summarised, one a day: enough for a rank and a usual. */
+  function seedGoogleHistory() {
+    for (let d = 1; d <= 6; d += 1) {
+      const startMs = START - d * DAY_MS
+      insertSession({
+        id: `google-old-${d}`, sourceId: 'google', attrs: GOOGLE_TREADMILL,
+        startMs, endMs: startMs + 30 * MINUTE, localDate: `2026-09-${String(20 - d).padStart(2, '0')}`,
+      })
+    }
+  }
+
+  it('marks a filled page pending, names each figure the samples gave it, and ranks no estimated pace', () => {
+    seedGoogleHistory()
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    seedZoneCeilings(DATE)
+
+    const filled = page('phone-run')
+    expect(filled.pending).toBe(true)
+    expect(filled.hero).toBe('pace')
+    expect([...filled.filled].sort()).toEqual([
+      'averageHeartRate', 'calories', 'cardioLoad', 'distance', 'hardZoneMinutes', 'pace', 'steps',
+    ])
+    // Every name is a figure the page sends: a filled field no figure reads is not named.
+    expect(filled.filled.every((key) => filled.figures[key] !== undefined)).toBe(true)
+    // A pace over elapsed time ranked among paces over moving time compares unlike with unlike.
+    expect(filled.rank).toBeNull()
+    // The history the page judges by stays as Google recorded it.
+    expect(filled.figures.distance!.baseline).toMatchObject({ low: 4000, high: 4000 })
+  })
+
+  it('ranks the same run once Google has summarised it, and marks nothing', () => {
+    seedGoogleHistory()
+    insertSession({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_TREADMILL })
+
+    const summarised = page('google-run')
+    expect(summarised.pending).toBe(false)
+    expect(summarised.filled).toEqual([])
+    expect(summarised.rank).not.toBeNull()
+  })
+
+  it('marks a bare page with no samples at all pending, with nothing filled', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    const bare = page('phone-run')
+    expect(bare.pending).toBe(true)
+    expect(bare.filled).toEqual([])
+  })
+
+  it('names a ride\'s filled speed, and its list rate says it runs over elapsed time', () => {
+    insertSession({ id: 'phone-ride', sourceId: 'phone', attrs: attrsOf({ exerciseType: 'BIKING' }) })
+    seedSamples()
+    const ride = page('phone-ride')
+    expect(ride.hero).toBe('speed')
+    expect(ride.filled).toContain('speed')
+    expect(q().sessionById({ sessionId: 'phone-ride', fill: true })!.rate).toMatchObject({ key: 'speed', fromElapsed: true })
+  })
+
+  it('sends no elapsed flag on a rate the device recorded', () => {
+    insertSession({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_TREADMILL })
+    expect(q().sessionById({ sessionId: 'google-run', fill: true })!.rate).not.toHaveProperty('fromElapsed')
   })
 })

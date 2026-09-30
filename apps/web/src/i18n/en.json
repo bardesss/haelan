@@ -370,7 +370,8 @@
       "emptyPeriodTitle": "No activities recorded in this period.",
       "emptyPeriodDetail": "Nothing has synced for these dates yet.",
       "excluded": "Excluded: {{reason}}",
-      "excludedNoReason": "Excluded"
+      "excludedNoReason": "Excluded",
+      "rateElapsed": "{{rate}} over the elapsed time"
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
@@ -625,8 +626,14 @@
           "merged": "Recorded by {{source}}, merged with {{others}}",
           "named": "named “{{name}}”",
           "excluded": "excluded",
+          "pending": "your watch’s figures arrive with the next sync",
           "action": "exclude or add a note",
           "details": "Details"
+        },
+        "filled": {
+          "figure": "from your readings",
+          "rate": "from your readings, over the elapsed time",
+          "previous": "this one over the elapsed time"
         },
         "secondsPer100m": "{{value}} s/100 m"
       }

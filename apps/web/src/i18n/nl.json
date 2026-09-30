@@ -370,7 +370,8 @@
       "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",
       "emptyPeriodDetail": "Er is nog niets gesynchroniseerd voor deze datums.",
       "excluded": "Uitgesloten: {{reason}}",
-      "excludedNoReason": "Uitgesloten"
+      "excludedNoReason": "Uitgesloten",
+      "rateElapsed": "{{rate}} over de verstreken tijd"
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
@@ -625,8 +626,14 @@
           "merged": "Opgenomen door {{source}}, samengevoegd met {{others}}",
           "named": "genaamd “{{name}}”",
           "excluded": "uitgesloten",
+          "pending": "de cijfers van je horloge komen met de volgende synchronisatie",
           "action": "uitsluiten of een notitie toevoegen",
           "details": "Details"
+        },
+        "filled": {
+          "figure": "uit je metingen",
+          "rate": "uit je metingen, over de verstreken tijd",
+          "previous": "deze over de verstreken tijd"
         },
         "secondsPer100m": "{{value}} s/100 m"
       }

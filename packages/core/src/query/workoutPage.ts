@@ -57,6 +57,18 @@ export interface WorkoutPage {
   sourceId: string
   localDate: string
   exerciseType: string | null
+  /**
+   * Whether the watch's own summary of this workout is still to come: a phone-only row with no
+   * Google copy yet (fillFromSamples.ts's `awaitingSummary`), filled from its samples or not.
+   */
+  pending: boolean
+  /**
+   * The figures on this page taken from the phone's own samples rather than the watch's summary
+   * (fillFromSamples.ts's `filled`, read as the figures they feed), each one the page sends. A
+   * filled pace or speed runs over elapsed time, since a bare workout has no moving time. Only the
+   * subject is ever filled: every usual, strip point before it and previous value is as recorded.
+   */
+  filled: WorkoutFigureKey[]
   hero: WorkoutFigureKey
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
@@ -491,11 +503,40 @@ function heroOf(category: ExerciseCategory, exerciseType: string | null, figures
 
 const RATES: ReadonlySet<WorkoutFigureKey> = new Set(['pace', 'speed', 'swimPace'])
 
+/**
+ * The figures each metricsSummary field fillFromSamples writes feeds: the zones feed the hard-zone
+ * minutes and the Edwards load built from them.
+ */
+const FILLED_FIGURES: Readonly<Record<string, readonly WorkoutFigureKey[]>> = {
+  steps: ['steps'],
+  distanceMillimeters: ['distance'],
+  caloriesKcal: ['calories'],
+  averageHeartRateBeatsPerMinute: ['averageHeartRate'],
+  heartRateZoneDurations: ['hardZoneMinutes', 'cardioLoad'],
+  averagePaceSecondsPerMeter: ['pace'],
+  averageSpeedMillimetersPerSecond: ['speed'],
+}
+
+// Answers: which of the page's figures came from the phone's samples, in FIGURES' order. Each is
+// one the page sends: the fill writes a rate only for the category that reads it, and a figure
+// with a filled input always has a value.
+function filledOf(attrs: unknown): WorkoutFigureKey[] {
+  const filled = isRecord(attrs) && Array.isArray(attrs.filled) ? attrs.filled : []
+  const keys = new Set(filled.flatMap((field) => (typeof field === 'string' ? FILLED_FIGURES[field] ?? [] : [])))
+  return FIGURES.flatMap((spec) => (keys.has(spec.key) ? [spec.key] : []))
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
 // Answers: the hero's rank among the comparison's window (the same sessions `window` holds, both
 // sameTypeWindow's), through the page's own figure for that rate, so the rank and the hero read
 // the one number; the comparison's own facet rule (COMPARISON_MIN, ties never better).
-function rankOf(hero: WorkoutFigureKey, subject: Reading, window: readonly Reading[], comparison: WorkoutComparison): ComparisonFacet | null {
-  if (!RATES.has(hero) || comparison.reason !== null) return null
+// A filled rate runs over elapsed time, stops included, and ranks among rates over moving time
+// only unlike with unlike, so it has none.
+function rankOf(
+  hero: WorkoutFigureKey, subject: Reading, window: readonly Reading[], comparison: WorkoutComparison, filled: readonly WorkoutFigureKey[],
+): ComparisonFacet | null {
+  if (!RATES.has(hero) || comparison.reason !== null || filled.includes(hero)) return null
   const spec = specOf(hero)
   return facet(spec.of(subject), window.map(spec.of), spec.direction === 'down')
 }
@@ -687,17 +728,20 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
   const dayCtx = contextFor(q, { today: session.localDate, nowMs: input.nowMs, nameOf: input.nameOf, finished: session.localDate < input.today })
   const hero = heroOf(category, exerciseType, figures)
   const comparison = compareWorkout(session, candidates)
+  const filled = filledOf(session.attrs)
 
   return {
     sessionId: session.id,
     sourceId: session.sourceId,
     localDate: session.localDate,
     exerciseType,
+    pending: isRecord(session.attrs) && session.attrs.awaitingSummary === true,
+    filled,
     hero,
     nav: navOf(q, session, input.today),
     figures,
     comparison,
-    rank: rankOf(hero, subject, window, comparison),
+    rank: rankOf(hero, subject, window, comparison, filled),
     previous: previousOf(session, candidates),
     // The Records best, so it may be a session done after this one.
     best: bestOf(category, records),

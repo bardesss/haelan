@@ -74,6 +74,14 @@ export interface WorkoutPageData {
   sourceId: string
   localDate: string
   exerciseType: string | null
+  /** Whether the watch's own summary of this workout is still to come: a phone-only workout with
+   *  no Google copy yet, filled from its samples or not (workoutPage.ts's `pending`). Absent from a
+   *  page cached before it was sent. */
+  pending?: boolean
+  /** The figures taken from the phone's samples rather than the watch's summary, each one the page
+   *  sends; a filled pace or speed runs over elapsed time (workoutPage.ts's `filled`). Absent from
+   *  a page cached before it was sent. */
+  filled?: WorkoutFigureKey[]
   hero: WorkoutFigureKey
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>

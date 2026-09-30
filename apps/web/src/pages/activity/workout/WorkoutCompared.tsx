@@ -5,7 +5,7 @@ import { formatShortDate } from '../../../format.js'
 import type { WorkoutFigure, WorkoutPageData, RecordRef } from '../../../data/useWorkoutPage.js'
 import { formatFigureDifference, formatFigureRange, formatFigureValue } from '../../detail/figureText.js'
 import { exerciseCategory, rateOf } from '@haelan/core/exercise-category'
-import { bestMonth, workoutPath } from './workoutText.js'
+import { bestMonth, filledNote, workoutPath } from './workoutText.js'
 
 // The table's rows, in the mockup's order: the four measures the previous workout's values cover.
 // The first is the rate the category reads (rateOf, through the shared core map): a ride's speed,
@@ -98,10 +98,15 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
             {rows.map(({ key, figure, value }) => {
               const before = previous?.values[key]
               const best = bestOf(page, key)
+              const filled = filledNote(page, key, t)
               return (
                 <tr key={key}>
                   <th scope="row">{t(`activity.workout.page.figures.${key}`)}</th>
-                  <td className="workout-compared-this">{formatFigureValue(figure, value, language, t)}</td>
+                  <td className="workout-compared-this">
+                    {formatFigureValue(figure, value, language, t)}
+                    {/* A value the phone's samples filled, on a line of its own under it. */}
+                    {filled !== undefined && <span className="figure-row-note workout-compared-filled">{filled}</span>}
+                  </td>
                   {previous !== null && (
                     <td>
                       {before === undefined ? absent : (

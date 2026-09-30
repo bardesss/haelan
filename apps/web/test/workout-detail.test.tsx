@@ -89,15 +89,20 @@ let tracePoints: IntradayPoint[] = []
 let traceReduction: { method: 'lttb' | 'minmax', from: number, to: number } | null = null
 // Every URL the page asked for, in order.
 let fetched: string[] = []
+// The answer to the sync button's POST /api/sync/run, and the status the page reads beside it.
+let syncAnswer: Answer = { status: 202, body: { started: true } }
+let statusAnswer: unknown = {}
 
 function stubFetch(page: Answer): void {
   const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
     fetched.push(url)
+    if (url === '/api/sync/run' && init?.method === 'POST') return json(syncAnswer.body, syncAnswer.status)
+    if (url === '/api/status') return json(statusAnswer)
     if (url.includes('/workout/')) return json(page.body, page.status)
     // An unseeded session read fails the way the page read is told to.
     if (url.includes(`/sessions/${WORKOUT_ID}`)) return json(page.body, page.status)
@@ -105,7 +110,10 @@ function stubFetch(page: Answer): void {
     if (url.includes('/sources')) return json({ items: [] })
     return json({ items: [], cursor: null })
   }) as typeof fetch
-  restoreFetch = () => { globalThis.fetch = original; tracePoints = []; traceReduction = null; fetched = [] }
+  restoreFetch = () => {
+    globalThis.fetch = original; tracePoints = []; traceReduction = null; fetched = []
+    syncAnswer = { status: 202, body: { started: true } }; statusAnswer = {}
+  }
 }
 
 async function mount(
@@ -1744,5 +1752,119 @@ describe('the workout page per sport', () => {
     expect(heroLabel(host)).toBe('Zwemtempo')
     expect(text(host, '.workout-hero-previous')).toBe('4\u00a0s/100 m sneller dan de vorige, dinsdag 1 september')
     expect(text(host, '.detail-verdict')).toBe('binnen je gebruikelijke bereik 2:02 – 2:14\u00a0/100\u202fm')
+  })
+})
+
+// A phone-only workout Google has not summarised yet (core's fillFromSamples.ts): the server says
+// it is pending and names the figures the phone's samples filled; the page words both.
+describe('a workout still waiting for the watch\'s figures', () => {
+  const pending = (filled: WorkoutPageData['filled'] = []): WorkoutPageData => ({ ...workoutPageFixture(), pending: true, filled })
+  const about = (host: ParentNode) => cardLabelled(host, 'About this workout')!
+  const syncButton = (host: ParentNode) => about(host).querySelector<HTMLButtonElement>('.workout-sync-now')
+  async function press(host: ParentNode, until: () => boolean, what: string): Promise<void> {
+    await act(async () => { syncButton(host)!.click() })
+    await pumpUntil(() => fetched.includes('/api/sync/run') && until(), what)
+  }
+
+  it('says nothing about a sync on a workout the watch has summarised', async () => {
+    const host = await mount(workoutPageFixture())
+    expect(text(about(host), '.detail-about-line')).toBe('Recorded by watch · exclude or add a note')
+    expect(syncButton(host)).toBeNull()
+  })
+
+  it('says in the About line that the figures arrive with the next sync, with a button to sync now', async () => {
+    const host = await mount(pending())
+    expect(text(about(host), '.detail-about-line'))
+      .toBe('Recorded by watch · your watch’s figures arrive with the next sync Sync now · exclude or add a note')
+    expect(syncButton(host)!.disabled).toBe(false)
+    // A state line, not a hero line: the hero says nothing about it.
+    expect(host.querySelector('.detail-hero')!.textContent).not.toContain('next sync')
+  })
+
+  it('starts a sync from the button, and says it is syncing while the run goes', async () => {
+    const host = await mount(pending())
+    // What the status says once the press has started the run, read again after the 202.
+    statusAnswer = { sync: { running: true, lastFinishedAtMs: null, lastRowsWritten: 0, lastFailed: 0, cooldownRemainingMs: 0 } }
+    await press(host, () => syncButton(host)!.textContent === 'Syncing…', 'the button to say it is syncing')
+    expect(syncButton(host)!.disabled).toBe(true)
+    expect(text(about(host), '.workout-sync-outcome')).toBe('')
+  })
+
+  // A run with little to fetch is over before the status is re-read; useRunSync then refreshes
+  // this person's data, the workout page with it, and a page the watch has now summarised drops
+  // the note. A longer run is seen ending by the shell's status poll (useRefreshOnSyncFinish),
+  // which refreshes the same data.
+  it('reads the page again when the run it started is over', async () => {
+    const host = await mount(pending(), workoutSessionFixture(), 'en', { status: 200, body: workoutPageFixture() })
+    statusAnswer = { sync: { running: false, lastFinishedAtMs: Date.now(), lastRowsWritten: 3, lastFailed: 0, cooldownRemainingMs: 0 } }
+    fetched = []
+    await press(host, () => fetched.some((url) => url.includes('/workout/')), 'the workout page to be read again')
+    await pumpUntil(() => syncButton(host) === null, 'the summarised page to drop the note')
+  })
+
+  it('says it synced just now when the server refuses the press for its cooldown', async () => {
+    syncAnswer = { status: 429, body: { error: { kind: 'transient', code: 'cooldown', message: 'wait' } } }
+    const host = await mount(pending())
+    await press(host, () => syncButton(host)!.textContent === 'Synced just now', 'the button to say it synced just now')
+    expect(syncButton(host)!.disabled).toBe(true)
+    expect(text(about(host), '.workout-sync-outcome')).toBe('')
+  })
+
+  it('says a sync is already running when the server answers busy', async () => {
+    syncAnswer = { status: 409, body: { error: { kind: 'config', code: 'busy', message: 'busy' } } }
+    const host = await mount(pending())
+    await press(host, () => text(about(host), '.workout-sync-outcome') !== '', 'the refusal to be worded')
+    expect(text(about(host), '.workout-sync-outcome')).toBe('A sync is already running.')
+    expect(syncButton(host)!.textContent).toBe('Sync now')
+  })
+
+  it('says the sync did not start on any other refusal', async () => {
+    syncAnswer = { status: 500, body: { error: { kind: 'internal', code: 'boom', message: 'boom' } } }
+    const host = await mount(pending())
+    await press(host, () => text(about(host), '.workout-sync-outcome') !== '', 'the refusal to be worded')
+    expect(text(about(host), '.workout-sync-outcome')).toBe('The sync did not start.')
+  })
+
+  it('marks every filled figure as from your readings, and a filled pace as over the elapsed time', async () => {
+    const host = await mount(pending(['pace', 'distance', 'averageHeartRate', 'cardioLoad', 'calories', 'steps', 'hardZoneMinutes']), fullSession())
+    // The hero: its own line under the verdict, and the previous line says which of the two it is.
+    expect(text(host, '.workout-hero-filled')).toBe('from your readings, over the elapsed time')
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1 · this one over the elapsed time')
+    // The four figures under it, each filled one with the note and the one the watch gave without.
+    const notes = [...host.querySelectorAll('.detail-minis .figure-row')].map((row) => [
+      text(row, '.figure-row-label'), text(row, '.figure-row-note') ?? null,
+    ])
+    expect(notes).toEqual([
+      ['Distance', 'from your readings'], ['Moving time', null], ['Avg heart rate', 'from your readings'], ['Cardio load', 'from your readings'],
+    ])
+    const more = cardLabelled(host, 'More about this workout')!
+    const moreNotes = Object.fromEntries([...more.querySelectorAll('.figure-row')].map((row) => [text(row, '.figure-row-label'), text(row, '.figure-row-note') ?? null]))
+    expect(moreNotes).toMatchObject({ Calories: 'from your readings', Steps: 'from your readings', 'Highest heart rate': null })
+    // The comparison table marks each cell of this workout that was filled.
+    expect([...host.querySelectorAll('.workout-compared tbody tr')].map((row) => text(row, '.workout-compared-filled') ?? null)).toEqual([
+      'from your readings, over the elapsed time', 'from your readings', 'from your readings', 'from your readings',
+    ])
+    expect(text(host, '.workout-zones-verdict')).toBe('15\u00a0min vigorous or peak · above your usual 8 – 14\u00a0min · from your readings')
+    // The same route's rate row.
+    expect(text(cardLabelled(host, 'This route')!, '.figure-row-note')).toBe('from your readings, over the elapsed time')
+  })
+
+  it('marks nothing the watch recorded itself', async () => {
+    const host = await mount(pending(), fullSession())
+    expect(host.querySelector('.workout-hero-filled')).toBeNull()
+    expect(host.querySelectorAll('.workout-compared-filled')).toHaveLength(0)
+    expect(host.textContent).not.toContain('from your readings')
+    expect(host.textContent).not.toContain('elapsed time')
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km faster than the previous one, Tuesday, September 1')
+  })
+
+  it('words the note, the button and the marks in Dutch', async () => {
+    const host = await mount(pending(['pace', 'distance']), workoutSessionFixture(), 'nl')
+    const card = cardLabelled(host, 'Over deze training')!
+    expect(text(card, '.detail-about-line'))
+      .toBe('Opgenomen door watch · de cijfers van je horloge komen met de volgende synchronisatie Nu synchroniseren · uitsluiten of een notitie toevoegen')
+    expect(text(host, '.workout-hero-filled')).toBe('uit je metingen, over de verstreken tijd')
+    expect(text(host, '.workout-hero-previous')).toBe('12\u00a0s/km sneller dan de vorige, dinsdag 1 september · deze over de verstreken tijd')
+    expect(text(host.querySelector('.detail-minis .figure-row')!, '.figure-row-note')).toBe('uit je metingen')
   })
 })

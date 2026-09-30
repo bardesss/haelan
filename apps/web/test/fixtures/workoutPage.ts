@@ -136,6 +136,8 @@ export function workoutPageFixture(): WorkoutPageData {
     sourceId: 'watch',
     localDate: WORKOUT_DATE,
     exerciseType: 'RUNNING',
+    pending: false,
+    filled: [],
     hero: 'pace',
     nav: { previous: NAV_PREVIOUS_ID, next: NEXT_ID },
     figures: {

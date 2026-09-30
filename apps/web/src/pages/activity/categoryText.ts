@@ -11,7 +11,11 @@ import { figureAs, formatFigureValue } from '../detail/figureText.js'
  * through formatFigureValue, the workout page's own formatter for each of the three.
  */
 export function sessionRateText(rate: SessionRate | null, language: string, t: Translate): string | null {
-  return rate === null ? null : formatFigureValue(figureAs(rate.key, rate.unit), rate.value, language, t)
+  if (rate === null) return null
+  const text = formatFigureValue(figureAs(rate.key, rate.unit), rate.value, language, t)
+  // A rate the phone's samples filled runs over the whole span, stops included (core's
+  // fillFromSamples.ts): said, so it never passes for the watch's own.
+  return rate.fromElapsed === true ? t('activity.sessions.rateElapsed', { rate: text }) : text
 }
 
 /** A swim's distance, in whole metres however far it went ("1,500 m"): a pool counts in metres. */

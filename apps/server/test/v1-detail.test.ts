@@ -574,6 +574,35 @@ describe('GET /workout/:sessionId', () => {
     })
   })
 
+  // A phone-only run Google has not summarised yet: the page says it is waiting and names what the
+  // phone's samples filled, and the rounding keeps both.
+  it('sends a bare workout as pending, with the figures its samples filled', async () => {
+    harness = await withServer()
+    harness.clock.nowMs = NOW_MS
+    const token = await harness.signIn()
+    seedSource(harness, 'phone')
+    seedRun(harness, { id: 'summarised', sourceId: 'phone', localDate: '2026-09-03', pace: 300 })
+    const startMs = at('2026-09-04', '07:00')
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sessions).values({
+      id: 'bare', personId: 'p1', sourceId: 'phone', kind: 'exercise', externalId: 'bare',
+      startMs, startOffsetMinutes: OFFSET, endMs: startMs + 30 * 60_000, endOffsetMinutes: OFFSET,
+      localDate: '2026-09-04', rawPayloadId: null, attrs: JSON.stringify({ exerciseType: 'RUNNING', metricsSummary: null }),
+    }).run()
+    for (let i = 0; i < 30; i += 1) {
+      insertSample(db, { personId: 'p1', sourceId: 'phone', metric: 'distance', utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET, value: 166_667 })
+    }
+
+    const bare = (await get(harness, token, '/workout/bare')).json()
+    expect(bare.pending).toBe(true)
+    expect(bare.filled).toEqual(['pace', 'distance'])
+    // 1,800 s over 5.00001 km, whole.
+    expect(bare.figures.pace.value).toBe(360)
+    const summarised = (await get(harness, token, '/workout/summarised')).json()
+    expect(summarised.pending).toBe(false)
+    expect(summarised.filled).toEqual([])
+  })
+
   // An alternate's id is an old link to a workout another source also recorded; the page answers
   // as the merged workout, the same one the list names, rather than 404ing on it.
   it('answers an alternate id with the merged workout it belongs to', async () => {

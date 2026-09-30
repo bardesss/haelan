@@ -158,7 +158,12 @@ export const RATE_FIGURES: Readonly<Record<RateKey, { unit: string, precision: n
  * key and unit, so a reader words it without knowing the session's category, and the value rounded
  * to that figure's precision.
  */
-export interface SessionRate { key: RateKey, unit: string, value: number }
+/**
+ * `fromElapsed` is there, and true, only on a rate filled from the phone's own samples
+ * (fillFromSamples.ts): distance over the whole span, stops included, since a bare workout has no
+ * moving time. Every reader that prints it says so.
+ */
+export interface SessionRate { key: RateKey, unit: string, value: number, fromElapsed?: true }
 
 /** How the category reads a rate: 'pace' (min/km), 'speed' (km/h), 'swimPace' (min/100 m), or null for none. */
 export function rateOf(category: ExerciseCategory): RateKey | null {

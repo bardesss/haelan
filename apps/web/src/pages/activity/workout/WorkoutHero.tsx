@@ -10,7 +10,7 @@ import type { Translate } from '../../../format.js'
 import { useOpensDay } from '../../dashboard/cardShared.js'
 import type { WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPage.js'
 import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/figureText.js'
-import { bestMonth, workoutPath } from './workoutText.js'
+import { bestMonth, filledNote, workoutPath } from './workoutText.js'
 
 /**
  * How far this workout's rate lies from the previous one's, as printed and without its sign, and
@@ -135,7 +135,12 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   const ranked = serverRank !== null && comparison.reason === null && band !== undefined ? serverRank : null
   const rank = ranked === null ? null
     : t(ranked.better === ranked.of ? 'activity.workout.comparison.rankAll' : 'activity.workout.comparison.rank', { better: ranked.better, of: ranked.of })
-  const previous = previousLine(page, hero, language, t)
+  // A rate the phone's samples filled says so under the verdict, and the previous line, which sets
+  // it beside a rate the watch took over moving time, says which of the two this one is.
+  const filled = filledNote(page, hero.key, t)
+  const previousWords = previousLine(page, hero, language, t)
+  const previous = previousWords === null || filled === undefined || !(hero.key === 'pace' || hero.key === 'speed')
+    ? previousWords : `${previousWords} · ${t('activity.workout.page.filled.previous')}`
   const best = bestLine(page, hero, language, t)
   // A pace strip is drawn upside down so a faster run sits higher; the caption says so, since a
   // reader of any other strip on the page takes higher to mean more. It counts the earlier
@@ -155,6 +160,7 @@ export function WorkoutHero({ page, onOpenWorkout }: {
           {verdict !== null && (
             <p id={verdictId} className={tone === null ? 'detail-verdict' : `detail-verdict ${tone}`}>{verdict}</p>
           )}
+          {filled !== undefined && <p className="workout-hero-line workout-hero-filled">{filled}</p>}
           {rank !== null && <p className="workout-hero-line workout-hero-rank">{rank}</p>}
           {previous !== null && <p className="workout-hero-line workout-hero-previous">{previous}</p>}
           {best !== null && <p className="workout-hero-line workout-hero-best">{best}</p>}

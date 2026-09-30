@@ -246,6 +246,20 @@ describe('SessionRowView', () => {
         .toBe('1.500\u00a0m · 2:40\u00a0/100\u202fm')
     })
 
+    // A rate the phone's samples filled runs over the whole span, stops included (core's
+    // fillFromSamples.ts), so the row says so rather than pass it off as the watch's own.
+    it('says a rate filled from the phone runs over the elapsed time', () => {
+      expect(detail('RUNNING', { distanceMeters: 5100, rate: { ...pace(353), fromElapsed: true } }))
+        .toBe('5,1\u00a0km · 5:53\u00a0/km over de verstreken tijd')
+      const english = renderToStaticMarkup(
+        <I18nProvider lng="en">
+          <SessionRowView id="s1" type="BIKING" startMs={0} durationSeconds={3600} distanceMeters={null} caloriesKcal={null}
+            averageHeartRateBpm={null} excluded={false} localDate="2026-09-03" rate={{ ...speed(6.94), fromElapsed: true }} />
+        </I18nProvider>,
+      )
+      expect(english).toContain('<div class="session-row-detail">25.0\u00a0km/h over the elapsed time</div>')
+    })
+
     it('prints no rate where the server sends none, an indoor bike or a lift', () => {
       expect(detail('STATIONARY_BIKE', { rate: null })).toBeNull()
       expect(detail('WEIGHTLIFTING', {})).toBeNull()
