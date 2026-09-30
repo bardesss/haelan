@@ -1057,6 +1057,13 @@ describe('readWorkoutPage: per sport', () => {
     expect(readWorkoutPage(q(), input('nodistance'))!.hero).toBe('movingTime')
   })
 
+  it("sends a swim's distance under the metric that reads in whole metres, and a run's under its key", () => {
+    seedWorkout('pool', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1500, moving: 1800 })
+    seedWorkout('run', '2026-09-05', 'RUNNING', { pace: 300, distance: 1500, moving: 450 })
+    expect(readWorkoutPage(q(), input('pool'))!.figures.distance).toMatchObject({ key: 'distance', metric: 'swimDistance', value: 1500 })
+    expect(readWorkoutPage(q(), input('run'))!.figures.distance).toMatchObject({ key: 'distance', metric: 'distance', value: 1500 })
+  })
+
   it('leads every other category with moving time, whatever rate it carries', () => {
     seedWorkout('hiit', SUBJECT_DATE, 'HIIT', { pace: 400, distance: 3000, moving: 1500, metrics: { averageSpeedMillimetersPerSecond: 2500 } })
     seedWorkout('lift', '2026-09-05', 'WEIGHTLIFTING', { pace: 400, distance: 3000, moving: 1500 })

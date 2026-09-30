@@ -106,6 +106,7 @@ A workout reads as its category does (core's `exerciseCategory`, the one map cor
 - The compared table's first row after a time hero's is the category's rate, whatever leads the hero: an indoor ride led by its moving time still sets its speed beside the last one.
 - Step cadence (the through chart's row) and running form ("Loopvorm") are a run's and a walk's alone.
 - Heart-rate recovery is read after a run, a ride, a swim and a cardio session; a walk or a strength session ends near the effort it went along at.
+- A climb reads in whole metres however high it goes ("1.250 m", never "1,25 km"), and so does a swim's distance ("1.500 m", core sends it as `swimDistance`), on the workout page as in the rows and on Records; the compared table's difference is in metres with them.
 - Climb is not shown for a swim or an indoor type (`isIndoor`: a treadmill run or walk, the incline run and walk, a stationary, spinning or assault bike, an elliptical, a rowing machine, a stairclimber): indoors it is the barometer drifting. An e-bike is assisted, not indoor, and keeps it. Indoor decides the climb and a ride's hero only; which types hold records is `countsForDistanceRecords`' alone.
 - A workout that covers a distance with no route says which line it lacks, by its category: "zonder route geen snelheidslijn" for a ride, "zonder route geen tempolijn" otherwise.
 - The through chart's pauses are the category's: under 20 m a minute stands a walk still, 50 m a run (and every category without its own), 150 m a ride.

@@ -160,6 +160,9 @@ interface FigureSpec {
   of: (r: Reading) => number | null
   /** Whether the page shows the figure for a workout of this category and type; every one without. */
   shows?: (category: ExerciseCategory, type: string | null) => boolean
+  /** The metric the figure is sent under, where the category reads it another way than its key
+   *  says; the key without. The web's formatFigureValue words a figure by its metric. */
+  metric?: (category: ExerciseCategory) => string
 }
 
 const mobility = (pick: (m: NonNullable<WorkoutDetail['mobility']>) => number | null) =>
@@ -203,7 +206,12 @@ const FIGURES: readonly FigureSpec[] = [
     of: (r) => { const both = distanceAndMoving(r); return both === null ? null : both.seconds / (both.metres / 100) },
     shows: (category) => category === 'swim',
   },
-  { key: 'distance', unit: 'meters', precision: 0, direction: 'neutral', of: (r) => r.summary.distanceMeters },
+  // A swim's distance is counted in metres as its pool and its pace are ("1,500 m", never "1.50 km"):
+  // sent as 'swimDistance', the metric the session rows and the Records page already word that way.
+  {
+    key: 'distance', unit: 'meters', precision: 0, direction: 'neutral', of: (r) => r.summary.distanceMeters,
+    metric: (category) => (category === 'swim' ? 'swimDistance' : 'distance'),
+  },
   { key: 'movingTime', unit: 'seconds', precision: 0, direction: 'neutral', of: (r) => r.detail.activeDurationSeconds },
   { key: 'elapsed', unit: 'seconds', precision: 0, direction: 'neutral', of: (r) => (r.session.endMs - r.session.startMs) / 1000 },
   { key: 'averageHeartRate', unit: 'bpm', precision: 0, direction: 'neutral', of: (r) => r.summary.averageHeartRateBpm },
@@ -356,7 +364,7 @@ function figuresOf(subject: Reading, window: readonly Reading[]): WorkoutPage['f
     // Banister and highest heart rate are read for the subject alone (readingOf's default), so
     // their history is empty and usualOf answers no band: no verdict is claimed on them.
     const history = window.flatMap((r) => { const v = spec.of(r); return v === null ? [] : [v] })
-    figures[spec.key] = workoutFigureOf({ ...spec, metric: spec.key }, value, history, [
+    figures[spec.key] = workoutFigureOf({ ...spec, metric: spec.metric?.(subject.category) ?? spec.key }, value, history, [
       ...stripped.map((r) => ({ session: r.session, value: spec.of(r) })),
       { session: subject.session, value },
     ])

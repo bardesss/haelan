@@ -107,6 +107,19 @@ describe('formatFigureValue: workout units', () => {
     expect(formatFigureValue(figure({ unit: 'meters', precision: 0 }), 5200, 'nl', tNl)).toBe('5,20\u00a0km')
   })
 
+  it("keeps the workout page's climb and a swim's distance in whole metres past 1000, and their difference with them", () => {
+    const climb = figure({ unit: 'meters', precision: 0, metric: 'elevationGain', value: 1250 })
+    const swim = figure({ unit: 'meters', precision: 0, metric: 'swimDistance', value: 1500 })
+    const run = figure({ unit: 'meters', precision: 0, metric: 'distance', value: 1500 })
+    expect(formatFigureValue(climb, 1250, 'en', t)).toBe('1,250 m')
+    expect(formatFigureValue(swim, 1500, 'nl', tNl)).toBe('1.500 m')
+    expect(formatFigureDifference(climb, 1250, 1100, 'en', t)).toBe('+150')
+    expect(formatFigureDifference(swim, 1500, 1750, 'nl', tNl)).toBe('-250')
+    // The same metres as a run's distance still turn to kilometres, value and difference alike.
+    expect(formatFigureValue(run, 1500, 'en', t)).toBe('1.50 km')
+    expect(formatFigureDifference(run, 1500, 1750, 'en', t)).toBe('-0.25')
+  })
+
   it('formats seconds under an hour as an elapsed mm:ss', () => {
     expect(formatFigureValue(figure({ unit: 'seconds', precision: 0 }), 1684, 'en', t)).toBe('28:04')
     expect(formatFigureValue(figure({ unit: 'seconds', precision: 0 }), 1684, 'nl', tNl)).toBe('28:04')

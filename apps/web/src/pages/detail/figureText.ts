@@ -42,11 +42,11 @@ const SMALL_UNITS: Readonly<Record<string, { factor: number, precision: number, 
 }
 
 // Distances that read in whole metres however far they run, keyed on the figure as SMALL_UNITS is,
-// since every other distance in metres turns to kilometres past a thousand: a record's climb
-// ("1,250 m", never "1.25 km") and a swim's distance, whose pool and pace are both counted in
-// metres ("1,500 m"). The Records page and the session rows name these two; the workout page's own
-// figures keep their keys.
-const WHOLE_METRES: ReadonlySet<string> = new Set(['climb', 'swimDistance'])
+// since every other distance in metres turns to kilometres past a thousand: a climb ("1,250 m",
+// never "1.25 km") and a swim's distance, whose pool and pace are both counted in metres ("1,500
+// m"). The Records page and the session rows name them 'climb' and 'swimDistance'; the workout page
+// sends its climb under its key, 'elevationGain', and a swim's distance as 'swimDistance'.
+const WHOLE_METRES: ReadonlySet<string> = new Set(['climb', 'elevationGain', 'swimDistance'])
 
 // A pace or a duration, worded as a clock reads a stopwatch: minutes and seconds with no leading
 // zero on the minutes, an hour digit only once there is one to show. workoutPage.ts's `pace`
@@ -310,13 +310,13 @@ export function workoutStripOf(figure: WorkoutFigure): {
  * How far this figure's value lies from another reading of it (the previous workout's), signed,
  * in the figure's own terms: a pace in seconds per kilometre ("-12 s/km", the words the hero's
  * previous line uses) or a swim's per 100 m ("-4 s/100 m"), a stopwatch time as a stopwatch ("+1:40"), a speed in km/h, a distance in
- * kilometres once the value is in kilometres, anything else at its own precision, the last three
+ * kilometres once the value is in kilometres (a climb's and a swim's always in metres), anything else at its own precision, the last three
  * without their unit. Taken between the two values as they are printed, each rounded first, so a
  * row adds up: 5.20 km beside 5.00 km reads +0.20 whatever the metres behind them. A difference
  * that rounds to nothing carries no sign (formatSignedNumber's rule).
  */
 export function formatFigureDifference(
-  figure: Pick<PageFigure, 'value' | 'unit' | 'precision'>, value: number, before: number, language: string, t: Translate,
+  figure: Pick<PageFigure, 'value' | 'unit' | 'metric' | 'precision'>, value: number, before: number, language: string, t: Translate,
 ): string {
   const absent = t('common.absent')
   // The two values rounded to 1/`scale` of the stored unit, as printed, and their difference.
@@ -330,7 +330,9 @@ export function formatFigureDifference(
     }
     // A speed is printed in km/h at one decimal (formatFigureValue), so its difference is too.
     case 'meters_per_second': return formatSignedNumber(between(36) * 3.6, 1, language, absent)
-    case 'meters': return figure.value !== null && figure.value >= 1000
+    // A whole-metre distance (WHOLE_METRES) is printed in metres however far it runs, so its difference is too.
+    case 'meters': if (WHOLE_METRES.has(figure.metric)) return formatSignedNumber(between(1), 0, language, absent)
+      return figure.value !== null && figure.value >= 1000
       ? formatSignedNumber(between(1 / 10) / 1000, 2, language, absent)
       : formatSignedNumber(between(10 ** figure.precision), figure.precision, language, absent)
     default: return formatSignedNumber(between(10 ** figure.precision), figure.precision, language, absent)
