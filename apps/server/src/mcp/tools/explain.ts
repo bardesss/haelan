@@ -7,6 +7,7 @@ import { DAILY_SOURCE, defaultAggFor } from './series.ts'
 import { EMPTY_EVIDENCE, EMPTY_LINKS, walkEmpty } from './explainEmpty.ts'
 import { RECOVERY_EVIDENCE, RECOVERY_LINKS, walkRecovery } from './explainRecovery.ts'
 import { WORKOUT_EVIDENCE, WORKOUT_LINKS, walkWorkout } from './explainWorkout.ts'
+import { DAY_EVIDENCE, DAY_LINKS, walkDay } from './explainDay.ts'
 
 /**
  * `explain` (issue 412): one chain per kind, walked in order, that stops at the first link
@@ -20,10 +21,10 @@ import { WORKOUT_EVIDENCE, WORKOUT_LINKS, walkWorkout } from './explainWorkout.t
  * serves `stoppedAt` and `walked` for all of them.
  */
 
-const LINKS = [...EMPTY_LINKS, ...RECOVERY_LINKS, ...WORKOUT_LINKS] as const
+const LINKS = [...EMPTY_LINKS, ...RECOVERY_LINKS, ...WORKOUT_LINKS, ...DAY_LINKS] as const
 
-type Kind = 'empty' | 'recovery' | 'workout'
-type Argument = 'localDate' | 'sessionId' | 'metric' | 'agg' | 'source'
+type Kind = 'empty' | 'recovery' | 'workout' | 'day'
+type Argument = 'localDate' | 'today' | 'sessionId' | 'metric' | 'agg' | 'source'
 
 // Which arguments each kind reads. Anything else is refused rather than ignored: an argument that
 // silently changed nothing would read as an answer about it - a `source` on the recovery index,
@@ -32,6 +33,7 @@ const TAKES: Readonly<Record<Kind, { needs: readonly Argument[], may: readonly A
   empty: { needs: ['localDate', 'metric'], may: ['agg', 'source'] },
   recovery: { needs: ['localDate'], may: [] },
   workout: { needs: ['sessionId'], may: [] },
+  day: { needs: ['localDate', 'today'], may: [] },
 }
 
 function requireArguments(kind: Kind, args: Partial<Record<Argument, string>>): void {
@@ -81,10 +83,29 @@ export const explainTool = defineTool({
     + 'foot, speed on a bike, time otherwise) outside its usual; `hardMinutes`, the minutes in the '
     + 'vigorous and peak zones outside theirs; `lastKilometre`, the last full kilometre against the '
     + 'session\'s own earlier kilometres; `otherFigure`, any other figure outside its usual; and '
-    + '`withinUsual`. These are facts about the session, never about a next one.',
+    + '`withinUsual`. These are facts about the session, never about a next one.\n\n'
+    + '`kind: day` asks what on the finished day `localDate` sits away from this person\'s own usual, '
+    + 'and what was lived beside it - the same readings and 60-day usual ranges the app\'s dashboard '
+    + 'draws for that day. It needs `today`, which must be after `localDate`: a day still running is '
+    + 'not judged against whole days. The gates come first and stop the walk, because the data '
+    + 'cannot carry an interpretation of such a day: `dayEmpty`, nothing arrived; `sourceStopped`, a '
+    + 'source feeding the day had stopped before it, judged as of the day itself; `hrvFilled`, the day\'s own HRV is an intraday '
+    + 'average; `thinBaselines`, no reading has enough history to judge; then `nothingAway`, every '
+    + 'reading sits within its usual. Otherwise the first reading away from its usual, looked for in '
+    + 'a fixed order (resting heart rate, HRV, breathing rate, sleep, steps, active minutes), is '
+    + 'reported beside the first lived factor away from its own usual, in a fixed order per reading: '
+    + '`shortNight`, `lateBedtime` and `heavyYesterday` (the day before\'s vigorous minutes) for a '
+    + 'body reading on its worse side, `lateBedtime` for a short night, `workoutThatDay` for more '
+    + 'movement, and `loggedEvent` for every reading; `noLivedFactor` when none was. A lived factor '
+    + 'is an association reported beside the reading, never the reason for it, and the finding says '
+    + 'so.',
   inputSchema: {
-    kind: z.enum(['empty', 'recovery', 'workout']),
-    localDate: z.string().optional().describe('YYYY-MM-DD. Required for `empty` and `recovery`, refused for `workout`.'),
+    kind: z.enum(['empty', 'recovery', 'workout', 'day']),
+    localDate: z.string().optional().describe('YYYY-MM-DD. Required for `empty`, `recovery` and `day`, refused for `workout`.'),
+    today: z.string().optional().describe(
+      'YYYY-MM-DD, today in the person\'s own zone. Required for `day`, refused otherwise: a day is only '
+      + 'explained once it is over.',
+    ),
     sessionId: z.string().optional().describe('An exercise session id from get_workouts. Required for `workout`, refused otherwise.'),
     metric: z.string().optional().describe('Required for `empty`, refused otherwise.'),
     agg: z.string().optional().describe(
@@ -93,7 +114,7 @@ export const explainTool = defineTool({
     source: DAILY_SOURCE,
   },
   outputSchema: {
-    kind: z.enum(['empty', 'recovery', 'workout']),
+    kind: z.enum(['empty', 'recovery', 'workout', 'day']),
     finding: z.string(),
     stoppedAt: z.enum(LINKS),
     walked: z.array(z.enum(LINKS)),
@@ -101,16 +122,21 @@ export const explainTool = defineTool({
       empty: EMPTY_EVIDENCE.nullable(),
       recovery: RECOVERY_EVIDENCE.nullable(),
       workout: WORKOUT_EVIDENCE.nullable(),
+      day: DAY_EVIDENCE.nullable(),
     }),
   },
   run: (q, args) => {
     const { kind, ...rest } = args
     requireArguments(kind, rest)
-    const none = { empty: null, recovery: null, workout: null }
+    const none = { empty: null, recovery: null, workout: null, day: null }
 
     if (kind === 'recovery') {
       const { evidence, ...walk } = walkRecovery(q, args.localDate!)
       return { kind, ...walk, evidence: { ...none, recovery: evidence } }
+    }
+    if (kind === 'day') {
+      const { evidence, ...walk } = walkDay(q, args.localDate!, args.today!)
+      return { kind, ...walk, evidence: { ...none, day: evidence } }
     }
     if (kind === 'workout') {
       const { evidence, ...walk } = walkWorkout(q, args.sessionId!)
