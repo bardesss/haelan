@@ -14,7 +14,7 @@ import { NO_THINNING } from './sessionHeartRate.ts'
 import { cadenceSeries, paceSeries, pauseMetresPerMinuteOf, speedSeries } from './workoutThrough.ts'
 import type { MinuteSeries, PaceSeries, SpeedSeries } from './workoutThrough.ts'
 import { oneNightPerDate } from '../api/nights.ts'
-import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
+import { averageSpeedOf, workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
 import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
 import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
@@ -195,11 +195,7 @@ const FIGURES: readonly FigureSpec[] = [
   },
   {
     key: 'speed', unit: 'meters_per_second', precision: 2, direction: 'up',
-    of: (r) => {
-      if (r.detail.averageSpeedMetersPerSecond !== null) return r.detail.averageSpeedMetersPerSecond
-      const both = r.category === 'ride' ? distanceAndMoving(r) : null
-      return both === null ? null : both.metres / both.seconds
-    },
+    of: (r) => averageSpeedOf(r.detail.averageSpeedMetersPerSecond, r.summary.distanceMeters, r.detail.activeDurationSeconds, r.category === 'ride'),
   },
   {
     key: 'swimPace', unit: 'seconds_per_100m', precision: 0, direction: 'down',

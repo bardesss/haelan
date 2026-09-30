@@ -366,6 +366,16 @@ describe('readActivityPeriod', () => {
     expect(workouts[0]).toMatchObject({ paceSecondsPerKm: null, elevationGainMeters: null })
   })
 
+  it("carries a ride's speed, worked out from distance and moving time without a device pace, and none for a run", () => {
+    seedDays()
+    seedWorkout('2026-08-03', 'BIKING', { distanceMm: 18_000_000 })
+    seedWorkout('2026-08-04', 'RUNNING', { distanceMm: 5_000_000 })
+    const { workouts } = readActivityPeriod(q(), input(AUGUST))
+    expect(workouts[1]!.paceSecondsPerKm).toBeNull()
+    expect(workouts[1]!.speedMetersPerSecond).toBeCloseTo(18_000 / 1800, 9)
+    expect(workouts[0]!.speedMetersPerSecond).toBeNull()
+  })
+
   it("counts each month's workouts and their time, newest first, the excluded ones left out", () => {
     seedDays()
     seedWorkout('2026-07-02', 'RUNNING')

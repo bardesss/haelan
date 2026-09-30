@@ -129,6 +129,9 @@ export interface WorkoutListRow {
   paceSecondsPerKm: number | null
   elevationGainMeters: number | null
   excluded: boolean
+  /** A ride's average speed in m/s at two decimals (core's rideSpeedOf), null for any other category;
+   *  absent from a capture older than it. */
+  speedMetersPerSecond?: number | null
 }
 
 /** A calendar month of the workouts list ("2026-08"): its counted workouts and their time. */

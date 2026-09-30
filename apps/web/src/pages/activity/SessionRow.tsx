@@ -69,6 +69,8 @@ export interface SessionRowViewProps {
   /** The person's own day for the row, the same one a caller's date heading groups by. */
   localDate: string
   paceSecondsPerKm?: number | null
+  /** A ride's average speed as core sends it (sessions.ts's rideSpeedOf); absent from an older payload. */
+  speedMetersPerSecond?: number | null
   elevationGainMeters?: number | null
   /** The date at the head of the second line ("Wed, Sep 30 · 8.7 km"), for a list with no date
    *  headings of its own (the Activity overview's workouts, the approved mockup's). */
@@ -81,6 +83,7 @@ export function SessionRowView(props: SessionRowViewProps) {
   const language = i18n.language
   const { distanceMeters, caloriesKcal, averageHeartRateBpm } = props
   const paceSecondsPerKm = props.paceSecondsPerKm ?? null
+  const speedMetersPerSecond = props.speedMetersPerSecond ?? null
   const elevationGainMeters = props.elevationGainMeters ?? null
   const excludeReason = props.excludeReason ?? null
   const { localDate } = props
@@ -117,7 +120,7 @@ export function SessionRowView(props: SessionRowViewProps) {
         : `${formatNumber(distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
     // The rate the category reads (a ride's speed, a swim's time per 100 m), never a pace per
     // kilometre on a sport that is not on foot; nothing for one with no rate.
-    sessionRateText(category, paceSecondsPerKm, language, t),
+    sessionRateText(category, { paceSecondsPerKm, speedMetersPerSecond }, language, t),
     elevationGainMeters === null ? null
       : `${formatNumber(elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
   ].filter((part): part is string => part !== null)
@@ -190,6 +193,7 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       excluded={session.excluded}
       excludeReason={session.excludeReason}
       paceSecondsPerKm={summary.paceSecondsPerKm}
+      speedMetersPerSecond={session.speedMetersPerSecond ?? null}
       elevationGainMeters={summary.elevationGainMeters}
       localDate={session.localDate}
     />

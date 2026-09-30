@@ -221,7 +221,8 @@ function sessionValue(record: SessionRecord, language: string, t: Translate): st
   const key = record.kind.slice('fastest-'.length)
   const meters = effortDistancesOf(record.category).find((d) => d.key === key)?.meters
   if (meters === undefined || record.value <= 0) return time
-  const rate = sessionRateText(record.category, record.value / (meters / 1000), language, t)
+  // An effort's rate over its own distance and time, as the record states both.
+  const rate = sessionRateText(record.category, { paceSecondsPerKm: record.value / (meters / 1000), speedMetersPerSecond: meters / record.value }, language, t)
   return rate === null ? time : `${time} · ${rate}`
 }
 

@@ -314,6 +314,20 @@ function eventsFrom(value: unknown): WorkoutEvent[] {
  * hasGps is the one field this function does not resolve to false on an absent metadata object:
  * see its own comment on WorkoutDetail for why absence has to survive as null.
  */
+/**
+ * A session's average speed in metres per second: the device's own where it recorded one, else,
+ * where `worksOut` (a ride), its distance over its moving time; null without either. The one rule
+ * the workout page's speed figure and a list row's ride speed share, so the row prints what the
+ * page leads with.
+ */
+export function averageSpeedOf(
+  device: number | null, distanceMeters: number | null, movingSeconds: number | null, worksOut: boolean,
+): number | null {
+  if (device !== null) return device
+  if (!worksOut || distanceMeters === null || movingSeconds === null || distanceMeters <= 0 || movingSeconds <= 0) return null
+  return distanceMeters / movingSeconds
+}
+
 export function workoutDetail(attrs: unknown): WorkoutDetail {
   const record = isRecord(attrs) ? attrs : {}
   const metrics = isRecord(record.metricsSummary) ? record.metricsSummary : {}

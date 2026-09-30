@@ -26,6 +26,9 @@ export interface WorkoutSession {
    */
   sources?: string[]
   alternateIds?: string[]
+  /** A ride's average speed in m/s (core's rideSpeedOf, the workout page's own rule), null for any
+   *  other category; optional for the same reason as `sources`, a capture or cache older than it. */
+  speedMetersPerSecond?: number | null
 }
 
 /** One recorded GPS fix. Mirrors `RoutePoint` in packages/core/src/query/workoutDerived.ts field

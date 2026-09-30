@@ -354,7 +354,7 @@ describe('roundActivityPeriod', () => {
       workouts: [{
         id: 'w', sourceId: 'watch', localDate: '2026-09-01', startMs: 0, endMs: 1_800_000, type: 'RUNNING',
         durationSeconds: 1800.4, distanceMeters: 5012.6, caloriesKcal: 300.4, averageHeartRateBpm: 141.6,
-        paceSecondsPerKm: 318.6, elevationGainMeters: 57.5, excluded: false,
+        paceSecondsPerKm: 318.6, elevationGainMeters: 57.5, excluded: false, speedMetersPerSecond: 7.5049,
       }],
       types: [{
         type: 'RUNNING', count: 2, seconds: 3600.4, distanceMeters: 10000.6,
@@ -362,7 +362,7 @@ describe('roundActivityPeriod', () => {
       }],
     }))
     expect(rounded.workouts[0]).toMatchObject({
-      durationSeconds: 1800, distanceMeters: 5013, caloriesKcal: 300, averageHeartRateBpm: 142, paceSecondsPerKm: 319, elevationGainMeters: 58,
+      durationSeconds: 1800, distanceMeters: 5013, caloriesKcal: 300, averageHeartRateBpm: 142, paceSecondsPerKm: 319, elevationGainMeters: 58, speedMetersPerSecond: 7.5,
     })
     // 2 is above 1.96 but not above the 2.0 the page prints.
     expect(rounded.types[0]).toMatchObject({
@@ -401,7 +401,7 @@ describe('roundActivityPeriod', () => {
   it("sums each month's header again from the rounded rows, leaving an excluded workout out", () => {
     const row = (id: string, localDate: string, durationSeconds: number, excluded = false) => ({
       id, sourceId: 'watch', localDate, startMs: 0, endMs: 0, type: 'RUNNING', durationSeconds, distanceMeters: null,
-      caloriesKcal: null, averageHeartRateBpm: null, paceSecondsPerKm: null, elevationGainMeters: null, excluded,
+      caloriesKcal: null, averageHeartRateBpm: null, paceSecondsPerKm: null, elevationGainMeters: null, excluded, speedMetersPerSecond: null,
     })
     const rounded = roundActivityPeriod(activity({
       workouts: [row('c', '2026-09-02', 600.4), row('b', '2026-09-01', 600.4), row('x', '2026-09-01', 900, true), row('a', '2026-08-31', 1200.6)],

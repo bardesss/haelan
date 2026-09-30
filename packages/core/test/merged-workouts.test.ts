@@ -8,6 +8,7 @@ import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { enrichAttrs, mergeWorkouts } from '../src/query/mergedWorkouts.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { readRoutesFor } from '../src/query/workoutDerived.ts'
+import { rideSpeedOf } from '../src/query/sessions.ts'
 import type { WorkoutSession } from '../src/query/sessions.ts'
 
 /**
@@ -63,6 +64,7 @@ function session(o: Partial<WorkoutSession> & { id: string, sourceId: string }):
     excludeReason: null,
     sources: [o.sourceId],
     alternateIds: [],
+    speedMetersPerSecond: null,
     ...o,
   }
 }
@@ -139,6 +141,21 @@ describe('mergeWorkouts', () => {
     expect(attrs.routeConsentRequired).toBe(true)
     expect(attrs.displayName).toBe('Morning Run')
     expect(attrs.metricsSummary).toEqual(GOOGLE_RUN.metricsSummary)
+  })
+
+  it("reads a ride's speed again off the merged attrs, so the phone's bare copy takes the watch's distance and time", () => {
+    const phoneFirst = priorityFrom({
+      lists: new Map([['exercise', ['phone', 'google']]]),
+      sources: [{ id: 'google', kind: 'app' }, { id: 'phone', kind: 'app' }],
+    })
+    const googleRide = attrsOf({ exerciseType: 'BIKING', activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000 } })
+    const phoneRide = attrsOf({ exerciseType: 'BIKING' })
+    const [out] = mergeWorkouts([
+      session({ id: 'google-ride', sourceId: 'google', attrs: googleRide, speedMetersPerSecond: rideSpeedOf(googleRide) }),
+      session({ id: 'phone-ride', sourceId: 'phone', attrs: phoneRide, speedMetersPerSecond: rideSpeedOf(phoneRide) }),
+    ], { priority: phoneFirst, overlapRatio: DEFAULT_OVERLAP_RATIO })
+    expect(out!.id).toBe('phone-ride')
+    expect(out!.speedMetersPerSecond).toBeCloseTo(20000 / 2400, 9)
   })
 
   it('leaves two workouts that do not overlap enough as two', () => {
@@ -328,5 +345,22 @@ describe('PersonQuery workouts, merged', () => {
       }).run()
     }
     expect(q().sessions({ kind: 'sleep', from: '2026-09-20', to: '2026-09-20' }).map((s) => s.id)).toEqual(['n1', 'n2'])
+  })
+})
+
+describe('rideSpeedOf', () => {
+  const ride = (fields: Record<string, unknown>) => attrsOf({ exerciseType: 'BIKING', ...fields })
+  it("takes the device's own speed first, as the workout page's speed figure does", () => {
+    expect(rideSpeedOf(ride({ activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000, averageSpeedMillimetersPerSecond: 9000 } })))
+      .toBe(9)
+  })
+  it('works a ride without a device speed or pace out from its distance over its moving time', () => {
+    expect(rideSpeedOf(ride({ activeDuration: '2400s', metricsSummary: { distanceMillimeters: 20_000_000 } }))).toBeCloseTo(20000 / 2400, 9)
+  })
+  it('answers null for a ride missing its distance or its moving time, and for every other category', () => {
+    expect(rideSpeedOf(ride({ metricsSummary: { distanceMillimeters: 20_000_000 } }))).toBeNull()
+    expect(rideSpeedOf(ride({ activeDuration: '2400s' }))).toBeNull()
+    expect(rideSpeedOf(GOOGLE_RUN)).toBeNull()
+    expect(rideSpeedOf(null)).toBeNull()
   })
 })

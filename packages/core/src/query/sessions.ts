@@ -2,7 +2,8 @@ import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { sessions, overrides as overridesTable } from '../db/schema/index.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
-import { workoutSummary } from '../api/workoutSummary.ts'
+import { averageSpeedOf, durationSecondsOrNull, numberOrNull, workoutSummary } from '../api/workoutSummary.ts'
+import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
 
 // Named WorkoutSession rather than a generic SessionRow: the reader also serves readSleepNights'
 // underlying rows for kind 'sleep', but a workout list is its most interesting caller.
@@ -45,6 +46,29 @@ export interface WorkoutSession {
   sources: string[]
   /** The ids of the other rows merged into this one, best ranked first. Empty for a raw row. */
   alternateIds: string[]
+  /**
+   * A ride's average speed in metres per second (rideSpeedOf), sent so a row prints the speed the
+   * workout page leads with rather than turning a pace round; null for every other category and a
+   * ride with neither a device speed nor a distance and a moving time.
+   */
+  speedMetersPerSecond: number | null
+}
+
+/**
+ * A ride's average speed, the workout page's own rule (averageSpeedOf): the device's speed, else
+ * its distance over its moving time. Null for a session whose category reads no speed. Read off
+ * the few fields it needs rather than through workoutDetail, which parses every split; every
+ * session list pays for this.
+ */
+export function rideSpeedOf(attrs: unknown): number | null {
+  const summary = workoutSummary(attrs)
+  if (rateOf(exerciseCategory(summary.exerciseType)) !== 'speed') return null
+  // A record: a ride's category came off its exerciseType, which only a record carries.
+  const record = attrs as { metricsSummary?: unknown, activeDuration?: unknown }
+  const metrics = typeof record.metricsSummary === 'object' && record.metricsSummary !== null
+    ? record.metricsSummary as { averageSpeedMillimetersPerSecond?: unknown } : {}
+  const device = numberOrNull(metrics.averageSpeedMillimetersPerSecond)
+  return averageSpeedOf(device === null ? null : device / 1000, summary.distanceMeters, durationSecondsOrNull(record.activeDuration), true)
 }
 
 /**
@@ -147,6 +171,7 @@ function toWorkoutSession(
   row: typeof sessions.$inferSelect,
   excluded: Map<string, string | null>,
 ): WorkoutSession {
+  const attrs = parseAttrs(row.attrs)
   return {
     id: row.id,
     // Cast rather than widened: the column's own type is the three-kind SessionKind, but both
@@ -159,11 +184,12 @@ function toWorkoutSession(
     startOffsetMinutes: row.startOffsetMinutes,
     endOffsetMinutes: row.endOffsetMinutes,
     localDate: row.localDate,
-    attrs: parseAttrs(row.attrs),
+    attrs,
     excluded: excluded.has(row.id),
     excludeReason: excluded.get(row.id) ?? null,
     sources: [row.sourceId],
     alternateIds: [],
+    speedMetersPerSecond: row.kind === 'exercise' ? rideSpeedOf(attrs) : null,
   }
 }
 

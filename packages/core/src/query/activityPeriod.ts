@@ -22,6 +22,8 @@ export interface WorkoutListRow {
   type: string | null, durationSeconds: number | null, distanceMeters: number | null
   caloriesKcal: number | null, averageHeartRateBpm: number | null
   paceSecondsPerKm: number | null, elevationGainMeters: number | null, excluded: boolean
+  /** A ride's average speed in m/s (sessions.ts's rideSpeedOf), null for any other category. */
+  speedMetersPerSecond: number | null
 }
 /** A month's counted workouts (excluded ones left out), for the list's month headers on 3 months and a year. */
 export interface WorkoutMonth { month: string, count: number, seconds: number }
@@ -100,7 +102,7 @@ function rowOf(w: WorkoutSession): WorkoutListRow {
     durationSeconds: detail.activeDurationSeconds ?? (w.endMs - w.startMs) / 1000,
     distanceMeters: summary.distanceMeters, caloriesKcal: summary.caloriesKcal, averageHeartRateBpm: summary.averageHeartRateBpm,
     paceSecondsPerKm: summary.paceSecondsPerKm, elevationGainMeters: summary.elevationGainMeters,
-    excluded: w.excluded,
+    excluded: w.excluded, speedMetersPerSecond: w.speedMetersPerSecond,
   }
 }
 

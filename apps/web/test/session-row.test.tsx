@@ -217,16 +217,21 @@ describe('SessionRowView', () => {
       expect(detail('HIKING', { paceSecondsPerKm: 720 })).toBe('12:00\u00a0/km')
     })
 
-    it('reads a ride as a speed, in km/u in Dutch, never as a pace', () => {
-      // 120 s a km is 30 km an hour.
-      expect(detail('BIKING', { distanceMeters: 30_000, paceSecondsPerKm: 120 })).toBe('30,0 km · 30,0\u00a0km/u')
+    it('reads a ride as the speed core sends, in km/u in Dutch, never as a pace', () => {
+      // 8.33 m/s is 30 km an hour.
+      expect(detail('BIKING', { distanceMeters: 30_000, paceSecondsPerKm: 120, speedMetersPerSecond: 8.33 })).toBe('30,0 km · 30,0\u00a0km/u')
       const english = renderToStaticMarkup(
         <I18nProvider lng="en">
           <SessionRowView id="s1" type="SPINNING" startMs={0} durationSeconds={3600} distanceMeters={null} caloriesKcal={null}
-            averageHeartRateBpm={null} excluded={false} localDate="2026-09-03" paceSecondsPerKm={144} />
+            averageHeartRateBpm={null} excluded={false} localDate="2026-09-03" speedMetersPerSecond={6.94} />
         </I18nProvider>,
       )
       expect(english).toContain('<div class="session-row-detail">25.0\u00a0km/h</div>')
+    })
+
+    it("shows a ride's speed without a device pace, and never turns a pace round into one", () => {
+      expect(detail('BIKING', { speedMetersPerSecond: 7.5 })).toBe('27,0\u00a0km/u')
+      expect(detail('BIKING', { paceSecondsPerKm: 120 })).toBeNull()
     })
 
     it('reads a swim as the time per 100 m, its distance in metres', () => {
@@ -238,7 +243,7 @@ describe('SessionRowView', () => {
     it('prints no rate for a category that reads none, and no speed off a zero pace', () => {
       expect(detail('CARDIO_WORKOUT', { paceSecondsPerKm: 400 })).toBeNull()
       expect(detail('WEIGHTLIFTING', { paceSecondsPerKm: 400 })).toBeNull()
-      expect(detail('BIKING', { paceSecondsPerKm: 0 })).toBeNull()
+      expect(detail('BIKING', { speedMetersPerSecond: 0 })).toBeNull()
     })
   })
 
