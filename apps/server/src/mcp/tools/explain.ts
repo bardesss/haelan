@@ -6,6 +6,7 @@ import { defineTool } from '../contract.ts'
 import { DAILY_SOURCE, defaultAggFor } from './series.ts'
 import { EMPTY_EVIDENCE, EMPTY_LINKS, walkEmpty } from './explainEmpty.ts'
 import { RECOVERY_EVIDENCE, RECOVERY_LINKS, walkRecovery } from './explainRecovery.ts'
+import { WORKOUT_EVIDENCE, WORKOUT_LINKS, walkWorkout } from './explainWorkout.ts'
 
 /**
  * `explain` (issue 412): one chain per kind, walked in order, that stops at the first link
@@ -19,7 +20,29 @@ import { RECOVERY_EVIDENCE, RECOVERY_LINKS, walkRecovery } from './explainRecove
  * serves `stoppedAt` and `walked` for all of them.
  */
 
-const LINKS = [...EMPTY_LINKS, ...RECOVERY_LINKS] as const
+const LINKS = [...EMPTY_LINKS, ...RECOVERY_LINKS, ...WORKOUT_LINKS] as const
+
+type Kind = 'empty' | 'recovery' | 'workout'
+type Argument = 'localDate' | 'sessionId' | 'metric' | 'agg' | 'source'
+
+// Which arguments each kind reads. Anything else is refused rather than ignored: an argument that
+// silently changed nothing would read as an answer about it - a `source` on the recovery index,
+// which is always the day's own all-sources number, or a date on a workout, which has its own.
+const TAKES: Readonly<Record<Kind, { needs: readonly Argument[], may: readonly Argument[] }>> = {
+  empty: { needs: ['localDate', 'metric'], may: ['agg', 'source'] },
+  recovery: { needs: ['localDate'], may: [] },
+  workout: { needs: ['sessionId'], may: [] },
+}
+
+function requireArguments(kind: Kind, args: Partial<Record<Argument, string>>): void {
+  const { needs, may } = TAKES[kind]
+  for (const name of needs) if (args[name] === undefined) throw new ConfigError(`kind '${kind}' needs ${name}`)
+  for (const name of Object.keys(args) as Argument[]) {
+    if (args[name] !== undefined && !needs.includes(name) && !may.includes(name)) {
+      throw new ConfigError(`kind '${kind}' takes no ${name}`)
+    }
+  }
+}
 
 export const explainTool = defineTool({
   name: 'explain',
@@ -28,9 +51,10 @@ export const explainTool = defineTool({
     + 'does not have to stitch the other tools together and keep looking after the first sufficient '
     + 'answer. `stoppedAt` names the link that answered and `walked` every link checked on the way, '
     + 'so there is nothing further to walk. `finding` is one sentence about the data - an '
-    + 'association with how the day was lived at most, never a cause, advice, a readiness verdict '
-    + 'or a claim about the person\'s health - and `evidence` carries the numbers behind it, under '
-    + 'the kind asked; a field a link never reached is null.\n\n'
+    + 'association with how the day was lived at most, never a cause, advice, a readiness verdict, '
+    + 'a suggestion for a next session or a claim about the person\'s health - and `evidence` '
+    + 'carries the numbers behind it, under the kind asked; a field a link never reached is null. '
+    + 'An argument the kind does not read is refused rather than ignored.\n\n'
     + '`kind: empty` asks why `metric` has no reading on `localDate`. The links, in order: a reading '
     + 'is there after all (`thinBaseline` when its baseline is too thin to judge it against, '
     + '`present` otherwise); the metric was excluded by hand that day; a sleep session that would '
@@ -48,45 +72,58 @@ export const explainTool = defineTool({
     + 'any that pulled the other way. An input\'s points are its share of the distance from 50 and '
     + 'do not add up to it when the inputs disagreed. An absent input, sleep on half its evidence '
     + 'and filled HRV inside the baseline are stated in the finding whichever link answers. `band` '
-    + 'is distance from this person\'s own normal, not a readiness verdict. `metric`, `agg` and '
-    + '`source` are refused for this kind.',
+    + 'is distance from this person\'s own normal, not a readiness verdict.\n\n'
+    + '`kind: workout` asks what stands out about the exercise session `sessionId` (from '
+    + 'get_workouts) against this person\'s earlier sessions of its type - the same usual ranges the '
+    + 'app\'s workout page draws, from up to twenty sessions in the 90 days before it. The links, in '
+    + 'order: `excluded`, a session excluded by hand is not judged; `thinHistory`, too few earlier '
+    + 'sessions for a usual, or no type at all; `hero`, the figure the page leads with (pace on '
+    + 'foot, speed on a bike, time otherwise) outside its usual; `hardMinutes`, the minutes in the '
+    + 'vigorous and peak zones outside theirs; `lastKilometre`, the last full kilometre against the '
+    + 'session\'s own earlier kilometres; `otherFigure`, any other figure outside its usual; and '
+    + '`withinUsual`. These are facts about the session, never about a next one.',
   inputSchema: {
-    kind: z.enum(['empty', 'recovery']),
-    localDate: z.string().describe('YYYY-MM-DD'),
-    metric: z.string().optional().describe('Required for `empty`, refused for `recovery`.'),
+    kind: z.enum(['empty', 'recovery', 'workout']),
+    localDate: z.string().optional().describe('YYYY-MM-DD. Required for `empty` and `recovery`, refused for `workout`.'),
+    sessionId: z.string().optional().describe('An exercise session id from get_workouts. Required for `workout`, refused otherwise.'),
+    metric: z.string().optional().describe('Required for `empty`, refused otherwise.'),
     agg: z.string().optional().describe(
       '`empty` only. Omitted, the metric\'s own default aggregate, the one get_daily uses.',
     ),
     source: DAILY_SOURCE,
   },
   outputSchema: {
-    kind: z.enum(['empty', 'recovery']),
+    kind: z.enum(['empty', 'recovery', 'workout']),
     finding: z.string(),
     stoppedAt: z.enum(LINKS),
     walked: z.array(z.enum(LINKS)),
     evidence: z.object({
       empty: EMPTY_EVIDENCE.nullable(),
       recovery: RECOVERY_EVIDENCE.nullable(),
+      workout: WORKOUT_EVIDENCE.nullable(),
     }),
   },
   run: (q, args) => {
-    if (args.kind === 'recovery') {
-      // Refused rather than ignored: the index is always the day's own all-sources number, and a
-      // `source` that silently changed nothing would read as an answer about that source.
-      for (const name of ['metric', 'agg', 'source'] as const) {
-        if (args[name] !== undefined) throw new ConfigError(`kind 'recovery' takes no ${name}: the recovery index is the day's own number`)
-      }
-      const { evidence, ...rest } = walkRecovery(q, args.localDate)
-      return { kind: args.kind, ...rest, evidence: { empty: null, recovery: evidence } }
+    const { kind, ...rest } = args
+    requireArguments(kind, rest)
+    const none = { empty: null, recovery: null, workout: null }
+
+    if (kind === 'recovery') {
+      const { evidence, ...walk } = walkRecovery(q, args.localDate!)
+      return { kind, ...walk, evidence: { ...none, recovery: evidence } }
+    }
+    if (kind === 'workout') {
+      const { evidence, ...walk } = walkWorkout(q, args.sessionId!)
+      return { kind, ...walk, evidence: { ...none, workout: evidence } }
     }
 
-    if (args.metric === undefined) throw new ConfigError('kind \'empty\' needs a metric')
-    const spec = metricSpec(args.metric)
+    const metric = args.metric!
+    const spec = metricSpec(metric)
     // An unknown metric is refused by series()'s own requireMetricAndAgg on the first read, the
     // same way get_daily lets it be, so the empty agg below never reaches an answer.
     const agg = args.agg ?? (spec === undefined ? '' : defaultAggFor(spec))
-    const { evidence, ...rest } = walkEmpty(q, { metric: args.metric, agg, localDate: args.localDate, source: args.source })
-    return { kind: args.kind, ...rest, evidence: { empty: evidence, recovery: null } }
+    const { evidence, ...walk } = walkEmpty(q, { metric, agg, localDate: args.localDate!, source: args.source })
+    return { kind, ...walk, evidence: { ...none, empty: evidence } }
   },
 })
 

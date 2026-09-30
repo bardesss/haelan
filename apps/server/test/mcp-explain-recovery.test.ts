@@ -207,6 +207,6 @@ describe('explain, kind recovery', () => {
   })
 
   it('refuses kind empty without a metric', () => {
-    expect(() => explainTool.run(q, { kind: 'empty', localDate: D })).toThrow(/needs a metric/)
+    expect(() => explainTool.run(q, { kind: 'empty', localDate: D })).toThrow(/kind 'empty' needs metric/)
   })
 })
