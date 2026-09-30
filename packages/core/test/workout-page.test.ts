@@ -130,6 +130,29 @@ function seedHeartRate(fromMs: number, bpms: readonly number[]) {
   })
 }
 
+// Metres per degree of latitude on the 6,371 km sphere, and per degree of longitude at 52 N.
+const metresPerDegree = (6_371_000 * Math.PI) / 180
+const lonMetres = metresPerDegree * Math.cos((52 * Math.PI) / 180)
+
+/** A route from the session's start, a fix every 10 s at `speed` m/s for `fixes` fixes, heading `north` or `east`. */
+function seedRoute(sessionId: string, localDate: string, o: { speed?: number, fixes?: number, heading?: 'north' | 'east', hhmm?: string } = {}) {
+  const startMs = at(localDate, o.hhmm ?? '07:00')
+  const step = (o.speed ?? 3) * 10
+  test.db.insert(sessionRoutes).values(Array.from({ length: (o.fixes ?? 70) + 1 }, (_, i) => ({
+    id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
+    latitude: 52 + (o.heading === 'east' ? 0 : (i * step) / metresPerDegree),
+    longitude: 5 + (o.heading === 'east' ? (i * step) / lonMetres : 0),
+    altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+  }))).run()
+}
+
+/** Heart rate around a 30-minute workout's end at 07:30: its last minute, the minute of the end, and the two after. */
+const seedRecovery = (localDate: string, bpms: readonly number[], sourceId = 'watch') => bpms.forEach((bpm, i) => {
+  for (const agg of ['min', 'mean', 'max'] as const) {
+    insertSample(test.db, { personId: 'p1', sourceId, metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
+  }
+})
+
 describe('readWorkoutPage', () => {
   it('is null for an unknown session', () => {
     expect(readWorkoutPage(q(), input('nope'))).toBeNull()
@@ -457,12 +480,6 @@ describe('readWorkoutPage', () => {
 
 describe('readWorkoutPage: heart-rate recovery', () => {
   const END = at(SUBJECT_DATE, '07:30')
-  /** Heart rate for a run ending at 07:30: its last minute, the minute of the end, and the two after. */
-  const seedRecovery = (localDate: string, bpms: readonly number[], sourceId = 'watch') => bpms.forEach((bpm, i) => {
-    for (const agg of ['min', 'mean', 'max'] as const) {
-      insertSample(test.db, { personId: 'p1', sourceId, metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
-    }
-  })
 
   it('reads how far heart rate fell one and two minutes after the end, judged against the earlier runs', () => {
     seedRuns(10, { pace: 330 })
@@ -590,7 +607,6 @@ describe('readWorkoutPage: through the workout', () => {
     seedRun('subject', SUBJECT_DATE, { pace: 300 }, { minutes: 2 })
     seedRun('bare', SUBJECT_DATE, { pace: 300 }, { hhmm: '18:00' })
     const startMs = at(SUBJECT_DATE, '07:00')
-    const metresPerDegree = (6_371_000 * Math.PI) / 180
     test.db.insert(sessionRoutes).values(Array.from({ length: 19 }, (_, i) => ({
       id: `subject-${i}`, sessionId: 'subject', ordinal: i, atMs: startMs + i * 10_000,
       latitude: 52 + (i * 30) / metresPerDegree, longitude: 5,
@@ -632,21 +648,6 @@ describe('readWorkoutPage: through the workout', () => {
 })
 
 describe('readWorkoutPage: this route and fastest efforts', () => {
-  const metresPerDegree = (6_371_000 * Math.PI) / 180
-  const lonMetres = metresPerDegree * Math.cos((52 * Math.PI) / 180)
-
-  /** A route from the session's start, a fix every 10 s at `speed` m/s for `fixes` fixes, heading `north` or `east`. */
-  function seedRoute(sessionId: string, localDate: string, o: { speed?: number, fixes?: number, heading?: 'north' | 'east', hhmm?: string } = {}) {
-    const startMs = at(localDate, o.hhmm ?? '07:00')
-    const step = (o.speed ?? 3) * 10
-    test.db.insert(sessionRoutes).values(Array.from({ length: (o.fixes ?? 70) + 1 }, (_, i) => ({
-      id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
-      latitude: 52 + (o.heading === 'east' ? 0 : (i * step) / metresPerDegree),
-      longitude: 5 + (o.heading === 'east' ? (i * step) / lonMetres : 0),
-      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
-    }))).run()
-  }
-
   /** `n` runs on the same 2.1 km route, every third day before SUBJECT_DATE, moving time alternating 600 +/- 10 s. */
   function seedRouteRuns(n: number) {
     for (let i = 0; i < n; i += 1) {
@@ -998,27 +999,6 @@ describe('readWorkoutPage: this route and fastest efforts', () => {
 })
 
 describe('readWorkoutPage: per sport', () => {
-  const metresPerDegree = (6_371_000 * Math.PI) / 180
-
-  /** A route heading north from the session's start, a fix every 10 s at `speed` m/s. */
-  function seedRoute(sessionId: string, localDate: string, speed: number, fixes = 70) {
-    const startMs = at(localDate, '07:00')
-    test.db.insert(sessionRoutes).values(Array.from({ length: fixes + 1 }, (_, i) => ({
-      id: `${sessionId}-${i}`, sessionId, ordinal: i, atMs: startMs + i * 10_000,
-      latitude: 52 + (i * speed * 10) / metresPerDegree, longitude: 5,
-      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
-    }))).run()
-  }
-
-  /** Heart rate around a 30-minute workout's end at 07:30: its last minute, the minute of the end, and the two after. */
-  function seedRecovery(localDate: string) {
-    [160, 150, 135, 118].forEach((bpm, i) => {
-      for (const agg of ['min', 'mean', 'max'] as const) {
-        insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: at(localDate, '07:29') + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: bpm })
-      }
-    })
-  }
-
   const mobility = {
     mobilityMetrics: {
       avgCadenceStepsPerMinute: 172, avgStrideLengthMillimeters: '1150', avgGroundContactTimeDuration: '0.256s',
@@ -1124,11 +1104,54 @@ describe('readWorkoutPage: per sport', () => {
     for (const id of ['road', 'ebike']) expect(readWorkoutPage(q(), input(id))!.figures.elevationGain, id).toMatchObject({ value: 50 })
   })
 
+  it('shows no climb for an incline treadmill or a cardio machine, and leaves their records to the record rule', () => {
+    const climb = { elevationGainMillimeters: 50_000 }
+    const machines = ['INCLINE_RUN', 'INCLINE_WALK', 'ELLIPTICAL', 'ROWING_MACHINE', 'STAIRCLIMBER']
+    machines.forEach((type, i) => seedWorkout(type, shiftLocalDate(SUBJECT_DATE, i), type, { distance: 3000, moving: 1500, metrics: climb }))
+    for (const type of machines) expect(readWorkoutPage(q(), input(type))!.figures.elevationGain, type).toBeUndefined()
+    // Indoor is about the climb alone: an incline run still holds the run's distance records.
+    expect(readWorkoutPage(q(), input('INCLINE_RUN'))!.best.furthest).toMatchObject({ sessionId: 'INCLINE_RUN', value: 3000 })
+  })
+
+  it("ranks a ride by the speed its hero shows, worked out where the device sent no pace", () => {
+    // Four earlier rides at 5, 6, 7 and 8 m/s, none with a device pace or speed; this one at 7.5.
+    ;[4000, 3333, 2857, 2500].forEach((moving, i) => seedWorkout(`ride-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (4 - i)), 'BIKING', { distance: 20_000, moving }))
+    seedWorkout('subject', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 2667 })
+    const page = readWorkoutPage(q(), input('subject'))!
+    expect(page.hero).toBe('speed')
+    expect(page.comparison.pace).toBeNull()
+    expect(page.rank).toEqual({ better: 3, of: 4 })
+  })
+
+  it("ranks a treadmill run by its worked-out pace, and a swim by its pace per 100 m", () => {
+    // Treadmill: 330, 320, 290 s/km before; this one 300 s/km, faster than two.
+    ;[1650, 1600, 1450].forEach((moving, i) => seedWorkout(`tm-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (3 - i)), 'TREADMILL', { distance: 5000, moving }))
+    seedWorkout('treadmill', SUBJECT_DATE, 'TREADMILL', { distance: 5000, moving: 1500 })
+    // Swims: 2:10, 2:00 and 2:10 a 100 m before; this one 2:00, faster than two, a tie never better.
+    ;[1300, 1200, 1300].forEach((moving, i) => seedWorkout(`swim-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (3 - i)), 'SWIMMING_POOL', { distance: 1000, moving }, { hhmm: '18:00' }))
+    seedWorkout('swim', SUBJECT_DATE, 'SWIMMING_POOL', { distance: 1000, moving: 1200 }, { hhmm: '18:00' })
+    const treadmill = readWorkoutPage(q(), input('treadmill'))!
+    expect(treadmill.comparison.pace).toBeNull()
+    expect(treadmill.rank).toEqual({ better: 2, of: 3 })
+    const swim = readWorkoutPage(q(), input('swim'))!
+    expect(swim.hero).toBe('swimPace')
+    expect(swim.rank).toEqual({ better: 2, of: 3 })
+  })
+
+  it('ranks nothing under a time hero, or with too few earlier workouts', () => {
+    ;[2400, 2500, 2600].forEach((moving, i) => seedWorkout(`lift-${i}`, shiftLocalDate(SUBJECT_DATE, -3 * (3 - i)), 'WEIGHTLIFTING', { moving }))
+    seedWorkout('lift', SUBJECT_DATE, 'WEIGHTLIFTING', { moving: 2700 })
+    seedWorkout('ride-0', '2026-09-01', 'BIKING', { distance: 20_000, moving: 3000 })
+    seedWorkout('ride', SUBJECT_DATE, 'BIKING', { distance: 20_000, moving: 2800 }, { hhmm: '18:00' })
+    expect(readWorkoutPage(q(), input('lift'))!.rank).toBeNull()
+    expect(readWorkoutPage(q(), input('ride'))!.rank).toBeNull()
+  })
+
   it('reads heart-rate recovery after a run, a ride, a swim and a cardio session, and after nothing else', () => {
     const days = { RUNNING: '2026-08-01', BIKING: '2026-08-02', SWIMMING_POOL: '2026-08-03', HIIT: '2026-08-04', WALKING: '2026-08-05', WEIGHTLIFTING: '2026-08-06', YOGA: '2026-08-07' }
     for (const [type, localDate] of Object.entries(days)) {
       seedWorkout(type, localDate, type, { distance: 3000, moving: 1500 })
-      seedRecovery(localDate)
+      seedRecovery(localDate, [160, 150, 135, 118])
     }
     for (const type of ['RUNNING', 'BIKING', 'SWIMMING_POOL', 'HIIT']) {
       expect(readWorkoutPage(q(), input(type))!.heartRateRecovery, type).toMatchObject({ oneMinute: { value: 25 } })
@@ -1138,7 +1161,7 @@ describe('readWorkoutPage: per sport', () => {
 
   it("draws a ride's speed through the workout in place of its pace", () => {
     seedWorkout('ride', SUBJECT_DATE, 'BIKING', { distance: 5000, moving: 700 }, { minutes: 12 })
-    seedRoute('ride', SUBJECT_DATE, 8)
+    seedRoute('ride', SUBJECT_DATE, { speed: 8 })
     const { through } = readWorkoutPage(q(), input('ride'))!
     expect(through.pace).toBeNull()
     expect(through.speed!.unit).toBe('meters_per_second')
@@ -1148,7 +1171,7 @@ describe('readWorkoutPage: per sport', () => {
 
   it('draws a run\'s pace and no speed', () => {
     seedRun('run', SUBJECT_DATE, { pace: 300 }, { minutes: 12 })
-    seedRoute('run', SUBJECT_DATE, 3)
+    seedRoute('run', SUBJECT_DATE, { speed: 3 })
     const { through } = readWorkoutPage(q(), input('run'))!
     expect(through.speed).toBeNull()
     expect(through.pace!.points[0]!.value).toBeCloseTo(1000 / 3, 1)
@@ -1157,14 +1180,14 @@ describe('readWorkoutPage: per sport', () => {
   it('reads a pause by the category: a slow walk still moves, a slow ride has stopped', () => {
     // 30 m a minute: over a walk's 20 m, under a run's 50 m.
     seedWorkout('walk', SUBJECT_DATE, 'WALKING', { pace: 2000 }, { minutes: 12 })
-    seedRoute('walk', SUBJECT_DATE, 0.5)
+    seedRoute('walk', SUBJECT_DATE, { speed: 0.5 })
     seedRun('run', '2026-09-05', { pace: 2000 }, { minutes: 12 })
-    seedRoute('run', '2026-09-05', 0.5)
+    seedRoute('run', '2026-09-05', { speed: 0.5 })
     // 120 m a minute: over a run's 50 m, under a ride's 150 m.
     seedWorkout('ride', '2026-09-06', 'BIKING', { distance: 1500, moving: 700 }, { minutes: 12 })
-    seedRoute('ride', '2026-09-06', 2)
+    seedRoute('ride', '2026-09-06', { speed: 2 })
     seedRun('jog', '2026-09-07', { pace: 500 }, { minutes: 12 })
-    seedRoute('jog', '2026-09-07', 2)
+    seedRoute('jog', '2026-09-07', { speed: 2 })
     expect(readWorkoutPage(q(), input('walk'))!.through.pace).not.toBeNull()
     expect(readWorkoutPage(q(), input('run'))!.through.pace).toBeNull()
     expect(readWorkoutPage(q(), input('ride'))!.through.speed).toBeNull()
@@ -1175,10 +1198,10 @@ describe('readWorkoutPage: per sport', () => {
     for (let i = 0; i < 5; i += 1) {
       const localDate = shiftLocalDate(SUBJECT_DATE, -3 * (5 - i))
       seedWorkout(`loop-${i}`, localDate, 'BIKING', { distance: 5600, moving: i % 2 === 0 ? 800 : 700 })
-      seedRoute(`loop-${i}`, localDate, 8)
+      seedRoute(`loop-${i}`, localDate, { speed: 8 })
     }
     seedWorkout('subject', SUBJECT_DATE, 'BIKING', { distance: 5600, moving: 560 })
-    seedRoute('subject', SUBJECT_DATE, 8)
+    seedRoute('subject', SUBJECT_DATE, { speed: 8 })
     const rate = readWorkoutPage(q(), input('subject'))!.sameRoute!.rate!
     expect(rate).toMatchObject({ key: 'speed', unit: 'meters_per_second', direction: 'up', value: 10, standing: 'above', judged: 'better' })
     expect(rate.strip).toHaveLength(6)

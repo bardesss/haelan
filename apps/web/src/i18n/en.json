@@ -549,6 +549,7 @@
             "speed": "speed smoothed over three minutes"
           },
           "noRoute": "no route, no pace line",
+          "noRouteSpeed": "no route, no speed line",
           "from": {
             "pace_one": "The pace comes from the times of the one route point.",
             "pace_other": "The pace comes from the times of the {{count}} route points.",

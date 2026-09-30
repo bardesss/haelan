@@ -12,10 +12,6 @@ import type { WorkoutFigure, WorkoutPageData } from '../../../data/useWorkoutPag
 import { formatFigureValue, verdictLine, workoutStripOf } from '../../detail/figureText.js'
 import { bestMonth, workoutPath } from './workoutText.js'
 
-// The heroes whose ranking is the comparison's pace facet: faster is faster whether it is read as
-// a pace or as a speed. Moving time has no facet of its own to rank by.
-const RANKED_BY_PACE: ReadonlySet<string> = new Set(['pace', 'speed'])
-
 /**
  * How far this workout's rate lies from the previous one's, as printed and without its sign, and
  * whether it was the quicker: a pace in whole seconds per km ("12 s/km"), a swim's per 100 m
@@ -130,12 +126,13 @@ export function WorkoutHero({ page, onOpenWorkout }: {
   const verdict = verdictLine(hero, language, t)
   const tone = verdictTone(hero.judged, hero.standing)
   const { comparison } = page
-  const rankable = RANKED_BY_PACE.has(hero.key) && comparison.reason === null && band !== undefined
-  // "Faster than 20 of your last 20" is a sum the reader has to check; every one of them is "all".
-  const rank = rankable && comparison.pace !== null
-    ? t(comparison.pace.better === comparison.pace.of ? 'activity.workout.comparison.paceAll' : 'activity.workout.comparison.pace',
-      { better: comparison.pace.better, of: comparison.pace.of })
-    : null
+  // The server's rank on the rate the hero shows (workoutPage.ts's rankOf: a pace, a ride's speed
+  // or a swim's pace per 100 m, each faster being better), so one sentence serves all three; none
+  // for a time hero. "Faster than 20 of your last 20" is a sum the reader has to check; every one of
+  // them is "all".
+  const ranked = page.rank !== null && comparison.reason === null && band !== undefined ? page.rank : null
+  const rank = ranked === null ? null
+    : t(ranked.better === ranked.of ? 'activity.workout.comparison.paceAll' : 'activity.workout.comparison.pace', { better: ranked.better, of: ranked.of })
   const previous = previousLine(page, hero, language, t)
   const best = bestLine(page, hero, language, t)
   // A pace strip is drawn upside down so a faster run sits higher; the caption says so, since a

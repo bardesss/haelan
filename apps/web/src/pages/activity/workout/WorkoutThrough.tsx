@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { useTranslation } from '../../../i18n/index.js'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
+import { exerciseCategory, rateOf } from '@haelan/core/exercise-category'
 import { Card } from '../../../components/Card.js'
 import { BasisContext } from '../../../components/basis.js'
 import { ErrorState } from '../../../components/ErrorState.js'
@@ -168,7 +169,10 @@ export function WorkoutThrough({ session, detail, page, chosenSource }: {
     ...(both === null ? [] : [t(`activity.workout.page.through.smoothed.${both}`)]),
     // Only a workout that covers a distance and has no route points is missing its pace for want of
     // a route; a route whose minutes all fail the pace rules says nothing here.
-    ...(rate === null && page.figures.distance !== undefined && routePoints === 0 ? [t('activity.workout.page.through.noRoute')] : []),
+    // Worded for the line the category would draw: a ride's speed, anything else's pace.
+    ...(rate === null && page.figures.distance !== undefined && routePoints === 0
+      ? [t(rateOf(exerciseCategory(page.exerciseType)) === 'speed' ? 'activity.workout.page.through.noRouteSpeed' : 'activity.workout.page.through.noRoute')]
+      : []),
   ].join(' · ')
 
   // The highest reading is the server's figure; when in the workout it came is read off the trace.

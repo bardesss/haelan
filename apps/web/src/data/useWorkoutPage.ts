@@ -82,6 +82,10 @@ export interface WorkoutPageData {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
+  /** How many of the compared workouts this one beat on the rate its hero shows (a pace, a ride's
+   *  speed, a swim's pace per 100 m), read as the hero reads it; null for a time hero, a comparison
+   *  with a reason, or too few earlier readings (workoutPage.ts's rankOf). */
+  rank: ComparisonFacet | null
   previous: { sessionId: string, localDate: string, values: Partial<Record<PreviousKey, number>> } | null
   /** The category's Records bests (workoutPage.ts's best): one per kind the category keeps, null
    *  where none is held; `longest`, `furthest` and `most-climb` always present. Milliseconds for

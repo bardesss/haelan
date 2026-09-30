@@ -247,7 +247,7 @@ describe('the workout page\'s hero', () => {
   // "Faster than 20 of your last 20" reads as a sum to check; every one of them is "all".
   it('says "all" when the workout beat every one it is ranked against', async () => {
     const page = workoutPageFixture()
-    const host = await mount({ ...page, comparison: { ...page.comparison, pace: { ...page.comparison.pace!, better: 20, of: 20 } } })
+    const host = await mount({ ...page, rank: { better: 20, of: 20 } })
     expect(text(host, '.workout-hero-rank')).toBe('Faster than all of your last 20 of this type')
   })
 
@@ -1613,6 +1613,32 @@ describe('the workout page per sport', () => {
     expect(text(same, '.workout-hero-previous')).toBe('As fast as the previous one, Tuesday, September 1')
   })
 
+  it("ranks a ride by the server's rank on its speed, though the comparison has no pace facet", async () => {
+    const host = await mount(ridePageFixture(), rideSessionFixture())
+    expect(text(host, '.workout-hero-rank')).toBe('Faster than 12 of your last 20 of this type')
+  })
+
+  it('ranks a swim by its pace per 100 m, in the same words in Dutch', async () => {
+    const swim = { ...workoutSessionFixture(), attrs: { exerciseType: 'SWIMMING_POOL', activeDuration: '1875s' } }
+    const host = await mount(swimPageFixture(), swim, 'nl')
+    expect(text(host, '.workout-hero-rank')).toBe('Sneller dan al je laatste 20 van dit type')
+  })
+
+  it('draws no rank when the server sends none, whatever the comparison holds', async () => {
+    const host = await mount({ ...workoutPageFixture(), rank: null })
+    expect(host.querySelector('.workout-hero-rank')).toBeNull()
+  })
+
+  it('says a ride without a route has no speed line, not no pace line', async () => {
+    const page = ridePageFixture()
+    tracePoints = [reading(minute(1), 120)]
+    const host = await mount({ ...page, exerciseType: 'STATIONARY_BIKE', hero: 'movingTime', through: { pace: null, speed: null, cadence: null } },
+      { ...rideSessionFixture(), route: [] })
+    const caption = text(host.querySelector('.workout-through')!.closest('.card')!, '.workout-through ~ .dash-caption')
+    expect(caption).toContain('no route, no speed line')
+    expect(caption).not.toContain('pace')
+  })
+
   it('reads the same ride in Dutch, in km/u', async () => {
     const host = await mount(ridePageFixture(), rideSessionFixture(), 'nl')
     expect(heroLabel(host)).toBe('Snelheid')
@@ -1683,6 +1709,10 @@ describe('the workout page per sport', () => {
       ['Speed', '27.4\u00a0km/h', 'within your usual 24.8 – 28.1\u00a0km/h'],
       ['Moving time', '28:04', 'faster than your usual 28:20 – 30:00'],
     ])
+    // A higher speed already sits higher; only the time, where less is faster, is drawn upside down.
+    const inverse = [...card.querySelectorAll<HTMLDivElement>('[role="img"]')]
+      .map((chart) => (echarts.getInstanceByDom(chart)!.getOption() as { yAxis: { inverse?: boolean }[] }).yAxis[0]!.inverse === true)
+    expect(inverse).toEqual([false, true])
   })
 
   it('leads a swim with its pace per 100 m, and sets no pace per km beside the previous one', async () => {

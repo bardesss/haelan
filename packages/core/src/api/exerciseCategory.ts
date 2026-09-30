@@ -99,13 +99,18 @@ export function countsForDistanceRecords(type: string | null): boolean {
   return type === null || !NOT_FOR_RECORDS.has(type)
 }
 
+// The incline run and walk are the treadmill's own; the three cardio machines stand in one place.
+// Records do not read this set: which types count toward them is countsForDistanceRecords' alone.
 const INDOOR: ReadonlySet<string> = new Set([
-  'TREADMILL', 'TREADMILL_WALK', 'STATIONARY_BIKE', 'SPINNING', 'ASSAULT_BIKE',
+  'TREADMILL', 'TREADMILL_WALK', 'INCLINE_RUN', 'INCLINE_WALK',
+  'STATIONARY_BIKE', 'SPINNING', 'ASSAULT_BIKE',
+  'ELLIPTICAL', 'ROWING_MACHINE', 'STAIRCLIMBER',
 ])
 
 /**
- * The indoor variants of a run, a walk and a ride: done in one place, so a climb off the barometer
- * is drift and a bike's speed is the machine's own reckoning rather than ground covered.
+ * The types done in one place: a treadmill's run or walk (the incline ones among them), a bike that
+ * goes nowhere, and the cardio machines. A climb off the barometer there is drift, and an indoor
+ * bike's speed is the machine's own reckoning rather than ground covered.
  */
 export function isIndoor(type: string | null): boolean {
   return type !== null && INDOOR.has(type)

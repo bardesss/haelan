@@ -18,8 +18,8 @@ import { workoutDetail, workoutSummary } from '../api/workoutSummary.ts'
 import type { WorkoutDetail, WorkoutSplit, WorkoutSummary } from '../api/workoutSummary.ts'
 import { edwardsLoadFromSeconds } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
-import { compareWorkout, sameTypeWindow } from '../api/workoutComparison.ts'
-import type { WorkoutComparison } from '../api/workoutComparison.ts'
+import { compareWorkout, facet, sameTypeWindow } from '../api/workoutComparison.ts'
+import type { ComparisonFacet, WorkoutComparison } from '../api/workoutComparison.ts'
 import { RECORD_KINDS_BY_CATEGORY, kilometreSplitsOf, readsEfforts, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
 import type { SessionForRecords, SessionRecord, SessionRecordKind } from '../api/sessionRecords.ts'
 import { routeSignature, sameRoute as onSameRoute } from '../api/routeMatch.ts'
@@ -61,6 +61,14 @@ export interface WorkoutPage {
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
   comparison: WorkoutComparison
+  /**
+   * How many of the compared workouts (the comparison's own window) this one beat on the rate its
+   * hero shows, read as the page's own figure reads it: a ride's speed (worked out where the device
+   * sent none), a treadmill run's worked-out pace, a swim's pace per 100 m; better taken in the
+   * figure's own direction, a tie never better. Null for a hero that is no rate, when the
+   * comparison says why it has nothing to stand on, or with fewer earlier readings than it needs.
+   */
+  rank: ComparisonFacet | null
   previous: { sessionId: string, localDate: string, values: Partial<Record<PreviousKey, number>> } | null
   /**
    * The Records bests of this workout's category (a trail run's are the run category's), one per
@@ -487,6 +495,17 @@ function heroOf(category: ExerciseCategory, exerciseType: string | null, figures
   return figures.movingTime !== undefined ? 'movingTime' : 'elapsed'
 }
 
+const RATES: ReadonlySet<WorkoutFigureKey> = new Set(['pace', 'speed', 'swimPace'])
+
+// Answers: the hero's rank among the comparison's window (the same sessions `window` holds, both
+// sameTypeWindow's), through the page's own figure for that rate, so the rank and the hero read
+// the one number; the comparison's own facet rule (COMPARISON_MIN, ties never better).
+function rankOf(hero: WorkoutFigureKey, subject: Reading, window: readonly Reading[], comparison: WorkoutComparison): ComparisonFacet | null {
+  if (!RATES.has(hero) || comparison.reason !== null) return null
+  const spec = specOf(hero)
+  return facet(spec.of(subject), window.map(spec.of), spec.direction === 'down')
+}
+
 // Answers: the latest earlier session of this type the person did not exclude, however long ago,
 // with the values the comparison table's rows read, each as the page's own figure reads it and only
 // where the category shows that figure: its rate, and moving and elapsed time, since a time hero
@@ -671,16 +690,19 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
   const figures = figuresOf(subject, window)
   // The glance's view of the workout's own day, shared by the day card and the morning before it.
   const dayCtx = contextFor(q, { today: session.localDate, nowMs: input.nowMs, nameOf: input.nameOf, finished: session.localDate < input.today })
+  const hero = heroOf(category, exerciseType, figures)
+  const comparison = compareWorkout(session, candidates)
 
   return {
     sessionId: session.id,
     sourceId: session.sourceId,
     localDate: session.localDate,
     exerciseType,
-    hero: heroOf(category, exerciseType, figures),
+    hero,
     nav: navOf(q, session, input.today),
     figures,
-    comparison: compareWorkout(session, candidates),
+    comparison,
+    rank: rankOf(hero, subject, window, comparison),
     previous: previousOf(session, candidates),
     // The Records best, so it may be a session done after this one.
     best: bestOf(category, records),

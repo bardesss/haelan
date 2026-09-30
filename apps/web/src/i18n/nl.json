@@ -549,6 +549,7 @@
             "speed": "snelheid gladgestreken over drie minuten"
           },
           "noRoute": "zonder route geen tempolijn",
+          "noRouteSpeed": "zonder route geen snelheidslijn",
           "from": {
             "pace_one": "Het tempo komt uit de tijden van het ene routepunt.",
             "pace_other": "Het tempo komt uit de tijden van de {{count}} routepunten.",

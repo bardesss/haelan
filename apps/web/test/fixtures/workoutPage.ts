@@ -164,6 +164,7 @@ export function workoutPageFixture(): WorkoutPageData {
       exerciseType: 'RUNNING', of: 20, reason: null,
       pace: { better: 17, of: 20 }, heartRate: { better: 4, of: 20 }, distance: { better: 12, of: 20 }, cardioLoad: { better: 18, of: 20 },
     },
+    rank: { better: 17, of: 20 },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { pace: 336, distance: 5000, averageHeartRate: 153, cardioLoad: 62 } },
     best: {
       longest: { value: 3_904_000, sessionId: 'run-may', localDate: '2026-05-10' },
@@ -267,6 +268,7 @@ export function strengthPageFixture(): WorkoutPageData {
       calories: figure({ key: 'calories', unit: 'kcal', value: 240, baseline: thin(240) }),
     },
     comparison: { exerciseType: 'WEIGHTLIFTING', of: 0, reason: 'too-few', pace: null, heartRate: null, distance: null, cardioLoad: null },
+    rank: null,
     previous: null,
     best: { longest: null, furthest: null, 'most-climb': null },
     splitTrend: null,
@@ -308,7 +310,8 @@ export function ridePageFixture(): WorkoutPageData {
     exerciseType: 'BIKING',
     hero: 'speed',
     figures: { ...rest, speed, distance: figure({ key: 'distance', unit: 'meters', value: 30_000, baseline: band(28_000, 24_000, 32_000) }) },
-    comparison: { ...page.comparison, exerciseType: 'BIKING' },
+    comparison: { ...page.comparison, exerciseType: 'BIKING', pace: null },
+    rank: { better: 12, of: 20 },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { speed: 7.38, distance: 28_000, averageHeartRate: 141, cardioLoad: 60 } },
     best: {
       longest: { value: 9_000_000, sessionId: 'ride-may', localDate: '2026-05-10' },
@@ -355,7 +358,8 @@ export function swimPageFixture(): WorkoutPageData {
       movingTime: figure({ key: 'movingTime', unit: 'seconds', value: 1875, baseline: band(1800, 1600, 2000) }),
       averageHeartRate: page.figures.averageHeartRate!,
     },
-    comparison: { ...page.comparison, exerciseType: 'SWIMMING_POOL' },
+    comparison: { ...page.comparison, exerciseType: 'SWIMMING_POOL', pace: null },
+    rank: { better: 20, of: 20 },
     previous: { sessionId: PREVIOUS_ID, localDate: PREVIOUS_DATE, values: { swimPace: 129, distance: 1400, averageHeartRate: 150 } },
     best: {
       longest: { value: 3_000_000, sessionId: 'swim-may', localDate: '2026-05-10' },

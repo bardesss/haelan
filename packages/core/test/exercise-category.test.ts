@@ -76,12 +76,12 @@ describe('countsForDistanceRecords', () => {
 })
 
 describe('isIndoor', () => {
-  it.each(['TREADMILL', 'TREADMILL_WALK', 'STATIONARY_BIKE', 'SPINNING', 'ASSAULT_BIKE'])(
+  it.each(['TREADMILL', 'TREADMILL_WALK', 'INCLINE_RUN', 'INCLINE_WALK', 'STATIONARY_BIKE', 'SPINNING', 'ASSAULT_BIKE', 'ELLIPTICAL', 'ROWING_MACHINE', 'STAIRCLIMBER'])(
     'names %s indoor', (type) => expect(isIndoor(type)).toBe(true),
   )
 
   // An e-bike is assisted, not indoor: it holds no record, but its climb and speed are real.
-  it.each(['RUNNING', 'WALKING', 'BIKING', 'ELECTRIC_BIKE', 'SWIMMING_POOL', 'WEIGHTLIFTING'])(
+  it.each(['RUNNING', 'TRAIL_RUN', 'WALKING', 'HIKING', 'BIKING', 'ELECTRIC_BIKE', 'SWIMMING_POOL', 'WEIGHTLIFTING', 'ROWING'])(
     'does not name %s indoor', (type) => expect(isIndoor(type)).toBe(false),
   )
 

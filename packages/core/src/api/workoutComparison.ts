@@ -68,7 +68,7 @@ const WITHHELD = { pace: null, heartRate: null, distance: null, cardioLoad: null
  * average heart rate) and one upwards (a longer distance), and a single comparator with a flag is
  * what keeps the tie rule identical across all three: a tie is never counted as better.
  */
-function facet(
+export function facet(
   subjectValue: number | null,
   values: readonly (number | null)[],
   lowerIsBetter: boolean,

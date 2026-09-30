@@ -102,10 +102,12 @@ A workout reads as its category does (core's `exerciseCategory`, the one map cor
 - The hero is the category's rate (`rateOf`): pace for a run or a walk (a treadmill run's worked out from distance and moving time), speed for a ride that covered a distance outdoors, pace per 100 m for a swim (`swimPace`, "2:05 /100 m"); moving time for everything else, and for a ride indoors or without a distance.
 - A ride reads in km/h everywhere ("km/u" in Dutch): the hero, the compared table's rate row, the same-route card's rate row, the kilometre table's column and bar, the split trend ("tweede helft 1,2 km/u sneller" / "second half 1.2 km/h faster"), the through chart's speed row ("hoogste 32,4 km/u na 14:00", the heart rate's words, since more of a speed is more), and the previous-workout line ("0,8 km/u sneller dan de vorige"). A ride has no pace figure at all; a swim has no pace per km.
 - A speed is faster or slower against the previous one and in the split trend, as a pace is; its verdict against the usual keeps the plain above and below, as the hero always worded it.
+- The hero's rank ranks by the rate the hero shows, through the page's own figure (the server's `rank`): a ride by its speed, a treadmill run by its worked-out pace, a swim by its pace per 100 m, all in one sentence ("Sneller dan 12 van je laatste 20 van dit type"). A time hero has no rank.
 - The compared table's first row after a time hero's is the category's rate, whatever leads the hero: an indoor ride led by its moving time still sets its speed beside the last one.
 - Step cadence (the through chart's row) and running form ("Loopvorm") are a run's and a walk's alone.
 - Heart-rate recovery is read after a run, a ride, a swim and a cardio session; a walk or a strength session ends near the effort it went along at.
-- Climb is not shown for a swim or an indoor type (treadmill, treadmill walk, a stationary, spinning or assault bike): indoors it is the barometer drifting. An e-bike is assisted, not indoor, and keeps it.
+- Climb is not shown for a swim or an indoor type (`isIndoor`: a treadmill run or walk, the incline run and walk, a stationary, spinning or assault bike, an elliptical, a rowing machine, a stairclimber): indoors it is the barometer drifting. An e-bike is assisted, not indoor, and keeps it. Indoor decides the climb and a ride's hero only; which types hold records is `countsForDistanceRecords`' alone.
+- A workout that covers a distance with no route says which line it lacks, by its category: "zonder route geen snelheidslijn" for a ride, "zonder route geen tempolijn" otherwise.
 - The through chart's pauses are the category's: under 20 m a minute stands a walk still, 50 m a run (and every category without its own), 150 m a ride.
 
 ## Terms (nl / en)
