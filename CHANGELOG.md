@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.19.0](https://github.com/bardesss/haelan/compare/v2.18.0...v2.19.0) (2026-10-01)
+
+
+### Features
+
+* fill a phone-only workout from its readings, and a Health API sync button ([#426](https://github.com/bardesss/haelan/issues/426)) ([00ad894](https://github.com/bardesss/haelan/commit/00ad8941b4fe4a0e1a0bf15725797e7eb9778fbb))
+
 ## [2.18.0](https://github.com/bardesss/haelan/compare/v2.17.0...v2.18.0) (2026-09-30)
 
 
