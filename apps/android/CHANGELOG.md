@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/bardesss/haelan/compare/android-v0.9.0...android-v0.10.0) (2026-09-30)
+
+
+### Features
+
+* fill a phone-only workout from its readings, and a Health API sync button ([#426](https://github.com/bardesss/haelan/issues/426)) ([00ad894](https://github.com/bardesss/haelan/commit/00ad8941b4fe4a0e1a0bf15725797e7eb9778fbb))
+
 ## [0.9.0](https://github.com/bardesss/haelan/compare/android-v0.8.0...android-v0.9.0) (2026-09-30)
 
 
