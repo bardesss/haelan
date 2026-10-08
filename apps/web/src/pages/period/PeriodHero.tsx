@@ -25,7 +25,7 @@ import { EmphasisedText } from './EmphasisedText.js'
  * Nothing at all without a value, so the grid closes up. The strip's arrays and formatter are
  * memoised on the figure: a fresh one every render would rebuild the chart.
  */
-export function PeriodHero({ label, figure, noun, standout, caption, hint, lastYear, panel }: {
+export function PeriodHero({ label, figure, noun, standout, caption, hint, note, lastYear, panel }: {
   label: string
   figure: PeriodFigure
   noun: 'night' | 'day'
@@ -35,6 +35,9 @@ export function PeriodHero({ label, figure, noun, standout, caption, hint, lastY
   caption: string
   /** What a tap on a point does, beside the caption: "tap a night for the figures". */
   hint?: string
+  /** A caption across the foot of the card, under the figure and its strip: what the whole hero is
+   *  read from, where that is not what the page's controls say (Recovery's index, from every source). */
+  note?: string | null
   /** The same days a year earlier, aligned to the daily points; ignored when the strip is weekly. */
   lastYear?: (number | null)[]
   /** The PointPanel for a tapped point, and how it closes itself. */
@@ -115,6 +118,7 @@ export function PeriodHero({ label, figure, noun, standout, caption, hint, lastY
           </div>
         )}
       </div>
+      {note !== undefined && note !== null && <p className="dash-caption period-hero-source">{note}</p>}
     </Card>
   )
 }

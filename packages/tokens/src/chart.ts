@@ -45,6 +45,10 @@ export const chartTokens = {
     grid: 'slate.925',
     axis: 'slate.500',
     'band-baseline': 'blue.900',
+    // The wash behind a run of days (Sparkline's `spans`, the HRV stretch). It used to borrow
+    // surface-accent, which in dark sits a hair from the card, so a stretch's shading all but
+    // vanished; the border-chosen composite's step of the series blue reads in both themes.
+    'band-span': 'blue.750',
     'state-excluded': 'slate.600',
     'state-no-data': 'plum.300',
     'tooltip-bg': 'slate.850',
@@ -76,6 +80,7 @@ export const chartTokens = {
     grid: 'slate.200',
     axis: 'slate.650',
     'band-baseline': 'blue.200',
+    'band-span': 'blue.350',
     'state-excluded': 'slate.600',
     'state-no-data': 'plum.800',
     'tooltip-bg': 'slate.150',

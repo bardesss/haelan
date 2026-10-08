@@ -55,7 +55,7 @@ export const SCREENSHOTS = [
   {
     file: 'recovery.png',
     title: 'Recovery',
-    alt: 'The Recovery page: a recovery index against your own last sixty days, with the four measures that moved it, beside resting heart rate, heart rate variability and respiratory rate against their own baselines, and the daily heart rate range beneath them.',
+    alt: 'The Recovery page for three months: the average recovery index against the usual for three months, with how many days were usual, higher or lower, the highest and lowest day and which measure moved it most, above resting heart rate, HRV and breathing rate, each against its own usual, and HRV\'s seven-day average against its usual week.',
     role: 'gallery',
     readme: 'link',
   },

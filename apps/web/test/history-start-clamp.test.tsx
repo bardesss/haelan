@@ -10,16 +10,18 @@ import type { Session } from '../src/auth/session.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
+import { RECOVERY_PERIOD_MONTH } from './fixtures/recoveryPeriod.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
 
-// The steps card draws a real Sparkline once it has a point, and echarts.init throws
+// The heart rate range draws a real chart once it has a point, and echarts.init throws
 // without the chart tokens happy-dom never applies.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 // Recovery rather than the Dashboard this file first mounted, or Activity after it: the Dashboard
 // became the glance in M9b and Activity an overview over one period read in M10b, and neither reads
-// a range's series, so the clamp has nothing to act on there. Recovery still reads /series through
-// usePageControls, which is where the clamp lives.
+// a range's series, so the clamp has nothing to act on there. Recovery is an overview too now, but
+// its heart rate range still reads /series over usePageControls' range, which is where the clamp
+// lives.
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -67,6 +69,10 @@ function stubFetch(seen: string[], googleConnected: boolean): () => void {
         items: [], historyStartMs: Date.parse('2026-09-13T10:00:00Z'), googleConnected,
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    // The overview's own read, which carries no range of its own to clamp: the server bounds it.
+    if (url.includes('/recovery/period')) {
+      return new Response(JSON.stringify(RECOVERY_PERIOD_MONTH), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     if (url.includes('/series')) {
       const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
       const body: Record<string, unknown> = {}
@@ -97,18 +103,11 @@ function stubFetch(seen: string[], googleConnected: boolean): () => void {
 }
 
 /**
- * The series requests the page's range-following cards send, without the ones that ask over a
- * window fixed by their own definition: Recovery's recovery index reads its inputs over a lookback
- * that starts well before the tab (readRecoveryInput's window, the exception the Dashboard this file
- * used to mount had in its recovery index tile), so its `from` is deliberately neither the tab start
- * nor the history start. Both assertions below are about what the range-following cards ask for,
- * and a card that asks for something else is a separate, real cost rather than a clamp that failed.
- *
- * Filtered on a `from` before the tab start (2026-09-01), which no range-following card sends.
+ * The series requests the page's cards send. Every one follows the range: the recovery index that
+ * once read its inputs over a lookback starting well before the tab is the server's now, inside
+ * /recovery/period, so no request here is excused from the clamp.
  */
-const TAB_START = '2026-09-01'
-const cardSeries = (seen: string[]): string[] => seen.filter((u) =>
-  u.includes('/series') && (new URLSearchParams(u.split('?')[1] ?? '').get('from') ?? '') >= TAB_START)
+const cardSeries = (seen: string[]): string[] => seen.filter((u) => u.includes('/series'))
 
 describe('a phone-only history start', () => {
   // An all time card on a phone-only instance must not show a 30 day

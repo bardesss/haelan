@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
+import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../../i18n/index.js'
 import type { Translate } from '../../format.js'
 import { navigate } from '../../router.js'
@@ -48,19 +49,23 @@ type PeriodSource = ReturnType<typeof usePeriodSource>
 
 /**
  * The second half, over the page's period read: the header (PageHeader with the period and source,
- * then the ControlRow with the year comparison and the export of `exportMetrics`' daily sums), the
- * comparison with last year (asked on Week and Month only, while it is on: on 3 months and Year the
- * strip is weekly and draws no overlay; ended at historicalTo, so a month six days old is set
- * against the same six days a year earlier), the list's expansion (it belongs to the period it was
- * opened in: a new period opens collapsed), and `gate`, the page to render instead while there is no
- * period to draw (the Day tab's header alone, an error, loading). `alone` puts a body in a single
- * card under the header, in the detail page's root (PATTERNS.md's page shell), for any other state.
+ * then the ControlRow with the year comparison and the export of `exportMetrics`' daily sums, or
+ * their `exportAgg`), the comparison with last year (asked on Week and Month only, while it is on:
+ * on 3 months and Year the strip is weekly and draws no overlay; ended at historicalTo, so a month
+ * six days old is set against the same six days a year earlier), the list's expansion (it belongs
+ * to the period it was opened in: a new period opens collapsed), and `gate`, the page to render
+ * instead while there is no period to draw (the Day tab's header alone, an error, loading).
+ * `alone` puts a body in a single card under the header, in the detail page's root (PATTERNS.md's
+ * page shell), for any other state.
  */
 export function usePeriodShell<D extends { hero: PeriodFigure }>(o: {
   title: string
   page: PeriodSource
   query: { data: D | undefined, isError: boolean, error: unknown, refetch: () => unknown }
   exportMetrics: readonly string[]
+  /** The agg the export downloads `exportMetrics` at: their sums unless the page says otherwise
+   *  (Recovery's once-a-day readings, which the catalogue keeps as 'last'). */
+  exportAgg?: DailyAgg
   lastYearGroups: readonly MetricGroup[]
 }) {
   const { t, i18n } = useTranslation()
@@ -80,7 +85,7 @@ export function usePeriodShell<D extends { hero: PeriodFigure }>(o: {
   const toggle = useCallback(() => setExpandedFor((open) => (open === periodKey ? null : periodKey)), [periodKey])
 
   const personId = session.data?.personId
-  const exportPath = personId !== undefined ? exportPathFor(personId, o.exportMetrics, 'sum', range) : undefined
+  const exportPath = personId !== undefined ? exportPathFor(personId, o.exportMetrics, o.exportAgg ?? 'sum', range) : undefined
   const sourceName = source === ALL_SOURCES ? t('controlRow.sourceAll') : nameOf(source)
   const resolved = { ...controls, source }
   const header = (

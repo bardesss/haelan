@@ -175,6 +175,11 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
     expect(deltaE(band, s['surface-card']), 'baseline band vs surface-card').toBeGreaterThanOrEqual(5)
   })
 
+  // Painted at full strength, so measured as it is.
+  it("draws a stretch's shading as a wash rather than as bare card", () => {
+    expect(deltaE(chart['band-span'], s['surface-card']), 'span vs surface-card').toBeGreaterThanOrEqual(5)
+  })
+
   it('draws the heart-rate range band as a band rather than as bare card', () => {
     const band = tint(s['surface-card'], chart['stage-light'], RANGE_BAND_OPACITY)
     expect(deltaE(band, s['surface-card']), 'range band vs surface-card').toBeGreaterThanOrEqual(5)
@@ -354,7 +359,7 @@ describe('assertion coverage', () => {
   ]
   const ASSERTED_CHART: readonly ChartToken[] = [
     ...STAGE_KEYS, ...ZONE_KEYS, ...ACTIVITY_KEYS, ...SCALE_KEYS,
-    'series', 'series-alt', 'grid', 'axis', 'band-baseline',
+    'series', 'series-alt', 'grid', 'axis', 'band-baseline', 'band-span',
     'state-excluded', 'state-no-data', 'tooltip-bg', 'balance-over', 'balance-under',
   ]
 

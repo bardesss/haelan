@@ -212,6 +212,28 @@ describe('the panel\'s actions depend on what the click named', () => {
     expect(withheldText()).toBe('This point combines 6 readings, so there is no single value to correct.')
   })
 
+  // A day itself (the Recovery overview's index): nothing stored to exclude or correct, so neither
+  // is offered, the panel opens on the note, and the note is written against that day.
+  it('offers only a note and an event for a day, and writes the note against it', async () => {
+    let posted: { url: string, body: Record<string, unknown> | null } | null = null
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      posted = { url: String(input), body: init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null }
+      return respond(200, { id: 'n1' })
+    }) as typeof fetch
+
+    mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    expect(actionLabels()).toEqual(['Add a note', 'Add an event'])
+    expect(container!.querySelector('h2')?.textContent).toBe('This day, 2026-08-21')
+    type(fieldFor('Note'), 'slept badly')
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+
+    expect(posted!.url).toContain('/notes/2026-08-21')
+    expect(posted!.body).toEqual({ body: 'slept badly' })
+  })
+
   it('writes a sample scoped override for a sample click', async () => {
     let posted: Record<string, unknown> | null = null
     const original = globalThis.fetch

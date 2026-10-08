@@ -210,53 +210,80 @@
   "recovery": {
     "title": "Recovery",
     "units": {
-      "beatsPerMinute": "Beats per minute",
-      "bpm": "bpm",
-      "milliseconds": "Milliseconds",
-      "ms": "ms",
-      "breathsPerMinute": "Breaths per minute",
       "breathsPerMinuteShort": "breaths/min"
-    },
-    "insights": {
-      "restingHeartRate": "Resting heart rate, this period against the last"
-    },
-    "baselineNote": {
-      "pending": "the baseline is still loading",
-      "unknown": "the baseline could not be read, so no comparison is shown",
-      "none": "no baseline yet to compare against",
-      "thin": "the baseline from the 60 days before {{on}} is too thin to compare against",
-      "below": "↓ below the {{low}} to {{high}} baseline",
-      "above": "↑ above the {{low}} to {{high}} baseline",
-      "within": "→ within the {{low}} to {{high}} baseline"
-    },
-    "restingHeartRate": {
-      "label": "Resting heart rate",
-      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
-      "chartLabel": "Daily resting heart rate through {{period}}"
-    },
-    "dailyHrv": {
-      "label": "Heart rate variability",
-      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
-      "chartLabel": "Daily heart rate variability through {{period}}"
-    },
-    "respiratoryRate": {
-      "label": "Respiratory rate",
-      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
-      "chartLabel": "Daily respiratory rate through {{period}}"
-    },
-    "respiratoryRateSleep": {
-      "label": "Respiratory rate, during sleep",
-      "chartLabel": "Respiratory rate through {{period}}, measured during sleep"
     },
     "heartRateRange": {
       "label": "Heart rate range",
-      "basis": "daily minimum, mean and maximum, shaded band is the baseline from the 60 days before {{on}}",
-      "basisThin": "daily minimum, mean and maximum; the baseline from the 60 days before {{on}} is too thin to draw a band from",
-      "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
-      "basisBaselinePending": "daily minimum, mean and maximum; the baseline is still loading",
-      "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
-      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
-      "intradayChartLabel": "Heart rate through the day of {{date}}"
+      "basis": "daily minimum, mean and maximum, every day {{period}} · band = your usual range",
+      "basisThin": "daily minimum, mean and maximum, every day {{period}} · too few days yet for your usual range",
+      "basisNoBaseline": "daily minimum, mean and maximum, every day {{period}} · no usual range yet",
+      "basisBaselinePending": "daily minimum, mean and maximum, every day {{period}} · your usual range is still loading",
+      "basisBaselineUnknown": "daily minimum, mean and maximum, every day {{period}} · your usual range could not be read, so no band is drawn",
+      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
+    },
+    "period": {
+      "hero": "Recovery index, average per day",
+      "caption": {
+        "daily": "every day {{period}}",
+        "weekly": "every week, as its average"
+      },
+      "hint": {
+        "daily": "tap a day for its score and inputs",
+        "weekly": "tap a week for its average"
+      },
+      "lines": {
+        "daily": "each line: every day {{period}} · band = your usual range",
+        "weekly": "each line: every week, the average of its days · band = your usual range"
+      },
+      "carriedBy": "mostly down to your {{input}}",
+      "sourceCaption": "the recovery index and HRV against its usual week are worked out from all sources, whichever source is chosen",
+      "panel": {
+        "openDay": "View day",
+        "annotate": "Add a note or an event"
+      },
+      "band": {
+        "low": "well below your usual",
+        "below": "below your usual",
+        "usual": "around your usual",
+        "above": "above your usual",
+        "high": "well above your usual"
+      },
+      "emptyTitle": "No recovery index for this period",
+      "emptyDetail": "The index needs HRV and resting heart rate readings, each against your own previous {{days}} days."
+    },
+    "stretch": {
+      "label": "HRV against its usual week",
+      "average": "{{days}}-day average",
+      "run": {
+        "below": "below your usual for {{days}} measured days",
+        "above": "above your usual for {{days}} measured days"
+      },
+      "capped": {
+        "below": "more than {{days}} days below your usual",
+        "above": "more than {{days}} days above your usual"
+      },
+      "within": "within your usual",
+      "note": {
+        "below": "{{sideNights}} of the last {{weekReadings}} nightly readings low",
+        "above": "{{sideNights}} of the last {{weekReadings}} nightly readings high"
+      },
+      "caption": {
+        "daily": "each dot: the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side of the band",
+        "weekly": "each dot: a week's last measured day, the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = weeks a stretch reached"
+      },
+      "short": {
+        "below": "below your usual for fewer than {{minRun}} measured days",
+        "above": "above your usual for fewer than {{minRun}} measured days"
+      },
+      "tooFew": "too few readings in the last {{weekDays}} days",
+      "needsBaseline": "needs {{baselineDays}} days of HRV before its first week"
+    },
+    "method": {
+      "label": "How the index works",
+      "ingredients": "The recovery index weighs four readings: HRV {{hrv}}%, resting heart rate {{restingHeartRate}}%, last week's sleep {{sleep}}% and breathing rate {{respiratoryRate}}%. Each is set against your own previous {{days}} days.",
+      "usual": "50 is your usual. A day from {{low}} to {{high}} counts as around your usual; below or above that, as below or above it, and further out, as well below or well above it.",
+      "tuned": "The weights are tuned so the index follows the recovery score in the Google Health app, on scores copied from it by hand. It is not Google's number.",
+      "stretch": "HRV against its usual week takes the average of the last {{weekDays}} days, once it holds at least {{minReadings}} readings, and sets it against a band reaching {{band}} × the day-to-day spread of your usual to either side. It counts as a stretch once it stays on one side of that band for {{minRun}} measured days in a row."
     }
   },
   "health": {
@@ -1162,6 +1189,7 @@
   "annotate": {
     "title": "{{metric}} on {{date}}",
     "sessionTitle": "This workout, {{date}}",
+    "dayTitle": "This day, {{date}}",
     "close": "Close",
     "actionLabel": "What do you want to do",
     "actions": {
@@ -1706,7 +1734,6 @@
   },
   "recoveryIndex": {
     "label": "Recovery index",
-    "asOf": "as of {{date}}",
     "band": {
       "low": "Well below your usual",
       "below": "Below your usual",
@@ -1714,8 +1741,6 @@
       "above": "Above your usual",
       "high": "Well above your usual"
     },
-    "basis": "against your own last {{days}} days",
-    "unavailable": "Not enough recent data to compare against your usual.",
     "input": {
       "hrv": "Heart rate variability",
       "restingHeartRate": "Resting heart rate",
@@ -1918,6 +1943,8 @@
     "standout": {
       "longest": "longest: {{value}} on {{date}}",
       "busiest": "busiest: {{value}} on {{date}}",
+      "highest": "highest: {{value}} on {{date}}",
+      "lowest": "lowest: {{value}} on {{date}}",
       "previous": "{{delta}} against {{period}}",
       "previousPerDay": "{{delta}} a day against {{period}}",
       "yearEarlier": "{{delta}} against last year",

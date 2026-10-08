@@ -17,12 +17,15 @@ import { Link } from '../../router.js'
  */
 export interface PointPanelRow { label: string, value: string, verdict?: string, tone?: 'better' | 'worse' | 'is-out' | null }
 
-export function PointPanel({ title, subtitle = null, rows, open, onAnnotate, onClose }: {
+export function PointPanel({ title, subtitle = null, rows, open, onAnnotate, annotateText, onClose }: {
   title: string
   subtitle?: string | null
   rows: PointPanelRow[]
   open: { to: string, text: string } | null
   onAnnotate: (() => void) | null
+  /** The annotate button's words where the panel it opens offers less than an exclude (Recovery's
+   *  index, a day that takes a note or an event only); the shared "Exclude or add a note" otherwise. */
+  annotateText?: string
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -77,7 +80,7 @@ export function PointPanel({ title, subtitle = null, rows, open, onAnnotate, onC
       {(open !== null || onAnnotate !== null) && (
         <div className="point-panel-actions">
           {open !== null && <Link to={open.to} className="card-link">{open.text}</Link>}
-          {onAnnotate !== null && <button type="button" className="button" onClick={onAnnotate}>{t('common.annotate')}</button>}
+          {onAnnotate !== null && <button type="button" className="button" onClick={onAnnotate}>{annotateText ?? t('common.annotate')}</button>}
         </div>
       )}
     </div>

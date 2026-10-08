@@ -20,8 +20,7 @@ function filledCountOf(result: SeriesResult): FilledCount {
  * between `range.from` and `range.to` gets scored against its OWN 60-day baseline plus its own
  * 6-day sleep week, and the earliest of those windows belongs to the range's earliest date, not
  * its latest. Getting this wrong scores the earliest requested days against a baseline that is
- * silently too thin, which reads as `missing` rather than as the bug it is - the same reasoning
- * `apps/web/src/data/useRecoveryIndex.ts`'s `recoveryFetchRange` documents for the web reader.
+ * silently too thin, which reads as `missing` rather than as the bug it is.
  *
  * No `points` argument, anywhere in this file. A point budget is a display concern for a chart;
  * an index that moved with a chart's own budget would not be measuring anything.

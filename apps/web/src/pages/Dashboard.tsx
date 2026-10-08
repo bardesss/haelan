@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
@@ -6,6 +6,8 @@ import { CardGrid } from '../components/CardGrid.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { EmptyState } from '../components/EmptyState.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { useSession } from '../auth/session.js'
 import { useGlance } from '../data/useGlance.js'
 import { NightCard } from './dashboard/NightCard.js'
@@ -95,6 +97,15 @@ export function Dashboard() {
     if (refused) setDay(null, { replace: true })
   }, [refused, setDay])
 
+  // A heart rate reading tapped on the day's trace opens the annotate panel on that one reading
+  // (a sample target, on the day the cards show): the one chart in the app that names a single
+  // reading, since Recovery's Day tab, which drew the day's trace before, opens this page instead.
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
+  const shownDate = glance?.today
+  const openSample = useCallback((point: { sourceId: string, utcMs: number, n: number }) => {
+    if (shownDate !== undefined) setAnnotateTarget({ scope: 'sample', localDate: shownDate, metric: 'heart_rate', ...point })
+  }, [shownDate])
+
   // On its way to the nearest day (or back to today), the refusal is not an error to show.
   if (isError && nearest === null && !refused) {
     return <StatePage header={<Header timezone={timezone} day={urlDay} />}><ErrorState onRetry={() => void refetch()} error={error} /></StatePage>
@@ -166,7 +177,7 @@ export function Dashboard() {
       case 'night': return <NightCard key="night" sleep={sleep!} span={slot.span} today={glance.today} onOpenDay={setDay} finished={finished} />
       case 'recovery': return <RecoveryCard key="recovery" recovery={recovery} span={slot.span} wide={slot.wide} today={glance.today} timezone={timezone} finished={finished} onOpenDay={setDay} />
       case 'today': return <TodayCard key="today" day={day} span={slot.span} today={glance.today} timezone={timezone}
-        homeTimezone={session.data?.timezone} finished={finished} onOpenDay={setDay} />
+        homeTimezone={session.data?.timezone} finished={finished} onOpenDay={setDay} onSampleClick={openSample} />
       case 'week': return <WeekCard key="week" glance={glance} span={slot.span} onOpenDay={setDay} />
     }
   }
@@ -175,6 +186,7 @@ export function Dashboard() {
     <div className="dashboard">
       <Header timezone={timezone} day={shownDay} nav={nav} line={line} />
       <CardGrid className={stepping ? GRID_CLASS.stepping : GRID_CLASS.settled}>{dashboardRows(glance).flat().map(card)}</CardGrid>
+      {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </div>
   )
 }

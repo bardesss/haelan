@@ -252,7 +252,7 @@ export type RecoveryIndex = RecoveryIndexUnavailable | RecoveryIndexAvailable
  * `on`. A caller scoring a `range` must fetch from `recoveryWindowStart(range.from)` - not from a
  * window anchored on `range.to` - through `range.to`, because each date in the range carries its
  * own baseline-plus-sleep-week window behind it, and the earliest of those belongs to the range's
- * earliest date. `apps/web/src/data/useRecoveryIndex.ts`'s `recoveryFetchRange` does this correctly.
+ * earliest date. `readRecoveryInput` (packages/core/src/query/recoveryInput.ts) does this correctly.
  * A day nobody wore a device is ABSENT rather than present as zero.
  */
 export interface RecoveryIndexInput {
@@ -265,7 +265,7 @@ export interface RecoveryIndexInput {
 
 /**
  * Every `RecoveryIndexInput` field's own `/series` metric and aggregation - the mapping five call
- * sites once held five independent copies of (apps/web/src/data/useRecoveryIndex.ts,
+ * sites once held five independent copies of (the web's old client-side reader, useRecoveryIndex.ts,
  * apps/server/src/mcp/tools/recovery.ts, scripts/probe-recovery-scale.mjs,
  * apps/server/test/mcp-fixtures.ts, apps/web/test/recovery-index-tile.test.tsx), with nothing
  * holding the copies to each other: a sixth input, or a changed agg for one already here, meant

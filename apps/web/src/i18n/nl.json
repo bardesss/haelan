@@ -210,53 +210,80 @@
   "recovery": {
     "title": "Herstel",
     "units": {
-      "beatsPerMinute": "Slagen per minuut",
-      "bpm": "bpm",
-      "milliseconds": "Milliseconden",
-      "ms": "ms",
-      "breathsPerMinute": "Ademhalingen per minuut",
       "breathsPerMinuteShort": "ademh./min"
-    },
-    "insights": {
-      "restingHeartRate": "Rusthartslag, deze periode tegenover de vorige"
-    },
-    "baselineNote": {
-      "pending": "de baseline wordt nog geladen",
-      "unknown": "de baseline kon niet worden gelezen, dus er is geen vergelijking te zien",
-      "none": "nog geen baseline om mee te vergelijken",
-      "thin": "de baseline uit de 60 dagen vóór {{on}} is te dun om mee te vergelijken",
-      "below": "↓ onder de baseline van {{low}} tot {{high}}",
-      "above": "↑ boven de baseline van {{low}} tot {{high}}",
-      "within": "→ binnen de baseline van {{low}} tot {{high}}"
-    },
-    "restingHeartRate": {
-      "label": "Rusthartslag",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
-      "chartLabel": "Dagelijkse rusthartslag in {{period}}"
-    },
-    "dailyHrv": {
-      "label": "Hartslagvariabiliteit",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
-      "chartLabel": "Dagelijkse hartslagvariabiliteit in {{period}}"
-    },
-    "respiratoryRate": {
-      "label": "Ademhalingsfrequentie",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
-      "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
-    },
-    "respiratoryRateSleep": {
-      "label": "Ademhalingsfrequentie, tijdens slaap",
-      "chartLabel": "Ademhalingsfrequentie in {{period}}, gemeten tijdens slaap"
     },
     "heartRateRange": {
       "label": "Hartslagbereik",
-      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
-      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
-      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
-      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
-      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
-      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
-      "intradayChartLabel": "Hartslag tijdens de dag van {{date}}"
+      "basis": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · band = je gebruikelijke bereik",
+      "basisThin": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · nog te weinig dagen voor je gebruikelijke bereik",
+      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · nog geen gebruikelijk bereik",
+      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · je gebruikelijke bereik wordt nog geladen",
+      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · je gebruikelijke bereik kon niet worden gelezen, dus er is geen band",
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
+    },
+    "period": {
+      "hero": "Herstelindex, gemiddeld per dag",
+      "caption": {
+        "daily": "elke dag {{period}}",
+        "weekly": "elke week, als gemiddelde"
+      },
+      "hint": {
+        "daily": "tik op een dag voor de score en de onderdelen",
+        "weekly": "tik op een week voor het gemiddelde"
+      },
+      "lines": {
+        "daily": "elk lijntje: elke dag {{period}} · band = je gebruikelijke bereik",
+        "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke bereik"
+      },
+      "carriedBy": "vooral door je {{input}}",
+      "sourceCaption": "de herstelindex en HRV tegenover je gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest",
+      "panel": {
+        "openDay": "Bekijk dag",
+        "annotate": "Notitie of gebeurtenis toevoegen"
+      },
+      "band": {
+        "low": "ruim onder gebruikelijk",
+        "below": "onder gebruikelijk",
+        "usual": "zoals gebruikelijk",
+        "above": "boven gebruikelijk",
+        "high": "ruim boven gebruikelijk"
+      },
+      "emptyTitle": "Geen herstelindex voor deze periode",
+      "emptyDetail": "De index heeft metingen van HRV en rusthartslag nodig, elk tegenover je eigen {{days}} dagen ervoor."
+    },
+    "stretch": {
+      "label": "HRV tegenover je gebruikelijke week",
+      "average": "Gemiddelde over {{days}} dagen",
+      "run": {
+        "below": "{{days}} gemeten dagen onder je gebruikelijke bereik",
+        "above": "{{days}} gemeten dagen boven je gebruikelijke bereik"
+      },
+      "capped": {
+        "below": "meer dan {{days}} dagen onder je gebruikelijke bereik",
+        "above": "meer dan {{days}} dagen boven je gebruikelijke bereik"
+      },
+      "within": "binnen je gebruikelijke bereik",
+      "note": {
+        "below": "{{sideNights}} van de laatste {{weekReadings}} nachtelijke metingen laag",
+        "above": "{{sideNights}} van de laatste {{weekReadings}} nachtelijke metingen hoog"
+      },
+      "caption": {
+        "daily": "elke stip: het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = een reeks aan één kant van de band",
+        "weekly": "elke stip: de laatste gemeten dag van een week, het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = weken waarin een reeks liep"
+      },
+      "short": {
+        "below": "onder je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen",
+        "above": "boven je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen"
+      },
+      "tooFew": "te weinig metingen in de laatste {{weekDays}} dagen",
+      "needsBaseline": "heeft {{baselineDays}} dagen HRV nodig vóór de eerste week"
+    },
+    "method": {
+      "label": "Hoe de index werkt",
+      "ingredients": "De herstelindex weegt vier metingen: HRV {{hrv}}%, rusthartslag {{restingHeartRate}}%, de slaap van afgelopen week {{sleep}}% en ademhalingsfrequentie {{respiratoryRate}}%. Elk wordt afgezet tegen je eigen {{days}} dagen ervoor.",
+      "usual": "50 is je gebruikelijke waarde. Een dag van {{low}} tot en met {{high}} ligt rond je gebruikelijke waarde; daaronder of daarboven ligt hij onder of boven gebruikelijk, en verder weg ver onder of ver boven.",
+      "tuned": "De gewichten zijn zo afgesteld dat de index de herstelscore uit de Google Health-app volgt, op scores die er met de hand uit zijn overgenomen. Het is niet het getal van Google.",
+      "stretch": "HRV tegenover je gebruikelijke week neemt het gemiddelde van de laatste {{weekDays}} dagen, zodra daar minstens {{minReadings}} metingen in zitten, en zet het af tegen een band die {{band}} × de spreiding van dag tot dag in je gebruikelijke waarde naar beide kanten reikt. Het telt als een reeks zodra het {{minRun}} gemeten dagen achter elkaar aan één kant van die band blijft."
     }
   },
   "health": {
@@ -1162,6 +1189,7 @@
   "annotate": {
     "title": "{{metric}} op {{date}}",
     "sessionTitle": "Deze training, {{date}}",
+    "dayTitle": "Deze dag, {{date}}",
     "close": "Sluiten",
     "actionLabel": "Wat wil je doen",
     "actions": {
@@ -1706,7 +1734,6 @@
   },
   "recoveryIndex": {
     "label": "Herstelindex",
-    "asOf": "op {{date}}",
     "band": {
       "low": "Ruim onder gebruikelijk",
       "below": "Onder gebruikelijk",
@@ -1714,8 +1741,6 @@
       "above": "Boven gebruikelijk",
       "high": "Ruim boven gebruikelijk"
     },
-    "basis": "vergeleken met je eigen laatste {{days}} dagen",
-    "unavailable": "Te weinig recente gegevens om met je gebruikelijke waarde te vergelijken.",
     "input": {
       "hrv": "Hartslagvariabiliteit",
       "restingHeartRate": "Rusthartslag",
@@ -1918,6 +1943,8 @@
     "standout": {
       "longest": "je langste: {{value}} op {{date}}",
       "busiest": "je drukste: {{value}} op {{date}}",
+      "highest": "je hoogste: {{value}} op {{date}}",
+      "lowest": "je laagste: {{value}} op {{date}}",
       "previous": "{{delta}} tegenover {{period}}",
       "previousPerDay": "{{delta}} per dag tegenover {{period}}",
       "yearEarlier": "{{delta}} tegenover vorig jaar",

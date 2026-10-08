@@ -94,6 +94,26 @@ export function bandStep(tokens: ChartTokens) {
   }
 }
 
+// One span of shaded points (`spans`): from its first point's slot to its last point's, whole slots
+// both ends and the full height of the plot, so a run of days reads as a stretch rather than as a
+// line between two centres. A markArea cannot do it: echarts rounds a category coordinate to a whole
+// index, which would cut the first and last slot in half.
+export function spanStep(tokens: ChartTokens) {
+  return (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
+    const from = Number(api.value(0))
+    const to = Number(api.value(1))
+    const [fromX = 0] = api.coord([from, 0])
+    const [toX = 0] = api.coord([to, 0])
+    const size = api.size?.([1, 0]) ?? 0
+    const half = (Array.isArray(size) ? size[0] ?? 0 : size) / 2
+    const left = Math.round(fromX - half)
+    const right = Math.round(toX + half)
+    const { y, height } = params.coordSys as unknown as { y: number, height: number }
+    return { type: 'rect' as const, shape: { x: left, y, width: right - left, height },
+      style: { fill: tokens.span } }
+  }
+}
+
 // Re-exported from base.ts (defined there so dayTableRows can read it too) rather than defined
 // here a second time: every existing caller imports `PointStanding` from this module.
 export type { PointJudged, PointStanding } from './base.js'
@@ -102,7 +122,7 @@ export type { PointJudged, PointStanding } from './base.js'
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
   onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, pointMarks = EMPTY, opensDay, bands, pointIds,
-  inverse = false, standingUnit,
+  inverse = false, standingUnit, spans,
 }: {
   // The unit code the values are in, which picks the words a day's verdict takes in the table
   // (standingShort: a clock time later or earlier, a pace slower or faster). Defaults to the
@@ -240,6 +260,12 @@ export function Sparkline({
   // date, and `opensDay.current` names the point shown by its id, so a same-day sibling stays
   // openable. The labels stay dates, for the tooltip and the table. Undefined keeps dates.
   pointIds?: readonly string[]
+  // Runs of points to shade behind the strip, each from its first index to its last (both inclusive,
+  // into `values`): Recovery's HRV stretch, or on 3 months and Year the weeks a run touches. In the
+  // accent wash, under the band steps and the readings so the dots stay on top. Silent, and only
+  // shading: the accessible table does not mark which rows sit inside one. A caller keeps the array's
+  // identity stable (memoised), since it is a dependency of the built option. Undefined draws nothing.
+  spans?: readonly { from: number, to: number }[]
 }) {
   const { t, i18n } = useTranslation()
 
@@ -468,6 +494,12 @@ export function Sparkline({
         encode: { x: 0, y: [1, 2] },
         data: bands.flatMap((band, i) => (band === null ? [] : [[i, band.low, band.high]])),
         renderItem: bandStep(tokens) }] : []),
+      // Shaded spans, last of all for the reason the bands are, and a z below them: the wash sits
+      // behind the usual's steps as well as the readings. Not drawn for an empty list.
+      ...(spans && spans.length > 0 ? [{ type: 'custom' as const, silent: true, z: 0, tooltip: { show: false },
+        encode: { x: [0, 1] },
+        data: spans.map((span) => [span.from, span.to]),
+        renderItem: spanStep(tokens) }] : []),
     ],
     // `labels` is in this list even though nothing above reads it, and it is not dead weight.
     // useChart keys its stale-tap reset on `build`'s identity, and the resolvers below (onClick,
@@ -478,7 +510,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, pointJudged, pointMarks, ringed, edge, latest, bands, inverse])
+  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, pointJudged, pointMarks, ringed, edge, latest, bands, inverse, spans])
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current
