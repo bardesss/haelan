@@ -18,7 +18,7 @@ describe('hrvRunSentence', () => {
 
   it('words a capped stretch as more than 60 days', () => {
     expect(hrvRunSentence({ ...RUN, days: 60, capped: true })).toBe(
-      " HRV's seven-day average has been below its usual for more than 60 measured days, since 2026-08-02; 7 of the last 7 nightly readings were low.",
+      " HRV's seven-day average has been below its usual for more than 60 days; 7 of the last 7 nightly readings were low.",
     )
   })
 
