@@ -214,12 +214,21 @@
     },
     "heartRateRange": {
       "label": "Heart rate range",
-      "basis": "daily minimum, mean and maximum, every day {{period}} · band = your usual range",
-      "basisThin": "daily minimum, mean and maximum, every day {{period}} · too few days yet for your usual range",
-      "basisNoBaseline": "daily minimum, mean and maximum, every day {{period}} · no usual range yet",
-      "basisBaselinePending": "daily minimum, mean and maximum, every day {{period}} · your usual range is still loading",
-      "basisBaselineUnknown": "daily minimum, mean and maximum, every day {{period}} · your usual range could not be read, so no band is drawn",
-      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
+      "basis": "{{lines}} · band = your usual range",
+      "basisThin": "{{lines}} · too few days yet for your usual range",
+      "basisNoBaseline": "{{lines}} · no usual range yet",
+      "basisBaselinePending": "{{lines}} · your usual range is still loading",
+      "basisBaselineUnknown": "{{lines}} · your usual range could not be read, so no band is drawn",
+      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
+      "chartLabelWeekly": "Weekly heart rate minimum, mean and maximum through {{period}}",
+      "toggleWeekly": {
+        "hide": "Hide weekly range",
+        "show": "Show weekly range"
+      },
+      "lines": {
+        "daily": "daily minimum, mean and maximum, every day {{period}}",
+        "weekly": "every week: its lowest daily minimum, the average of its days and its highest daily maximum"
+      }
     },
     "period": {
       "hero": "Recovery index, average per day",
@@ -758,7 +767,8 @@
       "time": "Time",
       "source": "Source",
       "lastYear": "Last year",
-      "trend": "Trend"
+      "trend": "Trend",
+      "week": "Week"
     },
     "weekday": {
       "mon": "Mon",

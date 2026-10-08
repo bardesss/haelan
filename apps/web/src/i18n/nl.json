@@ -214,12 +214,21 @@
     },
     "heartRateRange": {
       "label": "Hartslagbereik",
-      "basis": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · band = je gebruikelijke bereik",
-      "basisThin": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · nog te weinig dagen voor je gebruikelijke bereik",
-      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · nog geen gebruikelijk bereik",
-      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · je gebruikelijke bereik wordt nog geladen",
-      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · je gebruikelijke bereik kon niet worden gelezen, dus er is geen band",
-      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
+      "basis": "{{lines}} · band = je gebruikelijke bereik",
+      "basisThin": "{{lines}} · nog te weinig dagen voor je gebruikelijke bereik",
+      "basisNoBaseline": "{{lines}} · nog geen gebruikelijk bereik",
+      "basisBaselinePending": "{{lines}} · je gebruikelijke bereik wordt nog geladen",
+      "basisBaselineUnknown": "{{lines}} · je gebruikelijke bereik kon niet worden gelezen, dus er is geen band",
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
+      "chartLabelWeekly": "Wekelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
+      "toggleWeekly": {
+        "hide": "Weekbereik verbergen",
+        "show": "Weekbereik tonen"
+      },
+      "lines": {
+        "daily": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}}",
+        "weekly": "elke week: het laagste dagminimum, het gemiddelde van haar dagen en het hoogste dagmaximum"
+      }
     },
     "period": {
       "hero": "Herstelindex, gemiddeld per dag",
@@ -758,7 +767,8 @@
       "time": "Tijd",
       "source": "Bron",
       "lastYear": "Vorig jaar",
-      "trend": "Trend"
+      "trend": "Trend",
+      "week": "Week"
     },
     "weekday": {
       "mon": "Ma",

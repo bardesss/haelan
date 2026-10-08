@@ -2,6 +2,9 @@ import { useId, useMemo } from 'react'
 import { MetricCard } from '../../components/MetricCard.js'
 import { BasisContext } from '../../components/basis.js'
 import { HeartRateRange } from '../../charts/HeartRateRange.js'
+import { periodAxisLabels } from '../../charts/barAxis.js'
+import { heartRateWeeks } from '../../charts/heartRateWeeks.js'
+import type { PeriodRange } from '../../data/periodTypes.js'
 import { useSeries } from '../../data/useSeries.js'
 import { useBaseline } from '../../data/useBaseline.js'
 import { useTranslation } from '../../i18n/index.js'
@@ -30,18 +33,27 @@ const EMPTY = Object.freeze([]) as never[]
  * overrides' reasons alone, no day notes or events: the overview pages draw none on their charts
  * (on a year they piled into one unreadable block), and the hero's day panel reaches them.
  *
+ * On 3 months and Year a point is a Monday-to-Sunday week, clipped to the period (heartRateWeeks):
+ * its lowest daily minimum, the mean of its daily means and its highest daily maximum, bucketed here
+ * from the days already fetched. A year of single days was a crammed row of day numbers with no
+ * month in it. A week is no one day to exclude or annotate, so its points open nothing and carry no
+ * day's marks, as Sleep's weekly balance bars do. The x axis speaks the range on every tab
+ * (periodAxisLabels), as the overview's bar charts do.
+ *
  * Its basis is a `.dash-caption` under the chart, as the page's other captions are: what the lines
  * are, by the range in words, and what the band is ("band = your usual range"), or why none is
  * drawn. No date in it; the band's anchor is historicalTo, which the request carries.
  */
 export function HeartRateCard({
-  from, to, historicalTo, source, rangeDates, period, periodWords, annotations, excluded, onDayClick, span,
+  from, to, historicalTo, source, rangeDates, range: tab, period, periodWords, annotations, excluded, onDayClick, span,
 }: {
   from: string
   to: string
   historicalTo: string
   source: string
   rangeDates: string[]
+  /** The tab: Week and Month draw days, 3 months and Year weeks. */
+  range: PeriodRange
   /** The range in dates, for the chart's accessible name. */
   period: string
   /** The range in words ("this month", thisPeriod), for the caption under the chart. */
@@ -51,7 +63,9 @@ export function HeartRateCard({
   onDayClick: (localDate: string) => void
   span: number
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const language = i18n.language
+  const weekly = tab === '3months' || tab === 'year'
   // The caption's id, which the chart is described by (BasisContext), as the header basis it was.
   const captionId = useId()
   const range = { from, to, source }
@@ -98,6 +112,8 @@ export function HeartRateCard({
       }
     })
   }, [rangeDates, meanHrPoints, minHrPoints, maxHrPoints])
+  const points = useMemo(() => (weekly ? heartRateWeeks(heartRateDays) : heartRateDays), [weekly, heartRateDays])
+  const axis = useMemo(() => periodAxisLabels(points.map((point) => point.date), tab, language), [points, tab, language])
   const rawBaseline = hrBaseline.data?.baseline ?? null
   // Thin stays undefined, not a band drawn thin: a band computed from three days looks exactly as
   // authoritative as one computed from thirty, and thin is the reader's only signal that it is
@@ -154,17 +170,18 @@ export function HeartRateCard({
     <MetricCard metric="heart_rate" span={span} label={t('recovery.heartRateRange.label')} basisPlacement="body"
       query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate, error: heartRateError }}
       points={meanHrPoints}
-      basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ period: periodWords }}>
+      basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey}
+      basisValues={{ lines: t(weekly ? 'recovery.heartRateRange.lines.weekly' : 'recovery.heartRateRange.lines.daily', { period: periodWords }) }}>
       {(basis) => (
         <>
           {/* HeartRateRange has taken annotations/excluded since D1, resolved by the caller and
               handed in rather than looked up a second time here. */}
           <BasisContext.Provider value={captionId}>
-            <HeartRateRange days={heartRateDays} baseline={heartRateBand}
-              annotations={annotations}
-              excluded={excluded}
-              label={t('recovery.heartRateRange.chartLabel', { period })}
-              onPointClick={onDayClick} />
+            <HeartRateRange days={points} baseline={heartRateBand} axis={axis}
+              annotations={weekly ? EMPTY : annotations}
+              excluded={weekly ? EMPTY : excluded}
+              label={t(weekly ? 'recovery.heartRateRange.chartLabelWeekly' : 'recovery.heartRateRange.chartLabel', { period })}
+              onPointClick={weekly ? undefined : onDayClick} />
           </BasisContext.Provider>
           <p id={captionId} className="dash-caption">{basis}</p>
         </>
