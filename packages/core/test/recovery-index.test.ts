@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries, recoveryIndex, RECOVERY_WEIGHTS, RECOVERY_SCALE, bandOf } from '../src/api/recoveryIndex.ts'
+import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries, recoveryIndex, RECOVERY_WEIGHTS, RECOVERY_SCALE, bandOf, RECOVERY_BAND_CUTS, RECOVERY_USUAL_BAND } from '../src/api/recoveryIndex.ts'
 import type { DayValue } from '../src/api/recoveryIndex.ts'
 import type { RecoveryIndexInput } from '../src/api/recoveryIndex.ts'
 
@@ -328,6 +328,15 @@ describe('bandOf', () => {
     expect(bandOf(73)).toBe('above')
     expect(bandOf(19)).toBe('low')
     expect(bandOf(74)).toBe('high')
+  })
+
+  it('splits at the exported cuts, and the usual band is the range between the middle two', () => {
+    expect(bandOf(RECOVERY_BAND_CUTS.belowUsual - 1)).toBe('below')
+    expect(bandOf(RECOVERY_BAND_CUTS.belowUsual)).toBe('usual')
+    expect(bandOf(RECOVERY_BAND_CUTS.usualAbove)).toBe('usual')
+    expect(bandOf(RECOVERY_BAND_CUTS.usualAbove + 1)).toBe('above')
+    expect(RECOVERY_BAND_CUTS).toEqual({ lowBelow: 20, belowUsual: 36, usualAbove: 62, aboveHigh: 73 })
+    expect(RECOVERY_USUAL_BAND).toEqual({ low: 36, high: 62 })
   })
 
   it('covers 0 and 100, so no score is unlabelled', () => {
