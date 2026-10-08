@@ -31,6 +31,8 @@ const CHART_SOURCES = {
   activityModerate: 'activity-moderate',
   activityVigorous: 'activity-vigorous',
   band: 'band-baseline',
+  // The wash behind a run of days (Sparkline's `spans`), its own role so it reads in both themes.
+  span: 'band-span',
   excluded: 'state-excluded',
   noData: 'state-no-data',
   tooltipBg: 'tooltip-bg',
@@ -52,11 +54,6 @@ const SEMANTIC_SOURCES = {
   primary: 'text-primary',
   negative: 'negative',
   positive: 'positive',
-  // The accent wash behind a run of days (Sparkline's `spans`): the same surface a primary button
-  // (.button-primary) and the log sheet's chosen face and chip (.log-face.is-on, .log-chip.is-on)
-  // sit on, so it reads as the app's own highlight rather than a chart colour of its own. The
-  // rail's selected item is not one of them: it sits on --surface-selected.
-  span: 'surface-accent',
 } as const satisfies Record<string, SemanticToken>
 
 export type ChartTokens = Record<keyof typeof CHART_SOURCES | keyof typeof SEMANTIC_SOURCES, string>

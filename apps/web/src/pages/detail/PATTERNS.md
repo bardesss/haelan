@@ -64,7 +64,7 @@ Every redesigned page is built from the pieces below. A section that looks like 
 - A table's last row draws no rule under any cell, its row header included.
 - A time hero (moving or elapsed time) leads the compared table with its own row.
 - Legends use `.detail-legend`, captions `.dash-caption`; a basis that describes one chart is a caption under it, so a card's first line is always its label. A key's colour is its series' chart token (`--chart-stage-*`, `--chart-zone-*`), never one borrowed from another chart.
-- A strip may shade spans of its points (`spans`, first to last index, whole slots), used for a run of days such as the HRV stretch, in the accent wash (`--surface-accent`, chart token `span`), behind the usual's steps and the dots. Shading only: the accessible table does not mark which days sit inside one.
+- A strip may shade spans of its points (`spans`, first to last index, whole slots), used for a run of days such as the HRV stretch, in its own wash (`--chart-band-span`, the chart token `band-span`, ChartTokens' `span`), behind the usual's steps and the dots. Shading only: the accessible table does not mark which days sit inside one.
 - A strip has no show-numbers control, on a detail page (the hero's and a `FigureRow`'s) as on the dashboard: it passes `tableToggle={false}` and keeps its table for a screen reader. A detail page's other charts keep theirs.
 
 ## The day block
