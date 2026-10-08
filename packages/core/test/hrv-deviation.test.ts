@@ -88,6 +88,15 @@ describe('hrvDeviationSeries', () => {
     expect(on([...flat(66, 7, 50), ...flat(6, 0, 40)])).toEqual({ localDate: D, measured: false, reason: 'flat-baseline' })
   })
 
+  it('drops a reading of 0 ms rather than letting ln(0) poison the baseline', () => {
+    // D-30 sits inside the baseline (D-66..D-7). Without the filter its -Infinity would turn the
+    // centre and spread to NaN, and the day would silently read within.
+    const without = [...usual(66, 31), ...usual(29, 0)]
+    const withZero = [...usual(66, 31), { localDate: day(30), value: 0 }, ...usual(29, 0)]
+    expect(on(without)).toMatchObject({ measured: true })
+    expect(on(withZero)).toEqual(on(without))
+  })
+
   it('reads on ln: one very high night lifts a raw mean over the band and the log mean not', () => {
     // Raw: baseline mean 50, spread ~5.04, band high ~52.5; the week's raw mean is ~53.1, above it.
     // ln: the week's mean is ~3.943, under the ln band's high of ~3.958, so within.

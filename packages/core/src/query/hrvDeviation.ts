@@ -94,6 +94,9 @@ const FLAT_SPREAD_EPSILON = 1e-9
 
 const meanOf = (values: readonly number[]): number => values.reduce((t, v) => t + v, 0) / values.length
 
+/** ln(0) is -Infinity and ln of a negative is NaN; one such reading would poison every mean it reaches. */
+const positiveOnly = (readings: readonly HrvReading[]): HrvReading[] => readings.filter((r) => r.value > 0)
+
 /**
  * Every date in `range`, oldest first. Dates compare as text, the convention recoveryIndex.ts and
  * trainingLoad.ts use.
@@ -106,6 +109,7 @@ export function hrvDeviationSeries(
   range: { from: string, to: string },
   band: number = HRV_DEVIATION_BAND,
 ): HrvDeviationDay[] {
+  readings = positiveOnly(readings)
   const out: HrvDeviationDay[] = []
   for (let date = range.from; date <= range.to; date = shiftLocalDate(date, 1)) {
     const weekFrom = shiftLocalDate(date, -(HRV_WEEK_DAYS - 1))
@@ -150,6 +154,7 @@ export function hrvDeviationSeries(
  * a day within the band or on the other side ends it.
  */
 export function hrvDeviationRun(readings: readonly HrvReading[], on: string): HrvDeviationRun | null {
+  readings = positiveOnly(readings)
   const from = shiftLocalDate(on, -(HRV_DEVIATION_LOOKBACK_DAYS - 1))
   const series = hrvDeviationSeries(readings, { from, to: on })
   const today = series.at(-1)!
@@ -173,8 +178,8 @@ export function hrvDeviationRun(readings: readonly HrvReading[], on: string): Hr
   if (capped && !(first.measured && first.side === side)) capped = false
 
   const weekFrom = shiftLocalDate(on, -(HRV_WEEK_DAYS - 1))
-  const sideNights = readings.filter((r) => r.localDate >= weekFrom && r.localDate <= on)
-    .filter((r) => (side === 'below' ? r.value < today.band.low : r.value > today.band.high)).length
+  const week = readings.filter((r) => r.localDate >= weekFrom && r.localDate <= on)
+  const sideNights = week.filter((r) => (side === 'below' ? r.value < today.band.low : r.value > today.band.high)).length
   const filledDays = readings.filter((r) => r.localDate >= since && r.localDate <= on && r.filled === true).length
   return { side, days, capped, since, sideNights, filledDays }
 }
