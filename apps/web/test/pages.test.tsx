@@ -13,6 +13,7 @@ import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { SLEEP_PERIOD_MONTH } from './fixtures/sleepPeriod.js'
 import { ACTIVITY_PERIOD_MONTH } from './fixtures/activityPeriod.js'
+import { RECOVERY_PERIOD_MONTH } from './fixtures/recoveryPeriod.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
 import { Nutrition } from '../src/pages/Nutrition.js'
@@ -118,11 +119,7 @@ const UNWORN_DAY = '2026-08-11'
 // The metrics whose UNWORN_DAY sits at that coverage floor. Emptied for one Health render below, so
 // the wear clause's plural ("0 days not worn") has a card to be read off as well as its singular.
 const UNWORN = { metrics: new Set(['heart_rate', 'spo2']) }
-// The Day tab, anchored on the last of DAYS' own four dates so the stub's /series (filtered to
-// the requested from/to, see stubFetch's own comment) answers with real data for it rather than
-// an empty range that would leave every assertion below indistinguishable from a genuinely quiet
-// day. Recovery since M9b: the Day tab cases below were the Dashboard's until the glance replaced
-// it, and Recovery is where the heart rate range card and its one-day trace moved.
+// Recovery's Day tab, which is no period since its overview: it opens the dashboard on that day.
 const DAY_ROUTE = '/recovery?range=day&on=2026-08-13'
 // Health's own Day tab, on the same anchor and for the same reason. One page alone was mounted
 // here while five other pages carried the same flag, which is how Health.tsx shipped without it:
@@ -216,6 +213,8 @@ function stubFetch(
     if (url.includes('/sleep/period')) return json(SLEEP_PERIOD_MONTH)
     // The Activity overview's one read (M10b), the same way.
     if (url.includes('/activity/period')) return json(ACTIVITY_PERIOD_MONTH)
+    // The Recovery overview's one read, the same way. Its heart rate range still reads /series.
+    if (url.includes('/recovery/period')) return json(RECOVERY_PERIOD_MONTH)
     if (url.includes('/sleep/nights')) {
       const start = Date.parse('2026-08-12T23:00:00Z')
       return json({
@@ -371,8 +370,10 @@ UNWORN.metrics.add('spo2')
 // Settled inside the same stub window as `pages`/`recoveryNl` above, rather than inside an `it`
 // after `restore()` runs below: every other settledPage call in this file happens while stubFetch
 // is installed, and the Day tab tests want the same real, resolved render those already get, not
-// a fresh mount racing the unstubbed global fetch.
-const recoveryDay = await settledPage(Recovery, DAY_ROUTE, 'en')
+// a fresh mount racing the unstubbed global fetch. Recovery's Day tab is read off the address it
+// left the reader at.
+await settledPage(Recovery, DAY_ROUTE, 'en')
+const recoveryDayAddress = `${window.location.pathname}${window.location.search}`
 const healthDay = await settledPage(Health, HEALTH_DAY_ROUTE, 'en')
 const glance = await settledPage(Dashboard, DASHBOARD_ROUTE, 'en')
 restore()
@@ -380,7 +381,7 @@ restore()
 // Whether a page carries at least one dense, by-position chart that draws an explicit absence
 // mark for a calendar day nothing answered (Recovery's HeartRateRange; on Activity since M10b the
 // intensity and zone minute bars, whose tables row every day of the period's read). Recovery is true since M9b, when the heart rate range card moved there from the
-// Dashboard; what follows about its Sparklines is still true of those three cards. An ordinary Sparkline, which is every per-metric tile chart on Recovery and Sleep,
+// Dashboard, and stays true on its overview, whose strips are the server's points. An ordinary Sparkline, which is every per-metric tile chart on Weight and Health,
 // builds its accessible table straight from the points a query actually returned (SeriesPoint.value
 // is never null, so there is no gap value to render a word for; see useSeries.ts's own comment),
 // not from a dense day-by-day array with a placeholder for the days it left out. Sleep's other two
@@ -390,8 +391,7 @@ restore()
 // calendar position with a placeholder for a day nothing answered. So a gapped week changes how
 // many rows any of these charts' tables have, never what a missing one says, and "not worn"/
 // "no reading" can never appear in either page's markup no matter what the stub answers. This is
-// not a coverage question either: none of Recovery's three metrics carries a wear signal
-// (Recovery.tsx's own card() comment) and neither does any sleep metric (emptyState.ts's own
+// not a coverage question either: no sleep metric carries a wear signal (emptyState.ts's own
 // coverageIsWearSignal), so even a wear-signal-capable metric drawn this way would still say
 // nothing, the same reason Activity's own distance and floors cards cannot either despite steps,
 // right beside them, being able to through the one chart that draws densely.
@@ -399,7 +399,7 @@ restore()
 // Health is true for the same reason Dashboard's heart rate range card is: Spo2Range (Health.tsx)
 // is built the same way HeartRateRange is, one day per date in the range looked up by localDate
 // with a null left where a request answered nothing, and it draws the same markPoint/markLine
-// absence marks HeartRateRange does over that gap. Unlike Recovery's three metrics, spo2 is also
+// absence marks HeartRateRange does over that gap. Unlike Weight's metrics, spo2 is also
 // an intraday metric (packages/core/src/api/catalogue.ts: tier 'intraday'), so it carries a real
 // wear signal too, giving the range card two independent ways to state an absence rather than none.
 //
@@ -441,12 +441,12 @@ const IS_CHART_PAGE: Record<string, boolean> = {
   Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
-// Whether a chart page draws change badges. Sleep and Activity stopped in M10b: an overview page
-// leads with the period against its usual and says the change against the period before in words,
-// and every first-half/second-half percentage went (sleep-page.test.tsx and activity.test.tsx hold
-// each to drawing none).
+// Whether a chart page draws change badges. Sleep and Activity stopped in M10b, Recovery with its
+// own overview: an overview page leads with the period against its usual and says the change
+// against the period before in words, and every first-half/second-half percentage went
+// (sleep-page.test.tsx, activity.test.tsx and recovery.test.tsx hold each to drawing none).
 const HAS_DELTAS: Record<string, boolean> = {
-  Activity: false, Recovery: true, Sleep: false, Health: true, Weight: true,
+  Activity: false, Recovery: false, Sleep: false, Health: true, Weight: true,
   Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
@@ -509,7 +509,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
 
   // The other half, only for a page carrying a chart that can actually say it: a day with no row
   // shows a word in that chart's own table alternative. See HAS_ABSENCE_CHART's own comment for
-  // why Recovery and Sleep are excluded by name rather than by leaving the whole page out of this
+  // why Sleep and Weight are excluded by name rather than by leaving the whole page out of this
   // describe.each the way the review round that added them here was asked not to repeat.
   it.skipIf(HAS_ABSENCE_CHART[_name] === false)('states absence in the accessible table, not silently', () => {
     expect(tables(html)).toMatch(/not worn|no reading/)
@@ -728,48 +728,17 @@ describe('the wear clause', () => {
 // chart's own accessible name is the discriminator: it is an existing catalogue string, so this
 // assertion cannot be satisfied by whatever copy the new chart happens to get.
 describe('Day tab', () => {
-  it('replaces the daily range chart on a one day range', () => {
-    expect(recoveryDay).not.toContain('Daily heart rate minimum, mean and maximum through')
-  })
-
-  // Every other MetricCard on this range still renders its StatTile, delta and basis line exactly
-  // as any other range does (see the next test); only the chart each would otherwise draw is
-  // swapped for ChartNote's own short line. Heart rate alone keeps an actual chart, because it alone
-  // has an intraday view to swap in instead. The figure count is the assertion because it is what a
-  // reader actually sees change: this page draws several fewer chart figures on the Day tab than it
-  // does on a week, the state this replaces.
-  it('draws fewer chart figures on a one day range than on a week', () => {
-    const dayFigures = (recoveryDay.match(/<figure/g) ?? []).length
-    const weekFigures = (pages.Recovery.match(/<figure/g) ?? []).length
-    expect(dayFigures).toBeLessThan(weekFigures)
-  })
-
-  // The defect a figure count alone cannot see: an early implementation dropped `single_day` into
-  // emptyStateFor's own gate, which meant MetricCard's existing early return fired for it exactly
-  // as it does for no_data and not_worn, discarding the StatTile (the number, the delta and the
-  // basis line) along with the chart on a range where none of the three were wrong. A reader on the
-  // Day tab lost every figure on the page, not only the meaningless one-point charts. Resting heart
-  // rate is the card under test because DAYS's own stubbed value for it is real and non-zero on
-  // 2026-08-13 (it was the Dashboard's steps tile until M9b).
-  it('keeps a plain metric card\'s own number on a one day range, only its chart goes', () => {
-    const cards = [...recoveryDay.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
-    const resting = cards.find((c) => c.includes('>Resting heart rate<'))
-    if (!resting) throw new Error('no Resting heart rate card in the Day tab render')
-    expect(resting).toContain('<div class="value">')
-    expect(resting).not.toContain('<figure')
-  })
-
-  // The distinction that matters and the one most likely to be got wrong: a one day range with a
-  // value is not missing data. Rendering the no-data copy would state something false, which is why
-  // this needs its own reason rather than reusing no_data.
-  it('does not claim a day with data has no data', () => {
-    expect(recoveryDay).not.toContain('No data yet')
+  // Recovery held these cases until its overview: a day is no period there, so its Day tab opens
+  // the dashboard on that day, which carries the day's own heart rate trace, and draws nothing of
+  // its own to swap a chart out of (recovery.test.tsx holds the rest of it).
+  it('opens the dashboard on that day from Recovery', () => {
+    expect(recoveryDayAddress).toBe('/?day=2026-08-13')
   })
 
   // Health was the sixth page and the one this branch missed: both its cards passed no oneDayRange
   // at all, so on ?range=day the spo2 card still drew a one point Spo2Range under a label promising
   // a range "through {period}", and daily_spo2 still drew a one point Sparkline. Each chart's own
-  // accessible name is the discriminator, the same one the Dashboard assertion above uses: they are
+  // accessible name is the discriminator, as the describe's own comment says: they are
   // existing catalogue strings, so neither assertion can be satisfied by whatever copy replaces the
   // chart.
   it('replaces the spo2 range chart on a one day range', () => {
@@ -789,9 +758,8 @@ describe('Day tab', () => {
     expect((pages.Health.match(/<figure/g) ?? []).length).toBeGreaterThan(1)
   })
 
-  // The same distinction the Dashboard assertions above draw, restated for the page whose cards
-  // are new to this: the number, its delta and the basis line all stay, only the chart goes, and a
-  // day carrying real data is never described as empty.
+  // The distinction the Day tab's cards are held to: the number, its delta and the basis line all
+  // stay, only the chart goes, and a day carrying real data is never described as empty.
   it('keeps the Health cards\' own numbers on a one day range', () => {
     expect(healthDay).toContain('<div class="value">')
     expect(healthDay).not.toContain('No data yet')
@@ -802,14 +770,15 @@ describe('Day tab', () => {
 // Task 11's own coverage: until this task every chart on every page was handed an empty
 // annotations/excluded pair (Dashboard's own EMPTY, by name, with a comment calling it a
 // milestone boundary) and no chart's onPointClick went anywhere, since no page held a target to
-// open the panel with. Recovery, not Dashboard.
+// open the panel with. Recovery, not Dashboard; on its heart rate range since the Recovery
+// overview, whose own strips open their day's panel instead (recovery.test.tsx).
 describe('annotate wiring', () => {
   const OVERRIDE_DATE = '2026-08-11'
-  const OVERRIDE_METRIC = 'resting_heart_rate'
+  const OVERRIDE_METRIC = 'heart_rate'
   const OVERRIDE_REASON = 'Watch left charging'
-  const RESTING_HR_LABEL = 'Resting heart rate'
+  const HEART_RATE_LABEL = 'Heart rate range'
 
-  async function mountRecoveryWithOverride(): Promise<{ html: string, clickResting: (event: unknown) => void, cleanup: () => void }> {
+  async function mountRecoveryWithOverride(): Promise<{ html: string, clickHeartRate: (event: unknown) => void, cleanup: () => void }> {
     const restore = stubFetch([{
       id: 'o1', scope: 'day_metric',
       targetKey: dayMetricTarget({ localDate: OVERRIDE_DATE, metric: OVERRIDE_METRIC }),
@@ -830,24 +799,23 @@ describe('annotate wiring', () => {
     })
     await flush(client, () => container.innerHTML)
 
-    // Found by DOM position, not by capturedCharts' own order: since M9b, Recovery also mounts
-    // HeartRateCard's own chart, fed by a query family independent of the three Sparklines' shared
-    // 'last' group, and the two can settle (and so mount their echarts instances) in either order
-    // - capturedCharts' own order is init() call order, a race, not the page's declared layout
-    // (see that array's own doc comment). The rendered DOM is not subject to that race, so this
-    // locates the "Resting heart rate" card's own host element there and matches it back to its
-    // captured entry by identity.
-    const restingCard = [...container.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === RESTING_HR_LABEL)
-    const restingHost = restingCard?.querySelector('[role="img"]')
-    if (!restingHost) throw new Error('no chart host rendered for the resting heart rate card')
-    const entry = capturedCharts.slice(chartsBefore).find((c) => c.dom === restingHost)
+    // Found by DOM position, not by capturedCharts' own order: the heart rate range is fed by a
+    // query family independent of the period read the overview's strips draw from, and the two can
+    // settle (and so mount their echarts instances) in either order - capturedCharts' own order is
+    // init() call order, a race, not the page's declared layout (see that array's own doc
+    // comment). The rendered DOM is not subject to that race, so this locates the "Heart rate
+    // range" card's own host element there and matches it back to its captured entry by identity.
+    const heartCard = [...container.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === HEART_RATE_LABEL)
+    const heartHost = heartCard?.querySelector('[role="img"]')
+    if (!heartHost) throw new Error('no chart host rendered for the heart rate range card')
+    const entry = capturedCharts.slice(chartsBefore).find((c) => c.dom === heartHost)
     if (!entry) throw new Error('no chart mounted')
-    const clickResting = clickHandlerOf(entry)
+    const clickHeartRate = clickHandlerOf(entry)
 
     return {
-      html: container.innerHTML,
-      clickResting,
+      html: heartCard!.innerHTML,
+      clickHeartRate,
       cleanup: () => {
         act(() => { root.unmount() })
         container.remove()
@@ -859,15 +827,13 @@ describe('annotate wiring', () => {
   it('marks the excluded day in its own chart table rather than dropping it', async () => {
     const { html, cleanup } = await mountRecoveryWithOverride()
     try {
-      // Recovery's first accessible table belongs to resting_heart_rate's own Sparkline, the same
-      // card the override targets; daily_hrv and respiratory_rate get no mark, since the override
-      // named a metric, not a day.
+      // The heart rate range card's own accessible table, the card the override targets.
       const firstTable = html.match(/<table class="sr-only">[\s\S]*?<\/table>/)?.[0]
       if (!firstTable) throw new Error('no accessible table rendered')
       const row = firstTable.match(new RegExp(`<tr><th scope="row">${OVERRIDE_DATE}</th>[\\s\\S]*?</tr>`))?.[0]
       if (!row) throw new Error(`no row for ${OVERRIDE_DATE}`)
-      // 67: DAYS' own resting_heart_rate value for 2026-08-11 (index 1, 60 + 1*7). Still present,
-      // not replaced by an absence word: an override marks a reading, it does not remove it.
+      // 67: DAYS' own heart_rate value for 2026-08-11 (index 1, 60 + 1*7). Still present, not
+      // replaced by an absence word: an override marks a reading, it does not remove it.
       expect(row).toContain('67')
       expect(row).toContain('excluded')
       expect(row).toContain(OVERRIDE_REASON)
@@ -880,11 +846,11 @@ describe('annotate wiring', () => {
   })
 
   it('opens the panel with the clicked point’s own day and metric, typed by nobody', async () => {
-    const { clickResting, cleanup } = await mountRecoveryWithOverride()
+    const { clickHeartRate, cleanup } = await mountRecoveryWithOverride()
     try {
-      // dataIndex 1 is DAYS[1], 2026-08-11: the same day the override above targets, clicked
-      // through the chart rather than read off state a caller assembled by hand.
-      act(() => { clickResting({ componentType: 'series', dataIndex: 1 }) })
+      // dataIndex 1 is the week's second day, 2026-08-11: the same day the override above targets,
+      // clicked through the chart rather than read off state a caller assembled by hand.
+      act(() => { clickHeartRate({ componentType: 'series', dataIndex: 1 }) })
       const containers = document.querySelectorAll('[role="dialog"]')
       expect(containers).toHaveLength(1)
       const dialogHtml = containers[0]!.innerHTML
@@ -901,17 +867,15 @@ describe('annotate wiring', () => {
 
 // Task 11b's own coverage: until this task useAnnotations issued GET /notes and GET /events on
 // every page and every range change and threw both away, the gap task-11b's own brief names.
-// Recovery, the same choice 'annotate wiring' above makes and for the same reason: every chart on
-// the page reads the same day level annotations, so a note or an event landing on all of them (or
-// on none) is unambiguous. Four charts since M9b, not three: HeartRateCard
-// (pages/recovery/HeartRateCard.tsx) mounted its own heart rate range chart at the foot of this
-// page, reading the same dayAnnotations this page's three Sparklines already did, so the loop
-// below has one more table to check rather than a different assertion to make.
+// Health, where every chart on the page reads the same day level annotations, so a note or an
+// event landing on all of them (or on none) is unambiguous. It was Recovery until its overview,
+// whose strips draw the server's points and carry no notes, the way Sleep's and Activity's do; only
+// its heart rate range still reads them (annotate wiring, above).
 describe('notes and events reach the charts', () => {
   const DATE = '2026-08-11'
   const NOTE_BODY = 'felt off today'
 
-  async function mountRecoveryWithDayAnnotations(): Promise<{ html: string, cleanup: () => void }> {
+  async function mountHealthWithDayAnnotations(): Promise<{ html: string, cleanup: () => void }> {
     const restore = stubFetch(
       [],
       [{ id: 'n1', localDate: DATE, body: NOTE_BODY, updatedAtMs: 0 }],
@@ -925,11 +889,11 @@ describe('notes and events reach the charts', () => {
     const root = createRoot(container)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
-    window.history.replaceState(null, '', RECOVERY_ROUTE)
+    window.history.replaceState(null, '', HEALTH_ROUTE)
 
     act(() => {
       root.render(
-        <I18nProvider lng="en"><QueryClientProvider client={client}><Recovery /></QueryClientProvider></I18nProvider>,
+        <I18nProvider lng="en"><QueryClientProvider client={client}><Health /></QueryClientProvider></I18nProvider>,
       )
     })
     await flush(client, () => container.innerHTML)
@@ -946,14 +910,14 @@ describe('notes and events reach the charts', () => {
 
   // The density judgment call task-11b's report states: a note or an event carries no metric of
   // its own (unlike an override), so it reaches every chart on the page rather than being
-  // arbitrarily attached to whichever card happens to share its date. Recovery draws exactly
-  // three cards, none of which the note or the event above targets by metric, so all three
+  // arbitrarily attached to whichever card happens to share its date. Health draws exactly
+  // two charts, neither of which the note or the event above targets by metric, so both
   // carrying the same date's mark is the decision under test, not an accident of the fixture.
   it('carries a note onto every chart on the page, not just one', async () => {
-    const { html, cleanup } = await mountRecoveryWithDayAnnotations()
+    const { html, cleanup } = await mountHealthWithDayAnnotations()
     try {
       const chartTables = [...html.matchAll(/<table class="sr-only">[\s\S]*?<\/table>/g)].map((m) => m[0])
-      expect(chartTables).toHaveLength(4)
+      expect(chartTables).toHaveLength(2)
       for (const t of chartTables) {
         const row = t.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
         if (!row) throw new Error(`no row for ${DATE}`)
@@ -968,7 +932,7 @@ describe('notes and events reach the charts', () => {
   // the same row, joined, rather than one silently replacing the other the way a find() (instead
   // of the filter+join every chart table now uses) would.
   it('translates a seed event kind and joins it with a note sharing its date', async () => {
-    const { html, cleanup } = await mountRecoveryWithDayAnnotations()
+    const { html, cleanup } = await mountHealthWithDayAnnotations()
     try {
       const firstTable = html.match(/<table class="sr-only">[\s\S]*?<\/table>/)?.[0]
       if (!firstTable) throw new Error('no accessible table rendered')
@@ -1008,8 +972,7 @@ describe('Weight specifics', () => {
     await flush(client, () => container.innerHTML)
 
     // The weight card is Weight.tsx's own first card() call, ahead of body_fat, so the first chart
-    // entry captured by this mount is unambiguously its Sparkline, the same ordinal reasoning
-    // mountRecoveryWithOverride above states for Recovery's own first card.
+    // entry captured by this mount is unambiguously its Sparkline.
     const entry = capturedCharts.slice(chartsBefore)[0]
     if (!entry) throw new Error('no chart mounted')
 

@@ -12,6 +12,7 @@ import { Dashboard } from '../src/pages/Dashboard.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { SLEEP_PERIOD_MONTH } from './fixtures/sleepPeriod.js'
+import { RECOVERY_PERIOD_MONTH } from './fixtures/recoveryPeriod.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -65,15 +66,16 @@ function stubFetch(): () => void {
     }
     // A real override plus a real note and a real event, all on the same day: task 11b's own merge
     // has to keep every one of these arrays stable across a rerender, on both branches, not only on
-    // an empty page. The override is on resting_heart_rate because Recovery's week tab draws that
-    // metric's sparkline (the case below that mounts it), so the "metric already has annotations"
-    // branch of mergeDayAnnotations, the one that concatenates a fresh array, reaches a chart. It
-    // used to sit on steps, which only the old Dashboard drew; the glance reads no annotations.
+    // an empty page. The override is on heart_rate because Recovery's week tab draws that metric's
+    // range chart (the case below that mounts it), so the "metric already has annotations" branch
+    // of mergeDayAnnotations, the one that concatenates a fresh array, reaches a chart. It sat on
+    // resting_heart_rate while the old Recovery drew that metric's own sparkline, and on steps
+    // before that, which only the old Dashboard drew; the glance reads no annotations.
     if (url.includes('/overrides')) {
       return json({
         items: [{
           id: 'o1', scope: 'day_metric',
-          targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'resting_heart_rate' }),
+          targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'heart_rate' }),
           action: 'exclude', correctedValue: null, reason: 'Watch left charging',
         }],
       })
@@ -119,8 +121,10 @@ function stubFetch(): () => void {
     // The glance Dashboard's one read, carrying a night (the hypnogram) and today's heart rate
     // points (the trace), so both of its echarts instances mount.
     if (url.includes('/glance')) return json(glanceBody())
-    // useSourceNames (IntradayHeartRate's own nameOf): reached by Recovery's Day tab and by the
-    // glance's Today card, the two places this file mounts that chart.
+    // The Recovery overview's one read, the week tab's case below.
+    if (url.includes('/recovery/period')) return json(RECOVERY_PERIOD_MONTH)
+    // useSourceNames (IntradayHeartRate's own nameOf): reached by the glance's Today card, the place
+    // this file mounts that chart.
     if (url.includes('/sources')) {
       return json({
         items: [{
@@ -349,12 +353,13 @@ describe('the charts across a rerender', () => {
     restore()
   })
 
-  // The annotation merge's own guard. The stub puts an override on resting_heart_rate, so that
-  // metric's entry in mergeDayAnnotations' result is a concatenation (the override's reason plus the
-  // day's note and event) rather than the shared dayAnnotations array every other metric falls back
-  // to. A fresh concatenation is a fresh array, so if useDayAnnotations' memo on the merge were
-  // dropped the resting heart rate sparkline would be handed a new `annotations` on every render
-  // and be rebuilt; the fallback branch alone would never show it, because its array is shared.
+  // The annotation merge's own guard. The stub puts an override on heart_rate, so that metric's
+  // entry in mergeDayAnnotations' result is a concatenation (the override's reason plus the day's
+  // note and event) rather than the shared dayAnnotations array every other metric falls back to. A
+  // fresh concatenation is a fresh array, so if useDayAnnotations' memo on the merge were dropped
+  // the heart rate range would be handed a new `annotations` on every render and be rebuilt; the
+  // fallback branch alone would never show it, because its array is shared. The overview's hero and
+  // figure strips are memoised on the period read, and are held to the same rule here.
   it('are not disposed and re-initialised on Recovery\'s week tab, where an overridden metric\'s annotations are merged', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
@@ -369,7 +374,7 @@ describe('the charts across a rerender', () => {
 
     // The overridden metric's own chart is on the page, so the case cannot pass without it.
     const hosts = [...container!.querySelectorAll('[role="img"]')]
-    expect(hosts.some((host) => (host.getAttribute('aria-label') ?? '').startsWith('Daily resting heart rate'))).toBe(true)
+    expect(hosts.some((host) => (host.getAttribute('aria-label') ?? '').startsWith('Daily heart rate minimum, mean and maximum'))).toBe(true)
     const before = chartRoots()
     expect(before.every((node) => node !== null)).toBe(true)
 
@@ -388,47 +393,18 @@ describe('the charts across a rerender', () => {
   // object, and so a fresh `nameOf`, on every render. IntradayHeartRate's own `build` closes over
   // `nameOf` and lists it in that useCallback's deps, and useChart keys its init/dispose effect on
   // `build`, so a stable session and a stable query cache still tore the chart down and rebuilt it
-  // on every render -- the case above never caught it because it stays on the week tab, and the
-  // heart rate card only mounts IntradayHeartRate on the Day tab.
-  //
-  // Mounts Recovery, not Dashboard: HeartRateCard (pages/recovery/HeartRateCard.tsx) moved out of
-  // Dashboard.tsx in M9b and Recovery.tsx is now the only page that mounts it, which is where this
-  // defect would reopen on the page's own render loop just as readily as it did on Dashboard's.
-  it('are not disposed and re-initialised on the Day tab either, where IntradayHeartRate lives', async () => {
-    const restore = stubFetch()
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-    client.setQueryData(queryKeys.session(), PERSON)
-    window.history.replaceState(null, '', '/recovery?range=day&on=2026-08-12')
-    const tree = (node: ReactNode): ReactNode => (
-      <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
-    )
-
-    act(() => { root!.render(tree(<Recovery />)) })
-    await flush(client, () => container!.innerHTML)
-
-    const before = chartRoots()
-    expect(before.length).toBeGreaterThan(0)
-    expect(before.every((node) => node !== null)).toBe(true)
-
-    act(() => { root!.render(tree(<Recovery />)) })
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
-
-    const after = chartRoots()
-    expect(after).toHaveLength(before.length)
-    for (let i = 0; i < before.length; i += 1) {
-      expect(after[i], `chart ${i} was re-initialised`).toBe(before[i])
-    }
-    restore()
-  })
+  // on every render. Its own case here mounted Recovery's Day tab until the Recovery overview, whose
+  // Day tab opens the dashboard on that day instead of drawing a trace; the glance's Today card is
+  // where IntradayHeartRate lives on a page now, and the first case above ("Heart rate today")
+  // holds it to the rule.
 
   // Final review finding on M8b: WorkoutDetail.tsx built `detail` fresh from `workoutDetail(...)`
   // on every render, and workout/WorkoutThrough.tsx's own `marks` and workout/WorkoutZones.tsx's
   // own `rows` were each a fresh `filter().map()` / `zoneRows(...)` call over it, so the workout
   // page's two charts (the zone bar and the heart rate trace) were disposed and reinitialised on
   // every commit - window focus, opening or closing the annotate panel, and the session-scope
-  // invalidation M8b itself added among them. This is the same defect the two cases above guard
-  // (the Dashboard, and
-  // Recovery's Day tab), on a page neither of them ever mounts.
+  // invalidation M8b itself added among them. This is the same defect the cases above guard
+  // (the Dashboard, and Recovery's week tab), on a page neither of them ever mounts.
   it('are not disposed and re-initialised on the workout page either, where its strips, zones and trace live', async () => {
     const restore = stubWorkoutFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })

@@ -52,9 +52,10 @@ const SEMANTIC_SOURCES = {
   primary: 'text-primary',
   negative: 'negative',
   positive: 'positive',
-  // The accent wash behind a run of days (Sparkline's `spans`): the same surface a selected rail
-  // item and a primary button sit on, so it reads as the app's own highlight rather than a chart
-  // colour of its own.
+  // The accent wash behind a run of days (Sparkline's `spans`): the same surface a primary button
+  // (.button-primary) and the log sheet's chosen face and chip (.log-face.is-on, .log-chip.is-on)
+  // sit on, so it reads as the app's own highlight rather than a chart colour of its own. The
+  // rail's selected item is not one of them: it sits on --surface-selected.
   span: 'surface-accent',
 } as const satisfies Record<string, SemanticToken>
 

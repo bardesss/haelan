@@ -210,43 +210,7 @@
   "recovery": {
     "title": "Recovery",
     "units": {
-      "beatsPerMinute": "Beats per minute",
-      "bpm": "bpm",
-      "milliseconds": "Milliseconds",
-      "ms": "ms",
-      "breathsPerMinute": "Breaths per minute",
       "breathsPerMinuteShort": "breaths/min"
-    },
-    "insights": {
-      "restingHeartRate": "Resting heart rate, this period against the last"
-    },
-    "baselineNote": {
-      "pending": "the baseline is still loading",
-      "unknown": "the baseline could not be read, so no comparison is shown",
-      "none": "no baseline yet to compare against",
-      "thin": "the baseline from the 60 days before {{on}} is too thin to compare against",
-      "below": "↓ below the {{low}} to {{high}} baseline",
-      "above": "↑ above the {{low}} to {{high}} baseline",
-      "within": "→ within the {{low}} to {{high}} baseline"
-    },
-    "restingHeartRate": {
-      "label": "Resting heart rate",
-      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
-      "chartLabel": "Daily resting heart rate through {{period}}"
-    },
-    "dailyHrv": {
-      "label": "Heart rate variability",
-      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
-      "chartLabel": "Daily heart rate variability through {{period}}"
-    },
-    "respiratoryRate": {
-      "label": "Respiratory rate",
-      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
-      "chartLabel": "Daily respiratory rate through {{period}}"
-    },
-    "respiratoryRateSleep": {
-      "label": "Respiratory rate, during sleep",
-      "chartLabel": "Respiratory rate through {{period}}, measured during sleep"
     },
     "heartRateRange": {
       "label": "Heart rate range",
@@ -255,8 +219,29 @@
       "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
       "basisBaselinePending": "daily minimum, mean and maximum; the baseline is still loading",
       "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
-      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
-      "intradayChartLabel": "Heart rate through the day of {{date}}"
+      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
+    },
+    "period": {
+      "hero": "Recovery index, average per day",
+      "caption": {
+        "daily": "every day {{period}}",
+        "weekly": "every week, as its average"
+      },
+      "hint": {
+        "daily": "tap a day for its score and inputs",
+        "weekly": "tap a week for its average"
+      },
+      "lines": {
+        "daily": "each line: every day {{period}} · band = your usual range",
+        "weekly": "each line: every week, the average of its days · band = your usual range"
+      },
+      "carriedBy": "Mostly carried by {{input}}",
+      "sourceCaption": "the recovery index and HRV against its usual week are worked out from all sources, whichever source is chosen",
+      "panel": {
+        "openDay": "View day"
+      },
+      "emptyTitle": "No recovery index for this period",
+      "emptyDetail": "The index needs HRV and resting heart rate readings, each against your own previous {{days}} days."
     }
   },
   "health": {
@@ -1706,7 +1691,6 @@
   },
   "recoveryIndex": {
     "label": "Recovery index",
-    "asOf": "as of {{date}}",
     "band": {
       "low": "Well below your usual",
       "below": "Below your usual",
@@ -1714,8 +1698,6 @@
       "above": "Above your usual",
       "high": "Well above your usual"
     },
-    "basis": "against your own last {{days}} days",
-    "unavailable": "Not enough recent data to compare against your usual.",
     "input": {
       "hrv": "Heart rate variability",
       "restingHeartRate": "Resting heart rate",
@@ -1918,6 +1900,8 @@
     "standout": {
       "longest": "longest: {{value}} on {{date}}",
       "busiest": "busiest: {{value}} on {{date}}",
+      "highest": "highest: {{value}} on {{date}}",
+      "lowest": "lowest: {{value}} on {{date}}",
       "previous": "{{delta}} against {{period}}",
       "previousPerDay": "{{delta}} a day against {{period}}",
       "yearEarlier": "{{delta}} against last year",

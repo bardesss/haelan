@@ -178,13 +178,16 @@ export function plainText(line: Emphasised): string {
 
 /**
  * What stood out, a line each: the high point ("longest: **8h 21m** on Sun, Aug 23", with ✦ when
- * the server judged it better), the change against the period before ("**+0h 23m** against July"),
- * and, when given, against the same period a year earlier. Empty when none of the three has
- * anything to say.
+ * the server judged it better), when given the low point after it ("lowest: **12** on Tue, Aug
+ * 18", the recovery index's), the change against the period before ("**+0h 23m** against July"),
+ * and, when given, against the same period a year earlier. Empty when none of them has anything
+ * to say.
  */
 export function standoutLines(o: {
   figure: PeriodFigure, high: PeriodHigh | null, previous: PeriodChange, yearEarlier: PeriodChange | null,
-  highWord: 'longest' | 'busiest', language: string, t: Translate,
+  highWord: 'longest' | 'busiest' | 'highest', language: string, t: Translate,
+  /** The period's low point, said after the high one; a low day is never marked good. */
+  low?: PeriodHigh | null,
   /** Whether a change is a day's worth, and says so ("+612 a day against August"): an average per day
    *  of a figure a reader adds up (steps), where a night's average reads as a night's without it. */
   perDay?: boolean,
@@ -196,6 +199,10 @@ export function standoutLines(o: {
     const date = formatWeekdayDate(high.localDate, language)
     const line = emphasise(t, `period.standout.${o.highWord}`, { value: formatFigureValue(figure, high.value, language, t), date }, ['value'])
     lines.push(high.good ? [...line, { text: ' ', strong: false }, { text: '✦', strong: false, good: true }] : line)
+  }
+  if (o.low !== undefined && o.low !== null) {
+    const date = formatWeekdayDate(o.low.localDate, language)
+    lines.push(emphasise(t, 'period.standout.lowest', { value: formatFigureValue(figure, o.low.value, language, t), date }, ['value']))
   }
   if (hasChange(previous)) {
     lines.push(emphasise(t, perDay ? 'period.standout.previousPerDay' : 'period.standout.previous', {
