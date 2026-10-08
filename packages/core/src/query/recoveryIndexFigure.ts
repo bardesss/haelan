@@ -20,6 +20,7 @@ import { valuesFigure } from './periodRead.ts'
  */
 export function recoveryUsualBaseline(): Baseline {
   const { low, high } = RECOVERY_USUAL_BAND
+  // The centre is 49 by construction, (36 + 62) / 2, and is never printed as the usual: 50 is the index's own.
   return { center: (low + high) / 2, spread: (high - low) / 2, n: BASELINE_WINDOW_DAYS, thin: false }
 }
 
