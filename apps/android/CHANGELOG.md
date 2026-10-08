@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/bardesss/haelan/compare/android-v0.10.0...android-v0.11.0) (2026-10-08)
+
+
+### Features
+
+* the recovery index reads HRV on ln and is fitted to Google's score ([#433](https://github.com/bardesss/haelan/issues/433)) ([739f86d](https://github.com/bardesss/haelan/commit/739f86da5b3616609e0a008406e068764c8b075a))
+
 ## [0.10.0](https://github.com/bardesss/haelan/compare/android-v0.9.0...android-v0.10.0) (2026-09-30)
 
 
