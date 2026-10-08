@@ -59,19 +59,30 @@ export interface RecoveryPeriod {
 }
 
 /**
- * The input that carried the period: each input's points summed over its scored days, and of
- * those, the largest pushing the way the hero's value sits from 50. Null when the hero has no
- * value or no input pushed that way.
+ * The input that carried the period: each input's `contribution` (its signed weight times z, the
+ * linear part of the composite) summed over the scored days, read in the direction the hero's
+ * value sits from 50. Named only when its sum is at least half of every input's sum in that
+ * direction added up, so a period two or more inputs moved together names none. Null too when the
+ * hero has no value or nothing moved that way.
+ *
+ * Not `points`: those are scaled by each day's distance from 50 through the logistic, so an input
+ * that only swings day to day sums to a net push and could be named over one that truly shifted.
  */
 export function carriedByOf(days: readonly RecoveryDay[], value: number | null): RecoveryInputKey | null {
   if (value === null) return null
   const sums = new Map<RecoveryInputKey, number>()
-  for (const day of days) for (const x of day.inputs) sums.set(x.key, (sums.get(x.key) ?? 0) + x.points)
+  for (const day of days) for (const x of day.inputs) sums.set(x.key, (sums.get(x.key) ?? 0) + x.contribution)
   const sign = value >= 50 ? 1 : -1
   let best: RecoveryInputKey | null = null
   let bestPush = 0
-  for (const [key, sum] of sums) if (sum * sign > bestPush) { best = key; bestPush = sum * sign }
-  return best
+  let total = 0
+  for (const [key, sum] of sums) {
+    const push = sum * sign
+    if (push <= 0) continue
+    total += push
+    if (push > bestPush) { best = key; bestPush = push }
+  }
+  return best !== null && bestPush >= total / 2 ? best : null
 }
 
 /**

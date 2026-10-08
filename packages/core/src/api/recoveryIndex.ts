@@ -194,6 +194,13 @@ export interface RecoveryInput {
    * which is the honest statement that they partly cancelled.
    */
   points: number
+  /**
+   * The signed amount this input added to the composite: its weight (after redistribution) times
+   * its sign-corrected z (after breathing's one-sided clamp). Linear, unlike `points`, so a sum
+   * over many days is a fair measure of which input moved a period; `points` is scaled by each
+   * day's distance from 50 through the logistic, which a sum over days would weigh unevenly.
+   */
+  contribution: number
 }
 
 export interface RecoveryIndexUnavailable {
@@ -417,6 +424,7 @@ export function recoveryIndexSeries(
       key,
       weight,
       points: totalMovement === 0 ? 0 : Math.abs(distance) * (contribution / totalMovement),
+      contribution,
     }))
 
     out.set(date, {

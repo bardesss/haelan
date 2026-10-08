@@ -5,8 +5,8 @@ import { daily, sources } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { ConfigError } from '../src/errors.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { readRecoveryPeriod } from '../src/query/recoveryPeriod.ts'
-import type { RecoveryPeriodInput } from '../src/query/recoveryPeriod.ts'
+import { carriedByOf, readRecoveryPeriod } from '../src/query/recoveryPeriod.ts'
+import type { RecoveryDay, RecoveryPeriodInput } from '../src/query/recoveryPeriod.ts'
 import { recoveryIndexFigure } from '../src/query/recoveryIndexFigure.ts'
 import { periodUsual } from '../src/query/periodFigure.ts'
 import { readSpan } from '../src/query/periodRead.ts'
@@ -109,9 +109,15 @@ describe('readRecoveryPeriod', () => {
     expect(page.carriedBy).toBe('hrv')
   })
 
-  it('says resting heart rate carried a month where only resting heart rate moved', () => {
-    // Resting heart rate swings with HRV here, high on HRV's low mornings, so HRV's own swing cannot
-    // outweigh it: a below-50 day's points are scaled by how far below 50 it is.
+  it('says resting heart rate carried a shifted month while HRV swung against it', () => {
+    // HRV's low mornings are resting heart rate's low ones: the case summed points named HRV for.
+    seedMornings({ rhr: (d, i) => (d >= '2026-08-01' && d <= '2026-08-31' ? 65 : 55) + swing(i, 1) })
+    const page = readRecoveryPeriod(q(), input({ range: 'month', anchor: '2026-08-15' }))
+    expect(page.hero.value).toBeLessThan(50)
+    expect(page.carriedBy).toBe('restingHeartRate')
+  })
+
+  it('says resting heart rate carried a shifted month while HRV only alternated with it', () => {
     seedMornings({ rhr: (d, i) => (d >= '2026-08-01' && d <= '2026-08-31' ? 65 : 55) - swing(i, 1) })
     const page = readRecoveryPeriod(q(), input({ range: 'month', anchor: '2026-08-15' }))
     expect(page.hero.value).toBeLessThan(50)
@@ -238,6 +244,32 @@ describe('readRecoveryPeriod stretch', () => {
       expect(week.point).toEqual(last)
       expect(week.point!.localDate).toBe(week.to)
     }
+  })
+})
+
+describe('carriedByOf', () => {
+  const day = (localDate: string, contributions: Partial<Record<'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', number>>): RecoveryDay => ({
+    localDate, score: 40, band: 'usual',
+    inputs: Object.entries(contributions).map(([key, contribution]) => ({ key: key as RecoveryDay['inputs'][number]['key'], weight: 0.25, points: 0, contribution: contribution! })),
+  })
+
+  it('names the input with at least half the push the way the hero leans', () => {
+    const days = [day('2026-08-01', { hrv: -1, restingHeartRate: -0.5 }), day('2026-08-02', { hrv: -1, restingHeartRate: -0.5 })]
+    expect(carriedByOf(days, 40)).toBe('hrv')
+    // Exactly half is enough.
+    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -0.5, sleep: -0.5 })], 40)).toBe('hrv')
+  })
+
+  it('names none when no input reaches half', () => {
+    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -1, sleep: -1 })], 40)).toBeNull()
+  })
+
+  it('reads the direction from the hero and leaves out inputs pushing the other way', () => {
+    const days = [day('2026-08-01', { hrv: 2, restingHeartRate: -3, sleep: 1 })]
+    expect(carriedByOf(days, 60)).toBe('hrv')
+    expect(carriedByOf(days, 40)).toBe('restingHeartRate')
+    expect(carriedByOf(days, null)).toBeNull()
+    expect(carriedByOf([day('2026-08-01', { hrv: 1 })], 40)).toBeNull()
   })
 })
 
