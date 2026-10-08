@@ -236,7 +236,7 @@
         "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke bereik"
       },
       "carriedBy": "vooral door je {{input}}",
-      "sourceCaption": "de herstelindex en HRV tegenover haar gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest",
+      "sourceCaption": "de herstelindex en HRV tegenover je gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest",
       "panel": {
         "openDay": "Bekijk dag",
         "annotate": "Notitie of gebeurtenis toevoegen"
@@ -248,8 +248,8 @@
       "label": "HRV tegenover je gebruikelijke week",
       "average": "Gemiddelde over {{days}} dagen",
       "run": {
-        "below": "Onder je gebruikelijke bereik, al {{days}} gemeten dagen",
-        "above": "Boven je gebruikelijke bereik, al {{days}} gemeten dagen"
+        "below": "{{days}} gemeten dagen onder je gebruikelijke bereik",
+        "above": "{{days}} gemeten dagen boven je gebruikelijke bereik"
       },
       "capped": {
         "below": "Meer dan {{days}} dagen onder je gebruikelijke bereik",
@@ -261,16 +261,22 @@
         "above": "{{sideNights}} van de laatste {{weekReadings}} nachtelijke metingen hoog"
       },
       "caption": {
-        "daily": "elke stip: het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke uit de {{baselineDays}} dagen voor die week · gearceerd = een periode aan één kant",
-        "weekly": "elke stip: de laatste gemeten dag van een week, het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke uit de {{baselineDays}} dagen voor die week · gearceerd = een periode aan één kant"
-      }
+        "daily": "elke stip: het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = een reeks aan één kant van de band",
+        "weekly": "elke stip: de laatste gemeten dag van een week, het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = een reeks aan één kant van de band"
+      },
+      "short": {
+        "below": "Onder je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen",
+        "above": "Boven je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen"
+      },
+      "tooFew": "Te weinig metingen in de laatste {{weekDays}} dagen",
+      "needsBaseline": "Heeft {{baselineDays}} dagen HRV nodig vóór de eerste week"
     },
     "method": {
       "label": "Hoe de index werkt",
       "ingredients": "De herstelindex weegt vier metingen: HRV {{hrv}}%, rusthartslag {{restingHeartRate}}%, de slaap van afgelopen week {{sleep}}% en ademhalingsfrequentie {{respiratoryRate}}%. Elk wordt afgezet tegen je eigen {{days}} dagen ervoor.",
-      "usual": "50 is je gebruikelijke waarde. Een dag van {{low}} tot {{high}} geldt als zoals gebruikelijk; daaronder of daarboven als onder of boven gebruikelijk.",
+      "usual": "50 is je gebruikelijke waarde. Een dag van {{low}} tot en met {{high}} ligt rond je gebruikelijke waarde; daaronder of daarboven ligt hij onder of boven gebruikelijk, en verder weg ver onder of ver boven.",
       "tuned": "De gewichten zijn zo afgesteld dat de index de herstelscore uit de Google Health-app volgt, op scores die er met de hand uit zijn overgenomen. Het is niet het getal van Google.",
-      "stretch": "HRV tegenover je gebruikelijke week neemt het gemiddelde van de laatste {{weekDays}} dagen, zodra daar minstens {{minReadings}} metingen in zitten, en zet het af tegen een band van {{band}} × de dagelijkse spreiding van je gebruikelijke waarde aan weerszijden. Het telt als een periode zodra het {{minRun}} gemeten dagen achter elkaar aan één kant van die band blijft."
+      "stretch": "HRV tegenover je gebruikelijke week neemt het gemiddelde van de laatste {{weekDays}} dagen, zodra daar minstens {{minReadings}} metingen in zitten, en zet het af tegen een band die {{band}} × de spreiding van dag tot dag in je gebruikelijke waarde naar beide kanten reikt. Het telt als een reeks zodra het {{minRun}} gemeten dagen achter elkaar aan één kant van die band blijft."
     }
   },
   "health": {

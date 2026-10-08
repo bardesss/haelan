@@ -261,16 +261,22 @@
         "above": "{{sideNights}} of the last {{weekReadings}} nightly readings high"
       },
       "caption": {
-        "daily": "each dot: the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side",
-        "weekly": "each dot: a week's last measured day, the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side"
-      }
+        "daily": "each dot: the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side of the band",
+        "weekly": "each dot: a week's last measured day, the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side of the band"
+      },
+      "short": {
+        "below": "Below its usual for fewer than {{minRun}} measured days",
+        "above": "Above its usual for fewer than {{minRun}} measured days"
+      },
+      "tooFew": "Too few readings in the last {{weekDays}} days",
+      "needsBaseline": "Needs {{baselineDays}} days of HRV before its first week"
     },
     "method": {
       "label": "How the index works",
       "ingredients": "The recovery index weighs four readings: HRV {{hrv}}%, resting heart rate {{restingHeartRate}}%, last week's sleep {{sleep}}% and breathing rate {{respiratoryRate}}%. Each is set against your own previous {{days}} days.",
-      "usual": "50 is your usual. A day from {{low}} to {{high}} counts as around your usual; below or above that, as below or above it.",
+      "usual": "50 is your usual. A day from {{low}} to {{high}} counts as around your usual; below or above that, as below or above it, and further out, as well below or well above it.",
       "tuned": "The weights are tuned so the index follows the recovery score in the Google Health app, on scores copied from it by hand. It is not Google's number.",
-      "stretch": "HRV against its usual week takes the average of the last {{weekDays}} days, once it holds at least {{minReadings}} readings, and sets it against a band {{band}} × the day-to-day spread of your usual on either side. It counts as a stretch once it stays on one side of that band for {{minRun}} measured days in a row."
+      "stretch": "HRV against its usual week takes the average of the last {{weekDays}} days, once it holds at least {{minReadings}} readings, and sets it against a band reaching {{band}} × the day-to-day spread of your usual to either side. It counts as a stretch once it stays on one side of that band for {{minRun}} measured days in a row."
     }
   },
   "health": {

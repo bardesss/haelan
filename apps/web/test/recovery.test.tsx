@@ -249,7 +249,7 @@ describe('the Recovery page: the hero', () => {
       .toBe('the recovery index and HRV against its usual week are worked out from all sources, whichever source is chosen')
     await renderAt(`${MONTH_URL}&source=watch`, RECOVERY_PERIOD_MONTH, 'nl')
     expect(sourceCaption(HERO_NL))
-      .toBe('de herstelindex en HRV tegenover haar gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest')
+      .toBe('de herstelindex en HRV tegenover je gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest')
   })
 })
 
