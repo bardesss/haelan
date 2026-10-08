@@ -264,6 +264,12 @@ describe('carriedByOf', () => {
     expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -1, sleep: -1 })], 40)).toBeNull()
   })
 
+  it('names none when two inputs tie for the largest push', () => {
+    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -1 })], 40)).toBeNull()
+    // A tie survives float noise: 0.1 + 0.2 against 0.3.
+    expect(carriedByOf([day('2026-08-01', { hrv: -0.1, restingHeartRate: -0.3 }), day('2026-08-02', { hrv: -0.2 })], 40)).toBeNull()
+  })
+
   it('reads the direction from the hero and leaves out inputs pushing the other way', () => {
     const days = [day('2026-08-01', { hrv: 2, restingHeartRate: -3, sleep: 1 })]
     expect(carriedByOf(days, 60)).toBe('hrv')

@@ -262,6 +262,18 @@ describe('recoveryIndex', () => {
     expect(Math.abs(summed)).toBeLessThan(distance)
   })
 
+  it('is the sum of every input contribution, opposing inputs included', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    const betterHrv = input.hrv.map((d) => d.localDate === end ? { ...d, value: 42.5 } : d)
+    const worseRhr = input.restingHeartRate.map((d) => d.localDate === end ? { ...d, value: 57.5 } : d)
+    const result = recoveryIndex({ ...input, hrv: betterHrv, restingHeartRate: worseRhr }, end)
+    expect(result.enough).toBe(true)
+    if (!result.enough) return
+    expect(result.inputs.map((i) => Math.sign(i.contribution)).slice(0, 2)).toEqual([1, -1])
+    expect(result.inputs.reduce((sum, i) => sum + i.contribution, 0)).toBeCloseTo(result.composite, 12)
+  })
+
   it('keeps every score inside 0 and 100 however extreme the day', () => {
     const end = '2026-09-14'
     const input = inputAt(end)

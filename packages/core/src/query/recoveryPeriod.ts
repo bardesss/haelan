@@ -58,12 +58,15 @@ export interface RecoveryPeriod {
   method: RecoveryMethod
 }
 
+/** Below this two summed contributions are the same push, apart from float rounding. */
+const CARRIED_TIE_EPSILON = 1e-9
+
 /**
  * The input that carried the period: each input's `contribution` (its signed weight times z, the
  * linear part of the composite) summed over the scored days, read in the direction the hero's
  * value sits from 50. Named only when its sum is at least half of every input's sum in that
- * direction added up, so a period two or more inputs moved together names none. Null too when the
- * hero has no value or nothing moved that way.
+ * direction added up, so a period two or more inputs moved together names none, and a tie for the
+ * largest names none either. Null too when the hero has no value or nothing moved that way.
  *
  * Not `points`: those are scaled by each day's distance from 50 through the logistic, so an input
  * that only swings day to day sums to a net push and could be named over one that truly shifted.
@@ -73,16 +76,14 @@ export function carriedByOf(days: readonly RecoveryDay[], value: number | null):
   const sums = new Map<RecoveryInputKey, number>()
   for (const day of days) for (const x of day.inputs) sums.set(x.key, (sums.get(x.key) ?? 0) + x.contribution)
   const sign = value >= 50 ? 1 : -1
-  let best: RecoveryInputKey | null = null
-  let bestPush = 0
-  let total = 0
-  for (const [key, sum] of sums) {
-    const push = sum * sign
-    if (push <= 0) continue
-    total += push
-    if (push > bestPush) { best = key; bestPush = push }
-  }
-  return best !== null && bestPush >= total / 2 ? best : null
+  const pushes = [...sums].map(([key, sum]) => ({ key, push: sum * sign })).filter((p) => p.push > 0)
+  if (pushes.length === 0) return null
+  pushes.sort((a, b) => b.push - a.push)
+  const total = pushes.reduce((t, p) => t + p.push, 0)
+  const [first, second] = pushes
+  // A tie for the largest push names nobody rather than whichever came first.
+  if (second !== undefined && first!.push - second.push < CARRIED_TIE_EPSILON) return null
+  return first!.push >= total / 2 - CARRIED_TIE_EPSILON ? first!.key : null
 }
 
 /**
