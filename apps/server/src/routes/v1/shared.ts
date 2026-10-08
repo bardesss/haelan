@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import {
-  ConfigError, effectiveTimezone, FIGURE_METRIC_ALIAS, figureDirection, judge, localDateInZone, PersonQuery, roundMetricValue, requireDate,
-  standingOf,
+  ConfigError, effectiveTimezone, FIGURE_METRIC_ALIAS, figureDirection, judge, localDateInZone, MAX_RANGE_DAYS,
+  PersonQuery, requireBoundedSpan, roundMetricValue, requireDate, standingOf,
 } from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
@@ -54,17 +54,9 @@ export function metricsFrom(raw: string | string[] | undefined): string[] {
   return Array.isArray(raw) ? [...new Set(raw)] : [raw]
 }
 
-/**
- * Ten years, inclusive of both ends. Generous on purpose: the widest view a real dashboard offers
- * is "all time", and a self hosted instance holding a decade of imported wearable history is
- * already at the far end of what anyone actually has. The point of the number is only that it is
- * finite. Without it, one authenticated GET with from=1000-01-01&to=9999-12-31 made /trend
- * materialise 3.28 million day entries against an empty database, holding the event loop for
- * roughly twelve seconds and ~290MB of heap, with no body and no data required.
- */
-export const MAX_RANGE_DAYS = 3660
-
-const DAY_MS = 86_400_000
+// Declared in core beside the other date helpers, so the MCP tools can bound a range without
+// importing this route module; re-exported here so every route keeps its import.
+export { MAX_RANGE_DAYS }
 
 /**
  * Refuses a range wider than the ceiling, for the reads whose cost is a function of the range
@@ -73,18 +65,13 @@ const DAY_MS = 86_400_000
  * The `daily` backed reads are bounded by SQL and by the rows actually present, so they do not
  * need this.
  *
- * A malformed or reversed range is left to the core call underneath, whose message names which
- * date is wrong; this only refuses a well formed range that is merely too wide, and the message
- * names the limit so a caller knows what to ask for instead.
+ * A malformed or reversed range is refused before this by requireDateRange, which every ranged
+ * route calls first so no date arithmetic sees one; this only refuses a well formed range that is
+ * merely too wide, and the message names the limit so a caller knows what to ask for instead.
  */
 export function requireBoundedRange(from: string, to: string, name = 'range'): void {
-  const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1
-  if (!Number.isFinite(days)) return
-  if (days > MAX_RANGE_DAYS) {
-    throw new ConfigError(
-      `${name} '${from}'..'${to}' spans ${days} days, more than the ${MAX_RANGE_DAYS} day maximum`,
-    )
-  }
+  // The span and its sentence are core's, shared with the MCP tools' range check.
+  requireBoundedSpan(from, to, name)
 }
 
 /**

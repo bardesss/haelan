@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, shiftLocalDate } from '@haelan/core'
+import { PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, shiftLocalDate, FLAT_SPREAD_EPSILON } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { explainTool } from '../src/mcp/tools/explain.ts'
 import { comparePeriods } from '../src/mcp/tools/series.ts'
@@ -89,6 +89,19 @@ describe('explain, kind comparison', () => {
     expect(answer.evidence.spread?.thin).toBe(true)
     expect(answer.evidence.spread?.spread).toBeGreaterThan(0)
     expect(answer.finding).toMatch(/a difference of 1\d{4}\. There is no usual day-to-day spread thick enough to set it against/)
+  })
+
+  // Sixty identical days of a value with no exact binary form leave a spread of ~1e-11 rather than
+  // zero. `spread > 0` let that through, and every difference then read as moved past it.
+  it('stops at spreadUnknown for a flat history whose float spread is not exactly zero', () => {
+    for (let i = 0; i < 60; i += 1) daily(shiftLocalDate(FROM, -60 + i), 'steps', 'sum', 8000.1)
+    for (let i = 0; i < 7; i += 1) daily(shiftLocalDate(FROM, i), 'steps', 'sum', 8100)
+    const answer = explain()
+    expect(answer.evidence.spread?.thin).toBe(false)
+    expect(answer.evidence.spread?.spread).toBeGreaterThan(0)
+    expect(answer.evidence.spread?.spread).toBeLessThan(FLAT_SPREAD_EPSILON)
+    expect(answer.stoppedAt).toBe('spreadUnknown')
+    expect(answer.walked).toEqual(['thinDays', 'thinCoverage', 'spreadUnknown'])
   })
 
   it('reads a difference inside the day-to-day spread as alike', () => {

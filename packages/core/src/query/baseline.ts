@@ -96,11 +96,21 @@ export function baselinesOver(
 }
 
 /**
+ * Below this a spread is rounding, not variation. The mean of sixty identical values is off from
+ * the value by a few ulps, so a truly flat baseline arrives with a spread near 1e-16 rather than
+ * exactly zero; real spreads, in any unit a metric is stored in (ln HRV included, ~1e-1), are many
+ * orders of magnitude above this.
+ */
+export const FLAT_SPREAD_EPSILON = 1e-9
+
+/**
  * A reading as distance from the centre in units of spread, which is the sentence a baseline
  * exists to make sayable. Null where the spread is zero, because a distance measured in units
  * of nothing is not a number, and reporting it as zero or infinity would both be inventions.
+ * Zero means below FLAT_SPREAD_EPSILON, not `=== 0`: a flat baseline's float residue would
+ * otherwise divide into an enormous z.
  */
 export function zScoreOf(value: number, baseline: Baseline): number | null {
-  if (baseline.spread === 0) return null
+  if (baseline.spread < FLAT_SPREAD_EPSILON) return null
   return (value - baseline.center) / baseline.spread
 }

@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify'
-import { ConfigError } from '@haelan/core'
+import { ConfigError, requireDate } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
-  optionalPositiveInt, personQueryOf, requireBoundedRange, requireMs, requireString, roundMetricValueOrNull,
-  sendHashed,
+  optionalPositiveInt, personQueryOf, requireBoundedRange, requireDateRange, requireMs, requireString,
+  roundMetricValueOrNull, sendHashed,
 } from './shared.ts'
 
 interface PersonParams { personId: string }
@@ -108,6 +108,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const personQuery = personQueryOf(request)
     const metric = requireString(request.query.metric, 'metric')
     const date = requireString(request.query.date, 'date')
+    requireDate('date', date)
     const points = optionalPositiveInt(request.query.points, 'points')
     const source = request.query.source
 
@@ -161,8 +162,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
 
   app.get<{ Params: PersonParams, Querystring: NightsQuery }>('/p/:personId/sleep/nights', async (request, reply) => {
     const personQuery = personQueryOf(request)
-    const from = requireString(request.query.from, 'from')
-    const to = requireString(request.query.to, 'to')
+    const { from, to } = requireDateRange(request.query)
     requireBoundedRange(from, to)
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
@@ -177,8 +177,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
   app.get<{ Params: PersonParams, Querystring: SessionsQuery }>('/p/:personId/sessions', async (request, reply) => {
     const personQuery = personQueryOf(request)
     const kind = requireString(request.query.kind, 'kind')
-    const from = requireString(request.query.from, 'from')
-    const to = requireString(request.query.to, 'to')
+    const { from, to } = requireDateRange(request.query)
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
     const type = request.query.type

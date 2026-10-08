@@ -113,7 +113,8 @@ export type {
 export type { OrphanedOverride } from './rebuild/retarget.ts'
 export { RebuildStateStore, isQuarantined, producedNothing } from './store/rebuildState.ts'
 export type { RebuildDrop, RebuildStateRow } from './store/rebuildState.ts'
-export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
+export { localDateOf, localHourOf, MAX_RANGE_DAYS, rangeSpanDays, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
+export { requireBoundedSpan, spanBeyondLimit } from './derive/boundedRange.ts'
 // The same question as localDateOf above, asked with an IANA zone rather than a fixed offset.
 // Aliased because the two cannot share a name and a caller holding a person's `timezone` string
 // needs this one: an offset is a fact about an instant, a zone is a fact about a person.
@@ -191,7 +192,7 @@ export { readRecoveryInput } from './query/recoveryInput.ts'
 export type { FilledCount } from './query/recoveryInput.ts'
 export { readHrvDeviation } from './query/hrvDeviationInput.ts'
 export { PROJECTION_TABLES } from './query/projection.ts'
-export { baselineOf, baselinesOver, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
+export { baselineOf, baselinesOver, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS, FLAT_SPREAD_EPSILON } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'
 export {
   hrvBaselineWindow, hrvDeviationRun, hrvDeviationSeries, hrvDeviationWindowStart, roundHrvDeviationDay,

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE, readHrvDeviation } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE, readHrvDeviation, requireDate } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
 import type { Stamp } from '../../api/etag.ts'
@@ -112,8 +112,7 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const personQuery = personQueryOf(request)
     const metrics = metricsFrom(request.query.metric)
     const agg = requireString(request.query.agg, 'agg')
-    const from = requireString(request.query.from, 'from')
-    const to = requireString(request.query.to, 'to')
+    const { from, to } = requireDateRange(request.query)
     const points = optionalPositiveInt(request.query.points, 'points')
     const source = request.query.source
 
@@ -149,6 +148,7 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const metric = requireString(request.query.metric, 'metric')
     const agg = requireString(request.query.agg, 'agg')
     const on = requireString(request.query.on, 'on')
+    requireDate('on', on)
     const windowDays = optionalPositiveInt(request.query.windowDays, 'windowDays') ?? BASELINE_WINDOW_DAYS
     const source = request.query.source
     // Deliberately not rounded, unlike every other body in this file. center and spread are not
@@ -202,8 +202,7 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const personQuery = personQueryOf(request)
     const metric = requireString(request.query.metric, 'metric')
     const agg = requireString(request.query.agg, 'agg')
-    const from = requireString(request.query.from, 'from')
-    const to = requireString(request.query.to, 'to')
+    const { from, to } = requireDateRange(request.query)
     // Bounded like /trend and /sleep/nights. The review assumed this route already refused a very
     // wide range as a side effect of the comparison window arithmetic. It did not: a two century
     // range answered 200. Stated as a limit here rather than left to arithmetic to imply.
@@ -248,8 +247,7 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const personQuery = personQueryOf(request)
     const metric = requireString(request.query.metric, 'metric')
     const agg = requireString(request.query.agg, 'agg')
-    const from = requireString(request.query.from, 'from')
-    const to = requireString(request.query.to, 'to')
+    const { from, to } = requireDateRange(request.query)
     requireBoundedRange(from, to)
     const source = request.query.source
     // Wrapped in an object rather than answered as a bare top level array, so this route's shape

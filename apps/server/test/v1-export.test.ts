@@ -325,4 +325,24 @@ describe('GET /export', () => {
     expect(response.json().error.kind).toBe('config')
     expect(response.json().error.message).toContain('all')
   })
+
+  // Refused at the route, before any date arithmetic: a malformed date could otherwise reach
+  // shiftLocalDate and surface as a RangeError, and an inverted range as an empty answer.
+  it('answers 400 naming the field for a malformed from', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-8-1&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from must be a YYYY-MM-DD local date, got '2026-8-1'" },
+    })
+  })
+
+  it('answers 400 naming both dates for an inverted range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from '2026-08-31' is after to '2026-08-01'" },
+    })
+  })
 })

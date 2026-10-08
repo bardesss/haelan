@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LOCAL_DATE, requireToolRange } from '../dates.ts'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, DEFAULT_INTRADAY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
 
@@ -12,7 +13,7 @@ export const getIntraday = defineTool({
     + 'points are every minute.',
   inputSchema: {
     metric: z.string(),
-    localDate: z.string().describe('YYYY-MM-DD'),
+    localDate: LOCAL_DATE.describe('YYYY-MM-DD'),
     points: z.number().optional(),
     source: z.string().optional().describe(
       'A source id from describe_person, to read one device on its own. Omitted blends every '
@@ -58,8 +59,8 @@ export const getSleep = defineTool({
     + 'began on gets an honest empty answer with nothing here to explain it, so use the date the '
     + 'person woke up.',
   inputSchema: {
-    from: z.string().describe('YYYY-MM-DD, inclusive'),
-    to: z.string().describe('YYYY-MM-DD, inclusive'),
+    from: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
+    to: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
     source: z.string().optional().describe(
       'A source id from describe_person, to read one device on its own. Omitted answers one entry '
       + 'per night per source. A source id only: `merged` and `provider` name a reconciled day, '
@@ -82,9 +83,10 @@ export const getSleep = defineTool({
       excludedSessions: z.array(z.string()),
     })),
   },
-  run: (q, args) => ({
-    nights: q.sleepNights({ from: args.from, to: args.to, sourceId: args.source }),
-  }),
+  run: (q, args) => {
+    requireToolRange(args.from, args.to)
+    return { nights: q.sleepNights({ from: args.from, to: args.to, sourceId: args.source }) }
+  },
 })
 
 export const intradayTools: Tool[] = [getIntraday, getSleep]

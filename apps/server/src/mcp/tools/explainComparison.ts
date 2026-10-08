@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { metricSpec } from '@haelan/core/metrics'
+import { FLAT_SPREAD_EPSILON } from '@haelan/core'
 import type { Baseline, PersonQuery } from '@haelan/core'
 
 /**
@@ -91,7 +92,9 @@ const LINKS: Record<ComparisonLink, Link> = {
   },
   spreadUnknown: (e, spread) => {
     const s = spread()
-    if (s !== null && !s.thin && s.spread > 0) return null
+    // Not `> 0`: a flat baseline's float residue (~1e-16) is no usual spread either, the same
+    // rule zScoreOf applies.
+    if (s !== null && !s.thin && s.spread >= FLAT_SPREAD_EPSILON) return null
     return `${means(e)}, a `
       + `difference of ${show(e.metric, e.delta!)}. There is no usual day-to-day spread thick enough to set it against, so `
       + `whether that is a change is not judged.${filledClause(e)}`

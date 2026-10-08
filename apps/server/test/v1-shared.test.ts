@@ -51,4 +51,24 @@ describe('the versioned surface shares its helpers rather than copying them', ()
     expect(imported).toBe(true)
     expect(shared).toMatch(/^export \{ roundMetricValue \}$/m)
   })
+
+  // MAX_RANGE_DAYS moved into core for the same reason: the MCP tools bound a range by it, and a
+  // tool should not import a route module to read a constant. One declaration, in core beside the
+  // other local date helpers; shared.ts only re-exports it, so the routes keep their import.
+  it('declares MAX_RANGE_DAYS in core and nowhere under routes/v1', () => {
+    const declaration = /^export const MAX_RANGE_DAYS\b/m
+    const declaring = readdirSync(V1_ROOT)
+      .filter((file) => file.endsWith('.ts'))
+      .filter((file) => declaration.test(readFileSync(join(V1_ROOT, file), 'utf8')))
+    expect(declaring).toEqual([])
+    const core = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../packages/core/src/derive/localDay.ts'), 'utf8')
+    expect(core).toMatch(declaration)
+  })
+
+  it('re-exports MAX_RANGE_DAYS from @haelan/core in shared.ts', () => {
+    const shared = readFileSync(join(V1_ROOT, 'shared.ts'), 'utf8')
+    const imported = /import\s*\{[^}]*\bMAX_RANGE_DAYS\b[^}]*\}\s*from\s*'@haelan\/core'/.test(shared)
+    expect(imported).toBe(true)
+    expect(shared).toMatch(/^export \{ MAX_RANGE_DAYS \}$/m)
+  })
 })

@@ -1,6 +1,6 @@
 import { shiftLocalDate } from '../derive/localDay.ts'
 import { roundMetricValue } from '../derive/metrics.ts'
-import { baselineOf, BASELINE_WINDOW_DAYS } from './baseline.ts'
+import { baselineOf, BASELINE_WINDOW_DAYS, FLAT_SPREAD_EPSILON } from './baseline.ts'
 
 /**
  * HRV deviation: whether a person's HRV has stayed away from their own usual for a stretch, as
@@ -93,9 +93,6 @@ export function hrvBaselineWindow(on: string): { from: string, to: string } {
 export function hrvDeviationWindowStart(from: string): string {
   return shiftLocalDate(from, -(HRV_DEVIATION_LOOKBACK_DAYS - 1) - (BASELINE_WINDOW_DAYS + HRV_WEEK_DAYS - 1))
 }
-
-/** Below this a spread on the log scale is rounding, not variation (real spreads are ~1e-1). */
-const FLAT_SPREAD_EPSILON = 1e-9
 
 const meanOf = (values: readonly number[]): number => values.reduce((t, v) => t + v, 0) / values.length
 

@@ -58,9 +58,9 @@ const ACTIONS = ['exclude', 'correct'] as const
  * costs the whole process, because better-sqlite3 is synchronous and the loop never yields, so
  * every other route, every other person and the runner's own timers wait behind it.
  *
- * This precedent is already in the codebase: shared.ts carries MAX_RANGE_DAYS because one
- * authenticated GET once held the event loop for roughly twelve seconds, and that was treated as
- * a defect worth a guard of its own rather than as a slow request.
+ * This precedent is already in the codebase: MAX_RANGE_DAYS (core, re-exported by shared.ts)
+ * exists because one authenticated GET once held the event loop for roughly twelve seconds, and
+ * that was treated as a defect worth a guard of its own rather than as a slow request.
  *
  * 128 batches of the size below is a little over a thousand days, which is deep enough to carry a
  * correction out from behind an ordinary backfill backlog. The budget below, not this, is what
