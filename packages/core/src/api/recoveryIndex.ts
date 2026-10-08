@@ -141,46 +141,43 @@ export function sleepWeekSeries(
 /**
  * How much each input moves the index.
  *
- * Proposals carrying their reasoning, in the manner of `MIN_WORN_ACUTE`, NOT derived truths. HRV
- * and resting heart rate are the autonomic core and take the larger share; the week's sleep
- * modifies; respiratory rate takes the smallest share because it deviates rarely and is, of the
- * four, the one this design has the least evidence behind. Google does not publish its own
- * weighting, so there is nothing to copy and something had to be chosen.
+ * Fitted 2026-10-08 by `scripts/probe-recovery-fit.mjs` against Google Health recovery scores
+ * harvested by hand (`admin.ts harvest-recovery`): every combination in steps of 0.05, each at least
+ * 0.05, ranked by how closely the composite follows the harvested scores, and kept only because a
+ * leave-one-out run of that search - each day predicted by weights chosen without it - beat the
+ * earlier hand-set weights by a wide margin on days it had not seen. Google does not publish its
+ * weighting; this is what tracks its number best, not a copy of it.
+ *
+ * The fit puts HRV far ahead, resting heart rate second, and the week's sleep and breathing rate at
+ * the search's floor: Google's score moves with HRV, and adding weight to sleep made the index follow
+ * it less closely, not more. Sleep keeps its own figures on the Sleep page; it is in here as a
+ * modifier, not a pillar. The earlier weights (HRV and resting heart rate as an equal-ish autonomic
+ * core, sleep a quarter) were chosen by reasoning before there was anything to fit against.
  *
  * **This object is the calibration target.** Fitting against harvested app scores later must be a
  * change to these four numbers and nothing else.
  */
 export const RECOVERY_WEIGHTS: Readonly<Record<RecoveryInputKey, number>> = {
-  hrv: 0.35,
-  restingHeartRate: 0.30,
-  sleep: 0.25,
-  respiratoryRate: 0.10,
+  hrv: 0.75,
+  restingHeartRate: 0.15,
+  sleep: 0.05,
+  respiratoryRate: 0.05,
 }
 
 /**
  * The `k` in `100 / (1 + e^(-k·z))`, where z is the weighted composite.
  *
- * Measured by `scripts/probe-recovery-scale.mjs` against this household's own archive (see the
- * spec, "The scale is measured, not chosen"): `k` was set so the more extreme of the 5th/95th
- * percentile composites lands at a score of 10 or 90, with the archive's other tail landing
- * somewhat less extreme than its counterpart - this composite's own asymmetry, not a flaw in the
- * scale. A constant picked to read well in a unit test can put every real day between 47 and 54
- * and no test would notice.
+ * Fitted 2026-10-08 by `scripts/probe-recovery-fit.mjs`, alongside `RECOVERY_WEIGHTS`: set so the
+ * index's spread over the hand-harvested days matches Google's own spread over the same days, so the
+ * two swing alike. No offset is fitted, on purpose: a composite of zero stays a score of 50, which
+ * keeps meaning "at your own usual". Google's number sits somewhat higher on average, and the index
+ * does not chase that - matching its level would move what 50 means.
  *
- * Re-measured 2026-09-19 over every day the archive can support, superseding a first measurement
- * that only covered its final ~67 days: the probe's own `from` had been anchored on the window
- * behind the LAST scored day (`recoveryWindowStart(to)`) rather than the earliest day with a full
- * window behind it, so the original 1.69 and the four `bandOf` cuts below were fit on a small tail
- * of the household's history rather than the history itself. The wider sample moved the fitted
- * scale from 1.69 to 1.76 and shifted each `bandOf` cut by a few points - a real change, not a
- * rounding difference, though not one that turns the shape of the distribution upside down either.
- *
- * **Placeholder, not settled.** This is still this household's own measurement, kept for now
- * rather than chosen for behaviour. It is expected to be refit again once there are harvested
- * Google Health scores to calibrate against - read it as provisional, not as a constant anyone has
- * signed off on.
+ * Earlier values (1.69, then 1.76) were measured from this household's archive alone, by placing the
+ * 5th/95th percentile composites near 10 and 90, before there was a second number to agree with.
+ * The band cuts in `bandOf` were re-derived against this scale; a change here must re-derive them.
  */
-export const RECOVERY_SCALE = 1.76
+export const RECOVERY_SCALE = 1.00
 
 /** The two inputs without which this is a different statistic wearing the same name. */
 export const REQUIRED_INPUTS: readonly RecoveryInputKey[] = ['hrv', 'restingHeartRate']
@@ -323,7 +320,12 @@ export const RECOVERY_HARVEST_EVENT_KIND = 'google_recovery_score'
 export function recoveryIndexSeries(
   input: RecoveryIndexInput,
   range: DateRange,
+  // Overrides for scripts/probe-recovery-fit.mjs, which searches weights and scale against
+  // harvested scores without editing this file per candidate. Every product surface passes neither.
+  tuning: { weights?: Readonly<Record<RecoveryInputKey, number>>, scale?: number } = {},
 ): Map<string, RecoveryIndex> {
+  const weights = tuning.weights ?? RECOVERY_WEIGHTS
+  const scale = tuning.scale ?? RECOVERY_SCALE
   // A z on day D reads a baseline over [D-60, D-1], so the sleep week statistic has to exist for
   // those earlier days too - and each of THOSE needs the six days before it, which is exactly what
   // `recoveryWindowStart` reaches back for.
@@ -332,8 +334,13 @@ export function recoveryIndexSeries(
     to: range.to,
   })
 
+  // HRV on the log scale. RMSSD is right-skewed: a few very high nights pull a raw mean and widen a
+  // raw spread, so a raw z under-reads a drop and over-reads a rise of the same ratio. ln makes 1.5x
+  // up and 1.5x down the same distance, the reading packages/core/src/query/hrvDeviation.ts uses
+  // too. A reading of zero or less has no logarithm and is dropped rather than poisoning 60 days.
+  const lnHrv = input.hrv.filter((day) => day.value > 0).map((day) => ({ localDate: day.localDate, value: Math.log(day.value) }))
   const z = {
-    hrv: zSeries(input.hrv, range, 'up'),
+    hrv: zSeries(lnHrv, range, 'up'),
     restingHeartRate: zSeries(input.restingHeartRate, range, 'down'),
     respiratoryRate: zSeries(input.respiratoryRate, range, 'down'),
     sleepDuration: zSeries(sleep.duration, range, 'up'),
@@ -383,7 +390,7 @@ export function recoveryIndexSeries(
     // Sleep standing on one half earns half its nominal weight; the freed half flows through the
     // same renormalisation an absent input already gets.
     const nominalWeight = (key: RecoveryInputKey): number =>
-      key === 'sleep' && sleepHalfOnly ? RECOVERY_WEIGHTS.sleep / 2 : RECOVERY_WEIGHTS[key]
+      key === 'sleep' && sleepHalfOnly ? weights.sleep / 2 : weights[key]
     // Weights are renormalised over the inputs actually present, so a redistribution never changes
     // what zero means - only how much each survivor carries.
     const weightPresent = keys.reduce((sum, key) => sum + nominalWeight(key), 0)
@@ -392,7 +399,7 @@ export function recoveryIndexSeries(
       return { key, weight, contribution: weight * (present[key] as number) }
     })
     const composite = contributions.reduce((sum, c) => sum + c.contribution, 0)
-    const score = Math.round(100 / (1 + Math.exp(-RECOVERY_SCALE * composite)))
+    const score = Math.round(100 / (1 + Math.exp(-scale * composite)))
     const distance = score - 50
     // The total movement across every present input, in the same units as `composite` but never
     // letting opposing pulls cancel each other out of the denominator. Dividing by the signed
@@ -473,11 +480,15 @@ export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
  * Re-derived 2026-09-19 alongside `RECOVERY_SCALE`'s own re-measurement (see its comment): the
  * probe that produced the first four cuts here had the same `from` bug that gave `RECOVERY_SCALE`
  * its first, too-narrow sample, so these moved too, by a few points each.
+ *
+ * Re-derived 2026-10-08 after the refit against harvested Google scores moved the weights and set
+ * the scale to 1.00: the same percentile intent, read off the archive through the new constants.
+ * The smaller scale narrows the swings, so the cuts sit closer to 50 than before.
  */
 export function bandOf(score: number): RecoveryBand {
-  if (score < 17) return 'low'
-  if (score < 33) return 'below'
-  if (score <= 64) return 'usual'
-  if (score <= 83) return 'above'
+  if (score < 20) return 'low'
+  if (score < 36) return 'below'
+  if (score <= 62) return 'usual'
+  if (score <= 73) return 'above'
   return 'high'
 }

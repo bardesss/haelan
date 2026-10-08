@@ -146,6 +146,31 @@ describe('recoveryIndex', () => {
     expect(result.reducedWeight).toEqual([])
   })
 
+  it('reads HRV on the log scale, so the same ratio up and down moves the score equally far', () => {
+    // A baseline alternating 30 and 120 has a geometric centre of 60 and an arithmetic one of 75.
+    // 90 and 40 are 60 times and over 1.5: equal and opposite on the log scale, but +15 and -35
+    // around 75 on the raw one, so only a log reading scores them as mirror images.
+    const end = '2026-09-14'
+    const base = inputAt(end)
+    const hrvWith = (today: number): DayValue[] => [
+      ...base.hrv.filter((day) => day.localDate !== end).map((day, index) => ({ ...day, value: index % 2 === 0 ? 30 : 120 })),
+      { localDate: end, value: today },
+    ]
+    // Resting heart rate sits exactly on its own centre today (z 0, see the test above); the
+    // optional inputs are constant, so their zero spread drops them out. HRV alone moves the score.
+    const centred = base.restingHeartRate.map((day) => (day.localDate === end ? { ...day, value: 55 } : day))
+    const steady = (days: readonly DayValue[]): DayValue[] => days.map((day) => ({ ...day, value: days[0]!.value }))
+    const onlyHrv = (today: number) => recoveryIndex({
+      hrv: hrvWith(today), restingHeartRate: centred, respiratoryRate: steady(base.respiratoryRate),
+      asleepMinutes: steady(base.asleepMinutes), bedtimeMinutes: steady(base.bedtimeMinutes),
+    }, end)
+    const up = onlyHrv(90)
+    const down = onlyHrv(40)
+    expect(up.enough && down.enough).toBe(true)
+    if (!up.enough || !down.enough) return
+    expect(up.composite).toBeCloseTo(-down.composite, 9)
+  })
+
   it('withholds entirely when HRV is missing for the day', () => {
     const end = '2026-09-14'
     const input = inputAt(end)
@@ -279,7 +304,7 @@ describe('recoveryIndex', () => {
     expect(bothHalves.reducedWeight).toEqual([])
     const fullWeight = bothHalves.inputs.find((i) => i.key === 'sleep')?.weight
     const halfWeight = durationOnly.inputs.find((i) => i.key === 'sleep')?.weight
-    expect(fullWeight).toBeCloseTo(0.25, 10)
+    expect(fullWeight).toBeCloseTo(RECOVERY_WEIGHTS.sleep, 10)
     expect(halfWeight).toBeLessThan(fullWeight as number)
   })
 
@@ -294,14 +319,14 @@ describe('recoveryIndex', () => {
 describe('bandOf', () => {
   it('names five comparative bands with 50 sitting in the middle one', () => {
     expect(bandOf(50)).toBe('usual')
-    expect(bandOf(33)).toBe('usual')
-    expect(bandOf(64)).toBe('usual')
-    expect(bandOf(32)).toBe('below')
-    expect(bandOf(65)).toBe('above')
-    expect(bandOf(17)).toBe('below')
-    expect(bandOf(83)).toBe('above')
-    expect(bandOf(16)).toBe('low')
-    expect(bandOf(84)).toBe('high')
+    expect(bandOf(36)).toBe('usual')
+    expect(bandOf(62)).toBe('usual')
+    expect(bandOf(35)).toBe('below')
+    expect(bandOf(63)).toBe('above')
+    expect(bandOf(20)).toBe('below')
+    expect(bandOf(73)).toBe('above')
+    expect(bandOf(19)).toBe('low')
+    expect(bandOf(74)).toBe('high')
   })
 
   it('covers 0 and 100, so no score is unlabelled', () => {
