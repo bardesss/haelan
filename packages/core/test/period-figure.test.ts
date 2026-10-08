@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockMean, periodTotalUsual, periodUsual, periodFigureOf, countsOf, highOf, changeOf, PERIOD_MIN_PERIODS } from '../src/query/periodFigure.ts'
+import { blockMean, periodTotalUsual, periodUsual, periodFigureOf, countsOf, highOf, lowOf, changeOf, PERIOD_MIN_PERIODS } from '../src/query/periodFigure.ts'
 import { periodBounds, datesIn } from '../src/query/periodBounds.ts'
 import type { Baseline } from '../src/query/baseline.ts'
 
@@ -256,6 +256,12 @@ describe('countsOf, highOf, changeOf', () => {
     expect(highOf([point('2026-09-01', 5, 'within', null), point('2026-09-02', 9, 'above', 'better'), point('2026-09-03', 9, 'above', 'better')]))
       .toEqual({ localDate: '2026-09-02', value: 9, good: true })
     expect(highOf([point('2026-09-01', null, null, null)])).toBeNull()
+  })
+  it('the low point is the smallest, the earliest on a tie, the same shape as the high point', () => {
+    expect(lowOf([point('2026-09-01', 5, 'within', null), point('2026-09-02', 2, 'below', 'worse'), point('2026-09-03', 2, 'below', 'worse'), point('2026-09-04', null, null, null)]))
+      .toEqual({ localDate: '2026-09-02', value: 2, good: false })
+    expect(lowOf([point('2026-09-01', 1, 'below', 'better')])).toEqual({ localDate: '2026-09-01', value: 1, good: true })
+    expect(lowOf([point('2026-09-01', null, null, null)])).toBeNull()
   })
   it('the change is current minus the earlier span, null when either side is', () => {
     const values = fill('2026-08-01', '2026-08-31', () => 400)

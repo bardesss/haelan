@@ -194,6 +194,13 @@ export interface RecoveryInput {
    * which is the honest statement that they partly cancelled.
    */
   points: number
+  /**
+   * The signed amount this input added to the composite: its weight (after redistribution) times
+   * its sign-corrected z (after breathing's one-sided clamp). Linear, unlike `points`, so a sum
+   * over many days is a fair measure of which input moved a period; `points` is scaled by each
+   * day's distance from 50 through the logistic, which a sum over days would weigh unevenly.
+   */
+  contribution: number
 }
 
 export interface RecoveryIndexUnavailable {
@@ -417,6 +424,7 @@ export function recoveryIndexSeries(
       key,
       weight,
       points: totalMovement === 0 ? 0 : Math.abs(distance) * (contribution / totalMovement),
+      contribution,
     }))
 
     out.set(date, {
@@ -451,8 +459,16 @@ export function recoveryIndex(input: RecoveryIndexInput, on: string): RecoveryIn
 
 export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
 
+/** The four cut points bandOf splits a score at: low < lowBelow <= below < belowUsual <= usual <= usualAbove < above <= aboveHigh < high. */
+export const RECOVERY_BAND_CUTS = { lowBelow: 20, belowUsual: 36, usualAbove: 62, aboveHigh: 73 } as const
+
+/** The "usual" band as a range, the index's daily usual on every day. */
+export const RECOVERY_USUAL_BAND = { low: RECOVERY_BAND_CUTS.belowUsual, high: RECOVERY_BAND_CUTS.usualAbove } as const
+
 /**
- * Which of five comparative bands a score falls in.
+ * Which of five comparative bands a score falls in. The cuts live in `RECOVERY_BAND_CUTS`; the
+ * middle band is also the index's daily usual (`RECOVERY_USUAL_BAND`), the range every day of it is
+ * judged against on the overview pages.
  *
  * Deliberately NOT a readiness verdict. Google's tile says the body is recovered and ready for a
  * workout; a personal archive is not licensed to say that, so these describe distance from the
@@ -487,9 +503,9 @@ export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
  * The smaller scale narrows the swings, so the cuts sit closer to 50 than before.
  */
 export function bandOf(score: number): RecoveryBand {
-  if (score < 20) return 'low'
-  if (score < 36) return 'below'
-  if (score <= 62) return 'usual'
-  if (score <= 73) return 'above'
+  if (score < RECOVERY_BAND_CUTS.lowBelow) return 'low'
+  if (score < RECOVERY_BAND_CUTS.belowUsual) return 'below'
+  if (score <= RECOVERY_BAND_CUTS.usualAbove) return 'usual'
+  if (score <= RECOVERY_BAND_CUTS.aboveHigh) return 'above'
   return 'high'
 }

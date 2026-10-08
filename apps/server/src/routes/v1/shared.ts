@@ -335,3 +335,6 @@ export function personAndToday(app: FastifyInstance, personId: string) {
   const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId, person.timezone).map((s) => [s.id, s.name]))
   return { person, nowMs, today, nameOf: (id: string) => names.get(id) ?? id }
 }
+
+// Moved to core beside hrvDeviationSeries, so the MCP tool rounds a stretch day the way the routes do.
+export { roundHrvDeviationDay } from '@haelan/core'

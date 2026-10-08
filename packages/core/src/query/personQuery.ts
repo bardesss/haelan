@@ -60,6 +60,8 @@ import { readSleepPeriod } from './sleepPeriod.ts'
 import type { SleepPeriod, SleepPeriodInput } from './sleepPeriod.ts'
 import { readActivityPeriod } from './activityPeriod.ts'
 import type { ActivityPeriod, ActivityPeriodInput } from './activityPeriod.ts'
+import { readRecoveryPeriod } from './recoveryPeriod.ts'
+import type { RecoveryPeriod, RecoveryPeriodInput } from './recoveryPeriod.ts'
 import { periodBounds, PERIOD_RANGES } from './periodBounds.ts'
 import type { PeriodRange } from './periodBounds.ts'
 
@@ -314,6 +316,16 @@ export class PersonQuery {
   activityPeriod(input: ActivityPeriodInput): ActivityPeriod {
     this.#requirePeriod(input)
     return readActivityPeriod(this, input)
+  }
+
+  /**
+   * The Recovery overview: a week, month, three months or year of the recovery index, its figures
+   * and the HRV stretch around `anchor`, refused on the same grounds as `sleepPeriod`. The source
+   * narrows the figure rows; the index is always scored from merged rows.
+   */
+  recoveryPeriod(input: RecoveryPeriodInput): RecoveryPeriod {
+    this.#requirePeriod(input)
+    return readRecoveryPeriod(this, input)
   }
 
   #requirePeriod(input: { range: PeriodRange, anchor: string, today: string, source?: string }): void {

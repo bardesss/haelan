@@ -9,7 +9,7 @@ import { balanceWeeks, isWeekendMorning as coreIsWeekendMorning, readSleepPeriod
 import type { SleepPeriodInput } from '../src/query/sleepPeriod.ts'
 import { readPeriodSeries, readSpan } from '../src/query/periodRead.ts'
 import { datesIn, periodBounds, yearEarlierDate } from '../src/query/periodBounds.ts'
-import { RECOVERY_METRIC_SOURCES } from '../src/api/recoveryIndex.ts'
+import { RECOVERY_METRIC_SOURCES, RECOVERY_USUAL_BAND } from '../src/api/recoveryIndex.ts'
 
 // Synthetic nights only. Every series runs from FIRST through TODAY, 430 days, so a month has twelve
 // whole earlier months behind it and the same month a year earlier is fully covered.
@@ -225,15 +225,17 @@ describe('readSleepPeriod', () => {
     expect(page.more.map((f) => f.metric)).toEqual(['sleep_light_minutes', 'sleep_awake_minutes', 'sleep_waketime_minutes'])
   })
 
-  it('bands every night of the hero but no day of the recovery index', () => {
+  it('bands every night of the hero, and every day of the recovery index with its own usual band', () => {
     seedNights()
     seedSeries('respiratory_rate', 'last', (d) => 14 + jitter(d) / 10)
     const page = readSleepPeriod(q(), input({ range: 'month', anchor: '2026-08-15' }))
     const recovery = page.mornings.find((f) => f.metric === 'recovery_index')!
-    // The index is already a distance from the person's own baselines; a band of it would be a
-    // baseline of a baseline (readRecovery's rule), so its days are neither banded nor judged.
+    // The index is already a distance from the person's own baselines, so its daily usual is not a
+    // baseline of it but the band bandOf calls usual, the same on every day, and every scored day is judged.
     expect(recovery.days).toBeGreaterThan(0)
-    expect(recovery.daily.every((p) => p.band === null && p.standing === null && p.judged === null)).toBe(true)
+    expect(recovery.daily.every((p) => p.band?.low === RECOVERY_USUAL_BAND.low && p.band.high === RECOVERY_USUAL_BAND.high && !p.band.thin)).toBe(true)
+    expect(recovery.daily.filter((p) => p.value !== null).every((p) => p.standing !== null)).toBe(true)
+    expect([recovery.counts.within + recovery.counts.above + recovery.counts.below, recovery.counts.unjudged]).toEqual([recovery.days, 0])
     expect(recovery.usual).not.toBeNull()
     expect(page.hero.daily.every((p) => p.band !== null)).toBe(true)
   })
