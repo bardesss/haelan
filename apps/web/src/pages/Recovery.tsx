@@ -58,7 +58,7 @@ function datesBetween(from: string, to: string): string[] {
  *
  * The index (and the HRV stretch beside it) is scored on every source's merged rows whatever
  * source is chosen, as on Sleep's mornings; the figure rows and the heart rate follow the source.
- * With one chosen, a caption under the hero says so.
+ * With one chosen, a caption under the hero says so, or in its place when the hero draws nothing.
  *
  * The Day tab is no period: it opens the dashboard on that day, as Activity's does. The header, the
  * source, the comparison with last year and the states before there is a period to draw are the
@@ -147,6 +147,9 @@ export function Recovery() {
   ]
 
   const figuresShown = data.figures.some((figure) => figure.value !== null)
+  // The source caption speaks for the stretch as well as the index, so it stays when the hero has no
+  // value and draws nothing: then it is a card of its own in the hero's place.
+  const sourceNote = source === ALL_SOURCES ? null : t('recovery.period.sourceCaption')
 
   return (
     <div className="detail-page">
@@ -155,7 +158,10 @@ export function Recovery() {
         <PeriodHero label={heroLabel} figure={hero} noun="day" standout={[...standout, ...carried]}
           caption={weekly ? t('recovery.period.caption.weekly') : t('recovery.period.caption.daily', { period })}
           hint={t(weekly ? 'recovery.period.hint.weekly' : 'recovery.period.hint.daily')}
-          note={source === ALL_SOURCES ? null : t('recovery.period.sourceCaption')} panel={panel} />
+          note={sourceNote} panel={panel} />
+        {hero.value === null && sourceNote !== null && (
+          <Card span={12}><p className="dash-caption">{sourceNote}</p></Card>
+        )}
         {figuresShown && (
           <Card span={12}>
             <div className="detail-minis">

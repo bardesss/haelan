@@ -251,6 +251,18 @@ describe('the Recovery page: the hero', () => {
     expect(sourceCaption(HERO_NL))
       .toBe('de herstelindex en HRV tegenover je gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest')
   })
+
+  // The caption speaks for the HRV stretch too, so a hero with no value (no index scored) keeps it.
+  it('keeps the source caption when the hero has no value to draw', async () => {
+    const empty = month({ hero: { ...RECOVERY_PERIOD_MONTH.hero, value: null } })
+    await renderAt(`${MONTH_URL}&source=watch`, empty)
+    expect(cardFor(HERO)).toBeUndefined()
+    const captions = [...container!.querySelectorAll('section.card > .dash-caption')].map((caption) => caption.textContent)
+    expect(captions).toContain('the recovery index and HRV against its usual week are worked out from all sources, whichever source is chosen')
+    await renderAt(MONTH_URL, empty)
+    expect([...container!.querySelectorAll('section.card > .dash-caption')].map((caption) => caption.textContent))
+      .not.toContain('the recovery index and HRV against its usual week are worked out from all sources, whichever source is chosen')
+  })
 })
 
 describe('the Recovery page: the tap panel', () => {
