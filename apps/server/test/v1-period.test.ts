@@ -495,8 +495,10 @@ describe('GET /recovery/period', () => {
       expect(body.hero.metric).toBe('recovery_index')
       expect(body.hero.days).toBeGreaterThan(0)
       expect(body.figures.map((f: { metric: string }) => f.metric)).toEqual(['resting_heart_rate', 'daily_hrv'])
-      expect(body.days.length).toBeGreaterThan(0)
-      expect(body.stretch.days.length).toBeGreaterThan(0)
+      // Three months and a year send no days of either; the trim test below pins that.
+      const byWeek = range === '3months' || range === 'year'
+      expect(body.days.length > 0, range).toBe(!byWeek)
+      expect(body.stretch.days.length > 0, range).toBe(!byWeek)
       expect(body.method.baselineDays).toBe(60)
     }
   })
@@ -535,7 +537,7 @@ describe('GET /recovery/period', () => {
     }
   })
 
-  it('on three months and a year empties the figures\' days but keeps the stretch, its days and the scored days', async () => {
+  it('on three months and a year empties the figures, the stretch and the scored days of their days, keeping the weeks and the runs', async () => {
     const { h, token } = await started()
     seedMornings(h)
     for (const range of ['3months', 'year'] as const) {
@@ -552,15 +554,19 @@ describe('GET /recovery/period', () => {
       expect(body.high).not.toBeNull()
       expect([body.high, body.low]).toEqual([highOf(body.hero.daily), lowOf(body.hero.daily)])
       expect(['hrv', 'restingHeartRate', 'sleep', 'respiratoryRate', null]).toContain(body.carriedBy)
-      expect(body.stretch.days.at(-1).localDate).toBe(lastDay)
-      expect(body.stretch.days[0].localDate >= from).toBe(true)
-      expect(body.stretch.weeks.length).toBeGreaterThan(0)
-      expect(body.days.length).toBeGreaterThan(0)
+      expect(body.stretch.days).toEqual([])
+      expect(body.stretch.weeks.at(-1).to).toBe(lastDay)
+      expect(body.stretch.weeks[0].from).toBe(from)
+      expect(Array.isArray(body.stretch.runs)).toBe(true)
+      expect('run' in body.stretch).toBe(true)
+      expect(body.days).toEqual([])
       expect(body.method.stretch.minRun).toBeGreaterThan(0)
     }
     const month = (await get(h, token, '/recovery/period?range=month&anchor=2026-08-14')).json()
     expect(month.figures.every((f: { daily: unknown[] }) => f.daily.length === 31)).toBe(true)
     expect(month.stretch.weeks).toBeNull()
+    expect(month.stretch.days.at(-1).localDate).toBe('2026-08-31')
+    expect(month.days.length).toBeGreaterThan(0)
   })
 })
 

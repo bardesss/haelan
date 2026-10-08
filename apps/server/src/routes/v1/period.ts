@@ -247,15 +247,20 @@ function trimFigures(value: unknown, trim: (f: PeriodFigure) => PeriodFigure): u
  * by its weeks, so it keeps `weekly` and sends no days. The hero keeps its days on every range:
  * the balance, the steps heatmap and the tap panel all read them. `counts` were taken from the
  * rounded days before this runs, so they still describe the days a figure no longer sends.
+ *
+ * The Recovery overview's stretch is drawn by its weeks there too, so it sends `stretch.days: []`
+ * and keeps `weeks`, `runs` and `run`; its scored days (`days`, the tap panel's) go to `[]` as
+ * well. Its `high`, `low` and `carriedBy` were taken from the full days before this runs.
  */
 export function trimForWire<P extends SleepPeriod | ActivityPeriod | RecoveryPeriod>(payload: P, range: PeriodRange): P {
   const byWeek = range === '3months' || range === 'year'
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(payload)) {
-    // The Recovery overview's own sections hold no PeriodFigure: the stretch's days and the tap
-    // panel's scored days are read whole on every range, so they are named here rather than left
-    // to trimFigures' shape test, which a later field of theirs could start to satisfy.
-    if (key === 'hero' || key === 'stretch' || key === 'days' || key === 'method') out[key] = value
+    // The Recovery overview's own sections hold no PeriodFigure, so they are named here rather
+    // than left to trimFigures' shape test, which a later field of theirs could start to satisfy.
+    if (key === 'hero' || key === 'method') out[key] = value
+    else if (key === 'days') out[key] = byWeek ? [] : value
+    else if (key === 'stretch') out[key] = byWeek && value !== null ? { ...(value as RecoveryPeriod['stretch']), days: [] } : value
     else if (key === 'more') out[key] = trimFigures(value, (f) => ({ ...f, daily: [], weekly: null }))
     else out[key] = byWeek ? trimFigures(value, (f) => ({ ...f, daily: [] })) : value
   }
