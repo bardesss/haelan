@@ -9,6 +9,7 @@ import * as echarts from 'echarts/core'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { HeartRateCard } from '../src/pages/recovery/HeartRateCard.js'
+import { hrTooltip } from '../src/charts/hrTooltip.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -429,4 +430,37 @@ describe('the heart rate range toggle', () => {
       restore()
     })
   }
+})
+
+describe('the weekly tooltip', () => {
+  it('heads hrTooltip with the span it is handed in place of the day', () => {
+    const t = ((key: string) => key) as Parameters<typeof hrTooltip>[2]
+    const week = { date: '2025-01-06', to: '2025-01-12', steps: null, sleepMinutes: null, hrMin: 50, hrMean: 60, hrMax: 120, worn: true }
+    expect(hrTooltip([week], 0, t, 'en', '2025-01-06 – 2025-01-12').startsWith('2025-01-06 – 2025-01-12<br/>')).toBe(true)
+    expect(hrTooltip([week], 0, t, 'en').startsWith('2025-01-06<br/>')).toBe(true)
+  })
+
+  it('names a week on a year by its first and last day, and a day on a month by its date', async () => {
+    const YEAR = datesFrom('2025-01-01', '2025-12-31')
+    const tooltipAt = (dataIndex: number): string => {
+      const instance = echarts.getInstanceByDom(container!.querySelector<HTMLDivElement>('.card div[role="img"]')!)!
+      const { tooltip } = instance.getOption() as unknown as { tooltip: { formatter: (params: unknown) => string }[] }
+      return tooltip[0]!.formatter([{ componentType: 'series', dataIndex }])
+    }
+    const restore = stubFetch({ baseline: null, dates: YEAR })
+    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} from="2025-01-01" to="2025-12-31" historicalTo="2025-12-31"
+      rangeDates={YEAR} range="year" />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(tooltipAt(1).startsWith('2025-01-06 – 2025-01-12<br/>')).toBe(true)
+    restore()
+
+    const AUGUST = datesFrom('2026-08-01', '2026-08-31')
+    const restoreMonth = stubFetch({ baseline: null, dates: AUGUST })
+    const month = withQuery(<HeartRateCard {...DEFAULT_PROPS} from="2026-08-01" to="2026-08-31" historicalTo="2026-08-31" rangeDates={AUGUST} />)
+    mount(<I18nProvider lng="en">{month.tree}</I18nProvider>)
+    await flush(month.client, () => container!.innerHTML)
+    expect(tooltipAt(3).startsWith('2026-08-04<br/>')).toBe(true)
+    restoreMonth()
+  })
 })

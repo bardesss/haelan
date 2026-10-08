@@ -140,14 +140,15 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
             // is gone to `atDate`, where it is drawn by position and needs no y, rather than dropping it the way this
             // list built in place used to, so everything left here is a day whose mean is still drawn under its mark.
             //
-            // xAxis is the day's own array position, never `date.slice(8)`: the axis itself is
-            // still labelled by day-of-month for display (below), but a category axis's
-            // markPoint/markLine `xAxis` resolves a string against that label by name, and the
-            // label repeats the moment a range crosses a month boundary (3months, year both draw
-            // one point per calendar day with no downsampling). A string key placed the mark on the
-            // FIRST day carrying that label rather than the day the override actually named,
-            // silently swapping months; an index cannot collide, which is why dayMarks resolves
-            // every mark to an index before this chart ever sees it.
+            // xAxis is the point's own array position, never its axis label: a category axis's
+            // markPoint/markLine `xAxis` resolves a string against the label by name, and the
+            // labels repeat. periodAxisLabels prints weekday names on a week (and a label-less
+            // caller gets day numbers, which repeat once a range crosses a month boundary). A
+            // string key placed the mark on the FIRST point carrying that label rather than the day
+            // the override actually named, silently swapping days; an index cannot collide, which
+            // is why dayMarks resolves every mark to an index before this chart ever sees it. Only
+            // Week and Month carry marks at all: on 3 months and Year a point is a week
+            // (heartRateWeeks), and the card hands it no exclusions or annotations.
             data: marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })) },
           markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
             label: { color: tokens.stageAwake, fontSize: base.axisLabel.fontSize, formatter: (p: { name: string }) => p.name },
