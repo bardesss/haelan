@@ -18,7 +18,6 @@ const SHARED_HELPERS = [
   'metricsFrom',
   'requireBoundedRange',
   'sendHashed',
-  'roundMetricValue',
   'roundMetricValueOrNull',
   'roundSeriesResult',
 ] as const
@@ -33,5 +32,23 @@ function filesDeclaring(name: string): string[] {
 describe('the versioned surface shares its helpers rather than copying them', () => {
   it.each(SHARED_HELPERS)('declares %s in shared.ts and nowhere else under routes/v1', (name) => {
     expect(filesDeclaring(name)).toEqual(['shared.ts'])
+  })
+
+  // roundMetricValue moved out of shared.ts into packages/core, because the MCP tools round with
+  // it too and a tool should not import an HTTP route module to do so. The rule it was listed
+  // under still holds, so it is split into its two halves: one declaration, in core, and none
+  // under routes/v1 - shared.ts only re-exports it, so route files keep their import and no copy
+  // can appear beside it.
+  it('declares roundMetricValue in core and nowhere under routes/v1', () => {
+    expect(filesDeclaring('roundMetricValue')).toEqual([])
+    const core = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../packages/core/src/derive/metrics.ts'), 'utf8')
+    expect(core).toMatch(/^export function roundMetricValue\b/m)
+  })
+
+  it('re-exports roundMetricValue from @haelan/core in shared.ts', () => {
+    const shared = readFileSync(join(V1_ROOT, 'shared.ts'), 'utf8')
+    const imported = /import\s*\{[^}]*\broundMetricValue\b[^}]*\}\s*from\s*'@haelan\/core'/.test(shared)
+    expect(imported).toBe(true)
+    expect(shared).toMatch(/^export \{ roundMetricValue \}$/m)
   })
 })
