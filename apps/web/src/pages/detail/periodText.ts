@@ -94,8 +94,8 @@ export function pointVerdictWords(standing: PeriodStripPoint['standing'], unit: 
 /** "24 of 30 nights usual · 3 longer · 3 shorter"; null when no day was counted, or none judged. */
 export function dayCountsLine(figure: PeriodFigure, noun: CountNoun, t: Translate): string | null {
   const { within, above, below, unjudged } = figure.counts
-  // No day judged covers no day at all: a figure the server never judges by day (the recovery index)
-  // counts every day unjudged, and says nothing here either.
+  // No day judged covers no day at all: a figure whose days all went unjudged (no band behind any of
+  // them) says nothing here either.
   if (within + above + below === 0) return null
   const count = within + above + below + unjudged
   const words = sideWords(figure.unit, figure.metric)
