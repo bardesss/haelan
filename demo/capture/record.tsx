@@ -368,8 +368,13 @@ describe('the capture sweep', () => {
     const pastWorkouts = new Set<string>()
     for (const day of glanceDays) {
       const reply = await server.fetch(`/api/v1/p/${server.personId}/glance?day=${day}`)
-      const { sleep, day: { workouts } } = await reply.json() as
-        { sleep: { localDate: string } | null, day: { workouts: { id: string }[] } }
+      const { sleep, day: { workouts }, recovery } = await reply.json() as
+        { sleep: { localDate: string } | null, day: { workouts: { id: string }[] }, recovery: { hrv: { value: number | null, asOfDate: string | null } } }
+      // The recovery card's HRV stretch note reads one day of /hrv-deviation for the HRV reading's own
+      // day (RecoveryCard.tsx), once per past day the demo can open; a day without an HRV value asks nothing.
+      if (recovery.hrv.value !== null && recovery.hrv.asOfDate !== null) {
+        await server.fetch(`/api/v1/p/${server.personId}/hrv-deviation?from=${recovery.hrv.asOfDate}&to=${recovery.hrv.asOfDate}`)
+      }
       if (sleep !== null) pastNights.add(sleep.localDate)
       for (const { id } of workouts) pastWorkouts.add(id)
     }

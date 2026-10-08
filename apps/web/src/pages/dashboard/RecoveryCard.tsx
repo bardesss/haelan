@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Sparkline } from '../../charts/Sparkline.js'
+import { useHrvDeviation, HRV_LOOKBACK_DAYS } from '../../data/useHrvDeviation.js'
 import type { GlanceFigure, GlanceRecovery } from '../../data/useGlance.js'
 import { DashCard, Described, useOpensDay } from './cardShared.js'
 import { ScoreRing } from './ScoreRing.js'
@@ -30,6 +31,11 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
   const subtitle = recovery.index.asOfDate === today ? t(finished ? 'glance.subtitle.thatDay' : 'glance.subtitle.today')
     : recovery.index.asOfDate !== null && recovery.index.asOfDate === yesterdayOf(today)
       ? t(finished ? 'glance.subtitle.dayBefore' : 'glance.subtitle.yesterday') : null
+  // The stretch the HRV reading sits in, from the route that owns the rule. No request without an HRV
+  // value, and no markup without a run, so a card without a stretch keeps its height.
+  const hrvDay = recovery.hrv.value === null ? null : recovery.hrv.asOfDate
+  const run = useHrvDeviation(hrvDay).data?.run ?? null
+  const runNote = run === null ? null : t(`glance.recovery.hrvRun.${run.capped ? 'capped' : 'days'}.${run.side}`, { days: run.days, lookback: HRV_LOOKBACK_DAYS })
   const gauge = (key: 'rhr' | 'hrv', figure: GlanceFigure, unit: string) => {
     if (figure.value === null) return <div className="dash-dial"><p className="glance-empty">{t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</p><span className="label">{t(`glance.recovery.${key}`)}</span></div>
     const usual = usualLine(figure, t, language)
@@ -82,6 +88,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
       {recovery.respiratoryRate !== null && (
         <p className="glance-note">{t('glance.recovery.respiratory', { value: `${formatFigure(recovery.respiratoryRate, language)} ${t('recovery.units.breathsPerMinuteShort')}` })}</p>
       )}
+      {runNote !== null && <p className="glance-note">{runNote}</p>}
     </DashCard>
   )
 }
