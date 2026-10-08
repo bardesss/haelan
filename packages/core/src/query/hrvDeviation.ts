@@ -23,13 +23,17 @@ export const HRV_WEEK_MIN_READINGS = 4
  * The band's half-width, in units of the baseline's spread of DAILY ln values.
  *
  * Narrower than the ±1 a daily dot is judged by, because a 7-day mean moves far less than one day
- * does, and a band sized for days would almost never be crossed by a week. Measured by
- * probe/scripts/hrv-deviation.mjs against this household's archive (see its header for what it
- * reports), not chosen to read well in a test. Argue with it there.
+ * does, and a band sized for days would almost never be crossed by a week. A proposal pending
+ * probe/scripts/hrv-deviation.mjs, which has not been run yet: it scores each person's history at
+ * several band widths and reports the share of days left unmeasured, runs started per 30 measured
+ * days on each side, and their lengths. Settle the width there, not in a test.
  */
 export const HRV_DEVIATION_BAND = 0.5
 
-/** Measured days in a row on one side before a stretch is called one. Probed alongside the band. */
+/**
+ * Measured days in a row on one side before a stretch is called one. A proposal pending the same
+ * probe, which reports the same run counts and lengths at each minimum it tries beside each band.
+ */
 export const HRV_DEVIATION_MIN_RUN = 3
 
 /**
@@ -85,7 +89,7 @@ export function hrvDeviationWindowStart(from: string): string {
   return shiftLocalDate(from, -(HRV_DEVIATION_LOOKBACK_DAYS - 1) - (BASELINE_WINDOW_DAYS + HRV_WEEK_DAYS - 1))
 }
 
-/** Below this a spread on the log scale is rounding, not variation (real spreads are ~1e-2). */
+/** Below this a spread on the log scale is rounding, not variation (real spreads are ~1e-1). */
 const FLAT_SPREAD_EPSILON = 1e-9
 
 const meanOf = (values: readonly number[]): number => values.reduce((t, v) => t + v, 0) / values.length
