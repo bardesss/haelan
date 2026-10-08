@@ -194,7 +194,7 @@ export { PROJECTION_TABLES } from './query/projection.ts'
 export { baselineOf, baselinesOver, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'
 export {
-  hrvBaselineWindow, hrvDeviationRun, hrvDeviationSeries, hrvDeviationWindowStart,
+  hrvBaselineWindow, hrvDeviationRun, hrvDeviationSeries, hrvDeviationWindowStart, roundHrvDeviationDay,
   HRV_DEVIATION_BAND, HRV_DEVIATION_LOOKBACK_DAYS, HRV_DEVIATION_MIN_RUN, HRV_WEEK_DAYS, HRV_WEEK_MIN_READINGS,
 } from './query/hrvDeviation.ts'
 export type { HrvDeviationDay, HrvDeviationRun, HrvReading, HrvSide } from './query/hrvDeviation.ts'

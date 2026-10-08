@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { PersonQuery, createTestDatabase, metricSpec, readHrvDeviation, seedPerson, schema, DERIVATION_VERSION } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
-import { hrvDeviationTool } from '../src/mcp/tools/hrvDeviation.ts'
+import { hrvDayOf, hrvDeviationTool } from '../src/mcp/tools/hrvDeviation.ts'
+import { roundHrvDeviationDay } from '../src/routes/v1/shared.ts'
 
 type Out = {
   days: Array<{ localDate: string, measured: boolean, reason: string | null, rolling: number | null, low: number | null, high: number | null, side: string | null }>
@@ -83,5 +84,14 @@ describe('hrv_deviation tool', () => {
     expect(day.rolling).toBe(Number(raw.rolling.toFixed(precision)))
     expect(day.low).toBe(Number(raw.band.low.toFixed(precision)))
     expect(day.high).toBe(Number(raw.band.high.toFixed(precision)))
+  })
+})
+
+describe('hrv_deviation day rows', () => {
+  it('judge a day on its band edge as the HTTP routes do, on the rounded numbers', () => {
+    // 50.4 is above 49.96, but it is sent as 50 against a high of 50.
+    const raw = { localDate: '2026-08-31', measured: true as const, rolling: 50.4, band: { low: 40.04, high: 49.96 }, side: 'above' as const }
+    expect(hrvDayOf(raw)).toEqual({ localDate: '2026-08-31', measured: true, reason: null, rolling: 50, low: 40, high: 50, side: 'within' })
+    expect(roundHrvDeviationDay(raw).side).toBe('within')
   })
 })

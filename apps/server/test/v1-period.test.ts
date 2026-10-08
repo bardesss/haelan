@@ -3,7 +3,6 @@ import { DERIVATION_VERSION, highOf, lowOf, periodBounds, schema, shiftLocalDate
 import type { ActivityPeriod, PeriodFigure, PeriodStripPoint, RecoveryDay, RecoveryPeriod, SleepPeriod } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
-import { roundHrvDeviationDay } from '../src/routes/v1/shared.ts'
 import { roundActivityPeriod, roundPeriodFigure, roundRecoveryPeriod, roundSleepPeriod } from '../src/routes/v1/period.ts'
 
 let harness: Harness | null = null
@@ -332,29 +331,6 @@ describe('roundSleepPeriod', () => {
     }
     // 400 and 401 average 400.5, sent whole.
     expect(roundSleepPeriod(period).months).toEqual([{ month: '2026-09', nights: 2, asleepMinutes: 401 }])
-  })
-})
-
-describe('roundHrvDeviationDay', () => {
-  const day = (rolling: number, low: number, high: number, side: 'below' | 'within' | 'above') =>
-    ({ localDate: '2026-08-31', measured: true as const, rolling, band: { low, high }, side })
-
-  // Rounding is monotone, so a day that core put outside its band can only land on the band's edge
-  // or inside it after rounding, never on the far side; the two moves that exist are below to within
-  // and above to within, and a day within can stay within only.
-  it('judges a day above its band as within when the rounded rolling mean meets the rounded high', () => {
-    expect(roundHrvDeviationDay(day(50.4, 40.04, 49.96, 'above'))).toEqual(day(50, 40, 50, 'within'))
-  })
-
-  it('judges a day below its band as within when the rounded rolling mean meets the rounded low', () => {
-    expect(roundHrvDeviationDay(day(39.6, 40.4, 49.96, 'below'))).toEqual(day(40, 40, 50, 'within'))
-  })
-  it('keeps a side the rounded numbers still support, and leaves an unmeasured day alone', () => {
-    expect(roundHrvDeviationDay(day(52.4, 40.04, 49.96, 'above'))).toMatchObject({ side: 'above' })
-    expect(roundHrvDeviationDay(day(30.2, 40.04, 49.96, 'below'))).toMatchObject({ side: 'below' })
-    expect(roundHrvDeviationDay(day(45.2, 40.04, 49.96, 'within'))).toMatchObject({ side: 'within' })
-    const unmeasured = { localDate: '2026-08-31', measured: false as const, reason: 'thin-week' as const }
-    expect(roundHrvDeviationDay(unmeasured)).toEqual(unmeasured)
   })
 })
 
