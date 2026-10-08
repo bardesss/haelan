@@ -10,6 +10,11 @@ import { WeekCard } from '../src/pages/dashboard/WeekCard.js'
 import { formatFigure } from '../src/pages/dashboard/glanceText.js'
 import { I18nextProvider } from 'react-i18next'
 import { I18nProvider, initI18n } from '../src/i18n/index.js'
+import type { Session } from '../src/auth/session.js'
+import type { HrvRun } from '../src/data/useHrvDeviation.js'
+import { hrvDeviationPath, hrvRunKeyFrom } from '../src/data/useHrvDeviation.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import { addDays } from '../src/controls/range.js'
 import type { GlanceFigure, GlanceSleep, GlanceRecovery, GlanceDay } from '../src/data/useGlance.js'
 import { glanceBody, GLANCE_TODAY } from './glanceFixture.js'
 import type { Sparkline } from '../src/charts/Sparkline.js'
@@ -323,13 +328,42 @@ function recoveryFixture(over: {
   }
 }
 
-function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {}): string {
-  return renderToStaticMarkup(
-    <I18nProvider lng="en">
-      <RecoveryCard recovery={recoveryFixture()} span={4} wide={false} today={TODAY} timezone="UTC" {...props} />
-    </I18nProvider>,
-  )
+const HRV_PERSON = { personId: 'p1' } as Session
+
+function hrvRunFixture(over: Partial<HrvRun> = {}): HrvRun {
+  return { side: 'below', days: 5, capped: false, since: '2026-09-18', sideNights: 5, weekReadings: 7, filledDays: 0, ...over }
 }
+
+/** The recovery card with a session cached, and the HRV stretch for its HRV day when `run` is given. */
+function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {}, run?: HrvRun | null, lng: 'en' | 'nl' = 'en'): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), HRV_PERSON)
+  const recovery = props.recovery ?? recoveryFixture()
+  if (run !== undefined && recovery.hrv.asOfDate !== null) {
+    client.setQueryData(queryKeys.resource('p1', 'hrv-deviation', {
+      from: hrvRunKeyFrom(recovery.hrv.asOfDate), to: recovery.hrv.asOfDate,
+    }), { days: [], run })
+  }
+  hrvRequests = []
+  lastClient = client
+  const original = globalThis.fetch
+  globalThis.fetch = ((url: string) => { hrvRequests.push(String(url)); return Promise.resolve(new Response('{}')) }) as typeof fetch
+  try {
+    return renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng={lng}>
+          <RecoveryCard recovery={recoveryFixture()} span={4} wide={false} today={TODAY} timezone="UTC" {...props} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    )
+  } finally {
+    globalThis.fetch = original
+  }
+}
+let hrvRequests: string[] = []
+let lastClient: QueryClient | null = null
+/** The HRV stretch queries the last render put in the cache, seeded ones included. */
+const hrvQueriesFor = (day: string) => lastClient!.getQueryCache().getAll().filter((q) => q.queryKey[2] === 'hrv-deviation' && JSON.stringify(q.queryKey).includes(day))
 
 describe('RecoveryCard', () => {
   beforeEach(() => {
@@ -389,6 +423,60 @@ describe('RecoveryCard', () => {
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual(['below', null, null, null, null, null, null])
     expect(sparklineProps?.tableToggle).toBe(false)
+  })
+})
+
+describe('RecoveryCard HRV stretch note', () => {
+  const hrvDay = () => recoveryFixture().hrv.asOfDate!
+  it('names a below stretch, as a line at the bottom of the card, after the breathing one', () => {
+    const html = renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }))
+    expect(html).toContain('<p class="glance-note">HRV 5 measured days below your usual</p>')
+    expect(html.indexOf('HRV 5 measured')).toBeGreaterThan(html.indexOf('Breathing rate'))
+  })
+  it('names an above stretch', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 4 }))).toContain('>HRV 4 measured days above your usual<')
+  })
+  it('says more than the lookback when the stretch is capped', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }))).toContain('>HRV more than 60 days below your usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }))).toContain('>HRV more than 60 days above your usual<')
+  })
+  it('speaks Dutch with whole strings', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }), 'nl')).toContain('>HRV 5 gemeten dagen onder je gebruikelijke bereik<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 5 }), 'nl')).toContain('>HRV 5 gemeten dagen boven je gebruikelijke bereik<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }), 'nl')).toContain('>HRV meer dan 60 dagen onder je gebruikelijke bereik<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }), 'nl')).toContain('>HRV meer dan 60 dagen boven je gebruikelijke bereik<')
+  })
+  it('renders nothing without a run, so a normal day keeps its height', () => {
+    expect(renderRecovery({}, null)).not.toContain('measured days')
+    expect(renderRecovery({})).not.toContain('measured days')
+  })
+  it('asks nothing and shows nothing when HRV has no value', () => {
+    const recovery = recoveryFixture({ hrv: { value: null, asOfDate: null } })
+    const html = renderRecovery({ recovery }, hrvRunFixture())
+    expect(html).not.toContain('measured days')
+    expect(hrvRequests).toEqual([])
+  })
+  // The unvalued gauge draws no note whatever the cache holds, so the markup cannot tell the guard
+  // from its absence: what the guard decides is whether the read is made for that day at all, and an
+  // observer for it shows in the query cache (a seeded entry is there too, hence the unseeded render).
+  it('makes no read for the HRV day when HRV has no value, though its day is known', () => {
+    const recovery = recoveryFixture({ hrv: { value: null } })
+    const day = recovery.hrv.asOfDate!
+    expect(renderRecovery({ recovery })).not.toContain('measured days')
+    expect(hrvQueriesFor(day)).toHaveLength(0)
+    renderRecovery({ recovery: recoveryFixture() })
+    expect(hrvQueriesFor(day)).toHaveLength(1)
+  })
+  it('prints the lookback when capped, not the measured days', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 55, capped: true }))).toContain('>HRV more than 60 days below your usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 55, capped: true }), 'nl')).toContain('>HRV meer dan 60 dagen boven je gebruikelijke bereik<')
+  })
+  it('keys the read by a window ending on the day and reaching back at least the run depends on', () => {
+    const on = hrvDay()
+    expect(hrvRunKeyFrom(on) <= addDays(on, -125)).toBe(true)
+  })
+  it('asks for exactly the HRV day', () => {
+    expect(hrvDeviationPath('p1', hrvDay())).toBe(`/api/v1/p/p1/hrv-deviation?from=${hrvDay()}&to=${hrvDay()}`)
   })
 })
 
