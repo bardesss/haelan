@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { withQuery } from '../router.js'
 import { Card } from '../components/Card.js'
@@ -82,6 +82,12 @@ export function Recovery() {
   const byMetric = useMemo(() => overridesByMetric(overridesQuery.overrides.data?.items ?? []), [overridesQuery.overrides.data])
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
   const labelOf = useRecoveryLabel()
+  // A figure row's day opens that reading's own panel (exclude, note, event), as the old metric
+  // cards did: the index is worked out from these readings, so excluding a bad one is how it
+  // leaves the index. Weekly strips hand no clicks (PeriodFigureRows).
+  const onFigureDay = useCallback((metric: string, localDate: string) => {
+    setAnnotateTarget({ scope: 'day_metric', localDate, metric })
+  }, [])
 
   const { data } = query
   if (gate !== null || data === undefined) return gate
@@ -152,7 +158,7 @@ export function Recovery() {
         {figuresShown && (
           <Card span={12}>
             <div className="detail-minis">
-              <PeriodFigureRows figures={data.figures} labelOf={labelOf} noun="day" />
+              <PeriodFigureRows figures={data.figures} labelOf={labelOf} noun="day" onDayClick={onFigureDay} />
             </div>
             <p className="dash-caption">{weekly ? t('recovery.period.lines.weekly') : t('recovery.period.lines.daily', { period })}</p>
           </Card>

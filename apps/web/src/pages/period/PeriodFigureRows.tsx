@@ -25,8 +25,10 @@ const NONE: readonly string[] = []
  * `noteOf` (stable too) gives a figure a note of its own in place of its per-day line and counts,
  * the nap count's "3 naps, 0h 52m together"; null keeps the usual note. A total's usual note is its
  * per-day line alone, without the day counts. `children` are rows of the caller's own after these.
+ * `onDayClick` (stable too) makes a daily strip's dots open their day for that figure's metric; a
+ * weekly strip's dots stay untappable, since a week is no reading to exclude.
  */
-export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, bars = false, deviation = NONE, noteOf, children }: {
+export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, bars = false, deviation = NONE, noteOf, onDayClick, children }: {
   figures: PeriodFigure[]
   labelOf: (metric: string) => string
   /** What the day counts count ("nights", "mornings"), or 'none' where the card says it once. */
@@ -36,6 +38,8 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
   bars?: boolean
   deviation?: readonly string[]
   noteOf?: (figure: PeriodFigure) => string | null
+  /** A daily dot's click, with the figure's metric and the dot's day. */
+  onDayClick?: (metric: string, localDate: string) => void
   /** Rows of the caller's own after these, in the same grid (the Activity page's VO₂max). */
   children?: ReactNode
 }) {
@@ -49,6 +53,7 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
       values: drawn.values, labels: drawn.labels, bands: drawn.bands,
       pointStandings: drawn.pointStandings, pointJudged: drawn.pointJudged, metric: figure.metric, unit: label,
       formatValue: (value, absent) => (value === null ? absent : formatFigureValue(figure, value, language, t)),
+      ...(onDayClick === undefined || drawn.weekly ? {} : { onPointClick: (localDate: string) => onDayClick(figure.metric, localDate) }),
     }
     const deviated = deviation.includes(figure.metric) ? periodDeviationLine(figure, language, t) : null
     const { value, under } = deviated === null ? periodValueLine(figure, language, t) : { value: deviated.value, under: null }
@@ -65,7 +70,7 @@ export function PeriodFigureRows({ figures, labelOf, noun, max, side = false, ba
     const judged = asPrinted(figure)
     const mark = figure.per === 'period' && figure.total !== null ? figure.total : judged.value
     return [{ key: figure.metric, label, value, verdict, note, figure: judged, strip, mark }]
-  }), [figures, labelOf, noun, bars, deviation, noteOf, language, t])
+  }), [figures, labelOf, noun, bars, deviation, noteOf, onDayClick, language, t])
   if (rows.length === 0 && (children === undefined || children === null || children === false)) return null
 
   return (

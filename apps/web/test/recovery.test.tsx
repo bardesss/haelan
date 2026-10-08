@@ -321,6 +321,25 @@ describe('the Recovery page: the figures and the heart rate', () => {
       .toBe('elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke bereik')
   })
 
+  // The index is worked out from these readings, so a bad one is dropped by excluding it here:
+  // a daily dot opens its own metric's day panel, the old metric cards' exclude restored.
+  it("opens a figure row's day on its own metric, exclude first, on a month", async () => {
+    await renderAt(MONTH_URL, RECOVERY_PERIOD_MONTH)
+    act(() => { sparklines.get('HRV')!.onPointClick!('2026-08-03') })
+    const dialog = document.querySelector('.annotate-panel')!
+    expect(dialog.querySelector('h2')?.textContent).toBe('daily_hrv on 2026-08-03')
+    expect([...dialog.querySelectorAll('.segment')].map((segment) => segment.textContent))
+      .toEqual(['Exclude', 'Add a note', 'Add an event'])
+    expect(dialog.querySelector('.segment[aria-pressed="true"]')?.textContent).toBe('Exclude')
+  })
+
+  it("offers no tap on a figure row's weekly dots on a year", async () => {
+    await renderAt(YEAR_URL, RECOVERY_PERIOD_YEAR)
+    expect(['Resting heart rate', 'HRV', 'Breathing rate'].map((label) => sparklines.get(label)?.onPointClick))
+      .toEqual([undefined, undefined, undefined])
+    expect(sparklines.get('HRV')!.values.length).toBeGreaterThan(0)
+  })
+
   it('leaves out the figures card when no figure has a value', async () => {
     await renderAt(MONTH_URL, month({ figures: RECOVERY_PERIOD_MONTH.figures.map((figure) => ({ ...figure, value: null })) }))
     expect(container!.querySelector('.detail-minis')).toBeNull()
