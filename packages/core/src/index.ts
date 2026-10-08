@@ -311,8 +311,12 @@ export { PERIOD_RANGES, periodBounds, stepPeriod } from './query/periodBounds.ts
 export type {
   PeriodWindow, PeriodUsual, DayCounts, PeriodStripPoint, PeriodReason, PeriodFigure, PeriodHigh, PeriodChange, PeriodHeader,
 } from './query/periodFigure.ts'
-export { countsOf, highOf } from './query/periodFigure.ts'
+export { countsOf, highOf, lowOf } from './query/periodFigure.ts'
 export type { SleepPeriod, SleepListRow, ScheduleSides, ScheduleSide, BalanceWeek, NightMonth } from './query/sleepPeriod.ts'
 export { balanceWeeks, isWeekendMorning, nightMonths } from './query/sleepPeriod.ts'
 export type { ActivityPeriod, WorkoutListRow, WorkoutMonth, TypeTotal, Vo2Trend } from './query/activityPeriod.ts'
 export { vo2TrendOf, workoutMonths, TYPE_COUNT_DIRECTION } from './query/activityPeriod.ts'
+export type {
+  RecoveryPeriod, RecoveryPeriodInput, RecoveryDay, RecoveryStretch, RecoveryMethod, HrvStretchSpan, HrvStretchWeek,
+} from './query/recoveryPeriod.ts'
+export { carriedByOf, stretchRuns } from './query/recoveryPeriod.ts'
