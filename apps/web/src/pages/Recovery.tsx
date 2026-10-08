@@ -103,8 +103,8 @@ export function Recovery() {
   const dayOn = new Map(data.days.map((day) => [day.localDate, day]))
 
   // A day's panel: its score with its band in words (lower case, as every verdict on this page)
-  // and the tone of its own verdict, then its
-  // inputs, largest mover first (contributionRows), the day on the dashboard, and a note or an event
+  // and the tone of its own verdict, then its inputs, largest mover first (contributionRows), HRV
+  // by the name the rest of the page gives it, the day on the dashboard, and a note or an event
   // on the day (a day target: the index is worked out, never stored, so there is no reading to
   // exclude, and excluding one of its inputs from here would remove that input everywhere). A
   // week's (3 months and Year, where the server sends no days): that week's average with its own
@@ -124,7 +124,7 @@ export function Recovery() {
           verdict: t(`recovery.period.band.${day.band}`), tone: verdictTone(point.judged, point.standing),
         }
     const inputs = contributionRows(day?.inputs ?? []).map((row): PointPanelRow => ({
-      label: t(`recoveryIndex.input.${row.key}`),
+      label: row.key === 'hrv' ? t('sleep.night.morning.hrv') : t(`recoveryIndex.input.${row.key}`),
       value: t('recoveryIndex.points', { points: row.points > 0 ? `+${row.points}` : String(row.points) }),
     }))
     return (

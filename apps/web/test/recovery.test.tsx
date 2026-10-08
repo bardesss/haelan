@@ -263,7 +263,7 @@ describe('the Recovery page: the tap panel', () => {
       [...row.querySelectorAll('dt, dd')].map((cell) => cell.textContent))
     expect(rows).toEqual([
       ['Recovery index', '71', 'above your usual'],
-      ['Heart rate variability', '+21 points'],
+      ['HRV', '+21 points'],
       ['Resting heart rate', '0 points'],
       ['Breathing rate', '0 points'],
       ['Last week\'s sleep', '0 points'],
@@ -281,6 +281,22 @@ describe('the Recovery page: the tap panel', () => {
     expect(dialog.querySelector('h2')?.textContent).toBe('This day, 2026-08-01')
     expect([...dialog.querySelectorAll('.segment')].map((segment) => segment.textContent)).toEqual(['Add a note', 'Add an event'])
     expect(dialog.querySelector('.segment[aria-pressed="true"]')?.textContent).toBe('Add a note')
+  })
+
+  // HRV by the name the figure row and the stretch give it, and the band in lower case like every
+  // other verdict on the page, in Dutch too.
+  it('says the same day panel in Dutch, HRV by its short name', async () => {
+    await renderAt(MONTH_URL, RECOVERY_PERIOD_MONTH, 'nl')
+    act(() => { sparklines.get(HERO_NL)!.onPointClick!('2026-08-01') })
+    const rows = [...container!.querySelectorAll('.point-panel .point-panel-row')].map((row) =>
+      [...row.querySelectorAll('dt, dd')].map((cell) => cell.textContent))
+    expect(rows).toEqual([
+      ['Herstelindex', '71', 'boven gebruikelijk'],
+      ['HRV', '+21 punten'],
+      ['Rusthartslag', '0 punten'],
+      ['Ademhalingsfrequentie', '0 punten'],
+      ['Afgelopen week aan slaap', '0 punten'],
+    ])
   })
 
   // A week's dot is toned by its own verdict, against the usual for a week; the index's daily bands
