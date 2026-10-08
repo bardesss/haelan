@@ -49,6 +49,8 @@ const MIN_RUNS = [3, 5]
 
 const source = RECOVERY_METRIC_SOURCES.find((s) => s.key === 'hrv')
 if (source === undefined) throw new Error("no recovery metric source declared for 'hrv'")
+// personQuery.ts's DEVICE_ROLLED_EQUIVALENT entry for daily_hrv, which it does not export.
+const FILLED_FROM = { metric: 'hrv', agg: 'mean' }
 
 const db = openReadOnly(DIR)
 const pct = (n, d) => (d === 0 ? 'n/a' : `${((n / d) * 100).toFixed(1)}%`)
@@ -84,10 +86,14 @@ console.log(`people: ${ids.length}`)
 ids.forEach((personId, index) => {
   console.log(`\n${'='.repeat(70)}\n## person ${index + 1}\n`)
 
+  // Bounds over both the daily reading and the intraday mean PersonQuery fills it from
+  // (DEVICE_ROLLED_EQUIVALENT in personQuery.ts), so a person whose HRV exists only as the filled
+  // fallback is scored, and filled days outside the daily span are not cut off.
   const rows = db.$client.prepare(
     `SELECT MIN(local_date) AS first, MAX(local_date) AS last FROM daily
-      WHERE person_id = ? AND metric = ? AND agg = ? AND value IS NOT NULL`,
-  ).get(personId, source.metric, source.agg)
+      WHERE person_id = ? AND value IS NOT NULL
+        AND ((metric = ? AND agg = ?) OR (metric = ? AND agg = ?))`,
+  ).get(personId, source.metric, source.agg, FILLED_FROM.metric, FILLED_FROM.agg)
   if (rows === undefined || rows.first === null) { console.log('  no HRV readings\n'); return }
 
   const { points } = new PersonQuery(db, personId).series({
