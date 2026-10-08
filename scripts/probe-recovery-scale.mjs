@@ -1,6 +1,8 @@
-// Prints the recovery composite's distribution over a real archive, so RECOVERY_SCALE is measured
-// rather than chosen. Run against .local-archive; DO NOT commit its output, which carries figures
-// off a household archive.
+// Prints the recovery composite's distribution over a real archive and the bandOf cut points it
+// implies at the shipped RECOVERY_SCALE. The scale itself is fitted by probe-recovery-fit.mjs against
+// harvested Google scores; after any change to the weights, the ln reading or the scale, re-run this
+// and re-derive bandOf from its last line. Run against .local-archive; DO NOT commit its output,
+// which carries figures off a household archive.
 //
 //   node --experimental-strip-types scripts/probe-recovery-scale.mjs .local-archive/haelan.sqlite
 import { recoveryIndexSeries, RECOVERY_SCALE, SLEEP_WEEK_DAYS, RECOVERY_METRIC_SOURCES } from '../packages/core/src/api/recoveryIndex.ts'
@@ -73,9 +75,6 @@ for (const [personId, input] of byPerson) {
   const at = (q) => composites[Math.min(composites.length - 1, Math.floor(q * composites.length))]
   console.log(`${personId.slice(0, 6)}: n=${composites.length}`)
   console.log(`  p05 ${at(0.05).toFixed(3)}  p25 ${at(0.25).toFixed(3)}  p50 ${at(0.50).toFixed(3)}  p75 ${at(0.75).toFixed(3)}  p95 ${at(0.95).toFixed(3)}`)
-  // k such that the 5th and 95th percentile land near 10 and 90, which is a score using its range.
-  const suggested = Math.log(9) / Math.max(Math.abs(at(0.05)), Math.abs(at(0.95)))
-  console.log(`  suggested RECOVERY_SCALE: ${suggested.toFixed(3)}`)
   // The four percentiles bandOf's five-way split needs (bottom tenth / next fifth / middle two
   // fifths / next fifth / top tenth), read straight off the data rather than estimated from a
   // single tail under a normality assumption - the composite need not be symmetric.
@@ -89,14 +88,5 @@ for (const [personId, input] of byPerson) {
     `  below/usual ${scoreAt(at(0.30)).toFixed(2)}` +
     `  usual/above ${scoreAt(at(0.70)).toFixed(2)}` +
     `  above/high ${scoreAt(at(0.90)).toFixed(2)}`,
-  )
-  // The same four cuts, but mapped through the scale this run just suggested - what bandOf's cut
-  // points must become if RECOVERY_SCALE is refit to this sample.
-  const scoreAtSuggested = (composite) => 100 / (1 + Math.exp(-suggested * composite))
-  console.log(
-    `  band cuts at suggested scale (score)  low/below ${scoreAtSuggested(at(0.10)).toFixed(2)}` +
-    `  below/usual ${scoreAtSuggested(at(0.30)).toFixed(2)}` +
-    `  usual/above ${scoreAtSuggested(at(0.70)).toFixed(2)}` +
-    `  above/high ${scoreAtSuggested(at(0.90)).toFixed(2)}`,
   )
 }

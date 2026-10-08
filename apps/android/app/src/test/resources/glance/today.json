@@ -460,7 +460,7 @@
   "recovery": {
     "index": {
       "metric": "recovery_index",
-      "value": 4,
+      "value": 15,
       "unit": "score",
       "baseline": null,
       "asOfDate": "2026-08-20",
@@ -470,14 +470,14 @@
       "strip": [
         {
           "localDate": "2026-08-14",
-          "value": 44,
+          "value": 40,
           "band": null,
           "standing": null,
           "judged": null
         },
         {
           "localDate": "2026-08-15",
-          "value": 23,
+          "value": 22,
           "band": null,
           "standing": null,
           "judged": null
@@ -491,28 +491,28 @@
         },
         {
           "localDate": "2026-08-17",
-          "value": 65,
+          "value": 66,
           "band": null,
           "standing": null,
           "judged": null
         },
         {
           "localDate": "2026-08-18",
-          "value": 31,
+          "value": 44,
           "band": null,
           "standing": null,
           "judged": null
         },
         {
           "localDate": "2026-08-19",
-          "value": 45,
+          "value": 38,
           "band": null,
           "standing": null,
           "judged": null
         },
         {
           "localDate": "2026-08-20",
-          "value": 4,
+          "value": 15,
           "band": null,
           "standing": null,
           "judged": null

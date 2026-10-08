@@ -464,8 +464,8 @@ export interface GlanceRecovery {
  * Today's recovery: the index, the two readings people check beside it, and respiratory rate only
  * when it says something.
  *
- * HRV is shown although it is also the index's heaviest input (0.35): beside the index it explains
- * the number rather than repeating it, and it is the figure people look for. Respiratory rate
+ * HRV is shown although it is also by far the index's heaviest input (see RECOVERY_WEIGHTS): beside
+ * the index it shows the reading the number mostly rests on, and it is the figure people look for. Respiratory rate
  * barely moves from day to day, so as a permanent figure it would read "usual" nearly every
  * morning; it appears only on a day it rises above its own baseline, because a rise is an early
  * sign of illness. A thin baseline cannot say "above", so it never shows on one.

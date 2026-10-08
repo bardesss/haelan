@@ -92,7 +92,7 @@ class GlanceParserTest {
     @Test
     fun `recovery lands with its band, and respiratory rate on the day it rose`() {
         val recovery = today.recovery
-        assertEquals(4.0, recovery.index.value)
+        assertEquals(15.0, recovery.index.value)
         assertNull(recovery.index.baseline)
         assertNull(recovery.index.strip[0].band)
         assertEquals(RecoveryBand.LOW, recovery.band)
