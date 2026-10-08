@@ -18,6 +18,7 @@ import { glanceKey } from '../src/data/useGlance.js'
 import { glanceCalendarKey } from '../src/data/useGlanceCalendar.js'
 import { sleepPeriodKey } from '../src/data/useSleepPeriod.js'
 import { nightPageKey } from '../src/data/useNightPage.js'
+import { PERIOD_KINDS, periodKey } from '../src/data/usePeriodRead.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -298,9 +299,10 @@ describe('useWriteOverride, applied true', () => {
     const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
     const sleep = sleepPeriodKey('p1', 'month', '2026-08-31', ALL_SOURCES)
     const activity = [...queryKeys.resource('p1', 'activity-period'), 'month', '2026-08-31', ALL_SOURCES]
+    const recovery = [...queryKeys.resource('p1', 'recovery-period'), 'month', '2026-08-31', ALL_SOURCES]
     const night = nightPageKey('p1', '2026-08-15')
     const otherPerson = sleepPeriodKey('p2', 'month', '2026-08-31', ALL_SOURCES)
-    for (const key of [sleep, activity, night, otherPerson]) client.setQueryData(key, {})
+    for (const key of [sleep, activity, recovery, night, otherPerson]) client.setQueryData(key, {})
 
     const original = globalThis.fetch
     globalThis.fetch = (async () => respond(200, {
@@ -314,8 +316,30 @@ describe('useWriteOverride, applied true', () => {
 
     expect(client.getQueryState(sleep)?.isInvalidated).toBe(true)
     expect(client.getQueryState(activity)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(recovery)?.isInvalidated).toBe(true)
     expect(client.getQueryState(night)?.isInvalidated).toBe(true)
     expect(client.getQueryState(otherPerson)?.isInvalidated).toBe(false)
+  })
+
+  // The guard on the list above: every overview kind's read, from the kinds the reads are keyed
+  // by, so a new overview whose read the write leaves stale fails here.
+  it('invalidates the read of every overview kind', async () => {
+    const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
+    const keys = PERIOD_KINDS.map((kind) => periodKey(kind, 'p1', 'week', '2026-08-31', ALL_SOURCES))
+    for (const key of keys) client.setQueryData(key, {})
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: true,
+    })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(PERIOD_KINDS).toEqual(['sleep', 'activity', 'recovery'])
+    expect(keys.map((key) => client.getQueryState(key)?.isInvalidated)).toEqual(PERIOD_KINDS.map(() => true))
   })
 
   // affected: null means the target names a sample or a session no backfill has reached, so the

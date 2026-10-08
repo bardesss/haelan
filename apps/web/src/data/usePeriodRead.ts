@@ -5,7 +5,9 @@ import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import type { ActivityPeriodData, PeriodRange, RecoveryPeriodData, SleepPeriodData } from './periodTypes.js'
 
-export type PeriodKind = 'sleep' | 'activity' | 'recovery'
+/** Every overview's read, the list useAnnotations invalidates after a write lands. */
+export const PERIOD_KINDS = ['sleep', 'activity', 'recovery'] as const
+export type PeriodKind = (typeof PERIOD_KINDS)[number]
 export interface PeriodReadInput { range: PeriodRange | 'day', anchor: string, source: string }
 
 /** `queryKeys.resource(personId, '<kind>-period')` as the prefix, then the range, anchor and source. */
