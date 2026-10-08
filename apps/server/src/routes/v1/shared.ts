@@ -3,7 +3,7 @@ import {
   ConfigError, effectiveTimezone, FIGURE_METRIC_ALIAS, figureDirection, judge, localDateInZone, PersonQuery, roundMetricValue, requireDate,
   standingOf,
 } from '@haelan/core'
-import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
+import type { GlanceBaseline, GlanceFigure, HrvDeviationDay, HrvSide, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
 
 interface PersonParams { personId: string }
@@ -334,4 +334,19 @@ export function personAndToday(app: FastifyInstance, personId: string) {
   const today = localDateInZone(nowMs, effectiveTimezone(person))
   const names = new Map(app.haelan.instance.sourceAliases.listNamed(personId, person.timezone).map((s) => [s.id, s.name]))
   return { person, nowMs, today, nameOf: (id: string) => names.get(id) ?? id }
+}
+
+/**
+ * A stretch day at the wire's precision, with its side taken again from the numbers it is drawn
+ * with, by core's own comparison (below the low, above the high, else within): a dot must not sit
+ * on its rounded band yet be coloured as outside it. An unmeasured day has no numbers to round. The
+ * runs and the current run stay the verdict core reached once, from the unrounded days; only the
+ * per-dot colour has to agree with its drawn band.
+ */
+export function roundHrvDeviationDay(day: HrvDeviationDay): HrvDeviationDay {
+  if (!day.measured) return day
+  const rolling = roundMetricValue('daily_hrv', day.rolling)
+  const band = { low: roundMetricValue('daily_hrv', day.band.low), high: roundMetricValue('daily_hrv', day.band.high) }
+  const side: HrvSide = rolling < band.low ? 'below' : rolling > band.high ? 'above' : 'within'
+  return { ...day, rolling, band, side }
 }

@@ -5,7 +5,7 @@ import { notModified, stampEtag } from '../../api/etag.ts'
 import type { Stamp } from '../../api/etag.ts'
 import {
   metricsFrom, optionalPositiveInt, personQueryOf, requireBoundedRange, requireDateRange, requireString,
-  roundMetricValue, roundMetricValueOrNull, roundSeriesResult,
+  roundHrvDeviationDay, roundMetricValue, roundMetricValueOrNull, roundSeriesResult,
 } from './shared.ts'
 
 interface PersonParams { personId: string }
@@ -192,13 +192,7 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     requireBoundedRange(from, to)
     const { days, run, series } = readHrvDeviation(personQuery, { from, to })
     const body = {
-      days: days.map((day) => (day.measured
-        ? {
-          ...day,
-          rolling: roundMetricValue('daily_hrv', day.rolling),
-          band: { low: roundMetricValue('daily_hrv', day.band.low), high: roundMetricValue('daily_hrv', day.band.high) },
-        }
-        : day)),
+      days: days.map(roundHrvDeviationDay),
       run,
     }
     return sendStamped(reply, request, body, [stampOf(series.points)])

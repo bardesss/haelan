@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { balanceOf, balanceWeeks, countsOf, highOf, judge, lowOf, nightMonths, standingOf, TYPE_COUNT_DIRECTION, vo2TrendOf, workoutMonths } from '@haelan/core'
 import type {
-  ActivityPeriod, HrvDeviationDay, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, RecoveryPeriod, SleepPeriod,
+  ActivityPeriod, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, RecoveryPeriod, SleepPeriod,
 } from '@haelan/core'
 import {
-  personAndToday, personIdOf, personQueryOf, requireString, roundBandTo, roundMetricValue, roundTo, roundToOrNull, sendHashed,
+  personAndToday, personIdOf, personQueryOf, requireString, roundBandTo, roundHrvDeviationDay, roundMetricValue, roundTo, roundToOrNull, sendHashed,
   standingAfterRounding,
 } from './shared.ts'
 
@@ -192,16 +192,6 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
   }
 }
 
-/** A stretch day's rolling mean and band at the HRV metric's precision; an unmeasured day has neither. */
-function roundStretchDay(day: HrvDeviationDay): HrvDeviationDay {
-  if (!day.measured) return day
-  return {
-    ...day,
-    rolling: roundMetricValue('daily_hrv', day.rolling),
-    band: { low: roundMetricValue('daily_hrv', day.band.low), high: roundMetricValue('daily_hrv', day.band.high) },
-  }
-}
-
 /**
  * The Recovery overview at the wire's precision. The hero and the figures go through
  * roundPeriodFigure; the high, the low and the changes are taken again from the rounded hero, as
@@ -223,9 +213,9 @@ export function roundRecoveryPeriod(p: RecoveryPeriod): RecoveryPeriod {
     figures: p.figures.map(roundPeriodFigure),
     stretch: p.stretch === null ? null : {
       ...p.stretch,
-      days: p.stretch.days.map(roundStretchDay),
+      days: p.stretch.days.map(roundHrvDeviationDay),
       weeks: p.stretch.weeks === null ? null
-        : p.stretch.weeks.map((w) => ({ ...w, point: w.point === null ? null : roundStretchDay(w.point) })),
+        : p.stretch.weeks.map((w) => ({ ...w, point: w.point === null ? null : roundHrvDeviationDay(w.point) })),
     },
     days: p.days.map((d) => ({
       ...d,

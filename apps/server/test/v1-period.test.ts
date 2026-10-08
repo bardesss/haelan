@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, periodBounds, schema, shiftLocalDate } from '@haelan/core'
+import { DERIVATION_VERSION, highOf, lowOf, periodBounds, schema, shiftLocalDate } from '@haelan/core'
 import type { ActivityPeriod, PeriodFigure, PeriodStripPoint, RecoveryDay, RecoveryPeriod, SleepPeriod } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
+import { roundHrvDeviationDay } from '../src/routes/v1/shared.ts'
 import { roundActivityPeriod, roundPeriodFigure, roundRecoveryPeriod, roundSleepPeriod } from '../src/routes/v1/period.ts'
 
 let harness: Harness | null = null
@@ -334,6 +335,29 @@ describe('roundSleepPeriod', () => {
   })
 })
 
+describe('roundHrvDeviationDay', () => {
+  const day = (rolling: number, low: number, high: number, side: 'below' | 'within' | 'above') =>
+    ({ localDate: '2026-08-31', measured: true as const, rolling, band: { low, high }, side })
+
+  // Rounding is monotone, so a day that core put outside its band can only land on the band's edge
+  // or inside it after rounding, never on the far side; the two moves that exist are below to within
+  // and above to within, and a day within can stay within only.
+  it('judges a day above its band as within when the rounded rolling mean meets the rounded high', () => {
+    expect(roundHrvDeviationDay(day(50.4, 40.04, 49.96, 'above'))).toEqual(day(50, 40, 50, 'within'))
+  })
+
+  it('judges a day below its band as within when the rounded rolling mean meets the rounded low', () => {
+    expect(roundHrvDeviationDay(day(39.6, 40.4, 49.96, 'below'))).toEqual(day(40, 40, 50, 'within'))
+  })
+  it('keeps a side the rounded numbers still support, and leaves an unmeasured day alone', () => {
+    expect(roundHrvDeviationDay(day(52.4, 40.04, 49.96, 'above'))).toMatchObject({ side: 'above' })
+    expect(roundHrvDeviationDay(day(30.2, 40.04, 49.96, 'below'))).toMatchObject({ side: 'below' })
+    expect(roundHrvDeviationDay(day(45.2, 40.04, 49.96, 'within'))).toMatchObject({ side: 'within' })
+    const unmeasured = { localDate: '2026-08-31', measured: false as const, reason: 'thin-week' as const }
+    expect(roundHrvDeviationDay(unmeasured)).toEqual(unmeasured)
+  })
+})
+
 describe('roundRecoveryPeriod', () => {
   function recovery(over: Partial<RecoveryPeriod> = {}): RecoveryPeriod {
     const hero = figure({
@@ -405,6 +429,20 @@ describe('roundRecoveryPeriod', () => {
     ])
     expect(rounded.stretch!.weeks![0]!.point).toEqual({ localDate: '2026-08-31', measured: true, rolling: 44, band: { low: 40, high: 50 }, side: 'within' })
     expect(rounded.stretch!.runs).toEqual([{ from: '2026-08-31', to: '2026-09-01', side: 'below' }])
+    expect(rounded.stretch!.run).toEqual(run)
+  })
+
+  it("judges each stretch day and week point again on its rounded band, while the runs and the run stay core's verdict", () => {
+    const above = { localDate: '2026-08-31', measured: true as const, rolling: 50.4, band: { low: 40.04, high: 49.96 }, side: 'above' as const }
+    const run = { side: 'above' as const, days: 3, capped: false, since: '2026-08-29', sideNights: 3, weekReadings: 6, filledDays: 0 }
+    const spans = [{ from: '2026-08-29', to: '2026-08-31', side: 'above' as const }]
+    const rounded = roundRecoveryPeriod(recovery({
+      stretch: { days: [above], weeks: [{ from: '2026-08-31', to: '2026-09-06', point: above }], runs: spans, run },
+    }))
+    const drawn = { ...above, rolling: 50, band: { low: 40, high: 50 }, side: 'within' }
+    expect(rounded.stretch!.days).toEqual([drawn])
+    expect(rounded.stretch!.weeks![0]!.point).toEqual(drawn)
+    expect(rounded.stretch!.runs).toEqual(spans)
     expect(rounded.stretch!.run).toEqual(run)
   })
 
@@ -494,6 +532,10 @@ describe('GET /recovery/period', () => {
         expect(f.weekly).not.toBeNull()
       }
       expect(body.hero.daily.length).toBeGreaterThan(0)
+      // Taken from the hero's days before the trim, and sent untouched.
+      expect(body.high).not.toBeNull()
+      expect([body.high, body.low]).toEqual([highOf(body.hero.daily), lowOf(body.hero.daily)])
+      expect(['hrv', 'restingHeartRate', 'sleep', 'respiratoryRate', null]).toContain(body.carriedBy)
       expect(body.stretch.days.at(-1).localDate).toBe(lastDay)
       expect(body.stretch.days[0].localDate >= from).toBe(true)
       expect(body.stretch.weeks.length).toBeGreaterThan(0)
