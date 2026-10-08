@@ -319,3 +319,4 @@ export { vo2TrendOf, workoutMonths, TYPE_COUNT_DIRECTION } from './query/activit
 export type {
   RecoveryPeriod, RecoveryPeriodInput, RecoveryDay, RecoveryStretch, RecoveryMethod, HrvStretchSpan, HrvStretchWeek,
 } from './query/recoveryPeriod.ts'
+export { carriedByOf } from './query/recoveryPeriod.ts'

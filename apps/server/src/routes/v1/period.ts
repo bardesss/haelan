@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { balanceOf, balanceWeeks, countsOf, highOf, judge, lowOf, nightMonths, standingOf, TYPE_COUNT_DIRECTION, vo2TrendOf, workoutMonths } from '@haelan/core'
+import { balanceOf, balanceWeeks, carriedByOf, countsOf, highOf, judge, lowOf, nightMonths, standingOf, TYPE_COUNT_DIRECTION, vo2TrendOf, workoutMonths } from '@haelan/core'
 import type {
   ActivityPeriod, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, RecoveryPeriod, SleepPeriod,
 } from '@haelan/core'
@@ -195,7 +195,8 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
 /**
  * The Recovery overview at the wire's precision. The hero and the figures go through
  * roundPeriodFigure; the high, the low and the changes are taken again from the rounded hero, as
- * the Sleep overview does. The index is already a whole number. The stretch's rolling mean and band
+ * the Sleep overview does, and so is carriedBy: its direction follows the hero's standing, which
+ * rounding can move to within. The index is already a whole number. The stretch's rolling mean and band
  * are HRV in milliseconds, so they go to that metric's precision. A tap panel input's points are
  * what the explanation prints, to a tenth; its contribution is a z-scale quantity the page never
  * prints, kept to a thousandth only so the hashed body stays stable. Everything else (the band
@@ -210,6 +211,7 @@ export function roundRecoveryPeriod(p: RecoveryPeriod): RecoveryPeriod {
     low: lowOf(hero.daily),
     previous: roundChange(p.previous, hero),
     yearEarlier: roundChange(p.yearEarlier, hero),
+    carriedBy: carriedByOf(p.days, hero.value, hero.standing),
     figures: p.figures.map(roundPeriodFigure),
     stretch: p.stretch === null ? null : {
       ...p.stretch,

@@ -410,6 +410,22 @@ describe('roundRecoveryPeriod', () => {
     expect(rounded.carriedBy).toBe('hrv')
   })
 
+  it('names what carried the period again from the rounded hero, whose standing rounding can move to within', () => {
+    const days: RecoveryDay[] = [{
+      localDate: '2026-08-31', score: 44, band: 'usual',
+      inputs: [{ key: 'hrv', weight: 0.5, points: 3, contribution: 1 }, { key: 'restingHeartRate', weight: 0.5, points: -6, contribution: -2 }],
+    }]
+    // 44.48 is above a usual reaching 44.45, so HRV lifted it; at 44 against 44 it is within, and
+    // below 50 the push that counts is the one down.
+    const hero = figure({
+      metric: 'recovery_index', unit: 'score', precision: 0, value: 44.48, total: null,
+      usual: { ...band(40, 35, 44.45), window: WINDOW, periods: 12 }, standing: 'above', judged: 'better',
+    })
+    const rounded = roundRecoveryPeriod(recovery({ hero, days, carriedBy: 'hrv' }))
+    expect(rounded.hero.standing).toBe('within')
+    expect(rounded.carriedBy).toBe('restingHeartRate')
+  })
+
   it("sends a tap panel input's points to a tenth and its contribution to a thousandth, leaving the rest of the day", () => {
     const rounded = roundRecoveryPeriod(recovery())
     expect(rounded.days).toEqual([{

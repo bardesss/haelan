@@ -5,6 +5,7 @@ import { shiftLocalDate } from '../derive/localDay.ts'
 import { bandOf, RECOVERY_USUAL_BAND, RECOVERY_WEIGHTS } from '../api/recoveryIndex.ts'
 import type { RecoveryBand, RecoveryIndexAvailable, RecoveryInput, RecoveryInputKey } from '../api/recoveryIndex.ts'
 import { BASELINE_WINDOW_DAYS } from './baseline.ts'
+import type { GlanceStanding } from './glance.ts'
 import {
   HRV_DEVIATION_BAND, HRV_DEVIATION_LOOKBACK_DAYS, HRV_DEVIATION_MIN_RUN, HRV_WEEK_DAYS, HRV_WEEK_MIN_READINGS,
 } from './hrvDeviation.ts'
@@ -47,7 +48,13 @@ export interface RecoveryPeriod {
   low: PeriodHigh | null
   previous: PeriodChange
   yearEarlier: PeriodChange
-  /** The input whose points pushed the period hardest the way the hero leans; null with no value. */
+  /**
+   * The input that carried the period: each input's contribution (signed weight times z, the
+   * linear part of the composite) summed over the scored days, read the way the hero sits from its
+   * period usual when it is above or below it, else the way its value sits from 50. Named only when
+   * that push is at least half of every input's push that way; null on a tie for the largest, when
+   * nothing pushed that way, or when the hero has no value.
+   */
   carriedBy: RecoveryInputKey | null
   /** Resting heart rate, HRV, breathing rate, those with days. */
   figures: PeriodFigure[]
@@ -63,19 +70,24 @@ const CARRIED_TIE_EPSILON = 1e-9
 
 /**
  * The input that carried the period: each input's `contribution` (its signed weight times z, the
- * linear part of the composite) summed over the scored days, read in the direction the hero's
- * value sits from 50. Named only when its sum is at least half of every input's sum in that
- * direction added up, so a period two or more inputs moved together names none, and a tie for the
- * largest names none either. Null too when the hero has no value or nothing moved that way.
+ * linear part of the composite) summed over the scored days. The direction is the hero's standing
+ * against its period usual when that is above or below (above reads positive pushes, below
+ * negative ones), so a month above 50 but below its own usual names what pulled it down. Only a
+ * hero within its usual, or one not judged, falls back to the side of 50 its value sits on. Named
+ * only when its sum is at least half of every input's sum in that direction added up, so a period
+ * two or more inputs moved together names none, and a tie for the largest names none either. Null
+ * too when the hero has no value or nothing moved that way.
  *
  * Not `points`: those are scaled by each day's distance from 50 through the logistic, so an input
  * that only swings day to day sums to a net push and could be named over one that truly shifted.
  */
-export function carriedByOf(days: readonly RecoveryDay[], value: number | null): RecoveryInputKey | null {
+export function carriedByOf(
+  days: readonly RecoveryDay[], value: number | null, standing: GlanceStanding | null,
+): RecoveryInputKey | null {
   if (value === null) return null
   const sums = new Map<RecoveryInputKey, number>()
   for (const day of days) for (const x of day.inputs) sums.set(x.key, (sums.get(x.key) ?? 0) + x.contribution)
-  const sign = value >= 50 ? 1 : -1
+  const sign = standing === 'above' ? 1 : standing === 'below' ? -1 : value >= 50 ? 1 : -1
   const pushes = [...sums].map(([key, sum]) => ({ key, push: sum * sign })).filter((p) => p.push > 0)
   if (pushes.length === 0) return null
   pushes.sort((a, b) => b.push - a.push)
@@ -137,7 +149,7 @@ export function readRecoveryPeriod(q: PersonQuery, input: RecoveryPeriodInput): 
     high: highOf(hero.daily),
     low: lowOf(hero.daily),
     ...periodChanges(values, range, anchor, bounds, hero.value, lastDay),
-    carriedBy: carriedByOf(days, hero.value),
+    carriedBy: carriedByOf(days, hero.value, hero.standing),
     figures: [figure('resting_heart_rate'), figure('daily_hrv'), breathing].filter(shown),
     stretch: stretchOf(q, range, bounds.from, lastDay),
     days,

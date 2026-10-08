@@ -255,27 +255,45 @@ describe('carriedByOf', () => {
 
   it('names the input with at least half the push the way the hero leans', () => {
     const days = [day('2026-08-01', { hrv: -1, restingHeartRate: -0.5 }), day('2026-08-02', { hrv: -1, restingHeartRate: -0.5 })]
-    expect(carriedByOf(days, 40)).toBe('hrv')
+    expect(carriedByOf(days, 40, 'below')).toBe('hrv')
     // Exactly half is enough.
-    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -0.5, sleep: -0.5 })], 40)).toBe('hrv')
+    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -0.5, sleep: -0.5 })], 40, 'below')).toBe('hrv')
   })
 
   it('names none when no input reaches half', () => {
-    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -1, sleep: -1 })], 40)).toBeNull()
+    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -1, sleep: -1 })], 40, 'below')).toBeNull()
+    // A unique largest push is still not enough below half: 1 of 2.8.
+    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -0.9, sleep: -0.9 })], 40, 'below')).toBeNull()
   })
 
   it('names none when two inputs tie for the largest push', () => {
-    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -1 })], 40)).toBeNull()
+    expect(carriedByOf([day('2026-08-01', { hrv: -1, restingHeartRate: -1 })], 40, 'below')).toBeNull()
     // A tie survives float noise: 0.1 + 0.2 against 0.3.
-    expect(carriedByOf([day('2026-08-01', { hrv: -0.1, restingHeartRate: -0.3 }), day('2026-08-02', { hrv: -0.2 })], 40)).toBeNull()
+    expect(carriedByOf([day('2026-08-01', { hrv: -0.1, restingHeartRate: -0.3 }), day('2026-08-02', { hrv: -0.2 })], 40, 'below')).toBeNull()
   })
 
   it('reads the direction from the hero and leaves out inputs pushing the other way', () => {
     const days = [day('2026-08-01', { hrv: 2, restingHeartRate: -3, sleep: 1 })]
-    expect(carriedByOf(days, 60)).toBe('hrv')
-    expect(carriedByOf(days, 40)).toBe('restingHeartRate')
-    expect(carriedByOf(days, null)).toBeNull()
-    expect(carriedByOf([day('2026-08-01', { hrv: 1 })], 40)).toBeNull()
+    expect(carriedByOf(days, 60, 'above')).toBe('hrv')
+    expect(carriedByOf(days, 40, 'below')).toBe('restingHeartRate')
+    expect(carriedByOf(days, null, null)).toBeNull()
+    expect(carriedByOf([day('2026-08-01', { hrv: 1 })], 40, 'below')).toBeNull()
+  })
+
+  it('reads the direction from the standing against the period usual, not from 50', () => {
+    const days = [day('2026-08-01', { hrv: 2, restingHeartRate: -3, sleep: 1 })]
+    // Above 50 yet below its own usual: what pulled it down carried it.
+    expect(carriedByOf(days, 55, 'below')).toBe('restingHeartRate')
+    // Below 50 yet above its own usual: what lifted it carried it.
+    expect(carriedByOf(days, 45, 'above')).toBe('hrv')
+  })
+
+  it('falls back to the side of 50 when the hero is within its usual or not judged', () => {
+    const days = [day('2026-08-01', { hrv: 2, restingHeartRate: -3, sleep: 1 })]
+    expect(carriedByOf(days, 55, 'within')).toBe('hrv')
+    expect(carriedByOf(days, 45, 'within')).toBe('restingHeartRate')
+    expect(carriedByOf(days, 55, null)).toBe('hrv')
+    expect(carriedByOf(days, 45, null)).toBe('restingHeartRate')
   })
 })
 
