@@ -269,7 +269,7 @@
       },
       "caption": {
         "daily": "each dot: the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side of the band",
-        "weekly": "each dot: a week's last measured day, the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side of the band"
+        "weekly": "each dot: a week's last measured day, the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = weeks a stretch reached"
       },
       "short": {
         "below": "below your usual for fewer than {{minRun}} measured days",

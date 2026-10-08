@@ -198,7 +198,10 @@ describe('HrvStretchCard', () => {
     expect(props.spans).toEqual([{ from: 9, to: 11 }, { from: 52, to: 52 }])
     expect(container.querySelector('.figure-row-value')?.textContent).toBe(`47${NB}ms`)
     expect(container.querySelector('.dash-caption')?.textContent)
-      .toBe("each dot: a week's last measured day, the average of the 7 days ending on it, against your usual from the 60 days before that week · shaded = a stretch on one side of the band")
+      .toBe("each dot: a week's last measured day, the average of the 7 days ending on it, against your usual from the 60 days before that week · shaded = weeks a stretch reached")
+    mount(year, RECOVERY_PERIOD_MONTH.method, 'nl')
+    expect(container.querySelector('.dash-caption')?.textContent)
+      .toBe('elke stip: de laatste gemeten dag van een week, het gemiddelde van de 7 dagen tot en met die dag, tegenover je gebruikelijke bereik uit de 60 dagen vóór die week · gekleurd vlak = weken waarin een reeks liep')
   })
 
   it('on a year, shades nothing for a run touching no week, the clipped first week for one reaching into it, and one week once for two runs in it', () => {

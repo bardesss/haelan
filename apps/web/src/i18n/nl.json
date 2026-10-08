@@ -269,7 +269,7 @@
       },
       "caption": {
         "daily": "elke stip: het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = een reeks aan één kant van de band",
-        "weekly": "elke stip: de laatste gemeten dag van een week, het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = een reeks aan één kant van de band"
+        "weekly": "elke stip: de laatste gemeten dag van een week, het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = weken waarin een reeks liep"
       },
       "short": {
         "below": "onder je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen",
