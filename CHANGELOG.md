@@ -9,6 +9,21 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.22.0](https://github.com/bardesss/haelan/compare/v2.21.0...v2.22.0) (2026-10-08)
+
+
+### Features
+
+* the dashboard names an HRV stretch ([#439](https://github.com/bardesss/haelan/issues/439)) ([615aed2](https://github.com/bardesss/haelan/commit/615aed2aca37e681824dbf9a51521196a5353617))
+* the heart rate range reads by week on long ranges ([#440](https://github.com/bardesss/haelan/issues/440)) ([d719d88](https://github.com/bardesss/haelan/commit/d719d886d1ea450251b50b099a5a85e24b3d0f0d))
+* the Recovery overview read, and the recovery index's daily usual ([#436](https://github.com/bardesss/haelan/issues/436)) ([5c66996](https://github.com/bardesss/haelan/commit/5c66996866266aff43b1aa94e341113601846bfb))
+* the Recovery page on the overview pattern ([#438](https://github.com/bardesss/haelan/issues/438)) ([2da9f5c](https://github.com/bardesss/haelan/commit/2da9f5cc2c87cba1c709a2caa95739cce4c94b6b))
+
+
+### Bug Fixes
+
+* validate dates everywhere they are taken, and treat a residue spread as flat ([#441](https://github.com/bardesss/haelan/issues/441)) ([c2656aa](https://github.com/bardesss/haelan/commit/c2656aabf4edf099e8b1f07cd3a552d7885bd582))
+
 ## [2.21.0](https://github.com/bardesss/haelan/compare/v2.20.0...v2.21.0) (2026-10-08)
 
 
