@@ -570,7 +570,8 @@ The seven-day average of heart rate variability against this person's own band f
   - **days** (number) — Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.
   - **capped** (boolean) — True when the run is longer than the 60 days looked back over.
   - **since** (string)
-  - **sideNights** (number) — Of the last seven single nights, how many were outside the band on this side.
+  - **sideNights** (number) — Of the readings in the last seven days, how many were outside the band on this side. Out of `weekReadings`, not out of seven.
+  - **weekReadings** (number) — How many HRV readings the last seven days hold, `to` and the six before it. Fewer than seven when nights are missing.
   - **filledDays** (number) — Days in the run whose HRV was an intraday average standing in for a measured reading.
 
 ### explain
@@ -649,7 +650,8 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **days** (number) — Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.
       - **capped** (boolean) — True when the run is longer than the 60 days looked back over.
       - **since** (string)
-      - **sideNights** (number) — Of the last seven single nights, how many were outside the band on this side.
+      - **sideNights** (number) — Of the readings in the last seven days, how many were outside the band on this side. Out of `weekReadings`, not out of seven.
+      - **weekReadings** (number) — How many HRV readings the last seven days hold, `to` and the six before it. Fewer than seven when nights are missing.
       - **filledDays** (number) — Days in the run whose HRV was an intraday average standing in for a measured reading.
   - **workout** (object, nullable)
     - **sessionId** (string)
@@ -707,7 +709,8 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **days** (number) — Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.
       - **capped** (boolean) — True when the run is longer than the 60 days looked back over.
       - **since** (string)
-      - **sideNights** (number) — Of the last seven single nights, how many were outside the band on this side.
+      - **sideNights** (number) — Of the readings in the last seven days, how many were outside the band on this side. Out of `weekReadings`, not out of seven.
+      - **weekReadings** (number) — How many HRV readings the last seven days hold, `to` and the six before it. Fewer than seven when nights are missing.
       - **filledDays** (number) — Days in the run whose HRV was an intraday average standing in for a measured reading.
   - **comparison** (object, nullable)
     - **metric** (string)

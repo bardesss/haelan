@@ -25,7 +25,8 @@ export const HRV_RUN = z.object({
   days: z.number().describe('Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.'),
   capped: z.boolean().describe('True when the run is longer than the 60 days looked back over.'),
   since: z.string(),
-  sideNights: z.number().describe('Of the last seven single nights, how many were outside the band on this side.'),
+  sideNights: z.number().describe('Of the readings in the last seven days, how many were outside the band on this side. Out of `weekReadings`, not out of seven.'),
+  weekReadings: z.number().describe('How many HRV readings the last seven days hold, `to` and the six before it. Fewer than seven when nights are missing.'),
   filledDays: z.number().describe('Days in the run whose HRV was an intraday average standing in for a measured reading.'),
 }).nullable()
 

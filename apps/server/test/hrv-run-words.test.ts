@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { hrvRunSentence } from '../src/mcp/tools/hrvRunWords.ts'
 
-const RUN = { side: 'below', days: 9, capped: false, since: '2026-08-02', sideNights: 7, filledDays: 0 } as const
+const RUN = { side: 'below', days: 9, capped: false, since: '2026-08-02', sideNights: 7, weekReadings: 7, filledDays: 0 } as const
 
 describe('hrvRunSentence', () => {
   it('words a stretch below, uncapped, with nothing filled', () => {
@@ -13,6 +13,12 @@ describe('hrvRunSentence', () => {
   it('words a stretch above as high', () => {
     expect(hrvRunSentence({ ...RUN, side: 'above', sideNights: 5 })).toBe(
       " HRV's seven-day average has been above its usual for 9 measured days, since 2026-08-02; 5 of the last 7 nightly readings were high.",
+    )
+  })
+
+  it('counts the nightly readings out of those the week holds, not out of seven', () => {
+    expect(hrvRunSentence({ ...RUN, sideNights: 4, weekReadings: 5 })).toBe(
+      " HRV's seven-day average has been below its usual for 9 measured days, since 2026-08-02; 4 of the last 5 nightly readings were low.",
     )
   })
 

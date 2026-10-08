@@ -308,7 +308,7 @@ describe('GET /hrv-deviation', () => {
     const response = await get(harness, token, `/hrv-deviation?from=${HRV_DAY}&to=${HRV_DAY}`)
     expect(response.statusCode).toBe(200)
     const body = response.json()
-    expect(body.run).toEqual({ side: 'below', days: 7, capped: false, since: '2026-09-24', sideNights: 7, filledDays: 0 })
+    expect(body.run).toEqual({ side: 'below', days: 7, capped: false, since: '2026-09-24', sideNights: 7, weekReadings: 7, filledDays: 0 })
     expect(body.days).toHaveLength(1)
     expect(body.days[0]).toEqual({
       localDate: HRV_DAY, measured: true, rolling: 20, band: { low: 44, high: 54 }, side: 'below',

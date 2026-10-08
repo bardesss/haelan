@@ -17,7 +17,7 @@ interface RecoveryEvidence {
   hrvFilled: { filled: number, of: number }
   carriedBy: string | null
   pulledAgainst: string[] | null
-  hrvRun: { side: string, days: number, capped: boolean, since: string, sideNights: number, filledDays: number } | null
+  hrvRun: { side: string, days: number, capped: boolean, since: string, sideNights: number, weekReadings: number, filledDays: number } | null
 }
 
 interface Answer { kind: string, finding: string, stoppedAt: string, walked: string[], evidence: RecoveryEvidence }
@@ -216,7 +216,7 @@ describe('explain, kind recovery', () => {
       const answer = explain()
       expect(answer.evidence.score).toBeLessThan(50)
       expect(answer.evidence.carriedBy).toBe('hrv')
-      expect(answer.evidence.hrvRun).toEqual({ side: 'below', days: 9, capped: false, since: '2026-08-02', sideNights: 7, filledDays: 0 })
+      expect(answer.evidence.hrvRun).toEqual({ side: 'below', days: 9, capped: false, since: '2026-08-02', sideNights: 7, weekReadings: 7, filledDays: 0 })
       expect(answer.finding).toBe('The recovery index on 2026-08-10 is 28, in the below band. Heart rate variability lowered it most, -16.3 of the 22 points between the score and 50. Resting heart rate pulled the other way (+5.4), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-02; 7 of the last 7 nightly readings were low.')
     })
 

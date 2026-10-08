@@ -181,6 +181,13 @@ describe('hrvDeviationRun', () => {
     expect(hrvDeviationRun(readings, D)!.sideNights).toBe(7)
   })
 
+  it('counts the readings the week holds, so a week with gaps is not read as out of seven', () => {
+    const dip = flat(9, 0, 30).filter((r) => r.localDate !== day(2) && r.localDate !== day(4))
+    expect(hrvDeviationRun([...usual(125, 10), ...dip], D)).toEqual({
+      side: 'below', days: 10, capped: false, since: day(9), sideNights: 5, weekReadings: 5, filledDays: 0,
+    })
+  })
+
   it('mirrors below for above', () => {
     const run = hrvDeviationRun([...usual(125, 10), ...flat(9, 0, 80)], D)!
     expect(run.side).toBe('above')

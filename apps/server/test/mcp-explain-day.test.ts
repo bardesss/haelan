@@ -13,7 +13,7 @@ interface DayEvidence {
   factor: { value: number | null } | null
   workouts: { sessionId: string }[] | null
   eventIds: string[] | null
-  hrvRun: { side: string, days: number, capped: boolean, since: string, sideNights: number, filledDays: number } | null
+  hrvRun: { side: string, days: number, capped: boolean, since: string, sideNights: number, weekReadings: number, filledDays: number } | null
 }
 
 interface Answer { kind: string, finding: string, stoppedAt: string, walked: string[], evidence: DayEvidence }
@@ -267,7 +267,7 @@ describe('explain, kind day', () => {
   })
 
   describe('a stretch of HRV away from its usual', () => {
-    const RUN = { side: 'below', days: 9, capped: false, since: '2026-08-12', sideNights: 7, filledDays: 0 }
+    const RUN = { side: 'below', days: 9, capped: false, since: '2026-08-12', sideNights: 7, weekReadings: 7, filledDays: 0 }
 
     it('is named after the lived factor, and the factor was still looked for', () => {
       seed({ on: { asleep: 300 } })

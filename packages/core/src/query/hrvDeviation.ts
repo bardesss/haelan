@@ -64,8 +64,10 @@ export interface HrvDeviationRun {
   capped: boolean
   /** The earliest measured day of the run. */
   since: string
-  /** Of the last seven single nights, how many sat outside the band on the run's side. */
+  /** Of the readings in the last seven days (`on` and the six before it), how many sat outside the band on the run's side. */
   sideNights: number
+  /** How many readings the last seven days hold: `sideNights` is out of this, not out of seven. */
+  weekReadings: number
   /** Readings inside the run whose HRV was filled from the intraday mean. */
   filledDays: number
 }
@@ -181,5 +183,5 @@ export function hrvDeviationRun(readings: readonly HrvReading[], on: string): Hr
   const week = readings.filter((r) => r.localDate >= weekFrom && r.localDate <= on)
   const sideNights = week.filter((r) => (side === 'below' ? r.value < today.band.low : r.value > today.band.high)).length
   const filledDays = readings.filter((r) => r.localDate >= since && r.localDate <= on && r.filled === true).length
-  return { side, days, capped, since, sideNights, filledDays }
+  return { side, days, capped, since, sideNights, weekReadings: week.length, filledDays }
 }
