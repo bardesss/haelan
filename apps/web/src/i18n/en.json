@@ -243,6 +243,34 @@
       },
       "emptyTitle": "No recovery index for this period",
       "emptyDetail": "The index needs HRV and resting heart rate readings, each against your own previous {{days}} days."
+    },
+    "stretch": {
+      "label": "HRV against its usual week",
+      "average": "{{days}}-day average",
+      "run": {
+        "below": "Below its usual for {{days}} measured days",
+        "above": "Above its usual for {{days}} measured days"
+      },
+      "capped": {
+        "below": "More than {{days}} days below its usual",
+        "above": "More than {{days}} days above its usual"
+      },
+      "within": "Within its usual",
+      "note": {
+        "below": "{{sideNights}} of the last {{weekReadings}} nightly readings low",
+        "above": "{{sideNights}} of the last {{weekReadings}} nightly readings high"
+      },
+      "caption": {
+        "daily": "each dot: the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side",
+        "weekly": "each dot: a week's last measured day, the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side"
+      }
+    },
+    "method": {
+      "label": "How the index works",
+      "ingredients": "The recovery index weighs four readings: HRV {{hrv}}%, resting heart rate {{restingHeartRate}}%, last week's sleep {{sleep}}% and breathing rate {{respiratoryRate}}%. Each is set against your own previous {{days}} days.",
+      "usual": "50 is your usual. A day from {{low}} to {{high}} counts as around your usual; below or above that, as below or above it.",
+      "tuned": "The weights are tuned so the index follows the recovery score in the Google Health app, on scores copied from it by hand. It is not Google's number.",
+      "stretch": "HRV against its usual week takes the average of the last {{weekDays}} days, once it holds at least {{minReadings}} readings, and sets it against a band {{band}} × the day-to-day spread of your usual on either side. It counts as a stretch once it stays on one side of that band for {{minRun}} measured days in a row."
     }
   },
   "health": {

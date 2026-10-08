@@ -39,7 +39,7 @@ const pct = (f: number) => `${(f * 100).toFixed(1)}%`
 // A formatted value's number and its unit, split at the last no-break space figureText puts between
 // them ("13.8 breaths/min"), so the unit can be set smaller and a long one still fits its column.
 // No split where the last part is itself a number (a duration's "04m", a clock time).
-function valueParts(value: string): { number: string, unit: string | null } {
+export function valueParts(value: string): { number: string, unit: string | null } {
   const at = value.lastIndexOf('\u00a0')
   const unit = at < 0 ? '' : value.slice(at + 1)
   return at < 0 || /^[\d+-]/.test(unit) ? { number: value, unit: null } : { number: value.slice(0, at + 1), unit }

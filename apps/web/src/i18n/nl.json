@@ -243,6 +243,34 @@
       },
       "emptyTitle": "Geen herstelindex voor deze periode",
       "emptyDetail": "De index heeft metingen van HRV en rusthartslag nodig, elk tegenover je eigen {{days}} dagen ervoor."
+    },
+    "stretch": {
+      "label": "HRV tegenover je gebruikelijke week",
+      "average": "Gemiddelde over {{days}} dagen",
+      "run": {
+        "below": "Onder je gebruikelijke bereik, al {{days}} gemeten dagen",
+        "above": "Boven je gebruikelijke bereik, al {{days}} gemeten dagen"
+      },
+      "capped": {
+        "below": "Meer dan {{days}} dagen onder je gebruikelijke bereik",
+        "above": "Meer dan {{days}} dagen boven je gebruikelijke bereik"
+      },
+      "within": "Binnen je gebruikelijke bereik",
+      "note": {
+        "below": "{{sideNights}} van de laatste {{weekReadings}} nachtelijke metingen laag",
+        "above": "{{sideNights}} van de laatste {{weekReadings}} nachtelijke metingen hoog"
+      },
+      "caption": {
+        "daily": "elke stip: het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke uit de {{baselineDays}} dagen voor die week · gearceerd = een periode aan één kant",
+        "weekly": "elke stip: de laatste gemeten dag van een week, het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke uit de {{baselineDays}} dagen voor die week · gearceerd = een periode aan één kant"
+      }
+    },
+    "method": {
+      "label": "Hoe de index werkt",
+      "ingredients": "De herstelindex weegt vier metingen: HRV {{hrv}}%, rusthartslag {{restingHeartRate}}%, de slaap van afgelopen week {{sleep}}% en ademhalingsfrequentie {{respiratoryRate}}%. Elk wordt afgezet tegen je eigen {{days}} dagen ervoor.",
+      "usual": "50 is je gebruikelijke waarde. Een dag van {{low}} tot {{high}} geldt als zoals gebruikelijk; daaronder of daarboven als onder of boven gebruikelijk.",
+      "tuned": "De gewichten zijn zo afgesteld dat de index de herstelscore uit de Google Health-app volgt, op scores die er met de hand uit zijn overgenomen. Het is niet het getal van Google.",
+      "stretch": "HRV tegenover je gebruikelijke week neemt het gemiddelde van de laatste {{weekDays}} dagen, zodra daar minstens {{minReadings}} metingen in zitten, en zet het af tegen een band van {{band}} × de dagelijkse spreiding van je gebruikelijke waarde aan weerszijden. Het telt als een periode zodra het {{minRun}} gemeten dagen achter elkaar aan één kant van die band blijft."
     }
   },
   "health": {

@@ -23,6 +23,8 @@ import { PointPanel } from './period/PointPanel.js'
 import type { PointPanelRow } from './period/PointPanel.js'
 import { pointRow, usePeriodShell, usePeriodSource } from './period/usePeriodPage.js'
 import { HeartRateCard } from './recovery/HeartRateCard.js'
+import { HowTheIndexWorks } from './recovery/HowTheIndexWorks.js'
+import { HrvStretchCard } from './recovery/HrvStretchCard.js'
 import { contributionRows } from './recovery/contributionRows.js'
 import { useRecoveryLabel } from './recovery/labels.js'
 
@@ -49,7 +51,8 @@ function datesBetween(from: string, to: string): string[] {
 /**
  * The Recovery overview: the period's recovery index against the usual for a period that long,
  * what stood out (its highest and lowest days, the change against the period before, and the input
- * that carried it), resting heart rate, HRV and breathing rate under it, then the heart rate range.
+ * that carried it), resting heart rate, HRV and breathing rate under it, HRV against its usual week,
+ * the heart rate range, and last how the index works.
  * One read (/recovery/period) the server has already scored, judged, rounded and trimmed; the page
  * only words and draws it (PATTERNS.md's "Overview pages"). The heart rate range keeps its own
  * /series reads, the one card here the period read does not carry.
@@ -154,14 +157,14 @@ export function Recovery() {
             <p className="dash-caption">{weekly ? t('recovery.period.lines.weekly') : t('recovery.period.lines.daily', { period })}</p>
           </Card>
         )}
-        {/* The HRV stretch, "HRV against its usual week" (span 12), goes here, from data.stretch. */}
+        <HrvStretchCard stretch={data.stretch} method={data.method} />
         <HeartRateCard from={controls.from} to={controls.to} historicalTo={controls.historicalTo} source={source}
           rangeDates={rangeDates} period={`${controls.from} ${t('common.to')} ${controls.to}`}
           annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, HEART_RATE)}
           excluded={annotationsFor(byMetric, HEART_RATE).excluded}
           onDayClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: HEART_RATE })}
           span={12} />
-        {/* How the index works (span 12), from data.method, goes here. */}
+        <HowTheIndexWorks method={data.method} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </div>
