@@ -244,6 +244,9 @@ describe('the Sleep page: sections', () => {
     const notes = (label: string) => [...cardFor(label)!.querySelectorAll('.figure-row-note')].map((note) => note.textContent ?? '')
     expect(notes('The mornings').length).toBeGreaterThan(0)
     for (const note of notes('The mornings')) expect(note).toMatch(/^\d+ of \d+ mornings? usual/)
+    // The index's row, judged day by day against its usual band: 28 scored mornings, every one judged.
+    const index = [...cardFor('The mornings')!.querySelectorAll('.figure-row')].find((row) => row.querySelector('.label')?.textContent === 'Recovery index')
+    expect(index!.querySelector('.figure-row-note')!.textContent).toBe('11 of 28 mornings usual · 9 higher · 8 lower')
     // Every row but the naps, whose line is their own (the next test).
     const more = notes('More about the sleep').filter((note) => !note.includes('naps'))
     expect(more.length).toBeGreaterThan(0)
