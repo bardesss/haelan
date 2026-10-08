@@ -172,7 +172,7 @@ describe('explain, kind recovery', () => {
     const answer = explain()
     expect(answer.stoppedAt).toBe('hrvFilledToday')
     expect(answer.evidence.hrvFilled.filled).toBe(2)
-    expect(answer.finding).toContain('1 of the HRV readings in its baseline was filled')
+    expect(answer.finding).toContain('1 of the HRV readings in its 60-day baseline was filled')
   })
 
   it('states an absent input whichever link answers', () => {
@@ -189,7 +189,7 @@ describe('explain, kind recovery', () => {
     expect(answer.stoppedAt).toBe('carriedBy')
     expect(answer.evidence.dayHrvFilled).toBe(false)
     expect(answer.evidence.hrvFilled.filled).toBe(2)
-    expect(answer.finding).toContain('2 of the HRV readings in its baseline were filled from an intraday average, not measured')
+    expect(answer.finding).toContain('2 of the HRV readings in its 60-day baseline were filled from an intraday average, not measured')
   })
 
   it('answers the number recovery_index answers for the same day', () => {
@@ -217,7 +217,17 @@ describe('explain, kind recovery', () => {
       expect(answer.evidence.score).toBeLessThan(50)
       expect(answer.evidence.carriedBy).toBe('hrv')
       expect(answer.evidence.hrvRun).toEqual({ side: 'below', days: 9, capped: false, since: '2026-08-02', sideNights: 7, filledDays: 0 })
-      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 28, in the below band. Heart rate variability lowered it most, -16.3 of the 22 points between the score and 50. Resting heart rate pulled the other way (+5.4), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-02; 7 of the last 7 nights were low.')
+      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 28, in the below band. Heart rate variability lowered it most, -16.3 of the 22 points between the score and 50. Resting heart rate pulled the other way (+5.4), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-02; 7 of the last 7 nightly readings were low.')
+    })
+
+    it('is named when HRV lifted a score of 50 or more and the stretch is above', () => {
+      seed({ on: { hrv: 70 } })
+      hrvStretch(9, 1, 70)
+      const answer = explain()
+      expect(answer.evidence.score).toBeGreaterThanOrEqual(50)
+      expect(answer.evidence.carriedBy).toBe('hrv')
+      expect(answer.evidence.hrvRun?.side).toBe('above')
+      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 86, in the high band. Heart rate variability lifted it most, +26.7 of the 36 points between the score and 50. The past week\'s sleep pulled the other way (-0.5), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been above its usual for 11 measured days, since 2026-07-31; 7 of the last 7 nightly readings were high.')
     })
 
     it('is not named when resting heart rate carried the score', () => {

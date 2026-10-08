@@ -187,11 +187,12 @@ describe('explain, kind day', () => {
   it('reports the night before beside a higher resting heart rate, before its bedtime', () => {
     // The bedtime is late too, so lateBedtime would answer; the fixed order looks at the night first.
     seed({ on: { rhr: 65, asleep: 300, bedtime: 1500 } })
+    hrvStretch(9, 0, 50)
     const answer = explain()
     expect(answer.evidence.away).toBe('restingHeartRate')
     expect(answer.stoppedAt).toBe('shortNight')
     expect(answer.walked).not.toContain('lateBedtime')
-    expect(answer.finding).toMatch(/^Resting heart rate on 2026-08-20 was 65 bpm, above its usual \d+ bpm to \d+ bpm\. The night filed under that morning was 5h00 asleep, below its usual 6h\d\d asleep to 7h\d\d asleep\. The two are reported side by side as an association, not as the reason for it\. HRV's seven-day average has been below its usual for 6 measured days, since 2026-08-15; 5 of the last 7 nights were low\.$/)
+    expect(answer.finding).toMatch(/^Resting heart rate on 2026-08-20 was 65 bpm, above its usual \d+ bpm to \d+ bpm\. The night filed under that morning was 5h00 asleep, below its usual 6h\d\d asleep to 7h\d\d asleep\. The two are reported side by side as an association, not as the reason for it\.$/)
   })
 
   it('reports a late bedtime when the night itself was not short', () => {
@@ -276,7 +277,7 @@ describe('explain, kind day', () => {
       expect(answer.stoppedAt).toBe('shortNight')
       expect(answer.walked).toContain('shortNight')
       expect(answer.evidence.hrvRun).toEqual(RUN)
-      expect(answer.finding).toBe('HRV on 2026-08-20 was 30 ms, below its usual 39 ms to 55 ms. The night filed under that morning was 5h00 asleep, below its usual 6h44 asleep to 7h12 asleep. The two are reported side by side as an association, not as the reason for it. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 7 of the last 7 nights were low.')
+      expect(answer.finding).toBe('HRV on 2026-08-20 was 30 ms, below its usual 39 ms to 55 ms. The night filed under that morning was 5h00 asleep, below its usual 6h44 asleep to 7h12 asleep. The two are reported side by side as an association, not as the reason for it. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 7 of the last 7 nightly readings were low.')
     })
 
     it('is named after noLivedFactor', () => {
@@ -284,7 +285,7 @@ describe('explain, kind day', () => {
       hrvStretch(9, 1, 30)
       const noFactor = explain()
       expect(noFactor.stoppedAt).toBe('noLivedFactor')
-      expect(noFactor.finding).toBe('HRV on 2026-08-20 was 30 ms, below its usual 39 ms to 55 ms. None of the night before, its bedtime, the day before\'s vigorous minutes or a logged event was away from its usual or on record. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 7 of the last 7 nights were low.')
+      expect(noFactor.finding).toBe('HRV on 2026-08-20 was 30 ms, below its usual 39 ms to 55 ms. None of the night before, its bedtime, the day before\'s vigorous minutes or a logged event was away from its usual or on record. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 7 of the last 7 nightly readings were low.')
       expect(noFactor.evidence.hrvRun).toEqual(RUN)
     })
 
@@ -293,7 +294,7 @@ describe('explain, kind day', () => {
       hrvStretch(9, 1, 30)
       const answer = explain()
       expect(answer.stoppedAt).toBe('nothingAway')
-      expect(answer.finding).toBe('Every reading on 2026-08-20 with a usual to stand on sits within it. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 6 of the last 7 nights were low.')
+      expect(answer.finding).toBe('Every reading on 2026-08-20 with a usual to stand on sits within it. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 6 of the last 7 nightly readings were low.')
       expect(answer.evidence.hrvRun).toEqual({ ...RUN, sideNights: 6 })
     })
 

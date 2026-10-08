@@ -87,7 +87,7 @@ function caveats(evidence: Evidence): string {
   }
   const baselineFilled = evidence.hrvFilled.filled - (evidence.dayHrvFilled === true ? 1 : 0)
   if (baselineFilled > 0) {
-    out.push(`${baselineFilled} of the HRV readings in its baseline ${baselineFilled === 1 ? 'was' : 'were'} filled from an intraday average, not measured.`)
+    out.push(`${baselineFilled} of the HRV readings in its 60-day baseline ${baselineFilled === 1 ? 'was' : 'were'} filled from an intraday average, not measured.`)
   }
   return out.length === 0 ? '' : ` ${out.join(' ')}`
 }
