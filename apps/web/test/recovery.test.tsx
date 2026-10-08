@@ -8,7 +8,6 @@ import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Recovery } from '../src/pages/Recovery.js'
-import { contributionRows } from '../src/pages/recovery/RecoveryIndexCard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Insight } from '../src/data/useInsight.js'
@@ -493,21 +492,5 @@ describe('the Recovery page', () => {
       .map((u) => new URL(u, 'http://example').searchParams.get('metric'))
     expect(baselineMetrics).toContain('sleep_respiratory_rate')
     restore()
-  })
-})
-
-describe('contributionRows', () => {
-  it('orders inputs by how much they moved the score, largest first', () => {
-    const rows = contributionRows([
-      { key: 'hrv', weight: 0.35, points: 2, contribution: 0.1 },
-      { key: 'restingHeartRate', weight: 0.30, points: -11, contribution: -0.6 },
-      { key: 'sleep', weight: 0.25, points: 1, contribution: 0.05 },
-    ])
-    expect(rows.map((row) => row.key)).toEqual(['restingHeartRate', 'hrv', 'sleep'])
-  })
-
-  it('rounds points to whole numbers, because a tenth of a point means nothing', () => {
-    const rows = contributionRows([{ key: 'hrv', weight: 1, points: -11.4, contribution: -0.5 }])
-    expect(rows[0]?.points).toBe(-11)
   })
 })

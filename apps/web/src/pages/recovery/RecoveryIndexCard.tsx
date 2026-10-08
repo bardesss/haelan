@@ -1,6 +1,5 @@
 import { BASELINE_WINDOW_DAYS } from '@haelan/core/baseline-window'
 import { bandOf } from '@haelan/core/recovery-index'
-import type { RecoveryInput } from '@haelan/core/recovery-index'
 import { useTranslation } from '../../i18n/index.js'
 import { Card } from '../../components/Card.js'
 import { StatTile } from '../../components/StatTile.js'
@@ -9,6 +8,7 @@ import { Loading } from '../../components/Loading.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import { useRecoveryIndex } from '../../data/useRecoveryIndex.js'
 import { formatNumber, formatLocalDate } from '../../format.js'
+import { contributionRows } from './contributionRows.js'
 
 /**
  * The scored date, or null when it IS today.
@@ -21,30 +21,6 @@ import { formatNumber, formatLocalDate } from '../../format.js'
  */
 export function asOfLabel(scored: string, today: string): string | null {
   return scored === today ? null : scored
-}
-
-export interface ContributionRow {
-  key: RecoveryInput['key']
-  points: number
-}
-
-/**
- * The inputs, largest mover first, with points rounded to whole numbers.
- *
- * Exported so the ordering can be asserted without mounting. Largest-first rather than a fixed
- * order because the question this card answers is "what moved it", and an input that moved it by
- * a point is not the answer however important it usually is.
- *
- * These do NOT sum to the headline's distance from 50, except on a day every input pushed the
- * same way: `RecoveryInput.points` (packages/core/src/api/recoveryIndex.ts) is scaled by the
- * total absolute movement across inputs, not by the signed composite, so two inputs pulling in
- * opposite directions genuinely cancel rather than adding up to the score. This list never claims
- * a total.
- */
-export function contributionRows(inputs: readonly RecoveryInput[]): ContributionRow[] {
-  return [...inputs]
-    .map((input) => ({ key: input.key, points: Math.round(input.points) }))
-    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
 }
 
 /** The index's own history over the page's range, and what moved the latest one. */
