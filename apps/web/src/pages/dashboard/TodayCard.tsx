@@ -34,12 +34,16 @@ import { TodayWorkouts } from './TodayWorkouts.js'
  * screen reader hears it once, where it is printed, rather than a second hidden sentence. With none
  * printed, the within sentence stays out of sight as the description, as the night card's does.
  */
-export function TodayCard({ day, span, today, timezone, homeTimezone, finished = false, onOpenDay }: {
+export function TodayCard({ day, span, today, timezone, homeTimezone, finished = false, onOpenDay, onSampleClick }: {
   day: GlanceDay, span: 8 | 12, today: string, timezone: string, finished?: boolean
   /** The person's home zone, the second zone a finished day's recorded offset may be explained by. */
   homeTimezone?: string
   /** Opens a strip dot's day (M9c). */
   onOpenDay?: (day: string) => void
+  /** A heart rate reading tapped on the trace, for the annotate panel's sample target: the one
+   *  place in the app a single reading can be excluded or corrected. Kept stable by the caller,
+   *  since it reaches the chart's click handler. */
+  onSampleClick?: (point: { sourceId: string, utcMs: number, n: number }) => void
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -150,7 +154,7 @@ export function TodayCard({ day, span, today, timezone, homeTimezone, finished =
             <IntradayHeartRate points={day.heartRate.points} reduction={null}
               label={t(finished ? 'glance.today.heartRateChartThatDay' : 'glance.today.heartRateChart')}
               compact startMs={midnight} endMs={endMs} spans={workoutSpans}
-              offsetMinutes={clock.offsetMinutes} timeZone={clock.timeZone} />
+              offsetMinutes={clock.offsetMinutes} timeZone={clock.timeZone} onPointClick={onSampleClick} />
           </Described>
         </div>
       )}
