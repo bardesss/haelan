@@ -9,8 +9,9 @@ const percent = (weight: number) => String(Math.round(weight * 100))
  * "How the index works": four short paragraphs of plain prose, no list, on what the index weighs,
  * where its usual sits, what its weights were tuned against, and how the HRV stretch is called.
  * A full-row card like every other on the page (a `measured` card would leave a hole beside it),
- * its prose kept to a reading measure inside (`.prose-measured`). Every number in it is the server's (`method`, read from the constants the index and the stretch
- * are computed by), never typed into a sentence, so the text cannot drift from the code.
+ * its prose kept to a reading measure inside (`.prose-measured`). Every number in it is the
+ * server's (`method`, read from the constants the index and the stretch are computed by), never
+ * typed into a sentence, so the text cannot drift from the code.
  */
 export function HowTheIndexWorks({ method }: { method: RecoveryMethod }) {
   const { t, i18n } = useTranslation()
