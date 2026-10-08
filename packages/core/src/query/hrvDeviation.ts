@@ -93,10 +93,14 @@ const meanOf = (values: readonly number[]): number => values.reduce((t, v) => t 
 /**
  * Every date in `range`, oldest first. Dates compare as text, the convention recoveryIndex.ts and
  * trainingLoad.ts use.
+ *
+ * `band` is the half-width in baseline spreads, defaulting to the shipped constant. It is a
+ * parameter so probe/scripts/hrv-deviation.mjs can compare widths without editing the module.
  */
 export function hrvDeviationSeries(
   readings: readonly HrvReading[],
   range: { from: string, to: string },
+  band: number = HRV_DEVIATION_BAND,
 ): HrvDeviationDay[] {
   const out: HrvDeviationDay[] = []
   for (let date = range.from; date <= range.to; date = shiftLocalDate(date, 1)) {
@@ -122,8 +126,8 @@ export function hrvDeviationSeries(
       continue
     }
     const rolling = meanOf(week)
-    const low = baseline.center - HRV_DEVIATION_BAND * baseline.spread
-    const high = baseline.center + HRV_DEVIATION_BAND * baseline.spread
+    const low = baseline.center - band * baseline.spread
+    const high = baseline.center + band * baseline.spread
     const side: HrvSide = rolling < low ? 'below' : rolling > high ? 'above' : 'within'
     out.push({
       localDate: date, measured: true, rolling: Math.exp(rolling),

@@ -53,6 +53,13 @@ describe('hrvDeviationSeries', () => {
     expect(on(usual(66, 0))).toMatchObject({ measured: true, side: 'within' })
   })
 
+  it('takes the band as a parameter: a width of 0 reads a week a hair under the centre as below', () => {
+    // Usual 45/55 has its centre at ln-mean sqrt(45*55) ~ 49.75 ms; a week of 49.7 sits just under it.
+    const readings = [...usual(66, 7), ...flat(6, 0, 49.7)]
+    expect(hrvDeviationSeries(readings, { from: D, to: D }, 0)[0]).toMatchObject({ measured: true, side: 'below' })
+    expect(hrvDeviationSeries(readings, { from: D, to: D })[0]).toMatchObject({ measured: true, side: 'within' })
+  })
+
   it('reports rolling and band in ms, the band wider above the centre than below it', () => {
     const result = on(usual(66, 0))
     if (!result.measured) throw new Error('expected measured')
