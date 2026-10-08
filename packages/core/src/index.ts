@@ -100,7 +100,7 @@ export type { SeedArchiveInput, SeedArchiveResult } from './testing/seed.ts'
 // M2a. The derivation layer: tier 3 from tier 2, and the two types that have no tier 2 at all.
 // ACTIONS, supports, DeriveQueue and QueueEntry are exported above already, added when earlier
 // tasks in this milestone first needed them across the apps/server boundary.
-export { METRICS, DAILY_AGGS, metricSpec } from './derive/metrics.ts'
+export { METRICS, DAILY_AGGS, metricSpec, roundMetricValue } from './derive/metrics.ts'
 export type { MetricSpec, DailyAgg } from './derive/metrics.ts'
 export { DERIVATION_VERSION } from './derive/version.ts'
 export { MAPPING_VERSION } from './api/version.ts'

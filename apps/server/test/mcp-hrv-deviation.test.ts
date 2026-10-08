@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION } from '@haelan/core'
+import { PersonQuery, createTestDatabase, metricSpec, readHrvDeviation, seedPerson, schema, DERIVATION_VERSION } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { hrvDeviationTool } from '../src/mcp/tools/hrvDeviation.ts'
 
@@ -55,5 +55,33 @@ describe('hrv_deviation tool', () => {
       { localDate: '2026-08-03', measured: false, reason: 'thin-week', rolling: null, low: null, high: null, side: null },
     ])
     expect(out.run).toBeNull()
+  })
+
+  it('answers a run above the band after a seeded rise', () => {
+    const start = '2026-05-01'
+    for (let i = 0; i < 80; i++) seedHrv(addDays(start, i), i % 2 === 0 ? 50 : 60)
+    for (let i = 80; i < 90; i++) seedHrv(addDays(start, i), 90)
+    const to = addDays(start, 89)
+    const out = hrvDeviationTool.run(new PersonQuery(test.db, 'robin'), { from: to, to }) as Out
+    expect(out.run?.side).toBe('above')
+    expect(out.run!.days).toBeGreaterThanOrEqual(3)
+    expect(out.days[0]).toMatchObject({ measured: true, side: 'above' })
+  })
+
+  it('rounds rolling, low and high to the daily_hrv precision', () => {
+    const start = '2026-05-01'
+    for (let i = 0; i < 80; i++) seedHrv(addDays(start, i), i % 2 === 0 ? 50 : 60)
+    // Alternating 31 and 37: the log-scale mean is sqrt(1147), 33.8673..., not a round figure.
+    for (let i = 80; i < 90; i++) seedHrv(addDays(start, i), i % 2 === 0 ? 31 : 37)
+    const to = addDays(start, 89)
+    const q = new PersonQuery(test.db, 'robin')
+    const raw = readHrvDeviation(q, { from: to, to }).days[0]
+    if (!raw || !raw.measured) throw new Error('expected a measured day')
+    const day = (hrvDeviationTool.run(q, { from: to, to }) as Out).days[0]!
+    const precision = metricSpec('daily_hrv')!.precision
+    expect(Number(raw.rolling.toFixed(precision + 3))).not.toBe(Number(raw.rolling.toFixed(precision)))
+    expect(day.rolling).toBe(Number(raw.rolling.toFixed(precision)))
+    expect(day.low).toBe(Number(raw.band.low.toFixed(precision)))
+    expect(day.high).toBe(Number(raw.band.high.toFixed(precision)))
   })
 })

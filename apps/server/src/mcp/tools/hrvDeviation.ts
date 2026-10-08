@@ -1,9 +1,8 @@
 import { z } from 'zod'
-import { readHrvDeviation } from '@haelan/core'
+import { readHrvDeviation, roundMetricValue } from '@haelan/core'
 import type { HrvDeviationDay } from '@haelan/core'
 import type { Tool } from '../contract.ts'
 import { defineTool } from '../contract.ts'
-import { roundMetricValue } from '../../routes/v1/shared.ts'
 
 // A flat, nullable day rather than a discriminated union, for the reason recovery.ts gives above
 // RECOVERY_DAY: TOOLS.md's generator documents plain objects and arrays of them, not unions. A day
