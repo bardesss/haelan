@@ -24,6 +24,10 @@ describe('HowTheIndexWorks', () => {
   it('words the method from the numbers it is sent', () => {
     const html = renderToStaticMarkup(<I18nProvider lng="en"><HowTheIndexWorks method={METHOD} /></I18nProvider>)
     expect(html).toContain('<h2')
+    // A full-row card like every other on the page; the prose keeps to a measure inside it.
+    expect(html).toContain('data-span="12"')
+    expect(html).not.toContain('card-measured')
+    expect(html).toContain('<div class="prose-measured"><p>')
     expect(html).toContain('How the index works')
     expect(paragraphs('en')).toEqual([
       "The recovery index weighs four readings: HRV 60%, resting heart rate 25%, last week's sleep 10% and breathing rate 5%. Each is set against your own previous 45 days.",

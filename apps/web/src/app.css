@@ -553,6 +553,10 @@ html:has(dialog.log-sheet[open]) { overflow: hidden; }
    are what wanted the limit; the card was only ever where it was easiest to put it. */
 .list-measured { max-width: 46rem; }
 
+/* The same measure on paragraphs inside a full-row card: Recovery's "How the index works" keeps
+   its span 12 so the grid tiles, and only the prose stops where a reader's eye does. */
+.prose-measured { max-width: 46rem; }
+
 /* The workout page's excluded badge and "also recorded by"/gps sentences, in the About fold
    (WorkoutAbout.tsx, M10a-3). */
 .workout-excluded { color: var(--text-muted); font-size: var(--font-size-sm); margin: 0; }

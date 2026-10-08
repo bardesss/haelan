@@ -10,7 +10,6 @@ import { useRecoveryPeriod } from '../data/usePeriodRead.js'
 import type { PeriodStripPoint } from '../data/periodTypes.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { annotationsFor, overridesByMetric } from '../data/chartAnnotations.js'
-import { annotationsWithDay, useDayAnnotations } from '../data/dayAnnotations.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { verdictTone } from '../charts/base.js'
 import { formatLocalDateRange } from '../format.js'
@@ -76,10 +75,11 @@ export function Recovery() {
   })
 
   const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
-  // The heart rate range's own marks: its overrides, and the day's notes and events beside them.
+  // The heart rate range's own marks: its overrides (an excluded reading and its reason). No day
+  // notes or events: the overview pages draw none on their charts, and the hero's day panel
+  // reaches them.
   const overridesQuery = useAnnotations(range)
   const byMetric = useMemo(() => overridesByMetric(overridesQuery.overrides.data?.items ?? []), [overridesQuery.overrides.data])
-  const { dayAnnotations, dayAnnotationsByMetric } = useDayAnnotations(overridesQuery.notes, overridesQuery.events, byMetric)
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
   const labelOf = useRecoveryLabel()
 
@@ -159,8 +159,8 @@ export function Recovery() {
         )}
         <HrvStretchCard stretch={data.stretch} method={data.method} />
         <HeartRateCard from={controls.from} to={controls.to} historicalTo={controls.historicalTo} source={source}
-          rangeDates={rangeDates} period={`${controls.from} ${t('common.to')} ${controls.to}`}
-          annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, HEART_RATE)}
+          rangeDates={rangeDates} period={`${controls.from} ${t('common.to')} ${controls.to}`} periodWords={period}
+          annotations={annotationsFor(byMetric, HEART_RATE).annotations}
           excluded={annotationsFor(byMetric, HEART_RATE).excluded}
           onDayClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: HEART_RATE })}
           span={12} />

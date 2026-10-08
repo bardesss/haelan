@@ -353,14 +353,15 @@ describe('the charts across a rerender', () => {
     restore()
   })
 
-  // The annotation merge's own guard. The stub puts an override on heart_rate, so that metric's
-  // entry in mergeDayAnnotations' result is a concatenation (the override's reason plus the day's
-  // note and event) rather than the shared dayAnnotations array every other metric falls back to. A
-  // fresh concatenation is a fresh array, so if useDayAnnotations' memo on the merge were dropped
-  // the heart rate range would be handed a new `annotations` on every render and be rebuilt; the
-  // fallback branch alone would never show it, because its array is shared. The overview's hero and
-  // figure strips are memoised on the period read, and are held to the same rule here.
-  it('are not disposed and re-initialised on Recovery\'s week tab, where an overridden metric\'s annotations are merged', async () => {
+  // The overridden metric's own guard. The stub puts an override on heart_rate, so the heart rate
+  // range is handed that metric's own entry from overridesByMetric (its reasons and excluded days)
+  // rather than the shared empty one every other metric falls back to. The entry is built per
+  // render unless the page's memo on the map holds, so dropping it would hand the chart a new
+  // `annotations` on every render and rebuild it; the shared empty entry alone would never show
+  // it. (Recovery hands the range no day notes or events since the overview, so the day merge is
+  // no longer part of this case.) The overview's hero and figure strips are memoised on the period
+  // read, and are held to the same rule here.
+  it('are not disposed and re-initialised on Recovery\'s week tab, where an overridden metric carries its own annotations', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)

@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { MetricCard } from '../../components/MetricCard.js'
+import { BasisContext } from '../../components/basis.js'
 import { HeartRateRange } from '../../charts/HeartRateRange.js'
 import { useSeries } from '../../data/useSeries.js'
 import { useBaseline } from '../../data/useBaseline.js'
@@ -24,24 +25,35 @@ const EMPTY = Object.freeze([]) as never[]
  *
  * Owns its own queries rather than reading them off a page's shared groups: `from`/`to`/
  * `historicalTo`/`source`/`rangeDates`/`period` are the page state this card needs, handed in as
- * props, and `annotations`/`excluded` are the heart_rate slice of a page's own overrides/day
- * annotations lookups rather than a lookup this card would otherwise have to duplicate.
+ * props, and `annotations`/`excluded` are the heart_rate slice of a page's own overrides lookup
+ * rather than a lookup this card would otherwise have to duplicate. Recovery hands it the
+ * overrides' reasons alone, no day notes or events: the overview pages draw none on their charts
+ * (on a year they piled into one unreadable block), and the hero's day panel reaches them.
+ *
+ * Its basis is a `.dash-caption` under the chart, as the page's other captions are: what the lines
+ * are, by the range in words, and what the band is ("band = your usual range"), or why none is
+ * drawn. No date in it; the band's anchor is historicalTo, which the request carries.
  */
 export function HeartRateCard({
-  from, to, historicalTo, source, rangeDates, period, annotations, excluded, onDayClick, span,
+  from, to, historicalTo, source, rangeDates, period, periodWords, annotations, excluded, onDayClick, span,
 }: {
   from: string
   to: string
   historicalTo: string
   source: string
   rangeDates: string[]
+  /** The range in dates, for the chart's accessible name. */
   period: string
+  /** The range in words ("this month", thisPeriod), for the caption under the chart. */
+  periodWords: string
   annotations: { date: string, text: string }[]
   excluded: string[]
   onDayClick: (localDate: string) => void
   span: number
 }) {
   const { t } = useTranslation()
+  // The caption's id, which the chart is described by (BasisContext), as the header basis it was.
+  const captionId = useId()
   const range = { from, to, source }
   const meanSeries = useSeries(['heart_rate'], range, 'mean')
   const minHrSeries = useSeries(['heart_rate'], range, 'min')
@@ -139,19 +151,23 @@ export function HeartRateCard({
   // branch, went with that branch: M3e-2 marked both for removal, and this task removed them as
   // dead code no caller ever reached.
   return (
-    <MetricCard metric="heart_rate" span={span} label={t('recovery.heartRateRange.label')} basisPlacement="header"
+    <MetricCard metric="heart_rate" span={span} label={t('recovery.heartRateRange.label')} basisPlacement="body"
       query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate, error: heartRateError }}
       points={meanHrPoints}
-      basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: historicalTo }}>
-      {() => (
-        // HeartRateRange has taken annotations/excluded since D1; annotations/excluded are the
-        // same heart_rate lookup every other card on the page uses, resolved by the caller and
-        // handed in rather than looked up a second time here.
-        <HeartRateRange days={heartRateDays} baseline={heartRateBand}
-          annotations={annotations}
-          excluded={excluded}
-          label={t('recovery.heartRateRange.chartLabel', { period })}
-          onPointClick={onDayClick} />
+      basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ period: periodWords }}>
+      {(basis) => (
+        <>
+          {/* HeartRateRange has taken annotations/excluded since D1, resolved by the caller and
+              handed in rather than looked up a second time here. */}
+          <BasisContext.Provider value={captionId}>
+            <HeartRateRange days={heartRateDays} baseline={heartRateBand}
+              annotations={annotations}
+              excluded={excluded}
+              label={t('recovery.heartRateRange.chartLabel', { period })}
+              onPointClick={onDayClick} />
+          </BasisContext.Provider>
+          <p id={captionId} className="dash-caption">{basis}</p>
+        </>
       )}
     </MetricCard>
   )

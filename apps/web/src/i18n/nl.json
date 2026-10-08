@@ -214,11 +214,11 @@
     },
     "heartRateRange": {
       "label": "Hartslagbereik",
-      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
-      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
-      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
-      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
-      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
+      "basis": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · band = je gebruikelijke bereik",
+      "basisThin": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · nog te weinig dagen voor je gebruikelijke bereik",
+      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · nog geen gebruikelijk bereik",
+      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · je gebruikelijke bereik wordt nog geladen",
+      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}} · je gebruikelijke bereik kon niet worden gelezen, dus er is geen band",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
     },
     "period": {
