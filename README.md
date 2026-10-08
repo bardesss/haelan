@@ -72,14 +72,17 @@ active minutes and every workout, with a page behind each night and each workout
 intraday chart, a weight trend, and period-over-period insight cards that withhold themselves, each
 with its own reason, when the data behind them is thin.
 
-Sleep and Activity read a week, a month, three months or a year as a period. Each figure is the
-period's average, or its total where a sum means something, set against its usual, with the verdict
-in words: how many days were usual, lower or higher, the longest night or busiest day, and the
-change against the period before. On three months and a year the strips draw one point per week.
+Sleep, Activity and Recovery read a week, a month, three months or a year as a period. Each figure
+is the period's average, or its total where a sum means something, set against its usual, with the
+verdict in words: how many days were usual, lower or higher, the longest night or busiest day, and
+the change against the period before. On three months and a year the strips draw one point per week.
 Sleep adds the stages and their shares, the schedule with weekday against weekend, the sleep balance
 and the mornings after; Activity adds a heatmap of each day's steps on three months and a year, the
 intensity split, zone minutes, the workouts with each type's count against its usual, cardio load
-and the VO2 max trend.
+and the VO2 max trend. Recovery sets the recovery index against its usual with its day counts and
+the input that moved it most, shows resting heart rate, HRV and breathing rate under it, follows
+HRV's seven-day average against its usual week with the stretches it spent on one side, draws the
+daily heart rate range, and closes with how the index is worked out.
 
 A night's page sets time asleep, efficiency, deep sleep, REM and bedtime against their usual ranges,
 and draws the stages on one time axis with the heart rate, HRV and SpO2 traces. It says when the
@@ -109,9 +112,9 @@ says so rather than inventing a data model to have something to draw.
 ### 📐 Personal baselines
 
 A reading is shown against your own usual, because "96 bpm" carries no information on its own and
-"1.4 standard deviations above your baseline" does. On the dashboard and a night's page that is
-your own last 60 days, and the recovery index keeps its 60 day baseline wherever it appears. A
-workout stands against earlier workouts of the same type. The Sleep and Activity pages compare a
+"1.4 standard deviations above your baseline" does. On the dashboard and a night's page that is your
+own last 60 days, and the recovery index keeps its 60 day baseline wherever it appears. A workout
+stands against earlier workouts of the same type. The Sleep, Activity and Recovery pages compare a
 period with the ones before it: a month with the twelve months before it, a week with the twelve
 weeks before, three months with the four quarters before them, and a year with the previous year's
 four quarters, since one year has no spread of its own. An earlier period counts only when at least
