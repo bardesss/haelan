@@ -439,3 +439,68 @@ describe('a sparkline with a band per day', () => {
     expect(series().find((s) => s.type === 'line')!.markArea).toBeDefined()
   })
 })
+
+// A run of days shaded behind the strip (Recovery's HRV stretch, or on 3 months and Year the weeks a
+// run touches): one silent rectangle per span, across the whole slots of its first to its last point.
+describe('a sparkline with shaded spans', () => {
+  type SpanSeries = { type: string, silent?: boolean, z?: number, data: number[][], renderItem: (p: unknown, api: unknown) => { shape: { x: number, y: number, width: number, height: number } } }
+  const series = () => (lastOption as { series: ({ type: string } | SpanSeries)[] }).series
+  const spanSeries = () => series().filter((s) => s.type === 'custom') as SpanSeries[]
+
+  const BASELINE = { low: 2, high: 4 }
+  const VALUES = [1, 2, 3, 4, 5]
+  const LABELS = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14']
+  function renderSpans(spans?: readonly { from: number, to: number }[], bands?: ({ low: number, high: number } | null)[]) {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Sparkline values={VALUES} labels={LABELS}
+            metric="steps" unit="Steps" label="steps, august 2026" dots spans={spans} bands={bands}
+            baseline={BASELINE} />
+        </I18nProvider>,
+      )
+    })
+  }
+
+  it('carries one entry per span, by its first and last point, silent and beneath the readings', () => {
+    renderSpans([{ from: 1, to: 2 }, { from: 4, to: 4 }])
+    const [spans] = spanSeries()
+    expect(spans!.data).toEqual([[1, 2], [4, 4]])
+    expect(spans!.silent).toBe(true)
+    expect(spans!.z).toBeLessThan(2)
+    // The readings stay the first series, which the tooltip and a click read.
+    expect(series()[0]!.type).toBe('line')
+  })
+
+  it('shades from the left edge of the first slot to the right edge of the last, the full plot height', () => {
+    renderSpans([{ from: 1, to: 2 }])
+    const [spans] = spanSeries()
+    const slot = 100.4
+    const api = (datum: number[]) => ({
+      value: (d: number) => datum[d],
+      coord: ([x]: number[]) => [slot / 2 + x! * slot, 0],
+      size: () => [slot, 0],
+    })
+    const params = { coordSys: { x: 0, y: 4, width: 502, height: 56 } }
+    expect(spans!.renderItem(params, api(spans!.data[0]!)).shape).toEqual({ x: 100, y: 4, width: 201, height: 56 })
+  })
+
+  it('draws nothing extra without the prop, or with an empty one, and keeps the per-day band beside it', () => {
+    renderSpans()
+    expect(spanSeries()).toHaveLength(0)
+    renderSpans([])
+    expect(spanSeries()).toHaveLength(0)
+    renderSpans([{ from: 0, to: 1 }], [null, null, null, null, null])
+    expect(spanSeries()).toHaveLength(2)
+  })
+
+  it('is not rebuilt while the spans array keeps its identity, and is when it changes', () => {
+    const spans = [{ from: 0, to: 1 }]
+    renderSpans(spans)
+    dispose.mockClear()
+    renderSpans(spans)
+    expect(dispose).not.toHaveBeenCalled()
+    renderSpans([{ from: 0, to: 1 }])
+    expect(dispose).toHaveBeenCalled()
+  })
+})

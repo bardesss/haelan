@@ -52,6 +52,10 @@ const SEMANTIC_SOURCES = {
   primary: 'text-primary',
   negative: 'negative',
   positive: 'positive',
+  // The accent wash behind a run of days (Sparkline's `spans`): the same surface a selected rail
+  // item and a primary button sit on, so it reads as the app's own highlight rather than a chart
+  // colour of its own.
+  span: 'surface-accent',
 } as const satisfies Record<string, SemanticToken>
 
 export type ChartTokens = Record<keyof typeof CHART_SOURCES | keyof typeof SEMANTIC_SOURCES, string>
