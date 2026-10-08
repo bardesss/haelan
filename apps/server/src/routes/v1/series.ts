@@ -1,10 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE, readHrvDeviation } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
 import type { Stamp } from '../../api/etag.ts'
 import {
-  metricsFrom, optionalPositiveInt, personQueryOf, requireBoundedRange, requireString,
+  metricsFrom, optionalPositiveInt, personQueryOf, requireBoundedRange, requireDateRange, requireString,
   roundMetricValue, roundMetricValueOrNull, roundSeriesResult,
 } from './shared.ts'
 
@@ -178,6 +178,30 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const { points } = personQuery.series({ metric, agg, from, to, source })
     const contributing = baselineContributingPoints(points, metric)
     return sendStamped(reply, request, { baseline, filledDays: filledCountOf(contributing) }, [stampOf(points)])
+  })
+
+  // HRV deviation (spec 2026-10-08): the rolling week against its own band for each day in the
+  // range, and the run as of `to`. The dashboard asks this for a single day rather than /glance
+  // carrying it, because /glance's body is pinned by the Android fixtures. Dates go through
+  // requireDateRange rather than requireString alone: it refuses a malformed date and an inverted
+  // range before any date arithmetic runs (the window start shifts `from` back, and a malformed one
+  // would throw a RangeError, a 500). Bounded like /insights.
+  app.get<{ Params: PersonParams, Querystring: { from?: string, to?: string } }>('/p/:personId/hrv-deviation', async (request, reply) => {
+    const personQuery = personQueryOf(request)
+    const { from, to } = requireDateRange(request.query)
+    requireBoundedRange(from, to)
+    const { days, run, series } = readHrvDeviation(personQuery, { from, to })
+    const body = {
+      days: days.map((day) => (day.measured
+        ? {
+          ...day,
+          rolling: roundMetricValue('daily_hrv', day.rolling),
+          band: { low: roundMetricValue('daily_hrv', day.band.low), high: roundMetricValue('daily_hrv', day.band.high) },
+        }
+        : day)),
+      run,
+    }
+    return sendStamped(reply, request, body, [stampOf(series.points)])
   })
 
   app.get<{ Params: PersonParams, Querystring: InsightsQuery }>('/p/:personId/insights', async (request, reply) => {

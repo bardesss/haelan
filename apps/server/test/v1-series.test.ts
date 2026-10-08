@@ -285,3 +285,71 @@ describe('GET /trend', () => {
     expect(response.statusCode).toBe(200)
   })
 })
+
+// Seven days of dip ending on the asked-for day, over a baseline of alternating 40 and 60. Dates are
+// built from offsets so the arithmetic that places them is not repeated as literals.
+const HRV_DAY = '2026-09-30'
+function hrvDate(offset: number): string {
+  const d = new Date(`${HRV_DAY}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + offset)
+  return d.toISOString().slice(0, 10)
+}
+function seedHrvDip(h: Harness, personId = 'p1'): void {
+  for (let offset = -80; offset <= 0; offset += 1) {
+    const value = offset >= -6 ? 20 : offset % 2 === 0 ? 40 : 60
+    seedDaily(h, { localDate: hrvDate(offset), metric: 'daily_hrv', agg: 'last', value, personId })
+  }
+}
+
+describe('GET /hrv-deviation', () => {
+  it('answers the rolling week against its band, and the run it belongs to', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedHrvDip(harness)
+    const response = await get(harness, token, `/hrv-deviation?from=${HRV_DAY}&to=${HRV_DAY}`)
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.run).toEqual({ side: 'below', days: 7, capped: false, since: '2026-09-24', sideNights: 7, weekReadings: 7, filledDays: 0 })
+    expect(body.days).toHaveLength(1)
+    expect(body.days[0]).toEqual({
+      localDate: HRV_DAY, measured: true, rolling: 20, band: { low: 44, high: 54 }, side: 'below',
+    })
+  })
+
+  it('answers 400 for a range wider than the maximum', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/hrv-deviation?from=1900-01-01&to=2100-01-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
+  })
+
+  it('answers 400 for a malformed from, not 500', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, `/hrv-deviation?from=garbage&to=${HRV_DAY}`)
+    expect(response.statusCode).toBe(400)
+  })
+
+  it('answers 400 for an inverted range, not an empty 200', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, `/hrv-deviation?from=${HRV_DAY}&to=2026-09-01`)
+    expect(response.statusCode).toBe(400)
+  })
+
+  it('answers 400 for a missing from', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, `/hrv-deviation?to=${HRV_DAY}`)
+    expect(response.statusCode).toBe(400)
+  })
+
+  it('answers 304 to a repeat request carrying its ETag', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedHrvDip(harness)
+    const first = await get(harness, token, `/hrv-deviation?from=${HRV_DAY}&to=${HRV_DAY}`)
+    const etag = first.headers.etag as string
+    expect(etag).toBeTruthy()
+    const second = await harness.app.inject({
+      method: 'GET', url: `/api/v1/p/p1/hrv-deviation?from=${HRV_DAY}&to=${HRV_DAY}`,
+      headers: { authorization: `Bearer ${token}`, 'if-none-match': etag },
+    })
+    expect(second.statusCode).toBe(304)
+  })
+})
