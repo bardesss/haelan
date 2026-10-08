@@ -6,7 +6,7 @@
 // Run against a restored backup; DO NOT commit its output, which carries figures off a household
 // archive - the same rule probe-recovery-scale.mjs and probe-recovery-calibration.mjs carry.
 //
-//   node --experimental-strip-types scripts/probe-recovery-fit.mjs .local-archive/haelan.sqlite
+//   node --experimental-strip-types scripts/probe-recovery-fit.mjs .local-archive/haelan.sqlite [--exclude YYYY-MM-DD ...]
 //
 // What it does, in order:
 //   1. The current weights' correlation with the harvested scores: the baseline to beat.
@@ -36,6 +36,11 @@ try {
 const STEP = 0.05
 const MIN_WEIGHT = 0.05
 const MIN_GAIN = 0.03
+const MIN_PAIRED = 10
+const excluded = new Set()
+for (let i = 3; i < process.argv.length; i += 1) {
+  if (process.argv[i] === '--exclude' && process.argv[i + 1] !== undefined) excluded.add(process.argv[i += 1])
+}
 const KEYS = ['hrv', 'restingHeartRate', 'sleep', 'respiratoryRate']
 
 const file = process.argv[2]
@@ -97,16 +102,21 @@ const fmtW = (w) => KEYS.map((k) => `${k} ${w[k].toFixed(2)}`).join(', ')
 for (const [personId, input] of byPerson) {
   const harvest = harvestByPerson.get(personId)
   if (harvest === undefined || harvest.size === 0) continue
-  const dates = [...harvest.keys()].sort()
-  const range = { from: dates[0], to: dates.at(-1) }
   const earliest = input.hrv[0]?.localDate
-  if (earliest === undefined || shiftLocalDate(earliest, BASELINE_WINDOW_DAYS + SLEEP_WEEK_DAYS - 1) > range.from) {
-    console.log(`${personId.slice(0, 6)}: some harvested days fall before a full window; they are dropped below`)
+  if (earliest === undefined) continue
+  // A harvested day counts only once a full baseline window and sleep week stand behind it, the
+  // clamp probe-recovery-calibration.mjs applies.
+  const firstScored = shiftLocalDate(earliest, BASELINE_WINDOW_DAYS + SLEEP_WEEK_DAYS - 1)
+  const allDates = [...harvest.keys()].filter((d) => !excluded.has(d)).sort()
+  const dates = allDates.filter((d) => d >= firstScored)
+  if (allDates.length > dates.length) {
+    console.log(`${personId.slice(0, 6)}: ${allDates.length - dates.length} harvested days fall before a full window and are dropped`)
   }
+  if (dates.length === 0) continue
+  const range = { from: dates[0], to: dates.at(-1) }
 
   // Composites for every grid point over the harvested days. The scale cannot change which weights
   // correlate best with the composite, so the search runs on composites and the scale comes after.
-  const theirsByDate = harvest
   const compositesFor = (weights) => {
     const series = recoveryIndexSeries(input, range, { weights })
     const out = new Map()
@@ -115,8 +125,8 @@ for (const [personId, input] of byPerson) {
   }
   const current = compositesFor(RECOVERY_WEIGHTS)
   const paired = dates.filter((d) => current.has(d))
-  const theirs = paired.map((d) => theirsByDate.get(d))
-  const rOf = (comps, days) => pearson(days.map((d) => comps.get(d)), days.map((d) => theirsByDate.get(d)))
+  const theirs = paired.map((d) => harvest.get(d))
+  const rOf = (comps, days) => pearson(days.map((d) => comps.get(d)), days.map((d) => harvest.get(d)))
 
   console.log(`\n=== ${personId.slice(0, 6)} ===  paired days: ${paired.length} of ${harvest.size}`)
   const rCurrent = rOf(current, paired)
@@ -145,7 +155,8 @@ for (const [personId, input] of byPerson) {
 
   // The scale that matches Google's spread on these days, by bisection: the logistic's spread
   // grows with the scale, monotonically on any fixed set of composites.
-  const comps = paired.map((d) => compositesFor(chosen).get(d))
+  const chosenComps = compositesFor(chosen)
+  const comps = paired.map((d) => chosenComps.get(d))
   const target = sd(theirs)
   let lo = 0.05, hi = 10
   for (let i = 0; i < 60; i += 1) { const mid = (lo + hi) / 2; if (sd(comps.map((c) => scoreOf(c, mid))) < target) lo = mid; else hi = mid }

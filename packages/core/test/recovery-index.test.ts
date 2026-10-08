@@ -119,9 +119,10 @@ describe('recoveryIndex', () => {
   it('scores a day sitting on its own baseline at 50', () => {
     const end = '2026-09-14'
     const input = inputAt(end)
-    // Put the final day of each autonomic series exactly on its own baseline centre, so each z is
-    // 0. `history` cycles -1/0/+1 over a window of 60, which is a multiple of 3, so the centre is
-    // the bare value.
+    // Put the final day of each autonomic series on its own baseline centre, so each z is 0.
+    // `history` cycles -1/0/+1 over a window of 60, which is a multiple of 3, so the centre is the
+    // bare value. Under ln, HRV's centre is the log-mean of 39/40/41, slightly below ln 40, so HRV's
+    // z is a hair off zero and the score still rounds to 50.
     const flatten = (days: readonly DayValue[], centre: number): DayValue[] =>
       days.map((day) => day.localDate === end ? { ...day, value: centre } : day)
     // Sleep is handed an unvarying history on purpose. A constant series has zero spread, so its z
@@ -148,7 +149,7 @@ describe('recoveryIndex', () => {
 
   it('reads HRV on the log scale, so the same ratio up and down moves the score equally far', () => {
     // A baseline alternating 30 and 120 has a geometric centre of 60 and an arithmetic one of 75.
-    // 90 and 40 are 60 times and over 1.5: equal and opposite on the log scale, but +15 and -35
+    // 90 and 40 are 60 × 1.5 and 60 / 1.5: equal and opposite on the log scale, but +15 and -35
     // around 75 on the raw one, so only a log reading scores them as mirror images.
     const end = '2026-09-14'
     const base = inputAt(end)

@@ -133,7 +133,7 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   // fixture values, not guessed. Bart's own RECOVERY_ON scores 0, band 'low'. (73, not 76: the
   // 2026-10-08 refit against harvested Google scores read HRV on ln, moved the weights towards HRV
   // and set RECOVERY_SCALE to 1.00 - see recoveryIndex.ts's own comments on both. 73 is also the
-  // top of the re-derived 'above' band, so a cut that moved by one would fail this too.)
+  // top of the re-derived 'above' band, so this catches the above/high cut moving down.)
   //
   // ALICE_FINGERPRINTS holds one fingerprint per tool, and `found` below only knows two matchers
   // - a boundary-anchored bare number (numberLeak) or a plain substring - so a lone '73' would
@@ -182,8 +182,8 @@ type RecoveryCentres = Record<RecoveryInputKey, { centre: number, amplitude: num
 // Alice and bart's centres are far enough apart (hrv 50 vs 80, resting heart rate 55 vs 65, and
 // so on) that recovery_index leaking one person's rows into the other's answer reads as an
 // obviously wrong number, not a coincidentally similar one - the isolation suites' own bar. Each
-// spikes on RECOVERY_ON in the direction that scores well for that person (higher hrv, lower
-// resting heart rate) so the tool actually answers `enough: true` with a real, non-boundary
+// spikes on RECOVERY_ON (alice in the direction that scores well, bart the other way, to a low
+// score) so the tool actually answers `enough: true` with a real, non-boundary
 // score rather than sitting at the baseline z of zero every non-spiked day gets.
 const ALICE_RECOVERY: RecoveryCentres = {
   hrv: { centre: 50, amplitude: 4, spike: 53 },

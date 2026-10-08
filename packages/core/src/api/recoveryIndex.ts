@@ -154,8 +154,9 @@ export function sleepWeekSeries(
  * modifier, not a pillar. The earlier weights (HRV and resting heart rate as an equal-ish autonomic
  * core, sleep a quarter) were chosen by reasoning before there was anything to fit against.
  *
- * **This object is the calibration target.** Fitting against harvested app scores later must be a
- * change to these four numbers and nothing else.
+ * **This object is a calibration target.** A refit re-runs `probe-recovery-fit.mjs` against the
+ * harvested scores and may move these weights and `RECOVERY_SCALE` together; the `bandOf` cuts must
+ * then be re-derived.
  */
 export const RECOVERY_WEIGHTS: Readonly<Record<RecoveryInputKey, number>> = {
   hrv: 0.75,
@@ -471,10 +472,10 @@ export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
  * behind it are not repeated here - what is fixed, and what a refit must reproduce, is the
  * percentile intent below.
  *
- * **If `RECOVERY_SCALE` is ever refit** against harvested Google Health scores, these five cuts do
- * not follow along automatically - the probe must be re-run and these five cuts re-derived from the
- * same intent (bottom tenth, next fifth, middle two-fifths, next fifth, top tenth) against the new
- * scale. Leaving the old cuts in place after a refit would silently change what fraction of days
+ * **The cuts depend on the weights, the ln reading of HRV and `RECOVERY_SCALE`** (all refit against
+ * harvested Google Health scores once already), so any change to those does not carry the cuts along
+ * automatically: re-derive them with the "shipped scale" lines of `probe-recovery-scale.mjs`, from the
+ * same intent (bottom tenth, next fifth, middle two-fifths, next fifth, top tenth). Leaving the old cuts in place after a refit would silently change what fraction of days
  * each band actually covers.
  *
  * Re-derived 2026-09-19 alongside `RECOVERY_SCALE`'s own re-measurement (see its comment): the
