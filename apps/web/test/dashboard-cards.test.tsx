@@ -12,7 +12,7 @@ import { I18nextProvider } from 'react-i18next'
 import { I18nProvider, initI18n } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { HrvRun } from '../src/data/useHrvDeviation.js'
-import { hrvDeviationPath } from '../src/data/useHrvDeviation.js'
+import { hrvDeviationPath, hrvRunKeyFrom } from '../src/data/useHrvDeviation.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import { addDays } from '../src/controls/range.js'
 import type { GlanceFigure, GlanceSleep, GlanceRecovery, GlanceDay } from '../src/data/useGlance.js'
@@ -341,10 +341,11 @@ function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {},
   const recovery = props.recovery ?? recoveryFixture()
   if (run !== undefined && recovery.hrv.asOfDate !== null) {
     client.setQueryData(queryKeys.resource('p1', 'hrv-deviation', {
-      from: addDays(recovery.hrv.asOfDate, -126), to: recovery.hrv.asOfDate,
+      from: hrvRunKeyFrom(recovery.hrv.asOfDate), to: recovery.hrv.asOfDate,
     }), { days: [], run })
   }
   hrvRequests = []
+  lastClient = client
   const original = globalThis.fetch
   globalThis.fetch = ((url: string) => { hrvRequests.push(String(url)); return Promise.resolve(new Response('{}')) }) as typeof fetch
   try {
@@ -360,6 +361,9 @@ function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {},
   }
 }
 let hrvRequests: string[] = []
+let lastClient: QueryClient | null = null
+/** The HRV stretch queries the last render put in the cache, seeded ones included. */
+const hrvQueriesFor = (day: string) => lastClient!.getQueryCache().getAll().filter((q) => q.queryKey[2] === 'hrv-deviation' && JSON.stringify(q.queryKey).includes(day))
 
 describe('RecoveryCard', () => {
   beforeEach(() => {
@@ -426,7 +430,7 @@ describe('RecoveryCard HRV stretch note', () => {
   const hrvDay = () => recoveryFixture().hrv.asOfDate!
   it('names a below stretch, in the out-of-usual tone, under the HRV gauge', () => {
     const html = renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }))
-    expect(html).toContain('<span class="dash-mini-note is-out">5 days below usual</span>')
+    expect(html).toContain('<span class="dash-mini-note is-out is-wrapping">5 days below usual</span>')
     expect(html.indexOf('5 days below usual')).toBeGreaterThan(html.lastIndexOf('usual-gauge'))
   })
   it('names an above stretch', () => {
@@ -451,6 +455,25 @@ describe('RecoveryCard HRV stretch note', () => {
     const html = renderRecovery({ recovery }, hrvRunFixture())
     expect(html).not.toContain('dash-mini-note')
     expect(hrvRequests).toEqual([])
+  })
+  // The unvalued gauge draws no note whatever the cache holds, so the markup cannot tell the guard
+  // from its absence: what the guard decides is whether the read is made for that day at all, and an
+  // observer for it shows in the query cache (a seeded entry is there too, hence the unseeded render).
+  it('makes no read for the HRV day when HRV has no value, though its day is known', () => {
+    const recovery = recoveryFixture({ hrv: { value: null } })
+    const day = recovery.hrv.asOfDate!
+    expect(renderRecovery({ recovery })).not.toContain('dash-mini-note')
+    expect(hrvQueriesFor(day)).toHaveLength(0)
+    renderRecovery({ recovery: recoveryFixture() })
+    expect(hrvQueriesFor(day)).toHaveLength(1)
+  })
+  it('prints the lookback when capped, not the measured days', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 55, capped: true }))).toContain('>more than 60 days below usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 55, capped: true }), 'nl')).toContain('>meer dan 60 dagen boven gebruikelijk<')
+  })
+  it('keys the read by a window ending on the day and reaching back at least the run depends on', () => {
+    const on = hrvDay()
+    expect(hrvRunKeyFrom(on) <= addDays(on, -125)).toBe(true)
   })
   it('asks for exactly the HRV day', () => {
     expect(hrvDeviationPath('p1', hrvDay())).toBe(`/api/v1/p/p1/hrv-deviation?from=${hrvDay()}&to=${hrvDay()}`)

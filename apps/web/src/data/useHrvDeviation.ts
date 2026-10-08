@@ -30,7 +30,15 @@ export interface HrvDeviationBody {
  * hrvDeviationWindowStart). The query key carries this window so an applied override anywhere inside
  * it invalidates the read (useAnnotations.ts overlapsAffected); the request itself asks for one day.
  */
-const HRV_RUN_DEPENDS_ON_DAYS = 60 + 7 + 60
+export const HRV_RUN_DEPENDS_ON_DAYS = 60 + 7 + 60
+
+/** The lookback a capped run was cut at: core's HRV_DEVIATION_LOOKBACK_DAYS, mirrored by value (no browser safe subpath). A capped run's own `days` counts measured days and can be fewer. */
+export const HRV_LOOKBACK_DAYS = 60
+
+/** The `from` the query key carries for the run ending `on`. */
+export function hrvRunKeyFrom(on: string): string {
+  return addDays(on, -(HRV_RUN_DEPENDS_ON_DAYS - 1))
+}
 
 export function hrvDeviationPath(personId: string, on: string): string {
   const params = new URLSearchParams({ from: on, to: on })
@@ -43,7 +51,7 @@ export function useHrvDeviation(on: string | null): UseQueryResult<HrvDeviationB
   const personId = session.data?.personId
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'hrv-deviation', {
-      from: on === null ? '' : addDays(on, -(HRV_RUN_DEPENDS_ON_DAYS - 1)), to: on ?? '',
+      from: on === null ? '' : hrvRunKeyFrom(on), to: on ?? '',
     }),
     enabled: personId !== undefined && on !== null,
     queryFn: () => apiGet<HrvDeviationBody>(hrvDeviationPath(personId!, on!)),

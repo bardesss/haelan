@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Sparkline } from '../../charts/Sparkline.js'
-import { verdictTone } from '../../charts/base.js'
-import { useHrvDeviation } from '../../data/useHrvDeviation.js'
+import { useHrvDeviation, HRV_LOOKBACK_DAYS } from '../../data/useHrvDeviation.js'
 import type { GlanceFigure, GlanceRecovery } from '../../data/useGlance.js'
 import { DashCard, Described, useOpensDay } from './cardShared.js'
 import { ScoreRing } from './ScoreRing.js'
@@ -36,7 +35,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
   // value, and no markup without a run, so a card without a stretch keeps its height.
   const hrvDay = recovery.hrv.value === null ? null : recovery.hrv.asOfDate
   const run = useHrvDeviation(hrvDay).data?.run ?? null
-  const runNote = run === null ? null : t(`glance.recovery.hrvRun.${run.capped ? 'capped' : 'days'}.${run.side}`, { days: run.days })
+  const runNote = run === null ? null : t(`glance.recovery.hrvRun.${run.capped ? 'capped' : 'days'}.${run.side}`, { days: run.capped ? HRV_LOOKBACK_DAYS : run.days })
   const gauge = (key: 'rhr' | 'hrv', figure: GlanceFigure, unit: string) => {
     if (figure.value === null) return <div className="dash-dial"><p className="glance-empty">{t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</p><span className="label">{t(`glance.recovery.${key}`)}</span></div>
     const usual = usualLine(figure, t, language)
@@ -48,7 +47,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
           label={[`${t(`glance.recovery.${key}`)} ${formatFigure(figure, language)} ${unit}`, usual].filter(Boolean).join(', ')} />
         <span className="label">{t(`glance.recovery.${key}`)}</span>
         {day !== null && <span className="glance-asof">{day}</span>}
-        {key === 'hrv' && runNote !== null && <span className={`dash-mini-note ${verdictTone(null, run!.side) ?? 'is-out'}`}>{runNote}</span>}
+        {key === 'hrv' && runNote !== null && <span className="dash-mini-note is-out is-wrapping">{runNote}</span>}
       </div>
     )
   }
