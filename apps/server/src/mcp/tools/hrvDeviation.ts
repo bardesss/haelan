@@ -1,5 +1,8 @@
 import { z } from 'zod'
-import { readHrvDeviation, roundMetricValue } from '@haelan/core'
+import {
+  BASELINE_WINDOW_DAYS, HRV_DEVIATION_LOOKBACK_DAYS, HRV_DEVIATION_MIN_RUN, HRV_WEEK_DAYS, HRV_WEEK_MIN_READINGS,
+  readHrvDeviation, roundMetricValue,
+} from '@haelan/core'
 import type { HrvDeviationDay } from '@haelan/core'
 import type { Tool } from '../contract.ts'
 import { defineTool } from '../contract.ts'
@@ -11,10 +14,10 @@ export const HRV_DAY = z.object({
   localDate: z.string(),
   measured: z.boolean(),
   reason: z.enum(['thin-week', 'thin-baseline', 'flat-baseline']).nullable().describe(
-    'Null when `measured` is true. thin-week: fewer than four HRV readings in the seven days ending here. '
-    + 'thin-baseline: too few days in the 60 before that week. flat-baseline: those 60 days did not vary at all.',
+    `Null when \`measured\` is true. thin-week: fewer than ${HRV_WEEK_MIN_READINGS} HRV readings in the ${HRV_WEEK_DAYS} days ending here. `
+    + `thin-baseline: too few days in the ${BASELINE_WINDOW_DAYS} before that week. flat-baseline: those ${BASELINE_WINDOW_DAYS} days did not vary at all.`,
   ),
-  rolling: z.number().nullable().describe('The seven-day average HRV in ms, averaged on the log scale. Null when not measured.'),
+  rolling: z.number().nullable().describe(`The ${HRV_WEEK_DAYS}-day average HRV in ms, averaged on the log scale. Null when not measured.`),
   low: z.number().nullable().describe('The low edge of this person\'s own band for that average, in ms. Null when not measured.'),
   high: z.number().nullable().describe('The high edge, in ms. Null when not measured.'),
   side: z.enum(['below', 'within', 'above']).nullable().describe('Null when not measured.'),
@@ -22,11 +25,11 @@ export const HRV_DAY = z.object({
 
 export const HRV_RUN = z.object({
   side: z.enum(['below', 'above']),
-  days: z.number().describe('Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.'),
-  capped: z.boolean().describe('True when the run is longer than the 60 days looked back over.'),
+  days: z.number().describe(`Measured days in a row the ${HRV_WEEK_DAYS}-day average has been on this side. Days without enough readings are skipped, not counted.`),
+  capped: z.boolean().describe(`True when the run is longer than the ${HRV_DEVIATION_LOOKBACK_DAYS} days looked back over.`),
   since: z.string(),
-  sideNights: z.number().describe('Of the readings in the last seven days, how many were outside the band on this side. Out of `weekReadings`, not out of seven.'),
-  weekReadings: z.number().describe('How many HRV readings the last seven days hold, `to` and the six before it. Fewer than seven when nights are missing.'),
+  sideNights: z.number().describe(`Of the readings in the last ${HRV_WEEK_DAYS} days, how many were outside the band on this side. Out of \`weekReadings\`, not out of ${HRV_WEEK_DAYS}.`),
+  weekReadings: z.number().describe(`How many HRV readings the last ${HRV_WEEK_DAYS} days hold, \`to\` and the ${HRV_WEEK_DAYS - 1} before it. Fewer than ${HRV_WEEK_DAYS} when nights are missing.`),
   filledDays: z.number().describe('Days in the run whose HRV was an intraday average standing in for a measured reading.'),
 }).nullable()
 
@@ -48,9 +51,9 @@ function dayOf(day: HrvDeviationDay): z.infer<typeof HRV_DAY> {
 export const hrvDeviationTool = defineTool({
   name: 'hrv_deviation',
   description:
-    'The seven-day average of heart rate variability against this person\'s own band for each day in '
+    `The ${HRV_WEEK_DAYS}-day average of heart rate variability against this person's own band for each day in `
     + 'a date range, oldest first, and `run`: whether that average has stayed on one side of the band '
-    + 'for at least three measured days in a row as of `to` (null when it has not). Both directions '
+    + `for at least ${HRV_DEVIATION_MIN_RUN} measured days in a row as of \`to\` (null when it has not). Both directions `
     + 'are reported and neither is a verdict: a long stretch above the band is not "recovered", and a '
     + 'long stretch below is not a diagnosis, only distance from a person\'s own usual. A day with '
     + '`measured: false` had too little to judge (see `reason`) and is not the same as a low reading; '

@@ -1,3 +1,4 @@
+import { HRV_DEVIATION_LOOKBACK_DAYS } from '@haelan/core'
 import type { HrvDeviationRun } from '@haelan/core'
 
 /**
@@ -10,7 +11,7 @@ import type { HrvDeviationRun } from '@haelan/core'
 export function hrvRunSentence(run: HrvDeviationRun): string {
   // A capped run can hold fewer measured days than the lookback has days, and its first day is
   // only where the lookback began, so it gets neither "measured" nor a since date.
-  const length = run.capped ? 'more than 60 days' : `${run.days} measured days, since ${run.since}`
+  const length = run.capped ? `more than ${HRV_DEVIATION_LOOKBACK_DAYS} days` : `${run.days} measured days, since ${run.since}`
   const nights = run.side === 'below' ? 'low' : 'high'
   const filled = run.filledDays === 0 ? ''
     : ` ${run.filledDays} of those days' HRV ${run.filledDays === 1 ? 'was' : 'were'} filled from an intraday average, not measured.`
