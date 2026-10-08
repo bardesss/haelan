@@ -6,6 +6,7 @@ import { annotationTools } from './tools/annotations.ts'
 import { workoutTools } from './tools/workouts.ts'
 import { sqlTools } from './tools/sql.ts'
 import { recoveryTools } from './tools/recovery.ts'
+import { hrvDeviationTools } from './tools/hrvDeviation.ts'
 import { explainTools } from './tools/explain.ts'
 
 /**
@@ -14,5 +15,5 @@ import { explainTools } from './tools/explain.ts'
  */
 export const CATALOGUE: Tool[] = [
   ...personTools, ...seriesTools, ...intradayTools, ...annotationTools, ...workoutTools, ...sqlTools,
-  ...recoveryTools, ...explainTools,
+  ...recoveryTools, ...hrvDeviationTools, ...explainTools,
 ]

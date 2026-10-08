@@ -51,7 +51,7 @@ It is slower than the other tools - it builds a fresh database per query - and i
 
 Pointing an LLM at this server sends that person's health data to whichever model provider is on the other end of the conversation. Self-hosting the store does not self-host the model: haelan keeps the database on your own disk, but the moment an agent calls one of these tools, the answer it reads leaves the house for wherever that model runs.
 
-## Tools (16)
+## Tools (17)
 
 ### describe_person
 
@@ -545,6 +545,33 @@ The recovery index for each day in a date range, oldest first - the same number 
 - **hrvFilled** (object) — How many of the daily HRV readings behind these scores (each day's own reading plus its 60-day baseline) were filled in from an intraday average rather than measured, out of how many were used.
   - **filled** (number)
   - **of** (number)
+
+### hrv_deviation
+
+The seven-day average of heart rate variability against this person's own band for each day in a date range, oldest first, and `run`: whether that average has stayed on one side of the band for at least three measured days in a row as of `to` (null when it has not). Both directions are reported and neither is a verdict: a long stretch above the band is not "recovered", and a long stretch below is not a diagnosis, only distance from a person's own usual. A day with `measured: false` had too little to judge (see `reason`) and is not the same as a low reading; only read `rolling`, `low`, `high` and `side` where `measured` is true. Days in `run` without enough readings are skipped, not counted. A nonzero `run.filledDays` means some of the stretch stood on HRV filled in from an intraday average rather than the device's own daily summary; say so in words rather than reporting the stretch as measurement throughout. Report a finding as association with how the days were lived, never as advice, risk or a clinical claim.
+
+**Input**
+
+- **from** (string) — YYYY-MM-DD, inclusive
+- **to** (string) — YYYY-MM-DD, inclusive. The run is read as of this day.
+
+**Output**
+
+- **days** (array of object)
+  - **localDate** (string)
+  - **measured** (boolean)
+  - **reason** ('thin-week' | 'thin-baseline' | 'flat-baseline', nullable) — Null when `measured` is true. thin-week: fewer than four HRV readings in the seven days ending here. thin-baseline: too few days in the 60 before that week. flat-baseline: those 60 days did not vary at all.
+  - **rolling** (number, nullable) — The seven-day average HRV in ms, averaged on the log scale. Null when not measured.
+  - **low** (number, nullable) — The low edge of this person's own band for that average, in ms. Null when not measured.
+  - **high** (number, nullable) — The high edge, in ms. Null when not measured.
+  - **side** ('below' | 'within' | 'above', nullable) — Null when not measured.
+- **run** (object, nullable)
+  - **side** ('below' | 'above')
+  - **days** (number) — Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.
+  - **capped** (boolean) — True when the run is longer than the 60 days looked back over.
+  - **since** (string)
+  - **sideNights** (number) — Of the last seven single nights, how many were outside the band on this side.
+  - **filledDays** (number) — Days in the run whose HRV was an intraday average standing in for a measured reading.
 
 ### explain
 
