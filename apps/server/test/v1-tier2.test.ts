@@ -92,6 +92,16 @@ describe('GET /intraday', () => {
     expect(body.points.length).toBeLessThanOrEqual(100)
     expect(body.reduction).toMatchObject({ method: 'minmax', from: 600 })
   })
+
+  // Refused at the route, before any date arithmetic sees it.
+  it('answers 400 naming the field for a date that is not on the calendar', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/intraday?metric=heart_rate&date=2026-02-30')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "date is not a date on the calendar, got '2026-02-30'" },
+    })
+  })
 })
 
 describe('GET /sessions', () => {
@@ -238,6 +248,26 @@ describe('GET /sessions', () => {
     expect(body.items[0].autoSplits).toBeUndefined()
     expect(body.items[0].laps).toBeUndefined()
   })
+
+  // Refused at the route, before any date arithmetic: a malformed date could otherwise reach
+  // shiftLocalDate and surface as a RangeError, and an inverted range as an empty answer.
+  it('answers 400 naming the field for a malformed from', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sessions?kind=exercise&from=2026-8-1&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from must be a YYYY-MM-DD local date, got '2026-8-1'" },
+    })
+  })
+
+  it('answers 400 naming both dates for an inverted range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sessions?kind=exercise&from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from '2026-08-31' is after to '2026-08-01'" },
+    })
+  })
 })
 
 describe('GET /sleep/nights', () => {
@@ -297,5 +327,25 @@ describe('GET /sleep/nights', () => {
     const response = await get(harness, token, '/sleep/nights?from=1900-01-01&to=2100-01-01&limit=1')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
+  })
+
+  // Refused at the route, before any date arithmetic: a malformed date could otherwise reach
+  // shiftLocalDate and surface as a RangeError, and an inverted range as an empty answer.
+  it('answers 400 naming the field for a malformed from', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sleep/nights?from=2026-8-1&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from must be a YYYY-MM-DD local date, got '2026-8-1'" },
+    })
+  })
+
+  it('answers 400 naming both dates for an inverted range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sleep/nights?from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from '2026-08-31' is after to '2026-08-01'" },
+    })
   })
 })

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { SeriesResult } from '@haelan/core'
-import { metricsFrom, personQueryOf, requireString, roundSeriesResult, sendHashed } from './shared.ts'
+import { metricsFrom, personQueryOf, requireDateRange, requireString, roundSeriesResult, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -122,8 +122,7 @@ export function registerExportRoutes(app: FastifyInstance): void {
     }
     const metrics = metricsFrom(request.query.metric)
     const agg = requireString(request.query.agg, 'agg')
-    const from = requireString(request.query.from, 'from')
-    const to = requireString(request.query.to, 'to')
+    const { from, to } = requireDateRange(request.query)
     const source = request.query.source
 
     const body: Record<string, SeriesResult> = {}

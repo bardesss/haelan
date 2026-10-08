@@ -73,9 +73,9 @@ const DAY_MS = 86_400_000
  * The `daily` backed reads are bounded by SQL and by the rows actually present, so they do not
  * need this.
  *
- * A malformed or reversed range is left to the core call underneath, whose message names which
- * date is wrong; this only refuses a well formed range that is merely too wide, and the message
- * names the limit so a caller knows what to ask for instead.
+ * A malformed or reversed range is refused before this by requireDateRange, which every ranged
+ * route calls first so no date arithmetic sees one; this only refuses a well formed range that is
+ * merely too wide, and the message names the limit so a caller knows what to ask for instead.
  */
 export function requireBoundedRange(from: string, to: string, name = 'range'): void {
   const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1
