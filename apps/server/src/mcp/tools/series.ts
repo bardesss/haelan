@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LOCAL_DATE, requireToolRange } from '../dates.ts'
 import { metricSpec } from '@haelan/core/metrics'
 import type { MetricSpec } from '@haelan/core/metrics'
 import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE } from '@haelan/core'
@@ -77,8 +78,8 @@ export const querySeries = defineTool({
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
-    from: z.string().describe('YYYY-MM-DD, inclusive'),
-    to: z.string().describe('YYYY-MM-DD, inclusive'),
+    from: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
+    to: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
     points: z.number().optional(),
     source: DAILY_SOURCE,
   },
@@ -92,6 +93,7 @@ export const querySeries = defineTool({
     summary: SUMMARY,
   },
   run: (q, args) => {
+    requireToolRange(args.from, args.to)
     const result = q.series({
       metric: args.metric, agg: args.agg, from: args.from, to: args.to,
       points: budgetFor(args.points, DEFAULT_DAILY_POINTS), source: args.source,
@@ -139,7 +141,7 @@ export const getDaily = defineTool({
     + 'this surface. Some readings are marked `filled`; see that field before calling a filled day '
     + 'a measurement.',
   inputSchema: {
-    localDate: z.string().describe('YYYY-MM-DD'),
+    localDate: LOCAL_DATE.describe('YYYY-MM-DD'),
     metrics: z.array(z.string()).min(1),
     agg: z.string().optional().describe(
       'Applies to every metric in `metrics` alike. Omitted, each metric uses its own default '
@@ -194,7 +196,7 @@ export const getBaselines = defineTool({
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
-    on: z.string().describe('YYYY-MM-DD, the baseline is computed from the days before this one'),
+    on: LOCAL_DATE.describe('YYYY-MM-DD, the baseline is computed from the days before this one'),
     windowDays: z.number().optional(),
     source: DAILY_SOURCE,
   },
@@ -239,8 +241,8 @@ export const comparePeriods = defineTool({
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
-    from: z.string().describe('YYYY-MM-DD, inclusive, the current period'),
-    to: z.string().describe('YYYY-MM-DD, inclusive, the current period'),
+    from: LOCAL_DATE.describe('YYYY-MM-DD, inclusive, the current period'),
+    to: LOCAL_DATE.describe('YYYY-MM-DD, inclusive, the current period'),
     source: DAILY_SOURCE,
   },
   outputSchema: {
@@ -260,6 +262,7 @@ export const comparePeriods = defineTool({
     previousFilledDays: FILLED_DAYS,
   },
   run: (q, args) => {
+    requireToolRange(args.from, args.to)
     const insight = q.comparePeriods({
       metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
     })
@@ -292,8 +295,8 @@ export const trend = defineTool({
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
-    from: z.string().describe('YYYY-MM-DD, inclusive'),
-    to: z.string().describe('YYYY-MM-DD, inclusive'),
+    from: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
+    to: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
     source: DAILY_SOURCE,
   },
   outputSchema: {
@@ -302,6 +305,7 @@ export const trend = defineTool({
     filledDays: FILLED_DAYS,
   },
   run: (q, args) => {
+    requireToolRange(args.from, args.to)
     const points = q.trend({
       metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
     })

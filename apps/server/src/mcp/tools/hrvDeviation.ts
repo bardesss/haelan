@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LOCAL_DATE, requireToolRange } from '../dates.ts'
 import {
   BASELINE_WINDOW_DAYS, HRV_DEVIATION_LOOKBACK_DAYS, HRV_DEVIATION_MIN_RUN, HRV_WEEK_DAYS, HRV_WEEK_MIN_READINGS,
   readHrvDeviation, roundHrvDeviationDay,
@@ -63,14 +64,15 @@ export const hrvDeviationTool = defineTool({
     + 'say so in words rather than reporting the stretch as measurement throughout. Report a finding '
     + 'as association with how the days were lived, never as advice, risk or a clinical claim.',
   inputSchema: {
-    from: z.string().describe('YYYY-MM-DD, inclusive'),
-    to: z.string().describe('YYYY-MM-DD, inclusive. The run is read as of this day.'),
+    from: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
+    to: LOCAL_DATE.describe('YYYY-MM-DD, inclusive. The run is read as of this day.'),
   },
   outputSchema: {
     days: z.array(HRV_DAY),
     run: HRV_RUN,
   },
   run: (q, args) => {
+    requireToolRange(args.from, args.to)
     const { days, run } = readHrvDeviation(q, { from: args.from, to: args.to })
     return { days: days.map(hrvDayOf), run }
   },

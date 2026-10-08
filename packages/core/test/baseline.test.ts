@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { baselineOf, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from '../src/query/baseline.ts'
+import { baselineOf, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS, FLAT_SPREAD_EPSILON } from '../src/query/baseline.ts'
 import { INSIGHT_MIN_DAY_FRACTION } from '../src/query/insights.ts'
 
 describe('baselineOf', () => {
@@ -86,5 +86,19 @@ describe('zScoreOf', () => {
     const flat = baselineOf([70, 70, 70], 3)!
     expect(flat.spread).toBe(0)
     expect(zScoreOf(75, flat)).toBeNull()
+  })
+
+  // A float mean of sixty identical values lands a few ulps off the value, so the spread of a truly
+  // flat baseline is ~1e-16 rather than zero; `=== 0` let that through as an enormous z.
+  it('returns null for sixty identical values whose float spread is not exactly zero', () => {
+    const flat = baselineOf(Array.from({ length: 60 }, () => Math.log(43.7)), 60)!
+    expect(flat.spread).toBeGreaterThan(0)
+    expect(flat.spread).toBeLessThan(FLAT_SPREAD_EPSILON)
+    expect(zScoreOf(Math.log(50), flat)).toBeNull()
+  })
+
+  it('still answers a number for a real spread, however tight', () => {
+    const tight = baselineOf(Array.from({ length: 60 }, (_, i) => 60 + (i % 2 === 0 ? 0.5 : -0.5)), 60)!
+    expect(zScoreOf(61, tight)).toBe((61 - tight.center) / tight.spread)
   })
 })

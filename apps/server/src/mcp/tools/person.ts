@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LOCAL_DATE } from '../dates.ts'
 import { METRICS } from '@haelan/core/metrics'
 import type { Tool } from '../contract.ts'
 import { untrusted, UNTRUSTED } from '../contract.ts'
@@ -18,7 +19,7 @@ export const describePerson: Tool = {
     // Declared, not taken from a clock: the Tool contract deliberately gives `run` no second
     // argument beyond its parsed input (see contract.ts), so there is nowhere for a server clock
     // to enter. Without this the staleness fields below could never be reached at all.
-    today: z.string().optional().describe(
+    today: LOCAL_DATE.optional().describe(
       "Today's date as YYYY-MM-DD. Supply it to learn whether each source is still reporting: "
       + 'without it, lastReportedDate and status come back null. A source that quietly stopped is '
       + 'why a series can thin out without any single day being wrong.',

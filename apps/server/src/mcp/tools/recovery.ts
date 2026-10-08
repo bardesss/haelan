@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LOCAL_DATE, requireToolRange } from '../dates.ts'
 import { recoveryIndexSeries, bandOf } from '@haelan/core/recovery-index'
 import type { RecoveryIndex } from '@haelan/core/recovery-index'
 import { readRecoveryInput } from '@haelan/core'
@@ -97,8 +98,8 @@ export const recoveryIndexTool = defineTool({
     + 'throughout. Report a finding as association with how the day was lived, never as advice, '
     + 'risk or a clinical claim.',
   inputSchema: {
-    from: z.string().describe('YYYY-MM-DD, inclusive'),
-    to: z.string().describe('YYYY-MM-DD, inclusive'),
+    from: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
+    to: LOCAL_DATE.describe('YYYY-MM-DD, inclusive'),
   },
   outputSchema: {
     days: z.array(RECOVERY_DAY),
@@ -112,6 +113,7 @@ export const recoveryIndexTool = defineTool({
     ),
   },
   run: (q, args) => {
+    requireToolRange(args.from, args.to)
     const { input, hrvFilled } = readRecoveryInput(q, { from: args.from, to: args.to })
     const byDate = recoveryIndexSeries(input, { from: args.from, to: args.to })
     return { days: [...byDate.entries()].map(([localDate, index]) => dayOf(localDate, index)), hrvFilled }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LOCAL_DATE, requireToolRange } from '../dates.ts'
 import { metricSpec } from '@haelan/core/metrics'
 import { ConfigError } from '@haelan/core'
 import type { Tool } from '../contract.ts'
@@ -111,13 +112,13 @@ export const explainTool = defineTool({
     + 'Filled days in either period are stated in the finding whichever link answers.',
   inputSchema: {
     kind: z.enum(['empty', 'recovery', 'workout', 'day', 'comparison']),
-    localDate: z.string().optional().describe('YYYY-MM-DD. Required for `empty`, `recovery` and `day`, refused for `workout`.'),
-    today: z.string().optional().describe(
+    localDate: LOCAL_DATE.optional().describe('YYYY-MM-DD. Required for `empty`, `recovery` and `day`, refused for `workout`.'),
+    today: LOCAL_DATE.optional().describe(
       'YYYY-MM-DD, today in the person\'s own zone. Required for `day`, refused otherwise: a day is only '
       + 'explained once it is over.',
     ),
-    from: z.string().optional().describe('YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.'),
-    to: z.string().optional().describe('YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.'),
+    from: LOCAL_DATE.optional().describe('YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.'),
+    to: LOCAL_DATE.optional().describe('YYYY-MM-DD, inclusive, the current period. Required for `comparison`, refused otherwise.'),
     sessionId: z.string().optional().describe('An exercise session id from get_workouts. Required for `workout`, refused otherwise.'),
     metric: z.string().optional().describe('Required for `empty` and `comparison`, refused otherwise.'),
     agg: z.string().optional().describe(
@@ -162,6 +163,7 @@ export const explainTool = defineTool({
     // same way get_daily lets it be, so the empty agg below never reaches an answer.
     const agg = args.agg ?? (spec === undefined ? '' : defaultAggFor(spec))
     if (kind === 'comparison') {
+      requireToolRange(args.from!, args.to!)
       const { evidence, ...walk } = walkComparison(q, { metric, agg, from: args.from!, to: args.to!, source: args.source })
       return { kind, ...walk, evidence: { ...none, comparison: evidence } }
     }

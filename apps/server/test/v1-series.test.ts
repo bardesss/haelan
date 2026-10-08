@@ -102,6 +102,26 @@ describe('GET /series', () => {
     const response = await get(harness, token, '/series?agg=sum&from=2026-08-01&to=2026-08-01')
     expect(response.statusCode).toBe(400)
   })
+
+  // Refused at the route, before any date arithmetic: a malformed date could otherwise reach
+  // shiftLocalDate and surface as a RangeError, and an inverted range as an empty answer.
+  it('answers 400 naming the field for a malformed from', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/series?metric=steps&agg=sum&from=2026-8-1&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from must be a YYYY-MM-DD local date, got '2026-8-1'" },
+    })
+  })
+
+  it('answers 400 naming both dates for an inverted range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/series?metric=steps&agg=sum&from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from '2026-08-31' is after to '2026-08-01'" },
+    })
+  })
 })
 
 describe('GET /baselines', () => {
@@ -176,6 +196,16 @@ describe('GET /baselines', () => {
     expect(response.json().baseline.n).toBe(4)
     expect(response.json().filledDays).toEqual({ filled: 0, of: 4 })
   })
+
+  // Refused at the route, before any date arithmetic sees it.
+  it('answers 400 naming the field for a date that is not on the calendar', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-02-30')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "on is not a date on the calendar, got '2026-02-30'" },
+    })
+  })
 })
 
 describe('GET /insights', () => {
@@ -225,6 +255,26 @@ describe('GET /insights', () => {
     expect(response.statusCode).toBe(200)
     expect(response.json().currentFilledDays).toEqual({ filled: 0, of: 7 })
     expect(response.json().previousFilledDays).toEqual({ filled: 7, of: 7 })
+  })
+
+  // Refused at the route, before any date arithmetic: a malformed date could otherwise reach
+  // shiftLocalDate and surface as a RangeError, and an inverted range as an empty answer.
+  it('answers 400 naming the field for a malformed from', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/insights?metric=steps&agg=sum&from=2026-8-1&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from must be a YYYY-MM-DD local date, got '2026-8-1'" },
+    })
+  })
+
+  it('answers 400 naming both dates for an inverted range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/insights?metric=steps&agg=sum&from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from '2026-08-31' is after to '2026-08-01'" },
+    })
   })
 })
 
@@ -283,6 +333,26 @@ describe('GET /trend', () => {
       .toISOString().slice(0, 10)
     const response = await get(harness, token, `/trend?metric=steps&agg=sum&from=${from}&to=${to}`)
     expect(response.statusCode).toBe(200)
+  })
+
+  // Refused at the route, before any date arithmetic: a malformed date could otherwise reach
+  // shiftLocalDate and surface as a RangeError, and an inverted range as an empty answer.
+  it('answers 400 naming the field for a malformed from', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/trend?metric=steps&agg=sum&from=2026-8-1&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from must be a YYYY-MM-DD local date, got '2026-8-1'" },
+    })
+  })
+
+  it('answers 400 naming both dates for an inverted range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/trend?metric=steps&agg=sum&from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: "from '2026-08-31' is after to '2026-08-01'" },
+    })
   })
 })
 

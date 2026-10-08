@@ -6,8 +6,8 @@ import type { RecoveryIndexInput } from '../src/api/recoveryIndex.ts'
 /**
  * 60 days alternating one unit either side of `flat`, then one day that deviates sharply.
  *
- * The alternation matters: `zScoreOf` returns null for a literally constant baseline (spread
- * exactly zero is not a number of standard deviations), so a truly flat history could never
+ * The alternation matters: `zScoreOf` returns null for a literally constant baseline (a spread
+ * below FLAT_SPREAD_EPSILON is not a number of standard deviations), so a truly flat history could never
  * produce the finite "large z" this helper exists to test. Alternating keeps the baseline tight
  * -- nothing like the deviating day below -- while giving it a real, small, computable spread.
  */
