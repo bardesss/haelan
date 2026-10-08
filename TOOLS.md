@@ -644,6 +644,13 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **of** (number)
     - **carriedBy** ('hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — The input that moved the score furthest in its own direction.
     - **pulledAgainst** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Inputs that moved the score the other way.
+    - **hrvRun** (object, nullable) — The stretch of the seven-day HRV average on one side of its band as of the day; null on a withheld day or when there is none. Named in the finding only when HRV carried the score and the stretch is on the same side.
+      - **side** ('below' | 'above')
+      - **days** (number) — Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.
+      - **capped** (boolean) — True when the run is longer than the 60 days looked back over.
+      - **since** (string)
+      - **sideNights** (number) — Of the last seven single nights, how many were outside the band on this side.
+      - **filledDays** (number) — Days in the run whose HRV was an intraday average standing in for a measured reading.
   - **workout** (object, nullable)
     - **sessionId** (string)
     - **localDate** (string)
@@ -695,6 +702,13 @@ Walks one chain for a question and stops at the first link that accounts for it,
       - **sessionId** (string)
       - **exerciseType** (string, nullable)
     - **eventIds** (array of string, nullable) — Events logged on the day or the day before; read them with get_events.
+    - **hrvRun** (object, nullable) — The stretch of the seven-day HRV average on one side of its band as of the day, where the walk got past the gates; null before that or when there is none.
+      - **side** ('below' | 'above')
+      - **days** (number) — Measured days in a row the seven-day average has been on this side. Days without enough readings are skipped, not counted.
+      - **capped** (boolean) — True when the run is longer than the 60 days looked back over.
+      - **since** (string)
+      - **sideNights** (number) — Of the last seven single nights, how many were outside the band on this side.
+      - **filledDays** (number) — Days in the run whose HRV was an intraday average standing in for a measured reading.
   - **comparison** (object, nullable)
     - **metric** (string)
     - **agg** (string)

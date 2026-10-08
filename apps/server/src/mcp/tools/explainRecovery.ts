@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import { recoveryIndexSeries, bandOf } from '@haelan/core/recovery-index'
 import type { RecoveryIndex, RecoveryInputKey } from '@haelan/core/recovery-index'
-import { readRecoveryInput } from '@haelan/core'
+import { readHrvDeviation, readRecoveryInput } from '@haelan/core'
 import type { PersonQuery } from '@haelan/core'
+import { HRV_RUN } from './hrvDeviation.ts'
+import { hrvRunSentence } from './hrvRunWords.ts'
 
 /**
  * `explain`'s `recovery` chain: what the recovery index on one day stands on. See explain.ts for
@@ -16,6 +18,11 @@ import type { PersonQuery } from '@haelan/core'
  * A filled day inside the baseline, an absent optional input and sleep on half its evidence are
  * not stops: they are true of the score whatever carried it, so they ride along as clauses on
  * whichever link answers.
+ *
+ * A stretch of the seven-day HRV average away from its band is added only to the carriedBy link,
+ * and only when HRV is the input it names and the stretch is on the side that moved the score: a
+ * stretch below beside a score HRV lowered, above beside one HRV lifted. Anywhere else it would
+ * read as an explanation the score does not give.
  */
 
 export const RECOVERY_LINKS = ['withheld', 'hrvFilledToday', 'usual', 'carriedBy'] as const
@@ -47,6 +54,7 @@ export const RECOVERY_EVIDENCE = z.object({
   ),
   carriedBy: RECOVERY_INPUT_KEY.nullable().describe('The input that moved the score furthest in its own direction.'),
   pulledAgainst: z.array(RECOVERY_INPUT_KEY).nullable().describe('Inputs that moved the score the other way.'),
+  hrvRun: HRV_RUN.describe('The stretch of the seven-day HRV average on one side of its band as of the day; null on a withheld day or when there is none. Named in the finding only when HRV carried the score and the stretch is on the same side.'),
 })
 
 type Evidence = z.infer<typeof RECOVERY_EVIDENCE>
@@ -118,8 +126,10 @@ const LINKS: Record<RecoveryLink, Link> = {
       ? ''
       : ` ${capitalise(listOf(against.map((input) => input.key)))} pulled the other way (${against.map((input) => signed(input.points)).join(', ')}), `
         + 'so the inputs do not add up to the distance from 50.'
+    // The stretch only where HRV carried the score and the stretch is on the side that moved it.
+    const run = e.hrvRun !== null && top.key === 'hrv' && e.hrvRun.side === (up ? 'above' : 'below') ? hrvRunSentence(e.hrvRun) : ''
     return `${scoreOf(e)}. ${capitalise(NAMES[top.key])} ${up ? 'lifted' : 'lowered'} it most, `
-      + `${signed(top.points)} of the ${distance} points between the score and 50.${disagreement}${caveats(e)}`
+      + `${signed(top.points)} of the ${distance} points between the score and 50.${disagreement}${run}${caveats(e)}`
   },
 }
 
@@ -140,11 +150,12 @@ export function walkRecovery(q: PersonQuery, localDate: string): {
       inputs: index.inputs.map((i) => ({ key: i.key, weight: i.weight, points: i.points })),
       degraded: [...index.degraded], reducedWeight: [...index.reducedWeight],
       dayHrvFilled: day?.filled ?? null, hrvFilled, carriedBy: null, pulledAgainst: null,
+      hrvRun: readHrvDeviation(q, range).run,
     }
     : {
       localDate, enough: false, missing: [...index.missing], score: null, band: null, inputs: null,
       degraded: null, reducedWeight: null, dayHrvFilled: day?.filled ?? null, hrvFilled,
-      carriedBy: null, pulledAgainst: null,
+      carriedBy: null, pulledAgainst: null, hrvRun: null,
     }
 
   const walked: RecoveryLink[] = []

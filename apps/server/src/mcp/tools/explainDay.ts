@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import {
-  ConfigError, localMidnightMs, shiftLocalDate, standingOf, toGlanceBaseline, workoutSummary,
+  ConfigError, localMidnightMs, readHrvDeviation, shiftLocalDate, standingOf, toGlanceBaseline, workoutSummary,
 } from '@haelan/core'
 import type { Glance, GlanceBaseline, GlanceFigure, PersonQuery } from '@haelan/core'
+import { HRV_RUN } from './hrvDeviation.ts'
+import { hrvRunSentence } from './hrvRunWords.ts'
 
 /**
  * `explain`'s `day` chain: what on one finished day sits away from this person's own usual, and
@@ -21,6 +23,10 @@ import type { Glance, GlanceBaseline, GlanceFigure, PersonQuery } from '@haelan/
  * once and written down here rather than ranked per day, because a ranking by size would read as
  * a claim about which factor mattered. A factor is reported beside the reading as an association,
  * never as why: the sentence says so.
+ *
+ * A stretch of the seven-day HRV average on one side of its band is added to whichever of those
+ * findings answers after the gates, as a sentence of its own. The gates return unchanged: a day the
+ * data cannot carry an interpretation of gets none from a stretch either.
  */
 
 export const DAY_LINKS = [
@@ -79,6 +85,7 @@ export const DAY_EVIDENCE = z.object({
   ),
   workouts: z.array(z.object({ sessionId: z.string(), exerciseType: z.string().nullable() })).nullable(),
   eventIds: z.array(z.string()).nullable().describe('Events logged on the day or the day before; read them with get_events.'),
+  hrvRun: HRV_RUN.describe('The stretch of the seven-day HRV average on one side of its band as of the day, where the walk got past the gates; null before that or when there is none.'),
 })
 
 type Evidence = z.infer<typeof DAY_EVIDENCE>
@@ -253,7 +260,7 @@ export function walkDay(q: PersonQuery, localDate: string, today: string): {
   const evidence: Evidence = {
     localDate, today,
     figures: [...judged].map(([key, f]) => ({ key, value: f.value, usual: bandOf(f.baseline), standing: f.standing })),
-    stoppedSources: null, hrvFilled: null, away: null, factor: null, workouts: null, eventIds: null,
+    stoppedSources: null, hrvFilled: null, away: null, factor: null, workouts: null, eventIds: null, hrvRun: null,
   }
   const all = Object.values(figures).filter((f): f is GlanceFigure => f !== null && f !== undefined)
   const c: Context = { q, glance, evidence, all, judged, away: null }
@@ -263,9 +270,16 @@ export function walkDay(q: PersonQuery, localDate: string, today: string): {
     walked.push(link)
     return LINKS[link](c)
   }
+  // Read once, and only once the first four gates are past: a stretch is only ever added to an
+  // interpretation, and the finding that nothing is away from its usual is one.
+  const named = (finding: string): string => {
+    const run = readHrvDeviation(q, { from: localDate, to: localDate }).run
+    evidence.hrvRun = run
+    return run === null ? finding : finding + hrvRunSentence(run)
+  }
   for (const gate of ['dayEmpty', 'sourceStopped', 'hrvFilled', 'thinBaselines', 'nothingAway'] as const) {
     const finding = walk(gate)
-    if (finding !== null) return { finding, stoppedAt: gate, walked, evidence }
+    if (finding !== null) return { finding: gate === 'nothingAway' ? named(finding) : finding, stoppedAt: gate, walked, evidence }
   }
 
   const { key, figure } = c.away!
@@ -274,11 +288,11 @@ export function walkDay(q: PersonQuery, localDate: string, today: string): {
   const factors = figure.standing === table.direction ? table.factors : []
   for (const factor of factors) {
     const finding = walk(factor)
-    if (finding !== null) return { finding, stoppedAt: factor, walked, evidence }
+    if (finding !== null) return { finding: named(finding), stoppedAt: factor, walked, evidence }
   }
   walked.push('noLivedFactor')
   const looked = factors.length === 0
     ? ' No lived factor is looked at beside a reading on this side of its usual.'
     : ` None of ${listOf(factors.map((f) => FACTOR_WORDS[f]))} was away from its usual or on record.`
-  return { finding: `${readingSentence(c)}${looked}`, stoppedAt: 'noLivedFactor', walked, evidence }
+  return { finding: named(`${readingSentence(c)}${looked}`), stoppedAt: 'noLivedFactor', walked, evidence }
 }

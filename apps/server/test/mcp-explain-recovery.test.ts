@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { and, eq, gt, lte } from 'drizzle-orm'
 import { PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, shiftLocalDate } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { recoveryWindowStart, RECOVERY_METRIC_SOURCES } from '@haelan/core/recovery-index'
@@ -16,6 +17,7 @@ interface RecoveryEvidence {
   hrvFilled: { filled: number, of: number }
   carriedBy: string | null
   pulledAgainst: string[] | null
+  hrvRun: { side: string, days: number, capped: boolean, since: string, sideNights: number, filledDays: number } | null
 }
 
 interface Answer { kind: string, finding: string, stoppedAt: string, walked: string[], evidence: RecoveryEvidence }
@@ -197,6 +199,51 @@ describe('explain, kind recovery', () => {
     expect(answer.evidence.score).toBe(index.days[0]!.score)
     expect(answer.evidence.band).toBe(index.days[0]!.band)
     expect(answer.evidence.hrvFilled).toEqual(index.hrvFilled)
+  })
+
+  describe('a stretch of HRV away from its usual', () => {
+    /** Sets the daily HRV from `first` days before D through `last` days before D (0 is D itself). */
+    function hrvStretch(first: number, last: number, value: number): void {
+      test.db.update(schema.daily).set({ value }).where(and(
+        eq(schema.daily.metric, 'daily_hrv'),
+        gt(schema.daily.localDate, shiftLocalDate(D, -first - 1)), lte(schema.daily.localDate, shiftLocalDate(D, -last)),
+      )).run()
+    }
+
+    it('is named when HRV lowered a score below 50 and the stretch is below', () => {
+      seed({ on: { hrv: 30 } })
+      hrvStretch(9, 1, 30)
+      const answer = explain()
+      expect(answer.evidence.score).toBeLessThan(50)
+      expect(answer.evidence.carriedBy).toBe('hrv')
+      expect(answer.evidence.hrvRun).toEqual({ side: 'below', days: 9, capped: false, since: '2026-08-02', sideNights: 7, filledDays: 0 })
+      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 28, in the below band. Heart rate variability lowered it most, -16.3 of the 22 points between the score and 50. Resting heart rate pulled the other way (+5.4), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-02; 7 of the last 7 nights were low.')
+    })
+
+    it('is not named when resting heart rate carried the score', () => {
+      seed({ on: { restingHeartRate: 75 } })
+      hrvStretch(9, 1, 30)
+      const answer = explain()
+      expect(answer.evidence.carriedBy).toBe('restingHeartRate')
+      expect(answer.evidence.hrvRun?.side).toBe('below')
+      expect(answer.finding).not.toContain('seven-day average')
+    })
+
+    it('is not named when the stretch is above and HRV lowered the score', () => {
+      seed({ on: { hrv: 30 } })
+      hrvStretch(9, 1, 70)
+      const answer = explain()
+      expect(answer.evidence.score).toBeLessThan(50)
+      expect(answer.evidence.carriedBy).toBe('hrv')
+      expect(answer.evidence.hrvRun?.side).toBe('above')
+      expect(answer.finding).not.toContain('seven-day average')
+    })
+
+    it('is null in the evidence on a withheld day', () => {
+      seed({ without: ['restingHeartRate'] })
+      hrvStretch(9, 1, 30)
+      expect(explain().evidence.hrvRun).toBeNull()
+    })
   })
 
   it('refuses a metric, an agg or a source rather than ignoring them', () => {
