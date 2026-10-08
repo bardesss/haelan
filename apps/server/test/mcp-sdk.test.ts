@@ -5,6 +5,7 @@ import { PersonQuery, createTestDatabase, seedPerson, schema } from '@haelan/cor
 import type { TestDatabase } from '@haelan/core'
 import { buildMcpServer } from '../src/mcp/adapter.ts'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
+import { MAX_RANGE_DAYS } from '../src/routes/v1/shared.ts'
 
 /**
  * The suite that drives the real SDK rather than calling `Tool.run` directly.
@@ -160,6 +161,98 @@ describe('argument validation', () => {
     expect(outcome.refused, `expected an answer, the server refused with: ${outcome.detail}`).toBe(false)
     expect(run).toHaveBeenCalledTimes(1)
 
+    await client.close()
+  })
+})
+
+/**
+ * Dates, one tool per family. A malformed date used to reach date arithmetic and come back to the
+ * agent as a raw RangeError, and an inverted or unbounded range ran as asked. The field schema
+ * (mcp/dates.ts's LOCAL_DATE) refuses the first before the tool is entered; requireToolRange
+ * refuses the other two as the first thing each ranged tool does.
+ */
+describe('date arguments', () => {
+  const ranged: { name: string, rest: Record<string, unknown> }[] = [
+    { name: 'query_series', rest: { metric: 'steps', agg: 'sum' } },
+    { name: 'compare_periods', rest: { metric: 'steps', agg: 'sum' } },
+    { name: 'trend', rest: { metric: 'steps', agg: 'sum' } },
+    { name: 'get_sleep', rest: {} },
+    { name: 'search_notes', rest: {} },
+    { name: 'get_events', rest: {} },
+    { name: 'get_workouts', rest: { kind: 'exercise' } },
+    { name: 'recovery_index', rest: {} },
+    { name: 'hrv_deviation', rest: {} },
+    { name: 'explain', rest: { kind: 'comparison', metric: 'steps' } },
+  ]
+
+  it.each(ranged)('$name refuses a date that is not on the calendar, naming the field, without entering the tool', async ({ name, rest }) => {
+    const target = CATALOGUE.find((t) => t.name === name)
+    if (target === undefined) throw new Error(`no tool named ${name}`)
+    const run = vi.spyOn(target, 'run')
+    const client = await connected()
+
+    const outcome = await refusal(client, { name, arguments: { ...rest, from: '2026-02-30', to: '2026-03-31' } })
+
+    expect(outcome.refused, `expected a refusal, the server answered: ${outcome.detail}`).toBe(true)
+    expect(outcome.detail).toContain('is not a date on the calendar')
+    expect(outcome.detail).toContain('from')
+    expect(outcome.detail).not.toContain('RangeError')
+    expect(run).toHaveBeenCalledTimes(0)
+    await client.close()
+  })
+
+  it.each(ranged)('$name refuses an inverted range with a sentence naming both dates', async ({ name, rest }) => {
+    const client = await connected()
+    const result = await client.callTool({ name, arguments: { ...rest, from: '2026-08-31', to: '2026-08-01' } })
+    expect(result.isError).toBe(true)
+    expect(result.content).toEqual([{ type: 'text', text: "from '2026-08-31' is after to '2026-08-01'" }])
+    await client.close()
+  })
+
+  it('refuses a range wider than the HTTP routes allow, naming the limit', async () => {
+    const client = await connected()
+    const result = await client.callTool({
+      name: 'query_series', arguments: { metric: 'steps', agg: 'sum', from: '1900-01-01', to: '2100-01-01' },
+    })
+    expect(result.isError).toBe(true)
+    expect(result.content).toEqual([{
+      type: 'text',
+      text: `range '1900-01-01'..'2100-01-01' spans 73050 days, more than the ${MAX_RANGE_DAYS} day maximum`,
+    }])
+    await client.close()
+  })
+
+  const single: { name: string, args: Record<string, unknown>, field: string }[] = [
+    { name: 'get_intraday', args: { metric: 'heart_rate', localDate: '2026-8-1' }, field: 'localDate' },
+    { name: 'get_daily', args: { metrics: ['steps'], localDate: '2026-8-1' }, field: 'localDate' },
+    { name: 'get_baselines', args: { metric: 'steps', agg: 'sum', on: '2026-8-1' }, field: 'on' },
+    { name: 'describe_person', args: { today: '2026-8-1' }, field: 'today' },
+    { name: 'explain', args: { kind: 'recovery', localDate: '2026-8-1' }, field: 'localDate' },
+  ]
+
+  it.each(single)('$name refuses a malformed $field without entering the tool', async ({ name, args, field }) => {
+    const target = CATALOGUE.find((t) => t.name === name)
+    if (target === undefined) throw new Error(`no tool named ${name}`)
+    const run = vi.spyOn(target, 'run')
+    const client = await connected()
+
+    const outcome = await refusal(client, { name, arguments: args })
+
+    expect(outcome.refused, `expected a refusal, the server answered: ${outcome.detail}`).toBe(true)
+    expect(outcome.detail).toContain('must be a YYYY-MM-DD local date')
+    expect(outcome.detail).toContain(field)
+    expect(run).toHaveBeenCalledTimes(0)
+    await client.close()
+  })
+
+  // The control: a well formed, ordered range still goes through, so the refusals above are the
+  // dates deciding and not a server that refuses everything.
+  it('lets a well formed range through', async () => {
+    const client = await connected()
+    const outcome = await refusal(client, {
+      name: 'query_series', arguments: { metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-31' },
+    })
+    expect(outcome.refused, `expected an answer, the server refused with: ${outcome.detail}`).toBe(false)
     await client.close()
   })
 })
