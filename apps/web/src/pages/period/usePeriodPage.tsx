@@ -50,12 +50,11 @@ type PeriodSource = ReturnType<typeof usePeriodSource>
 /**
  * The second half, over the page's period read: the header (PageHeader with the period and source,
  * then the ControlRow with the year comparison and the export of `exportMetrics`' daily sums, or
- * their `exportAgg`), the
- * comparison with last year (asked on Week and Month only, while it is on: on 3 months and Year the
- * strip is weekly and draws no overlay; ended at historicalTo, so a month six days old is set
- * against the same six days a year earlier), the list's expansion (it belongs to the period it was
- * opened in: a new period opens collapsed), and `gate`, the page to render instead while there is no
- * period to draw (the Day tab's header alone, an error, loading). `alone` puts a body in a single
+ * their `exportAgg`), the comparison with last year (asked on Week and Month only, while it is on:
+ * on 3 months and Year the strip is weekly and draws no overlay; ended at historicalTo, so a month
+ * six days old is set against the same six days a year earlier), the list's expansion (it belongs
+ * to the period it was opened in: a new period opens collapsed), and `gate`, the page to render
+ * instead while there is no period to draw (the Day tab's header alone, an error, loading). `alone` puts a body in a single
  * card under the header, in the detail page's root (PATTERNS.md's page shell), for any other state.
  */
 export function usePeriodShell<D extends { hero: PeriodFigure }>(o: {

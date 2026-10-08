@@ -235,10 +235,11 @@
         "daily": "elk lijntje: elke dag {{period}} · band = je gebruikelijke bereik",
         "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke bereik"
       },
-      "carriedBy": "Vooral gedragen door je {{input}}",
+      "carriedBy": "vooral door je {{input}}",
       "sourceCaption": "de herstelindex en HRV tegenover haar gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest",
       "panel": {
-        "openDay": "Bekijk dag"
+        "openDay": "Bekijk dag",
+        "annotate": "Notitie of gebeurtenis toevoegen"
       },
       "emptyTitle": "Geen herstelindex voor deze periode",
       "emptyDetail": "De index heeft metingen van HRV en rusthartslag nodig, elk tegenover je eigen {{days}} dagen ervoor."
@@ -1147,6 +1148,7 @@
   "annotate": {
     "title": "{{metric}} op {{date}}",
     "sessionTitle": "Deze training, {{date}}",
+    "dayTitle": "Deze dag, {{date}}",
     "close": "Sluiten",
     "actionLabel": "Wat wil je doen",
     "actions": {

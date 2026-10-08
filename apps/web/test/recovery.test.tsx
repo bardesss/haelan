@@ -185,7 +185,7 @@ describe('the Recovery page: the hero', () => {
       'highest: 82 on Mon, Aug 3 ✦',
       'lowest: 0 on Tue, Aug 18',
       '-16 against July',
-      'Mostly carried by HRV',
+      'mostly down to your HRV',
     ])
     expect(heroBold()).toEqual(['82', '0', '-16', 'HRV'])
     expect(hero.querySelector('.period-hero-captions')?.textContent).toBe('every day this monthtap a day for its score and inputs')
@@ -200,16 +200,16 @@ describe('the Recovery page: the hero', () => {
       'je hoogste: 82 op ma 3 aug ✦',
       'je laagste: 0 op di 18 aug',
       '-16 tegenover juli',
-      'Vooral gedragen door je HRV',
+      'vooral door je HRV',
     ])
     expect(hero.querySelector('.period-hero-captions')?.textContent).toBe('elke dag deze maandtik op een dag voor de score en de onderdelen')
   })
 
   it('names the input that carried the period, and says nothing when the server named none', async () => {
     await renderAt(MONTH_URL, month({ carriedBy: 'restingHeartRate' }))
-    expect(heroLines().at(-1)).toBe('Mostly carried by resting heart rate')
+    expect(heroLines().at(-1)).toBe('mostly down to your resting heart rate')
     await renderAt(MONTH_URL, month({ carriedBy: 'restingHeartRate' }), 'nl')
-    expect(heroLines(HERO_NL).at(-1)).toBe('Vooral gedragen door je rusthartslag')
+    expect(heroLines(HERO_NL).at(-1)).toBe('vooral door je rusthartslag')
     await renderAt(MONTH_URL, month({ carriedBy: null }))
     expect(heroLines()).toEqual([
       '6 of 29 days usual · 7 higher · 16 lower', 'highest: 82 on Mon, Aug 3 ✦', 'lowest: 0 on Tue, Aug 18', '-16 against July',
@@ -218,7 +218,7 @@ describe('the Recovery page: the hero', () => {
 
   it('says the change against last year with the comparison on, once on a year where both name the same year', async () => {
     await renderAt(`${MONTH_URL}&compare=year`, RECOVERY_PERIOD_MONTH)
-    expect(heroLines().slice(3)).toEqual(['-16 against July', '-16 against last year', 'Mostly carried by HRV'])
+    expect(heroLines().slice(3)).toEqual(['-16 against July', '-16 against last year', 'mostly down to your HRV'])
     await renderAt(`${YEAR_URL}&compare=year`, JUDGED_YEAR)
     expect(cardFor(HERO)!.querySelector('.detail-verdict')?.textContent).toBe('within your usual 47 – 52 for a year, from 2024')
     expect(heroLines()).toEqual([
@@ -226,7 +226,7 @@ describe('the Recovery page: the hero', () => {
       'highest: 74 on Fri, Mar 28 ✦',
       'lowest: 24 on Wed, May 7',
       '+2 against 2024',
-      'Mostly carried by breathing',
+      'mostly down to your breathing',
     ])
   })
 
@@ -254,7 +254,7 @@ describe('the Recovery page: the hero', () => {
 })
 
 describe('the Recovery page: the tap panel', () => {
-  it('opens a day with its score and band, its inputs largest first, the day on the dashboard and the annotate', async () => {
+  it('opens a day with its score and band, its inputs largest first, the day on the dashboard and a note or event on the day', async () => {
     await renderAt(MONTH_URL, RECOVERY_PERIOD_MONTH)
     act(() => { sparklines.get(HERO)!.onPointClick!('2026-08-01') })
     const panel = container!.querySelector('.point-panel')!
@@ -271,20 +271,30 @@ describe('the Recovery page: the tap panel', () => {
     expect(panel.querySelector('.point-panel-verdict')?.className).toBe('point-panel-verdict better')
     expect(panel.querySelector('a.card-link')?.getAttribute('href')).toBe('/?day=2026-08-01')
     expect(panel.querySelector('a.card-link')?.textContent).toBe('View day')
-    act(() => { panel.querySelector<HTMLButtonElement>('.point-panel-actions .button')!.click() })
+    const annotate = panel.querySelector<HTMLButtonElement>('.point-panel-actions .button')!
+    expect(annotate.textContent).toBe('Add a note or an event')
+    act(() => { annotate.click() })
     expect(container!.querySelector('.point-panel')).toBeNull()
-    expect(document.querySelector('.annotate-panel')?.textContent).toContain('daily_hrv on 2026-08-01')
+    // The day itself, never one of the index's inputs: the index is worked out, so there is no
+    // reading to exclude, and an exclusion of HRV from here would remove HRV everywhere.
+    const dialog = document.querySelector('.annotate-panel')!
+    expect(dialog.querySelector('h2')?.textContent).toBe('This day, 2026-08-01')
+    expect([...dialog.querySelectorAll('.segment')].map((segment) => segment.textContent)).toEqual(['Add a note', 'Add an event'])
+    expect(dialog.querySelector('.segment[aria-pressed="true"]')?.textContent).toBe('Add a note')
   })
 
-  it('opens a week on a year with its average and band words alone, and nowhere to go', async () => {
+  // A week's dot is toned by its own verdict, against the usual for a week; the index's daily bands
+  // would word it otherwise (44 is inside the daily usual band), so the panel says what the dot says.
+  it('opens a week on a year with its average and its own verdict, as its dot shows it, and nowhere to go', async () => {
     await renderAt(YEAR_URL, RECOVERY_PERIOD_YEAR)
-    const week = RECOVERY_PERIOD_YEAR.hero.weekly!.find((point) => point.value !== null)!
+    const week = RECOVERY_PERIOD_YEAR.hero.weekly!.find((point) => point.from === '2025-07-07')!
+    expect([week.value, week.standing, week.judged, bandOf(week.value!)]).toEqual([44, 'below', 'worse', 'usual'])
     act(() => { sparklines.get(HERO)!.onPointClick!(week.from) })
     const panel = container!.querySelector('.point-panel')!
     const rows = [...panel.querySelectorAll('.point-panel-row')].map((row) =>
       [...row.querySelectorAll('dt, dd')].map((cell) => cell.textContent))
-    const words = { low: 'Well below your usual', below: 'Below your usual', usual: 'Around your usual', above: 'Above your usual', high: 'Well above your usual' }
-    expect(rows).toEqual([['Recovery index', String(week.value), words[bandOf(week.value!)]]])
+    expect(rows).toEqual([['Recovery index', '44', 'below your usual']])
+    expect(panel.querySelector('.point-panel-verdict')?.className).toBe('point-panel-verdict worse')
     expect(panel.querySelector('a.card-link')).toBeNull()
     expect(panel.querySelector('.point-panel-actions')).toBeNull()
   })

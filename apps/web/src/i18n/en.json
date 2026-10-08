@@ -235,10 +235,11 @@
         "daily": "each line: every day {{period}} · band = your usual range",
         "weekly": "each line: every week, the average of its days · band = your usual range"
       },
-      "carriedBy": "Mostly carried by {{input}}",
+      "carriedBy": "mostly down to your {{input}}",
       "sourceCaption": "the recovery index and HRV against its usual week are worked out from all sources, whichever source is chosen",
       "panel": {
-        "openDay": "View day"
+        "openDay": "View day",
+        "annotate": "Add a note or an event"
       },
       "emptyTitle": "No recovery index for this period",
       "emptyDetail": "The index needs HRV and resting heart rate readings, each against your own previous {{days}} days."
@@ -1147,6 +1148,7 @@
   "annotate": {
     "title": "{{metric}} on {{date}}",
     "sessionTitle": "This workout, {{date}}",
+    "dayTitle": "This day, {{date}}",
     "close": "Close",
     "actionLabel": "What do you want to do",
     "actions": {

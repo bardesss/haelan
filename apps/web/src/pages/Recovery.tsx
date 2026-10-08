@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { bandOf } from '@haelan/core/recovery-index'
 import { useTranslation } from '../i18n/index.js'
 import { withQuery } from '../router.js'
 import { Card } from '../components/Card.js'
@@ -22,7 +21,7 @@ import { PeriodHero } from './period/PeriodHero.js'
 import { PeriodFigureRows } from './period/PeriodFigureRows.js'
 import { PointPanel } from './period/PointPanel.js'
 import type { PointPanelRow } from './period/PointPanel.js'
-import { usePeriodShell, usePeriodSource } from './period/usePeriodPage.js'
+import { pointRow, usePeriodShell, usePeriodSource } from './period/usePeriodPage.js'
 import { HeartRateCard } from './recovery/HeartRateCard.js'
 import { contributionRows } from './recovery/contributionRows.js'
 import { useRecoveryLabel } from './recovery/labels.js'
@@ -33,9 +32,6 @@ const EXPORT_METRICS = ['resting_heart_rate', 'daily_hrv', 'respiratory_rate', '
 // The index is the server's, scored from no series, so there is no year-earlier line to overlay on
 // its strip; the comparison with last year is the stood-out line alone.
 const LAST_YEAR_GROUPS: readonly MetricGroup[] = []
-// What a day point's exclude and annotate name: the index is worked out, never stored, so it has no
-// day of its own to exclude; HRV is the reading it mostly stands on (three quarters of its weight).
-const ANNOTATED = 'daily_hrv'
 const HEART_RATE = 'heart_rate'
 
 /** The dashboard on a day: the Day tab's page, and a day point's. */
@@ -98,22 +94,21 @@ export function Recovery() {
   const dayOn = new Map(data.days.map((day) => [day.localDate, day]))
 
   // A day's panel: its score with its band in words and the tone of its own verdict, then its
-  // inputs, largest mover first (contributionRows), the day on the dashboard, and the day-metric
-  // exclude and annotate, which closes the panel as the AnnotatePanel opens. A week's (3 months and
-  // Year, where the server sends no days): that week's average and its band in words alone, and
-  // nowhere to go.
+  // inputs, largest mover first (contributionRows), the day on the dashboard, and a note or an event
+  // on the day (a day target: the index is worked out, never stored, so there is no reading to
+  // exclude, and excluding one of its inputs from here would remove that input everywhere). A
+  // week's (3 months and Year, where the server sends no days): that week's average with its own
+  // verdict in words and tone, as its dot shows it (pointRow, Sleep's week panel), and nowhere to go.
   const panel = (point: PeriodStripPoint, close: () => void) => {
-    const value = formatFigureValue(hero, point.value, language, t)
     if (weekly) {
-      const band = point.value === null ? '' : t(`recoveryIndex.band.${bandOf(point.value)}`)
       return (
-        <PointPanel title={formatLocalDateRange(point.from, point.to, language)} rows={[{ label: indexLabel, value, verdict: band, tone: null }]}
+        <PointPanel title={formatLocalDateRange(point.from, point.to, language)} rows={[pointRow(hero, point, indexLabel, language, t)]}
           open={null} onAnnotate={null} onClose={close} />
       )
     }
     const day = dayOn.get(point.from)
     const score: PointPanelRow = day === undefined
-      ? { label: indexLabel, value }
+      ? pointRow(hero, point, indexLabel, language, t)
       : {
           label: indexLabel, value: formatFigureValue(hero, day.score, language, t),
           verdict: t(`recoveryIndex.band.${day.band}`), tone: verdictTone(point.judged, point.standing),
@@ -125,7 +120,8 @@ export function Recovery() {
     return (
       <PointPanel title={formatLongDate(point.from, language)} rows={[score, ...inputs]}
         open={{ to: dayHref(point.from), text: t('recovery.period.panel.openDay') }}
-        onAnnotate={() => { close(); setAnnotateTarget({ scope: 'day_metric', localDate: point.from, metric: ANNOTATED }) }}
+        onAnnotate={() => { close(); setAnnotateTarget({ scope: 'day', localDate: point.from }) }}
+        annotateText={t('recovery.period.panel.annotate')}
         onClose={close} />
     )
   }

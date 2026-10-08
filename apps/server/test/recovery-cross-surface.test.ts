@@ -68,9 +68,23 @@ function seedRecoveryDaily(h: Harness, personId: string): void {
   }
 }
 
+/** A device whose own resting heart rate runs well above the merged one, so a page that asks for
+ *  it reads different figure rows: the index must not move with them. */
+function seedWatch(h: Harness, personId: string): void {
+  h.app.haelan.instance.db.insert(schema.sources).values({
+    id: 'watch', personId, externalId: 'watch', displayName: 'watch', kind: 'device', createdAtMs: 0,
+  }).run()
+  for (let date = START; date <= TO; date = shiftLocalDate(date, 1)) {
+    h.app.haelan.instance.db.insert(schema.daily).values({
+      personId, localDate: date, metric: 'resting_heart_rate', agg: 'last', source: 'watch',
+      value: 70, coverage: null, sourceMix: null, derivationVersion: DERIVATION_VERSION,
+    }).run()
+  }
+}
+
 interface WirePoint { from: string, value: number | null }
 interface WireDay { localDate: string, score: number, band: string }
-interface WirePeriod { hero: { daily: WirePoint[] }, days: WireDay[] }
+interface WirePeriod { hero: { daily: WirePoint[] }, days: WireDay[], figures: { metric: string, value: number | null }[] }
 
 describe('recovery_index: the MCP tool and the Recovery page agree', () => {
   it('answers the same score and band for every day of a month, the page\'s strip and panel alike', async () => {
@@ -78,6 +92,7 @@ describe('recovery_index: the MCP tool and the Recovery page agree', () => {
     h.clock.nowMs = NOW_MS
     await h.completeSetup()
     seedRecoveryDaily(h, 'p1')
+    seedWatch(h, 'p1')
     const token = await h.signIn()
 
     // The MCP surface: recoveryIndexTool.run against a PersonQuery, exactly as adapter.ts calls it
@@ -89,13 +104,16 @@ describe('recovery_index: the MCP tool and the Recovery page agree', () => {
     const mcpScored = mcpResult.days.filter((day) => day.enough)
 
     // The web surface: the one read the Recovery page makes, through the real HTTP route.
-    const response = await h.app.inject({
-      method: 'GET',
-      url: `/api/v1/p/p1/recovery/period?range=month&anchor=${FROM}`,
-      headers: { authorization: `Bearer ${token}` },
-    })
-    expect(response.statusCode).toBe(200)
-    const page = response.json() as WirePeriod
+    const read = async (query: string): Promise<WirePeriod> => {
+      const response = await h!.app.inject({
+        method: 'GET',
+        url: `/api/v1/p/p1/recovery/period?range=month&anchor=${FROM}${query}`,
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.statusCode, query).toBe(200)
+      return response.json() as WirePeriod
+    }
+    const page = await read('')
     const pointOn = new Map(page.hero.daily.map((point) => [point.from, point.value]))
 
     // Every day of the month scored, on both surfaces, and more than one band among them, so the
@@ -108,5 +126,14 @@ describe('recovery_index: the MCP tool and the Recovery page agree', () => {
       .toEqual(mcpScored.map((day) => ({ localDate: day.localDate, score: day.score, band: day.band })))
     expect(mcpScored.map((day) => [day.localDate, pointOn.get(day.localDate)]))
       .toEqual(mcpScored.map((day) => [day.localDate, day.score]))
+
+    // A chosen source moves the figure rows and never the index (the page's caption says so): the
+    // same days, scores and bands, and the same strip, as with every source.
+    const watch = await read('&source=watch')
+    const resting = (body: WirePeriod) => body.figures.find((figure) => figure.metric === 'resting_heart_rate')?.value
+    expect(resting(watch)).toBe(70)
+    expect(resting(watch)).not.toBe(resting(page))
+    expect(watch.days).toEqual(page.days)
+    expect(watch.hero.daily).toEqual(page.hero.daily)
   })
 })
