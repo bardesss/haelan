@@ -428,32 +428,32 @@ describe('RecoveryCard', () => {
 
 describe('RecoveryCard HRV stretch note', () => {
   const hrvDay = () => recoveryFixture().hrv.asOfDate!
-  it('names a below stretch, in the out-of-usual tone, under the HRV gauge', () => {
+  it('names a below stretch, as a line at the bottom of the card, after the breathing one', () => {
     const html = renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }))
-    expect(html).toContain('<span class="dash-mini-note is-out is-wrapping">5 days below usual</span>')
-    expect(html.indexOf('5 days below usual')).toBeGreaterThan(html.lastIndexOf('usual-gauge'))
+    expect(html).toContain('<p class="glance-note">HRV 5 measured days below your usual</p>')
+    expect(html.indexOf('HRV 5 measured')).toBeGreaterThan(html.indexOf('Breathing rate'))
   })
   it('names an above stretch', () => {
-    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 4 }))).toContain('>4 days above usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 4 }))).toContain('>HRV 4 measured days above your usual<')
   })
   it('says more than the lookback when the stretch is capped', () => {
-    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }))).toContain('>more than 60 days below usual<')
-    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }))).toContain('>more than 60 days above usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }))).toContain('>HRV more than 60 days below your usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }))).toContain('>HRV more than 60 days above your usual<')
   })
   it('speaks Dutch with whole strings', () => {
-    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }), 'nl')).toContain('>5 dagen onder gebruikelijk<')
-    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 5 }), 'nl')).toContain('>5 dagen boven gebruikelijk<')
-    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }), 'nl')).toContain('>meer dan 60 dagen onder gebruikelijk<')
-    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }), 'nl')).toContain('>meer dan 60 dagen boven gebruikelijk<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }), 'nl')).toContain('>HRV 5 gemeten dagen onder je gebruikelijke bereik<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 5 }), 'nl')).toContain('>HRV 5 gemeten dagen boven je gebruikelijke bereik<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }), 'nl')).toContain('>HRV meer dan 60 dagen onder je gebruikelijke bereik<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }), 'nl')).toContain('>HRV meer dan 60 dagen boven je gebruikelijke bereik<')
   })
   it('renders nothing without a run, so a normal day keeps its height', () => {
-    expect(renderRecovery({}, null)).not.toContain('dash-mini-note')
-    expect(renderRecovery({})).not.toContain('dash-mini-note')
+    expect(renderRecovery({}, null)).not.toContain('measured days')
+    expect(renderRecovery({})).not.toContain('measured days')
   })
   it('asks nothing and shows nothing when HRV has no value', () => {
     const recovery = recoveryFixture({ hrv: { value: null, asOfDate: null } })
     const html = renderRecovery({ recovery }, hrvRunFixture())
-    expect(html).not.toContain('dash-mini-note')
+    expect(html).not.toContain('measured days')
     expect(hrvRequests).toEqual([])
   })
   // The unvalued gauge draws no note whatever the cache holds, so the markup cannot tell the guard
@@ -462,14 +462,14 @@ describe('RecoveryCard HRV stretch note', () => {
   it('makes no read for the HRV day when HRV has no value, though its day is known', () => {
     const recovery = recoveryFixture({ hrv: { value: null } })
     const day = recovery.hrv.asOfDate!
-    expect(renderRecovery({ recovery })).not.toContain('dash-mini-note')
+    expect(renderRecovery({ recovery })).not.toContain('measured days')
     expect(hrvQueriesFor(day)).toHaveLength(0)
     renderRecovery({ recovery: recoveryFixture() })
     expect(hrvQueriesFor(day)).toHaveLength(1)
   })
   it('prints the lookback when capped, not the measured days', () => {
-    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 55, capped: true }))).toContain('>more than 60 days below usual<')
-    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 55, capped: true }), 'nl')).toContain('>meer dan 60 dagen boven gebruikelijk<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 55, capped: true }))).toContain('>HRV more than 60 days below your usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 55, capped: true }), 'nl')).toContain('>HRV meer dan 60 dagen boven je gebruikelijke bereik<')
   })
   it('keys the read by a window ending on the day and reaching back at least the run depends on', () => {
     const on = hrvDay()

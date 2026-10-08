@@ -35,7 +35,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
   // value, and no markup without a run, so a card without a stretch keeps its height.
   const hrvDay = recovery.hrv.value === null ? null : recovery.hrv.asOfDate
   const run = useHrvDeviation(hrvDay).data?.run ?? null
-  const runNote = run === null ? null : t(`glance.recovery.hrvRun.${run.capped ? 'capped' : 'days'}.${run.side}`, { days: run.capped ? HRV_LOOKBACK_DAYS : run.days })
+  const runNote = run === null ? null : t(`glance.recovery.hrvRun.${run.capped ? 'capped' : 'days'}.${run.side}`, { days: run.days, lookback: HRV_LOOKBACK_DAYS })
   const gauge = (key: 'rhr' | 'hrv', figure: GlanceFigure, unit: string) => {
     if (figure.value === null) return <div className="dash-dial"><p className="glance-empty">{t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</p><span className="label">{t(`glance.recovery.${key}`)}</span></div>
     const usual = usualLine(figure, t, language)
@@ -47,7 +47,6 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
           label={[`${t(`glance.recovery.${key}`)} ${formatFigure(figure, language)} ${unit}`, usual].filter(Boolean).join(', ')} />
         <span className="label">{t(`glance.recovery.${key}`)}</span>
         {day !== null && <span className="glance-asof">{day}</span>}
-        {key === 'hrv' && runNote !== null && <span className="dash-mini-note is-out is-wrapping">{runNote}</span>}
       </div>
     )
   }
@@ -89,6 +88,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
       {recovery.respiratoryRate !== null && (
         <p className="glance-note">{t('glance.recovery.respiratory', { value: `${formatFigure(recovery.respiratoryRate, language)} ${t('recovery.units.breathsPerMinuteShort')}` })}</p>
       )}
+      {runNote !== null && <p className="glance-note">{runNote}</p>}
     </DashCard>
   )
 }

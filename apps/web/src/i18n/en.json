@@ -1816,8 +1816,8 @@
       "rhr": "Resting heart rate",
       "hrv": "HRV",
       "hrvRun": {
-        "days": { "below": "{{days}} days below usual", "above": "{{days}} days above usual" },
-        "capped": { "below": "more than {{days}} days below usual", "above": "more than {{days}} days above usual" }
+        "days": { "below": "HRV {{days}} measured days below your usual", "above": "HRV {{days}} measured days above your usual" },
+        "capped": { "below": "HRV more than {{lookback}} days below your usual", "above": "HRV more than {{lookback}} days above your usual" }
       },
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",

@@ -1273,8 +1273,6 @@ h2.label { margin: 0; }
    a line of its own rather than splitting mid-phrase, and a two-word label stays on one line. */
 .dash-mini { flex-wrap: wrap; }
 .dash-mini-label, .dash-mini-note { white-space: nowrap; }
-/* The stretch note under the recovery card's HRV gauge sits in a narrow dial column: it wraps and centres. */
-.dash-mini-note.is-wrapping { white-space: normal; text-align: center; max-width: 100%; }
 .dash-mini-note.better { color: var(--positive); }
 .dash-mini-note.worse, .dash-mini-note.is-out { color: var(--negative); }
 .dash-caption { margin: var(--space-1) 0 0; font-size: var(--font-size-micro); color: var(--text-faint); }

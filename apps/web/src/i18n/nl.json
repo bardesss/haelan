@@ -1816,8 +1816,8 @@
       "rhr": "Rusthartslag",
       "hrv": "HRV",
       "hrvRun": {
-        "days": { "below": "{{days}} dagen onder gebruikelijk", "above": "{{days}} dagen boven gebruikelijk" },
-        "capped": { "below": "meer dan {{days}} dagen onder gebruikelijk", "above": "meer dan {{days}} dagen boven gebruikelijk" }
+        "days": { "below": "HRV {{days}} gemeten dagen onder je gebruikelijke bereik", "above": "HRV {{days}} gemeten dagen boven je gebruikelijke bereik" },
+        "capped": { "below": "HRV meer dan {{lookback}} dagen onder je gebruikelijke bereik", "above": "HRV meer dan {{lookback}} dagen boven je gebruikelijke bereik" }
       },
       "respiratory": "Ademhaling {{value}}, boven je gebruikelijke waarde",
       "unscored": "Nog niet genoeg metingen om te scoren.",
