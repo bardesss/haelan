@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.20.0](https://github.com/bardesss/haelan/compare/v2.19.0...v2.20.0) (2026-10-08)
+
+
+### Features
+
+* HRV deviation, a stretch away from your usual ([#431](https://github.com/bardesss/haelan/issues/431)) ([3482abe](https://github.com/bardesss/haelan/commit/3482abe66c246c2b6579fbcea522309c2776a65f))
+
 ## [2.19.0](https://github.com/bardesss/haelan/compare/v2.18.0...v2.19.0) (2026-10-01)
 
 
