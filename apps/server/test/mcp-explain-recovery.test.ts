@@ -137,34 +137,42 @@ describe('explain, kind recovery', () => {
   })
 
   it('says so when an input pulled the other way, and that the inputs do not add up', () => {
-    // The sine leaves the week's sleep a little under its usual on D, so it pulls against the score\n    // too: the sentence names both, capitalised at the start, in the order the inputs are listed.
-    seed({ on: { hrv: 62, restingHeartRate: 60 } })
+    // A short night on D leaves the week's sleep under its usual, so it pulls against the score too:
+    // the sentence names both, capitalised at the start, in the order the inputs are listed. Sleep
+    // weighs 0.05 since the refit, so the sine's own dip alone pulls only -0.04 and prints as 0.0;
+    // the short night is what makes its pull real.
+    seed({ on: { hrv: 62, restingHeartRate: 60, asleepMinutes: 360 } })
     const answer = explain()
     expect(answer.evidence.carriedBy).toBe('hrv')
     expect(answer.evidence.pulledAgainst).toEqual(['restingHeartRate', 'sleep'])
-    expect(answer.finding).toMatch(/ Resting heart rate and the past week's sleep pulled the other way \(-\d+\.\d, -\d+\.\d\), so the inputs do not add up to the distance from 50\./)
+    expect(answer.finding).toBe('The recovery index on 2026-08-10 is 93, in the high band. Heart rate variability lifted it most, +39.0 of the 43 points between the score and 50. Resting heart rate and the past week\'s sleep pulled the other way (-3.7, -0.3), so the inputs do not add up to the distance from 50.')
   })
 
   it('names the input that carried the score\'s direction, not the largest pull overall', () => {
-    // Found by probing: the score lands at 32, in the below band, with HRV the single largest
-    // input (+7.0) pulling UP against it and resting heart rate (-7.0) the largest pulling down.
-    seed({ on: { hrv: 56, restingHeartRate: 62, respiratoryRate: 17 } })
+    // Found by probing: the score lands at 30, in the below band, with HRV the single largest
+    // input (+7.9) pulling UP against it and resting heart rate (-6.7) the largest pulling down.
+    // HRV weighs five times resting heart rate since the refit, so resting heart rate needs a far
+    // larger deviation, and breathing rate and a short night add enough downward pull between them
+    // to outweigh HRV without either becoming the largest downward pull itself.
+    seed({ on: { hrv: 56, restingHeartRate: 80, respiratoryRate: 28, asleepMinutes: 200 } })
     const answer = explain()
     expect(answer.evidence.band).toBe('below')
     expect(answer.evidence.carriedBy).toBe('restingHeartRate')
     expect(answer.evidence.pulledAgainst).toEqual(['hrv'])
-    expect(answer.finding).toContain('Resting heart rate lowered it most')
+    expect(answer.finding).toBe('The recovery index on 2026-08-10 is 30, in the below band. Resting heart rate lowered it most, -6.7 of the 20 points between the score and 50. Heart rate variability pulled the other way (+7.9), so the inputs do not add up to the distance from 50.')
   })
 
   it('does not name a pull that prints as 0.0', () => {
-    // Found by probing: breathing rate a hair above its usual gives it -0.025 points on a score of
-    // 83, which the sentence would print as -0.0. Resting heart rate and sleep pull against HRV for real.
-    seed({ on: { hrv: 60, restingHeartRate: 58, respiratoryRate: 13.96 } })
+    // Found by probing: breathing rate a hair above its usual gives it -0.009 points on a score of
+    // 91, which the sentence would print as -0.0. Resting heart rate and sleep pull against HRV for
+    // real, sleep because of the short night on D.
+    seed({ on: { hrv: 60, restingHeartRate: 58, respiratoryRate: 13.96, asleepMinutes: 360 } })
     const answer = explain()
     expect(answer.evidence.carriedBy).toBe('hrv')
     expect(answer.evidence.pulledAgainst).toEqual(['restingHeartRate', 'sleep'])
     expect(answer.finding).not.toContain('breathing rate')
     expect(answer.finding).not.toContain('0.0')
+    expect(answer.finding).toBe('The recovery index on 2026-08-10 is 91, in the high band. Heart rate variability lifted it most, +38.0 of the 41 points between the score and 50. Resting heart rate and the past week\'s sleep pulled the other way (-2.6, -0.4), so the inputs do not add up to the distance from 50.')
   })
 
   it('counts filled HRV in the baseline without counting the day\'s own', () => {
@@ -217,7 +225,7 @@ describe('explain, kind recovery', () => {
       expect(answer.evidence.score).toBeLessThan(50)
       expect(answer.evidence.carriedBy).toBe('hrv')
       expect(answer.evidence.hrvRun).toEqual({ side: 'below', days: 9, capped: false, since: '2026-08-02', sideNights: 7, weekReadings: 7, filledDays: 0 })
-      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 28, in the below band. Heart rate variability lowered it most, -16.3 of the 22 points between the score and 50. Resting heart rate pulled the other way (+5.4), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-02; 7 of the last 7 nightly readings were low.')
+      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 17, in the low band. Heart rate variability lowered it most, -30.6 of the 33 points between the score and 50. Resting heart rate pulled the other way (+2.3), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-02; 7 of the last 7 nightly readings were low.')
     })
 
     it('is named when HRV lifted a score of 50 or more and the stretch is above', () => {
@@ -227,7 +235,7 @@ describe('explain, kind recovery', () => {
       expect(answer.evidence.score).toBeGreaterThanOrEqual(50)
       expect(answer.evidence.carriedBy).toBe('hrv')
       expect(answer.evidence.hrvRun?.side).toBe('above')
-      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 86, in the high band. Heart rate variability lifted it most, +26.7 of the 36 points between the score and 50. The past week\'s sleep pulled the other way (-0.5), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been above its usual for 11 measured days, since 2026-07-31; 7 of the last 7 nightly readings were high.')
+      expect(answer.finding).toBe('The recovery index on 2026-08-10 is 85, in the high band. Heart rate variability lifted it most, +32.4 of the 35 points between the score and 50. The past week\'s sleep pulled the other way (-0.1), so the inputs do not add up to the distance from 50. HRV\'s seven-day average has been above its usual for 11 measured days, since 2026-07-31; 7 of the last 7 nightly readings were high.')
     })
 
     it('is not named when resting heart rate carried the score', () => {
