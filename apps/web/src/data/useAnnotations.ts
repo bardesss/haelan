@@ -5,6 +5,7 @@ import { RECOVERY_HARVEST_EVENT_KIND } from '@haelan/core/recovery-index'
 import { apiGet, apiSend, ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
+import { PERIOD_KINDS } from './usePeriodRead.js'
 
 // Re-exported under the same name so nothing importing OverrideScope from here has to change:
 // AnnotatePanel.tsx (the panel that builds target keys) added a third browser safe subpath,
@@ -262,9 +263,9 @@ function invalidateAffected(queryClient: QueryClient, personId: string, result: 
   invalidateResource(queryClient, personId, 'glance-calendar')
   // The period reads and the night page are keyed by a range name, an anchor or a night, never a
   // from/to pair, so overlapsAffected cannot see them either: without these an excluded night kept
-  // its place in the Sleep page's hero, counts and list until the read aged out.
-  invalidateResource(queryClient, personId, 'sleep-period')
-  invalidateResource(queryClient, personId, 'activity-period')
+  // its place in the Sleep page's hero, counts and list until the read aged out. Every overview
+  // kind, so a new overview cannot be left out.
+  for (const kind of PERIOD_KINDS) invalidateResource(queryClient, personId, `${kind}-period`)
   invalidateResource(queryClient, personId, 'night')
 }
 

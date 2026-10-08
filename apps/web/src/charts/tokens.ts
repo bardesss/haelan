@@ -31,6 +31,8 @@ const CHART_SOURCES = {
   activityModerate: 'activity-moderate',
   activityVigorous: 'activity-vigorous',
   band: 'band-baseline',
+  // The wash behind a run of days (Sparkline's `spans`), its own role so it reads in both themes.
+  span: 'band-span',
   excluded: 'state-excluded',
   noData: 'state-no-data',
   tooltipBg: 'tooltip-bg',

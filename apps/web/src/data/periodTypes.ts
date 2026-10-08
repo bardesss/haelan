@@ -1,4 +1,4 @@
-// Mirrors the wire shape of packages/core/src/query/periodFigure.ts, sleepPeriod.ts and activityPeriod.ts, after
+// Mirrors the wire shape of packages/core/src/query/periodFigure.ts, sleepPeriod.ts, activityPeriod.ts and recoveryPeriod.ts, after
 // apps/server/src/routes/v1/period.ts rounds, re-judges and trims it, field for field rather than
 // imported: @haelan/core's root export pulls in better-sqlite3 and drizzle, which have no business in
 // a browser bundle (the precedent is useNightPage.ts).
@@ -187,4 +187,62 @@ export interface ActivityPeriodData {
   cardioLoad: PeriodFigure | null
   vo2max: Vo2Trend | null
   more: PeriodFigure[]
+}
+
+export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
+export type RecoveryInputKey = 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate'
+
+/** One input of a scored day: its weight, its points to a tenth and its contribution to a thousandth. */
+export interface RecoveryInput { key: RecoveryInputKey, weight: number, points: number, contribution: number }
+/** One scored day, for the tap panel. Sent on week and month only; `[]` on 3 months and a year. */
+export interface RecoveryDay { localDate: string, score: number, band: RecoveryBand, inputs: RecoveryInput[] }
+
+export type HrvSide = 'below' | 'within' | 'above'
+export type HrvDeviationDay =
+  | { localDate: string, measured: true, rolling: number, band: { low: number, high: number }, side: HrvSide }
+  | { localDate: string, measured: false, reason: 'thin-week' | 'thin-baseline' | 'flat-baseline' }
+export interface HrvDeviationRun {
+  side: 'below' | 'above'
+  days: number
+  capped: boolean
+  since: string
+  sideNights: number
+  weekReadings: number
+  filledDays: number
+}
+
+/** A run of the HRV stretch inside the period: its first and last measured days there. */
+export interface HrvStretchSpan { from: string, to: string, side: 'below' | 'above' }
+/** A Monday-to-Sunday week of the stretch, clipped to the period: its last measured day, null with none. */
+export interface HrvStretchWeek { from: string, to: string, point: HrvDeviationDay | null }
+export interface RecoveryStretch {
+  /** Empty on 3 months and a year. */
+  days: HrvDeviationDay[]
+  /** Set on 3 months and a year only. */
+  weeks: HrvStretchWeek[] | null
+  runs: HrvStretchSpan[]
+  run: HrvDeviationRun | null
+}
+export interface RecoveryMethod {
+  weights: Record<RecoveryInputKey, number>
+  usualBand: { low: number, high: number }
+  baselineDays: number
+  stretch: { weekDays: number, minReadings: number, band: number, minRun: number, lookbackDays: number }
+}
+
+export interface RecoveryPeriodData {
+  period: PeriodHeader
+  hero: PeriodFigure
+  high: PeriodHigh | null
+  low: PeriodHigh | null
+  previous: PeriodChange
+  yearEarlier: PeriodChange
+  carriedBy: RecoveryInputKey | null
+  /** Resting heart rate, HRV, breathing rate, those with days. */
+  figures: PeriodFigure[]
+  /** Null when no day of the period is measured. */
+  stretch: RecoveryStretch | null
+  /** Every scored day, oldest first; `[]` on 3 months and a year. */
+  days: RecoveryDay[]
+  method: RecoveryMethod
 }

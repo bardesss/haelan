@@ -13,10 +13,11 @@ import { ALL_SOURCES } from '../src/controls/source.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { flush, pumpUntil } from './flush.js'
-import { seriesPoint, insightBody } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
+import { RECOVERY_PERIOD_MONTH } from './fixtures/recoveryPeriod.js'
 
-// Same reason dashboard-cards.test.tsx needs this: HeartRateRange and IntradayHeartRate draw for
-// real here, and echarts.init's effect throws "missing chart token" without it.
+// Same reason dashboard-cards.test.tsx needs this: HeartRateRange draws for real here, and
+// echarts.init's effect throws "missing chart token" without it.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 let container: HTMLDivElement | null = null
@@ -64,22 +65,20 @@ const RANGE_DATES = ['2026-08-14', '2026-08-15', '2026-08-16']
 /** The month-shaped default props every test below starts from, overridable per case. */
 const DEFAULT_PROPS = {
   from: '2026-08-14', to: '2026-08-16', historicalTo: '2026-08-16', source: ALL_SOURCES,
-  tab: 'month' as const, rangeDates: RANGE_DATES, period: '2026-08-14 to 2026-08-16',
-  annotations: [], excluded: [], onDayClick: () => {}, onSampleClick: () => {}, span: 8,
+  rangeDates: RANGE_DATES, period: '2026-08-14 to 2026-08-16', periodWords: 'this month',
+  annotations: [], excluded: [], onDayClick: () => {}, span: 8,
 }
 
 /**
  * Answers every route HeartRateCard calls, mirroring dashboard-cards.test.tsx's own stubFetch
  * (this card used to be part of that page and drew from the same routes): the session, /series
- * for heart_rate under mean/min/max, /baselines, /intraday and /data-types.
+ * for heart_rate under mean/min/max, and /baselines.
  */
-function stubFetch(opts: {
-  baseline: Baseline, hangBaselines?: boolean, excludedDataTypes?: string[],
-  emptyIntraday?: boolean, hangDataTypes?: boolean, intradayOffset?: number,
-}): () => void {
+function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, asked?: string[] }): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
+    opts.asked?.push(url)
     if (url.includes('/api/auth/me')) {
       return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
     }
@@ -94,22 +93,6 @@ function stubFetch(opts: {
     if (url.includes('/baselines')) {
       if (opts.hangBaselines === true) return new Promise<Response>(() => {})
       return new Response(JSON.stringify({ baseline: opts.baseline }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }
-    if (url.includes('/intraday')) {
-      const date = new URLSearchParams(url.split('?')[1] ?? '').get('date') ?? '2026-08-15'
-      return new Response(JSON.stringify({
-        points: opts.emptyIntraday === true ? [] : [
-          { sourceId: 'watch', utcMs: Date.parse(`${date}T08:00:00Z`), min: 58, mean: 62, max: 70, n: 1, excluded: false },
-        ],
-        reduction: null,
-        ...(opts.intradayOffset === undefined ? {} : { offsetMinutes: opts.intradayOffset }),
-      }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }
-    if (url.includes('/data-types')) {
-      if (opts.hangDataTypes === true) return new Promise<Response>(() => {})
-      const excluded = new Set(opts.excludedDataTypes ?? [])
-      return new Response(JSON.stringify({ items: [{ id: 'heart-rate', tier: 'intraday', excluded: excluded.has('heart-rate') }] }),
-        { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/api/sync/status')) {
       return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -155,113 +138,42 @@ describe('the heart rate range band', () => {
       'the heart rate range basis line',
     )
     const text = container!.textContent!
-    expect(text).toContain('the baseline is still loading')
-    expect(text).not.toContain('no baseline yet to compare against')
+    expect(text).toContain('your usual range is still loading')
+    expect(text).not.toContain('no usual range yet')
     restore()
   })
 
-  // M3 phase review B2: hrBaseline itself moved to historicalTo (the date the band is really
-  // computed against), but the basis line's own {{on}} kept reading the range end. This card's own
-  // hrBaseline comment states the invariant this reopened: "the basis line used to report that
-  // anchor date instead of the one the drawn band was really computed against."
-  it('names the baseline\'s own anchor date in its basis line, not the range\'s own future end', async () => {
-    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false } })
+  // M3 phase review B2: the band is computed against historicalTo, not the range's own future end.
+  // The caption names no date any more (it says what the band is, as the page's other captions do),
+  // so the guard holds the request itself to that anchor.
+  it('asks for the band at historicalTo, not the end of the range, and captions it under the chart', async () => {
+    const asked: string[] = []
+    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false }, asked })
     const { client, tree } = withQuery(
       <HeartRateCard {...DEFAULT_PROPS} to="2026-09-30" historicalTo="2026-09-05" />,
     )
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
-    const text = container!.textContent!
-    expect(text).toContain('60 days before 2026-09-05')
-    expect(text).not.toContain('60 days before 2026-09-30')
+    const baselines = asked.filter((url) => url.includes('/baselines'))
+    expect(baselines.length).toBeGreaterThan(0)
+    expect(baselines.every((url) => url.includes('on=2026-09-05'))).toBe(true)
+    // Under the chart, as a caption, and no basis line in the card's header.
+    expect(container!.querySelector('.basis')).toBeNull()
+    const caption = container!.querySelector('.card .dash-caption')
+    expect(caption?.textContent).toBe('daily minimum, mean and maximum, every day this month · band = your usual range')
+    // After the chart in the card, not above it.
+    const chart = container!.querySelector('.card [role="img"]')!
+    expect(chart.compareDocumentPosition(caption!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     restore()
   })
-})
 
-describe('the Day tab\'s intraday heart rate card', () => {
-  // Finding 4 of the final review: the Day tab's intraday heart rate chart hand rolls its own
-  // error/pending/empty order and used to have no exclusion check in it at all, so excluding
-  // heart-rate rendered "No data yet" -- the untrue claim the empty-state work exists to prevent.
-  it('says the excluded heart rate type was never synced, not that the day has no data', async () => {
-    const restore = stubFetch({ baseline: null, excludedDataTypes: ['heart-rate'] })
-    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-08-15" to="2026-08-15" />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+  it('words its caption in Dutch', async () => {
+    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false } })
+    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} periodWords="deze maand" />)
+    mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card?.textContent).toContain('Not being synced')
-    expect(card?.textContent).not.toContain('No data yet')
-    restore()
-  })
-
-  it('draws the intraday chart normally when heart rate is not excluded', async () => {
-    const restore = stubFetch({ baseline: null })
-    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-08-15" to="2026-08-15" />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card?.textContent).not.toContain('Not being synced')
-    expect(card?.textContent).not.toContain('No data yet')
-    restore()
-  })
-
-  // A finished day recorded in New York (UTC-4): its 08:00Z reading reads 04:00, the time it was
-  // recorded at, not 10:00 in the reader's zone. Today, still running, stays in the reader's zone.
-  it('reads an earlier day\'s trace at the offset it was recorded under, and today\'s in the effective zone', async () => {
-    const firstCell = async (today: string) => {
-      const restore = stubFetch({ baseline: null, intradayOffset: -240 })
-      try {
-        const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-08-15" to="2026-08-15" today={today} />)
-        mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-        await flush(client, () => container!.innerHTML)
-        return container!.querySelector('table tbody tr td, table tbody tr th')?.textContent
-      } finally { restore() }
-    }
-    expect(await firstCell('2026-08-20')).toBe('04:00')
-    expect(await firstCell('2026-08-15')).toBe('10:00')
-  })
-
-  // 25 October 2026 at home in Amsterdam, recorded at +120 from its midnight: the zone explains it,
-  // so a reading after the clocks went back (08:00Z) reads 09:00 CET, not 10:00 at a fixed +120.
-  it('reads an earlier daylight saving day at home in the zone, not at its first offset', async () => {
-    const restore = stubFetch({ baseline: null, intradayOffset: 120 })
-    try {
-      const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-10-25" to="2026-10-25" today="2026-10-30" />)
-      mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-      await flush(client, () => container!.innerHTML)
-      expect(container!.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('09:00')
-    } finally { restore() }
-  })
-
-  // The same cold-load race MetricCard's own gate exists for, in the one card that hand rolls its
-  // exclusion check instead of going through it. excludedDataTypes is [] while /data-types is in
-  // flight, which reads as "heart rate is not excluded", so an empty day hid this card for that
-  // moment rather than saying it is not being synced.
-  it('keeps the heart rate card while the exclusion list is still loading', async () => {
-    const restore = stubFetch({ baseline: null, emptyIntraday: true, hangDataTypes: true })
-    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-08-15" to="2026-08-15" />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    // pumpUntil, not flush: the whole point of this fixture is one request that never settles.
-    await pumpUntil(
-      () => container!.querySelector('.card') !== null,
-      'the heart rate card to settle while the exclusion list hangs',
-    )
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card).toBeDefined()
-    expect(card?.textContent).not.toContain('No data yet')
-    restore()
-  })
-
-  it('renders no heart rate card on a Day tab with no intraday samples', async () => {
-    const restore = stubFetch({ baseline: null, emptyIntraday: true })
-    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} tab="day" from="2026-08-15" to="2026-08-15" />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
-      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card).toBeUndefined()
+    expect(container!.querySelector('.card .dash-caption')?.textContent)
+      .toBe('dagelijks minimum, gemiddelde en maximum, elke dag deze maand · band = je gebruikelijke bereik')
     restore()
   })
 })
@@ -276,6 +188,7 @@ describe('mounted on Recovery', () => {
       const json = (body: unknown) =>
         new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
       if (url.includes('/api/auth/me')) return json(PERSON)
+      if (url.includes('/recovery/period')) return json(RECOVERY_PERIOD_MONTH)
       if (url.includes('/series')) {
         const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
         const body: Record<string, unknown> = {}
@@ -283,46 +196,50 @@ describe('mounted on Recovery', () => {
         return json(body)
       }
       if (url.includes('/baselines')) return json({ baseline: null })
-      if (url.includes('/insights')) return json(insightBody(url))
-      if (url.includes('/intraday')) {
-        return json({
-          points: [{ sourceId: 'watch', utcMs: Date.parse('2026-08-15T08:00:00Z'), min: 58, mean: 62, max: 70, n: 1, excluded: false }],
-          reduction: null, offsetMinutes: -240,
-        })
+      if (url.includes('/notes')) return json({ items: [{ id: 'n1', localDate: '2026-08-15', body: 'Slept at a friend', updatedAtMs: 0 }] })
+      if (url.includes('/events')) {
+        return json({ items: [{
+          id: 'e1', kind: 'caffeine', startedAtMs: Date.parse('2026-08-15T09:00:00Z'), startedAtOffsetMinutes: 0,
+          endedAtMs: null, endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-15',
+        }] })
       }
-      if (url.includes('/data-types')) return json({ items: [{ id: 'heart-rate', tier: 'intraday', excluded: false }] })
+      if (url.includes('/overrides')) return json({ items: [] })
       if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD })
       return json({})
     }) as typeof fetch
     return () => { globalThis.fetch = original }
   }
 
-  // Task 1's own point: Recovery now mounts the same card Dashboard has always drawn, at the foot
-  // of its own grid.
-  it('shows a card labelled Heart rate range', async () => {
-    window.history.replaceState(null, '', '/recovery')
+  // Recovery mounts the card the old Dashboard drew at its own foot, across the whole row of the
+  // overview's grid. Its Day tab draws no trace: it opens the dashboard on that day
+  // (recovery.test.tsx), and the dashboard's day carries the trace.
+  it('shows a card labelled Heart rate range, the whole row wide', async () => {
+    window.history.replaceState(null, '', '/recovery?range=month&on=2026-08-15')
     const restore = stubRecovery()
     const { client, tree } = withQuery(<Recovery />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
-    const card = [...container!.querySelectorAll('.card')]
+    const card = [...container!.querySelectorAll<HTMLElement>('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-    expect(card).toBeDefined()
+    expect(card?.dataset.span).toBe('12')
     restore()
   })
 
-  // The page hands the card its today, which is what tells an earlier day (read at the offset it
-  // was recorded under, New York's here) from the day still running.
-  it('draws an earlier Day tab in the offset it was recorded under', async () => {
-    window.history.replaceState(null, '', '/recovery?range=day&on=2026-08-15')
+  // The overview pages draw no day notes or events on their charts: on a year they piled into one
+  // unreadable block. Notes and events stay reachable from the hero's day panel.
+  it('draws no day note or event on the range, and captions it by the period', async () => {
+    window.history.replaceState(null, '', '/recovery?range=month&on=2026-08-15')
     const restore = stubRecovery()
-    try {
-      const { client, tree } = withQuery(<Recovery />)
-      mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-      await flush(client, () => container!.innerHTML)
-      const card = [...container!.querySelectorAll('.card')]
-        .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
-      expect(card?.querySelector('table tbody tr td, table tbody tr th')?.textContent).toBe('04:00')
-    } finally { restore() }
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll<HTMLElement>('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')!
+    expect(card.querySelector('table')).not.toBeNull()
+    expect(card.innerHTML).not.toContain('Slept at a friend')
+    expect(card.innerHTML).not.toContain('Caffeine')
+    expect(card.querySelector('.dash-caption')?.textContent)
+      .toBe('daily minimum, mean and maximum, every day this month · no usual range yet')
+    restore()
   })
 })

@@ -35,6 +35,11 @@ export type AnnotateTarget =
   // excluding the primary alone would hand the event to the phone's copy and the workout would
   // stay on the list under a different id.
   | { scope: 'session', localDate: string, sessionId: string, alsoSessionIds?: readonly string[] }
+  // A day itself, for a point that stands for a figure worked out rather than stored (the
+  // Recovery overview's index): there is no reading behind it to exclude or correct, and an
+  // exclusion aimed at one of its inputs instead would quietly remove that input everywhere. So it
+  // names the day alone and is offered only what a day carries, a note and an event.
+  | { scope: 'day', localDate: string }
 
 type Action = 'exclude' | 'correct' | 'note' | 'event'
 
@@ -45,12 +50,16 @@ type Action = 'exclude' | 'correct' | 'note' | 'event'
  * the minute, so on the chart this ships from, n is always 1; the guard is what keeps a future
  * chart over raw readings from writing a correction against an instant that stands for six.
  *
+ * `day` offers only note and event: it names a computed figure's day, which has no stored reading
+ * for an override to act on (the variant's own comment).
+ *
  * `session` offers only exclude and note: correct is sample scope only, which OverrideStore.validate
  * already enforces, and an event belongs to a day rather than to one workout, so offering one here
  * would write it against the day the workout happens to fall on, which is a different claim from
  * the one the reader made.
  */
 function actionsFor(target: AnnotateTarget): readonly Action[] {
+  if (target.scope === 'day') return ['note', 'event']
   if (target.scope === 'day_metric') return ['exclude', 'note', 'event']
   if (target.scope === 'session') return ['exclude', 'note']
   return target.n === 1 ? ['exclude', 'correct', 'note', 'event'] : ['exclude', 'note', 'event']
@@ -78,7 +87,8 @@ export function AnnotatePanel({ target, onClose }: {
 
   const actions = actionsFor(target)
 
-  const [action, setAction] = useState<Action>('exclude')
+  // The first action the target is offered: exclude wherever there is a reading, a note on a day.
+  const [action, setAction] = useState<Action>(actions[0]!)
   const [reason, setReason] = useState('')
   const [correctedValue, setCorrectedValue] = useState('')
   const [noteBody, setNoteBody] = useState('')
@@ -100,11 +110,14 @@ export function AnnotatePanel({ target, onClose }: {
   // nowhere else in this component. No reason for a target key to appear as a field a reader could
   // edit: the point they clicked already said which day and metric, or which source and instant,
   // or the page they opened already said which session, this panel is about.
-  const targetKey = target.scope === 'day_metric'
-    ? dayMetricTarget({ localDate: target.localDate, metric: target.metric })
-    : target.scope === 'session'
-      ? sessionTarget(target.sessionId)
-      : sampleTarget({ source: target.sourceId, metric: target.metric, utcMs: target.utcMs })
+  // A day target names no reading, so it has no override key at all (actionsFor never offers it an
+  // override to write).
+  const targetKey = target.scope === 'day' ? null
+    : target.scope === 'day_metric'
+      ? dayMetricTarget({ localDate: target.localDate, metric: target.metric })
+      : target.scope === 'session'
+        ? sessionTarget(target.sessionId)
+        : sampleTarget({ source: target.sourceId, metric: target.metric, utcMs: target.utcMs })
 
   const canSubmit =
     action === 'exclude' ? reason.trim() !== '' :
@@ -125,7 +138,9 @@ export function AnnotatePanel({ target, onClose }: {
     event.preventDefault()
     if (!canSubmit) return
 
-    if (action === 'exclude') {
+    // A day target is never offered either (actionsFor); the guard keeps one from writing anything.
+    if ((action === 'exclude' || action === 'correct') && (target.scope === 'day' || targetKey === null)) return
+    if (action === 'exclude' && target.scope !== 'day' && targetKey !== null) {
       // One key everywhere but a merged workout, which excludes each of its copies in turn (the
       // comment on AnnotateTarget's session variant says why). In turn rather than at once: each
       // write drains the derive queue before it answers, and the panel closes only once every one
@@ -145,7 +160,7 @@ export function AnnotatePanel({ target, onClose }: {
         })
       }
       writeFrom(0, true)
-    } else if (action === 'correct') {
+    } else if (action === 'correct' && target.scope !== 'day' && targetKey !== null) {
       // Reachable only when actionsFor offered this segment, which only happens at sample scope
       // (target.n === 1), so target.scope is always 'sample' here; OverrideStore.validate would
       // 400 a correct write at any other scope regardless.
@@ -190,7 +205,9 @@ export function AnnotatePanel({ target, onClose }: {
           <h2 id={titleId}>
             {target.scope === 'session'
               ? t('annotate.sessionTitle', { date: target.localDate })
-              : t('annotate.title', { metric: target.metric, date: target.localDate })}
+              : target.scope === 'day'
+                ? t('annotate.dayTitle', { date: target.localDate })
+                : t('annotate.title', { metric: target.metric, date: target.localDate })}
           </h2>
           <button type="button" className="icon-button" onClick={onClose} aria-label={t('annotate.close')}>
             {'×'}
