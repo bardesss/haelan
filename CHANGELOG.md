@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.21.0](https://github.com/bardesss/haelan/compare/v2.20.0...v2.21.0) (2026-10-08)
+
+
+### Features
+
+* the recovery index reads HRV on ln and is fitted to Google's score ([#433](https://github.com/bardesss/haelan/issues/433)) ([739f86d](https://github.com/bardesss/haelan/commit/739f86da5b3616609e0a008406e068764c8b075a))
+
 ## [2.20.0](https://github.com/bardesss/haelan/compare/v2.19.0...v2.20.0) (2026-10-08)
 
 
