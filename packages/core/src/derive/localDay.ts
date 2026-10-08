@@ -67,3 +67,11 @@ export function shiftLocalDate(localDate: string, days: number): string {
  * roughly twelve seconds and ~290MB of heap, with no body and no data required.
  */
 export const MAX_RANGE_DAYS = 3660
+
+/**
+ * How many days `from`..`to` covers, both ends included. NaN when either is not a date, so a
+ * caller can tell "too wide" from "not a range" without a second parse.
+ */
+export function rangeSpanDays(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1
+}

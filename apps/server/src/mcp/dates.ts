@@ -1,8 +1,7 @@
 import { z } from 'zod'
-import { ConfigError, MAX_RANGE_DAYS, requireDate } from '@haelan/core'
+import { ConfigError, requireDate, spanBeyondLimit } from '@haelan/core'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-const DAY_MS = 86_400_000
 
 /**
  * Whether a string names a day that exists, answered by core's own requireDate rather than a
@@ -41,13 +40,8 @@ export const DATE_RANGE = z.object({ from: LOCAL_DATE, to: LOCAL_DATE }).superRe
     ctx.addIssue({ code: 'custom', message: `from '${from}' is after to '${to}'` })
     return
   }
-  const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1
-  if (days > MAX_RANGE_DAYS) {
-    ctx.addIssue({
-      code: 'custom',
-      message: `range '${from}'..'${to}' spans ${days} days, more than the ${MAX_RANGE_DAYS} day maximum`,
-    })
-  }
+  const beyond = spanBeyondLimit(from, to)
+  if (beyond !== null) ctx.addIssue({ code: 'custom', message: beyond })
 })
 
 /** Refuses a malformed, inverted or too wide range as a ConfigError the adapter hands the agent as prose. */

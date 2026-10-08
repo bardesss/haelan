@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import {
   ConfigError, effectiveTimezone, FIGURE_METRIC_ALIAS, figureDirection, judge, localDateInZone, MAX_RANGE_DAYS,
-  PersonQuery, roundMetricValue, requireDate, standingOf,
+  PersonQuery, requireBoundedSpan, roundMetricValue, requireDate, standingOf,
 } from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
@@ -58,8 +58,6 @@ export function metricsFrom(raw: string | string[] | undefined): string[] {
 // importing this route module; re-exported here so every route keeps its import.
 export { MAX_RANGE_DAYS }
 
-const DAY_MS = 86_400_000
-
 /**
  * Refuses a range wider than the ceiling, for the reads whose cost is a function of the range
  * asked for rather than of the rows that exist: /trend builds one array entry per day regardless
@@ -72,13 +70,8 @@ const DAY_MS = 86_400_000
  * merely too wide, and the message names the limit so a caller knows what to ask for instead.
  */
 export function requireBoundedRange(from: string, to: string, name = 'range'): void {
-  const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1
-  if (!Number.isFinite(days)) return
-  if (days > MAX_RANGE_DAYS) {
-    throw new ConfigError(
-      `${name} '${from}'..'${to}' spans ${days} days, more than the ${MAX_RANGE_DAYS} day maximum`,
-    )
-  }
+  // The span and its sentence are core's, shared with the MCP tools' range check.
+  requireBoundedSpan(from, to, name)
 }
 
 /**
