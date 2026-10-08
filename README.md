@@ -550,7 +550,7 @@ the small screen, the night and workout detail pages, and the glance with its na
 phone. The agent surface is an MCP server with typed tools, reachable over stdio and over HTTP
 behind a per-account token, including `sql_query` behind its own sandbox. The tenth, M10, is under
 way: it redesigns the screens page by page so every figure stands against its usual, and the night
-and workout pages and the Sleep and Activity pages are done.
+and workout pages and the Sleep, Activity and Recovery pages are done.
 
 **[ROADMAP.md](ROADMAP.md)** has the table, every milestone's pull request, and why the order is
 what it is.
