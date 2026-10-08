@@ -189,6 +189,7 @@ export { PersonQuery, requireDate, GLANCE_DAY_METRICS } from './query/personQuer
 export type { DailyPoint, SeriesResult } from './query/personQuery.ts'
 export { readRecoveryInput } from './query/recoveryInput.ts'
 export type { FilledCount } from './query/recoveryInput.ts'
+export { readHrvDeviation } from './query/hrvDeviationInput.ts'
 export { PROJECTION_TABLES } from './query/projection.ts'
 export { baselineOf, baselinesOver, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'
