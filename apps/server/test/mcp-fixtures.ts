@@ -128,21 +128,22 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   // 1200, so a suppressed answer (every field null) fails this the same way a missing tool would.
   compare_periods: '1200',
   // `insertRecoverySeries` below gives alice her own 67 days of hrv/resting-heart-rate/
-  // respiratory-rate/sleep numbers, distinct from bart's, and RECOVERY_ON scores as 76, band
+  // respiratory-rate/sleep numbers, distinct from bart's, and RECOVERY_ON scores as 73, band
   // 'above' - both checked against the real recoveryIndexSeries/bandOf output for these exact
-  // fixture values, not guessed. (76, not 75: RECOVERY_SCALE moved from 1.69 to 1.76 when the
-  // probe's own window bug was fixed and re-measured against the archive's full history rather
-  // than only its final ~67 days - see recoveryIndex.ts's own comment on RECOVERY_SCALE.)
+  // fixture values, not guessed. Bart's own RECOVERY_ON scores 0, band 'low'. (73, not 76: the
+  // 2026-10-08 refit against harvested Google scores read HRV on ln, moved the weights towards HRV
+  // and set RECOVERY_SCALE to 1.00 - see recoveryIndex.ts's own comments on both. 73 is also the
+  // top of the re-derived 'above' band, so this catches the above/high cut moving down.)
   //
   // ALICE_FINGERPRINTS holds one fingerprint per tool, and `found` below only knows two matchers
-  // - a boundary-anchored bare number (numberLeak) or a plain substring - so a lone '76' would
+  // - a boundary-anchored bare number (numberLeak) or a plain substring - so a lone '73' would
   // prove the score but say nothing about `band`: bandOf is a second, independent step (a
-  // cut-point change or a wrong lookup could move the band while the score stays exactly 76), and
+  // cut-point change or a wrong lookup could move the band while the score stays exactly 73), and
   // a score-only fingerprint would not notice. The fingerprint below is the two fields' own exact
   // JSON adjacency - `score` immediately followed by `band` in dayOf's own field order - so it
   // only matches when both are simultaneously correct - not a looser substring of either value
-  // alone the way a bare '76' or a bare 'above' could be.
-  recovery_index: '"score":76,"band":"above"',
+  // alone the way a bare '73' or a bare 'above' could be.
+  recovery_index: '"score":73,"band":"above"',
   // Alice's seven-day HRV average and her own band on RECOVERY_ON, measured against the same
   // `insertRecoverySeries` rows (bart's read 75 against 79 to 82), as one adjacent run of fields so
   // a wrong number in any of them fails it.
@@ -181,8 +182,8 @@ type RecoveryCentres = Record<RecoveryInputKey, { centre: number, amplitude: num
 // Alice and bart's centres are far enough apart (hrv 50 vs 80, resting heart rate 55 vs 65, and
 // so on) that recovery_index leaking one person's rows into the other's answer reads as an
 // obviously wrong number, not a coincidentally similar one - the isolation suites' own bar. Each
-// spikes on RECOVERY_ON in the direction that scores well for that person (higher hrv, lower
-// resting heart rate) so the tool actually answers `enough: true` with a real, non-boundary
+// spikes on RECOVERY_ON (alice in the direction that scores well, bart the other way, to a low
+// score) so the tool actually answers `enough: true` with a real, non-boundary
 // score rather than sitting at the baseline z of zero every non-spiked day gets.
 const ALICE_RECOVERY: RecoveryCentres = {
   hrv: { centre: 50, amplitude: 4, spike: 53 },
