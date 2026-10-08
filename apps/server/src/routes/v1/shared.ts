@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import {
-  ConfigError, effectiveTimezone, FIGURE_METRIC_ALIAS, figureDirection, judge, localDateInZone, PersonQuery, roundMetricValue, requireDate,
-  standingOf,
+  ConfigError, effectiveTimezone, FIGURE_METRIC_ALIAS, figureDirection, judge, localDateInZone, MAX_RANGE_DAYS,
+  PersonQuery, roundMetricValue, requireDate, standingOf,
 } from '@haelan/core'
 import type { GlanceBaseline, GlanceFigure, GlanceStanding, PageFigure, SeriesResult, WorkoutFigure } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
@@ -54,15 +54,9 @@ export function metricsFrom(raw: string | string[] | undefined): string[] {
   return Array.isArray(raw) ? [...new Set(raw)] : [raw]
 }
 
-/**
- * Ten years, inclusive of both ends. Generous on purpose: the widest view a real dashboard offers
- * is "all time", and a self hosted instance holding a decade of imported wearable history is
- * already at the far end of what anyone actually has. The point of the number is only that it is
- * finite. Without it, one authenticated GET with from=1000-01-01&to=9999-12-31 made /trend
- * materialise 3.28 million day entries against an empty database, holding the event loop for
- * roughly twelve seconds and ~290MB of heap, with no body and no data required.
- */
-export const MAX_RANGE_DAYS = 3660
+// Declared in core beside the other date helpers, so the MCP tools can bound a range without
+// importing this route module; re-exported here so every route keeps its import.
+export { MAX_RANGE_DAYS }
 
 const DAY_MS = 86_400_000
 

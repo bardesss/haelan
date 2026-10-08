@@ -57,3 +57,13 @@ const DAY_MS = 86_400_000
 export function shiftLocalDate(localDate: string, days: number): string {
   return new Date(Date.parse(`${localDate}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
 }
+
+/**
+ * Ten years, inclusive of both ends. Generous on purpose: the widest view a real dashboard offers
+ * is "all time", and a self hosted instance holding a decade of imported wearable history is
+ * already at the far end of what anyone actually has. The point of the number is only that it is
+ * finite. Without it, one authenticated GET with from=1000-01-01&to=9999-12-31 made /trend
+ * materialise 3.28 million day entries against an empty database, holding the event loop for
+ * roughly twelve seconds and ~290MB of heap, with no body and no data required.
+ */
+export const MAX_RANGE_DAYS = 3660

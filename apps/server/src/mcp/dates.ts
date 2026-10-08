@@ -1,19 +1,22 @@
 import { z } from 'zod'
-import { ConfigError } from '@haelan/core'
-import { MAX_RANGE_DAYS } from '../routes/v1/shared.ts'
+import { ConfigError, MAX_RANGE_DAYS, requireDate } from '@haelan/core'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const DAY_MS = 86_400_000
 
 /**
- * Whether a YYYY-MM-DD string names a day that exists. The shape alone accepts a thirteenth month
- * and a thirtieth of February; round tripping through the calendar refuses those while keeping a
- * real leap day, the same rule core's requireDate applies.
+ * Whether a string names a day that exists, answered by core's own requireDate rather than a
+ * second copy of its rule (the YYYY-MM-DD shape, then a round trip through the calendar that
+ * refuses a thirtieth of February and keeps a real leap day), so the HTTP routes and the tools
+ * cannot drift on what a date is.
  */
 export function isCalendarDate(value: string): boolean {
-  if (!ISO_DATE.test(value)) return false
-  const onCalendar = new Date(`${value}T00:00:00Z`)
-  return !Number.isNaN(onCalendar.getTime()) && onCalendar.toISOString().slice(0, 10) === value
+  try {
+    requireDate('date', value)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -28,9 +31,9 @@ export const LOCAL_DATE = z.string()
 /**
  * The cross field half, which a tool's input shape cannot carry: the shape is a raw shape (see
  * contract.ts), so a refinement across `from` and `to` has nowhere to attach there. Each ranged
- * tool runs it first thing in `run` through requireToolRange instead. The ceiling is the HTTP
- * routes' own MAX_RANGE_DAYS, imported rather than restated, so an agent cannot ask for more
- * work than the web app can.
+ * tool runs it first thing in `run` through requireToolRange instead. The ceiling is core's
+ * MAX_RANGE_DAYS, the one the HTTP routes bound by, so an agent cannot ask for more work than
+ * the web app can.
  */
 export const DATE_RANGE = z.object({ from: LOCAL_DATE, to: LOCAL_DATE }).superRefine(({ from, to }, ctx) => {
   if (!isCalendarDate(from) || !isCalendarDate(to)) return

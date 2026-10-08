@@ -1,11 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { PersonQuery, createTestDatabase, seedPerson, schema } from '@haelan/core'
+import { MAX_RANGE_DAYS, PersonQuery, createTestDatabase, seedPerson, schema } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { buildMcpServer } from '../src/mcp/adapter.ts'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
-import { MAX_RANGE_DAYS } from '../src/routes/v1/shared.ts'
 
 /**
  * The suite that drives the real SDK rather than calling `Tool.run` directly.
