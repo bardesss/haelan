@@ -262,7 +262,7 @@ describe('the Recovery page: the tap panel', () => {
     const rows = [...panel.querySelectorAll('.point-panel-row')].map((row) =>
       [...row.querySelectorAll('dt, dd')].map((cell) => cell.textContent))
     expect(rows).toEqual([
-      ['Recovery index', '71', 'Above your usual'],
+      ['Recovery index', '71', 'above your usual'],
       ['Heart rate variability', '+21 points'],
       ['Resting heart rate', '0 points'],
       ['Breathing rate', '0 points'],

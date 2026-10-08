@@ -241,6 +241,13 @@
         "openDay": "Bekijk dag",
         "annotate": "Notitie of gebeurtenis toevoegen"
       },
+      "band": {
+        "low": "ruim onder gebruikelijk",
+        "below": "onder gebruikelijk",
+        "usual": "zoals gebruikelijk",
+        "above": "boven gebruikelijk",
+        "high": "ruim boven gebruikelijk"
+      },
       "emptyTitle": "Geen herstelindex voor deze periode",
       "emptyDetail": "De index heeft metingen van HRV en rusthartslag nodig, elk tegenover je eigen {{days}} dagen ervoor."
     },
@@ -252,10 +259,10 @@
         "above": "{{days}} gemeten dagen boven je gebruikelijke bereik"
       },
       "capped": {
-        "below": "Meer dan {{days}} dagen onder je gebruikelijke bereik",
-        "above": "Meer dan {{days}} dagen boven je gebruikelijke bereik"
+        "below": "meer dan {{days}} dagen onder je gebruikelijke bereik",
+        "above": "meer dan {{days}} dagen boven je gebruikelijke bereik"
       },
-      "within": "Binnen je gebruikelijke bereik",
+      "within": "binnen je gebruikelijke bereik",
       "note": {
         "below": "{{sideNights}} van de laatste {{weekReadings}} nachtelijke metingen laag",
         "above": "{{sideNights}} van de laatste {{weekReadings}} nachtelijke metingen hoog"
@@ -265,11 +272,11 @@
         "weekly": "elke stip: de laatste gemeten dag van een week, het gemiddelde van de {{weekDays}} dagen tot en met die dag, tegenover je gebruikelijke bereik uit de {{baselineDays}} dagen vóór die week · gekleurd vlak = een reeks aan één kant van de band"
       },
       "short": {
-        "below": "Onder je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen",
-        "above": "Boven je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen"
+        "below": "onder je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen",
+        "above": "boven je gebruikelijke bereik, minder dan {{minRun}} gemeten dagen"
       },
-      "tooFew": "Te weinig metingen in de laatste {{weekDays}} dagen",
-      "needsBaseline": "Heeft {{baselineDays}} dagen HRV nodig vóór de eerste week"
+      "tooFew": "te weinig metingen in de laatste {{weekDays}} dagen",
+      "needsBaseline": "heeft {{baselineDays}} dagen HRV nodig vóór de eerste week"
     },
     "method": {
       "label": "Hoe de index werkt",

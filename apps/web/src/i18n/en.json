@@ -241,6 +241,13 @@
         "openDay": "View day",
         "annotate": "Add a note or an event"
       },
+      "band": {
+        "low": "well below your usual",
+        "below": "below your usual",
+        "usual": "around your usual",
+        "above": "above your usual",
+        "high": "well above your usual"
+      },
       "emptyTitle": "No recovery index for this period",
       "emptyDetail": "The index needs HRV and resting heart rate readings, each against your own previous {{days}} days."
     },
@@ -248,14 +255,14 @@
       "label": "HRV against its usual week",
       "average": "{{days}}-day average",
       "run": {
-        "below": "Below its usual for {{days}} measured days",
-        "above": "Above its usual for {{days}} measured days"
+        "below": "below your usual for {{days}} measured days",
+        "above": "above your usual for {{days}} measured days"
       },
       "capped": {
-        "below": "More than {{days}} days below its usual",
-        "above": "More than {{days}} days above its usual"
+        "below": "more than {{days}} days below your usual",
+        "above": "more than {{days}} days above your usual"
       },
-      "within": "Within its usual",
+      "within": "within your usual",
       "note": {
         "below": "{{sideNights}} of the last {{weekReadings}} nightly readings low",
         "above": "{{sideNights}} of the last {{weekReadings}} nightly readings high"
@@ -265,11 +272,11 @@
         "weekly": "each dot: a week's last measured day, the average of the {{weekDays}} days ending on it, against your usual from the {{baselineDays}} days before that week · shaded = a stretch on one side of the band"
       },
       "short": {
-        "below": "Below its usual for fewer than {{minRun}} measured days",
-        "above": "Above its usual for fewer than {{minRun}} measured days"
+        "below": "below your usual for fewer than {{minRun}} measured days",
+        "above": "above your usual for fewer than {{minRun}} measured days"
       },
-      "tooFew": "Too few readings in the last {{weekDays}} days",
-      "needsBaseline": "Needs {{baselineDays}} days of HRV before its first week"
+      "tooFew": "too few readings in the last {{weekDays}} days",
+      "needsBaseline": "needs {{baselineDays}} days of HRV before its first week"
     },
     "method": {
       "label": "How the index works",
