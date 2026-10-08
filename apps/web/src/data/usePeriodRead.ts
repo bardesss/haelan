@@ -3,9 +3,9 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
-import type { ActivityPeriodData, PeriodRange, SleepPeriodData } from './periodTypes.js'
+import type { ActivityPeriodData, PeriodRange, RecoveryPeriodData, SleepPeriodData } from './periodTypes.js'
 
-export type PeriodKind = 'sleep' | 'activity'
+export type PeriodKind = 'sleep' | 'activity' | 'recovery'
 export interface PeriodReadInput { range: PeriodRange | 'day', anchor: string, source: string }
 
 /** `queryKeys.resource(personId, '<kind>-period')` as the prefix, then the range, anchor and source. */
@@ -38,3 +38,6 @@ export const useSleepPeriod = (input: PeriodReadInput): UseQueryResult<SleepPeri
 
 /** The Activity overview's read (GET /activity/period). */
 export const useActivityPeriod = (input: PeriodReadInput): UseQueryResult<ActivityPeriodData> => usePeriodRead<ActivityPeriodData>('activity', input)
+
+/** The Recovery overview's read (GET /recovery/period). */
+export const useRecoveryPeriod = (input: PeriodReadInput): UseQueryResult<RecoveryPeriodData> => usePeriodRead<RecoveryPeriodData>('recovery', input)
