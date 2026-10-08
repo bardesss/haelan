@@ -10,6 +10,11 @@ import { WeekCard } from '../src/pages/dashboard/WeekCard.js'
 import { formatFigure } from '../src/pages/dashboard/glanceText.js'
 import { I18nextProvider } from 'react-i18next'
 import { I18nProvider, initI18n } from '../src/i18n/index.js'
+import type { Session } from '../src/auth/session.js'
+import type { HrvRun } from '../src/data/useHrvDeviation.js'
+import { hrvDeviationPath } from '../src/data/useHrvDeviation.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import { addDays } from '../src/controls/range.js'
 import type { GlanceFigure, GlanceSleep, GlanceRecovery, GlanceDay } from '../src/data/useGlance.js'
 import { glanceBody, GLANCE_TODAY } from './glanceFixture.js'
 import type { Sparkline } from '../src/charts/Sparkline.js'
@@ -323,13 +328,38 @@ function recoveryFixture(over: {
   }
 }
 
-function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {}): string {
-  return renderToStaticMarkup(
-    <I18nProvider lng="en">
-      <RecoveryCard recovery={recoveryFixture()} span={4} wide={false} today={TODAY} timezone="UTC" {...props} />
-    </I18nProvider>,
-  )
+const HRV_PERSON = { personId: 'p1' } as Session
+
+function hrvRunFixture(over: Partial<HrvRun> = {}): HrvRun {
+  return { side: 'below', days: 5, capped: false, since: '2026-09-18', sideNights: 5, weekReadings: 7, filledDays: 0, ...over }
 }
+
+/** The recovery card with a session cached, and the HRV stretch for its HRV day when `run` is given. */
+function renderRecovery(props: Partial<Parameters<typeof RecoveryCard>[0]> = {}, run?: HrvRun | null, lng: 'en' | 'nl' = 'en'): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), HRV_PERSON)
+  const recovery = props.recovery ?? recoveryFixture()
+  if (run !== undefined && recovery.hrv.asOfDate !== null) {
+    client.setQueryData(queryKeys.resource('p1', 'hrv-deviation', {
+      from: addDays(recovery.hrv.asOfDate, -126), to: recovery.hrv.asOfDate,
+    }), { days: [], run })
+  }
+  hrvRequests = []
+  const original = globalThis.fetch
+  globalThis.fetch = ((url: string) => { hrvRequests.push(String(url)); return Promise.resolve(new Response('{}')) }) as typeof fetch
+  try {
+    return renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng={lng}>
+          <RecoveryCard recovery={recoveryFixture()} span={4} wide={false} today={TODAY} timezone="UTC" {...props} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    )
+  } finally {
+    globalThis.fetch = original
+  }
+}
+let hrvRequests: string[] = []
 
 describe('RecoveryCard', () => {
   beforeEach(() => {
@@ -389,6 +419,41 @@ describe('RecoveryCard', () => {
     expect(sparklineProps?.dots).toBe(true)
     expect(sparklineProps?.pointStandings).toEqual(['below', null, null, null, null, null, null])
     expect(sparklineProps?.tableToggle).toBe(false)
+  })
+})
+
+describe('RecoveryCard HRV stretch note', () => {
+  const hrvDay = () => recoveryFixture().hrv.asOfDate!
+  it('names a below stretch, in the out-of-usual tone, under the HRV gauge', () => {
+    const html = renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }))
+    expect(html).toContain('<span class="dash-mini-note is-out">5 days below usual</span>')
+    expect(html.indexOf('5 days below usual')).toBeGreaterThan(html.lastIndexOf('usual-gauge'))
+  })
+  it('names an above stretch', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 4 }))).toContain('>4 days above usual<')
+  })
+  it('says more than the lookback when the stretch is capped', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }))).toContain('>more than 60 days below usual<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }))).toContain('>more than 60 days above usual<')
+  })
+  it('speaks Dutch with whole strings', () => {
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 5 }), 'nl')).toContain('>5 dagen onder gebruikelijk<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 5 }), 'nl')).toContain('>5 dagen boven gebruikelijk<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'below', days: 60, capped: true }), 'nl')).toContain('>meer dan 60 dagen onder gebruikelijk<')
+    expect(renderRecovery({}, hrvRunFixture({ side: 'above', days: 60, capped: true }), 'nl')).toContain('>meer dan 60 dagen boven gebruikelijk<')
+  })
+  it('renders nothing without a run, so a normal day keeps its height', () => {
+    expect(renderRecovery({}, null)).not.toContain('dash-mini-note')
+    expect(renderRecovery({})).not.toContain('dash-mini-note')
+  })
+  it('asks nothing and shows nothing when HRV has no value', () => {
+    const recovery = recoveryFixture({ hrv: { value: null, asOfDate: null } })
+    const html = renderRecovery({ recovery }, hrvRunFixture())
+    expect(html).not.toContain('dash-mini-note')
+    expect(hrvRequests).toEqual([])
+  })
+  it('asks for exactly the HRV day', () => {
+    expect(hrvDeviationPath('p1', hrvDay())).toBe(`/api/v1/p/p1/hrv-deviation?from=${hrvDay()}&to=${hrvDay()}`)
   })
 })
 

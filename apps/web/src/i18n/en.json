@@ -1815,6 +1815,10 @@
       "index": "Recovery index",
       "rhr": "Resting heart rate",
       "hrv": "HRV",
+      "hrvRun": {
+        "days": { "below": "{{days}} days below usual", "above": "{{days}} days above usual" },
+        "capped": { "below": "more than {{days}} days below usual", "above": "more than {{days}} days above usual" }
+      },
       "respiratory": "Breathing rate {{value}}, above your usual",
       "unscored": "Not enough readings to score yet.",
       "unscoredFinished": "Not enough readings to score.",

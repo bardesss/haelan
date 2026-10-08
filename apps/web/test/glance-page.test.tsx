@@ -583,12 +583,14 @@ describe('the glance Dashboard', () => {
 
   // One read: the old Dashboard issued a dozen (series per agg, insights, nights, annotations).
   // /sources is the heart rate trace's own legend lookup (IntradayHeartRate's useSourceNames), a
-  // name table rather than a read of anyone's data, so it is the one other request allowed.
-  it('makes exactly one data request, to /glance', async () => {
+  // name table rather than a read of anyone's data, so it is the one other request allowed. The
+  // recovery card's HRV stretch note is the second: one day of /hrv-deviation, for the HRV reading's
+  // own day, because /glance's body is pinned by the phone app's fixtures and cannot carry it.
+  it('makes one data request, to /glance, and one for the HRV stretch', async () => {
     const { seen, restore } = await mountPage()
     try {
       const data = seen.filter((u) => !u.includes('/sources') && !u.includes('/api/auth/me'))
-      expect(data).toEqual(['/api/v1/p/p1/glance'])
+      expect(data).toEqual(['/api/v1/p/p1/glance', '/api/v1/p/p1/hrv-deviation?from=2026-09-23&to=2026-09-23'])
     } finally { restore() }
   })
 })

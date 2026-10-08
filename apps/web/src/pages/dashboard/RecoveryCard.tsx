@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Sparkline } from '../../charts/Sparkline.js'
+import { verdictTone } from '../../charts/base.js'
+import { useHrvDeviation } from '../../data/useHrvDeviation.js'
 import type { GlanceFigure, GlanceRecovery } from '../../data/useGlance.js'
 import { DashCard, Described, useOpensDay } from './cardShared.js'
 import { ScoreRing } from './ScoreRing.js'
@@ -30,6 +32,11 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
   const subtitle = recovery.index.asOfDate === today ? t(finished ? 'glance.subtitle.thatDay' : 'glance.subtitle.today')
     : recovery.index.asOfDate !== null && recovery.index.asOfDate === yesterdayOf(today)
       ? t(finished ? 'glance.subtitle.dayBefore' : 'glance.subtitle.yesterday') : null
+  // The stretch the HRV reading sits in, from the route that owns the rule. No request without an HRV
+  // value, and no markup without a run, so a card without a stretch keeps its height.
+  const hrvDay = recovery.hrv.value === null ? null : recovery.hrv.asOfDate
+  const run = useHrvDeviation(hrvDay).data?.run ?? null
+  const runNote = run === null ? null : t(`glance.recovery.hrvRun.${run.capped ? 'capped' : 'days'}.${run.side}`, { days: run.days })
   const gauge = (key: 'rhr' | 'hrv', figure: GlanceFigure, unit: string) => {
     if (figure.value === null) return <div className="dash-dial"><p className="glance-empty">{t(finished ? 'glance.noReadingFinished' : 'glance.noReading')}</p><span className="label">{t(`glance.recovery.${key}`)}</span></div>
     const usual = usualLine(figure, t, language)
@@ -41,6 +48,7 @@ export function RecoveryCard({ recovery, span, wide, today, timezone, finished =
           label={[`${t(`glance.recovery.${key}`)} ${formatFigure(figure, language)} ${unit}`, usual].filter(Boolean).join(', ')} />
         <span className="label">{t(`glance.recovery.${key}`)}</span>
         {day !== null && <span className="glance-asof">{day}</span>}
+        {key === 'hrv' && runNote !== null && <span className={`dash-mini-note ${verdictTone(null, run!.side) ?? 'is-out'}`}>{runNote}</span>}
       </div>
     )
   }
