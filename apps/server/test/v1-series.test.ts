@@ -286,7 +286,7 @@ describe('GET /trend', () => {
   })
 })
 
-// A fortnight of dip behind the asked-for day, over a baseline of alternating 40 and 60. Dates are
+// Seven days of dip ending on the asked-for day, over a baseline of alternating 40 and 60. Dates are
 // built from offsets so the arithmetic that places them is not repeated as literals.
 const HRV_DAY = '2026-09-30'
 function hrvDate(offset: number): string {
@@ -308,7 +308,7 @@ describe('GET /hrv-deviation', () => {
     const response = await get(harness, token, `/hrv-deviation?from=${HRV_DAY}&to=${HRV_DAY}`)
     expect(response.statusCode).toBe(200)
     const body = response.json()
-    expect(body.run).toMatchObject({ side: 'below', capped: false })
+    expect(body.run).toEqual({ side: 'below', days: 7, capped: false, since: '2026-09-24', sideNights: 7, filledDays: 0 })
     expect(body.days).toHaveLength(1)
     expect(body.days[0]).toEqual({
       localDate: HRV_DAY, measured: true, rolling: 20, band: { low: 44, high: 54 }, side: 'below',
@@ -320,6 +320,18 @@ describe('GET /hrv-deviation', () => {
     const response = await get(harness, token, '/hrv-deviation?from=1900-01-01&to=2100-01-01')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
+  })
+
+  it('answers 400 for a malformed from, not 500', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, `/hrv-deviation?from=garbage&to=${HRV_DAY}`)
+    expect(response.statusCode).toBe(400)
+  })
+
+  it('answers 400 for an inverted range, not an empty 200', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, `/hrv-deviation?from=${HRV_DAY}&to=2026-09-01`)
+    expect(response.statusCode).toBe(400)
   })
 
   it('answers 400 for a missing from', async () => {

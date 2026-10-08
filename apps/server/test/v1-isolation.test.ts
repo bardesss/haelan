@@ -185,7 +185,10 @@ const ROUTES: readonly RouteCase[] = [
       }
     },
     seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-09-30', metric: 'daily_hrv', agg: 'last', value: 999_999 }),
-    ownNeedle: '"rolling":20',
+    // Subordinate to the toBe(20) below, which is exact; the comma keeps it from matching 205. The
+    // other needle can never appear: the route answers a computed statistic and never echoes a raw
+    // reading, so detection rests on extraOwnAssertions, as with the other computed routes above.
+    ownNeedle: '"rolling":20,',
     otherNeedle: '999999',
     extraOwnAssertions: (body) => {
       const { days, run } = body as { days: Array<{ rolling: number, side: string }>, run: { side: string } | null }
