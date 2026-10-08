@@ -557,6 +557,38 @@ const ROUTES: readonly RouteCase[] = [
     ownNeedle: 'own-source-ok',
     otherNeedle: 'leaked-source-999999',
   },
+  // The Recovery overview names no source in its body, so the needles are values. The month is
+  // February 2026 and the harness's own today is 2026-02-02, so the period reads up to that day.
+  // The owner has one resting heart rate on the 1st; the leak target has seventy mornings up to
+  // the 2nd. The figure's series dedupes by localDate alone (preferMerged, personQuery.ts): a leak
+  // on the owner's own date would overwrite rather than add, and whether the body moved would
+  // depend on SQLite's row order. The leak target's row on the 2nd, a date the owner has no row
+  // for, adds a day instead, so a leak moves the figure's day count from 1 to 2, its value off the
+  // owner's 4242, and puts 999999 points in the strip.
+  {
+    name: 'recovery/period',
+    template: '/api/v1/p/:personId/recovery/period',
+    path: (p) => `/api/v1/p/${p}/recovery/period?range=month&anchor=2026-02-01`,
+    seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-02-01', metric: 'resting_heart_rate', agg: 'last', value: 4242 }),
+    // The seventy mornings of HRV and resting heart rate are there for the index and the stretch:
+    // enough to score days and to measure the stretch, so a leak into either shows as days or a
+    // stretch the owner, with one resting heart rate and no HRV at all, cannot have.
+    seedOther: (h, personId) => {
+      for (let day = 0; day < 70; day += 1) {
+        const localDate = new Date(Date.UTC(2026, 1, 2) - (69 - day) * 86_400_000).toISOString().slice(0, 10)
+        seedDaily(h, { personId, localDate, metric: 'daily_hrv', agg: 'last', value: day % 2 === 0 ? 40 : 60 })
+        seedDaily(h, { personId, localDate, metric: 'resting_heart_rate', agg: 'last', value: 999_999 })
+      }
+    },
+    ownNeedle: '4242',
+    otherNeedle: '999999',
+    extraOwnAssertions: (body) => {
+      const { figures, days, stretch } = body as { figures: { metric: string, value: number, days: number }[], days: unknown[], stretch: unknown }
+      expect(figures.map((f) => [f.metric, f.value, f.days])).toEqual([['resting_heart_rate', 4242, 1]])
+      // One reading is too little to score a day or to measure the stretch.
+      expect([days, stretch]).toEqual([[], null])
+    },
+  },
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {

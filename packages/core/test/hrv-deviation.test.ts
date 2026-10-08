@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { shiftLocalDate } from '../src/derive/localDay.ts'
 import {
-  hrvBaselineWindow, hrvDeviationRun, hrvDeviationSeries, hrvDeviationWindowStart,
+  hrvBaselineWindow, hrvDeviationRun, hrvDeviationSeries, hrvDeviationWindowStart, roundHrvDeviationDay,
 } from '../src/query/hrvDeviation.ts'
 import type { HrvReading } from '../src/query/hrvDeviation.ts'
 
@@ -192,5 +192,28 @@ describe('hrvDeviationRun', () => {
     const run = hrvDeviationRun([...usual(125, 10), ...flat(9, 0, 80)], D)!
     expect(run.side).toBe('above')
     expect(run.sideNights).toBe(7)
+  })
+})
+
+describe('roundHrvDeviationDay', () => {
+  const day = (rolling: number, low: number, high: number, side: 'below' | 'within' | 'above') =>
+    ({ localDate: '2026-08-31', measured: true as const, rolling, band: { low, high }, side })
+
+  // Rounding is monotone, so a day that core put outside its band can only land on the band's edge
+  // or inside it after rounding, never on the far side; the two moves that exist are below to within
+  // and above to within, and a day within can stay within only.
+  it('judges a day above its band as within when the rounded rolling mean meets the rounded high', () => {
+    expect(roundHrvDeviationDay(day(50.4, 40.04, 49.96, 'above'))).toEqual(day(50, 40, 50, 'within'))
+  })
+
+  it('judges a day below its band as within when the rounded rolling mean meets the rounded low', () => {
+    expect(roundHrvDeviationDay(day(39.6, 40.4, 49.96, 'below'))).toEqual(day(40, 40, 50, 'within'))
+  })
+  it('keeps a side the rounded numbers still support, and leaves an unmeasured day alone', () => {
+    expect(roundHrvDeviationDay(day(52.4, 40.04, 49.96, 'above'))).toEqual(day(52, 40, 50, 'above'))
+    expect(roundHrvDeviationDay(day(30.2, 40.04, 49.96, 'below'))).toEqual(day(30, 40, 50, 'below'))
+    expect(roundHrvDeviationDay(day(45.2, 40.04, 49.96, 'within'))).toEqual(day(45, 40, 50, 'within'))
+    const unmeasured = { localDate: '2026-08-31', measured: false as const, reason: 'thin-week' as const }
+    expect(roundHrvDeviationDay(unmeasured)).toEqual(unmeasured)
   })
 })

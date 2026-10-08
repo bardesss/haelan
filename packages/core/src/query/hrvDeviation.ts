@@ -1,4 +1,5 @@
 import { shiftLocalDate } from '../derive/localDay.ts'
+import { roundMetricValue } from '../derive/metrics.ts'
 import { baselineOf, BASELINE_WINDOW_DAYS } from './baseline.ts'
 
 /**
@@ -140,7 +141,7 @@ export function hrvDeviationSeries(
     const rolling = meanOf(week)
     const low = baseline.center - band * baseline.spread
     const high = baseline.center + band * baseline.spread
-    const side: HrvSide = rolling < low ? 'below' : rolling > high ? 'above' : 'within'
+    const side = sideOf(rolling, low, high)
     out.push({
       localDate: date, measured: true, rolling: Math.exp(rolling),
       band: { low: Math.exp(low), high: Math.exp(high) }, side,
@@ -186,4 +187,23 @@ export function hrvDeviationRun(readings: readonly HrvReading[], on: string): Hr
   const sideNights = week.filter((r) => (side === 'below' ? r.value < today.band.low : r.value > today.band.high)).length
   const filledDays = readings.filter((r) => r.localDate >= since && r.localDate <= on && r.filled === true).length
   return { side, days, capped, since, sideNights, weekReadings: week.length, filledDays }
+}
+
+/** Below the low edge, above the high edge, else within: one comparison for core and the wire. */
+function sideOf(value: number, low: number, high: number): HrvSide {
+  return value < low ? 'below' : value > high ? 'above' : 'within'
+}
+
+/**
+ * A stretch day at the wire's precision, with its side taken again from the numbers it is drawn
+ * with, by the comparison hrvDeviationSeries uses: a dot must not sit on its rounded band yet be
+ * coloured as outside it. An unmeasured day has no numbers to round. A run stays the verdict
+ * reached once, from the unrounded days; only the per-dot colour has to agree with its drawn band.
+ * Shared by the HTTP routes and the MCP tool, so the two agree on a borderline day.
+ */
+export function roundHrvDeviationDay(day: HrvDeviationDay): HrvDeviationDay {
+  if (!day.measured) return day
+  const rolling = roundMetricValue('daily_hrv', day.rolling)
+  const band = { low: roundMetricValue('daily_hrv', day.band.low), high: roundMetricValue('daily_hrv', day.band.high) }
+  return { ...day, rolling, band, side: sideOf(rolling, band.low, band.high) }
 }

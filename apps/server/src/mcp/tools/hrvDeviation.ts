@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import {
   BASELINE_WINDOW_DAYS, HRV_DEVIATION_LOOKBACK_DAYS, HRV_DEVIATION_MIN_RUN, HRV_WEEK_DAYS, HRV_WEEK_MIN_READINGS,
-  readHrvDeviation, roundMetricValue,
+  readHrvDeviation, roundHrvDeviationDay,
 } from '@haelan/core'
 import type { HrvDeviationDay } from '@haelan/core'
 import type { Tool } from '../contract.ts'
@@ -33,18 +33,18 @@ export const HRV_RUN = z.object({
   filledDays: z.number().describe('Days in the run whose HRV was an intraday average standing in for a measured reading.'),
 }).nullable()
 
-function dayOf(day: HrvDeviationDay): z.infer<typeof HRV_DAY> {
+/**
+ * One day of the answer, rounded by the helper the HTTP routes use, so its side is judged on the
+ * numbers it is sent with and agrees with /hrv-deviation on a day that sits on its band's edge.
+ */
+export function hrvDayOf(raw: HrvDeviationDay): z.infer<typeof HRV_DAY> {
+  const day = roundHrvDeviationDay(raw)
   if (!day.measured) {
     return { localDate: day.localDate, measured: false, reason: day.reason, rolling: null, low: null, high: null, side: null }
   }
   return {
-    localDate: day.localDate,
-    measured: true,
-    reason: null,
-    rolling: roundMetricValue('daily_hrv', day.rolling),
-    low: roundMetricValue('daily_hrv', day.band.low),
-    high: roundMetricValue('daily_hrv', day.band.high),
-    side: day.side,
+    localDate: day.localDate, measured: true, reason: null,
+    rolling: day.rolling, low: day.band.low, high: day.band.high, side: day.side,
   }
 }
 
@@ -72,7 +72,7 @@ export const hrvDeviationTool = defineTool({
   },
   run: (q, args) => {
     const { days, run } = readHrvDeviation(q, { from: args.from, to: args.to })
-    return { days: days.map(dayOf), run }
+    return { days: days.map(hrvDayOf), run }
   },
 })
 

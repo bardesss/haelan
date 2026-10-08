@@ -137,6 +137,13 @@ export function highOf(daily: readonly PeriodStripPoint[]): PeriodHigh | null {
   return best === null ? null : { localDate: best.from, value: best.value!, good: best.judged === 'better' }
 }
 
+/** The lowest day, in highOf's shape: the earliest on a tie, `good` when that day was judged better. */
+export function lowOf(daily: readonly PeriodStripPoint[]): PeriodHigh | null {
+  let worst: PeriodStripPoint | null = null
+  for (const p of daily) if (p.value !== null && (worst === null || p.value < worst.value!)) worst = p
+  return worst === null ? null : { localDate: worst.from, value: worst.value!, good: worst.judged === 'better' }
+}
+
 export function changeOf(
   values: ReadonlyMap<string, number>, span: DateSpan, current: number | null, lastDay: string, scale: number,
 ): PeriodChange {

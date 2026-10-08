@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, periodBounds, schema, shiftLocalDate } from '@haelan/core'
-import type { ActivityPeriod, PeriodFigure, PeriodStripPoint, SleepPeriod } from '@haelan/core'
+import { DERIVATION_VERSION, highOf, lowOf, periodBounds, schema, shiftLocalDate } from '@haelan/core'
+import type { ActivityPeriod, PeriodFigure, PeriodStripPoint, RecoveryDay, RecoveryPeriod, SleepPeriod } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
-import { roundActivityPeriod, roundPeriodFigure, roundSleepPeriod } from '../src/routes/v1/period.ts'
+import { roundActivityPeriod, roundPeriodFigure, roundRecoveryPeriod, roundSleepPeriod } from '../src/routes/v1/period.ts'
 
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
@@ -331,6 +331,218 @@ describe('roundSleepPeriod', () => {
     }
     // 400 and 401 average 400.5, sent whole.
     expect(roundSleepPeriod(period).months).toEqual([{ month: '2026-09', nights: 2, asleepMinutes: 401 }])
+  })
+})
+
+describe('roundRecoveryPeriod', () => {
+  function recovery(over: Partial<RecoveryPeriod> = {}): RecoveryPeriod {
+    const hero = figure({
+      metric: 'recovery_index', unit: 'score', precision: 0, value: 61, total: null, usual: null,
+      daily: [point('2026-08-31', 61, band(50, 40, 60), 'above', 'better'), point('2026-09-01', 58, band(50, 40, 60), 'within', null)],
+    })
+    return {
+      period: HEADER, hero,
+      high: { localDate: '2026-08-31', value: 61, good: true },
+      low: { localDate: '2026-09-01', value: 58, good: false },
+      previous: { from: '2026-08-24', to: '2026-08-30', value: 55.6, delta: 5.4 },
+      yearEarlier: { from: '2025-08-31', to: '2025-09-06', value: null, delta: null },
+      carriedBy: 'hrv',
+      figures: [figure({ metric: 'daily_hrv', unit: 'ms', value: 45.4, total: null })],
+      stretch: {
+        days: [
+          { localDate: '2026-08-31', measured: true, rolling: 44.46, band: { low: 40.04, high: 49.96 }, side: 'within' },
+          { localDate: '2026-09-01', measured: false, reason: 'thin-week' },
+        ],
+        weeks: [{ from: '2026-08-31', to: '2026-09-06', point: { localDate: '2026-08-31', measured: true, rolling: 44.46, band: { low: 40.04, high: 49.96 }, side: 'within' } }],
+        runs: [], run: null,
+      },
+      days: [{
+        localDate: '2026-08-31', score: 61, band: 'usual',
+        inputs: [{ key: 'hrv', weight: 0.5, points: 7.46, contribution: 0.123456 }, { key: 'restingHeartRate', weight: 0.5, points: -2.04, contribution: -0.0124 }],
+      }],
+      method: {
+        weights: { hrv: 0.4, restingHeartRate: 0.3, respiratoryRate: 0.15, sleep: 0.15 } as RecoveryPeriod['method']['weights'],
+        usualBand: { low: 40, high: 60 }, baselineDays: 60,
+        stretch: { weekDays: 7, minReadings: 4, band: 1, minRun: 3, lookbackDays: 90 },
+      },
+      ...over,
+    }
+  }
+
+  it('rounds the hero and figures as every period figure, and takes high, low and the changes again from the rounded hero', () => {
+    const base = recovery()
+    const hero = figure({
+      metric: 'recovery_index', unit: 'score', precision: 0, value: 60.6, total: null, usual: null,
+      daily: [point('2026-08-31', 60.6, band(50, 40, 60), 'above', 'better'), point('2026-09-01', 57.4, band(50, 40, 60), 'within', null)],
+    })
+    const rounded = roundRecoveryPeriod({ ...base, hero })
+    expect(rounded.hero.value).toBe(61)
+    expect(rounded.hero.daily.map((p) => p.value)).toEqual([61, 57])
+    expect(rounded.high).toEqual({ localDate: '2026-08-31', value: 61, good: true })
+    expect(rounded.low).toEqual({ localDate: '2026-09-01', value: 57, good: false })
+    // 61 against 56 is 5, though the unrounded difference is 5.4.
+    expect(rounded.previous).toEqual({ from: '2026-08-24', to: '2026-08-30', value: 56, delta: 5 })
+    expect(rounded.figures[0]!.value).toBe(45)
+    expect(rounded.carriedBy).toBe('hrv')
+  })
+
+  it('names what carried the period again from the rounded hero, whose standing rounding can move to within', () => {
+    const days: RecoveryDay[] = [{
+      localDate: '2026-08-31', score: 44, band: 'usual',
+      inputs: [{ key: 'hrv', weight: 0.5, points: 3, contribution: 1 }, { key: 'restingHeartRate', weight: 0.5, points: -6, contribution: -2 }],
+    }]
+    // 44.48 is above a usual reaching 44.45, so HRV lifted it; at 44 against 44 it is within, and
+    // below 50 the push that counts is the one down.
+    const hero = figure({
+      metric: 'recovery_index', unit: 'score', precision: 0, value: 44.48, total: null,
+      usual: { ...band(40, 35, 44.45), window: WINDOW, periods: 12 }, standing: 'above', judged: 'better',
+    })
+    const rounded = roundRecoveryPeriod(recovery({ hero, days, carriedBy: 'hrv' }))
+    expect(rounded.hero.standing).toBe('within')
+    expect(rounded.carriedBy).toBe('restingHeartRate')
+  })
+
+  it("sends a tap panel input's points to a tenth and its contribution to a thousandth, leaving the rest of the day", () => {
+    const rounded = roundRecoveryPeriod(recovery())
+    expect(rounded.days).toEqual([{
+      localDate: '2026-08-31', score: 61, band: 'usual',
+      inputs: [{ key: 'hrv', weight: 0.5, points: 7.5, contribution: 0.123 }, { key: 'restingHeartRate', weight: 0.5, points: -2, contribution: -0.012 }],
+    }])
+  })
+
+  it("sends the stretch's rolling mean and band to the HRV metric's precision, and keeps unmeasured days, runs and the run as they are", () => {
+    const run = { side: 'below' as const, days: 4, capped: false, since: '2026-08-31', sideNights: 4, weekReadings: 5, filledDays: 0 }
+    const rounded = roundRecoveryPeriod(recovery({
+      stretch: { ...recovery().stretch!, runs: [{ from: '2026-08-31', to: '2026-09-01', side: 'below' }], run },
+    }))
+    expect(rounded.stretch!.days).toEqual([
+      { localDate: '2026-08-31', measured: true, rolling: 44, band: { low: 40, high: 50 }, side: 'within' },
+      { localDate: '2026-09-01', measured: false, reason: 'thin-week' },
+    ])
+    expect(rounded.stretch!.weeks![0]!.point).toEqual({ localDate: '2026-08-31', measured: true, rolling: 44, band: { low: 40, high: 50 }, side: 'within' })
+    expect(rounded.stretch!.runs).toEqual([{ from: '2026-08-31', to: '2026-09-01', side: 'below' }])
+    expect(rounded.stretch!.run).toEqual(run)
+  })
+
+  it("judges each stretch day and week point again on its rounded band, while the runs and the run stay core's verdict", () => {
+    const above = { localDate: '2026-08-31', measured: true as const, rolling: 50.4, band: { low: 40.04, high: 49.96 }, side: 'above' as const }
+    const run = { side: 'above' as const, days: 3, capped: false, since: '2026-08-29', sideNights: 3, weekReadings: 6, filledDays: 0 }
+    const spans = [{ from: '2026-08-29', to: '2026-08-31', side: 'above' as const }]
+    const rounded = roundRecoveryPeriod(recovery({
+      stretch: { days: [above], weeks: [{ from: '2026-08-31', to: '2026-09-06', point: above }], runs: spans, run },
+    }))
+    const drawn = { ...above, rolling: 50, band: { low: 40, high: 50 }, side: 'within' }
+    expect(rounded.stretch!.days).toEqual([drawn])
+    expect(rounded.stretch!.weeks![0]!.point).toEqual(drawn)
+    expect(rounded.stretch!.runs).toEqual(spans)
+    expect(rounded.stretch!.run).toEqual(run)
+  })
+
+  it('keeps a null stretch, null weeks, a null week point and the method as they are', () => {
+    expect(roundRecoveryPeriod(recovery({ stretch: null })).stretch).toBeNull()
+    const stretch = recovery().stretch!
+    expect(roundRecoveryPeriod(recovery({ stretch: { ...stretch, weeks: null } })).stretch!.weeks).toBeNull()
+    expect(roundRecoveryPeriod(recovery({ stretch: { ...stretch, weeks: [{ from: '2026-08-31', to: '2026-09-06', point: null }] } })).stretch!.weeks)
+      .toEqual([{ from: '2026-08-31', to: '2026-09-06', point: null }])
+    expect(roundRecoveryPeriod(recovery()).method).toEqual(recovery().method)
+  })
+})
+
+describe('GET /recovery/period', () => {
+  // Mornings from before any range asked for to today, an HRV and a resting heart rate either side of a round level.
+  function seedMornings(h: Harness): void {
+    let i = 0
+    for (let d = '2025-12-01'; d <= '2026-09-10'; d = shiftLocalDate(d, 1)) {
+      seedDailyAgg(h, d, 'daily_hrv', 'last', 45 + (i % 2 === 0 ? 3 : -3))
+      seedDailyAgg(h, d, 'resting_heart_rate', 'last', 55 + (i % 2 === 0 ? 1 : -1))
+      i += 1
+    }
+  }
+
+  it('answers each range with the hero, the figures, the stretch and the scored days', async () => {
+    const { h, token } = await started()
+    seedMornings(h)
+    for (const range of ['week', 'month', '3months', 'year'] as const) {
+      const response = await get(h, token, `/recovery/period?range=${range}&anchor=2026-08-14`)
+      expect(response.statusCode, range).toBe(200)
+      const body = response.json()
+      const { from, to } = periodBounds(range, '2026-08-14')
+      expect(body.period).toMatchObject({ range, from, to })
+      expect(body.hero.metric).toBe('recovery_index')
+      expect(body.hero.days).toBeGreaterThan(0)
+      expect(body.figures.map((f: { metric: string }) => f.metric)).toEqual(['resting_heart_rate', 'daily_hrv'])
+      // Three months and a year send no days of either; the trim test below pins that.
+      const byWeek = range === '3months' || range === 'year'
+      expect(body.days.length > 0, range).toBe(!byWeek)
+      expect(body.stretch.days.length > 0, range).toBe(!byWeek)
+      expect(body.method.baselineDays).toBe(60)
+    }
+  })
+
+  it('refuses a day range, an unknown range, a missing or malformed anchor, a period not yet started and an unknown source', async () => {
+    const { h, token } = await started()
+    for (const query of [
+      'range=day&anchor=2026-09-01', 'range=quarter&anchor=2026-09-01', 'anchor=2026-09-01',
+      'range=month', 'range=month&anchor=2026-13-01', 'range=week&anchor=2026-09-14', 'range=week&anchor=2026-09-01&source=nope',
+    ]) {
+      const response = await get(h, token, `/recovery/period?${query}`)
+      expect(response.statusCode, query).toBe(400)
+      expect(response.json()).toMatchObject({ error: { kind: 'config' } })
+    }
+  })
+
+  it("answers 304 to a repeat request carrying the first one's ETag, and treats source=all as no source", async () => {
+    const { h, token } = await started()
+    seedMornings(h)
+    const first = await get(h, token, `/recovery/period?range=week&anchor=${WEEK}`)
+    expect(first.statusCode).toBe(200)
+    const again = await get(h, token, `/recovery/period?range=week&anchor=${WEEK}`, { 'if-none-match': first.headers.etag as string })
+    expect(again.statusCode).toBe(304)
+    expect((await get(h, token, `/recovery/period?range=week&anchor=${WEEK}&source=all`)).body).toBe(first.body)
+  })
+
+  it('sends every input of a scored day with points to a tenth and contribution to a thousandth', async () => {
+    const { h, token } = await started()
+    seedMornings(h)
+    const body = (await get(h, token, `/recovery/period?range=week&anchor=${WEEK}`)).json()
+    const inputs = body.days.flatMap((d: RecoveryDay) => d.inputs)
+    expect(inputs.length).toBeGreaterThan(0)
+    for (const x of inputs) {
+      expect(x.points).toBe(Number(x.points.toFixed(1)))
+      expect(x.contribution).toBe(Number(x.contribution.toFixed(3)))
+    }
+  })
+
+  it('on three months and a year empties the figures, the stretch and the scored days of their days, keeping the weeks and the runs', async () => {
+    const { h, token } = await started()
+    seedMornings(h)
+    for (const range of ['3months', 'year'] as const) {
+      const body = (await get(h, token, `/recovery/period?range=${range}&anchor=2026-08-14`)).json()
+      const { from, to } = periodBounds(range, '2026-08-14')
+      const lastDay = to < '2026-09-10' ? to : '2026-09-10'
+      expect(body.figures.length).toBeGreaterThan(0)
+      for (const f of body.figures) {
+        expect(f.daily).toEqual([])
+        expect(f.weekly).not.toBeNull()
+      }
+      expect(body.hero.daily.length).toBeGreaterThan(0)
+      // Taken from the hero's days before the trim, and sent untouched.
+      expect(body.high).not.toBeNull()
+      expect([body.high, body.low]).toEqual([highOf(body.hero.daily), lowOf(body.hero.daily)])
+      expect(['hrv', 'restingHeartRate', 'sleep', 'respiratoryRate', null]).toContain(body.carriedBy)
+      expect(body.stretch.days).toEqual([])
+      expect(body.stretch.weeks.at(-1).to).toBe(lastDay)
+      expect(body.stretch.weeks[0].from).toBe(from)
+      expect(Array.isArray(body.stretch.runs)).toBe(true)
+      expect('run' in body.stretch).toBe(true)
+      expect(body.days).toEqual([])
+      expect(body.method.stretch.minRun).toBeGreaterThan(0)
+    }
+    const month = (await get(h, token, '/recovery/period?range=month&anchor=2026-08-14')).json()
+    expect(month.figures.every((f: { daily: unknown[] }) => f.daily.length === 31)).toBe(true)
+    expect(month.stretch.weeks).toBeNull()
+    expect(month.stretch.days.at(-1).localDate).toBe('2026-08-31')
+    expect(month.days.length).toBeGreaterThan(0)
   })
 })
 
