@@ -92,6 +92,6 @@ describe('hrv_deviation day rows', () => {
     // 50.4 is above 49.96, but it is sent as 50 against a high of 50.
     const raw = { localDate: '2026-08-31', measured: true as const, rolling: 50.4, band: { low: 40.04, high: 49.96 }, side: 'above' as const }
     expect(hrvDayOf(raw)).toEqual({ localDate: '2026-08-31', measured: true, reason: null, rolling: 50, low: 40, high: 50, side: 'within' })
-    expect(roundHrvDeviationDay(raw).side).toBe('within')
+    expect(roundHrvDeviationDay(raw)).toEqual({ localDate: '2026-08-31', measured: true, rolling: 50, band: { low: 40, high: 50 }, side: 'within' })
   })
 })
