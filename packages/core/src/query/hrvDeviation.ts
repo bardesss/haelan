@@ -56,7 +56,7 @@ export interface HrvDeviationRun {
   side: 'below' | 'above'
   /** Measured days in the run. Unmeasured days inside it are skipped, not counted. */
   days: number
-  /** True when the run reached the lookback cap without ending. */
+  /** True only when the walk did not end on a within/other-side day AND the lookback's first day is itself measured on the run's side. */
   capped: boolean
   /** The earliest measured day of the run. */
   since: string
@@ -159,6 +159,10 @@ export function hrvDeviationRun(readings: readonly HrvReading[], on: string): Hr
     since = day.localDate
   }
   if (days < HRV_DEVIATION_MIN_RUN) return null
+  // The walk can run out because the lookback's earliest days were unmeasured, which says nothing
+  // about the run continuing; only a measured first day on the run's side shows it reached the cap.
+  const first = series[0]!
+  if (capped && !(first.measured && first.side === side)) capped = false
 
   const weekFrom = shiftLocalDate(on, -(HRV_WEEK_DAYS - 1))
   const sideNights = readings.filter((r) => r.localDate >= weekFrom && r.localDate <= on)

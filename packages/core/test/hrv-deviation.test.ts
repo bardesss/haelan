@@ -98,8 +98,8 @@ describe('hrvDeviationRun', () => {
     const run = hrvDeviationRun([...usual(125, 10), ...flat(9, 0, 30)], D)
     expect(run).not.toBeNull()
     expect(run!.side).toBe('below')
-    expect(run!.days).toBeGreaterThanOrEqual(3)
-    expect(run!.since > day(10)).toBe(true)
+    expect(run!.days).toBe(10)
+    expect(run!.since).toBe(day(9))
     expect(run!.capped).toBe(false)
   })
 
@@ -143,6 +143,16 @@ describe('hrvDeviationRun', () => {
     expect(run.side).toBe('below')
     expect(run.days).toBe(60)
     expect(run.capped).toBe(true)
+  })
+
+  it('does not call a run capped when the lookback starts on unmeasured days', () => {
+    // The lookback's first days (D-59..D-35) have no baseline behind them, so they are thin, not
+    // below; the walk running out there is not the run reaching the cap.
+    const readings = [...usual(80, 35), ...flat(34, 0, 30)]
+    const run = hrvDeviationRun(readings, D)!
+    expect(run.side).toBe('below')
+    expect(run.days).toBe(33)
+    expect(run.capped).toBe(false)
   })
 
   it('counts the run days whose HRV was filled', () => {
