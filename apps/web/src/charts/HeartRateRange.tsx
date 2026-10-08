@@ -201,7 +201,11 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-1)' }}>
         <button type="button" className="button" onClick={() => setShowBand((current) => !current)}
           aria-pressed={showBand}>
-          {t(showBand ? 'charts.bandToggle.hide' : 'charts.bandToggle.show')}
+          {/* A week's band is its lowest minimum to its highest maximum, no one day's range, so
+              weekly points name the week (this card's own keys; the shared pair stays daily). */}
+          {weekly
+            ? t(showBand ? 'recovery.heartRateRange.toggleWeekly.hide' : 'recovery.heartRateRange.toggleWeekly.show')
+            : t(showBand ? 'charts.bandToggle.hide' : 'charts.bandToggle.show')}
         </button>
       </div>
       <ChartFigure label={label} host={host} style={style} tap={tap}

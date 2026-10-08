@@ -221,6 +221,10 @@
       "basisBaselineUnknown": "{{lines}} · your usual range could not be read, so no band is drawn",
       "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
       "chartLabelWeekly": "Weekly heart rate minimum, mean and maximum through {{period}}",
+      "toggleWeekly": {
+        "hide": "Hide weekly range",
+        "show": "Show weekly range"
+      },
       "lines": {
         "daily": "daily minimum, mean and maximum, every day {{period}}",
         "weekly": "every week: its lowest daily minimum, the average of its days and its highest daily maximum"

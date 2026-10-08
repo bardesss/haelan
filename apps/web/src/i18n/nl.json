@@ -221,6 +221,10 @@
       "basisBaselineUnknown": "{{lines}} · je gebruikelijke bereik kon niet worden gelezen, dus er is geen band",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
       "chartLabelWeekly": "Wekelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
+      "toggleWeekly": {
+        "hide": "Weekbereik verbergen",
+        "show": "Weekbereik tonen"
+      },
       "lines": {
         "daily": "dagelijks minimum, gemiddelde en maximum, elke dag {{period}}",
         "weekly": "elke week: het laagste dagminimum, het gemiddelde van haar dagen en het hoogste dagmaximum"

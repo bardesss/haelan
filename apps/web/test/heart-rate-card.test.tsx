@@ -402,3 +402,31 @@ describe('the heart rate range by the range', () => {
     restore()
   })
 })
+
+describe('the heart rate range toggle', () => {
+  const YEAR = datesFrom('2025-01-01', '2025-12-31')
+  const QUARTER = datesFrom('2026-07-01', '2026-09-30')
+  const AUGUST = datesFrom('2026-08-01', '2026-08-31')
+  const toggle = () => container!.querySelector<HTMLButtonElement>('.card button[aria-pressed]')!
+  const cases = [
+    { range: 'year' as const, dates: YEAR, lng: 'en', hide: 'Hide weekly range', show: 'Show weekly range' },
+    { range: 'year' as const, dates: YEAR, lng: 'nl', hide: 'Weekbereik verbergen', show: 'Weekbereik tonen' },
+    { range: '3months' as const, dates: QUARTER, lng: 'en', hide: 'Hide weekly range', show: 'Show weekly range' },
+    { range: '3months' as const, dates: QUARTER, lng: 'nl', hide: 'Weekbereik verbergen', show: 'Weekbereik tonen' },
+    { range: 'month' as const, dates: AUGUST, lng: 'en', hide: 'Hide daily range', show: 'Show daily range' },
+    { range: 'month' as const, dates: AUGUST, lng: 'nl', hide: 'Dagbereik verbergen', show: 'Dagbereik tonen' },
+  ]
+  for (const c of cases) {
+    it(`says "${c.hide}" then "${c.show}" on ${c.range} in ${c.lng}`, async () => {
+      const restore = stubFetch({ baseline: null, dates: c.dates })
+      const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} from={c.dates[0]!} to={c.dates.at(-1)!}
+        historicalTo={c.dates.at(-1)!} rangeDates={c.dates} range={c.range} />)
+      mount(<I18nProvider lng={c.lng}>{tree}</I18nProvider>)
+      await flush(client, () => container!.innerHTML)
+      expect(toggle().textContent).toBe(c.hide)
+      act(() => { toggle().click() })
+      expect(toggle().textContent).toBe(c.show)
+      restore()
+    })
+  }
+})
