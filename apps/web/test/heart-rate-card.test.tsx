@@ -5,6 +5,7 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import * as echarts from 'echarts/core'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { HeartRateCard } from '../src/pages/recovery/HeartRateCard.js'
@@ -15,6 +16,7 @@ import { I18nProvider } from '../src/i18n/index.js'
 import { flush, pumpUntil } from './flush.js'
 import { seriesPoint } from './metricCoverage.js'
 import { RECOVERY_PERIOD_MONTH } from './fixtures/recoveryPeriod.js'
+import { PHONE_MEDIA_QUERY } from '../src/ui/breakpoint.js'
 
 // Same reason dashboard-cards.test.tsx needs this: HeartRateRange draws for real here, and
 // echarts.init's effect throws "missing chart token" without it.
@@ -65,7 +67,7 @@ const RANGE_DATES = ['2026-08-14', '2026-08-15', '2026-08-16']
 /** The month-shaped default props every test below starts from, overridable per case. */
 const DEFAULT_PROPS = {
   from: '2026-08-14', to: '2026-08-16', historicalTo: '2026-08-16', source: ALL_SOURCES,
-  rangeDates: RANGE_DATES, period: '2026-08-14 to 2026-08-16', periodWords: 'this month',
+  rangeDates: RANGE_DATES, range: 'month' as const, period: '2026-08-14 to 2026-08-16', periodWords: 'this month',
   annotations: [], excluded: [], onDayClick: () => {}, span: 8,
 }
 
@@ -74,7 +76,7 @@ const DEFAULT_PROPS = {
  * (this card used to be part of that page and drew from the same routes): the session, /series
  * for heart_rate under mean/min/max, and /baselines.
  */
-function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, asked?: string[] }): () => void {
+function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, asked?: string[], dates?: string[] }): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -86,7 +88,7 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, asked?: 
       const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
-        body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
+        body[metric] = { points: (opts.dates ?? ['2026-08-15']).map((date) => seriesPoint(metric, date, 60)), reduction: null }
       }
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     }
@@ -240,6 +242,163 @@ describe('mounted on Recovery', () => {
     expect(card.innerHTML).not.toContain('Caffeine')
     expect(card.querySelector('.dash-caption')?.textContent)
       .toBe('daily minimum, mean and maximum, every day this month · no usual range yet')
+    restore()
+  })
+})
+
+/** Every date from `from` to `to`, both included. */
+function datesFrom(from: string, to: string): string[] {
+  const dates: string[] = []
+  for (let at = Date.parse(`${from}T00:00:00Z`); at <= Date.parse(`${to}T00:00:00Z`); at += 86_400_000) {
+    dates.push(new Date(at).toISOString().slice(0, 10))
+  }
+  return dates
+}
+
+/** Answers the phone query, so a chart that takes taps renders its annotate control (chart-annotate-handlers.test.tsx). */
+function pretendPhone(): () => void {
+  const real = window.matchMedia.bind(window)
+  window.matchMedia = ((query: string) => {
+    if (query !== PHONE_MEDIA_QUERY) return real(query)
+    return {
+      matches: true, media: query, onchange: null,
+      addEventListener() {}, removeEventListener() {},
+      addListener() {}, removeListener() {}, dispatchEvent: () => false,
+    } as unknown as MediaQueryList
+  }) as typeof window.matchMedia
+  return () => { window.matchMedia = real }
+}
+
+type DrawnOption = {
+  xAxis: { data: string[], axisLabel: { interval: (index: number) => boolean } }[]
+  series: { name: string, data: (number | null)[] }[]
+}
+const option = (): DrawnOption =>
+  echarts.getInstanceByDom(container!.querySelector<HTMLDivElement>('.card div[role="img"]')!)!.getOption() as unknown as DrawnOption
+const meanDrawn = () => option().series.find((series) => series.name === 'mean')!.data
+// The x labels the axis prints (periodAxisLabels' `shown`).
+const xLabels = (): string[] => {
+  const axis = option().xAxis[0]!
+  return axis.data.filter((_, index) => axis.axisLabel.interval(index))
+}
+const tableRows = (): string[][] => [...container!.querySelectorAll('.card table tbody tr')]
+  .map((row) => [...row.querySelectorAll('th, td')].map((cell) => cell.textContent ?? ''))
+const tableHead = (): string[] => [...container!.querySelectorAll('.card table thead th')].map((cell) => cell.textContent ?? '')
+
+describe('the heart rate range by the range', () => {
+  const YEAR = datesFrom('2025-01-01', '2025-12-31')
+  const AUGUST = datesFrom('2026-08-01', '2026-08-31')
+  const yearProps = {
+    ...DEFAULT_PROPS, from: '2025-01-01', to: '2025-12-31', historicalTo: '2025-12-31',
+    rangeDates: YEAR, range: 'year' as const, period: '2025-01-01 to 2025-12-31', periodWords: 'this year',
+  }
+  const monthProps = {
+    ...DEFAULT_PROPS, from: '2026-08-01', to: '2026-08-31', historicalTo: '2026-08-31', rangeDates: AUGUST,
+  }
+
+  it('draws a point a week on a year, under month names, and words its table by the week', async () => {
+    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false }, dates: YEAR.filter((date) => date < '2025-12-01') })
+    const { client, tree } = withQuery(<HeartRateCard {...yearProps} />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(meanDrawn()).toHaveLength(53)
+    // December has no readings: its weeks are gaps, not the last value carried on.
+    expect(meanDrawn().at(-1)).toBeNull()
+    expect(meanDrawn()[0]).toBe(60)
+    expect(xLabels()).toEqual(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+    expect(tableHead()[0]).toBe('Week')
+    expect(tableRows()).toHaveLength(53)
+    expect(tableRows()[0]![0]).toBe('2025-01-01 – 2025-01-05')
+    expect(tableRows()[1]![0]).toBe('2025-01-06 – 2025-01-12')
+    expect(container!.querySelector('.card .dash-caption')?.textContent)
+      .toBe('every week: its lowest daily minimum, the average of its days and its highest daily maximum · band = your usual range')
+    restore()
+  })
+
+  it('draws a point a week on 3 months too', async () => {
+    const quarter = datesFrom('2026-07-01', '2026-09-30')
+    const restore = stubFetch({ baseline: null, dates: quarter })
+    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} from="2026-07-01" to="2026-09-30" historicalTo="2026-09-30"
+      rangeDates={quarter} range="3months" />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    // Wed 1 Jul to Wed 30 Sep: a clipped week at each end and twelve whole ones between.
+    expect(meanDrawn()).toHaveLength(14)
+    expect(xLabels()).toEqual(['Jul', 'Aug', 'Sep'])
+    restore()
+  })
+
+  it('draws a point a day on a month, its axis day numbers every seventh day', async () => {
+    const restore = stubFetch({ baseline: null, dates: AUGUST })
+    const { client, tree } = withQuery(<HeartRateCard {...monthProps} />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(meanDrawn()).toHaveLength(31)
+    expect(xLabels()).toEqual(['1', '8', '15', '22', '29'])
+    expect(tableHead()[0]).toBe('Date')
+    expect(tableRows()[0]![0]).toBe('2026-08-01')
+    restore()
+  })
+
+  it('names the days of a week by weekday', async () => {
+    const week = datesFrom('2026-08-10', '2026-08-16')
+    const restore = stubFetch({ baseline: null, dates: week })
+    const { client, tree } = withQuery(<HeartRateCard {...DEFAULT_PROPS} from="2026-08-10" to="2026-08-16" rangeDates={week} range="week" />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(meanDrawn()).toHaveLength(7)
+    expect(xLabels()).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+    restore()
+  })
+
+  it('opens a day from a month point, and nothing from a week point on a year', async () => {
+    const realPhone = pretendPhone()
+    try {
+      const restoreMonth = stubFetch({ baseline: null, dates: AUGUST })
+      const month = withQuery(<HeartRateCard {...monthProps} />)
+      mount(<I18nProvider lng="en">{month.tree}</I18nProvider>)
+      await flush(month.client, () => container!.innerHTML)
+      expect(container!.querySelector('.chart-annotate')).not.toBeNull()
+      restoreMonth()
+
+      const restoreYear = stubFetch({ baseline: null, dates: YEAR })
+      const year = withQuery(<HeartRateCard {...yearProps} />)
+      mount(<I18nProvider lng="en">{year.tree}</I18nProvider>)
+      await flush(year.client, () => container!.innerHTML)
+      expect(meanDrawn()).toHaveLength(53)
+      expect(container!.querySelector('.chart-annotate')).toBeNull()
+      restoreYear()
+    } finally {
+      realPhone()
+    }
+  })
+
+  it('draws no exclusion or note on a week, and names an excluded day on a month', async () => {
+    const restore = stubFetch({ baseline: null, dates: YEAR })
+    const { client, tree } = withQuery(<HeartRateCard {...yearProps} excluded={['2025-03-04']}
+      annotations={[{ date: '2025-03-04', text: 'Bad strap' }]} />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(tableRows()).toHaveLength(53)
+    expect(container!.querySelector('.card table')!.textContent).not.toContain('excluded')
+    expect(container!.querySelector('.card table')!.textContent).not.toContain('Bad strap')
+    restore()
+
+    const restoreMonth = stubFetch({ baseline: null, dates: AUGUST })
+    const month = withQuery(<HeartRateCard {...monthProps} excluded={['2026-08-04']} />)
+    mount(<I18nProvider lng="en">{month.tree}</I18nProvider>)
+    await flush(month.client, () => container!.innerHTML)
+    expect(tableRows().find((row) => row[0] === '2026-08-04')!.at(-1)).toBe('excluded')
+    restoreMonth()
+  })
+
+  it('words the weekly caption in Dutch', async () => {
+    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false }, dates: YEAR })
+    const { client, tree } = withQuery(<HeartRateCard {...yearProps} periodWords="dit jaar" />)
+    mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.querySelector('.card .dash-caption')?.textContent)
+      .toBe('elke week: het laagste dagminimum, het gemiddelde van haar dagen en het hoogste dagmaximum · band = je gebruikelijke bereik')
     restore()
   })
 })

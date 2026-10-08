@@ -172,7 +172,7 @@ export function Recovery() {
         )}
         <HrvStretchCard stretch={data.stretch} method={data.method} />
         <HeartRateCard from={controls.from} to={controls.to} historicalTo={controls.historicalTo} source={source}
-          rangeDates={rangeDates} period={`${controls.from} ${t('common.to')} ${controls.to}`} periodWords={period}
+          rangeDates={rangeDates} range={data.period.range} period={`${controls.from} ${t('common.to')} ${controls.to}`} periodWords={period}
           annotations={annotationsFor(byMetric, HEART_RATE).annotations}
           excluded={annotationsFor(byMetric, HEART_RATE).excluded}
           onDayClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: HEART_RATE })}

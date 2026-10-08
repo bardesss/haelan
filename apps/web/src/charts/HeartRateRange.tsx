@@ -9,9 +9,20 @@ import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatLocalDate, formatMetricValue } from '../format.js'
 import type { DayRow } from '../fixtures/july.js'
+import type { PeriodAxis } from './barAxis.js'
+import type { HeartRateWeek } from './heartRateWeeks.js'
+
+/** A point of the range: a day, or on 3 months and Year a week (heartRateWeeks), which carries its last day. */
+type RangePoint = DayRow | HeartRateWeek
+
+const isWeek = (point: RangePoint): point is HeartRateWeek => 'to' in point
+
+/** What names a point in the tooltip and the table: a day's date, a week's first and last day. */
+const pointName = (point: RangePoint): string => (isWeek(point) ? `${point.date} – ${point.to}` : point.date)
 
 type Props = {
-  days: DayRow[]
+  /** The points, one per category: days on Week and Month, weeks on 3 months and Year. */
+  days: RangePoint[]
   // Optional and, when present, never thin: the call site only ever passes a baseline that
   // cleared useBaseline's own thin check, since a band this project cannot stand behind reads as
   // more authoritative than a band built from thirty real days, not less.
@@ -20,6 +31,8 @@ type Props = {
   excluded: string[]
   label: string
   onPointClick?: (localDate: string) => void
+  /** The x labels an overview page prints (periodAxisLabels), in place of the day numbers; keep it stable. */
+  axis?: PeriodAxis
 }
 
 /**
@@ -46,8 +59,10 @@ export function heartRateRangePointDate(
   return days[event.dataIndex]?.date
 }
 
-export function HeartRateRange({ days, baseline, annotations, excluded, label, onPointClick }: Props) {
+export function HeartRateRange({ days, baseline, annotations, excluded, label, onPointClick, axis }: Props) {
   const { t, i18n } = useTranslation()
+  // Weeks are named as weeks in the table's first column, as the strips' points are by their span.
+  const weekly = days[0] !== undefined && isWeek(days[0])
 
   // Section 11's own named example of a card level control: the min/max band is shown by default,
   // today's behaviour, and this is the one piece of state that decides both what the canvas draws
@@ -92,10 +107,17 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
             const mark = marks.atDate[p.dataIndex]
             return mark ? tip`${mark.date}<br/>${mark.text}` : ''
           }
-          return hrTooltip(days, p.dataIndex, t, i18n.language)
+          const point = days[p.dataIndex]
+          return hrTooltip(days, p.dataIndex, t, i18n.language, point === undefined ? undefined : pointName(point))
         },
       },
-      xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)), ...base.labelledAxis },
+      // The range's own words when the page hands them (periodAxisLabels: weekdays, every seventh day
+      // number, month names under the weeks), as the overview's bar charts print them; day numbers
+      // alone otherwise.
+      xAxis: {
+        type: 'category' as const, data: axis?.data ?? days.map((d) => d.date.slice(8)), ...base.labelledAxis,
+        ...(axis && { axisLabel: { ...base.axisLabel, interval: (index: number) => axis.shown[index] === true } }),
+      },
       yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
       series: [
         // 'min' carries no visible pixel of its own; its only job is to hold the stack's
@@ -151,7 +173,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
               ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
       ],
     }
-  }, [days, baseline, marks, t, i18n.language, showBand])
+  }, [days, baseline, marks, t, i18n.language, showBand, axis])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = heartRateRangePointDate(days, marks, event)
@@ -188,7 +210,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
           // showBand flag: a screen reader user toggling this gets the same change a sighted one
           // does, rather than a table that still lists numbers the canvas no longer draws.
           columns: [
-            t('charts.columns.date'),
+            t(weekly ? 'charts.columns.week' : 'charts.columns.date'),
             ...(showBand ? [t('charts.columns.minimum')] : []),
             t('charts.columns.mean'),
             ...(showBand ? [t('charts.columns.maximum')] : []),
@@ -202,7 +224,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
             // together. See Sparkline's own copy of this for the same rule on one column.
             const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
             return [
-              d.date,
+              pointName(d),
               ...(showBand ? [formatMetricValue(d.hrMin, 'heart_rate', i18n.language, absent)] : []),
               formatMetricValue(d.hrMean, 'heart_rate', i18n.language, absent),
               ...(showBand ? [formatMetricValue(d.hrMax, 'heart_rate', i18n.language, absent)] : []),

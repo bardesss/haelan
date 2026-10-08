@@ -11,9 +11,13 @@ import type { Translate } from '../format.js'
 // A raw interpolation here is exactly the reported bug: a reader hovering this chart saw
 // "mean 90.18407633664866 bpm", on a template literal that also never called t() at all, so the
 // words around that number stayed English no matter what language the rest of the app was in.
-export function hrTooltip(days: DayRow[], index: number | undefined, t: Translate, language: string): string {
-  const day = index === undefined ? undefined : days[index]
-  if (!day) return ''
+//
+// `heading` names the point when it is not one day: HeartRateRange's weeks on 3 months and Year
+// pass the week's span, so the tooltip and the table name it alike.
+export function hrTooltip(days: DayRow[], index: number | undefined, t: Translate, language: string, heading?: string): string {
+  const found = index === undefined ? undefined : days[index]
+  if (!found) return ''
+  const day = { ...found, date: heading ?? found.date }
   if (!day.worn) return tip`${day.date}<br/>${t('charts.absence.notWorn')}`
   if (day.hrMean === null || day.hrMin === null || day.hrMax === null) {
     // Same word the accessible tables beside this chart already use for a day with nothing to
