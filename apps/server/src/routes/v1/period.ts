@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
-import { balanceOf, balanceWeeks, countsOf, highOf, judge, nightMonths, standingOf, TYPE_COUNT_DIRECTION, vo2TrendOf, workoutMonths } from '@haelan/core'
-import type { ActivityPeriod, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, SleepPeriod } from '@haelan/core'
+import { balanceOf, balanceWeeks, countsOf, highOf, judge, lowOf, nightMonths, standingOf, TYPE_COUNT_DIRECTION, vo2TrendOf, workoutMonths } from '@haelan/core'
+import type {
+  ActivityPeriod, HrvDeviationDay, PeriodChange, PeriodFigure, PeriodRange, PeriodStripPoint, RecoveryPeriod, SleepPeriod,
+} from '@haelan/core'
 import {
   personAndToday, personIdOf, personQueryOf, requireString, roundBandTo, roundMetricValue, roundTo, roundToOrNull, sendHashed,
   standingAfterRounding,
@@ -190,6 +192,48 @@ export function roundActivityPeriod(p: ActivityPeriod): ActivityPeriod {
   }
 }
 
+/** A stretch day's rolling mean and band at the HRV metric's precision; an unmeasured day has neither. */
+function roundStretchDay(day: HrvDeviationDay): HrvDeviationDay {
+  if (!day.measured) return day
+  return {
+    ...day,
+    rolling: roundMetricValue('daily_hrv', day.rolling),
+    band: { low: roundMetricValue('daily_hrv', day.band.low), high: roundMetricValue('daily_hrv', day.band.high) },
+  }
+}
+
+/**
+ * The Recovery overview at the wire's precision. The hero and the figures go through
+ * roundPeriodFigure; the high, the low and the changes are taken again from the rounded hero, as
+ * the Sleep overview does. The index is already a whole number. The stretch's rolling mean and band
+ * are HRV in milliseconds, so they go to that metric's precision. A tap panel input's points are
+ * what the explanation prints, to a tenth; its contribution is a z-scale quantity the page never
+ * prints, kept to a thousandth only so the hashed body stays stable. Everything else (the band
+ * names, the runs, the run, the method) is a date, a name or a constant, which rounding cannot touch.
+ */
+export function roundRecoveryPeriod(p: RecoveryPeriod): RecoveryPeriod {
+  const hero = roundPeriodFigure(p.hero)
+  return {
+    ...p,
+    hero,
+    high: highOf(hero.daily),
+    low: lowOf(hero.daily),
+    previous: roundChange(p.previous, hero),
+    yearEarlier: roundChange(p.yearEarlier, hero),
+    figures: p.figures.map(roundPeriodFigure),
+    stretch: p.stretch === null ? null : {
+      ...p.stretch,
+      days: p.stretch.days.map(roundStretchDay),
+      weeks: p.stretch.weeks === null ? null
+        : p.stretch.weeks.map((w) => ({ ...w, point: w.point === null ? null : roundStretchDay(w.point) })),
+    },
+    days: p.days.map((d) => ({
+      ...d,
+      inputs: d.inputs.map((x) => ({ ...x, points: roundTo(1, x.points), contribution: roundTo(3, x.contribution) })),
+    })),
+  }
+}
+
 const isFigure = (value: unknown): value is PeriodFigure =>
   typeof value === 'object' && value !== null && 'daily' in value && 'counts' in value && 'precision' in value
 
@@ -212,11 +256,14 @@ function trimFigures(value: unknown, trim: (f: PeriodFigure) => PeriodFigure): u
  * the balance, the steps heatmap and the tap panel all read them. `counts` were taken from the
  * rounded days before this runs, so they still describe the days a figure no longer sends.
  */
-export function trimForWire<P extends SleepPeriod | ActivityPeriod>(payload: P, range: PeriodRange): P {
+export function trimForWire<P extends SleepPeriod | ActivityPeriod | RecoveryPeriod>(payload: P, range: PeriodRange): P {
   const byWeek = range === '3months' || range === 'year'
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(payload)) {
-    if (key === 'hero') out[key] = value
+    // The Recovery overview's own sections hold no PeriodFigure: the stretch's days and the tap
+    // panel's scored days are read whole on every range, so they are named here rather than left
+    // to trimFigures' shape test, which a later field of theirs could start to satisfy.
+    if (key === 'hero' || key === 'stretch' || key === 'days' || key === 'method') out[key] = value
     else if (key === 'more') out[key] = trimFigures(value, (f) => ({ ...f, daily: [], weekly: null }))
     else out[key] = byWeek ? trimFigures(value, (f) => ({ ...f, daily: [] })) : value
   }
@@ -258,5 +305,12 @@ export function registerPeriodRoutes(app: FastifyInstance): void {
     const { range, anchor, source } = periodQuery(request.query)
     const period = personQueryOf(request).activityPeriod({ range, anchor, today, source })
     return sendHashed(reply, request, trimForWire(roundActivityPeriod(period), range))
+  })
+
+  app.get<{ Params: PersonParams, Querystring: PeriodQuery }>('/p/:personId/recovery/period', async (request, reply) => {
+    const { today } = personAndToday(app, personIdOf(request))
+    const { range, anchor, source } = periodQuery(request.query)
+    const period = personQueryOf(request).recoveryPeriod({ range, anchor, today, source })
+    return sendHashed(reply, request, trimForWire(roundRecoveryPeriod(period), range))
   })
 }

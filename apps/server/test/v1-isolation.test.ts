@@ -557,6 +557,27 @@ const ROUTES: readonly RouteCase[] = [
     ownNeedle: 'own-source-ok',
     otherNeedle: 'leaked-source-999999',
   },
+  // The Recovery overview names no source in its body, so the needles are values. The month is
+  // February 2026 and the harness's own today is 2026-02-02, so the period reads up to that day.
+  // The owner has one resting heart rate on the 1st; the leak target has one on the 2nd, a date
+  // the owner has no row for. The figure's series dedupes by localDate alone (preferMerged,
+  // personQuery.ts): a leak on the owner's own date would overwrite rather than add, and whether
+  // the body moved would depend on SQLite's row order. On its own date a leak adds a second day,
+  // so the figure's value stops being the owner's 4242 (it becomes the mean of the two), the
+  // strip gains a 999999 point, and the day count moves from 1 to 2.
+  {
+    name: 'recovery/period',
+    template: '/api/v1/p/:personId/recovery/period',
+    path: (p) => `/api/v1/p/${p}/recovery/period?range=month&anchor=2026-02-01`,
+    seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-02-01', metric: 'resting_heart_rate', agg: 'last', value: 4242 }),
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-02-02', metric: 'resting_heart_rate', agg: 'last', value: 999_999 }),
+    ownNeedle: '4242',
+    otherNeedle: '999999',
+    extraOwnAssertions: (body) => {
+      const { figures } = body as { figures: { metric: string, value: number, days: number }[] }
+      expect(figures.map((f) => [f.metric, f.value, f.days])).toEqual([['resting_heart_rate', 4242, 1]])
+    },
+  },
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
