@@ -100,7 +100,7 @@ export type { SeedArchiveInput, SeedArchiveResult } from './testing/seed.ts'
 // M2a. The derivation layer: tier 3 from tier 2, and the two types that have no tier 2 at all.
 // ACTIONS, supports, DeriveQueue and QueueEntry are exported above already, added when earlier
 // tasks in this milestone first needed them across the apps/server boundary.
-export { METRICS, DAILY_AGGS, metricSpec } from './derive/metrics.ts'
+export { METRICS, DAILY_AGGS, metricSpec, roundMetricValue } from './derive/metrics.ts'
 export type { MetricSpec, DailyAgg } from './derive/metrics.ts'
 export { DERIVATION_VERSION } from './derive/version.ts'
 export { MAPPING_VERSION } from './api/version.ts'
@@ -189,9 +189,15 @@ export { PersonQuery, requireDate, GLANCE_DAY_METRICS } from './query/personQuer
 export type { DailyPoint, SeriesResult } from './query/personQuery.ts'
 export { readRecoveryInput } from './query/recoveryInput.ts'
 export type { FilledCount } from './query/recoveryInput.ts'
+export { readHrvDeviation } from './query/hrvDeviationInput.ts'
 export { PROJECTION_TABLES } from './query/projection.ts'
 export { baselineOf, baselinesOver, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'
+export {
+  hrvBaselineWindow, hrvDeviationRun, hrvDeviationSeries, hrvDeviationWindowStart,
+  HRV_DEVIATION_BAND, HRV_DEVIATION_LOOKBACK_DAYS, HRV_DEVIATION_MIN_RUN, HRV_WEEK_DAYS, HRV_WEEK_MIN_READINGS,
+} from './query/hrvDeviation.ts'
+export type { HrvDeviationDay, HrvDeviationRun, HrvReading, HrvSide } from './query/hrvDeviation.ts'
 export { readSourceActivity } from './query/sourceActivity.ts'
 export { readAllTime, RECORD_METRICS } from './query/allTime.ts'
 export type { AllTime, AllTimeSpan, MetricRecord, Milestone } from './query/allTime.ts'

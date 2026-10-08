@@ -56,6 +56,9 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   // `insertRecoverySeries` writes below - both people score `enough: true` here, which is what
   // makes this tool's entry in ALICE_FINGERPRINTS mean something.
   recovery_index: { from: RECOVERY_ON, to: RECOVERY_ON },
+  // The same scored day, over the same per-person daily_hrv series: its seven-day week and the 60
+  // days before that week all sit inside what `insertRecoverySeries` writes.
+  hrv_deviation: { from: RECOVERY_ON, to: RECOVERY_ON },
   // A day with a reading, so the chain stops at its first gate and `evidence.value` carries it.
   explain: { kind: 'empty', metric: 'steps', localDate: '2026-08-01' },
 }
@@ -140,6 +143,10 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   // only matches when both are simultaneously correct - not a looser substring of either value
   // alone the way a bare '76' or a bare 'above' could be.
   recovery_index: '"score":76,"band":"above"',
+  // Alice's seven-day HRV average and her own band on RECOVERY_ON, measured against the same
+  // `insertRecoverySeries` rows (bart's read 75 against 79 to 82), as one adjacent run of fields so
+  // a wrong number in any of them fails it.
+  hrv_deviation: '"rolling":48,"low":49,"high":52,"side":"below"',
   // Alice's own steps on the day asked about, read back as the chain's evidence.
   explain: '1200',
 }

@@ -22,13 +22,14 @@ function seedDaily(h: Harness, input: {
   localDate: string
   value: number
   metric?: string
+  agg?: string
   updatedAtMs?: number | null
 }): void {
   h.app.haelan.instance.db.insert(schema.daily).values({
     personId: input.personId,
     localDate: input.localDate,
     metric: input.metric ?? 'steps',
-    agg: 'sum',
+    agg: input.agg ?? 'sum',
     source: 'merged',
     value: input.value,
     coverage: null,
@@ -163,6 +164,37 @@ const ROUTES: readonly RouteCase[] = [
       const { baseline } = body as { baseline: { n: number, thin: boolean } }
       expect(baseline.n).toBe(5)
       expect(baseline.thin).toBe(true)
+    },
+  },
+  {
+    name: 'hrv-deviation',
+    template: '/api/v1/p/:personId/hrv-deviation',
+    // The range is the single day 2026-09-30. The owner seeds 80 days ending the day before it:
+    // 74 of usual alternating 40 and 60, then six of 20, so the asked-for week holds six readings
+    // and sits below its band. The leak target seeds only the 30th itself, a date the owner has no
+    // row for. The HRV series dedupes by localDate alone (preferMerged, personQuery.ts): a leak on
+    // a date the owner already has would overwrite rather than add, and whether rolling moved
+    // would depend on SQLite's row order. On its own date a leak adds a seventh reading, and the
+    // week's mean leaves 20.
+    path: (p) => `/api/v1/p/${p}/hrv-deviation?from=2026-09-30&to=2026-09-30`,
+    seedOwn: (h) => {
+      for (let offset = 80; offset >= 1; offset -= 1) {
+        const date = new Date(Date.UTC(2026, 8, 30 - offset)).toISOString().slice(0, 10)
+        const value = offset <= 6 ? 20 : offset % 2 === 0 ? 40 : 60
+        seedDaily(h, { personId: 'p1', localDate: date, metric: 'daily_hrv', agg: 'last', value })
+      }
+    },
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-09-30', metric: 'daily_hrv', agg: 'last', value: 999_999 }),
+    // Subordinate to the toBe(20) below, which is exact; the comma keeps it from matching 205. The
+    // other needle can never appear: the route answers a computed statistic and never echoes a raw
+    // reading, so detection rests on extraOwnAssertions, as with the other computed routes above.
+    ownNeedle: '"rolling":20,',
+    otherNeedle: '999999',
+    extraOwnAssertions: (body) => {
+      const { days, run } = body as { days: Array<{ rolling: number, side: string }>, run: { side: string } | null }
+      expect(days[0]!.rolling).toBe(20)
+      expect(days[0]!.side).toBe('below')
+      expect(run?.side).toBe('below')
     },
   },
   {

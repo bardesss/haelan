@@ -233,3 +233,28 @@ export const SLEEP_METRICS = [
 export function metricSpec(metric: string): MetricSpec | undefined {
   return METRICS[metric]
 }
+
+/**
+ * Rounds a value already expressed in a metric's own stored unit (MetricSpec.precision's own doc
+ * comment: "in the unit this spec declares") to that many decimals. Called only at a response
+ * boundary, HTTP (apps/server/src/routes/v1) or MCP, and never by anything that writes a row.
+ * Core keeps full precision: `daily` and `samples` hold unrounded values, the same as before this
+ * function existed, because moving a rounding step into derivation would move DERIVATION_VERSION
+ * and force every person's history to rebuild for a change that is about how a number is shown,
+ * not what it is.
+ *
+ * An unknown metric has no declared precision to round to, and passes its value through unchanged
+ * rather than falling back to a guessed decimal count, which would silently truncate a reading
+ * nobody declared a precision for. Every /series, /export, /trend, /insights and /intraday caller
+ * in routes/v1 has already had its metric checked by `requireMetricAndAgg` or `requireMetric` inside
+ * PersonQuery, so for those this branch is a safety net rather than a path a real request takes.
+ * annotations.ts's /overrides caller is the one exception: its metric comes from
+ * `parseSampleTarget` on a stored `target_key`, which never touches PersonQuery, and neither that
+ * parser nor OverrideStore.validate checks it against METRICS. A `POST /overrides` naming a
+ * metric the catalogue has never heard of writes successfully and reaches this branch on the very
+ * next `GET /overrides`, which is why it is tested directly (v1-precision.test.ts).
+ */
+export function roundMetricValue(metric: string, value: number): number {
+  const precision = metricSpec(metric)?.precision
+  return precision === undefined ? value : Number(value.toFixed(precision))
+}

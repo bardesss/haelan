@@ -13,6 +13,7 @@ interface DayEvidence {
   factor: { value: number | null } | null
   workouts: { sessionId: string }[] | null
   eventIds: string[] | null
+  hrvRun: { side: string, days: number, capped: boolean, since: string, sideNights: number, weekReadings: number, filledDays: number } | null
 }
 
 interface Answer { kind: string, finding: string, stoppedAt: string, walked: string[], evidence: DayEvidence }
@@ -72,6 +73,14 @@ describe('explain, kind day', () => {
     }
     const bed = Date.parse(`${shiftLocalDate(D, -1)}T23:00:00Z`)
     insertSession(test.db, 'night', 'robin', 'watch', 'sleep', bed, bed + 7 * H, D)
+  }
+
+  /** Sets the daily HRV from `first` days before D through `last` days before D (0 is D itself). */
+  function hrvStretch(first: number, last: number, value: number): void {
+    test.db.update(schema.daily).set({ value }).where(and(
+      eq(schema.daily.metric, 'daily_hrv'), eq(schema.daily.source, 'merged'),
+      gt(schema.daily.localDate, shiftLocalDate(D, -first - 1)), lte(schema.daily.localDate, shiftLocalDate(D, -last)),
+    )).run()
   }
 
   function explain(): Answer {
@@ -178,6 +187,7 @@ describe('explain, kind day', () => {
   it('reports the night before beside a higher resting heart rate, before its bedtime', () => {
     // The bedtime is late too, so lateBedtime would answer; the fixed order looks at the night first.
     seed({ on: { rhr: 65, asleep: 300, bedtime: 1500 } })
+    hrvStretch(9, 0, 50)
     const answer = explain()
     expect(answer.evidence.away).toBe('restingHeartRate')
     expect(answer.stoppedAt).toBe('shortNight')
@@ -254,5 +264,96 @@ describe('explain, kind day', () => {
     expect(answer.evidence.away).toBe('steps')
     expect(answer.stoppedAt).toBe('workoutThatDay')
     expect(answer.finding).toContain('A workout (running) was recorded that day.')
+  })
+
+  describe('a stretch of HRV away from its usual', () => {
+    const RUN = { side: 'below', days: 9, capped: false, since: '2026-08-12', sideNights: 7, weekReadings: 7, filledDays: 0 }
+
+    it('is named after the lived factor, and the factor was still looked for', () => {
+      seed({ on: { asleep: 300 } })
+      hrvStretch(9, 0, 30)
+      const answer = explain()
+      expect(answer.evidence.away).toBe('hrv')
+      expect(answer.stoppedAt).toBe('shortNight')
+      expect(answer.walked).toContain('shortNight')
+      expect(answer.evidence.hrvRun).toEqual(RUN)
+      expect(answer.finding).toBe('HRV on 2026-08-20 was 30 ms, below its usual 39 ms to 55 ms. The night filed under that morning was 5h00 asleep, below its usual 6h44 asleep to 7h12 asleep. The two are reported side by side as an association, not as the reason for it. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 7 of the last 7 nightly readings were low.')
+    })
+
+    it('is named after noLivedFactor', () => {
+      seed({ on: { hrv: 30 } })
+      hrvStretch(9, 1, 30)
+      const noFactor = explain()
+      expect(noFactor.stoppedAt).toBe('noLivedFactor')
+      expect(noFactor.finding).toBe('HRV on 2026-08-20 was 30 ms, below its usual 39 ms to 55 ms. None of the night before, its bedtime, the day before\'s vigorous minutes or a logged event was away from its usual or on record. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 7 of the last 7 nightly readings were low.')
+      expect(noFactor.evidence.hrvRun).toEqual(RUN)
+    })
+
+    it('is named after the finding that every reading sits within its usual', () => {
+      seed()
+      hrvStretch(9, 1, 30)
+      const answer = explain()
+      expect(answer.stoppedAt).toBe('nothingAway')
+      expect(answer.finding).toBe('Every reading on 2026-08-20 with a usual to stand on sits within it. HRV\'s seven-day average has been below its usual for 9 measured days, since 2026-08-12; 6 of the last 7 nightly readings were low.')
+      expect(answer.evidence.hrvRun).toEqual({ ...RUN, sideNights: 6 })
+    })
+
+    it('is not named on a day nothing arrived on', () => {
+      seed()
+      hrvStretch(9, 0, 30)
+      const answer = explainTool.run(q, { kind: 'day', localDate: shiftLocalDate(D, 1), today: TODAY }) as unknown as Answer & { evidence: { day: DayEvidence } }
+      expect(answer.stoppedAt).toBe('dayEmpty')
+      expect(answer.finding).toBe('None of the day\'s headline readings arrived on 2026-08-21, so there is nothing to read the day by.')
+      expect(answer.evidence.day.hrvRun).toBeNull()
+    })
+
+    it('is not named on a day a source had stopped before', () => {
+      seed({ without: ['rhr'] })
+      hrvStretch(9, 0, 30)
+      const mix = (...ids: string[]) => JSON.stringify(ids.map((source) => ({ source, share: 1 / ids.length })))
+      const lastWatch = shiftLocalDate(D, -21)
+      for (let i = 0; i < 30; i += 1) {
+        const date = shiftLocalDate(D, -50 + i)
+        daily(date, 'resting_heart_rate', 'last', 55, 'watch')
+        daily(date, 'spo2', 'mean', 97, 'watch')
+      }
+      for (let date = shiftLocalDate(D, -50); date <= TODAY; date = shiftLocalDate(date, 1)) {
+        daily(date, 'resting_heart_rate', 'last', 55, 'phone')
+      }
+      const merged = and(eq(schema.daily.source, 'merged'), eq(schema.daily.metric, 'resting_heart_rate'))
+      test.db.update(schema.daily).set({ sourceMix: mix('watch', 'phone') }).where(and(merged, lte(schema.daily.localDate, lastWatch))).run()
+      test.db.update(schema.daily).set({ sourceMix: mix('phone') }).where(and(merged, gt(schema.daily.localDate, lastWatch))).run()
+      const answer = explain()
+      expect(answer.stoppedAt).toBe('sourceStopped')
+      expect(answer.finding).toBe('A source that feeds the day\'s readings had stopped reporting by 2026-08-20 (last on 2026-07-30), so the day is missing part of what it is usually read from and is not interpreted.')
+      expect(answer.evidence.hrvRun).toBeNull()
+    })
+
+    it('is not named on a day whose HRV is filled in', () => {
+      seed({ on: { rhr: 65 }, without: ['hrv'] })
+      hrvStretch(9, 1, 30)
+      daily(D, 'hrv', 'mean', 30)
+      const answer = explain()
+      expect(answer.stoppedAt).toBe('hrvFilled')
+      expect(answer.finding).toBe('The HRV on 2026-08-20 is the day\'s intraday average standing in for a measured daily reading, so the day is not read as measured and is not interpreted further.')
+      expect(answer.evidence.hrvRun).toBeNull()
+    })
+
+    it('is not named on a day with no baseline to judge by', () => {
+      seed({ days: 4, on: { rhr: 65 } })
+      const answer = explain()
+      expect(answer.stoppedAt).toBe('thinBaselines')
+      expect(answer.finding).toBe('None of the readings on 2026-08-20 has enough earlier days behind it for a usual to stand on, so nothing is judged. A thin baseline is low confidence, not evidence of nothing.')
+      expect(answer.evidence.hrvRun).toBeNull()
+    })
+
+    it('is null in the evidence when there is no stretch', () => {
+      seed({ on: { asleep: 300, rhr: 65 } })
+      hrvStretch(9, 0, 50)
+      const answer = explain()
+      expect(answer.stoppedAt).toBe('shortNight')
+      expect(answer.evidence.hrvRun).toBeNull()
+      expect(answer.finding).not.toContain('seven-day average')
+    })
   })
 })
