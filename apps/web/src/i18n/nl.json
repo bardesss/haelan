@@ -214,7 +214,7 @@
     },
     "heartRateRange": {
       "label": "Hartslagbereik",
-      "basis": "{{lines}} · band = je gebruikelijke bereik",
+      "basis": "{{lines}} · band = je gebruikelijke dag",
       "basisThin": "{{lines}} · nog te weinig dagen voor je gebruikelijke bereik",
       "basisNoBaseline": "{{lines}} · nog geen gebruikelijk bereik",
       "basisBaselinePending": "{{lines}} · je gebruikelijke bereik wordt nog geladen",
@@ -241,8 +241,8 @@
         "weekly": "tik op een week voor het gemiddelde"
       },
       "lines": {
-        "daily": "elk lijntje: elke dag {{period}} · band = je gebruikelijke bereik",
-        "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke bereik"
+        "daily": "elk lijntje: elke dag {{period}} · band = je gebruikelijke dag",
+        "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke week"
       },
       "carriedBy": "vooral door je {{input}}",
       "sourceCaption": "de herstelindex en HRV tegenover je gebruikelijke week worden uit alle bronnen berekend, welke bron je ook kiest",
@@ -694,8 +694,8 @@
       "workoutTime": "Trainingstijd",
       "sedentary": "Stilgezeten",
       "lines": {
-        "daily": "elk lijntje: elke dag {{period}}, ook actieve minuten · afstand en verdiepingen tellen de periode op · band = je gebruikelijke bereik",
-        "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · afstand en verdiepingen tellen de periode op · band = je gebruikelijke bereik"
+        "daily": "elk lijntje: elke dag {{period}}, ook actieve minuten · afstand en verdiepingen tellen de periode op · band = je gebruikelijke dag",
+        "weekly": "elk lijntje: elke week, het gemiddelde van haar dagen · afstand en verdiepingen tellen de periode op · band = je gebruikelijke week"
       },
       "intensity": {
         "daily": "elke dag {{period}} · minuten per band van beweging, uit je stappen",
@@ -1054,10 +1054,10 @@
         "weekly": "tik op een week voor de cijfers"
       },
       "lines": {
-        "nights": "elk lijntje: elke nacht {{period}} · band = je gebruikelijke bereik",
-        "mornings": "elk lijntje: elke ochtend {{period}} · band = je gebruikelijke bereik",
-        "weeklyNights": "elk lijntje: elke week, het gemiddelde van haar nachten · band = je gebruikelijke bereik",
-        "weeklyMornings": "elk lijntje: elke week, het gemiddelde van die ochtenden · band = je gebruikelijke bereik"
+        "nights": "elk lijntje: elke nacht {{period}} · band = je gebruikelijke nacht",
+        "mornings": "elk lijntje: elke ochtend {{period}} · band = je gebruikelijke ochtend",
+        "weeklyNights": "elk lijntje: elke week, het gemiddelde van haar nachten · band = je gebruikelijke week",
+        "weeklyMornings": "elk lijntje: elke week, het gemiddelde van die ochtenden · band = je gebruikelijke week"
       },
       "varied": "Naar bed varieerde ±{{value}} {{period}}",
       "variedUsual": "Naar bed varieerde ±{{value}} {{period}} · je gebruikelijke ±{{low}} – {{high}}",
@@ -1990,6 +1990,10 @@
       "month": "per maand",
       "quarter": "per 3 maanden",
       "year": "per jaar"
+    },
+    "average": {
+      "verdict": "gemiddeld {{verdict}}",
+      "single": "gemiddeld op je gebruikelijke {{value}}"
     },
     "for": {
       "week": "voor een week",

@@ -83,10 +83,39 @@ describe('periodVerdictLine', () => {
       .toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een maand, afgelopen 12 maanden`)
   })
 
-  it('is the verdict and its range alone without the window', () => {
+  it("names the period's average and the period's length without the window", () => {
     const f = figure({ usual: { center: 430, low: 410, high: 450, thin: false, window: MONTH, periods: 12 } })
-    expect(periodVerdictLine(f, 'en', t)).toBe(`within your usual 6h${NB}50m – 7h${NB}30m`)
-    expect(periodVerdictLine(f, 'nl', tNl)).toBe(`binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m`)
+    expect(periodVerdictLine(f, 'en', t)).toBe(`average within your usual 6h${NB}50m – 7h${NB}30m for a month`)
+    expect(periodVerdictLine(f, 'nl', tNl)).toBe(`gemiddeld binnen je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een maand`)
+  })
+
+  it("names an average above and below the usual for a month the same way, in both languages", () => {
+    const usual = { center: 63, low: 62, high: 64, thin: false, window: MONTH, periods: 12 }
+    const above = figure({ metric: 'resting_heart_rate', unit: 'bpm', value: 66, usual, standing: 'above' })
+    expect(periodVerdictLine(above, 'en', t)).toBe(`average above your usual 62 – 64${NB}bpm for a month`)
+    expect(periodVerdictLine(above, 'nl', tNl)).toBe(`gemiddeld boven je gebruikelijke bereik 62 – 64${NB}bpm voor een maand`)
+    const below = figure({ metric: 'daily_hrv', unit: 'milliseconds', value: 45, usual: { ...usual, low: 50, high: 63 }, standing: 'below' })
+    expect(periodVerdictLine(below, 'en', t)).toBe(`average below your usual 50 – 63${NB}ms for a month`)
+    expect(periodVerdictLine(below, 'nl', tNl)).toBe(`gemiddeld onder je gebruikelijke bereik 50 – 63${NB}ms voor een maand`)
+    // The hero names its window and keeps its verdict as it was.
+    expect(periodVerdictLine(above, 'nl', tNl, { window: true }))
+      .toBe(`boven je gebruikelijke bereik 62 – 64${NB}bpm voor een maand, afgelopen 12 maanden`)
+  })
+
+  it("names the period's length on 3 months and a year", () => {
+    const quarter: PeriodWindow = { unit: 'quarter', count: 4, from: '2025-05-01', to: '2026-04-30' }
+    const year: PeriodWindow = { unit: 'year', count: 1, from: '2025-01-01', to: '2025-12-31' }
+    const f = (window: PeriodWindow) => figure({ value: 470, standing: 'above', usual: { center: 430, low: 410, high: 450, thin: false, window, periods: 4 } })
+    expect(periodVerdictLine(f(quarter), 'en', t)).toBe(`average above your usual 6h${NB}50m – 7h${NB}30m for 3 months`)
+    expect(periodVerdictLine(f(quarter), 'nl', tNl)).toBe(`gemiddeld boven je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor 3 maanden`)
+    expect(periodVerdictLine(f(year), 'en', t)).toBe(`average above your usual 6h${NB}50m – 7h${NB}30m for a year`)
+    expect(periodVerdictLine(f(year), 'nl', tNl)).toBe(`gemiddeld boven je gebruikelijke bereik 6u${NB}50m – 7u${NB}30m voor een jaar`)
+  })
+
+  it('says where an average sits on a usual with no width', () => {
+    const f = figure({ value: 410, usual: { center: 410, low: 410, high: 410, thin: false, window: MONTH, periods: 12 } })
+    expect(periodVerdictLine(f, 'en', t)).toBe(`average at your usual 6h${NB}50m for a month`)
+    expect(periodVerdictLine(f, 'nl', tNl)).toBe(`gemiddeld op je gebruikelijke 6u${NB}50m voor een maand`)
   })
 
   it('words a bedtime above its usual as later', () => {
@@ -95,7 +124,10 @@ describe('periodVerdictLine', () => {
       usual: { center: -60, low: -75, high: -45, thin: false, window: MONTH, periods: 12 }, standing: 'above',
     })
     expect(periodVerdictLine(f, 'en', t, { window: true })).toBe('later than your usual 22:45 – 23:15 for a month, last 12 months')
-    expect(periodVerdictLine(f, 'nl', tNl)).toBe('later dan je gebruikelijke 22:45 – 23:15')
+    expect(periodVerdictLine(f, 'nl', tNl)).toBe('gemiddeld later dan je gebruikelijke 22:45 – 23:15 voor een maand')
+    expect(periodVerdictLine(f, 'en', t)).toBe('average later than your usual 22:45 – 23:15 for a month')
+    expect(periodVerdictLine({ ...f, value: -90, standing: 'below' }, 'nl', tNl))
+      .toBe('gemiddeld eerder dan je gebruikelijke 22:45 – 23:15 voor een maand')
   })
 
   it('names the year its usual comes from on a year', () => {
@@ -202,7 +234,7 @@ describe('periodVerdictLine', () => {
       totalStanding: 'below', totalJudged: 'worse',
     })
     expect(asPrinted(energy)).toBe(energy)
-    expect(periodVerdictLine(energy, 'en', t)).toBe(`within your usual 480 – 520${NB}kcal`)
+    expect(periodVerdictLine(energy, 'en', t)).toBe(`average within your usual 480 – 520${NB}kcal for a month`)
     // A total without a usual for its total keeps its average's verdict too.
     const floors = figure({
       metric: 'floors', unit: 'count', value: 10, total: 300, standing: 'within',
@@ -371,10 +403,12 @@ describe('standoutLines', () => {
 })
 
 describe('periodDeviationLine', () => {
-  it('words skin temperature as a deviation, with no window', () => {
+  it('words skin temperature as a deviation of the average, naming the period but no window', () => {
     const skin = figure({ metric: 'sleep_temperature', unit: 'celsius', precision: 1, value: 33.8,
       usual: { center: 33.7, low: 33.5, high: 34.0, thin: false, window: MONTH, periods: 12 } })
-    expect(periodDeviationLine(skin, 'en', t)).toEqual({ value: `+0.1${NB}°C`, verdict: `within your usual -0.2 – +0.3${NB}°C` })
+    expect(periodDeviationLine(skin, 'en', t)).toEqual({ value: `+0.1${NB}°C`, verdict: `average within your usual -0.2 – +0.3${NB}°C for a month` })
+    expect(periodDeviationLine({ ...skin, value: 34.3, standing: 'above' }, 'nl', tNl))
+      .toEqual({ value: `+0,6${NB}°C`, verdict: `gemiddeld boven je gebruikelijke bereik -0,2 – +0,3${NB}°C voor een maand` })
   })
 })
 

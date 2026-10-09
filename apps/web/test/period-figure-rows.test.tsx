@@ -52,9 +52,10 @@ describe('PeriodFigureRows', () => {
 
   it('puts the day counts in the plain note under the verdict, not in its toned words', () => {
     render([deep, bedtime])
-    // The verdict and its range alone: the window its usual comes from is named once, in the hero.
-    expect(rowProps[0]!.verdict).toBe(`your usual 1h${NB}10m`)
-    expect(rowProps[1]!.verdict).not.toContain('for a month')
+    // The period's average against the usual for a period that long: the window its usual comes
+    // from is named once, in the hero.
+    expect(rowProps[0]!.verdict).toBe(`average at your usual 1h${NB}10m for a month`)
+    expect(rowProps[1]!.verdict).toBe('average within your usual 22:59 – 23:01 for a month')
     expect(rowProps[0]!.note).toBe('17 of 28 nights usual · 6 longer · 5 shorter')
     expect(rowProps[1]!.note).toBe('16 of 28 nights usual · 5 later · 7 earlier')
   })

@@ -337,16 +337,16 @@ describe('the Recovery page: the figures and the heart rate', () => {
     const hrv = [...minis.querySelectorAll('.figure-row')][1]!
     expect(hrv.querySelector('.figure-row-note')?.textContent).toBe('12 of 29 days usual · 3 higher · 14 lower')
     expect(minis.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every day this month · band = your usual range')
+      .toBe('each line: every day this month · band = your usual day')
   })
 
   it('says the figures\' lines are weekly on a year, in both languages', async () => {
     await renderAt(YEAR_URL, RECOVERY_PERIOD_YEAR)
     expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every week, the average of its days · band = your usual range')
+      .toBe('each line: every week, the average of its days · band = your usual week')
     await renderAt(YEAR_URL, RECOVERY_PERIOD_YEAR, 'nl')
     expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke bereik')
+      .toBe('elk lijntje: elke week, het gemiddelde van haar dagen · band = je gebruikelijke week')
   })
 
   // The index is worked out from these readings, so a bad one is dropped by excluding it here:
