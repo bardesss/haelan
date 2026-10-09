@@ -61,9 +61,28 @@ export function periodVerdictLine(figure: PeriodFigure, language: string, t: Tra
   // average's verdict, and that range is per day.
   const verdict = figure.per === 'period' ? `${line} ${t(`period.per.${unit}`)}`
     : figure.per === 'week' ? `${line} ${t('period.per.week')}`
-      : figure.total !== null && PERIOD_TOTAL_METRICS.includes(figure.metric) ? `${line} ${t('period.per.day')}` : line
-  if (o.window !== true) return verdict
-  return `${verdict} ${windowPhrase(judged.usual.window, t)}`
+      : figure.total !== null && PERIOD_TOTAL_METRICS.includes(figure.metric) ? `${line} ${t('period.per.day')}` : null
+  if (o.window === true) return `${verdict ?? line} ${windowPhrase(judged.usual.window, t)}`
+  return verdict ?? averageVerdict(judged, line, language, t)
+}
+
+/**
+ * A figure row's verdict on an average, saying what it compares: the period's average, against the
+ * usual for a period that long ("average above your usual 62 - 64 bpm for a month"). That range is
+ * a narrow one of whole periods' averages, where the strip above it shades each day's (or week's)
+ * own usual, a wider band its caption names; without these words the two read as one range. A
+ * verdict naming no range (a thin usual, a running figure's "so far") is left as it is.
+ */
+function averageVerdict(figure: PeriodFigure, line: string, language: string, t: Translate): string {
+  const { usual } = figure
+  if (usual === null || usual.thin || figure.standing === null) return line
+  // A usual with no width that the average sits on reads "your usual 0"; "average your usual 0"
+  // does not, so it says where the average sits.
+  const single = formatFigureValue(figure, usual.low, language, t) === formatFigureValue(figure, usual.high, language, t)
+  const verdict = single && figure.standing === 'within'
+    ? t('period.average.single', { value: formatFigureValue(figure, usual.high, language, t) })
+    : t('period.average.verdict', { verdict: line })
+  return `${verdict} ${t(`period.for.${usual.window.unit}`)}`
 }
 
 // A day above or below its usual, in the words its unit reads in: a clock time is later or earlier
@@ -288,8 +307,9 @@ export function periodValueLine(figure: PeriodFigure, language: string, t: Trans
 /**
  * Skin temperature on an overview page, worded as the night page words it (NightMorning): the
  * period's average as a signed deviation from its usual's centre ("+0.3 °C"), and the usual as a
- * deviation too (deviationVerdictLine), with no window: a row's verdict is the verdict and its range
- * alone, the window said once, in the hero. Null without a usual worth deviating from
+ * deviation too (deviationVerdictLine), named as the period's average against the usual for a period
+ * that long ("average above your usual ±0.3 °C for a month"), with no window: that is said once, in
+ * the hero. Null without a usual worth deviating from
  * (none, or thin), or where the server gave a reason not to judge: the figure then reads as its
  * reading, through periodValueLine and periodVerdictLine, never as "— °C".
  */
@@ -299,6 +319,13 @@ export function periodDeviationLine(figure: PeriodFigure, language: string, t: T
   const deviation = formatSignedNumber(figure.value - usual.center, figure.precision, language, t('common.absent'))
   return {
     value: `${deviation}${NBSP}${t('charts.units.celsius')}`,
-    verdict: deviationVerdictLine({ ...figure, baseline: usual, strip: null }, language, t),
+    verdict: deviatedVerdict(figure, deviationVerdictLine({ ...figure, baseline: usual, strip: null }, language, t), t),
   }
+}
+
+// The deviation's verdict says what it compares as an average's verdict does (averageVerdict): the
+// period's average against the usual for a period that long.
+function deviatedVerdict(figure: PeriodFigure, line: string | null, t: Translate): string | null {
+  if (line === null || figure.standing === null || figure.usual === null) return line
+  return `${t('period.average.verdict', { verdict: line })} ${t(`period.for.${figure.usual.window.unit}`)}`
 }

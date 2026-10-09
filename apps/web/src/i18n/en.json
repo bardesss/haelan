@@ -214,7 +214,7 @@
     },
     "heartRateRange": {
       "label": "Heart rate range",
-      "basis": "{{lines}} · band = your usual range",
+      "basis": "{{lines}} · band = your usual day",
       "basisThin": "{{lines}} · too few days yet for your usual range",
       "basisNoBaseline": "{{lines}} · no usual range yet",
       "basisBaselinePending": "{{lines}} · your usual range is still loading",
@@ -241,8 +241,8 @@
         "weekly": "tap a week for its average"
       },
       "lines": {
-        "daily": "each line: every day {{period}} · band = your usual range",
-        "weekly": "each line: every week, the average of its days · band = your usual range"
+        "daily": "each line: every day {{period}} · band = your usual day",
+        "weekly": "each line: every week, the average of its days · band = your usual week"
       },
       "carriedBy": "mostly down to your {{input}}",
       "sourceCaption": "the recovery index and HRV against its usual week are worked out from all sources, whichever source is chosen",
@@ -694,8 +694,8 @@
       "workoutTime": "Workout time",
       "sedentary": "Sedentary",
       "lines": {
-        "daily": "each line: every day {{period}}, active minutes too · distance and floors add up the period · band = your usual range",
-        "weekly": "each line: every week, the average of its days · distance and floors add up the period · band = your usual range"
+        "daily": "each line: every day {{period}}, active minutes too · distance and floors add up the period · band = your usual day",
+        "weekly": "each line: every week, the average of its days · distance and floors add up the period · band = your usual week"
       },
       "intensity": {
         "daily": "every day {{period}} · minutes per band of movement, from your steps",
@@ -1054,10 +1054,10 @@
         "weekly": "tap a week for the figures"
       },
       "lines": {
-        "nights": "each line: every night {{period}} · band = your usual range",
-        "mornings": "each line: every morning {{period}} · band = your usual range",
-        "weeklyNights": "each line: every week, the average of its nights · band = your usual range",
-        "weeklyMornings": "each line: every week, the average of its mornings · band = your usual range"
+        "nights": "each line: every night {{period}} · band = your usual night",
+        "mornings": "each line: every morning {{period}} · band = your usual morning",
+        "weeklyNights": "each line: every week, the average of its nights · band = your usual week",
+        "weeklyMornings": "each line: every week, the average of its mornings · band = your usual week"
       },
       "varied": "Bedtime varied ±{{value}} {{period}}",
       "variedUsual": "Bedtime varied ±{{value}} {{period}} · your usual ±{{low}} – {{high}}",
@@ -1990,6 +1990,10 @@
       "month": "per month",
       "quarter": "per 3 months",
       "year": "per year"
+    },
+    "average": {
+      "verdict": "average {{verdict}}",
+      "single": "average at your usual {{value}}"
     },
     "for": {
       "week": "for a week",

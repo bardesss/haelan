@@ -163,7 +163,7 @@ describe('the heart rate range band', () => {
     // Under the chart, as a caption, and no basis line in the card's header.
     expect(container!.querySelector('.basis')).toBeNull()
     const caption = container!.querySelector('.card .dash-caption')
-    expect(caption?.textContent).toBe('daily minimum, mean and maximum, every day this month · band = your usual range')
+    expect(caption?.textContent).toBe('daily minimum, mean and maximum, every day this month · band = your usual day')
     // After the chart in the card, not above it.
     const chart = container!.querySelector('.card [role="img"]')!
     expect(chart.compareDocumentPosition(caption!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -176,7 +176,7 @@ describe('the heart rate range band', () => {
     mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
     expect(container!.querySelector('.card .dash-caption')?.textContent)
-      .toBe('dagelijks minimum, gemiddelde en maximum, elke dag deze maand · band = je gebruikelijke bereik')
+      .toBe('dagelijks minimum, gemiddelde en maximum, elke dag deze maand · band = je gebruikelijke dag')
     restore()
   })
 })
@@ -312,7 +312,7 @@ describe('the heart rate range by the range', () => {
     expect(tableRows()[0]![0]).toBe('2025-01-01 – 2025-01-05')
     expect(tableRows()[1]![0]).toBe('2025-01-06 – 2025-01-12')
     expect(container!.querySelector('.card .dash-caption')?.textContent)
-      .toBe('every week: its lowest daily minimum, the average of its days and its highest daily maximum · band = your usual range')
+      .toBe('every week: its lowest daily minimum, the average of its days and its highest daily maximum · band = your usual day')
     restore()
   })
 
@@ -399,7 +399,7 @@ describe('the heart rate range by the range', () => {
     mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
     expect(container!.querySelector('.card .dash-caption')?.textContent)
-      .toBe('elke week: het laagste dagminimum, het gemiddelde van haar dagen en het hoogste dagmaximum · band = je gebruikelijke bereik')
+      .toBe('elke week: het laagste dagminimum, het gemiddelde van haar dagen en het hoogste dagmaximum · band = je gebruikelijke dag')
     restore()
   })
 })
