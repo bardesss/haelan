@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.22.1](https://github.com/bardesss/haelan/compare/v2.22.0...v2.22.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **web:** a figure row says it compares the period's average, and its band says it is a day's ([#442](https://github.com/bardesss/haelan/issues/442)) ([8bd301c](https://github.com/bardesss/haelan/commit/8bd301c3b58a93dc55357263c6a4083308325685))
+
 ## [2.22.0](https://github.com/bardesss/haelan/compare/v2.21.0...v2.22.0) (2026-10-08)
 
 
