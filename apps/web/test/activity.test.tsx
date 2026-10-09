@@ -248,7 +248,7 @@ describe('the Activity page: the figures', () => {
     // A total's note is its average alone, with no day counts.
     expect(distance.querySelector('.figure-row-note')?.textContent).toBe(`5.3${NB}km per day on average`)
     expect(minis.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every day this month, active minutes too · distance and floors add up the period · band = your usual range')
+      .toBe('each line: every day this month, active minutes too · distance and floors add up the period · band = your usual day')
   })
 
   it("says a running period's total is so far, beside a whole month's usual for it", async () => {
@@ -274,7 +274,7 @@ describe('the Activity page: the figures', () => {
   it('says the figures\' lines are weekly on a year', async () => {
     await renderAt(YEAR_URL, { period: ACTIVITY_PERIOD_YEAR })
     expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every week, the average of its days · distance and floors add up the period · band = your usual range')
+      .toBe('each line: every week, the average of its days · distance and floors add up the period · band = your usual week')
   })
 
   it('prints Dutch in the usual words and durations', async () => {
@@ -383,12 +383,12 @@ describe('the Activity page: sections', () => {
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
     const row = rowNamed('Heart-rate zones', 'Highest heart rate, per day')!
     expect(row.querySelector('.figure-row-value')?.textContent).toBe(`164${NB}bpm`)
-    expect(row.querySelector('.figure-row-verdict')?.textContent).toBe(`within your usual 163 – 165${NB}bpm`)
+    expect(row.querySelector('.figure-row-verdict')?.textContent).toBe(`average within your usual 163 – 165${NB}bpm for a month`)
     act(() => { root?.unmount() })
     root = createRoot(container!)
     await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH }, 'nl')
     const nl = rowNamed('Hartslagzones', 'Hoogste hartslag, per dag')!
-    expect(nl.querySelector('.figure-row-verdict')?.textContent).toBe(`binnen je gebruikelijke bereik 163 – 165${NB}bpm`)
+    expect(nl.querySelector('.figure-row-verdict')?.textContent).toBe(`gemiddeld binnen je gebruikelijke bereik 163 – 165${NB}bpm voor een maand`)
   })
 
   it('keeps the heart-rate card for the highest heart rate alone, with no zones', async () => {

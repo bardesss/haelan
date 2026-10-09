@@ -234,9 +234,9 @@ describe('the Sleep page: sections', () => {
   it('says under each card of strips what a line and its band are', async () => {
     await renderAt(MONTH_URL, { period: SLEEP_PERIOD_MONTH })
     expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every night this month · band = your usual range')
+      .toBe('each line: every night this month · band = your usual night')
     expect(cardFor('The mornings')!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every morning this month · band = your usual range')
+      .toBe('each line: every morning this month · band = your usual morning')
   })
 
   it('counts the mornings in mornings, and More about the sleep without a noun', async () => {
@@ -364,9 +364,9 @@ describe('the Sleep page: sections', () => {
     expect([...cardFor(HERO)!.querySelectorAll('.period-hero-captions .dash-caption')].map((caption) => caption.textContent))
       .toEqual(['every week, as its average', 'tap a week for the figures'])
     expect(container!.querySelector('.detail-minis')!.parentElement!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every week, the average of its nights · band = your usual range')
+      .toBe('each line: every week, the average of its nights · band = your usual week')
     expect(cardFor('The mornings')!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('each line: every week, the average of its mornings · band = your usual range')
+      .toBe('each line: every week, the average of its mornings · band = your usual week')
     expect(cardFor('The nights')!.querySelector(':scope > .dash-caption')?.textContent)
       .toBe('stages per night, averaged per week · average per night in the legend')
     // No schedule chart on a year: its bedtime and wake time rows over their weeks, under the
@@ -414,7 +414,7 @@ describe('the Sleep page: sections', () => {
     expect(cardFor('Nachten')!.querySelector('.period-list-toggle')?.textContent).toBe(`Toon alle ${SLEEP_PERIOD_MONTH.nights.length} nachten`)
     expect(cardFor('Slaapbalans')!.querySelector('.night-week-against')?.textContent).toBe('ten opzichte van je gebruikelijke 6u 59m, over 28 nachten')
     expect(cardFor('De ochtenden')!.querySelector(':scope > .dash-caption')?.textContent)
-      .toBe('elk lijntje: elke ochtend deze maand · band = je gebruikelijke bereik')
+      .toBe('elk lijntje: elke ochtend deze maand · band = je gebruikelijke ochtend')
     expect(text()).not.toMatch(/\dh\s\d\dm/)
     // The list's short weekday date, so an expanded column keeps a row on one line.
     expect(cardFor('Nachten')!.querySelector('.night-row-date')?.textContent).toBe('ma 31 aug')
