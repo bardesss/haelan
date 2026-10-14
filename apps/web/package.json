@@ -15,13 +15,13 @@
   "dependencies": {
     "@haelan/core": "workspace:*",
     "@haelan/tokens": "workspace:*",
-    "@tanstack/react-query": "^5.104.0",
+    "@tanstack/react-query": "^5.104.1",
     "echarts": "^6.1.0",
     "i18next": "^26.4.2",
-    "maplibre-gl": "^6.11.2",
+    "maplibre-gl": "^6.13.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-i18next": "^17.0.15"
+    "react-i18next": "^17.0.16"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
