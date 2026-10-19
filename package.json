@@ -29,7 +29,7 @@
   "devDependencies": {
     "@types/node": "^26.6.4",
     "fast-check": "^4.10.2",
-    "happy-dom": "^20.14.6",
+    "happy-dom": "^21.0.3",
     "playwright": "1.64.0",
     "typescript": "^7.0.2",
     "vite-node": "^6.0.0",
