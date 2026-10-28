@@ -503,6 +503,7 @@
           "filled": "deze training uit je metingen",
           "filledPace": "deze training uit je metingen, het tempo over de verstreken tijd",
           "filledSpeed": "deze training uit je metingen, de snelheid over de verstreken tijd",
+          "zoneFormula": "cardiobelasting op zones geschat uit je leeftijd en rusthartslag",
           "tableCaption": "Deze training naast de vorige van dit type",
           "tableCaptionAlone": "Deze training",
           "captionWith": {
@@ -673,6 +674,7 @@
         "filled": {
           "figure": "uit je metingen",
           "rate": "uit je metingen, over de verstreken tijd",
+          "zoneFormula": "uit je metingen, op zones geschat uit je leeftijd en rusthartslag",
           "previous": "deze gemeten over de verstreken tijd"
         },
         "secondsPer100m": "{{value}} s/100 m"

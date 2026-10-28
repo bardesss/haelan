@@ -1887,6 +1887,34 @@ describe('a workout still waiting for the watch\'s figures', () => {
     expect(text(cardLabelled(host, 'This route')!, '.figure-row-note')).toBe('from your readings, over the elapsed time')
   })
 
+  // The cardio load is computed from the zones (workoutPage.ts: heartRateZoneDurations feeds both),
+  // so zones from the formula make the load an estimate too, and the zones card's caption does
+  // not reach the mini or the comparison table.
+  it('says the cardio load rests on the formula when the zones do, and only then', async () => {
+    const filled: WorkoutPageData['filled'] = ['cardioLoad', 'hardZoneMinutes']
+    const cardioNote = (host: ParentNode) => {
+      const row = [...host.querySelectorAll('.detail-minis .figure-row')].find((r) => text(r, '.figure-row-label') === 'Cardio load')!
+      return text(row, '.figure-row-note')
+    }
+    const estimated = await mount({ ...pending(filled), zoneFormula: true }, fullSession())
+    expect(cardioNote(estimated)).toBe('from your readings, on zones estimated from your age and resting heart rate')
+    expect(text(estimated, '.workout-compared-footnote'))
+      .toBe('This type only · your best from Records · this workout from your readings · cardio load on zones estimated from your age and resting heart rate')
+
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const measured = await mount({ ...pending(filled), zoneFormula: false }, fullSession())
+    expect(cardioNote(measured)).toBe('from your readings')
+    expect(text(measured, '.workout-compared-footnote')).not.toContain('estimated')
+
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const nl = await mount({ ...pending(filled), zoneFormula: true }, fullSession(), 'nl')
+    const nlRow = [...nl.querySelectorAll('.detail-minis .figure-row')].find((r) => text(r, '.figure-row-label') === 'Cardiobelasting')!
+    expect(text(nlRow, '.figure-row-note')).toBe('uit je metingen, op zones geschat uit je leeftijd en rusthartslag')
+    expect(text(nl, '.workout-compared-footnote')).toContain('cardiobelasting op zones geschat uit je leeftijd en rusthartslag')
+  })
+
   it('marks nothing the watch recorded itself', async () => {
     const host = await mount(pending(), fullSession())
     expect(host.querySelector('.workout-hero-filled')).toBeNull()

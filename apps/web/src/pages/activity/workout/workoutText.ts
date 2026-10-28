@@ -15,8 +15,14 @@ export function workoutPath(sessionId: string): string {
  * "from your readings", and for a pace or a speed "from your readings, over the elapsed time",
  * since a workout with no summary has no moving time to take a rate over. Undefined for a figure
  * the watch recorded; the server names the filled ones (`page.filled`), the page only words them.
+ *
+ * The cardio load is computed from the zones (workoutPage.ts sends both from one set of zone
+ * durations), so when the zones came from the formula (`page.zoneFormula`) its note says the load
+ * rests on them. The zones card's own caption says it for the zones, and reaches no other card.
+ * Formula zones only ever come from the fill, so the note keeps "from your readings" in front.
  */
 export function filledNote(page: WorkoutPageData, key: WorkoutFigureKey, t: Translate): string | undefined {
+  if (key === 'cardioLoad' && page.zoneFormula === true) return t('activity.workout.page.filled.zoneFormula')
   if (!(page.filled ?? []).includes(key)) return undefined
   return t(key === 'pace' || key === 'speed' ? 'activity.workout.page.filled.rate' : 'activity.workout.page.filled.figure')
 }
