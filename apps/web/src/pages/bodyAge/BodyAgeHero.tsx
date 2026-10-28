@@ -77,13 +77,15 @@ export function BodyAgeHero({ read, current }: { read: BodyAgeRead, current: Bod
   const strip = useMemo(() => {
     if (months.length < 2) return null
     const youngest = read.youngest !== null && read.youngest.gap < 0 ? read.youngest.month : null
-    // The range both lines span, labelled at the strip's left edge as every hero strip's band is
-    // (Sparkline's baseline and bandLabels), so the reader can read the ages off it.
+    // The range both lines span, labelled at the strip's left edge as every hero strip's band is,
+    // so the reader can read the ages off it.
     const ages = months.flatMap((month) => [month.bodyAge, month.calendarAge])
-    const range = { low: Math.min(...ages), high: Math.max(...ages) }
+    const low = Math.min(...ages)
+    const high = Math.max(...ages)
     return {
-      range,
-      rangeLabels: { low: formatNumber(range.low, 1, language, t('common.absent')), high: formatNumber(range.high, 1, language, t('common.absent')) },
+      // Labels with no band (Sparkline's rangeLabels): a band would say "your usual", which a
+      // body age has none of.
+      range: { low, high, lowText: formatNumber(low, 1, language, t('common.absent')), highText: formatNumber(high, 1, language, t('common.absent')) },
       values: monthValues(months, (month) => month.bodyAge),
       labels: months.map((month) => month.endDate),
       reference: { values: monthValues(months, (month) => month.calendarAge), label: t('bodyAge.hero.calendarAge') },
@@ -110,7 +112,7 @@ export function BodyAgeHero({ read, current }: { read: BodyAgeRead, current: Bod
             <BasisContext.Provider value={verdictId}>
               <Sparkline values={strip.values} labels={strip.labels} label={label} unit={label} metric="body_age"
                 formatValue={formatValue} reference={strip.reference} pointMarks={strip.marks}
-                baseline={strip.range} bandLabels={strip.rangeLabels}
+                rangeLabels={strip.range}
                 height={64} dots tableToggle={false} />
             </BasisContext.Provider>
             <div className="period-hero-captions">

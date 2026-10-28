@@ -18,6 +18,7 @@ import { dayTooltip } from '../src/charts/dayTooltip.js'
 type SparklineProps = {
   label: string, values: (number | null)[], reference?: { values: (number | null)[], label: string }
   baseline?: { low: number, high: number }, bandLabels?: { low: string, high: string }
+  rangeLabels?: { low: number, high: number, lowText: string, highText: string }
 }
 const { sparklines } = vi.hoisted(() => ({ sparklines: new Map<string, SparklineProps>() }))
 vi.mock('../src/charts/Sparkline.js', () => ({
@@ -150,9 +151,11 @@ describe('the body age page', () => {
     const strip = sparklines.get('Body age')!
     expect(strip.values).toEqual([33.6, 34.4, 34.6])
     expect(strip.reference?.values).toEqual([38.2, 38.3, 38.4])
-    // Labelled at its left edge with the range both lines span, as every hero strip's band is.
-    expect(strip.baseline).toEqual({ low: 33.6, high: 38.4 })
-    expect(strip.bandLabels).toEqual({ low: '33.6', high: '38.4' })
+    // Labelled at its left edge with the range both lines span, as every hero strip's band is, and
+    // no band: a body age has no usual.
+    expect(strip.rangeLabels).toEqual({ low: 33.6, high: 38.4, lowText: '33.6', highText: '38.4' })
+    expect(strip.baseline).toBeUndefined()
+    expect(strip.bandLabels).toBeUndefined()
   })
 
   it('words each factor, its comparison, its toned years, and the most room', async () => {

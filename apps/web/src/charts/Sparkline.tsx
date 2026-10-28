@@ -122,7 +122,7 @@ export type { PointJudged, PointStanding } from './base.js'
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
   onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, pointMarks = EMPTY, opensDay, bands, pointIds,
-  inverse = false, standingUnit, spans, reference,
+  inverse = false, standingUnit, spans, reference, rangeLabels,
 }: {
   // The unit code the values are in, which picks the words a day's verdict takes in the table
   // (standingShort: a clock time later or earlier, a pace slower or faster). Defaults to the
@@ -272,6 +272,12 @@ export function Sparkline({
   // reference rather than an earlier year. Undefined, every other caller, draws nothing. A caller
   // keeps it memoised, since it is a dependency of the built option.
   reference?: { values: readonly (number | null)[], label: string }
+  // The edge labels without a band: a range the strip spans, labelled at its left edge exactly as
+  // `bandLabels` labels a baseline (the same markPoints, the same measured margin, the y axis
+  // widened to include it), but with no shading, because a band means "your usual" and this range
+  // is none. The body age strip's lowest and highest age. Ignored when `baseline` and `bandLabels`
+  // are both given, which label the band instead. A caller keeps it memoised.
+  rangeLabels?: { low: number, high: number, lowText: string, highText: string }
 }) {
   const { t, i18n } = useTranslation()
 
@@ -336,14 +342,20 @@ export function Sparkline({
   // Zero without `baseline` as well as without `bandLabels`: the markPoint data below only ever
   // draws these two labels when both are set (`bandLabels && baseline`), so computing a margin for
   // `bandLabels` alone would widen the grid for text nothing on the chart actually draws.
+  // The labels the left edge carries: the band's, or with no band a range's (`rangeLabels`).
+  const edgeLabels = useMemo(() => (bandLabels && baseline
+    ? { low: baseline.low, high: baseline.high, lowText: bandLabels.low, highText: bandLabels.high }
+    : rangeLabels), [bandLabels, baseline, rangeLabels])
+  // The extent the y axis widens to: the band's, or the labelled range's.
+  const widenTo = baseline ?? rangeLabels
   const bandLabelMargin = useMemo(() => {
-    if (!bandLabels || !baseline) return 0
+    if (!edgeLabels) return 0
     const width = Math.max(
-      measureLabelWidth(bandLabels.low, AXIS_FONT_SIZE),
-      measureLabelWidth(bandLabels.high, AXIS_FONT_SIZE),
+      measureLabelWidth(edgeLabels.lowText, AXIS_FONT_SIZE),
+      measureLabelWidth(edgeLabels.highText, AXIS_FONT_SIZE),
     )
     return Math.ceil(width) + BAND_LABEL_GAP
-  }, [bandLabels, baseline])
+  }, [edgeLabels])
 
   // With dots, the margin a day at the strip's edge needs to be drawn whole: half the latest dot, and
   // its ring's width beyond that when a good day may carry one (pointMarks).
@@ -362,8 +374,8 @@ export function Sparkline({
     // a margin of half the latest dot on every other side, so a day at the strip's edge or its
     // extreme is drawn whole rather than clipped by the grid.
     grid: dots
-      ? { left: bandLabels && baseline ? bandLabelMargin : edge, right: edge, top: edge, bottom: edge }
-      : { left: bandLabels && baseline ? bandLabelMargin : 0, right: 0, top: 4, bottom: 4 },
+      ? { left: edgeLabels ? bandLabelMargin : edge, right: edge, top: edge, bottom: edge }
+      : { left: edgeLabels ? bandLabelMargin : 0, right: 0, top: 4, bottom: 4 },
     tooltip: {
       ...chartBase(tokens).tooltip,
       trigger: 'axis' as const,
@@ -394,9 +406,9 @@ export function Sparkline({
     // widen the fitted extent to include both band edges (echarts calls min/max with the extent it
     // would otherwise have picked); with no baseline, `scale: true` alone behaves exactly as before.
     yAxis: { type: 'value' as const, show: false, scale: true, inverse,
-      ...(baseline && {
-        min: (extent: { min: number }) => Math.min(extent.min, baseline.low),
-        max: (extent: { max: number }) => Math.max(extent.max, baseline.high),
+      ...(widenTo && {
+        min: (extent: { min: number }) => Math.min(extent.min, widenTo.low),
+        max: (extent: { max: number }) => Math.max(extent.max, widenTo.high),
       }) },
     series: [
       ...(comparing ? [{ type: 'line' as const, data: lastYear, showSymbol: false, connectNulls: episodic, silent: true,
@@ -476,15 +488,15 @@ export function Sparkline({
             // Anchored at the first slot, but the shown day's usual (the card's "usual X - Y"),
             // not the first day's own step beside it: at the last slot they would sit on the
             // shown day's dot again, the collision PR 375 moved them away from.
-            ...(bandLabels && baseline ? [
-              { name: 'band-high', xAxis: 0, yAxis: baseline.high, symbolSize: 0,
+            ...(edgeLabels ? [
+              { name: 'band-high', xAxis: 0, yAxis: edgeLabels.high, symbolSize: 0,
                 label: { show: true, position: 'left' as const, distance: BAND_LABEL_GAP, color: tokens.muted,
                   fontSize: chartBase(tokens).axisLabel.fontSize, fontFamily: labelFontFamily(),
-                  formatter: () => bandLabels.high } },
-              { name: 'band-low', xAxis: 0, yAxis: baseline.low, symbolSize: 0,
+                  formatter: () => edgeLabels.highText } },
+              { name: 'band-low', xAxis: 0, yAxis: edgeLabels.low, symbolSize: 0,
                 label: { show: true, position: 'left' as const, distance: BAND_LABEL_GAP, color: tokens.muted,
                   fontSize: chartBase(tokens).axisLabel.fontSize, fontFamily: labelFontFamily(),
-                  formatter: () => bandLabels.low } },
+                  formatter: () => edgeLabels.lowText } },
             ] : []),
           ] },
         markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
@@ -520,7 +532,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, referenced, dots, pointStandings, pointJudged, pointMarks, ringed, edge, latest, bands, inverse, spans])
+  }), [values, labels, baseline, edgeLabels, widenTo, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, referenced, dots, pointStandings, pointJudged, pointMarks, ringed, edge, latest, bands, inverse, spans])
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current

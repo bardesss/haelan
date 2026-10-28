@@ -315,6 +315,36 @@ describe('a sparkline with a labelled baseline band', () => {
   })
 })
 
+// The body age strip: its left edge labelled with the range its lines span, as a band's edges are,
+// but with no band drawn, since a band means "your usual" and this range is none.
+describe('a sparkline with range labels and no band', () => {
+  const range = { low: 8000, high: 9500, lowText: '8,000', highText: '9,500' }
+  const render = () => act(() => {
+    root!.render(
+      <I18nProvider lng="en">
+        <Sparkline values={values} labels={labels} metric="steps" unit="Steps" label="steps, august 2026" rangeLabels={range} />
+      </I18nProvider>,
+    )
+  })
+
+  it('draws the two edge labels, keeps their margin and widens the axis to the range', () => {
+    render()
+    const bandPoints = (readingSeries().markPoint?.data ?? []).filter((d) => d.name === 'band-high' || d.name === 'band-low')
+    expect(bandPoints.map((d) => [d.name, d.xAxis, d.yAxis, d.label!.formatter()]))
+      .toEqual([['band-high', 0, 9500, '9,500'], ['band-low', 0, 8000, '8,000']])
+    expect(chartOption().grid.left).toBeGreaterThan(5 * 7.5)
+    expect(chartOption().yAxis.min!({ min: 8600, max: 9400 })).toBe(8000)
+    expect(chartOption().yAxis.max!({ min: 8600, max: 9400 })).toBe(9500)
+  })
+
+  it('draws no band: no markArea and no band sentinel', () => {
+    render()
+    const series = (lastOption as { series: { markArea?: unknown }[] }).series
+    expect(series.every((s) => s.markArea === undefined)).toBe(true)
+    expect(container!.querySelector('[data-baseline-band]')).toBeNull()
+  })
+})
+
 // M9c: the dashboard's strips open the day a dot stands for. The tooltip ends with the words for
 // that ("Open this day") only when a click would do it, which is never on the day already shown.
 describe('a strip whose dots open their day', () => {
