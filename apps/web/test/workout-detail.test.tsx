@@ -1005,6 +1005,15 @@ describe('the workout page\'s zones', () => {
     expect([...host.querySelectorAll('.workout-zones .detail-legend-key')].map((key) => key.getAttribute('data-zone'))).toEqual(['light', 'moderate', 'vigorous', 'peak'])
   })
 
+  it('says zones were estimated from age and resting heart rate', async () => {
+    const estimated = await mount({ ...workoutPageFixture(), zoneFormula: true }, fullSession())
+    expect(text(estimated.querySelector('.workout-zones')!.closest('.card')!, '.dash-caption')).toContain('estimated from your age and resting heart rate')
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+    const measured = await mount({ ...workoutPageFixture(), zoneFormula: false }, fullSession())
+    expect(measured.querySelector('.workout-zones')!.closest('.card')!.textContent).not.toContain('estimated from your age')
+  })
+
   it('draws the bar in the four zone colours, not the ramp', async () => {
     const restore = overrideVars({
       '--chart-zone-light': '#0000b0', '--chart-zone-moderate': '#0000b1', '--chart-zone-vigorous': '#0000b2', '--chart-zone-peak': '#0000b3',

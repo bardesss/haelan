@@ -3,8 +3,8 @@ import type { DbOrTx } from '../db/open.ts'
 import { daily, people, sessionRoutes } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { workoutDetail } from '../api/workoutSummary.ts'
-import { edwardsLoadFromSeconds, banisterLoad, coefficientFor, ageAt, zoneBoundsOf } from '../api/cardioLoad.ts'
-import type { CardioLoad, ZoneBounds } from '../api/cardioLoad.ts'
+import { edwardsLoadFromSeconds, banisterLoad, coefficientFor, ageAt, zoneBoundsOf, zoneBoundsFromFormula } from '../api/cardioLoad.ts'
+import type { CardioLoad, ZoneBasis, ZoneBounds } from '../api/cardioLoad.ts'
 import { fillSplitHeartRate } from '../api/splitHeartRate.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
 import { readSessionHeartRateMinutes } from './sessionHeartRate.ts'
@@ -258,6 +258,33 @@ export function readWorkoutZoneBounds(db: DbOrTx, input: {
   return zoneBoundsOf({
     light: ceiling('light'), moderate: ceiling('moderate'), vigorous: ceiling('vigorous'), peak: ceiling('peak'),
   })
+}
+
+/**
+ * The zones a bare workout is filled against: the provider's ceilings for its day when it has them
+ * (readWorkoutZoneBounds, basis `providerCeilings`), else the formula from the person's birthday
+ * and that day's own resting heart rate (zoneBoundsFromFormula, basis `zoneFormula`). A phone sends
+ * no `heart_rate_zone_*_max_bpm` rows at all, so for a household without a watch the formula is the
+ * only source there is. The basis comes back with the bounds so the fill can say which it used.
+ *
+ * Deliberately separate from readWorkoutZoneBounds, which also feeds the trace's zone bands and the
+ * Banister maximum and stays the provider's own: an estimate is only ever drawn into a filled
+ * workout's zones, never behind a measured trace. Resting heart rate is the day's own, read the way
+ * readBanister reads it, never one borrowed from another day. Null for a night, and for a day with
+ * neither ceilings nor a birthday and resting heart rate to compute from.
+ */
+export function readFillZoneBounds(db: DbOrTx, input: {
+  personId: string
+  session: WorkoutSession
+}): { bounds: ZoneBounds, basis: ZoneBasis } | null {
+  const ceilings = readWorkoutZoneBounds(db, input)
+  if (ceilings !== null) return { bounds: ceilings, basis: 'providerCeilings' }
+  if (input.session.kind !== 'exercise') return null
+  const { localDate } = input.session
+  const birthDate = db.select().from(people).where(eq(people.id, input.personId)).get()?.birthDate ?? null
+  const restingBpm = dailyValue(db, input.personId, localDate, 'resting_heart_rate')
+  const bounds = zoneBoundsFromFormula({ birthDate, localDate, restingBpm })
+  return bounds === null ? null : { bounds, basis: 'zoneFormula' }
 }
 
 function readBanister(db: DbOrTx, input: { personId: string, session: WorkoutSession }) {

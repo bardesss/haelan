@@ -138,6 +138,7 @@ export function workoutPageFixture(): WorkoutPageData {
     exerciseType: 'RUNNING',
     pending: false,
     filled: [],
+    zoneFormula: false,
     hero: 'pace',
     nav: { previous: NAV_PREVIOUS_ID, next: NEXT_ID },
     figures: {

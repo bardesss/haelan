@@ -614,7 +614,8 @@
         },
         "zones": {
           "label": "Hartslagzones",
-          "hard": "{{value}} intensief of piek"
+          "hard": "{{value}} intensief of piek",
+          "formula": "Zones geschat op basis van je leeftijd en rusthartslag"
         },
         "recovery": {
           "label": "Hartslagherstel",
