@@ -68,7 +68,7 @@ export const GOMPERTZ_SLOPE = 0.085
  * person tends to have a low resting heart rate too), so adding their log hazards as if they were
  * independent over-counts. The total cap is where that is admitted.
  */
-// provisional: set by probe/scripts/body-age.mjs (plan Task 5)
+// measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
 export const BODY_AGE_TOTAL_CAP = 10
 
 /** The window is the 30 days ending on the most recent scored day: weeks, not one night. */
@@ -228,7 +228,7 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'vo2Max',
     unit: 'ml/kg/min',
-    // provisional: set by probe/scripts/body-age.mjs (plan Task 5)
+    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
     cap: 6,
     citation:
       'Hazard: Kodama et al. 2009, JAMA 301:2024-2035, abstract (pooled all-cause RR 0.87, 95% CI 0.84-0.90, '
@@ -242,7 +242,7 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'restingHeartRate',
     unit: 'bpm',
-    // provisional: set by probe/scripts/body-age.mjs (plan Task 5)
+    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
     cap: 3,
     citation:
       'Hazard: Zhang, Shen & Qi 2016, CMAJ 188:E53-E63, abstract and dose-response analysis (all-cause RR 1.09, '
@@ -258,8 +258,8 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
     // Minutes a week in which vigorous minutes already count double: the caller builds each day's
     // value as moderate + 2 × vigorous, as the paper's MET hours do.
     unit: 'min/week',
-    // provisional: set by probe/scripts/body-age.mjs (plan Task 5)
-    cap: 2,
+    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+    cap: 2.5,
     citation:
       'Arem et al. 2015, JAMA Intern Med 175:959-967, Results and Figure 1, all-cause HR by leisure-time '
       + 'MVPA band against none (0.80, 0.69, 0.63, 0.61, 0.61 for 0.1-<7.5 to 40-<75 MET h/wk; 661,137 adults '
@@ -272,8 +272,8 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'sleepRegularity',
     unit: 'min',
-    // provisional: set by probe/scripts/body-age.mjs (plan Task 5)
-    cap: 2,
+    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+    cap: 3.5,
     citation:
       'Windred et al. 2024, Sleep 47:zsad253, Table 2 (all-cause HR by Sleep Regularity Index quintile, fully '
       + 'adjusted: 1.00, 0.80, 0.75, 0.72, 0.70; 60,977 UK Biobank adults aged ~44-79 with wrist accelerometry). '
@@ -287,7 +287,7 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'strength',
     unit: 'sessions/week',
-    // provisional: set by probe/scripts/body-age.mjs (plan Task 5)
+    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
     cap: 2,
     citation:
       'Momma et al. 2022, BJSM 56:755-763, Table 1 and Figure 2 (all-cause RR 0.85, 95% CI 0.79-0.93, any '
