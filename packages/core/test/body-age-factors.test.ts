@@ -93,13 +93,18 @@ test('fitness age is null outside the reference table', () => {
   expect(fitnessAgeOf(vo2.reference(85, 'male') - 5, 'male')).toBeNull()
 })
 
-// The page reads these constants in the browser, so the subpath must stay free of imports: one that
-// pulled the barrel in would drag better-sqlite3 into the web bundle while every Node test stays green.
-test('the @haelan/core/body-age subpath is published and imports nothing', () => {
+// The page reads these constants in the browser, so the subpath may import only browser-safe modules:
+// one that pulled the barrel or the database in would drag better-sqlite3 into the web bundle while
+// every Node test stays green.
+test('the @haelan/core/body-age subpath is published and imports only browser-safe modules', () => {
   const read = (relative: string): string => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
   const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
   expect(pkg.exports['./body-age']).toBe('./src/api/bodyAge.ts')
   const code = read('../src/api/bodyAge.ts')
-  expect(code).not.toMatch(/\bimport\b/)
-  expect(code).not.toMatch(/\bfrom\s*['"]/)
+  const imports = [...code.matchAll(/^import\s+(type\s+)?[^'"]*from\s*['"]([^'"]+)['"]/gm)]
+    .map((m) => `${m[1] ? 'type ' : ''}${m[2]}`)
+  const allowed = ['../derive/localDay.ts', 'type ./recoveryIndex.ts']
+  expect(imports.filter((i) => !allowed.includes(i))).toEqual([])
+  // No dynamic import, require or re-export can hide from the scan above.
+  expect(code).not.toMatch(/\bimport\s*\(|\brequire\s*\(|^export\s[^\n]*\sfrom\s/m)
 })

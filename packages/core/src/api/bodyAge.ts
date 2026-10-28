@@ -30,6 +30,9 @@
  * birth date and nothing derived from it, and this module keeps to that.
  */
 
+import { shiftLocalDate } from '../derive/localDay.ts'
+import type { DayValue } from './recoveryIndex.ts'
+
 const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/
 const DAY_MS = 86_400_000
 
@@ -383,17 +386,6 @@ export function fitnessAgeOf(vo2Max: number, sex: Sex): number | null {
     if (vo2Max <= v0 && vo2Max >= v1) return age0 + ((age1 - age0) * (v0 - vo2Max)) / (v0 - v1)
   }
   return null
-}
-
-/** One observed day of one metric: the shape of `DayValue` in recoveryIndex.ts, restated here because this file imports nothing. */
-export interface DayValue {
-  localDate: string
-  value: number
-}
-
-/** `localDate` moved by whole days. Only called with dates that already parsed. */
-function shiftLocalDate(localDate: string, days: number): string {
-  return new Date(parseLocalDate(localDate)! + days * DAY_MS).toISOString().slice(0, 10)
 }
 
 export interface BodyAgeInput {
