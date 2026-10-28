@@ -29,6 +29,12 @@ export const PROVIDER_SOURCE = 'provider'
  */
 export const MERGED_SOURCE = 'merged'
 
+/**
+ * The `daily.basis` of a row computed from the heart rate zone formula (age and resting heart
+ * rate) rather than from what a device recorded.
+ */
+export const ZONE_FORMULA_BASIS = 'zone_formula'
+
 export interface DailyRow {
   personId: string
   localDate: string
@@ -40,6 +46,11 @@ export interface DailyRow {
   /** JSON, and only ever on a merged row. See the column comment in schema/derived.ts. */
   sourceMix: string | null
   derivationVersion: number
+  /**
+   * Optional so the builders that compute from recorded data need no change: absent means
+   * computed from what was recorded. See the column comment in schema/derived.ts.
+   */
+  basis?: typeof ZONE_FORMULA_BASIS | null
 }
 
 export interface RollUpDayInput {
