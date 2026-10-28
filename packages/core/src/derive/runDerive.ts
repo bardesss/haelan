@@ -61,7 +61,8 @@ export function runDerive(input: {
   }
 
   // Cached for the same reason as the priority list, and safe for the same reason: the zone formula
-  // reads it (derive/workoutZones.ts), so a birthday edit has to queue the person's workout days,
+  // reads it (derive/workoutZones.ts), so a birthday edit has to queue the person's workout days
+  // (the profile route does, via DeriveQueue.markExerciseDays),
   // and a drain that straddles one then costs a re-derive rather than a stale row.
   const birthDates = new Map<string, string | null>()
   const birthDateFor = (personId: string): string | null => {

@@ -20,9 +20,9 @@ import { exerciseCategory } from '../api/exerciseCategory.ts'
  * One workout's cardio load, both models.
  *
  * Computed on read rather than stored, unlike the daily `cardio_load_edwards` row. That is what
- * makes the two new `people` columns free: nothing derived depends on them, so editing a birthday
- * invalidates no row and triggers no rebuild. Moving this into derivation would take on that
- * obligation, and would also have to answer the light-zone floor question `banisterLoad`'s own
+ * makes `sex` free: nothing stored depends on it, so editing it invalidates no row. (A birthday is
+ * not free: the zone formula reads it, so the profile route queues the workout days when it
+ * changes.) Moving this into derivation would take on that obligation for `sex` too, and would also have to answer the light-zone floor question `banisterLoad`'s own
  * comment explains cannot be answered for a whole day.
  */
 export function readWorkoutCardioLoad(db: DbOrTx, input: {

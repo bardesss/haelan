@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { deriveQueue } from '../db/schema/index.ts'
+import { deriveQueue, sessions } from '../db/schema/index.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 
 export interface QueueEntry { personId: string, localDate: string }
@@ -30,6 +30,21 @@ export class DeriveQueue {
 
   markRange(input: { personId: string, fromLocalDate: string, toLocalDate: string, nowMs: number }): void {
     for (const localDate of datesBetween(input.fromLocalDate, input.toLocalDate)) {
+      this.markDirty({ personId: input.personId, localDate, nowMs: input.nowMs })
+    }
+  }
+
+  /**
+   * Every day this person has a workout on. For a change that reaches only what a workout's zones
+   * are computed from: a birthday moves the formula's maximum heart rate, so the days that carry
+   * workouts need deriving again and a day with only sleep does not. Distinct, because two workouts
+   * on one day are one dirty day.
+   */
+  markExerciseDays(input: { personId: string, nowMs: number }): void {
+    const days = this.#db.selectDistinct({ localDate: sessions.localDate }).from(sessions)
+      .where(and(eq(sessions.personId, input.personId), eq(sessions.kind, 'exercise')))
+      .all()
+    for (const { localDate } of days) {
       this.markDirty({ personId: input.personId, localDate, nowMs: input.nowMs })
     }
   }
