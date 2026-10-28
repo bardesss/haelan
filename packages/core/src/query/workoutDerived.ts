@@ -22,8 +22,9 @@ import { exerciseCategory } from '../api/exerciseCategory.ts'
  * Computed on read rather than stored, unlike the daily `cardio_load_edwards` row. That is what
  * makes `sex` free: nothing stored depends on it, so editing it invalidates no row. (A birthday is
  * not free: the zone formula reads it, so the profile route queues the workout days when it
- * changes.) Moving this into derivation would take on that obligation for `sex` too, and would also have to answer the light-zone floor question `banisterLoad`'s own
- * comment explains cannot be answered for a whole day.
+ * changes.) Moving this into derivation would take on that obligation for `sex` too, and would
+ * also have to answer the light-zone floor question `banisterLoad`'s own comment explains cannot
+ * be answered for a whole day.
  */
 export function readWorkoutCardioLoad(db: DbOrTx, input: {
   personId: string
@@ -198,7 +199,10 @@ function routesByOwner<T>(exercise: readonly WorkoutSession[], rows: readonly ({
 /** Routes are read this many sessions to a query, so a 1 Hz phone route history is never all in memory at once. */
 export const ROUTE_CHUNK_SESSIONS = 100
 
-/** What a route reduces to for comparing against other workouts: never a point, only its signature and efforts (null or NO_EFFORTS when not asked for). */
+/**
+ * What a route reduces to for comparing against other workouts: never a point, only its signature
+ * and efforts (null or NO_EFFORTS when not asked for).
+ */
 export interface RouteSummary { signature: RouteSignature | null, efforts: Efforts<number | null> }
 
 const NO_EFFORTS: Readonly<Efforts<number | null>> = Object.freeze({})

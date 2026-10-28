@@ -253,7 +253,7 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   // is entered afresh per day and a statement prepared inside it would not outlive one.
   //
   // Chunked because SQLite binds a limited number of parameters per statement (999 on the
-  // conservative default). `daily` has ten columns, so 80 rows is 800 parameters, and the chunk
+  // conservative default). `daily` has eleven columns, so 80 rows is 880 parameters, and the chunk
   // count is what bounds the distinct statements this prepares rather than the row count.
   const DAILY_INSERT_CHUNK = 80
   for (let i = 0; i < rows.length; i += DAILY_INSERT_CHUNK) {

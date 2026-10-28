@@ -60,10 +60,11 @@ export function runDerive(input: {
     return loaded
   }
 
-  // Cached for the same reason as the priority list, and safe for the same reason: the zone formula
-  // reads it (derive/workoutZones.ts), so a birthday edit has to queue the person's workout days
-  // (the profile route does, via DeriveQueue.markExerciseDays),
-  // and a drain that straddles one then costs a re-derive rather than a stale row.
+  // Cached once per person for the drain, like the priority list. The zone formula reads it
+  // (derive/workoutZones.ts), so a birthday edit has to queue the person's workout days, which the
+  // profile route does via DeriveQueue.markExerciseDays. The cache cannot go stale under a drain:
+  // runDerive is synchronous from claim to the last write, so no profile request runs, and no
+  // birthday edit lands, while it holds a cached value.
   const birthDates = new Map<string, string | null>()
   const birthDateFor = (personId: string): string | null => {
     if (birthDates.has(personId)) return birthDates.get(personId)!
