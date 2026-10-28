@@ -2096,7 +2096,7 @@
     },
     "method": {
       "label": "Hoe het berekend wordt",
-      "how": "Je lichaamsleeftijd is je kalenderleeftijd, verschoven door vijf factoren over de afgelopen {{days}} dagen. Voor elk ervan geven gepubliceerde studies hoeveel hoger of lager het risico om aan welke oorzaak ook te overlijden is bij jouw waarde dan bij de typische waarde voor je leeftijd en geslacht. Dat verschil wordt in jaren omgezet met één maat voor elke factor, de jaarlijkse stijging van de sterfte bij volwassenen ({{slope}} op de logschaal), zodat elke factor in jaren telt en ze bij elkaar opgeteld kunnen worden.",
+      "how": "Je lichaamsleeftijd is je kalenderleeftijd, verschoven door vijf factoren over de afgelopen {{days}} dagen. Voor elk ervan geven gepubliceerde studies hoeveel hoger of lager het risico om aan welke oorzaak ook te overlijden is bij jouw waarde dan bij een referentiewaarde (voor VO₂max en rusthartslag de typische waarde voor je leeftijd en geslacht). Dat verschil wordt in jaren omgezet met één maat voor elke factor, de jaarlijkse stijging van de sterfte bij volwassenen ({{slope}} op de logschaal), zodat elke factor in jaren telt en ze bij elkaar opgeteld kunnen worden.",
       "limits": "Geen factor verschuift het verder dan zijn eigen grens, en alle samen niet verder dan {{cap}} jaar. Een factor telt zodra er op {{min}} dagen van de periode metingen zijn, behalve variatie in bedtijd: die heeft in minstens {{blocks}} blokken van {{blockDays}} dagen elk {{nights}} nachten nodig; VO₂max is je laatste meting uit de afgelopen {{vo2Days}} dagen.",
       "factor": "{{factor}}, tot {{cap}} jaar.",
       "sources": "Bronnen",
