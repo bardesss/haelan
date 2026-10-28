@@ -12,8 +12,8 @@
  * exactly at every reference scores exactly their calendar age, because each `logHazard` is a
  * difference of the same curve at two points and is zero when the two points coincide.
  *
- * This file holds the arithmetic and the cited constants only. Windows, readers and the sum are
- * built on top of it elsewhere.
+ * This file holds the arithmetic, the cited constants, and the body age of one 30-day window.
+ * Reading the days out of the database is built on top of it elsewhere.
  *
  * **This module feeds a printed number, so it states what it honours** (CONTRIBUTING.md, "A reader
  * that feeds a number says what it honours"):
@@ -251,6 +251,8 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   },
   {
     key: 'activity',
+    // Minutes a week in which vigorous minutes already count double: the caller builds each day's
+    // value as moderate + 2 × vigorous, as the paper's MET hours do.
     unit: 'min/week',
     // provisional: set by probe/scripts/body-age.mjs (plan Task 5)
     cap: 2,
@@ -381,4 +383,173 @@ export function fitnessAgeOf(vo2Max: number, sex: Sex): number | null {
     if (vo2Max <= v0 && vo2Max >= v1) return age0 + ((age1 - age0) * (v0 - vo2Max)) / (v0 - v1)
   }
   return null
+}
+
+/** One observed day of one metric: the shape of `DayValue` in recoveryIndex.ts, restated here because this file imports nothing. */
+export interface DayValue {
+  localDate: string
+  value: number
+}
+
+/** `localDate` moved by whole days. Only called with dates that already parsed. */
+function shiftLocalDate(localDate: string, days: number): string {
+  return new Date(parseLocalDate(localDate)! + days * DAY_MS).toISOString().slice(0, 10)
+}
+
+export interface BodyAgeInput {
+  birthDate: string | null
+  sex: Sex | null
+  vo2Max: DayValue[]
+  restingHeartRate: DayValue[]
+  /** Raw ms. Not a factor, but its days tell the caller which days were scored. */
+  hrv: DayValue[]
+  /** Minutes per day, vigorous minutes already counted double. */
+  activityMinutes: DayValue[]
+  /** Minutes from midnight, signed so that either side of midnight stays close. */
+  bedtimeMinutes: DayValue[]
+  strengthSessionDates: string[]
+}
+
+export type BodyAgeMissing = 'birthDate' | 'sex' | 'vo2Max'
+
+export interface BodyAgeFactor {
+  key: BodyAgeFactorKey
+  value: number | null
+  reference: number | null
+  years: number
+  capped: boolean
+  /** Days with a reading in the window. */
+  days: number
+  missing: 'tooFewDays' | 'noReading' | null
+}
+
+export interface BodyAgeUnavailable {
+  enough: false
+  endDate: string
+  missing: BodyAgeMissing[]
+}
+
+export interface BodyAgeAvailable {
+  enough: true
+  endDate: string
+  window: { from: string, to: string }
+  calendarAge: number
+  bodyAge: number
+  gap: number
+  totalCapped: boolean
+  factors: BodyAgeFactor[]
+  carriedBy: BodyAgeFactorKey | null
+  mostRoom: { key: BodyAgeFactorKey, years: number } | null
+  fitnessAge: number | null
+  vo2MaxDate: string | null
+}
+
+export type BodyAge = BodyAgeUnavailable | BodyAgeAvailable
+
+const CARRIED_TIE_EPSILON = 1e-9
+
+function mean(values: readonly number[]): number {
+  return values.reduce((t, v) => t + v, 0) / values.length
+}
+
+/** Sample standard deviation (n - 1). */
+function sampleStandardDeviation(values: readonly number[]): number {
+  const m = mean(values)
+  return Math.sqrt(values.reduce((t, v) => t + (v - m) ** 2, 0) / (values.length - 1))
+}
+
+/** One value per day inside the window; a repeated date keeps its last row. */
+function inWindow(rows: readonly DayValue[], from: string, to: string): number[] {
+  const byDate = new Map<string, number>()
+  for (const row of rows) if (row.localDate >= from && row.localDate <= to) byDate.set(row.localDate, row.value)
+  return [...byDate.values()]
+}
+
+/**
+ * The factor whose years lean furthest the way the gap points, named only when it holds at least
+ * half of all the years in that direction. A tie or no lean names none, as `carriedByOf` does for
+ * the recovery index.
+ */
+function carriedByOf(factors: readonly BodyAgeFactor[], gap: number): BodyAgeFactorKey | null {
+  const sign = gap > CARRIED_TIE_EPSILON ? 1 : gap < -CARRIED_TIE_EPSILON ? -1 : 0
+  if (sign === 0) return null
+  const pushes = factors.map((f) => ({ key: f.key, push: f.years * sign })).filter((p) => p.push > CARRIED_TIE_EPSILON)
+  if (pushes.length === 0) return null
+  pushes.sort((a, b) => b.push - a.push)
+  const total = pushes.reduce((t, p) => t + p.push, 0)
+  const [first, second] = pushes
+  if (second !== undefined && first!.push - second.push < CARRIED_TIE_EPSILON) return null
+  return first!.push >= total / 2 - CARRIED_TIE_EPSILON ? first!.key : null
+}
+
+/**
+ * The body age for the 30 days ending `endDate`. Unavailable without a usable birth date, a sex and
+ * a VO2 max reading; every other factor that lacks days is marked missing and adds zero years.
+ */
+export function bodyAgeAt(input: BodyAgeInput, endDate: string): BodyAge {
+  const from = shiftLocalDate(endDate, -(BODY_AGE_WINDOW_DAYS - 1))
+  const calendarAge = input.birthDate === null ? null : ageYearsAt(input.birthDate, endDate)
+  const vo2Floor = shiftLocalDate(endDate, -VO2_LOOKBACK_DAYS)
+  let vo2: DayValue | null = null
+  for (const row of input.vo2Max) {
+    if (row.localDate > endDate || row.localDate < vo2Floor) continue
+    if (vo2 === null || row.localDate > vo2.localDate) vo2 = row
+  }
+
+  const { sex } = input
+  if (calendarAge === null || sex === null || vo2 === null) {
+    const missing: BodyAgeMissing[] = []
+    if (calendarAge === null) missing.push('birthDate')
+    if (sex === null) missing.push('sex')
+    if (vo2 === null) missing.push('vo2Max')
+    return { enough: false, endDate, missing }
+  }
+
+  const daily = (rows: readonly DayValue[], summarise: (values: number[]) => number) => {
+    const values = inWindow(rows, from, endDate)
+    return { days: values.length, value: values.length >= MIN_FACTOR_DAYS ? summarise(values) : null }
+  }
+  const strengthDays = new Set(input.strengthSessionDates.filter((d) => d >= from && d <= endDate))
+  const strengthSessions = input.strengthSessionDates.filter((d) => d >= from && d <= endDate).length
+
+  const readings: Record<Exclude<BodyAgeFactorKey, 'hrv'>, { value: number | null, days: number }> = {
+    vo2Max: { value: vo2.value, days: 1 },
+    restingHeartRate: daily(input.restingHeartRate, mean),
+    activity: daily(input.activityMinutes, (v) => mean(v) * 7),
+    sleepRegularity: daily(input.bedtimeMinutes, sampleStandardDeviation),
+    strength: { value: (strengthSessions * 7) / BODY_AGE_WINDOW_DAYS, days: strengthDays.size },
+  }
+
+  const factors: BodyAgeFactor[] = BODY_AGE_FACTORS.map((spec) => {
+    const { value, days } = readings[spec.key as keyof typeof readings]
+    if (value === null) {
+      return {
+        key: spec.key, value: null, reference: null, years: 0, capped: false, days,
+        missing: days === 0 ? 'noReading' : 'tooFewDays',
+      }
+    }
+    const reference = spec.reference(calendarAge, sex)
+    const { years, capped } = yearsOf(spec.logHazard(value, reference), spec.cap)
+    return { key: spec.key, value, reference, years, capped, days, missing: null }
+  })
+
+  const sum = factors.reduce((t, f) => t + f.years, 0)
+  const totalCapped = Math.abs(sum) > BODY_AGE_TOTAL_CAP
+  const gap = Math.max(-BODY_AGE_TOTAL_CAP, Math.min(BODY_AGE_TOTAL_CAP, sum)) + 0
+  const positive = factors.filter((f) => f.years > 0).sort((a, b) => b.years - a.years)
+
+  return {
+    enough: true,
+    endDate,
+    window: { from, to: endDate },
+    calendarAge,
+    bodyAge: calendarAge + gap,
+    gap,
+    totalCapped,
+    factors,
+    carriedBy: carriedByOf(factors, gap),
+    mostRoom: positive[0] === undefined ? null : { key: positive[0].key, years: positive[0].years },
+    fitnessAge: fitnessAgeOf(vo2.value, sex),
+    vo2MaxDate: vo2.localDate,
+  }
 }
