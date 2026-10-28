@@ -64,9 +64,9 @@ Your whole history in one SQLite file, kept past Google's retention windows and 
 losing access to the API. Intraday samples in particular have a shelf life at the source, so a
 mirror is the only place minute-level history stays available at that resolution.
 
-### 📊 Nine pages of it
+### 📊 Ten pages of it
 
-Dashboard, Records, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with
+Dashboard, Records, Activity, Sleep, Recovery, Body age, Health, Weight, Nutrition and Notes: sleep with
 stages and nap detection, resting heart rate and HRV, SpO2 with its confidence interval, steps,
 active minutes and every workout, with a page behind each night and each workout. There is also an
 intraday chart, a weight trend, and period-over-period insight cards that withhold themselves, each
@@ -138,7 +138,7 @@ A few people, one instance, each seeing only their own data. An admin invites a 
 chooses their own password, and each person connects their own Google account and picks which data
 types get fetched for them.
 
-### 🧰 Seventeen typed tools for an agent, read-only and person-bound
+### 🧰 Eighteen typed tools for an agent, read-only and person-bound
 
 They sit over the same person bound query layer the browser reads through, reachable over stdio
 from inside the container or over `POST /mcp` from anywhere else. An HTTP call needs a token
