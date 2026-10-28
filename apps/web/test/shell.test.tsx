@@ -7,6 +7,7 @@ import { Records } from '../src/pages/Records.js'
 import { Activity } from '../src/pages/Activity.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { Recovery } from '../src/pages/Recovery.js'
+import { BodyAge } from '../src/pages/BodyAge.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
 import { Nutrition } from '../src/pages/Nutrition.js'
@@ -88,7 +89,7 @@ describe('the route table', () => {
   it('has an entry for every page the design names', () => {
     expect(ROUTES.map((r) => r.path).sort()).toEqual(
       ['/', '/account', '/activity', '/activity/:sessionId', '/health', '/notes', '/nutrition',
-        '/records', '/recovery', '/settings', '/sleep', NIGHT_ROUTE, '/weight'].sort(),
+        '/records', '/recovery', '/body-age', '/settings', '/sleep', NIGHT_ROUTE, '/weight'].sort(),
     )
   })
 
@@ -119,6 +120,7 @@ describe('the route table', () => {
       '/activity': Activity,
       '/sleep': Sleep,
       '/recovery': Recovery,
+      '/body-age': BodyAge,
       '/health': Health,
       '/weight': Weight,
       '/nutrition': Nutrition,

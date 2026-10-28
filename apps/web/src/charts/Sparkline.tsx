@@ -122,7 +122,7 @@ export type { PointJudged, PointStanding } from './base.js'
 export function Sparkline({
   values, labels, label, unit, metric, formatValue, baseline, bandLabels, height = 34, annotations = EMPTY, excluded = EMPTY,
   onPointClick, episodic = false, trend, lastYear, tableToggle = true, dots = false, pointStandings = EMPTY, pointJudged = EMPTY, pointMarks = EMPTY, opensDay, bands, pointIds,
-  inverse = false, standingUnit, spans,
+  inverse = false, standingUnit, spans, reference,
 }: {
   // The unit code the values are in, which picks the words a day's verdict takes in the table
   // (standingShort: a clock time later or earlier, a pace slower or faster). Defaults to the
@@ -266,6 +266,12 @@ export function Sparkline({
   // shading: the accessible table does not mark which rows sit inside one. A caller keeps the array's
   // identity stable (memoised), since it is a dependency of the built option. Undefined draws nothing.
   spans?: readonly { from: number, to: number }[]
+  // A second line to read the points against, dense over the same labels, dashed in the muted
+  // tone under the readings, with its own column in the table and its own line in the tooltip
+  // under `label`: the body age strip's calendar age. lastYear's drawing, for a line that is a
+  // reference rather than an earlier year. Undefined, every other caller, draws nothing. A caller
+  // keeps it memoised, since it is a dependency of the built option.
+  reference?: { values: readonly (number | null)[], label: string }
 }) {
   const { t, i18n } = useTranslation()
 
@@ -289,6 +295,7 @@ export function Sparkline({
   const hasTrend = trend !== undefined && trend.some((v) => v !== null)
   // Drawn only when a year earlier holds something; the tile says so in words when it holds nothing.
   const comparing = lastYear !== undefined && lastYear.some((v) => v !== null)
+  const referenced = reference !== undefined && reference.values.some((v) => v !== null) ? reference : undefined
 
   // One formatter, read by the canvas's tooltip and by every table row, rather than two built the
   // same way: `formatValue` is the override for a caller whose displayed unit differs from the
@@ -310,6 +317,7 @@ export function Sparkline({
   useLayoutEffect(() => {
     tooltipRef.current = {
       values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t, lastYear: comparing ? lastYear : undefined,
+      reference: referenced,
     }
     opensRef.current = opensDay
     pointIdsRef.current = pointIds
@@ -392,6 +400,8 @@ export function Sparkline({
       }) },
     series: [
       ...(comparing ? [{ type: 'line' as const, data: lastYear, showSymbol: false, connectNulls: episodic, silent: true,
+        lineStyle: { width: STROKE.sparkline, color: tokens.muted, type: 'dashed' as const } }] : []),
+      ...(referenced ? [{ type: 'line' as const, data: [...referenced.values], showSymbol: false, connectNulls: true, silent: true,
         lineStyle: { width: STROKE.sparkline, color: tokens.muted, type: 'dashed' as const } }] : []),
       // Under the reading series below (drawn first, so echarts paints it first and the readings
       // land on top of it): trend's own dense array is null everywhere trendOf had no reading to
@@ -510,7 +520,7 @@ export function Sparkline({
     // is memoised over `labels` as well; both are facts about today's call sites, not about this
     // component. Memoise `labels` separately anywhere and the bug returns with every test green.
     // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
-  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, dots, pointStandings, pointJudged, pointMarks, ringed, edge, latest, bands, inverse, spans])
+  }), [values, labels, baseline, bandLabels, bandLabelMargin, marks, episodic, trend, hasTrend, comparing, lastYear, referenced, dots, pointStandings, pointJudged, pointMarks, ringed, edge, latest, bands, inverse, spans])
 
   // The day already shown is not a point to act on when this strip opens days (`opensDay`).
   const current = opensDay?.current
@@ -550,11 +560,11 @@ export function Sparkline({
           // (and only then) the columns are exactly what every other caller has always had, so no
           // chart without a trend grows an empty column.
           columns: [t('charts.columns.date'), unit, ...(hasTrend ? [t('charts.columns.trend')] : []),
-            ...(comparing ? [t('charts.columns.lastYear')] : []), t('charts.columns.note')],
+            ...(comparing ? [t('charts.columns.lastYear')] : []), ...(referenced ? [referenced.label] : []), t('charts.columns.note')],
           // dayTableRows (base.ts): shared with the bar charts' accessible tables, which need
           // neither the trend column nor the episodic filter, so both default off there.
           rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend,
-            lastYear: comparing ? lastYear : undefined, standings: dots ? pointStandings : undefined,
+            lastYear: comparing ? lastYear : undefined, reference: referenced?.values, standings: dots ? pointStandings : undefined,
             standingUnit: standingUnit ?? METRICS[metric]?.unit }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
