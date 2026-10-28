@@ -133,10 +133,27 @@ test('the sleep spread needs two weeks with at least four nights each', () => {
     .slice(0, nights)
   const one = [...week(0, 7), ...week(1, 3)]
   expect(factor(available({ ...full, bedtimeMinutes: one }), 'sleepRegularity'))
-    .toMatchObject({ missing: 'tooFewDays', value: null, years: 0, days: 10 })
+    .toMatchObject({ missing: 'tooFewWeeks', value: null, years: 0, days: 10 })
   const two = [...week(0, 7), ...week(1, 4)]
   expect(factor(available({ ...full, bedtimeMinutes: two }), 'sleepRegularity').missing).toBeNull()
   expect(factor(available({ ...full, bedtimeMinutes: [] }), 'sleepRegularity').missing).toBe('noReading')
+})
+
+test('fourteen nights three a week are withheld by the weekly rule, and say so', () => {
+  // Three nights in every 7-day block and the two oldest days, which fall in no block: 14 nights is
+  // past MIN_FACTOR_DAYS, but no block has four.
+  const spread = Array.from({ length: 30 }, (_, i) => shiftLocalDate(END, -i))
+    .filter((_, i) => i % 7 < 3)
+    .map((localDate, i) => ({ localDate, value: i % 2 === 0 ? 20 : -20 }))
+  expect(spread).toHaveLength(14)
+  expect(factor(available({ ...full, bedtimeMinutes: spread }), 'sleepRegularity'))
+    .toMatchObject({ missing: 'tooFewWeeks', value: null, years: 0, days: 14 })
+})
+
+test('eight nights in two good weeks count under the weekly rule', () => {
+  const two = bedtimes(20, [0, 0]).filter((b) => b.localDate > shiftLocalDate(END, -14)).filter((_, i) => i % 7 < 4)
+  expect(two).toHaveLength(8)
+  expect(factor(available({ ...full, bedtimeMinutes: two }), 'sleepRegularity')).toMatchObject({ missing: null, days: 8 })
 })
 
 test('the total cap binds', () => {
@@ -151,6 +168,24 @@ test('the total cap binds', () => {
   expect(r.bodyAge - r.calendarAge).toBeCloseTo(BODY_AGE_TOTAL_CAP, 9)
   expect(r.totalCapped).toBe(true)
 })
+
+test('mostRoom never claims more years than the total cap leaves', () => {
+  // Factors summing past +10: taking the largest away moves the printed body age only by what the
+  // sum without it falls below the cap.
+  const r = available({
+    ...full,
+    vo2Max: [{ localDate: END, value: 10 }],
+    restingHeartRate: days(START, 30, 110),
+    activityMinutes: days(START, 30, 0),
+    bedtimeMinutes: bedtimes(200),
+  })
+  const sum = r.factors.reduce((t, f) => t + f.years, 0)
+  const largest = Math.max(...r.factors.map((f) => f.years))
+  expect(r.mostRoom?.key).toBe('vo2Max')
+  expect(r.mostRoom?.years).toBeCloseTo(BODY_AGE_TOTAL_CAP - Math.min(BODY_AGE_TOTAL_CAP, sum - largest), 9)
+  expect(r.mostRoom!.years).toBeLessThan(largest)
+})
+
 
 test('zero strength sessions is a value', () => {
   expect(factor(available(full), 'strength')).toMatchObject({ missing: null, value: 0 })

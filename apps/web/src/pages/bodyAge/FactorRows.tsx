@@ -81,7 +81,13 @@ function FactorRow({ factor, current, method }: { factor: BodyAgeFactor, current
   if (factor.missing !== null || factor.value === null) {
     const note = factor.missing === 'tooFewDays'
       ? t('bodyAge.factors.tooFewDays', { days: factor.days, factor: inline, min: method.minFactorDays })
-      : t('bodyAge.factors.noReading', { factor: inline, days: method.windowDays })
+      : factor.missing === 'tooFewWeeks'
+        // Sleep regularity's own rule, so the note never sets its nights against the ten days the others need.
+        ? t('bodyAge.factors.tooFewWeeks', {
+          days: factor.days, window: method.windowDays, blocks: method.sleep.minBlocks,
+          blockDays: method.sleep.blockDays, nights: method.sleep.minNightsPerBlock,
+        })
+        : t('bodyAge.factors.noReading', { factor: inline, days: method.windowDays })
     return (
       <div className="body-age-factor">
         <div className="body-age-factor-text">
@@ -126,7 +132,8 @@ export function FactorRows({ current, method }: { current: BodyAgeAvailable, met
       {room !== null && (
         <p className="body-age-room"><EmphasisedText line={emphasise(t, 'bodyAge.factors.room', {
           factor: t(`bodyAge.factors.inline.${room.key}`),
-          // What reaching the typical level would take off: the years the factor adds now.
+          // What reaching the reference would take off: the years the factor adds now, or less when
+          // the total cap binds (the server's figure).
           years: formatNumber(room.years, 1, i18n.language, t('common.absent')),
         }, ['factor', 'years'])} /></p>
       )}

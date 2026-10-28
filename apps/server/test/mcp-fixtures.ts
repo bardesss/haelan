@@ -59,9 +59,9 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   // The same scored day, over the same per-person daily_hrv series: its seven-day week and the 60
   // days before that week all sit inside what `insertRecoverySeries` writes.
   hrv_deviation: { from: RECOVERY_ON, to: RECOVERY_ON },
-  // No arguments. Neither fixture person has a birth date, so this answers `enough: false` and
-  // carries nothing of either of them; the real answer is proved against two people in
-  // v1-isolation.test.ts, through the route that rounds the same read.
+  // Only `today`, the one argument the tool takes. Neither fixture person has a birth date, so
+  // this answers `enough: false` and carries nothing of either of them; the real answer is proved
+  // against two people in v1-isolation.test.ts, through the route that rounds the same read.
   body_age: { today: '2026-08-10' },
   // A day with a reading, so the chain stops at its first gate and `evidence.value` carries it.
   explain: { kind: 'empty', metric: 'steps', localDate: '2026-08-01' },

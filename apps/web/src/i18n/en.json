@@ -2040,14 +2040,14 @@
       "names": {
         "vo2Max": "VO₂max",
         "restingHeartRate": "Resting heart rate",
-        "activity": "Active minutes",
+        "activity": "Moderate-to-vigorous minutes",
         "sleepRegularity": "Bedtime variability",
         "strength": "Strength training"
       },
       "inline": {
         "vo2Max": "VO₂max",
         "restingHeartRate": "resting heart rate",
-        "activity": "active minutes",
+        "activity": "moderate-to-vigorous minutes",
         "sleepRegularity": "bedtime variability",
         "strength": "strength training"
       },
@@ -2090,13 +2090,14 @@
       "years": "{{years}} years",
       "noReading": "No {{factor}} in the last {{days}} days",
       "tooFewDays": "Only {{days}} days of {{factor}}, {{min}} needed",
-      "room": "Most room: {{factor}}. At your age's typical level it would count about {{years}} years fewer.",
+      "tooFewWeeks": "{{days}} nights in the last {{window}} days, but fewer than {{blocks}} of its {{blockDays}}-day blocks have {{nights}} nights each",
+      "room": "Most room: {{factor}}. At its reference level it would count about {{years}} years fewer.",
       "caption": "each bar: the years a factor adds or takes away · left of the centre younger, right older, out to its own limit"
     },
     "method": {
       "label": "How it's worked out",
       "how": "Your body age is your calendar age, moved by five factors read over the last {{days}} days. For each, published studies give how much higher or lower the risk of dying from any cause is at your value than at the typical value for your age and sex. That difference is turned into years with one rate for every factor, the yearly rise in adult mortality ({{slope}} on the log scale), so each factor counts in years and they add up.",
-      "limits": "No factor moves it further than its own limit, and all of them together no further than {{cap}} years. A factor counts once it has readings on {{min}} days of the window; VO₂max is your latest reading from the last {{vo2Days}} days.",
+      "limits": "No factor moves it further than its own limit, and all of them together no further than {{cap}} years. A factor counts once it has readings on {{min}} days of the window, except bedtime variability, which needs at least {{nights}} nights in each of {{blocks}} of the window's {{blockDays}}-day blocks; VO₂max is your latest reading from the last {{vo2Days}} days.",
       "factor": "{{factor}}, up to {{cap}} years.",
       "sources": "Sources",
       "citation": "{{factor}}: {{citation}}",
@@ -2108,7 +2109,7 @@
     },
     "empty": {
       "title": "No body age yet",
-      "detail": "It is worked out from your VO₂max, resting heart rate, active minutes, bedtimes and strength training once they have synced."
+      "detail": "It is worked out from your VO₂max, resting heart rate, moderate-to-vigorous minutes, bedtimes and strength training once they have synced."
     }
   }
 }

@@ -16,7 +16,7 @@ import { dayTooltip } from '../src/charts/dayTooltip.js'
 
 // The trend strip, stubbed so a test can read what it was handed (recovery.test.tsx's idiom).
 type SparklineProps = {
-  label: string, values: (number | null)[], reference?: { values: (number | null)[], label: string }
+  label: string, values: (number | null)[], labels: string[], reference?: { values: (number | null)[], label: string }
   baseline?: { low: number, high: number }, bandLabels?: { low: string, high: string }
   rangeLabels?: { low: number, high: number, lowText: string, highText: string }
 }
@@ -33,13 +33,14 @@ const TODAY = localToday(PERSON.effectiveTimezone)
 const EARLIER = addDays(TODAY, -14)
 
 const METHOD: BodyAgeRead['method'] = {
-  windowDays: 30, vo2LookbackDays: 180, minFactorDays: 10, gompertzSlope: 0.085, totalCap: 10,
+  windowDays: 30, vo2LookbackDays: 180, minFactorDays: 10, gompertzSlope: 0.085, totalCap: 10, totalCapBasis: 'evidence',
+  sleep: { blockDays: 7, minBlocks: 2, minNightsPerBlock: 4 },
   factors: [
-    { key: 'vo2Max', unit: 'ml/kg/min', cap: 6, citation: 'Kodama et al. 2009.' },
-    { key: 'restingHeartRate', unit: 'bpm', cap: 3, citation: 'Zhang, Shen & Qi 2016.' },
-    { key: 'activity', unit: 'min/week', cap: 2.5, citation: 'Arem et al. 2015.' },
-    { key: 'sleepRegularity', unit: 'min', cap: 3.5, citation: 'Windred et al. 2024.' },
-    { key: 'strength', unit: 'sessions/week', cap: 2, citation: 'Momma et al. 2022.' },
+    { key: 'vo2Max', unit: 'ml/kg/min', cap: 6, capBasis: 'evidence', citation: 'Kodama et al. 2009.' },
+    { key: 'restingHeartRate', unit: 'bpm', cap: 3, capBasis: 'evidence', citation: 'Zhang, Shen & Qi 2016.' },
+    { key: 'activity', unit: 'min/week', cap: 2.5, capBasis: 'probe', citation: 'Arem et al. 2015.' },
+    { key: 'sleepRegularity', unit: 'min', cap: 3.5, capBasis: 'probe', citation: 'Windred et al. 2024.' },
+    { key: 'strength', unit: 'sessions/week', cap: 2, capBasis: 'evidence', citation: 'Momma et al. 2022.' },
   ],
 }
 
@@ -163,7 +164,7 @@ describe('the body age page', () => {
     const card = cardFor('What moves it')!
     const rows = [...card.querySelectorAll('.body-age-factor')]
     expect(rows.map((row) => row.querySelector('.label')?.textContent))
-      .toEqual(['VO₂max', 'Resting heart rate', 'Active minutes', 'Bedtime variability', 'Strength training'])
+      .toEqual(['VO₂max', 'Resting heart rate', 'Moderate-to-vigorous minutes', 'Bedtime variability', 'Strength training'])
     const vo2 = rows[0]!
     expect(vo2.querySelector('.figure-row-value')?.textContent).toBe('47.2 ml/kg/min')
     expect(vo2.querySelector('.body-age-factor-note')?.textContent).toBe('above your age\'s average of 42.4 · fitness age 35.0')
@@ -179,7 +180,7 @@ describe('the body age page', () => {
     expect(strength.querySelector('.body-age-factor-years')?.classList.contains('better')).toBe(false)
     expect(strength.querySelector('.body-age-factor-years')?.classList.contains('worse')).toBe(false)
     expect(card.querySelector('.body-age-room')?.textContent)
-      .toBe('Most room: bedtime variability. At your age\'s typical level it would count about 0.6 years fewer.')
+      .toBe('Most room: bedtime variability. At its reference level it would count about 0.6 years fewer.')
   })
 
   it('builds how it is worked out from the method alone', async () => {
@@ -194,9 +195,36 @@ describe('the body age page', () => {
     expect(sources[0]!.open).toBe(false)
     expect(sources[0]!.querySelector('summary')?.textContent).toBe('Sources')
     expect([...sources[0]!.querySelectorAll('.body-age-citation')].map((p) => p.textContent))
-      .toEqual(['VO₂max: Kodama et al. 2009.', 'Resting heart rate: Zhang, Shen & Qi 2016.', 'Active minutes: Arem et al. 2015.',
+      .toEqual(['VO₂max: Kodama et al. 2009.', 'Resting heart rate: Zhang, Shen & Qi 2016.', 'Moderate-to-vigorous minutes: Arem et al. 2015.',
         'Bedtime variability: Windred et al. 2024.', 'Strength training: Momma et al. 2022.'])
     expect(prose).toContain('An estimate from published associations, not a measurement of your cells.')
+    // Sleep regularity counts by its own weekly rule, not the ten days the others need.
+    expect(prose).toContain('A factor counts once it has readings on 10 days of the window, except bedtime variability, '
+      + 'which needs at least 4 nights in each of 2 of the window\'s 7-day blocks;')
+  })
+
+  it('names the activity factor apart from the Activity page\'s active minutes, in Dutch too', async () => {
+    await render(FULL, 'nl')
+    const rows = [...cardFor('Wat het beweegt')!.querySelectorAll('.body-age-factor')]
+    expect(rows[2]!.querySelector('.label')?.textContent).toBe('Matige tot zware activiteit')
+    const prose = cardFor('Hoe het berekend wordt')!.textContent ?? ''
+    expect(prose).toContain('Matige tot zware activiteit, tot 2,5 jaar.')
+    expect(prose).toContain('behalve variatie in bedtijd: die heeft in minstens 2 blokken van 7 dagen elk 4 nachten nodig;')
+  })
+
+  it('leaves a gap on the strip for a month core withheld', async () => {
+    await render(read({
+      months: [
+        { month: '2026-05', endDate: '2026-05-31', bodyAge: 33.0, calendarAge: 38.0, gap: -5 },
+        { month: '2026-06', endDate: '2026-06-30', bodyAge: 33.4, calendarAge: 38.1, gap: -4.7 },
+        { month: '2026-09', endDate: '2026-09-30', bodyAge: 34.6, calendarAge: 38.4, gap: -3.8 },
+      ],
+      youngest: null,
+    }))
+    const strip = sparklines.get('Body age')!
+    expect(strip.values).toEqual([33.0, 33.4, null, null, 34.6])
+    expect(strip.reference?.values).toEqual([38.0, 38.1, null, null, 38.4])
+    expect(strip.labels).toEqual(['2026-05-31', '2026-06-30', '2026-07-31', '2026-08-31', '2026-09-30'])
   })
 
   it('hides the pace, the change, the youngest, the carrier and the most room when each is missing', async () => {
@@ -222,7 +250,7 @@ describe('the body age page', () => {
     const sterkte = [...cardFor('Wat het beweegt')!.querySelectorAll('.body-age-factor')][4]!
     expect(sterkte.querySelector('.body-age-factor-note')?.textContent).toBe('tegenover een referentie van geen')
     expect(cardFor('Wat het beweegt')!.querySelector('.body-age-room')?.textContent)
-      .toBe('Meeste ruimte: variatie in bedtijd. Op het typische niveau voor je leeftijd zou het ongeveer 0,6 jaar minder tellen.')
+      .toBe('Meeste ruimte: variatie in bedtijd. Op het referentieniveau zou het ongeveer 0,6 jaar minder tellen.')
   })
 
   it('says why a factor does not count', async () => {
@@ -234,7 +262,20 @@ describe('the body age page', () => {
     const rows = [...cardFor('What moves it')!.querySelectorAll('.body-age-factor')]
     expect(rows[1]!.querySelector('.body-age-factor-note')?.textContent).toBe('No resting heart rate in the last 30 days')
     expect(rows[1]!.querySelector('.body-age-factor-years')).toBeNull()
-    expect(rows[2]!.querySelector('.body-age-factor-note')?.textContent).toBe('Only 6 days of active minutes, 10 needed')
+    expect(rows[2]!.querySelector('.body-age-factor-note')?.textContent).toBe('Only 6 days of moderate-to-vigorous minutes, 10 needed')
+  })
+
+  it.each([
+    ['en', 'What moves it', '14 nights in the last 30 days, but fewer than 2 of its 7-day blocks have 4 nights each'],
+    ['nl', 'Wat het beweegt', '14 nachten in de afgelopen 30 dagen, maar minder dan 2 van de blokken van 7 dagen hebben elk 4 nachten'],
+  ] as const)('in %s, says sleep regularity\'s own rule when its weeks are too thin', async (lng, label, sentence) => {
+    await render(current({
+      factors: CURRENT.factors.map((factor) => factor.key === 'sleepRegularity'
+        ? { ...factor, value: null, reference: null, years: 0, days: 14, missing: 'tooFewWeeks' as const }
+        : factor),
+    }), lng)
+    const rows = [...cardFor(label)!.querySelectorAll('.body-age-factor')]
+    expect(rows[3]!.querySelector('.body-age-factor-note')?.textContent).toBe(sentence)
   })
 
   it('keeps the header over a failed read, and over no body age says so', async () => {

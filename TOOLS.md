@@ -576,7 +576,7 @@ The 7-day average of heart rate variability against this person's own band for e
 
 ### body_age
 
-A body age: the calendar age whose mortality risk matches this person's resting heart rate, VO2 max, weekly activity, bedtime regularity and strength training over the last 30 days, each read against the typical value for their age and sex. It is an estimate from published associations, not a measurement of cells or of anything inside the body. Read at the most recent day with a resting heart rate, named in `asOf`. `gap` is body age minus calendar age (negative is younger), the sum of the factors' `years`, held within a total cap. `carriedBy` names the factor holding at least half the years in the gap's direction, and `mostRoom` the factor adding the most years, the one that would give the most back at its typical value. `pace` is years of body age lived per calendar year over the last twelve months (1 is keeping pace, under 1 is slowing). `changeAgainstPrevious` is the body age now minus the body age 30 days earlier. `fitnessAge` is the age at which this VO2 max would be typical, null outside 25-75. A person with `enough: false` has no body age: `missing` lists what is absent (birthDate, sex, or a VO2 max reading in the last 180 days) and every figure is null. `enough: false` with `missing` and `asOf` both null means there is no scored day at all. A factor with `missing` set adds nothing and is not the same as a typical value. Report a finding as association with how the days were lived, never as advice, risk or a clinical claim.
+A body age: the calendar age whose mortality risk matches this person's resting heart rate, VO2 max, weekly activity, bedtime regularity and strength training over the last 30 days, each read against the typical value for their age and sex. It is an estimate from published associations, not a measurement of cells or of anything inside the body. Read at the most recent day with a resting heart rate or HRV, named in `asOf`. `gap` is body age minus calendar age (negative is younger), the sum of the factors' `years`, held within a total cap. `carriedBy` names the factor holding at least half the years in the gap's direction, and `mostRoom` the factor adding the most years, the one that would give the most back at its typical value. `pace` is years of body age lived per calendar year over the last twelve months (1 is keeping pace, under 1 is slowing). `changeAgainstPrevious` is the body age now minus the body age 30 days earlier. `fitnessAge` is the age at which this VO2 max would be typical, null outside 25-75. A person with `enough: false` has no body age: `missing` lists what is absent (birthDate, sex, or a VO2 max reading in the last 180 days) and every figure is null. `enough: false` with `missing` and `asOf` both null means there is no scored day at all. A factor with `missing` set adds nothing and is not the same as a typical value. Report a finding as association with how the days were lived, never as advice, risk or a clinical claim.
 
 **Input**
 
@@ -593,7 +593,7 @@ A body age: the calendar age whose mortality risk matches this person's resting 
 - **pace** (number, nullable) — Null until the history reaches back twelve months.
 - **changeAgainstPrevious** (number, nullable) — Body age now minus body age 30 days earlier, years. Null when either is unavailable.
 - **carriedBy** ('vo2Max' | 'restingHeartRate' | 'hrv' | 'activity' | 'sleepRegularity' | 'strength', nullable) — Null when no single factor holds half the years in the gap's direction.
-- **mostRoom** (object, nullable) — The factor adding the most years, with those years. Null when no factor adds any.
+- **mostRoom** (object, nullable) — The factor adding the most years, with the years the body age would lose at its typical value: its own years, or less when the total cap binds. Null when no factor would give any back.
   - **key** ('vo2Max' | 'restingHeartRate' | 'hrv' | 'activity' | 'sleepRegularity' | 'strength')
   - **years** (number)
 - **fitnessAge** (number, nullable)
@@ -603,7 +603,7 @@ A body age: the calendar age whose mortality risk matches this person's resting 
   - **reference** (number, nullable) — The typical figure for this age and sex, same unit. Null when `missing` is set.
   - **years** (number) — Years this factor adds (positive) or takes away (negative), within its own cap. 0 when `missing` is set.
   - **capped** (boolean) — True when the factor hit its own cap, so a larger difference would not have moved it further.
-  - **missing** ('tooFewDays' | 'noReading', nullable) — Null when the factor was scored. Otherwise it had too few days in the 30-day window, or none, and adds 0 years - withheld, not scored as typical.
+  - **missing** ('tooFewDays' | 'tooFewWeeks' | 'noReading', nullable) — Null when the factor was scored. Otherwise it had too few days in the 30-day window (`tooFewWeeks` for sleepRegularity: fewer than two of its 7-day blocks have 4 nights each), or none, and adds 0 years - withheld, not scored as typical.
 
 ### explain
 

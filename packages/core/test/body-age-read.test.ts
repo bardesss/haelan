@@ -110,6 +110,31 @@ describe('readBodyAge', () => {
     expect(input.vo2Max.every((d) => d.value === 50)).toBe(true)
   })
 
+  it('merges the VO2 metrics, so a device switch does not withhold today', () => {
+    // An old watch wrote daily_vo2_max until a year ago; the new one writes only run_vo2_max.
+    const old = shiftLocalDate(TODAY, -400)
+    test.db.insert(daily).values({
+      personId: 'p1', localDate: old, metric: 'daily_vo2_max', agg: 'last', source: 'merged', value: 50, coverage: 1,
+      sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    seed('run_vo2_max', 'last', (d) => (d === shiftLocalDate(TODAY, -3) ? 41 : null))
+    seed('resting_heart_rate', 'last', () => 60)
+    const { input } = readBodyAgeInput(test.db, 'p1', { today: TODAY })
+    expect(input.vo2Max).toEqual([{ localDate: old, value: 50 }, { localDate: shiftLocalDate(TODAY, -3), value: 41 }])
+    const current = readBodyAge(test.db, 'p1', { today: TODAY }).current
+    expect(current?.enough).toBe(true)
+    expect(current?.enough && current.vo2MaxDate).toBe(shiftLocalDate(TODAY, -3))
+    expect(current?.enough && current.factors.find((f) => f.key === 'vo2Max')?.value).toBe(41)
+  })
+
+  it('keeps the preferred VO2 metric on a day both have, and the other on days only it has', () => {
+    seed('daily_vo2_max', 'last', (_, i) => (i % 2 === 0 ? 50 : null))
+    seed('run_vo2_max', 'last', () => 30)
+    const { input } = readBodyAgeInput(test.db, 'p1', { today: TODAY })
+    expect(input.vo2Max).toHaveLength(60)
+    expect(input.vo2Max.every((d, i) => d.value === (i % 2 === 0 ? 50 : 30))).toBe(true)
+  })
+
   it('does not count a session that is not strength training', () => {
     seedEverything()
     seedWorkout(shiftLocalDate(TODAY, -5), 'RUNNING')
@@ -156,7 +181,17 @@ describe('readBodyAge', () => {
 
   it('lists every factor with its cap and citation as the method', () => {
     const { method } = readBodyAge(test.db, 'p1', { today: TODAY })
-    expect(method.factors).toEqual(BODY_AGE_FACTORS.map(({ key, unit, cap, citation }) => ({ key, unit, cap, citation })))
+    expect(method.factors).toEqual(BODY_AGE_FACTORS.map(({ key, unit, cap, capBasis, citation }) => ({ key, unit, cap, capBasis, citation })))
+  })
+
+  it('says which rule set each cap, and the weekly rule sleep regularity counts by', () => {
+    const { method } = readBodyAge(test.db, 'p1', { today: TODAY })
+    // The probe widened the two caps its household ran past; the rest kept their evidence caps.
+    expect(Object.fromEntries(method.factors.map((f) => [f.key, f.capBasis]))).toEqual({
+      vo2Max: 'evidence', restingHeartRate: 'evidence', activity: 'probe', sleepRegularity: 'probe', strength: 'evidence',
+    })
+    expect(method.totalCapBasis).toBe('evidence')
+    expect(method.sleep).toEqual({ blockDays: 7, minBlocks: 2, minNightsPerBlock: 4 })
   })
 
   it('is reachable through PersonQuery, and rejects a bad date', () => {

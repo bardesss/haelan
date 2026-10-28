@@ -58,12 +58,41 @@ function verdictOf(current: BodyAgeAvailable, language: string, t: Translate): s
   return t('bodyAge.hero.same', { age })
 }
 
-const monthValues = (months: readonly BodyAgeMonth[], pick: (month: BodyAgeMonth) => number) => months.map(pick)
+/** The month after `YYYY-MM`. */
+function nextMonth(month: string): string {
+  const [year, index] = month.split('-').map(Number) as [number, number]
+  return index === 12 ? `${year + 1}-01` : `${year}-${String(index + 1).padStart(2, '0')}`
+}
+
+/** The last day of `YYYY-MM`, the date a month the server left out is labelled by. */
+function monthEnd(month: string): string {
+  const [year, index] = month.split('-').map(Number) as [number, number]
+  return new Date(Date.UTC(year, index, 0)).toISOString().slice(0, 10)
+}
+
+/**
+ * Every month from the first on record to the last, the ones core withheld as null, so the strip
+ * draws a gap where there is no body age rather than joining the months either side (the spec's
+ * "gaps, not zeros"). A month on record keeps its own end date as its label.
+ */
+export function denseMonths(months: readonly BodyAgeMonth[]): { label: string, month: BodyAgeMonth | null }[] {
+  const first = months[0]
+  const last = months[months.length - 1]
+  if (first === undefined || last === undefined) return []
+  const byMonth = new Map(months.map((month) => [month.month, month]))
+  const slots: { label: string, month: BodyAgeMonth | null }[] = []
+  for (let month = first.month; month <= last.month; month = nextMonth(month)) {
+    const found = byMonth.get(month) ?? null
+    slots.push({ label: found?.endDate ?? monthEnd(month), month: found })
+  }
+  return slots
+}
 
 /**
  * The page's lead, PeriodHero's markup over the body age read (PATTERNS.md's hero): the body age
  * over the window in display type, the verdict against the calendar age in the verdict's tone,
- * the quiet lines under it, and beside them a strip of the months on record, the calendar age as
+ * the quiet lines under it, and beside them a strip of the months on record (a gap for each month
+ * without a body age), the calendar age as
  * its dashed reference line (Sparkline's `reference`) and the youngest month ringed when it was
  * younger, the range the two lines span labelled at its left edge. One point joins nothing, so
  * the strip needs two months.
@@ -76,6 +105,7 @@ export function BodyAgeHero({ read, current }: { read: BodyAgeRead, current: Bod
   const label = t('bodyAge.title')
   const strip = useMemo(() => {
     if (months.length < 2) return null
+    const slots = denseMonths(months)
     const youngest = read.youngest !== null && read.youngest.gap < 0 ? read.youngest.month : null
     // The range both lines span, labelled at the strip's left edge as every hero strip's band is,
     // so the reader can read the ages off it.
@@ -86,10 +116,11 @@ export function BodyAgeHero({ read, current }: { read: BodyAgeRead, current: Bod
       // Labels with no band (Sparkline's rangeLabels): a band would say "your usual", which a
       // body age has none of.
       range: { low, high, lowText: formatNumber(low, 1, language, t('common.absent')), highText: formatNumber(high, 1, language, t('common.absent')) },
-      values: monthValues(months, (month) => month.bodyAge),
-      labels: months.map((month) => month.endDate),
-      reference: { values: monthValues(months, (month) => month.calendarAge), label: t('bodyAge.hero.calendarAge') },
-      marks: months.map((month) => (month.month === youngest ? 'good' as const : undefined)),
+      values: slots.map((slot) => slot.month?.bodyAge ?? null),
+      labels: slots.map((slot) => slot.label),
+      // Null in the gaps too; Sparkline joins its reference line across them, the readings it breaks.
+      reference: { values: slots.map((slot) => slot.month?.calendarAge ?? null), label: t('bodyAge.hero.calendarAge') },
+      marks: slots.map((slot) => (slot.month !== null && slot.month.month === youngest ? 'good' as const : undefined)),
     }
   }, [months, read.youngest, language, t])
   const formatValue = useMemo(

@@ -1,9 +1,10 @@
 import { and, eq, inArray, min } from 'drizzle-orm'
 import {
-  BODY_AGE_FACTORS, BODY_AGE_TOTAL_CAP, BODY_AGE_WINDOW_DAYS, GOMPERTZ_SLOPE, MIN_FACTOR_DAYS, VO2_LOOKBACK_DAYS,
+  BODY_AGE_FACTORS, BODY_AGE_TOTAL_CAP, BODY_AGE_TOTAL_CAP_BASIS, BODY_AGE_WINDOW_DAYS, GOMPERTZ_SLOPE, MIN_FACTOR_DAYS,
+  MIN_NIGHTS_PER_BLOCK, MIN_SLEEP_BLOCKS, SLEEP_BLOCK_DAYS, VO2_LOOKBACK_DAYS,
   bodyAgeHistory,
 } from '../api/bodyAge.ts'
-import type { BodyAgeFactorKey, BodyAgeHistory, BodyAgeInput } from '../api/bodyAge.ts'
+import type { BodyAgeFactorKey, BodyAgeHistory, BodyAgeInput, CapBasis } from '../api/bodyAge.ts'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, people } from '../db/schema/index.ts'
 import { VO2_METRICS } from './activityPeriod.ts'
@@ -28,7 +29,11 @@ export interface BodyAgeMethod {
   minFactorDays: number
   gompertzSlope: number
   totalCap: number
-  factors: Array<{ key: BodyAgeFactorKey, unit: string, cap: number, citation: string }>
+  /** Which rule set `totalCap`, as each factor's `capBasis` says for its own cap. */
+  totalCapBasis: CapBasis
+  /** Sleep regularity's own rule in place of `minFactorDays`: `minBlocks` 7-day blocks of `minNightsPerBlock` nights. */
+  sleep: { blockDays: number, minBlocks: number, minNightsPerBlock: number }
+  factors: Array<{ key: BodyAgeFactorKey, unit: string, cap: number, capBasis: CapBasis, citation: string }>
 }
 
 export interface BodyAgeRead extends BodyAgeHistory {
@@ -43,7 +48,9 @@ const BODY_AGE_METHOD: BodyAgeMethod = {
   minFactorDays: MIN_FACTOR_DAYS,
   gompertzSlope: GOMPERTZ_SLOPE,
   totalCap: BODY_AGE_TOTAL_CAP,
-  factors: BODY_AGE_FACTORS.map(({ key, unit, cap, citation }) => ({ key, unit, cap, citation })),
+  totalCapBasis: BODY_AGE_TOTAL_CAP_BASIS,
+  sleep: { blockDays: SLEEP_BLOCK_DAYS, minBlocks: MIN_SLEEP_BLOCKS, minNightsPerBlock: MIN_NIGHTS_PER_BLOCK },
+  factors: BODY_AGE_FACTORS.map(({ key, unit, cap, capBasis, citation }) => ({ key, unit, cap, capBasis, citation })),
 }
 
 /**
@@ -62,12 +69,16 @@ export function readBodyAgeInput(db: DbOrTx, personId: string, input: { today: s
   const fetch = (metric: string, agg: 'last' | 'sum'): SeriesResult => q.series({ metric, agg, from, to: input.today })
   const toDayValues = (result: SeriesResult) => result.points.map((p) => ({ localDate: p.localDate, value: p.value }))
 
-  // The first VO2 metric with any row in the span; the three are one quantity from different sources.
-  let vo2Max: ReturnType<typeof toDayValues> = []
+  // The three VO2 metrics are one quantity from different sources, merged into one daily series so
+  // a device that switched from one to another still has a recent reading. On a day two of them
+  // have, the one earlier in VO2_METRICS' order of preference is kept.
+  const vo2ByDate = new Map<string, number>()
   for (const metric of VO2_METRICS) {
-    const result = fetch(metric, 'last')
-    if (result.points.length > 0) { vo2Max = toDayValues(result); break }
+    for (const p of fetch(metric, 'last').points) if (!vo2ByDate.has(p.localDate)) vo2ByDate.set(p.localDate, p.value)
   }
+  const vo2Max = [...vo2ByDate]
+    .map(([localDate, value]) => ({ localDate, value }))
+    .sort((a, b) => a.localDate.localeCompare(b.localDate))
 
   // Vigorous minutes count double (the activity factor expects that). A date is present when either has a row.
   const activity = new Map<string, number>()

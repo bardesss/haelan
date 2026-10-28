@@ -40,11 +40,19 @@ export type BodyAgeFactorKey = 'vo2Max' | 'restingHeartRate' | 'hrv' | 'activity
 
 export type Sex = 'male' | 'female'
 
+/** Which rule set a cap: the provisional evidence cap, or the probe's p95 that widened it. */
+export type CapBasis = 'evidence' | 'probe'
+
 export interface BodyAgeFactorSpec {
   key: BodyAgeFactorKey
   unit: string
   /** The most years this factor may add or take away on its own. */
   cap: number
+  /**
+   * Which rule set `cap`: `'evidence'` when the provisional cap from the evidence stood, `'probe'`
+   * when the probe's p95 (rounded up to 0.5) ran past it and widened it. The larger of the two wins.
+   */
+  capBasis: CapBasis
   /** Study, table or figure, and population for every figure the factor uses. */
   citation: string
   /** The typical value for this age and sex. A person at it scores zero years on this factor. */
@@ -68,8 +76,9 @@ export const GOMPERTZ_SLOPE = 0.085
  * person tends to have a low resting heart rate too), so adding their log hazards as if they were
  * independent over-counts. The total cap is where that is admitted.
  */
-// measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+// measured: probe/scripts/body-age.mjs p95 |sum| 5.57 (↑ 6) is under the evidence cap 10 (rule: evidence)
 export const BODY_AGE_TOTAL_CAP = 10
+export const BODY_AGE_TOTAL_CAP_BASIS: CapBasis = 'evidence'
 
 /** The window is the 30 days ending on the most recent scored day: weeks, not one night. */
 export const BODY_AGE_WINDOW_DAYS = 30
@@ -228,8 +237,9 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'vo2Max',
     unit: 'ml/kg/min',
-    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+    // measured: probe/scripts/body-age.mjs p95 2.44 (↑ 2.5) is under the evidence cap 6 (rule: evidence)
     cap: 6,
+    capBasis: 'evidence',
     citation:
       'Hazard: Kodama et al. 2009, JAMA 301:2024-2035, abstract (pooled all-cause RR 0.87, 95% CI 0.84-0.90, '
       + 'per 1-MET higher maximal aerobic capacity; 33 cohorts of healthy men and women, 102,980 participants, '
@@ -242,8 +252,9 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'restingHeartRate',
     unit: 'bpm',
-    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+    // measured: probe/scripts/body-age.mjs p95 0.14 (↑ 0.5) is under the evidence cap 3 (rule: evidence)
     cap: 3,
+    capBasis: 'evidence',
     citation:
       'Hazard: Zhang, Shen & Qi 2016, CMAJ 188:E53-E63, abstract and dose-response analysis (all-cause RR 1.09, '
       + '95% CI 1.07-1.12, per 10 beats/min; 46 cohorts of the general population, 1,246,203 participants, '
@@ -258,8 +269,9 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
     // Minutes a week in which vigorous minutes already count double: the caller builds each day's
     // value as moderate + 2 × vigorous, as the paper's MET hours do.
     unit: 'min/week',
-    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+    // measured: probe/scripts/body-age.mjs p95 2.32 (↑ 2.5) is over the evidence cap 2 (rule: probe)
     cap: 2.5,
+    capBasis: 'probe',
     citation:
       'Arem et al. 2015, JAMA Intern Med 175:959-967, Results and Figure 1, all-cause HR by leisure-time '
       + 'MVPA band against none (0.80, 0.69, 0.63, 0.61, 0.61 for 0.1-<7.5 to 40-<75 MET h/wk; 661,137 adults '
@@ -272,8 +284,9 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'sleepRegularity',
     unit: 'min',
-    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+    // measured: probe/scripts/body-age.mjs p95 3.38 (↑ 3.5) is over the evidence cap 2 (rule: probe)
     cap: 3.5,
+    capBasis: 'probe',
     citation:
       'Windred et al. 2024, Sleep 47:zsad253, Table 2 (all-cause HR by Sleep Regularity Index quintile, fully '
       + 'adjusted: 1.00, 0.80, 0.75, 0.72, 0.70; 60,977 UK Biobank adults aged ~44-79 with wrist accelerometry). '
@@ -287,8 +300,9 @@ export const BODY_AGE_FACTORS: readonly BodyAgeFactorSpec[] = [
   {
     key: 'strength',
     unit: 'sessions/week',
-    // measured: probe/scripts/body-age.mjs p95; cap = max(p95↑0.5, prior evidence cap)
+    // measured: probe/scripts/body-age.mjs p95 0.00 is under the evidence cap 2 (rule: evidence)
     cap: 2,
+    capBasis: 'evidence',
     citation:
       'Momma et al. 2022, BJSM 56:755-763, Table 1 and Figure 2 (all-cause RR 0.85, 95% CI 0.79-0.93, any '
       + 'muscle-strengthening activity against none; 7 cohorts, 263,058 adults without severe health '
@@ -411,9 +425,13 @@ export interface BodyAgeFactor {
   reference: number | null
   years: number
   capped: boolean
-  /** Days with a reading in the window. */
+  /** Days with a reading in the window (for sleep regularity, nights with a bedtime). */
   days: number
-  missing: 'tooFewDays' | 'noReading' | null
+  /**
+   * Why the factor does not count. `tooFewWeeks` is sleep regularity's own rule: it has nights,
+   * but fewer than `MIN_SLEEP_BLOCKS` of its 7-day blocks have `MIN_NIGHTS_PER_BLOCK` nights.
+   */
+  missing: 'tooFewDays' | 'tooFewWeeks' | 'noReading' | null
 }
 
 export interface BodyAgeUnavailable {
@@ -432,6 +450,10 @@ export interface BodyAgeAvailable {
   totalCapped: boolean
   factors: BodyAgeFactor[]
   carriedBy: BodyAgeFactorKey | null
+  /**
+   * The factor adding the most years, with what the body age would lose were it at its reference:
+   * its own years, or less when the total cap binds. Null when no factor would give any back.
+   */
   mostRoom: { key: BodyAgeFactorKey, years: number } | null
   fitnessAge: number | null
   vo2MaxDate: string | null
@@ -451,10 +473,14 @@ function sampleStandardDeviation(values: readonly number[]): number {
   return Math.sqrt(values.reduce((t, v) => t + (v - m) ** 2, 0) / (values.length - 1))
 }
 
-const SLEEP_BLOCK_DAYS = 7
+/**
+ * Sleep regularity counts by weeks, not by MIN_FACTOR_DAYS: at least `MIN_SLEEP_BLOCKS` of the
+ * window's 7-day blocks need `MIN_NIGHTS_PER_BLOCK` nights each.
+ */
+export const SLEEP_BLOCK_DAYS = 7
 const SLEEP_BLOCKS = 4
-const MIN_NIGHTS_PER_BLOCK = 4
-const MIN_SLEEP_BLOCKS = 2
+export const MIN_NIGHTS_PER_BLOCK = 4
+export const MIN_SLEEP_BLOCKS = 2
 
 /**
  * The mean of the sample SDs of bedtime over consecutive 7-day blocks ending on `endDate`, or null
@@ -542,7 +568,7 @@ export function bodyAgeAt(input: BodyAgeInput, endDate: string): BodyAge {
     if (value === null) {
       return {
         key: spec.key, value: null, reference: null, years: 0, capped: false, days,
-        missing: days === 0 ? 'noReading' : 'tooFewDays',
+        missing: days === 0 ? 'noReading' : spec.key === 'sleepRegularity' ? 'tooFewWeeks' : 'tooFewDays',
       }
     }
     const reference = spec.reference(calendarAge, sex)
@@ -552,8 +578,14 @@ export function bodyAgeAt(input: BodyAgeInput, endDate: string): BodyAge {
 
   const sum = factors.reduce((t, f) => t + f.years, 0)
   const totalCapped = Math.abs(sum) > BODY_AGE_TOTAL_CAP
-  const gap = Math.max(-BODY_AGE_TOTAL_CAP, Math.min(BODY_AGE_TOTAL_CAP, sum)) + 0
+  const held = (total: number) => Math.max(-BODY_AGE_TOTAL_CAP, Math.min(BODY_AGE_TOTAL_CAP, total))
+  const gap = held(sum) + 0
   const positive = factors.filter((f) => f.years > 0).sort((a, b) => b.years - a.years)
+  // What the printed body age would lose if the factor came to its reference: its own years, unless
+  // the total cap binds, when only the part of the sum without it that falls under the cap. The
+  // largest factor still gives the most back, and a factor that would give nothing back is not named.
+  const largest = positive[0]
+  const room = largest === undefined ? 0 : totalCapped ? gap - held(sum - largest.years) : largest.years
 
   return {
     enough: true,
@@ -565,7 +597,7 @@ export function bodyAgeAt(input: BodyAgeInput, endDate: string): BodyAge {
     totalCapped,
     factors,
     carriedBy: carriedByOf(factors, gap),
-    mostRoom: positive[0] === undefined ? null : { key: positive[0].key, years: positive[0].years },
+    mostRoom: largest === undefined || room <= 0 ? null : { key: largest.key, years: room },
     fitnessAge: fitnessAgeOf(vo2.value, sex),
     vo2MaxDate: vo2.localDate,
   }

@@ -14,9 +14,10 @@ const FACTOR = z.object({
   reference: z.number().nullable().describe('The typical figure for this age and sex, same unit. Null when `missing` is set.'),
   years: z.number().describe('Years this factor adds (positive) or takes away (negative), within its own cap. 0 when `missing` is set.'),
   capped: z.boolean().describe('True when the factor hit its own cap, so a larger difference would not have moved it further.'),
-  missing: z.enum(['tooFewDays', 'noReading']).nullable().describe(
-    'Null when the factor was scored. Otherwise it had too few days in the 30-day window, or none, '
-    + 'and adds 0 years - withheld, not scored as typical.',
+  missing: z.enum(['tooFewDays', 'tooFewWeeks', 'noReading']).nullable().describe(
+    'Null when the factor was scored. Otherwise it had too few days in the 30-day window '
+    + '(`tooFewWeeks` for sleepRegularity: fewer than two of its 7-day blocks have 4 nights each), '
+    + 'or none, and adds 0 years - withheld, not scored as typical.',
   ),
 })
 
@@ -27,7 +28,7 @@ export const bodyAgeTool = defineTool({
     + 'VO2 max, weekly activity, bedtime regularity and strength training over the last 30 days, each '
     + 'read against the typical value for their age and sex. It is an estimate from published '
     + 'associations, not a measurement of cells or of anything inside the body. Read at the most '
-    + 'recent day with a resting heart rate, named in `asOf`. `gap` is body age minus calendar age '
+    + 'recent day with a resting heart rate or HRV, named in `asOf`. `gap` is body age minus calendar age '
     + '(negative is younger), the sum of the factors\' `years`, held within a total cap. `carriedBy` '
     + 'names the factor holding at least half the years in the gap\'s direction, and `mostRoom` the '
     + 'factor adding the most years, the one that would give the most back at its typical value. `pace` is years '
@@ -62,7 +63,8 @@ export const bodyAgeTool = defineTool({
     ),
     carriedBy: FACTOR_KEY.nullable().describe('Null when no single factor holds half the years in the gap\'s direction.'),
     mostRoom: z.object({ key: FACTOR_KEY, years: z.number() }).nullable().describe(
-      'The factor adding the most years, with those years. Null when no factor adds any.',
+      'The factor adding the most years, with the years the body age would lose at its typical value: '
+      + 'its own years, or less when the total cap binds. Null when no factor would give any back.',
     ),
     fitnessAge: z.number().nullable(),
     factors: z.array(FACTOR).describe('Empty when `enough` is false.'),

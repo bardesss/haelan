@@ -22,9 +22,10 @@ export interface BodyAgeFactor {
   years: number
   /** Whether the factor's own cap bound its years. */
   capped: boolean
-  /** Days with a reading in the window. */
+  /** Days with a reading in the window (for sleep regularity, nights with a bedtime). */
   days: number
-  missing: 'tooFewDays' | 'noReading' | null
+  /** `tooFewWeeks` is sleep regularity's own rule (`BodyAgeMethod.sleep`), not too few days. */
+  missing: 'tooFewDays' | 'tooFewWeeks' | 'noReading' | null
 }
 
 export interface BodyAgeUnavailable {
@@ -45,7 +46,7 @@ export interface BodyAgeAvailable {
   factors: BodyAgeFactor[]
   /** The factor with most of the gap in its direction, named only when it carries at least half. */
   carriedBy: BodyAgeFactorKey | null
-  /** The factor whose reaching its typical level would move the figure most, and by how much. */
+  /** The factor whose reaching its reference would move the figure most, and by how much (within the total cap). */
   mostRoom: { key: BodyAgeFactorKey, years: number } | null
   fitnessAge: number | null
   vo2MaxDate: string | null
@@ -68,7 +69,11 @@ export interface BodyAgeMethod {
   minFactorDays: number
   gompertzSlope: number
   totalCap: number
-  factors: { key: BodyAgeFactorKey, unit: string, cap: number, citation: string }[]
+  /** Which rule set a cap: the provisional evidence cap, or the probe's p95 that widened it. */
+  totalCapBasis: 'evidence' | 'probe'
+  /** Sleep regularity counts by weeks in place of `minFactorDays`. */
+  sleep: { blockDays: number, minBlocks: number, minNightsPerBlock: number }
+  factors: { key: BodyAgeFactorKey, unit: string, cap: number, capBasis: 'evidence' | 'probe', citation: string }[]
 }
 
 export interface BodyAgeRead {

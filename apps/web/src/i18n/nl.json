@@ -2040,14 +2040,14 @@
       "names": {
         "vo2Max": "VO₂max",
         "restingHeartRate": "Rusthartslag",
-        "activity": "Actieve minuten",
+        "activity": "Matige tot zware activiteit",
         "sleepRegularity": "Variatie in bedtijd",
         "strength": "Krachttraining"
       },
       "inline": {
         "vo2Max": "VO₂max",
         "restingHeartRate": "rusthartslag",
-        "activity": "actieve minuten",
+        "activity": "matige tot zware activiteit",
         "sleepRegularity": "variatie in bedtijd",
         "strength": "krachttraining"
       },
@@ -2090,13 +2090,14 @@
       "years": "{{years}} jaar",
       "noReading": "Geen {{factor}} in de afgelopen {{days}} dagen",
       "tooFewDays": "Pas {{days}} dagen {{factor}}, {{min}} nodig",
-      "room": "Meeste ruimte: {{factor}}. Op het typische niveau voor je leeftijd zou het ongeveer {{years}} jaar minder tellen.",
+      "tooFewWeeks": "{{days}} nachten in de afgelopen {{window}} dagen, maar minder dan {{blocks}} van de blokken van {{blockDays}} dagen hebben elk {{nights}} nachten",
+      "room": "Meeste ruimte: {{factor}}. Op het referentieniveau zou het ongeveer {{years}} jaar minder tellen.",
       "caption": "elke balk: de jaren die een factor erbij doet of eraf haalt · links van het midden jonger, rechts ouder, tot de eigen grens"
     },
     "method": {
       "label": "Hoe het berekend wordt",
       "how": "Je lichaamsleeftijd is je kalenderleeftijd, verschoven door vijf factoren over de afgelopen {{days}} dagen. Voor elk ervan geven gepubliceerde studies hoeveel hoger of lager het risico om aan welke oorzaak ook te overlijden is bij jouw waarde dan bij de typische waarde voor je leeftijd en geslacht. Dat verschil wordt in jaren omgezet met één maat voor elke factor, de jaarlijkse stijging van de sterfte bij volwassenen ({{slope}} op de logschaal), zodat elke factor in jaren telt en ze bij elkaar opgeteld kunnen worden.",
-      "limits": "Geen factor verschuift het verder dan zijn eigen grens, en alle samen niet verder dan {{cap}} jaar. Een factor telt zodra er op {{min}} dagen van de periode metingen zijn; VO₂max is je laatste meting uit de afgelopen {{vo2Days}} dagen.",
+      "limits": "Geen factor verschuift het verder dan zijn eigen grens, en alle samen niet verder dan {{cap}} jaar. Een factor telt zodra er op {{min}} dagen van de periode metingen zijn, behalve variatie in bedtijd: die heeft in minstens {{blocks}} blokken van {{blockDays}} dagen elk {{nights}} nachten nodig; VO₂max is je laatste meting uit de afgelopen {{vo2Days}} dagen.",
       "factor": "{{factor}}, tot {{cap}} jaar.",
       "sources": "Bronnen",
       "citation": "{{factor}}: {{citation}}",
@@ -2108,7 +2109,7 @@
     },
     "empty": {
       "title": "Nog geen lichaamsleeftijd",
-      "detail": "Hij wordt berekend uit je VO₂max, rusthartslag, actieve minuten, bedtijden en krachttraining zodra die gesynchroniseerd zijn."
+      "detail": "Hij wordt berekend uit je VO₂max, rusthartslag, matige tot zware activiteit, bedtijden en krachttraining zodra die gesynchroniseerd zijn."
     }
   }
 }
