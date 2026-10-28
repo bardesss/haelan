@@ -3,6 +3,7 @@ import type { DbOrTx } from '../db/open.ts'
 import { daily } from '../db/schema/index.ts'
 import { zoneBoundsFromFormula, zoneSecondsFromMinutes } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
+import { INTRADAY_WINDOW_MAX_MS } from '../query/intraday.ts'
 import { readSessionHeartRateMinutes } from '../query/sessionHeartRate.ts'
 import { groupSessions } from './sessionOverlap.ts'
 import type { SessionLike } from './overrides.ts'
@@ -81,7 +82,12 @@ export function deriveWorkoutZonesDay(tx: DbOrTx, input: {
   const targets = [...new Set(input.sessions.map((s) => s.sourceId)), MERGED_SOURCE]
   const out: DailyRow[] = []
   for (const target of targets) {
-    const own = target === MERGED_SOURCE ? input.sessions : input.sessions.filter((s) => s.sourceId === target)
+    const own = (target === MERGED_SOURCE ? input.sessions : input.sessions.filter((s) => s.sourceId === target))
+      // The intraday window's own cap, the one fillOne skips a workout by: a span longer than any
+      // workout is a session left open by a crashed app, and summing two days of resting heart
+      // rate into its zones would hand the day a load nobody ran. Dropped before grouping, so a
+      // stuck session cannot win a group and take a real workout recorded inside it down with it.
+      .filter((s) => s.endMs - s.startMs <= INTRADAY_WINDOW_MAX_MS)
     // Through groupSessions even for one source's own list, exactly as deriveExerciseDay does: a
     // resync can store the same workout twice under one source, and for the merged view the same
     // run recorded by a watch and a phone is one workout. Only each group's primary is read, so

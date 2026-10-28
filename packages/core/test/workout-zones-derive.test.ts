@@ -8,6 +8,7 @@ import { DEFAULT_NIGHT_GAP_MINUTES } from '../src/derive/sleep.ts'
 import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { MERGED_SOURCE } from '../src/derive/rollup.ts'
 import { edwardsLoad } from '../src/api/cardioLoad.ts'
+import { INTRADAY_WINDOW_MAX_MS } from '../src/query/intraday.ts'
 import type { OverrideLike } from '../src/derive/overrides.ts'
 import { dayMetricTarget, sessionTarget } from '../src/derive/targetKey.ts'
 import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
@@ -182,6 +183,23 @@ describe('daily heart rate zone minutes from workouts', () => {
     expect(zoneRows(db)).toEqual([])
     // A zero load would read as a rest day measured, when nothing was measured at all.
     expect(db.select().from(daily).where(eq(daily.metric, 'cardio_load_edwards')).all()).toEqual([])
+  })
+
+  test('skips a session longer than the intraday window', () => {
+    const db = seed(['phone'])
+    db.insert(sessions).values({
+      id: 'stuck', personId: PERSON, sourceId: 'phone', kind: 'exercise', externalId: 'stuck',
+      startMs: START, startOffsetMinutes: 0, endMs: START + INTRADAY_WINDOW_MAX_MS + MINUTE, endOffsetMinutes: 0,
+      localDate: DATE, attrs: '{}', rawPayloadId: null,
+    }).run()
+    for (const [at, bpm] of ONE_MINUTE_EACH.entries()) {
+      insertSample(db, { personId: PERSON, sourceId: 'phone', metric: 'heart_rate', utcMs: START + at * MINUTE, value: bpm })
+    }
+    seedDayValue(db, 'phone', 'resting_heart_rate', 60)
+
+    derive(db)
+
+    expect(zoneRows(db)).toEqual([])
   })
 
   test('counts a workout recorded by watch and phone once in the merged view', () => {
