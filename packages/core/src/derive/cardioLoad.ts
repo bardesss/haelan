@@ -1,5 +1,6 @@
 import { edwardsLoad, CARDIO_LOAD_METRIC } from '../api/cardioLoad.ts'
 import type { DailyRow } from './rollup.ts'
+import { ZONE_FORMULA_BASIS } from './rollup.ts'
 import { DERIVATION_VERSION } from './version.ts'
 
 /**
@@ -32,6 +33,9 @@ export function deriveCardioLoadDay(input: {
   // Insertion ordered, so the rows come back in the order the sources first appeared, which is
   // what the per-source and merged tests pin and what keeps a rebuild's row order stable.
   const bySource = new Map<string, Map<string, number>>()
+  // A load is as much an estimate as the minutes it was computed from: a source any of whose zone
+  // rows came from the formula (derive/workoutZones.ts) gets a load that says so too.
+  const formulaSources = new Set<string>()
   for (const row of input.rows) {
     // 'sum' is the only aggregate these four declare (derive/metrics.ts), and reading any other
     // would take a number computed to answer a different question.
@@ -39,6 +43,7 @@ export function deriveCardioLoadDay(input: {
     const forSource = bySource.get(row.source) ?? new Map<string, number>()
     bySource.set(row.source, forSource)
     forSource.set(row.metric, row.value)
+    if (row.basis === ZONE_FORMULA_BASIS) formulaSources.add(row.source)
   }
 
   const out: DailyRow[] = []
@@ -66,6 +71,7 @@ export function deriveCardioLoadDay(input: {
       // input; recomputing it would count a different thing than the column counts everywhere
       // else. Null is the honest answer, the same one deriveExerciseDay gives a per source row.
       sourceMix: null,
+      basis: formulaSources.has(source) ? ZONE_FORMULA_BASIS : null,
       derivationVersion: DERIVATION_VERSION,
     })
   }

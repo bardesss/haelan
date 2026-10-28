@@ -1,4 +1,6 @@
+import { eq } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
+import { people } from '../db/schema/index.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
 import type { SourcePriorityStore } from '../store/sourcePriority.ts'
 import type { OverrideStore } from '../store/overrides.ts'
@@ -58,6 +60,18 @@ export function runDerive(input: {
     return loaded
   }
 
+  // Cached for the same reason as the priority list, and safe for the same reason: the zone formula
+  // reads it (derive/workoutZones.ts), so a birthday edit has to queue the person's workout days,
+  // and a drain that straddles one then costs a re-derive rather than a stale row.
+  const birthDates = new Map<string, string | null>()
+  const birthDateFor = (personId: string): string | null => {
+    if (birthDates.has(personId)) return birthDates.get(personId)!
+    const loaded = input.db.select({ birthDate: people.birthDate }).from(people)
+      .where(eq(people.id, personId)).get()?.birthDate ?? null
+    birthDates.set(personId, loaded)
+    return loaded
+  }
+
   const overridesByPerson = new Map<string, OverrideLike[]>()
   const overridesFor = (personId: string): OverrideLike[] => {
     const cached = overridesByPerson.get(personId)
@@ -72,6 +86,7 @@ export function runDerive(input: {
       rowsWritten += deriveDayInto(tx, {
         personId: entry.personId,
         localDate: entry.localDate,
+        birthDate: birthDateFor(entry.personId),
         priority: priorityFor(entry.personId),
         overrides: overridesFor(entry.personId),
         gapMinutes,

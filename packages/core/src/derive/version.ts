@@ -38,5 +38,10 @@
  *    three bands as unsplit totals: wrong rather than absent, which is what makes this bump
  *    necessary rather than optional. probe/findings/activity-minute-overlap.md measured why the
  *    intersection has to be stored at all.
+ * 10: phone-only days gain heart rate zone minutes and a cardio load, from the workouts' own heart
+ *    rate sorted into zones from the #385 formula (age and that day's resting heart rate) when the
+ *    day has no provider ceilings (derive/workoutZones.ts). A day derived under 9 lacks the
+ *    time_in_heart_rate_zone_* and cardio_load_edwards rows it should have, and nothing marks it
+ *    dirty on its own: its samples and sessions have not changed, only what deriveDay makes of them.
  */
-export const DERIVATION_VERSION = 9
+export const DERIVATION_VERSION = 10

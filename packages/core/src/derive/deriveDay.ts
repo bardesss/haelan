@@ -15,11 +15,18 @@ import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
 import type { ExerciseSessionLike } from './exercise.ts'
 import { deriveCardioLoadDay } from './cardioLoad.ts'
+import { deriveWorkoutZonesDay } from './workoutZones.ts'
 import { deriveActivityBandsDay, expandBandExclusions, mergeActivityBandsDay } from './activityBands.ts'
 
 export interface DeriveDayInput {
   personId: string
   localDate: string
+  /**
+   * The person's birthday, which the heart rate zone formula needs for a day without the
+   * provider's ceilings (derive/workoutZones.ts). Passed in, the way priority is, so a drain
+   * reads it once per person rather than once per day.
+   */
+  birthDate: string | null
   priority: Priority
   overrides: OverrideLike[]
   gapMinutes: number
@@ -186,6 +193,19 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
 
   const excluded = excludedMetrics(personOverrides, input.localDate)
 
+  // Zone minutes for a day whose sources sent none, from the workouts' own heart rate. Before the
+  // load below, which reads them as it reads Google's, so a phone-only day gets a load too.
+  const workoutZones = deriveWorkoutZonesDay(tx, {
+    personId: input.personId,
+    localDate: input.localDate,
+    birthDate: input.birthDate,
+    sessions: exerciseSessions,
+    rows: [...derived, ...merged],
+    excluded,
+    priority: input.priority,
+    overlapRatio: input.overlapRatio,
+  })
+
   // Computed from the zone rows that survive exclusion, not from the ones before it. A person who
   // threw out a day's zone minutes threw out the load computed from them, and reading the
   // unfiltered list here would leave the load standing on numbers no longer on any chart.
@@ -193,7 +213,7 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   const cardioLoad = deriveCardioLoadDay({
     personId: input.personId,
     localDate: input.localDate,
-    rows: applyToDay([...derived, ...merged], excluded),
+    rows: applyToDay([...derived, ...merged, ...workoutZones], excluded),
   })
 
   // Widened so an excluded level or an excluded peak total takes its overlap rows with it - see
@@ -201,7 +221,7 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   // saw the unwidened `excluded` above, and every other family here has no such sibling to chase.
   const rows = applyToDay(
     [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceBands, ...mergedBands,
-      ...perSourceExercise, ...mergedExercise, ...cardioLoad],
+      ...perSourceExercise, ...mergedExercise, ...workoutZones, ...cardioLoad],
     expandBandExclusions(excluded),
   )
 
