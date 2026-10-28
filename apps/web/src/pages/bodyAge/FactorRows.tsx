@@ -126,8 +126,8 @@ export function FactorRows({ current, method }: { current: BodyAgeAvailable, met
       {room !== null && (
         <p className="body-age-room"><EmphasisedText line={emphasise(t, 'bodyAge.factors.room', {
           factor: t(`bodyAge.factors.inline.${room.key}`),
-          // What reaching the typical level would take off: the years the factor adds now, negated.
-          years: formatSignedNumber(-room.years, 1, i18n.language, t('common.absent')),
+          // What reaching the typical level would take off: the years the factor adds now.
+          years: formatNumber(room.years, 1, i18n.language, t('common.absent')),
         }, ['factor', 'years'])} /></p>
       )}
       <p className="dash-caption">{t('bodyAge.factors.caption')}</p>

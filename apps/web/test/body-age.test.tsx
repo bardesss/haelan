@@ -15,7 +15,10 @@ import { dayTableRows } from '../src/charts/base.js'
 import { dayTooltip } from '../src/charts/dayTooltip.js'
 
 // The trend strip, stubbed so a test can read what it was handed (recovery.test.tsx's idiom).
-type SparklineProps = { label: string, values: (number | null)[], reference?: { values: (number | null)[], label: string } }
+type SparklineProps = {
+  label: string, values: (number | null)[], reference?: { values: (number | null)[], label: string }
+  baseline?: { low: number, high: number }, bandLabels?: { low: string, high: string }
+}
 const { sparklines } = vi.hoisted(() => ({ sparklines: new Map<string, SparklineProps>() }))
 vi.mock('../src/charts/Sparkline.js', () => ({
   Sparkline: (props: SparklineProps) => {
@@ -147,6 +150,9 @@ describe('the body age page', () => {
     const strip = sparklines.get('Body age')!
     expect(strip.values).toEqual([33.6, 34.4, 34.6])
     expect(strip.reference?.values).toEqual([38.2, 38.3, 38.4])
+    // Labelled at its left edge with the range both lines span, as every hero strip's band is.
+    expect(strip.baseline).toEqual({ low: 33.6, high: 38.4 })
+    expect(strip.bandLabels).toEqual({ low: '33.6', high: '38.4' })
   })
 
   it('words each factor, its comparison, its toned years, and the most room', async () => {
@@ -170,7 +176,7 @@ describe('the body age page', () => {
     expect(strength.querySelector('.body-age-factor-years')?.classList.contains('better')).toBe(false)
     expect(strength.querySelector('.body-age-factor-years')?.classList.contains('worse')).toBe(false)
     expect(card.querySelector('.body-age-room')?.textContent)
-      .toBe('Most room: bedtime variability. At your age\'s typical level it would count about -0.6 years.')
+      .toBe('Most room: bedtime variability. At your age\'s typical level it would count about 0.6 years fewer.')
   })
 
   it('builds how it is worked out from the method alone', async () => {
@@ -178,8 +184,15 @@ describe('the body age page', () => {
     const prose = cardFor('How it\'s worked out')!.textContent ?? ''
     expect(prose).toContain('last 30 days')
     expect(prose).toContain('0.085')
-    expect(prose).toContain('Kodama et al. 2009.')
-    expect(prose).toContain('up to 6 years')
+    expect(prose).toContain('VO₂max, up to 6 years.')
+    // The studies sit behind one Sources disclosure, closed until the reader opens it.
+    const sources = cardFor('How it\'s worked out')!.querySelectorAll('details')
+    expect(sources).toHaveLength(1)
+    expect(sources[0]!.open).toBe(false)
+    expect(sources[0]!.querySelector('summary')?.textContent).toBe('Sources')
+    expect([...sources[0]!.querySelectorAll('.body-age-citation')].map((p) => p.textContent))
+      .toEqual(['VO₂max: Kodama et al. 2009.', 'Resting heart rate: Zhang, Shen & Qi 2016.', 'Active minutes: Arem et al. 2015.',
+        'Bedtime variability: Windred et al. 2024.', 'Strength training: Momma et al. 2022.'])
     expect(prose).toContain('An estimate from published associations, not a measurement of your cells.')
   })
 
@@ -196,6 +209,17 @@ describe('the body age page', () => {
     await render(current({ endDate: EARLIER, window: { from: addDays(EARLIER, -29), to: EARLIER } }))
     const day = new Date(`${EARLIER}T00:00:00Z`).toLocaleString('en', { day: 'numeric', month: 'short', timeZone: 'UTC' })
     expect(container!.querySelector('.dash-date')?.textContent).toBe(`Last 30 days, to ${day}`)
+  })
+
+  it('sets strength training against a reference of none', async () => {
+    await render(current({ factors: CURRENT.factors.map((factor) => factor.key === 'strength' ? { ...factor, value: 1, years: -1.2 } : factor) }))
+    const strength = [...cardFor('What moves it')!.querySelectorAll('.body-age-factor')][4]!
+    expect(strength.querySelector('.body-age-factor-note')?.textContent).toBe('against a reference of none')
+    await render(current({ factors: CURRENT.factors.map((factor) => factor.key === 'strength' ? { ...factor, value: 1, years: -1.2 } : factor) }), 'nl')
+    const sterkte = [...cardFor('Wat het beweegt')!.querySelectorAll('.body-age-factor')][4]!
+    expect(sterkte.querySelector('.body-age-factor-note')?.textContent).toBe('tegenover een referentie van geen')
+    expect(cardFor('Wat het beweegt')!.querySelector('.body-age-room')?.textContent)
+      .toBe('Meeste ruimte: variatie in bedtijd. Op het typische niveau voor je leeftijd zou het ongeveer 0,6 jaar minder tellen.')
   })
 
   it('says why a factor does not count', async () => {

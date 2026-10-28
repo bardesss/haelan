@@ -1387,7 +1387,9 @@ button.week-bar-slot { cursor: pointer; }
 .body-age-factor-years.better { color: var(--positive); }
 .body-age-factor-years.worse { color: var(--negative); }
 .body-age-room { margin: var(--space-4) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
-.body-age-citation { display: block; margin-top: var(--space-1); font-size: var(--font-size-xs); color: var(--text-muted); }
+/* The Sources fold under "How it's worked out": the About fold's disclosure, its citations in fine print. */
+.body-age-sources { margin-top: var(--space-3); }
+.body-age-citation { margin: 0 0 var(--space-2); font-size: var(--font-size-xs); color: var(--text-muted); }
 .body-age-reason { margin: 0; }
 .body-age-reason + .body-age-reason { margin-top: var(--space-2); }
 @media (max-width: 620px) {
