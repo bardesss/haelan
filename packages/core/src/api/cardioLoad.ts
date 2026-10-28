@@ -219,6 +219,45 @@ export function zoneBoundsOf(ceilings: {
   return { moderateMin: light, vigorousMin: moderate, peakMin: vigorous, max: peak }
 }
 
+/** Where a set of zone bounds came from, carried beside them so a page can say so. A zone drawn from
+ *  Google's own ceilings and one computed from a formula look identical on a chart, and they are
+ *  not equally trustworthy. */
+export type ZoneBasis = 'providerCeilings' | 'zoneFormula'
+
+/**
+ * Zone bounds from the formula in #385, for a household that has no provider ceilings: a Tanaka
+ * maximum (208 - 0.7 x age) with each zone beginning at a Karvonen share of the heart rate reserve,
+ * resting + p x (max - resting), at p = 0.40 (moderate), 0.60 (vigorous) and 0.85 (peak).
+ *
+ * Used only for a day that has no ceilings. Google's ceilings always win over this: they are what
+ * its own zones were computed against, and `zoneBoundsOf` is read first by every caller. This is
+ * the fallback for a phone, which sends no `heart_rate_zone_*_max_bpm` rows at all.
+ *
+ * The maximum stays unrounded inside the sum (183.5 is used as 183.5, not 184), and only each
+ * finished bound is rounded, so a rounding step is taken once per bound and never compounds. The
+ * age is the one on `localDate`, from `ageAt`, so zones step down on the birthday and not on 1
+ * January.
+ *
+ * Null without a birth date or a resting heart rate, and null when the reserve is not positive or
+ * the bounds do not rise strictly (the same test `zoneBoundsOf` applies): a profile that is wrong
+ * is better shown as no zones than as zones that are plausible-looking and meaningless.
+ */
+export function zoneBoundsFromFormula(input: {
+  birthDate: string | null
+  localDate: string
+  restingBpm: number | null
+}): ZoneBounds | null {
+  const { birthDate, localDate, restingBpm } = input
+  if (birthDate === null || restingBpm === null) return null
+  const age = ageAt(birthDate, localDate)
+  if (age === null) return null
+  const maxHr = 208 - 0.7 * age
+  const reserve = maxHr - restingBpm
+  if (!(reserve > 0)) return null
+  const at = (share: number): number => Math.round(restingBpm + share * reserve)
+  return zoneBoundsOf({ light: at(0.4), moderate: at(0.6), vigorous: at(0.85), peak: Math.round(maxHr) })
+}
+
 const SECONDS_PER_HEART_RATE_MINUTE = 60
 
 /**
