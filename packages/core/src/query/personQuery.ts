@@ -87,6 +87,14 @@ export interface DailyPoint {
    * point needs to say so rather than presenting it as one.
    */
   filled: boolean
+  /**
+   * What the number rests on when it is not what a device recorded: `zone_formula` for heart rate
+   * zone minutes, and the cardio load built on them, estimated from age and that day's resting
+   * heart rate (derive/workoutZones.ts). Null for a recorded number. Carried on every daily read,
+   * not only the Activity period's, because the codebase never prints a number without its basis
+   * and a series, an export or a tool answer is the number printed somewhere else.
+   */
+  basis: string | null
 }
 
 export interface SeriesResult {
@@ -1082,6 +1090,7 @@ export class PersonQuery {
       source: daily.source,
       sourceMix: daily.sourceMix,
       updatedAtMs: daily.updatedAtMs,
+      basis: daily.basis,
     }).from(daily).where(and(
       eq(daily.personId, this.#personId),
       eq(daily.metric, metric),

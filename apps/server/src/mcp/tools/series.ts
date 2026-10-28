@@ -34,6 +34,17 @@ const FILLED_DESCRIPTION =
   + 'average standing in for it, not the device\'s own daily summary. Say so in words when reporting '
   + 'a filled reading; do not state it as a measurement.'
 
+// Shared by query_series and get_daily for the reason FILLED_DESCRIPTION is: a point-level reading
+// carries what it rests on, and an agent has no caption to read it from. `zone_formula` is the
+// only value today (packages/core/src/derive/rollup.ts's ZONE_FORMULA_BASIS), written on the heart
+// rate zone minutes the derive estimated for a phone-only day and on the cardio load built on them.
+const BASIS_DESCRIPTION =
+  'What this value rests on when it is not what a device recorded. `zone_formula` means estimated '
+  + 'from the person\'s age and that day\'s resting heart rate, not measured: heart rate zone '
+  + 'minutes sorted by the formula, or a cardio load computed from them. Say so in words when '
+  + 'reporting it. '
+  + 'Null for a recorded value.'
+
 // Shared by get_baselines, compare_periods and trend, the three tools that blend many days into
 // one statistic - a boolean per day cannot ride along through that fold the way it does on
 // query_series and get_daily, but a count can, and does.
@@ -74,7 +85,8 @@ export const querySeries = defineTool({
     + 'longer range is downsampled and `reduction` says so, so read `summary` for the true extremes '
     + 'rather than assuming the points are every day. Report findings with their coverage, and as '
     + 'association rather than cause. Some readings are marked `filled`; see that field before '
-    + 'calling a filled day a measurement.',
+    + 'calling a filled day a measurement. A reading whose `basis` is `zone_formula` was estimated '
+    + 'from age and resting heart rate, not measured; say so when reporting it.',
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
@@ -88,6 +100,7 @@ export const querySeries = defineTool({
       localDate: z.string(), value: z.number(),
       coverage: z.number().nullable(), source: z.string(),
       filled: z.boolean().describe(FILLED_DESCRIPTION),
+      basis: z.string().nullable().describe(BASIS_DESCRIPTION),
     })),
     reduction: REDUCTION,
     summary: SUMMARY,
@@ -101,7 +114,7 @@ export const querySeries = defineTool({
     return {
       points: result.points.map((p) => ({
         localDate: p.localDate, value: p.value, coverage: p.coverage, source: p.source,
-        filled: p.filled,
+        filled: p.filled, basis: p.basis,
       })),
       reduction: result.reduction,
       summary: summaryOf(result.points.map((p) => p.value)),
@@ -139,7 +152,8 @@ export const getDaily = defineTool({
     + 'with no row that day answers null rather than being left out, so a caller can tell "zero" '
     + 'from "not measured" — the same distinction a missing daily row always carries elsewhere on '
     + 'this surface. Some readings are marked `filled`; see that field before calling a filled day '
-    + 'a measurement.',
+    + 'a measurement. A reading whose `basis` is `zone_formula` was estimated from age and resting '
+    + 'heart rate, not measured; say so when reporting it.',
   inputSchema: {
     localDate: LOCAL_DATE.describe('YYYY-MM-DD'),
     metrics: z.array(z.string()).min(1),
@@ -161,6 +175,8 @@ export const getDaily = defineTool({
       // Null alongside value/coverage/source for the same reason those three are: nothing was
       // measured that day, so whether it would have been filled is not a question with an answer.
       filled: z.boolean().nullable().describe(FILLED_DESCRIPTION),
+      // Null with no row as well as for a recorded one: nothing was estimated that day either.
+      basis: z.string().nullable().describe(BASIS_DESCRIPTION),
     })),
   },
   run: (q, args) => ({
@@ -181,6 +197,7 @@ export const getDaily = defineTool({
         coverage: point?.coverage ?? null,
         source: point?.source ?? null,
         filled: point?.filled ?? null,
+        basis: point?.basis ?? null,
       }
     }),
   }),

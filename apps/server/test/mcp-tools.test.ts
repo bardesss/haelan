@@ -35,6 +35,7 @@ function seedDaily(input: {
   agg?: string
   source?: string
   coverage?: number | null
+  basis?: string | null
 }): void {
   test.db.insert(schema.daily).values({
     personId: 'robin',
@@ -47,6 +48,7 @@ function seedDaily(input: {
     sourceMix: null,
     derivationVersion: DERIVATION_VERSION,
     updatedAtMs: null,
+    basis: input.basis ?? null,
   }).run()
 }
 
@@ -149,9 +151,9 @@ describe('query_series', () => {
     }
 
     expect(out.points).toEqual([
-      { localDate: '2026-08-01', value: 1000, coverage: null, source: 'merged', filled: false },
-      { localDate: '2026-08-02', value: 2000, coverage: null, source: 'merged', filled: false },
-      { localDate: '2026-08-03', value: 3000, coverage: null, source: 'merged', filled: false },
+      { localDate: '2026-08-01', value: 1000, coverage: null, source: 'merged', filled: false, basis: null },
+      { localDate: '2026-08-02', value: 2000, coverage: null, source: 'merged', filled: false, basis: null },
+      { localDate: '2026-08-03', value: 3000, coverage: null, source: 'merged', filled: false, basis: null },
     ])
     expect(out.summary.n).toBe(3)
     expect(out.reduction).toBeNull()
@@ -174,6 +176,25 @@ describe('query_series', () => {
       { localDate: '2026-08-01', filled: true },
       { localDate: '2026-08-02', filled: false },
     ])
+  })
+
+  // The same words-not-a-dashed-line reasoning: a zone minute the derive estimated from age and
+  // resting heart rate (derive/workoutZones.ts) is a number an agent must not report as measured,
+  // and the caption the web app prints beside it never reaches a tool caller.
+  it('marks the zone minutes that rest on the formula', () => {
+    const metric = 'time_in_heart_rate_zone_moderate_minutes'
+    seedDaily({ localDate: '2026-08-01', metric, value: 12, basis: 'zone_formula' })
+    seedDaily({ localDate: '2026-08-02', metric, value: 30 })
+
+    const out = tool('query_series').run(q(), {
+      metric, agg: 'sum', from: '2026-08-01', to: '2026-08-02',
+    }) as { points: { localDate: string, basis: string | null }[] }
+
+    expect(out.points.map((p) => ({ localDate: p.localDate, basis: p.basis }))).toEqual([
+      { localDate: '2026-08-01', basis: 'zone_formula' },
+      { localDate: '2026-08-02', basis: null },
+    ])
+    expect(tool('query_series').description).toContain('zone_formula')
   })
 
   it('caps a wide range to the requested budget and says it thinned', () => {
@@ -237,6 +258,22 @@ describe('get_daily', () => {
   // a day of no steps as a day of zero steps, which is a different claim about somebody's health
   // record - and the readings must stay in the order they were asked for, or a caller matching
   // them up by position reads the wrong metric's answer.
+  it('says when the cardio load of a day rests on the zone formula', () => {
+    seedDaily({ localDate: '2026-08-10', metric: 'cardio_load_edwards', value: 40, basis: 'zone_formula' })
+    seedDaily({ localDate: '2026-08-10', metric: 'steps', value: 8000 })
+
+    const out = tool('get_daily').run(q(), {
+      localDate: '2026-08-10', metrics: ['cardio_load_edwards', 'steps', 'distance'],
+    }) as { readings: { metric: string, basis: string | null }[] }
+
+    expect(out.readings.map((r) => ({ metric: r.metric, basis: r.basis }))).toEqual([
+      { metric: 'cardio_load_edwards', basis: 'zone_formula' },
+      { metric: 'steps', basis: null },
+      { metric: 'distance', basis: null },
+    ])
+    expect(tool('get_daily').description).toContain('zone_formula')
+  })
+
   it('answers null for a metric with no row that day, in the order the metrics were asked for', () => {
     seedDaily({ localDate: '2026-08-10', metric: 'steps', value: 8000 })
 
@@ -252,8 +289,8 @@ describe('get_daily', () => {
 
     expect(out.localDate).toBe('2026-08-10')
     expect(out.readings).toEqual([
-      { metric: 'distance', agg: 'sum', value: null, coverage: null, source: null, filled: null },
-      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged', filled: false },
+      { metric: 'distance', agg: 'sum', value: null, coverage: null, source: null, filled: null, basis: null },
+      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged', filled: false, basis: null },
     ])
   })
 
@@ -290,8 +327,8 @@ describe('get_daily', () => {
     }
 
     expect(out.readings).toEqual([
-      { metric: 'heart_rate', agg: 'mean', value: 62, coverage: null, source: 'merged', filled: false },
-      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged', filled: false },
+      { metric: 'heart_rate', agg: 'mean', value: 62, coverage: null, source: 'merged', filled: false, basis: null },
+      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged', filled: false, basis: null },
     ])
   })
 
@@ -306,8 +343,8 @@ describe('get_daily', () => {
     }
 
     expect(out.readings).toEqual([
-      { metric: 'resting_heart_rate', agg: 'last', value: 55, coverage: null, source: 'merged', filled: false },
-      { metric: 'weight', agg: 'last', value: 70000, coverage: null, source: 'merged', filled: false },
+      { metric: 'resting_heart_rate', agg: 'last', value: 55, coverage: null, source: 'merged', filled: false, basis: null },
+      { metric: 'weight', agg: 'last', value: 70000, coverage: null, source: 'merged', filled: false, basis: null },
     ])
   })
 
