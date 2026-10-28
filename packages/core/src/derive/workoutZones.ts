@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily } from '../db/schema/index.ts'
-import { zoneBoundsFromFormula, zoneBoundsOf, zoneSecondsFromMinutes } from '../api/cardioLoad.ts'
+import { zoneBoundsFromFormula, zoneSecondsFromMinutes } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
 import { readSessionHeartRateMinutes } from '../query/sessionHeartRate.ts'
 import { groupSessions } from './sessionOverlap.ts'
@@ -27,17 +27,21 @@ import { DERIVATION_VERSION } from './version.ts'
  * (query/workoutDerived.ts, readFillZoneBounds): one workout's zones on its own page and the day's
  * zones on the dashboard come from the same minutes and the same bounds.
  *
- * Google's own rows always win. Where a target - a source, or the merged view - already has any
- * zone row for the day, it is left exactly as it is: those minutes were computed by the device
- * that measured them, against the ceilings it measured them with, and a second estimate written
- * beside them would be two answers to one question. The check is per target, so a phone's own row
- * is still written on a day a watch reported its zones, and the merged view keeps the watch's.
+ * Only for a day Google said nothing about. If any source has any zone row for the day, or the day
+ * has any of Google's zone ceilings (`heart_rate_zone_*_max_bpm`), nothing is written for any
+ * target, not even a phone's own per-source row. A Google household's numbers must not change
+ * because this step exists: a phone row written beside a watch's zones would move the merged view
+ * the moment priority favoured the phone, and its load with it. And a day with ceilings is a day a
+ * device measured zones for; minutes we sorted against those ceilings would carry no basis and be
+ * indistinguishable from Google's measured minutes, a number on the page built by us without
+ * saying so. Even one ceiling is enough to stand back: it is Google's day, whatever the other three
+ * are doing.
  *
- * The bounds come from the day's provider ceilings when all four are there (basis null: these are
- * a device's zones, sorted by us), else from the formula with the person's birthday and that day's
- * resting heart rate (basis `zone_formula`). Either way they are the bounds readFillZoneBounds
- * picks for a workout on that day, read in the same order, so the day and the workout never
- * disagree about which zone a minute was in.
+ * So every row this writes rests on the formula, with the person's birthday and that day's resting
+ * heart rate, and is stamped `zone_formula`. Those are the bounds readFillZoneBounds picks for a
+ * workout on a day without ceilings, so on every day this writes, the day and the workout agree
+ * about which zone a minute was in. The read-time workout fill still sorts by ceilings where a day
+ * has them; that is one workout's page, not the day's totals, and it says which bounds it used.
  */
 
 const ZONE_METRICS = {
@@ -69,15 +73,14 @@ export function deriveWorkoutZonesDay(tx: DbOrTx, input: {
   // Before any read: most days have no workout, and those cost nothing here.
   if (input.sessions.length === 0) return []
 
-  const resolved = boundsFor(tx, input)
-  if (resolved === null) return []
-  const { bounds, basis } = resolved
+  // Any source's zone minutes make it Google's day, for every target: see the module comment.
+  if (input.rows.some((row) => ZONE_METRIC_NAMES.has(row.metric))) return []
+  const bounds = formulaBoundsFor(tx, input)
+  if (bounds === null) return []
 
   const targets = [...new Set(input.sessions.map((s) => s.sourceId)), MERGED_SOURCE]
   const out: DailyRow[] = []
   for (const target of targets) {
-    if (input.rows.some((row) => row.source === target && ZONE_METRIC_NAMES.has(row.metric))) continue
-
     const own = target === MERGED_SOURCE ? input.sessions : input.sessions.filter((s) => s.sourceId === target)
     // Through groupSessions even for one source's own list, exactly as deriveExerciseDay does: a
     // resync can store the same workout twice under one source, and for the merged view the same
@@ -119,7 +122,7 @@ export function deriveWorkoutZonesDay(tx: DbOrTx, input: {
         // which is a session choice, not the hourly win the mix column counts.
         coverage: null,
         sourceMix: null,
-        basis,
+        basis: ZONE_FORMULA_BASIS,
         derivationVersion: DERIVATION_VERSION,
       })
     }
@@ -127,25 +130,27 @@ export function deriveWorkoutZonesDay(tx: DbOrTx, input: {
   return out
 }
 
-function boundsFor(tx: DbOrTx, input: {
+/**
+ * The formula's bounds for the day, or null when the day has any of Google's ceilings (it is then
+ * Google's day; see the module comment) or the formula lacks a birthday or a resting heart rate.
+ * A ceiling the person excluded is no ceiling, as dayValue reads it, so throwing one out hands
+ * the day back to the formula exactly as readFillZoneBounds would.
+ */
+function formulaBoundsFor(tx: DbOrTx, input: {
   personId: string
   localDate: string
   birthDate: string | null
   rows: readonly DailyRow[]
   excluded: ReadonlySet<string>
-}): { bounds: ZoneBounds, basis: typeof ZONE_FORMULA_BASIS | null } | null {
+}): ZoneBounds | null {
   const value = (metric: string) => dayValue(tx, input, metric)
-  const ceiling = (zone: string) => value(`heart_rate_zone_${zone}_max_bpm`)
-  const ceilings = zoneBoundsOf({
-    light: ceiling('light'), moderate: ceiling('moderate'), vigorous: ceiling('vigorous'), peak: ceiling('peak'),
-  })
-  if (ceilings !== null) return { bounds: ceilings, basis: null }
-  const formula = zoneBoundsFromFormula({
+  const zones = ['light', 'moderate', 'vigorous', 'peak']
+  if (zones.some((zone) => value(`heart_rate_zone_${zone}_max_bpm`) !== null)) return null
+  return zoneBoundsFromFormula({
     birthDate: input.birthDate,
     localDate: input.localDate,
     restingBpm: value('resting_heart_rate'),
   })
-  return formula === null ? null : { bounds: formula, basis: ZONE_FORMULA_BASIS }
 }
 
 /**

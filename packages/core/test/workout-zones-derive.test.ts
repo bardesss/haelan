@@ -108,12 +108,10 @@ describe('daily heart rate zone minutes from workouts', () => {
     expect(load?.basis).toBe('zone_formula')
   })
 
-  test('uses the day\'s ceilings and leaves the basis empty', () => {
+  test('writes nothing on a day with Google\'s ceilings', () => {
     const db = seed(['phone'])
     seedWorkout(db, 'run', 'phone', ONE_MINUTE_EACH)
     seedDayValue(db, 'phone', 'resting_heart_rate', 60)
-    // Ceilings that put every one of the four minutes in light but the last, which is peak. The
-    // formula would have spread them one a zone, so the split shows which bounds were used.
     seedDayValue(db, 'phone', 'heart_rate_zone_light_max_bpm', 150)
     seedDayValue(db, 'phone', 'heart_rate_zone_moderate_max_bpm', 160)
     seedDayValue(db, 'phone', 'heart_rate_zone_vigorous_max_bpm', 165)
@@ -121,8 +119,33 @@ describe('daily heart rate zone minutes from workouts', () => {
 
     derive(db)
 
-    expect(zonesOf(db, MERGED_SOURCE)).toEqual({ light: 3, moderate: 0, vigorous: 0, peak: 1 })
-    for (const row of zoneRows(db)) expect(row.basis).toBeNull()
+    expect(zoneRows(db)).toEqual([])
+    expect(db.select().from(daily).where(eq(daily.metric, 'cardio_load_edwards')).all()).toEqual([])
+  })
+
+  test('writes nothing on a day with only some of Google\'s ceilings', () => {
+    const db = seed(['phone'])
+    seedWorkout(db, 'run', 'phone', ONE_MINUTE_EACH)
+    seedDayValue(db, 'phone', 'resting_heart_rate', 60)
+    seedDayValue(db, 'phone', 'heart_rate_zone_light_max_bpm', 150)
+
+    derive(db)
+
+    expect(zoneRows(db)).toEqual([])
+  })
+
+  test('writes nothing for any target when another source reported zone minutes that day', () => {
+    const db = seed(['phone', 'watch'])
+    seedWorkout(db, 'run', 'phone', ONE_MINUTE_EACH)
+    seedDayValue(db, 'phone', 'resting_heart_rate', 60)
+    seedDayValue(db, 'watch', zoneMetric('light'), 30)
+    seedDayValue(db, 'watch', zoneMetric('moderate'), 12)
+
+    derive(db)
+
+    expect(zoneRows(db, 'phone')).toEqual([])
+    expect(zonesOf(db, MERGED_SOURCE)).toEqual({ light: 30, moderate: 12 })
+    expect(zoneRows(db).some((row) => row.basis === 'zone_formula')).toBe(false)
   })
 
   test('leaves a day with Google\'s zone minutes alone', () => {
