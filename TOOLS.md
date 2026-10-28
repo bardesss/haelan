@@ -580,7 +580,7 @@ A body age: the calendar age whose mortality risk matches this person's resting 
 
 **Input**
 
-None.
+- **today** (string) — YYYY-MM-DD, today in the person's own zone. Days after it do not count, which is what keeps this answer the same as the app's.
 
 **Output**
 

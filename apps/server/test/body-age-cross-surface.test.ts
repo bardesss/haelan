@@ -34,7 +34,7 @@ describe('body_age: the MCP tool and the body age route agree', () => {
     }
     const token = await h.signIn()
 
-    const mcp = bodyAgeTool.run(new PersonQuery(db, 'p1'), {}) as {
+    const mcp = bodyAgeTool.run(new PersonQuery(db, 'p1'), { today: '2026-02-02' }) as {
       enough: boolean, asOf: string, bodyAge: number, calendarAge: number, gap: number, pace: number | null,
       carriedBy: string | null, factors: { key: string, value: number | null, years: number }[]
     }
@@ -54,5 +54,30 @@ describe('body_age: the MCP tool and the body age route agree', () => {
     expect(mcp.carriedBy).toBe(current.carriedBy)
     expect(mcp.factors.map((f) => [f.key, f.value, f.years]))
       .toEqual(current.factors.map((f) => [f.key, f.value, f.years]))
+  })
+
+  it('ignores a row dated after today on both surfaces, given the same today', async () => {
+    h = await withServer()
+    await h.completeSetup()
+    const { db } = h.app.haelan.instance
+    db.update(schema.people).set({ birthDate: '1990-01-01', sex: 'female' }).where(eq(schema.people.id, 'p1')).run()
+    const row = (localDate: string, metric: string, value: number) => db.insert(schema.daily).values({
+      personId: 'p1', localDate, metric, agg: 'last', source: 'merged', value, coverage: null, sourceMix: null,
+      derivationVersion: DERIVATION_VERSION,
+    }).run()
+    row('2026-01-05', 'daily_vo2_max', 36.37)
+    for (let day = 1; day <= 20; day += 1) row(`2026-01-${String(day).padStart(2, '0')}`, 'resting_heart_rate', 55)
+    // The harness clock reads 2026-02-02; this day has not happened.
+    row('2026-03-01', 'resting_heart_rate', 55)
+    const token = await h.signIn()
+
+    const mcp = bodyAgeTool.run(new PersonQuery(db, 'p1'), { today: '2026-02-02' }) as { asOf: string, bodyAge: number }
+    const response = await h.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/body-age', headers: { authorization: `Bearer ${token}` },
+    })
+    const current = (response.json() as BodyAgeRead).current as { endDate: string, bodyAge: number }
+    expect(current.endDate).toBe('2026-01-20')
+    expect(mcp.asOf).toBe(current.endDate)
+    expect(mcp.bodyAge).toBe(current.bodyAge)
   })
 })

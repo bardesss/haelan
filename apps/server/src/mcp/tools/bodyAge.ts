@@ -1,15 +1,10 @@
 import { z } from 'zod'
+import { LOCAL_DATE } from '../dates.ts'
 import type { Tool } from '../contract.ts'
 import { defineTool } from '../contract.ts'
 import { roundBodyAge } from '../../routes/v1/bodyAge.ts'
 
 const FACTOR_KEY = z.enum(['vo2Max', 'restingHeartRate', 'hrv', 'activity', 'sleepRegularity', 'strength'])
-
-// A tool is handed a PersonQuery and nothing else, so it has no clock and no zone to name a
-// "today" with. Body age needs none: it is read at the person's last scored day, and `today` only
-// caps which days may count. A date no archive reaches caps nothing, which is the same answer the
-// route gives whenever no row is dated after the person's own today.
-const NO_CAP_TODAY = '9999-12-31'
 
 // A flat, nullable shape rather than a discriminated union on `enough`, for the reason
 // recovery_index gives: TOOLS.md's generator documents only plain objects and arrays of them.
@@ -45,7 +40,12 @@ export const bodyAgeTool = defineTool({
     + 'set adds nothing and is not the same as a typical value. Report '
     + 'a finding as association with how the days were lived, never as advice, risk or a clinical '
     + 'claim.',
-  inputSchema: {},
+  inputSchema: {
+    today: LOCAL_DATE.describe(
+      "YYYY-MM-DD, today in the person's own zone. Days after it do not count, which is what keeps "
+      + "this answer the same as the app's.",
+    ),
+  },
   outputSchema: {
     enough: z.boolean(),
     missing: z.array(z.enum(['birthDate', 'sex', 'vo2Max'])).nullable().describe(
@@ -67,8 +67,8 @@ export const bodyAgeTool = defineTool({
     fitnessAge: z.number().nullable(),
     factors: z.array(FACTOR).describe('Empty when `enough` is false.'),
   },
-  run: (q) => {
-    const read = roundBodyAge(q.bodyAge({ today: NO_CAP_TODAY }))
+  run: (q, args) => {
+    const read = roundBodyAge(q.bodyAge({ today: args.today }))
     const { current, previous } = read
     if (current === null) {
       return {
