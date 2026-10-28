@@ -615,7 +615,7 @@
         "zones": {
           "label": "Heart-rate zones",
           "hard": "{{value}} vigorous or peak",
-          "formula": "Zones estimated from your age and resting heart rate"
+          "formula": "zones estimated from your age and resting heart rate"
         },
         "recovery": {
           "label": "Heart-rate recovery",

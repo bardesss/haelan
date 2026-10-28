@@ -1007,7 +1007,7 @@ describe('the workout page\'s zones', () => {
 
   it('says zones were estimated from age and resting heart rate', async () => {
     const estimated = await mount({ ...workoutPageFixture(), zoneFormula: true }, fullSession())
-    expect(text(estimated.querySelector('.workout-zones')!.closest('.card')!, '.dash-caption')).toContain('estimated from your age and resting heart rate')
+    expect(text(estimated.querySelector('.workout-zones')!.closest('.card')!, '.dash-caption')).toContain('zones estimated from your age and resting heart rate')
     act(() => { root!.unmount() })
     root = createRoot(container!)
     const measured = await mount({ ...workoutPageFixture(), zoneFormula: false }, fullSession())
