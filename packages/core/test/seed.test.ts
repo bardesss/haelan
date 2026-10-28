@@ -169,14 +169,9 @@ describe('seedArchive', () => {
       // depend on `days` and the workout schedule lining up rather than on civilDateOf being
       // correct. The three active_minutes_*_peak overlaps are sparse the same way: a day has them
       // only when a run put minutes into the peak zone, and the run on this span's middle day
-      // (WORKOUT_SCHEDULE opens with one) is not on its last. The heart rate zone minutes and the
-      // cardio load computed from them are sparse for the same reason: this generator sends the
-      // day's zone ceilings but no zone-minute samples, so those rows come only from a day's
-      // workouts (derive/workoutZones.ts) and land on the run's day, not the span's last.
+      // (WORKOUT_SCHEDULE opens with one) is not on its last.
       const EXCLUDED_SPARSE_METRICS = new Set([
         'workout_count', 'workout_minutes', 'active_minutes_light_peak', 'active_minutes_moderate_peak', 'active_minutes_vigorous_peak',
-        'time_in_heart_rate_zone_light_minutes', 'time_in_heart_rate_zone_moderate_minutes',
-        'time_in_heart_rate_zone_vigorous_minutes', 'time_in_heart_rate_zone_peak_minutes', 'cardio_load_edwards',
       ])
       const newestByMetric = new Map<string, string>()
       for (const row of allRows) {

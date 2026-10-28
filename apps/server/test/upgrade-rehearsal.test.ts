@@ -581,22 +581,20 @@ describe('the upgrade path', () => {
       // come from a ride stream of their own and the old ride is still drawn and set aside, so no
       // run, walk or other count moved.
       //
-      // 1418 daily rows since a day's workouts give it heart rate zone minutes when no source sent
-      // any (derive/workoutZones.ts): this seed sends the day's zone ceilings but no zone-minute
-      // samples, so each of the five workout days gains the four time_in_heart_rate_zone_* rows and
-      // a cardio_load_edwards row from them, once for the workout's source and once merged:
-      // 5 days x 5 metrics x 2 rows = 50. No sample count moved.
+      // Still 1368 daily rows with the workout zone derive (derive/workoutZones.ts): this seed
+      // sends the day's zone ceilings, and a day with Google's ceilings is Google's day, so the
+      // derive writes no zone minutes and no load for it.
       expect({
         samples: countOf(db, 'samples'),
         daily: countOf(db, 'daily'),
         sessions: countOf(db, 'sessions'),
         observations: countOf(db, 'observations'),
-      }).toEqual({ samples: 10328, daily: 1418, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 10328, daily: 1368, sessions: 19, observations: 14 })
       // The report an operator reads has to say what the tables say.
       expect({
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
-      }).toEqual({ samples: 10328, dailyRows: 1418, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 10328, dailyRows: 1368, sessions: 19, observations: 14 })
 
       // Broken down per metric, so a regression that lost 300 steps samples while a mapper
       // started emitting 300 spurious weight rows - invisible to the bare total above, which
@@ -746,14 +744,6 @@ describe('the upgrade path', () => {
           weight: 4 * SEED_DAYS,
           workout_count: 10,
           workout_minutes: 10,
-          // From the workouts' own heart rate against the day's ceilings (derive/workoutZones.ts),
-          // since this seed sends no zone-minute samples: one row for the workout's source and one
-          // merged, on each of the five workout days. The load is computed from those four.
-          time_in_heart_rate_zone_light_minutes: 10,
-          time_in_heart_rate_zone_moderate_minutes: 10,
-          time_in_heart_rate_zone_vigorous_minutes: 10,
-          time_in_heart_rate_zone_peak_minutes: 10,
-          cardio_load_edwards: 10,
         })
 
       // The single worst thing a rebuild can do: produce exactly the right number of rows with
