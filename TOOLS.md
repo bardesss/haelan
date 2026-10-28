@@ -600,7 +600,7 @@ A body age: the calendar age whose mortality risk matches this person's resting 
 - **factors** (array of object) — Empty when `enough` is false.
   - **key** ('vo2Max' | 'restingHeartRate' | 'hrv' | 'activity' | 'sleepRegularity' | 'strength')
   - **value** (number, nullable) — The person's own figure in the factor's unit. Null when `missing` is set.
-  - **reference** (number, nullable) — The typical figure for this age and sex, same unit. Null when `missing` is set.
+  - **reference** (number, nullable) — The reference figure, same unit: age- and sex-specific for VO₂max and resting heart rate, fixed for the others. Null when `missing` is set.
   - **years** (number) — Years this factor adds (positive) or takes away (negative), within its own cap. 0 when `missing` is set.
   - **capped** (boolean) — True when the factor hit its own cap, so a larger difference would not have moved it further.
   - **missing** ('tooFewDays' | 'tooFewWeeks' | 'noReading', nullable) — Null when the factor was scored. Otherwise it had too few days in the 30-day window (`tooFewWeeks` for sleepRegularity: fewer than two of its 7-day blocks have 4 nights each), or none, and adds 0 years - withheld, not scored as typical.

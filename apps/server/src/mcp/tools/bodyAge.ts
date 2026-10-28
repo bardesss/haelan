@@ -11,7 +11,7 @@ const FACTOR_KEY = z.enum(['vo2Max', 'restingHeartRate', 'hrv', 'activity', 'sle
 const FACTOR = z.object({
   key: FACTOR_KEY,
   value: z.number().nullable().describe('The person\'s own figure in the factor\'s unit. Null when `missing` is set.'),
-  reference: z.number().nullable().describe('The typical figure for this age and sex, same unit. Null when `missing` is set.'),
+  reference: z.number().nullable().describe('The reference figure, same unit: age- and sex-specific for VO₂max and resting heart rate, fixed for the others. Null when `missing` is set.'),
   years: z.number().describe('Years this factor adds (positive) or takes away (negative), within its own cap. 0 when `missing` is set.'),
   capped: z.boolean().describe('True when the factor hit its own cap, so a larger difference would not have moved it further.'),
   missing: z.enum(['tooFewDays', 'tooFewWeeks', 'noReading']).nullable().describe(
