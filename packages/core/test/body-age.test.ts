@@ -22,9 +22,16 @@ function days(from: string, n: number, value: number) {
   return Array.from({ length: n }, (_, i) => ({ localDate: shiftLocalDate(from, i), value }))
 }
 
-/** Twelve bedtimes at -a and +a, six days each, 15 days apart. Their sample SD is a·√(12/11). */
-function bedtimes(a: number) {
-  return [-a, a].flatMap((v, i) => days(shiftLocalDate(START, i * 15), 6, v))
+/**
+ * Four 7-day blocks ending on END, in each of which the bedtimes are a, -a, a, -a, a, -a, 0. Each
+ * block's sample SD is exactly `a` (sum of squares 6a² over 6 degrees of freedom), whatever the
+ * block's mean. The two days before the first block are left out.
+ */
+function bedtimes(a: number, blockMeans: readonly number[] = [0, 0, 0, 0]) {
+  return blockMeans.flatMap((mean, k) => {
+    const blockStart = shiftLocalDate(END, -(6 + 7 * k))
+    return [a, -a, a, -a, a, -a, 0].map((v, i) => ({ localDate: shiftLocalDate(blockStart, i), value: mean + v }))
+  })
 }
 
 const ref = (key: string) => BODY_AGE_FACTORS.find((f) => f.key === key)!.reference(AGE, SEX)
@@ -36,7 +43,7 @@ const full: BodyAgeInput = {
   restingHeartRate: days(START, 30, ref('restingHeartRate')),
   hrv: days(START, 30, 50),
   activityMinutes: days(START, 30, ref('activity') / 7),
-  bedtimeMinutes: bedtimes(ref('sleepRegularity') * Math.sqrt(11 / 12)),
+  bedtimeMinutes: bedtimes(ref('sleepRegularity')),
   strengthSessionDates: [],
 }
 
@@ -105,6 +112,31 @@ test('bedtimes either side of midnight spread by minutes, not by a day', () => {
   const f = factor(available({ ...full, bedtimeMinutes: bed }), 'sleepRegularity')
   expect(f.value).toBeGreaterThan(15)
   expect(f.value).toBeLessThan(25)
+})
+
+test('a steady pattern that drifts from week to week has no spread', () => {
+  const drifting = bedtimes(0, [0, 60, 120, 180])
+  const f = factor(available({ ...full, bedtimeMinutes: drifting }), 'sleepRegularity')
+  expect(f.value).toBeCloseTo(0, 9)
+})
+
+test('the sleep spread is the mean of the weekly SDs', () => {
+  const mixed = [...bedtimes(10, [0, 0]), ...bedtimes(30, [0, 0, 0, 0]).filter((b) => b.localDate <= shiftLocalDate(END, -14))]
+  // Blocks 0 and 1 at SD 10, then blocks 2 and 3 at SD 30 (the later bedtimes(30) rows overwrite nothing).
+  const f = factor(available({ ...full, bedtimeMinutes: mixed }), 'sleepRegularity')
+  expect(f.value).toBeCloseTo(20, 9)
+})
+
+test('the sleep spread needs two weeks with at least four nights each', () => {
+  const week = (k: number, nights: number) => bedtimes(20, [0, 0, 0, 0])
+    .filter((b) => b.localDate >= shiftLocalDate(END, -(6 + 7 * k)) && b.localDate <= shiftLocalDate(END, -7 * k))
+    .slice(0, nights)
+  const one = [...week(0, 7), ...week(1, 3)]
+  expect(factor(available({ ...full, bedtimeMinutes: one }), 'sleepRegularity'))
+    .toMatchObject({ missing: 'tooFewDays', value: null, years: 0, days: 10 })
+  const two = [...week(0, 7), ...week(1, 4)]
+  expect(factor(available({ ...full, bedtimeMinutes: two }), 'sleepRegularity').missing).toBeNull()
+  expect(factor(available({ ...full, bedtimeMinutes: [] }), 'sleepRegularity').missing).toBe('noReading')
 })
 
 test('the total cap binds', () => {

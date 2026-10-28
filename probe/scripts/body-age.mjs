@@ -61,7 +61,7 @@ const nextMonth = (m) => {
 console.log(`\n# Body age gate, ${DIR}\n`)
 console.log(`slope ${GOMPERTZ_SLOPE}, total cap ${BODY_AGE_TOTAL_CAP}`
   + `, factor caps ${BODY_AGE_FACTORS.map((f) => `${f.key} ${f.cap}`).join(', ')}`)
-console.log('sleepRegularity: spread over the 30-day window (sample SD of nightly bedtime), not a 7-day SD')
+console.log('sleepRegularity: mean of the sample SDs of bedtime over the window\'s 7-day blocks')
 
 const ids = db.$client.prepare('SELECT id FROM people ORDER BY id').all().map((r) => r.id)
 console.log(`people: ${ids.length}`)

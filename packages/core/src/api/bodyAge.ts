@@ -175,8 +175,9 @@ const ACTIVITY_LN_HR: readonly Knot[] = [
  * The method that maps SRI to a bedtime spread: the paper's Supplementary Table S2.7 gives, for each
  * SRI quintile, the median within-person SD of sleep onset time over the same week: 1.58, 1.08,
  * 0.85, 0.68 and 0.47 hours. Each quintile's HR is placed at that median (95, 65, 51, 41 and 28
- * minutes) and interpolated between. haelan's bedtime spread is a PROXY for the SRI. The SRI also
- * counts wake times, naps and broken nights, which a bedtime SD does not see.
+ * minutes) and interpolated between. haelan's bedtime spread is a PROXY for the SRI: the mean of the
+ * SDs of bedtime over the window's 7-day blocks, the same one-week span as the paper's onset SD. The
+ * SRI also counts wake times, naps and broken nights, which a bedtime SD does not see.
  */
 const SLEEP_SPREAD_LN_HR: readonly Knot[] = [
   [28.2, Math.log(0.70)],
@@ -450,6 +451,27 @@ function sampleStandardDeviation(values: readonly number[]): number {
   return Math.sqrt(values.reduce((t, v) => t + (v - m) ** 2, 0) / (values.length - 1))
 }
 
+const SLEEP_BLOCK_DAYS = 7
+const SLEEP_BLOCKS = 4
+const MIN_NIGHTS_PER_BLOCK = 4
+const MIN_SLEEP_BLOCKS = 2
+
+/**
+ * The mean of the sample SDs of bedtime over consecutive 7-day blocks ending on `endDate`, or null
+ * when fewer than two blocks have at least four nights. The week is Windred's own window for the
+ * onset SD, and a bedtime that holds steady within each week but drifts between weeks reads as regular.
+ * The two oldest days of the 30 fall in no block.
+ */
+function weeklySleepSpread(rows: readonly DayValue[], endDate: string): number | null {
+  const spreads: number[] = []
+  for (let k = 0; k < SLEEP_BLOCKS; k += 1) {
+    const to = shiftLocalDate(endDate, -SLEEP_BLOCK_DAYS * k)
+    const values = inWindow(rows, shiftLocalDate(to, -(SLEEP_BLOCK_DAYS - 1)), to)
+    if (values.length >= MIN_NIGHTS_PER_BLOCK) spreads.push(sampleStandardDeviation(values))
+  }
+  return spreads.length >= MIN_SLEEP_BLOCKS ? mean(spreads) : null
+}
+
 /** One value per day inside the window; a repeated date keeps its last row. */
 function inWindow(rows: readonly DayValue[], from: string, to: string): number[] {
   const byDate = new Map<string, number>()
@@ -508,7 +530,10 @@ export function bodyAgeAt(input: BodyAgeInput, endDate: string): BodyAge {
     vo2Max: { value: vo2.value, days: 1 },
     restingHeartRate: daily(input.restingHeartRate, mean),
     activity: daily(input.activityMinutes, (v) => mean(v) * 7),
-    sleepRegularity: daily(input.bedtimeMinutes, sampleStandardDeviation),
+    sleepRegularity: {
+      value: weeklySleepSpread(input.bedtimeMinutes, endDate),
+      days: inWindow(input.bedtimeMinutes, from, endDate).length,
+    },
     strength: { value: (strengthSessions * 7) / BODY_AGE_WINDOW_DAYS, days: strengthDays.size },
   }
 
