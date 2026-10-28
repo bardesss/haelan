@@ -545,3 +545,94 @@ export function bodyAgeAt(input: BodyAgeInput, endDate: string): BodyAge {
     vo2MaxDate: vo2.localDate,
   }
 }
+
+/** The latest date on or before `onOrBefore` that has a resting heart rate or HRV row, else null. */
+export function lastScoredDay(input: BodyAgeInput, onOrBefore: string): string | null {
+  let latest: string | null = null
+  for (const rows of [input.restingHeartRate, input.hrv]) {
+    for (const row of rows) {
+      if (row.localDate <= onOrBefore && (latest === null || row.localDate > latest)) latest = row.localDate
+    }
+  }
+  return latest
+}
+
+export interface BodyAgeMonth {
+  /** `YYYY-MM`. */
+  month: string
+  /** The month's last scored day on or before today: the end of the window this entry reads. */
+  endDate: string
+  bodyAge: number
+  calendarAge: number
+  gap: number
+}
+
+export interface BodyAgeHistory {
+  /** The body age on the last scored day, not on today: a sync that lags leaves today empty. */
+  current: BodyAge | null
+  /** The window ending 30 days before `current`'s, when both are available. */
+  previous: BodyAgeAvailable | null
+  /** One entry per calendar month that has a scored day and a body age, oldest first. */
+  months: BodyAgeMonth[]
+  /** Years of body age lived per calendar year over the last twelve months. 1 is keeping pace. */
+  pace: number | null
+  /** The month with the largest gap below calendar age. */
+  youngest: BodyAgeMonth | null
+}
+
+const DAYS_PER_YEAR = 365.25
+
+function daysBetween(from: string, to: string): number {
+  return (parseLocalDate(to)! - parseLocalDate(from)!) / DAY_MS
+}
+
+/**
+ * The body age now, 30 days earlier, and at the end of every month with data.
+ *
+ * A month with scored days but a withheld body age (the VO2 reading too old, say) is absent: the
+ * hole in the series is the missing month, and nothing is filled in. The pace compares the current
+ * month's gap with the entry 12 calendar months before, and is null when that entry is absent.
+ * Months tied on the largest gap name the earliest.
+ */
+export function bodyAgeHistory(input: BodyAgeInput, today: string): BodyAgeHistory {
+  const endDate = lastScoredDay(input, today)
+  const current = endDate === null ? null : bodyAgeAt(input, endDate)
+
+  let previous: BodyAgeAvailable | null = null
+  if (current?.enough) {
+    const earlier = lastScoredDay(input, shiftLocalDate(current.endDate, -BODY_AGE_WINDOW_DAYS))
+    const body = earlier === null ? null : bodyAgeAt(input, earlier)
+    if (body?.enough) previous = body
+  }
+
+  const scoredMonths = new Set<string>()
+  for (const rows of [input.restingHeartRate, input.hrv]) {
+    for (const row of rows) if (row.localDate <= today) scoredMonths.add(row.localDate.slice(0, 7))
+  }
+  const months: BodyAgeMonth[] = []
+  for (const month of [...scoredMonths].sort()) {
+    // Dates compare as text: no date in a month is later than its own "31st", and today caps the
+    // current month so a row after today cannot become its anchor.
+    const anchor = lastScoredDay(input, `${month}-31` < today ? `${month}-31` : today)
+    if (anchor === null) continue
+    const body = bodyAgeAt(input, anchor)
+    if (body.enough) {
+      months.push({ month, endDate: anchor, bodyAge: body.bodyAge, calendarAge: body.calendarAge, gap: body.gap })
+    }
+  }
+
+  let youngest: BodyAgeMonth | null = null
+  for (const m of months) if (youngest === null || m.gap < youngest.gap) youngest = m
+
+  let pace: number | null = null
+  const now = months[months.length - 1]
+  if (current?.enough && now !== undefined && now.endDate === current.endDate) {
+    const thenMonth = `${Number(now.month.slice(0, 4)) - 1}${now.month.slice(4)}`
+    const then = months.find((m) => m.month === thenMonth)
+    if (then !== undefined) {
+      pace = 1 + (now.gap - then.gap) / (daysBetween(then.endDate, now.endDate) / DAYS_PER_YEAR)
+    }
+  }
+
+  return { current, previous, months, pace, youngest }
+}
