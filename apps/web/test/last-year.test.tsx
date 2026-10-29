@@ -10,7 +10,7 @@ import type { SeriesPoint } from '../src/data/useSeries.js'
 import type { Translate } from '../src/format.js'
 
 const point = (localDate: string, value: number): SeriesPoint =>
-  ({ localDate, value, coverage: 1, source: 'merged', sourceMix: null, updatedAtMs: 0, filled: false })
+  ({ localDate, value, coverage: 1, source: 'merged', sourceMix: null, updatedAtMs: 0, filled: false, basis: null })
 
 describe('yearEarlier', () => {
   it('names the same calendar date a year before', () => {

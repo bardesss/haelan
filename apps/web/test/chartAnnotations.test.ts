@@ -5,7 +5,7 @@ import type { StoredOverride } from '../src/data/useAnnotations.js'
 import type { SeriesPoint } from '../src/data/useSeries.js'
 
 function seriesPoint(localDate: string, filled: boolean): SeriesPoint {
-  return { localDate, value: 42, coverage: null, source: 'merged', sourceMix: null, updatedAtMs: null, filled }
+  return { localDate, value: 42, coverage: null, source: 'merged', sourceMix: null, updatedAtMs: null, filled, basis: null }
 }
 
 /**

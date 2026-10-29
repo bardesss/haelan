@@ -68,13 +68,20 @@ export interface ActivityPeriod {
   /** By count, descending, then type. */
   types: TypeTotal[]
   cardioLoad: PeriodFigure | null
+  /**
+   * The days, ascending, whose zone minutes come from the age-and-resting-rate formula rather than
+   * from heart rate zones a provider recorded (daily.basis = 'zone_formula'), within the period's
+   * days so far. It covers both `heartRateZones` and `cardioLoad`: the load on those days is built
+   * from those minutes, so a figure that rests on the formula says so in both places.
+   */
+  zoneFormulaDays: string[]
   vo2max: Vo2Trend | null
   /** Total calories, active zone minutes, workout minutes, altitude gain, sedentary minutes, those with days. */
   more: PeriodFigure[]
 }
 
 const ZONE_METRICS = ['active_zone_minutes_fat_burn', 'active_zone_minutes_cardio', 'active_zone_minutes_peak'] as const
-const HEART_RATE_ZONE_METRICS = [
+export const HEART_RATE_ZONE_METRICS = [
   'time_in_heart_rate_zone_light_minutes', 'time_in_heart_rate_zone_moderate_minutes',
   'time_in_heart_rate_zone_vigorous_minutes', 'time_in_heart_rate_zone_peak_minutes',
 ] as const
@@ -259,6 +266,8 @@ export function readActivityPeriod(q: PersonQuery, input: ActivityPeriodInput): 
     workoutMonths: workoutMonths(workouts),
     types: typesOf(counted, earlierTypes, range, bounds, steps.series.values, period.partial),
     cardioLoad: orNull(figure(CARDIO_LOAD_METRIC)),
+    // The Monday of a running week has no finished day yet, and the reader refuses an empty range.
+    zoneFormulaDays: lastDay < bounds.from ? [] : q.zoneFormulaDays({ from: bounds.from, to: lastDay, source }),
     vo2max: vo2Of(q, span, lastDay, source),
     more: [
       figure('total_calories'), zoneTotal, figure('workout_minutes'), figure('altitude_gain'), figure('sedentary_minutes'),

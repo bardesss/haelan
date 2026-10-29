@@ -1,3 +1,5 @@
+import { and, eq, inArray } from 'drizzle-orm'
+import { ZONE_FORMULA_BASIS } from '../src/derive/rollup.ts'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -332,6 +334,20 @@ describe('readActivityPeriod', () => {
     expect(hard).toMatchObject({ metric: 'hard_zone_minutes', unit: 'minutes', direction: 'up', per: 'day', days: 31, total: 11 * 31 - 3 })
     expect(hard!.daily.find((d) => d.from === '2026-08-05')!.value).toBe(8)
     expect(hard!.usual).toMatchObject({ periods: 11 })
+  })
+
+  it('lists the days whose zone minutes rest on the formula', () => {
+    seedDays()
+    seedSeries('time_in_heart_rate_zone_light_minutes', () => 200)
+    seedSeries('time_in_heart_rate_zone_vigorous_minutes', () => 8)
+    const formula = ['2026-08-03', '2026-08-12']
+    test.db.update(daily).set({ basis: ZONE_FORMULA_BASIS }).where(and(
+      inArray(daily.localDate, formula), inArray(daily.metric, ['time_in_heart_rate_zone_light_minutes', 'time_in_heart_rate_zone_vigorous_minutes']),
+    )).run()
+    // A formula day outside the period is not this period's.
+    test.db.update(daily).set({ basis: ZONE_FORMULA_BASIS }).where(eq(daily.localDate, '2026-07-31')).run()
+    expect(readActivityPeriod(q(), input(AUGUST)).zoneFormulaDays).toEqual(formula)
+    expect(readActivityPeriod(q(), input({ ...AUGUST, source: 'watch' })).zoneFormulaDays).toEqual([])
   })
 
   it('has no hard-zone lead without vigorous or peak minutes', () => {

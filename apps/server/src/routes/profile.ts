@@ -120,6 +120,11 @@ export function registerProfile(app: FastifyInstance): void {
       // Saving the form unchanged sends all three every time, and a timezone write costs this
       // person every derived row they have until a rebuild replays them (PeopleStore.setTimezone),
       // so "somebody pressed save" must never be mistaken for "the day boundary moved".
+      // The birthday gets the same treatment for a different reason: it costs far less than a
+      // rebuild, but a workout's heart rate zones come from it (the formula's maximum), so the
+      // days that carry workouts have to be derived again. A form that sends the birthday on every
+      // save would otherwise requeue every workout the person has each time.
+      const birthDateMoved = birthDate !== undefined && birthDate !== person.birthDate
       const zoneMoved = typeof timezone === 'string' && timezone !== person.timezone
 
       if (typeof displayName === 'string') stores().people.setDisplayName(person.id, displayName)
@@ -127,6 +132,9 @@ export function registerProfile(app: FastifyInstance): void {
       // land before anything has marked this person for an eleven minute rebuild they did not get.
       if (typeof username === 'string') stores().accounts.setUsername(account.id, username)
       if (birthDate !== undefined) stores().people.setBirthDate(person.id, birthDate as string | null)
+      if (birthDateMoved) {
+        app.haelan.instance.deriveQueue.markExerciseDays({ personId: person.id, nowMs: app.haelan.now() })
+      }
       if (sex !== undefined) stores().people.setSex(person.id, sex as 'male' | 'female' | null)
       // An out of range value throws ConfigError here, which this scope's own error handler turns
       // into the same envelope the branch above sends by hand. Left to travel rather than

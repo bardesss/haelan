@@ -135,7 +135,7 @@ export { priorityFrom, fallbackOrder, DEFAULT_LIST, UNRANKED_BASE } from './deri
 export type { Priority, PriorityInput, SourceFacts } from './derive/priority.ts'
 export { mergeDay } from './derive/merge.ts'
 export type { MixEntry, MergeDayInput } from './derive/merge.ts'
-export { MERGED_SOURCE } from './derive/rollup.ts'
+export { MERGED_SOURCE, ZONE_FORMULA_BASIS } from './derive/rollup.ts'
 export { SourcePriorityStore } from './store/sourcePriority.ts'
 export type { StoredList } from './store/sourcePriority.ts'
 export { SourceAliasStore, nameFor, namedSourcesOf, MAX_ALIAS_LENGTH } from './store/sourceAliases.ts'

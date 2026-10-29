@@ -1,0 +1,1 @@
+ALTER TABLE `daily` ADD `basis` text;

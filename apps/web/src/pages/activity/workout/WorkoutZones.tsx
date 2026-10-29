@@ -79,6 +79,7 @@ export function WorkoutZones({ detail, page }: { detail: WorkoutDetail, page: Wo
             ))}
           </ul>
         </div>
+        {page.zoneFormula === true && <p className="dash-caption">{t('activity.workout.page.zones.formula')}</p>}
       </div>
     </Card>
   )

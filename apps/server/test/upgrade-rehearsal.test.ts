@@ -580,6 +580,10 @@ describe('the upgrade path', () => {
       // workout writes heart rate every minute, so 17 minutes x four rows = 68 more. Its readings
       // come from a ride stream of their own and the old ride is still drawn and set aside, so no
       // run, walk or other count moved.
+      //
+      // Still 1368 daily rows with the workout zone derive (derive/workoutZones.ts): this seed
+      // sends the day's zone ceilings, and a day with Google's ceilings is Google's day, so the
+      // derive writes no zone minutes and no load for it.
       expect({
         samples: countOf(db, 'samples'),
         daily: countOf(db, 'daily'),

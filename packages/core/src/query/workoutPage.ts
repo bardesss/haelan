@@ -69,6 +69,11 @@ export interface WorkoutPage {
    * subject is ever filled: every usual, strip point before it and previous value is as recorded.
    */
   filled: WorkoutFigureKey[]
+  /**
+   * Whether the heart rate zones were estimated from the person's age and resting heart rate
+   * (fillFromSamples.ts's `zoneBasis`) rather than the provider's ceilings, so the page can say so.
+   */
+  zoneFormula: boolean
   hero: WorkoutFigureKey
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>
@@ -742,6 +747,7 @@ export function readWorkoutPage(q: PersonQuery, input: WorkoutPageInput): Workou
     exerciseType,
     pending: isRecord(session.attrs) && session.attrs.awaitingSummary === true,
     filled,
+    zoneFormula: isRecord(session.attrs) && session.attrs.zoneBasis === 'zoneFormula',
     hero,
     nav: navOf(q, session, input.today),
     figures,

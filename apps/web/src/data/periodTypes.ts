@@ -185,6 +185,8 @@ export interface ActivityPeriodData {
   workoutMonths: WorkoutMonth[]
   types: TypeTotal[]
   cardioLoad: PeriodFigure | null
+  /** The days whose zone minutes, and the cardio load built from them, rest on the formula: the heart-rate zones caption counts them. */
+  zoneFormulaDays: string[]
   vo2max: Vo2Trend | null
   more: PeriodFigure[]
 }

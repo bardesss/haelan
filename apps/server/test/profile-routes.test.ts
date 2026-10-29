@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -466,5 +467,37 @@ describe('an invite takes the timezone of the admin who sent it', () => {
     // is about, which is what it never was before.
     expect((await saveProfile(bobToken, { timezone: 'Europe/Lisbon' })).statusCode).toBe(200)
     expect(person(created.personId)!.timezone).toBe('Europe/Lisbon')
+  })
+})
+
+describe('PUT /api/profile birthday and the derive queue', () => {
+  // The zone formula reads the birthday, so a workout's stored zone minutes are only as current as
+  // the birthday they were derived under.
+  const seedWorkout = () => {
+    const db = h.app.haelan.instance.db
+    db.insert(schema.sources).values({
+      id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch', kind: 'device', createdAtMs: 0,
+    }).run()
+    db.insert(schema.sessions).values({
+      id: 'w1', personId: 'p1', sourceId: 'watch', kind: 'exercise', externalId: 'w1',
+      startMs: 0, startOffsetMinutes: 0, endMs: 0, endOffsetMinutes: 0,
+      localDate: '2026-08-22', attrs: '{}', rawPayloadId: null,
+    }).run()
+  }
+  const queued = () => h.app.haelan.instance.deriveQueue.has({ personId: 'p1', localDate: '2026-08-22' })
+
+  it("a changed birthday queues the person's workout days", async () => {
+    seedWorkout()
+    h.app.haelan.instance.deriveQueue.clear([{ personId: 'p1', localDate: '2026-08-22' }])
+    expect((await saveProfile(adminToken, { birthDate: '1985-03-04' })).statusCode).toBe(200)
+    expect(queued()).toBe(true)
+  })
+
+  it('saving the same birthday again queues nothing', async () => {
+    seedWorkout()
+    await saveProfile(adminToken, { birthDate: '1985-03-04' })
+    h.app.haelan.instance.deriveQueue.clear([{ personId: 'p1', localDate: '2026-08-22' }])
+    expect((await saveProfile(adminToken, { birthDate: '1985-03-04' })).statusCode).toBe(200)
+    expect(queued()).toBe(false)
   })
 })

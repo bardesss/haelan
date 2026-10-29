@@ -504,6 +504,7 @@
           "filled": "deze training uit je metingen",
           "filledPace": "deze training uit je metingen, het tempo over de verstreken tijd",
           "filledSpeed": "deze training uit je metingen, de snelheid over de verstreken tijd",
+          "zoneFormula": "cardiobelasting op zones geschat uit je leeftijd en rusthartslag",
           "tableCaption": "Deze training naast de vorige van dit type",
           "tableCaptionAlone": "Deze training",
           "captionWith": {
@@ -615,7 +616,8 @@
         },
         "zones": {
           "label": "Hartslagzones",
-          "hard": "{{value}} intensief of piek"
+          "hard": "{{value}} intensief of piek",
+          "formula": "zones geschat uit je leeftijd en rusthartslag"
         },
         "recovery": {
           "label": "Hartslagherstel",
@@ -673,6 +675,7 @@
         "filled": {
           "figure": "uit je metingen",
           "rate": "uit je metingen, over de verstreken tijd",
+          "zoneFormula": "uit je metingen, op zones geschat uit je leeftijd en rusthartslag",
           "previous": "deze gemeten over de verstreken tijd"
         },
         "secondsPer100m": "{{value}} s/100 m"
@@ -708,7 +711,9 @@
       },
       "zones": {
         "hard": "intensief of piek",
-        "caption": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag"
+        "caption": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag",
+        "captionFormula_one": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag; op {{count}} dag alleen tijdens trainingen, zones geschat uit je leeftijd en rusthartslag",
+        "captionFormula_other": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag; op {{count}} dagen alleen tijdens trainingen, zones geschat uit je leeftijd en rusthartslag"
       },
       "workouts": {
         "label": "Trainingen",

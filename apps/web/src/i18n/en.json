@@ -504,6 +504,7 @@
           "filled": "this workout from your readings",
           "filledPace": "this workout from your readings, its pace over the elapsed time",
           "filledSpeed": "this workout from your readings, its speed over the elapsed time",
+          "zoneFormula": "cardio load on zones estimated from your age and resting heart rate",
           "tableCaption": "This workout beside the previous one of its type",
           "tableCaptionAlone": "This workout",
           "captionWith": {
@@ -615,7 +616,8 @@
         },
         "zones": {
           "label": "Heart-rate zones",
-          "hard": "{{value}} vigorous or peak"
+          "hard": "{{value}} vigorous or peak",
+          "formula": "zones estimated from your age and resting heart rate"
         },
         "recovery": {
           "label": "Heart-rate recovery",
@@ -673,6 +675,7 @@
         "filled": {
           "figure": "from your readings",
           "rate": "from your readings, over the elapsed time",
+          "zoneFormula": "from your readings, on zones estimated from your age and resting heart rate",
           "previous": "this one measured over the elapsed time"
         },
         "secondsPer100m": "{{value}} s/100 m"
@@ -708,7 +711,9 @@
       },
       "zones": {
         "hard": "vigorous or peak",
-        "caption": "time in each zone over {{period}}, from your heart rate through the whole day"
+        "caption": "time in each zone over {{period}}, from your heart rate through the whole day",
+        "captionFormula_one": "time in each zone over {{period}}, from your heart rate through the whole day; on {{count}} day only during workouts, zones estimated from your age and resting heart rate",
+        "captionFormula_other": "time in each zone over {{period}}, from your heart rate through the whole day; on {{count}} days only during workouts, zones estimated from your age and resting heart rate"
       },
       "workouts": {
         "label": "Workouts",

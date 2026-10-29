@@ -488,6 +488,7 @@ function snapshotOf(db: Database): RebuildableSnapshot {
       personId: daily.personId, localDate: daily.localDate, metric: daily.metric,
       agg: daily.agg, source: daily.source, value: daily.value, coverage: daily.coverage,
       sourceMix: daily.sourceMix, derivationVersion: daily.derivationVersion,
+      basis: daily.basis,
     }).from(daily)
       .orderBy(
         asc(daily.personId), asc(daily.localDate), asc(daily.metric),
