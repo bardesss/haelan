@@ -82,8 +82,7 @@ export function readBodyAgeInput(db: DbOrTx, personId: string, input: { today: s
 
   // Vigorous minutes count double (the activity factor expects that). The source writes no row for a
   // level with no minutes, so a date is present when any level has a row: a light-only day is a worn
-  // day with zero, and leaving it out averaged over the active days alone (a quarter of worn days in
-  // the household archive, about a third added to the weekly figure).
+  // day with zero, and leaving it out averaged over the active days alone.
   const activity = new Map<string, number>()
   for (const [metric, weight] of [['active_minutes_light', 0], ['active_minutes_moderate', 1], ['active_minutes_vigorous', 2]] as const) {
     for (const p of fetch(metric, 'sum').points) activity.set(p.localDate, (activity.get(p.localDate) ?? 0) + weight * p.value)
