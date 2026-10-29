@@ -2,6 +2,8 @@ import { and, asc, eq, gt, gte, inArray, isNotNull, lt, lte, max, min } from 'dr
 import type { DbOrTx } from '../db/open.ts'
 import { readSourceActivity } from './sourceActivity.ts'
 import { readAllTime } from './allTime.ts'
+import { readBodyAge } from './bodyAgeRead.ts'
+import type { BodyAgeRead } from './bodyAgeRead.ts'
 import type { AllTime } from './allTime.ts'
 import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
 import { daily, metricDictionary, people, samples, sessions, overrides as overridesTable, SESSION_KINDS, sources } from '../db/schema/index.ts'
@@ -239,6 +241,12 @@ export class PersonQuery {
    */
   allTime(): AllTime {
     return readAllTime(this.#db, this.#personId)
+  }
+
+  /** Body age over this person's whole archive up to `today`: see readBodyAge. */
+  bodyAge(input: { today: string }): BodyAgeRead {
+    requireDate('today', input.today)
+    return readBodyAge(this.#db, this.#personId, input)
   }
 
   sourceActivity(input: { today: string }): SourceActivity[] {

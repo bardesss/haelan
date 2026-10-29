@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { DEFAULT_LIST, DERIVATION_VERSION, RawArchive, dayMetricTarget, insertSample, samplePoint, schema } from '@haelan/core'
 import { registeredRoutes, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
@@ -98,6 +99,17 @@ function seedNight(h: Harness, input: { personId: string, sourceId: string }): v
 function seedPeriodNight(h: Harness, input: { personId: string, sourceId: string }): void {
   seedNight(h, input)
   seedDaily(h, { personId: input.personId, localDate: '2026-02-01', metric: 'sleep_asleep_minutes', value: 420 })
+}
+
+// The four things a body age is withheld without, for the body-age entry below. The harness clock
+// reads 2026-02-02, so these January days have happened.
+function seedBodyAgePerson(h: Harness, personId: string, vo2: number): void {
+  h.app.haelan.instance.db.update(schema.people)
+    .set({ birthDate: '1990-01-01', sex: 'male' }).where(eq(schema.people.id, personId)).run()
+  seedDaily(h, { personId, localDate: '2026-01-20', metric: 'daily_vo2_max', agg: 'last', value: vo2 })
+  for (let day = 10; day <= 25; day += 1) {
+    seedDaily(h, { personId, localDate: `2026-01-${day}`, metric: 'resting_heart_rate', agg: 'last', value: 55 })
+  }
 }
 
 interface RouteCase {
@@ -410,6 +422,18 @@ const ROUTES: readonly RouteCase[] = [
     seedOther: (h, personId) => seedDaily(h, { personId, localDate: dateOf(2), value: 999999 }),
     ownNeedle: '1111',
     otherNeedle: '999999',
+  },
+  {
+    name: 'body-age',
+    template: '/api/v1/p/:personId/body-age',
+    // A body age needs a birth date, a sex, a VO2 max reading and a scored day (a resting heart
+    // rate row), so each person gets all four. The marker rides on the VO2 max, which the body
+    // carries as the vo2Max factor's value.
+    path: (p) => `/api/v1/p/${p}/body-age`,
+    seedOwn: (h) => seedBodyAgePerson(h, 'p1', 77.7),
+    seedOther: (h, personId) => seedBodyAgePerson(h, personId, 11.1),
+    ownNeedle: '77.7',
+    otherNeedle: '11.1',
   },
   {
     name: 'sources',

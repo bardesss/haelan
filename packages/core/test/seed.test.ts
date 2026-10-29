@@ -501,6 +501,29 @@ describe('seedArchive', () => {
     expect(run(true)).toEqual(withWalk)
   })
 
+  // The demo's body age page needs a VO2 max reading, which nothing else in the seed files by day.
+  it('adds a weekly daily VO2 max on request, and nothing else', () => {
+    type Put = { dataType: string, windowStartMs: number, body: string }
+    const run = (dailyVo2Max: boolean): Put[] => {
+      const puts: Put[] = []
+      const archive = { put: (row: Put) => { puts.push({ dataType: row.dataType, windowStartMs: row.windowStartMs, body: row.body }) } }
+      seedArchive({ archive: archive as unknown as RawArchive, personId: 'p1', days: 31, endMs: localMidnightMs('2026-09-07'), dailyVo2Max })
+      return puts
+    }
+    const without = run(false)
+    const withVo2 = run(true)
+    const vo2 = withVo2.filter((p) => p.dataType === 'daily-vo2-max')
+    expect(without.filter((p) => p.dataType === 'daily-vo2-max')).toEqual([])
+    expect(vo2.length).toBe(5)
+    expect(withVo2.filter((p) => p.dataType !== 'daily-vo2-max')).toEqual(without)
+    for (const p of vo2) {
+      const value = Number(JSON.parse(p.body).dataPoints[0].dailyVo2Max.vo2Max)
+      expect(value).toBeGreaterThan(35)
+      expect(value).toBeLessThan(55)
+    }
+    expect(run(true)).toEqual(withVo2)
+  })
+
   it('fills the phone-only walk from its samples after a rebuild, and marks it awaiting Google', () => {
     const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-phone-walk-'))
     const instance = openHaelan(dir)

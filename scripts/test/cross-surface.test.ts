@@ -34,7 +34,8 @@ function pageNames() {
     // neither Settings nor Account - the two halves of what used to be one settings page - is one
     // of the eight either document counts.
     .filter(([, literal, constant]) => constant === undefined && !literal!.includes(':'))
-    .map(([, , , component]) => component!)
+    // A two-word component (BodyAge) is a page the prose writes as "Body age".
+    .map(([, , , component]) => component!.replace(/([a-z])([A-Z])/g, (_, a: string, b: string) => `${a} ${b.toLowerCase()}`))
     .filter((component) => component !== 'Settings' && component !== 'Account')
 }
 
