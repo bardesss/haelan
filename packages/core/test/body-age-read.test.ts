@@ -96,6 +96,15 @@ describe('readBodyAge', () => {
     expect(input.activityMinutes).toEqual([{ localDate: TODAY, value: 8 }])
   })
 
+  it('counts a worn day with only light minutes as zero, not as a missing day', () => {
+    // The source writes no moderate or vigorous row for a level with no minutes, so a light row is
+    // the only sign the day was worn. Dropping it would average over the active days alone.
+    seed('active_minutes_light', 'sum', (d) => (d === TODAY || d === FIRST ? 90 : null))
+    seed('active_minutes_moderate', 'sum', (d) => (d === TODAY ? 30 : null))
+    const { input } = readBodyAgeInput(test.db, 'p1', { today: TODAY })
+    expect(input.activityMinutes).toEqual([{ localDate: FIRST, value: 0 }, { localDate: TODAY, value: 30 }])
+  })
+
   it('falls back to run_vo2_max when the other two VO2 metrics have no rows', () => {
     seedEverything('run_vo2_max')
     const { input } = readBodyAgeInput(test.db, 'p1', { today: TODAY })

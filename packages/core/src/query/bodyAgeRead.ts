@@ -40,7 +40,7 @@ export interface BodyAgeRead extends BodyAgeHistory {
   method: BodyAgeMethod
 }
 
-const FIXED_METRICS = ['resting_heart_rate', 'daily_hrv', 'sleep_bedtime_minutes', 'active_minutes_moderate', 'active_minutes_vigorous']
+const FIXED_METRICS = ['resting_heart_rate', 'daily_hrv', 'sleep_bedtime_minutes', 'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous']
 
 const BODY_AGE_METHOD: BodyAgeMethod = {
   windowDays: BODY_AGE_WINDOW_DAYS,
@@ -80,9 +80,12 @@ export function readBodyAgeInput(db: DbOrTx, personId: string, input: { today: s
     .map(([localDate, value]) => ({ localDate, value }))
     .sort((a, b) => a.localDate.localeCompare(b.localDate))
 
-  // Vigorous minutes count double (the activity factor expects that). A date is present when either has a row.
+  // Vigorous minutes count double (the activity factor expects that). The source writes no row for a
+  // level with no minutes, so a date is present when any level has a row: a light-only day is a worn
+  // day with zero, and leaving it out averaged over the active days alone (a quarter of worn days in
+  // the household archive, about a third added to the weekly figure).
   const activity = new Map<string, number>()
-  for (const [metric, weight] of [['active_minutes_moderate', 1], ['active_minutes_vigorous', 2]] as const) {
+  for (const [metric, weight] of [['active_minutes_light', 0], ['active_minutes_moderate', 1], ['active_minutes_vigorous', 2]] as const) {
     for (const p of fetch(metric, 'sum').points) activity.set(p.localDate, (activity.get(p.localDate) ?? 0) + weight * p.value)
   }
   const activityMinutes = [...activity]
