@@ -710,7 +710,9 @@
       },
       "zones": {
         "hard": "intensief of piek",
-        "caption": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag"
+        "caption": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag",
+        "captionFormula_one": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag; op {{count}} dag alleen tijdens trainingen, zones geschat uit je leeftijd en rusthartslag",
+        "captionFormula_other": "tijd in elke zone over {{period}}, uit je hartslag over de hele dag; op {{count}} dagen alleen tijdens trainingen, zones geschat uit je leeftijd en rusthartslag"
       },
       "workouts": {
         "label": "Trainingen",

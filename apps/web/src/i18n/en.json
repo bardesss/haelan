@@ -710,7 +710,9 @@
       },
       "zones": {
         "hard": "vigorous or peak",
-        "caption": "time in each zone over {{period}}, from your heart rate through the whole day"
+        "caption": "time in each zone over {{period}}, from your heart rate through the whole day",
+        "captionFormula_one": "time in each zone over {{period}}, from your heart rate through the whole day; on {{count}} day only during workouts, zones estimated from your age and resting heart rate",
+        "captionFormula_other": "time in each zone over {{period}}, from your heart rate through the whole day; on {{count}} days only during workouts, zones estimated from your age and resting heart rate"
       },
       "workouts": {
         "label": "Workouts",

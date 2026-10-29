@@ -144,7 +144,7 @@ export function Activity() {
           <ActivityZoneMinutes zones={data.zoneMinutes} total={data.more.find((figure) => figure.metric === ZONE_MINUTES_METRIC) ?? null}
             range={data.period.range} span={zoneSpan} />
         )}
-        {heartShown && <ActivityHeartZones zones={data.heartRateZones} maxHeartRate={data.maxHeartRate} range={data.period.range} span={zoneSpan} />}
+        {heartShown && <ActivityHeartZones zones={data.heartRateZones} maxHeartRate={data.maxHeartRate} range={data.period.range} span={zoneSpan} formulaDays={data.zoneFormulaDays} />}
         {listShown && (
           <ActivityWorkouts key={periodKey} workouts={data.workouts} workoutMonths={data.workoutMonths} types={data.types} workoutCount={data.workoutCount}
             workoutTime={data.more.find((figure) => figure.metric === WORKOUT_TIME) ?? null}
