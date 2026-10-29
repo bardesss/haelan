@@ -70,6 +70,7 @@ const EXPECTED_NAMES: Record<string, string> = {
   '/activity': 'Activity',
   '/sleep': 'Sleep',
   '/recovery': 'Recovery',
+  '/body-age': 'Body age',
   '/health': 'Health',
   '/weight': 'Weight',
   '/nutrition': 'Nutrition',

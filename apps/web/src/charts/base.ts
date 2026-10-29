@@ -330,6 +330,8 @@ export function dayTableRows(input: {
   hasTrend?: boolean
   /** A column for the same days a year earlier, when the reader is comparing (Sparkline). */
   lastYear?: readonly (number | null)[]
+  /** A column for a reference line (Sparkline's `reference`), after the year earlier's. */
+  reference?: readonly (number | null)[]
   // One verdict per entry of `values` (Sparkline's own dots): a day the server calls 'above' or
   // 'below' gets that said in words in the note cell, so a day out of band reads that way to a
   // screen reader too rather than only by the dot's colour. Undefined for every caller but
@@ -339,7 +341,7 @@ export function dayTableRows(input: {
   /** The unit code the values are in, which picks the verdict's words (standingShort). */
   standingUnit?: string
 }): (string | number)[][] {
-  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear, standings, standingUnit } = input
+  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false, lastYear, reference, standings, standingUnit } = input
   return values
     .map((v, i) => [v, i] as const)
     // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
@@ -363,6 +365,7 @@ export function dayTableRows(input: {
       const cell = format(v, absent)
       return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
         ...(lastYear !== undefined ? [format(lastYear[i] ?? null, t('charts.absence.noReading'))] : []),
+        ...(reference !== undefined ? [format(reference[i] ?? null, t('charts.absence.noReading'))] : []),
         [standingShort(standings?.[i], standingUnit, t),
           isExcluded ? t('charts.absence.excluded') : '',
           // filter, not find: several annotations can land on the same date now that day level

@@ -157,7 +157,8 @@
       "notes": "Notities",
       "account": "Account",
       "settings": "Instellingen",
-      "records": "Records"
+      "records": "Records",
+      "bodyAge": "Lichaamsleeftijd"
     }
   },
   "common": {
@@ -2021,6 +2022,99 @@
     "panel": {
       "within": "binnen je gebruikelijke bereik",
       "close": "Sluiten"
+    }
+  },
+  "bodyAge": {
+    "title": "Lichaamsleeftijd",
+    "line": "Afgelopen {{days}} dagen",
+    "lineTo": "Afgelopen {{days}} dagen, tot {{date}}",
+    "hero": {
+      "label": "Lichaamsleeftijd, afgelopen {{days}} dagen",
+      "younger": "{{years}} jaar jonger dan je kalenderleeftijd van {{age}}",
+      "older": "{{years}} jaar ouder dan je kalenderleeftijd van {{age}}",
+      "same": "gelijk aan je kalenderleeftijd van {{age}}",
+      "pace": "je wordt {{pace}} jaar ouder per jaar, over de afgelopen 12 maanden",
+      "previous": "{{delta}} tegenover de {{days}} dagen ervoor",
+      "youngest": "jongst: {{years}} jaar jonger, in {{month}}",
+      "carriedBy": "vooral door je {{factor}}",
+      "calendarAge": "Kalenderleeftijd",
+      "caption": "elke maand, als het cijfer over {{days}} dagen · gestippeld = je kalenderleeftijd"
+    },
+    "factors": {
+      "label": "Wat het beweegt",
+      "names": {
+        "vo2Max": "VO₂max",
+        "restingHeartRate": "Rusthartslag",
+        "activity": "Matige tot zware activiteit",
+        "sleepRegularity": "Variatie in bedtijd",
+        "strength": "Krachttraining"
+      },
+      "inline": {
+        "vo2Max": "VO₂max",
+        "restingHeartRate": "rusthartslag",
+        "activity": "matige tot zware activiteit",
+        "sleepRegularity": "variatie in bedtijd",
+        "strength": "krachttraining"
+      },
+      "units": {
+        "vo2Max": "ml/kg/min",
+        "restingHeartRate": "bpm",
+        "activity": "min per week",
+        "sleepRegularity": "min",
+        "strength": "per week"
+      },
+      "compare": {
+        "vo2Max": {
+          "above": "boven het gemiddelde voor je leeftijd van {{reference}}",
+          "below": "onder het gemiddelde voor je leeftijd van {{reference}}",
+          "at": "op het gemiddelde voor je leeftijd van {{reference}}"
+        },
+        "restingHeartRate": {
+          "above": "boven het gemiddelde voor je leeftijd van {{reference}}",
+          "below": "onder het gemiddelde voor je leeftijd van {{reference}}",
+          "at": "op het gemiddelde voor je leeftijd van {{reference}}"
+        },
+        "activity": {
+          "above": "boven de richtlijn van {{reference}} min per week",
+          "below": "onder de richtlijn van {{reference}} min per week",
+          "at": "op de richtlijn van {{reference}} min per week"
+        },
+        "sleepRegularity": {
+          "above": "ruimer dan de typische ±{{reference}} min",
+          "below": "krapper dan de typische ±{{reference}} min",
+          "at": "op de typische ±{{reference}} min"
+        },
+        "strength": {
+          "above": "tegenover een referentie van geen",
+          "below": "geen in de afgelopen {{days}} dagen",
+          "at": "geen in de afgelopen {{days}} dagen"
+        }
+      },
+      "fitnessAge": "fitheidsleeftijd {{age}}",
+      "capped": "op de grens van {{cap}} jaar",
+      "years": "{{years}} jaar",
+      "noReading": "Geen {{factor}} in de afgelopen {{days}} dagen",
+      "tooFewDays": "Pas {{days}} dagen {{factor}}, {{min}} nodig",
+      "tooFewWeeks": "{{days}} nachten in de afgelopen {{window}} dagen, maar minder dan {{blocks}} van de blokken van {{blockDays}} dagen hebben elk {{nights}} nachten",
+      "room": "Meeste ruimte: {{factor}}. Op het referentieniveau zou het ongeveer {{years}} jaar minder tellen.",
+      "caption": "elke balk: de jaren die een factor erbij doet of eraf haalt · links van het midden jonger, rechts ouder, tot de eigen grens"
+    },
+    "method": {
+      "label": "Hoe het berekend wordt",
+      "how": "Je lichaamsleeftijd is je kalenderleeftijd, verschoven door vijf factoren over de afgelopen {{days}} dagen. Voor elk ervan geven gepubliceerde studies hoeveel hoger of lager het risico om aan welke oorzaak ook te overlijden is bij jouw waarde dan bij een referentiewaarde (voor VO₂max en rusthartslag de typische waarde voor je leeftijd en geslacht). Dat verschil wordt in jaren omgezet met één maat voor elke factor, de jaarlijkse stijging van de sterfte bij volwassenen ({{slope}} op de logschaal), zodat elke factor in jaren telt en ze bij elkaar opgeteld kunnen worden.",
+      "limits": "Geen factor verschuift het verder dan zijn eigen grens, en alle samen niet verder dan {{cap}} jaar. Een factor telt zodra er op {{min}} dagen van de periode metingen zijn, behalve variatie in bedtijd: die heeft in minstens {{blocks}} blokken van {{blockDays}} dagen elk {{nights}} nachten nodig; VO₂max is je laatste meting uit de afgelopen {{vo2Days}} dagen.",
+      "factor": "{{factor}}, tot {{cap}} jaar.",
+      "sources": "Bronnen",
+      "citation": "{{factor}}: {{citation}}",
+      "estimate": "Een schatting uit gepubliceerde verbanden, geen meting van je cellen."
+    },
+    "unavailable": {
+      "settings": "Vul je geboortedatum en geslacht in bij Instellingen om je lichaamsleeftijd te zien",
+      "vo2Max": "Geen VO₂max-meting in de afgelopen {{months}} maanden"
+    },
+    "empty": {
+      "title": "Nog geen lichaamsleeftijd",
+      "detail": "Hij wordt berekend uit je VO₂max, rusthartslag, matige tot zware activiteit, bedtijden en krachttraining zodra die gesynchroniseerd zijn."
     }
   }
 }

@@ -90,7 +90,7 @@ export const MAX_HEART_RATE_METRIC = 'max_heart_rate'
 /** A type's count judged: more of it than usual reads as the better side. */
 export const TYPE_COUNT_DIRECTION: FigureDirection = 'up'
 /** In order of preference: the daily summary, the generic reading, the one a run records. */
-const VO2_METRICS = ['daily_vo2_max', 'vo2_max', 'run_vo2_max'] as const
+export const VO2_METRICS = ['daily_vo2_max', 'vo2_max', 'run_vo2_max'] as const
 const VO2_EARLIER_DAYS = 90
 const VO2_TREND_STEP = 1
 

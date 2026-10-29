@@ -22,6 +22,8 @@ export interface DayTooltipInput {
   hasTrend: boolean
   /** The same days a year earlier, when the reader is comparing; undefined otherwise. */
   lastYear?: readonly (number | null)[]
+  /** A reference line under its own label (Sparkline's `reference`); undefined without one. */
+  reference?: { values: readonly (number | null)[], label: string }
   episodic: boolean
   /** The accessible table's own value-column header, reused verbatim as the tooltip's label. */
   unit: string
@@ -50,7 +52,7 @@ export function dayTooltip(
   input: DayTooltipInput,
   event: Pick<ECElementEvent, 'componentType'> & { dataIndex?: number },
 ): string {
-  const { marks, labels, values, excluded, annotations, trend, hasTrend, lastYear, episodic, unit, format, t } = input
+  const { marks, labels, values, excluded, annotations, trend, hasTrend, lastYear, reference, episodic, unit, format, t } = input
   const index = event.dataIndex
 
   if (event.componentType === 'markPoint') {
@@ -95,6 +97,11 @@ export function dayTooltip(
     // this year's day, and says nothing about the same date a year earlier.
     lines.push(t('charts.tooltip.line', {
       label: t('charts.columns.lastYear'), value: format(lastYear[index] ?? null, t('charts.absence.noReading')),
+    }))
+  }
+  if (reference !== undefined) {
+    lines.push(t('charts.tooltip.line', {
+      label: reference.label, value: format(reference.values[index] ?? null, t('charts.absence.noReading')),
     }))
   }
   // Each part escaped, then joined plainly, rather than assembled in one `tip` template: the
