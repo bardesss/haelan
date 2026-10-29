@@ -100,9 +100,10 @@ function usesPageControls(path: string): boolean {
   // every figure on it is an all-time figure, so it has no ControlRow at all and its query key
   // carries no range. Five range mounts therefore ask for one already-cached resource, and only
   // the first is owed a landing. The Dashboard (M9b) is the fourth: the glance reads one payload
-  // for today and never the range, so only its first mount lands anything new.
+  // for today and never the range, so only its first mount lands anything new. Body age (this
+  // feature) is the fifth: one read at the last scored day, no ControlRow, so likewise.
   return path !== '/' && path !== '/settings' && path !== '/account' && path !== '/nutrition'
-    && path !== '/records'
+    && path !== '/records' && path !== '/body-age'
 }
 
 let server: CaptureServer

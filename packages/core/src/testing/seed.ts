@@ -779,6 +779,14 @@ export interface SeedArchiveInput {
    * one caller, so every other seeded archive keeps exactly the payloads it had.
    */
   phoneWorkout?: boolean
+  /**
+   * Opt-in and false by default: a daily VO2 max reading once a week, the last day included,
+   * rising slowly from the person's fitness level like the run estimates do. The runs' own estimate
+   * lives in each workout's summary and never becomes a daily figure, so without this nothing in
+   * the archive gives the body age page the VO2 max it needs. Drawn from no stream, so every other
+   * payload is what it was. scripts/seed-demo.mjs is the one caller.
+   */
+  dailyVo2Max?: boolean
 }
 
 export interface SeedArchiveResult { payloads: number }
@@ -807,6 +815,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const MOODS = requireType('moods')
   const DAILY_RESTING_HR = requireType('daily-resting-heart-rate')
   const DAILY_HRV = requireType('daily-heart-rate-variability')
+  const DAILY_VO2_MAX = requireType('daily-vo2-max')
   const DAILY_RESPIRATORY_RATE = requireType('daily-respiratory-rate')
   const DISTANCE = requireType('distance')
   const ACTIVE_ENERGY_BURNED = requireType('active-energy-burned')
@@ -1312,6 +1321,16 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   }
 
   if (input.phoneWorkout) putPhoneWorkout()
+
+  if (input.dailyVo2Max) {
+    for (let i = input.days - 1; i >= 0; i -= 7) {
+      const dayStart = input.endMs - (input.days - i) * DAY_MS
+      put(DAILY_VO2_MAX, dayStart, dayStart + DAY_MS, [dailyPoint({
+        payloadKey: DAILY_VO2_MAX.payloadKey, valuePath: DAILY_VO2_MAX.valuePath,
+        value: (vo2Base + (i / input.days) * 1.5).toFixed(1), date: civilDateOf(dayStart),
+      })])
+    }
+  }
 
   putRollups(TOTAL_CALORIES, totalCaloriesWindows)
   putRollups(FLOORS, floorsWindows)

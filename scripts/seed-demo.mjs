@@ -106,6 +106,13 @@ try {
   // marks this person as needing the rebuild below. A person stamped at the current versions
   // from birth would have nothing for runRebuild to pick up.
   seedPerson(instance.db, PERSON_ID, { displayName: 'Demo' })
+  // A birth date and a sex, which the body age page needs to say anything: without them it answers
+  // "add your birth date" and the published demo would show that card instead of a figure. Through
+  // the store setters, like every other profile write, rather than a seedPerson option the fixture
+  // does not have. The seed's weekly daily VO2 max (seedArchive's dailyVo2Max) is the third input.
+  const seededPeople = new PeopleStore(instance.db)
+  seededPeople.setBirthDate(PERSON_ID, '1984-04-12')
+  seededPeople.setSex(PERSON_ID, 'male')
 
   // demoRoute: true is what makes this call different from every other caller of seedArchive,
   // including packages/core/test/seed.test.ts's own "seeds no workout route". Task 7 proved a
@@ -123,7 +130,7 @@ try {
   // more than before, and no other payload changed (seed.test.ts proves both).
   const seeded = seedArchive({
     archive: instance.archive, personId: PERSON_ID, days, endMs, demoRoute: true, lastDayUntilMs: DEMO_CLOCK_MS,
-    phoneWorkout: true,
+    phoneWorkout: true, dailyVo2Max: true,
   })
 
   const report = runRebuild({

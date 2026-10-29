@@ -1363,6 +1363,39 @@ button.week-bar-slot { cursor: pointer; }
 .figure-row-verdict.worse, .figure-row-verdict.is-out { color: var(--negative); }
 /* A line under the verdict that is not one (FigureRow's note): smaller and fainter than the verdict, never its tone. */
 .figure-row-note { font-size: var(--font-size-micro); color: var(--text-faint); }
+
+/* The diverging contribution bar (PATTERNS.md, FactorRows.tsx): FigureRow's track, a hairline at
+   zero, and a fill from the centre out to one side, toned as the years beside it. */
+.diverging-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-inset); }
+.diverging-bar-centre { position: absolute; top: -3px; bottom: -3px; left: 50%; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text-faint); }
+.diverging-bar-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--text-secondary); }
+.diverging-bar-fill.better { background: var(--positive); }
+.diverging-bar-fill.worse { background: var(--negative); }
+
+/* Body age's "What moves it": a row per factor, its words on the left, the bars lined up on one
+   centre down the card so the factors compare, the toned years on the right. A phone stacks the
+   words over the bar and the years. */
+.body-age-factors { display: flex; flex-direction: column; }
+.body-age-factor {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 6.5rem; align-items: center;
+  gap: var(--space-1) var(--space-5); padding: var(--space-3) 0; border-top: 1px solid var(--border-subtle);
+}
+.body-age-factor:first-child { border-top: 0; padding-top: 0; }
+.body-age-factor-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.body-age-factor-note { font-size: var(--font-size-xs); color: var(--text-muted); }
+.body-age-factor-years { font-size: var(--font-size-sm); font-weight: var(--weight-semibold); color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+.body-age-factor-years.better { color: var(--positive); }
+.body-age-factor-years.worse { color: var(--negative); }
+.body-age-room { margin: var(--space-4) 0 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+/* The Sources fold under "How it's worked out": the About fold's disclosure, its citations in fine print. */
+.body-age-sources { margin-top: var(--space-3); }
+.body-age-citation { margin: 0 0 var(--space-2); font-size: var(--font-size-xs); color: var(--text-muted); }
+.body-age-reason { margin: 0; }
+.body-age-reason + .body-age-reason { margin-top: var(--space-2); }
+@media (max-width: 620px) {
+  .body-age-factor { grid-template-columns: minmax(0, 1fr) auto; }
+  .body-age-factor-text { grid-column: 1 / -1; }
+}
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }

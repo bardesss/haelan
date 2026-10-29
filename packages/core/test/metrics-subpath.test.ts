@@ -57,9 +57,10 @@ describe('the @haelan/core/metrics subpath', () => {
     // and status-panel-subpath.test.ts holds ./status-panel, whose 30-day default rule the server's
     // panel and the source list's switch share, to that empty list too; fastest-efforts-subpath.test.ts
     // holds ./fastest-efforts to the one pure module it reads, workoutThrough.ts;
-    // exercise-category-subpath.test.ts holds ./exercise-category to an empty import list.
+    // exercise-category-subpath.test.ts holds ./exercise-category to an empty import list;
+    // body-age-factors.test.ts holds ./body-age to an empty import list too.
     expect(Object.keys(pkg.exports).sort()).toEqual([
-      '.', './baseline-window', './cardio-load', './coverage-signal', './event-kinds', './exercise-category', './fastest-efforts', './metric-data-type', SUBPATH,
+      '.', './baseline-window', './body-age', './cardio-load', './coverage-signal', './event-kinds', './exercise-category', './fastest-efforts', './metric-data-type', SUBPATH,
       './nights', './recovery-index', './source-cadence', './split-heart-rate', './status-panel', './target-key', './training-load',
       './workout-comparison', './workout-summary',
     ])

@@ -64,9 +64,9 @@ Your whole history in one SQLite file, kept past Google's retention windows and 
 losing access to the API. Intraday samples in particular have a shelf life at the source, so a
 mirror is the only place minute-level history stays available at that resolution.
 
-### 📊 Nine pages of it
+### 📊 Ten pages of it
 
-Dashboard, Records, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with
+Dashboard, Records, Activity, Sleep, Recovery, Body age, Health, Weight, Nutrition and Notes: sleep with
 stages and nap detection, resting heart rate and HRV, SpO2 with its confidence interval, steps,
 active minutes and every workout, with a page behind each night and each workout. There is also an
 intraday chart, a weight trend, and period-over-period insight cards that withhold themselves, each
@@ -138,7 +138,7 @@ A few people, one instance, each seeing only their own data. An admin invites a 
 chooses their own password, and each person connects their own Google account and picks which data
 types get fetched for them.
 
-### 🧰 Seventeen typed tools for an agent, read-only and person-bound
+### 🧰 Eighteen typed tools for an agent, read-only and person-bound
 
 They sit over the same person bound query layer the browser reads through, reachable over stdio
 from inside the container or over `POST /mcp` from anywhere else. An HTTP call needs a token
@@ -606,12 +606,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 1475 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 1539 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 1475 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 1539 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

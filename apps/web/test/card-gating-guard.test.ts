@@ -44,7 +44,9 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 // followed it in the same milestone, over /activity/period, and Recovery.tsx after them, over
 // /recovery/period. Its one series card, the heart rate range, still gates through MetricCard
 // inside its own component (pages/recovery/HeartRateCard.tsx), outside this guard's directory.
-const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx', 'Sleep.tsx', 'Activity.tsx', 'Recovery.tsx'])
+// BodyAge.tsx joined them for the Records reason: one read (/body-age) of a payload with no metric
+// and no points, an age, its factors and a month per entry, gated once around that read.
+const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx', 'Sleep.tsx', 'Activity.tsx', 'Recovery.tsx', 'BodyAge.tsx'])
 
 // What this actually checks, read honestly: not "no card hand rolls gating" (it is file
 // granularity, so a page hand rolling two of its eight cards and routing the other six through

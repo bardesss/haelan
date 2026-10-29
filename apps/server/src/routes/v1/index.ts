@@ -10,6 +10,7 @@ import { registerQuickLogRoutes } from './quickLog.ts'
 import { registerIngestRoutes } from './ingest.ts'
 import { registerSourceRoutes } from './sources.ts'
 import { registerAllTimeRoutes } from './allTime.ts'
+import { registerBodyAgeRoutes } from './bodyAge.ts'
 import { registerGlanceRoutes } from './glance.ts'
 import { registerDetailRoutes } from './detail.ts'
 import { registerPeriodRoutes } from './period.ts'
@@ -56,6 +57,7 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
   registerIngestRoutes(app)
   registerSourceRoutes(app)
   registerAllTimeRoutes(app)
+  registerBodyAgeRoutes(app)
   registerGlanceRoutes(app)
   registerDetailRoutes(app)
   registerPeriodRoutes(app)

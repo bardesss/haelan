@@ -24,6 +24,7 @@ const GROUPS = [
       { path: '/activity', nameKey: 'sidebar.items.activity' },
       { path: '/sleep', nameKey: 'sidebar.items.sleep' },
       { path: '/recovery', nameKey: 'sidebar.items.recovery' },
+      { path: '/body-age', nameKey: 'sidebar.items.bodyAge' },
       { path: '/health', nameKey: 'sidebar.items.health' },
       { path: '/weight', nameKey: 'sidebar.items.weight' },
       { path: '/nutrition', nameKey: 'sidebar.items.nutrition' },

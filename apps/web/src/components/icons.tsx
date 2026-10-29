@@ -22,6 +22,9 @@ const PATHS: Record<string, React.ReactNode> = {
   activity: <path d="M4 19v-6M9.3 19V6M14.7 19v-9M20 19v-4" />,
   sleep: <path d="M20.5 14.8A8.5 8.5 0 0 1 9.2 3.5a8.5 8.5 0 1 0 11.3 11.3Z" />,
   recovery: <path d="M13 3 5.5 13.6h5.6L10 21l7.5-10.6h-5.6L13 3Z" />,
+  // An hourglass, for body age: an age that runs faster or slower than the calendar's. Keyed by the
+  // path Sidebar derives (`item.path.slice(1)`), hence the quotes.
+  'body-age': <path d="M6.5 3.5h11M6.5 20.5h11M7.5 3.5c0 4.5 4.5 6 4.5 8.5s-4.5 4-4.5 8.5M16.5 3.5c0 4.5-4.5 6-4.5 8.5s4.5 4 4.5 8.5" />,
   health: (
     <>
       <path d="M12 20.3S4.8 15.6 4.8 10.8A3.9 3.9 0 0 1 12 8.6a3.9 3.9 0 0 1 7.2 2.2c0 4.8-7.2 9.5-7.2 9.5Z" />

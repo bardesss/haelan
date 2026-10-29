@@ -200,6 +200,8 @@ export {
 } from './query/hrvDeviation.ts'
 export type { HrvDeviationDay, HrvDeviationRun, HrvReading, HrvSide } from './query/hrvDeviation.ts'
 export { readSourceActivity } from './query/sourceActivity.ts'
+export { readBodyAge, readBodyAgeInput } from './query/bodyAgeRead.ts'
+export type { BodyAgeMethod, BodyAgeRead } from './query/bodyAgeRead.ts'
 export { readAllTime, RECORD_METRICS } from './query/allTime.ts'
 export type { AllTime, AllTimeSpan, MetricRecord, Milestone } from './query/allTime.ts'
 export { eddingtonOf } from './api/eddington.ts'

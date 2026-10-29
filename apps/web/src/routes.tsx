@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard.js'
 import { Activity } from './pages/Activity.js'
 import { Sleep } from './pages/Sleep.js'
 import { Recovery } from './pages/Recovery.js'
+import { BodyAge } from './pages/BodyAge.js'
 import { Health } from './pages/Health.js'
 import { Weight } from './pages/Weight.js'
 import { Nutrition } from './pages/Nutrition.js'
@@ -37,6 +38,7 @@ export const ROUTES: readonly Route[] = [
   { path: '/activity', element: <Activity /> },
   { path: '/sleep', element: <Sleep /> },
   { path: '/recovery', element: <Recovery /> },
+  { path: '/body-age', element: <BodyAge /> },
   { path: '/health', element: <Health /> },
   { path: '/weight', element: <Weight /> },
   { path: '/nutrition', element: <Nutrition /> },

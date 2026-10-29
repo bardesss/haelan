@@ -86,7 +86,7 @@ describe('the go-to box', () => {
     expect(dialog?.getAttribute('aria-label')).toBe('Go to a page')
     expect(document.activeElement?.className).toContain('goto-input')
     expect(options()).toEqual([
-      'Dashboard', 'Records', 'Activity', 'Sleep', 'Recovery', 'Health', 'Weight', 'Nutrition', 'Notes', 'Settings', 'Account',
+      'Dashboard', 'Records', 'Activity', 'Sleep', 'Recovery', 'Body age', 'Health', 'Weight', 'Nutrition', 'Notes', 'Settings', 'Account',
     ])
   })
 
@@ -144,7 +144,7 @@ describe('the go-to box', () => {
     expect(openDialog()).toBeNull()
     press('/')
     expect((document.activeElement as HTMLInputElement).value).toBe('')
-    expect(options()).toHaveLength(11)
+    expect(options()).toHaveLength(12)
   })
 })
 
