@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.23.0](https://github.com/bardesss/haelan/compare/v2.22.1...v2.23.0) (2026-10-29)
+
+
+### Features
+
+* body age, a mortality-equivalent age from the data you already have ([#452](https://github.com/bardesss/haelan/issues/452)) ([bb7a3df](https://github.com/bardesss/haelan/commit/bb7a3df92daf6d6dda6b4dc9c2fde941d491c123))
+* heart rate zones for phone-only households ([#385](https://github.com/bardesss/haelan/issues/385)) ([#453](https://github.com/bardesss/haelan/issues/453)) ([d015340](https://github.com/bardesss/haelan/commit/d0153403c48f74eb45032662db0d9c199ec82dc8))
+
 ## [2.22.1](https://github.com/bardesss/haelan/compare/v2.22.0...v2.22.1) (2026-10-09)
 
 
