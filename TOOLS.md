@@ -156,7 +156,7 @@ Several metrics for a single day, one reading each, so an agent asking "what hap
 
 ### get_baselines
 
-A person's own center and spread for a metric, computed from the `windowDays` before `on` (default 60), never including the day itself. `thin` says whether there was enough history to stand on — treat a thin baseline as low confidence rather than as evidence of nothing. Report a reading against it as a distance in units of spread, and as association rather than cause.
+A person's own center and spread for a metric, computed from the `windowDays` before `on` (default 60), never including the day itself. `thin` says whether there was enough history to stand on — treat a thin baseline as low confidence rather than as evidence of nothing. Report a reading against it as a distance in units of spread, and as association rather than cause. Heart rate zone minutes and cardio load can rest on days estimated from age and resting heart rate rather than measured; the formula days count says how many, and a finding should say so.
 
 **Input**
 
@@ -176,10 +176,13 @@ A person's own center and spread for a metric, computed from the `windowDays` be
 - **filledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
   - **filled** (number)
   - **of** (number)
+- **formulaDays** (object) — How many of the days behind this statistic were estimated from age and resting heart rate (`basis: zone_formula`) rather than measured, out of how many. Say so when it is not zero.
+  - **formula** (number)
+  - **of** (number)
 
 ### compare_periods
 
-A date range's mean against the equal-length period immediately before it, with the delta and the coverage behind each side. Answers nulls and `suppressed: true` with a `reason` when either period has too few days or too little coverage to stand on — read a suppressed answer as "not enough data", never as "no change". Report a finding with `delta` and the two coverage fields, and as association between the periods rather than a claim about cause.
+A date range's mean against the equal-length period immediately before it, with the delta and the coverage behind each side. Answers nulls and `suppressed: true` with a `reason` when either period has too few days or too little coverage to stand on — read a suppressed answer as "not enough data", never as "no change". Report a finding with `delta` and the two coverage fields, and as association between the periods rather than a claim about cause. Heart rate zone minutes and cardio load can rest on days estimated from age and resting heart rate rather than measured; the formula days count says how many, and a finding should say so.
 
 **Input**
 
@@ -213,10 +216,16 @@ A date range's mean against the equal-length period immediately before it, with 
 - **previousFilledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
   - **filled** (number)
   - **of** (number)
+- **currentFormulaDays** (object) — How many of the days behind this statistic were estimated from age and resting heart rate (`basis: zone_formula`) rather than measured, out of how many. Say so when it is not zero.
+  - **formula** (number)
+  - **of** (number)
+- **previousFormulaDays** (object) — How many of the days behind this statistic were estimated from age and resting heart rate (`basis: zone_formula`) rather than measured, out of how many. Say so when it is not zero.
+  - **formula** (number)
+  - **of** (number)
 
 ### trend
 
-A smoothed line over the daily series for one metric over a date range, oldest first — an exponentially weighted moving average, not a stored value. Short of three contributing days it answers an empty list rather than a noisy line. Read `summary` for the true range rather than assuming the last point is representative. Report a shape (rising, falling, flat) with its coverage, and as association rather than cause.
+A smoothed line over the daily series for one metric over a date range, oldest first — an exponentially weighted moving average, not a stored value. Short of three contributing days it answers an empty list rather than a noisy line. Read `summary` for the true range rather than assuming the last point is representative. Report a shape (rising, falling, flat) with its coverage, and as association rather than cause. Heart rate zone minutes and cardio load can rest on days estimated from age and resting heart rate rather than measured; the formula days count says how many, and a finding should say so.
 
 **Input**
 
@@ -241,6 +250,9 @@ A smoothed line over the daily series for one metric over a date range, oldest f
   - **last** (number, nullable)
 - **filledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
   - **filled** (number)
+  - **of** (number)
+- **formulaDays** (object) — How many of the days behind this statistic were estimated from age and resting heart rate (`basis: zone_formula`) rather than measured, out of how many. Say so when it is not zero.
+  - **formula** (number)
   - **of** (number)
 
 ### get_intraday

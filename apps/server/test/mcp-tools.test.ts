@@ -433,6 +433,50 @@ describe('trend, filledDays', () => {
   })
 })
 
+// The same blind spot as filledDays above, for the other basis a day can rest on: heart rate zone
+// minutes the derive estimated from age and resting heart rate (`basis: 'zone_formula'`).
+describe('formula days behind a blended statistic', () => {
+  const metric = 'time_in_heart_rate_zone_moderate_minutes'
+
+  it('counts them for get_baselines and trend', () => {
+    seedDaily({ localDate: '2026-08-01', metric, agg: 'sum', value: 12, basis: 'zone_formula' })
+    seedDaily({ localDate: '2026-08-02', metric, agg: 'sum', value: 20 })
+    seedDaily({ localDate: '2026-08-03', metric, agg: 'sum', value: 15, basis: 'zone_formula' })
+
+    const baseline = tool('get_baselines').run(q(), {
+      metric, agg: 'sum', on: '2026-08-04', windowDays: 5,
+    }) as { formulaDays: { formula: number, of: number } }
+    expect(baseline.formulaDays).toEqual({ formula: 2, of: 3 })
+
+    const line = tool('trend').run(q(), {
+      metric, agg: 'sum', from: '2026-08-01', to: '2026-08-03',
+    }) as { formulaDays: { formula: number, of: number } }
+    expect(line.formulaDays).toEqual({ formula: 2, of: 3 })
+  })
+
+  it('counts them per period for compare_periods', () => {
+    for (let day = 1; day <= 14; day += 1) {
+      seedDaily({
+        localDate: `2026-08-${String(day).padStart(2, '0')}`, metric, agg: 'sum', value: 10,
+        basis: day <= 7 ? 'zone_formula' : null,
+      })
+    }
+
+    const out = tool('compare_periods').run(q(), {
+      metric, agg: 'sum', from: '2026-08-08', to: '2026-08-14',
+    }) as { currentFormulaDays: { formula: number, of: number }, previousFormulaDays: { formula: number, of: number } }
+
+    expect(out.currentFormulaDays).toEqual({ formula: 0, of: 7 })
+    expect(out.previousFormulaDays).toEqual({ formula: 7, of: 7 })
+  })
+
+  it('tells the model what a formula day is in each description', () => {
+    for (const name of ['get_baselines', 'compare_periods', 'trend']) {
+      expect(tool(name).description).toContain('estimated from age and resting heart rate')
+    }
+  })
+})
+
 describe('get_intraday', () => {
   it('returns a day of samples with a summary and no reduction at the default budget', () => {
     const nineAm = Date.UTC(2026, 7, 10, 7, 0) // 09:00 local at +120 on 2026-08-10.

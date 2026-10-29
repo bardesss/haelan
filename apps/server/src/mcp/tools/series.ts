@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { LOCAL_DATE, requireToolRange } from '../dates.ts'
 import { metricSpec } from '@haelan/core/metrics'
 import type { MetricSpec } from '@haelan/core/metrics'
-import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE, ZONE_FORMULA_BASIS } from '@haelan/core'
 import type { DailyPoint } from '@haelan/core'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
@@ -60,6 +60,26 @@ const FILLED_DAYS = z.object({
 
 function filledCountOf(points: readonly DailyPoint[]): { filled: number, of: number } {
   return { filled: points.filter((point) => point.filled).length, of: points.length }
+}
+
+// The blended tools' counterpart to BASIS_DESCRIPTION, for the reason FILLED_DAYS exists: a mean,
+// a band or a smoothed line has no point left to carry a `basis` on, so the count of days that
+// rested on the zone formula travels beside it instead.
+const FORMULA_DAYS = z.object({
+  formula: z.number(),
+  of: z.number(),
+}).describe(
+  'How many of the days behind this statistic were estimated from age and resting heart rate '
+  + '(`basis: zone_formula`) rather than measured, out of how many. Say so when it is not zero.',
+)
+
+// One sentence every blended tool's description ends with, so a model reads it beside the field.
+const FORMULA_DAYS_SENTENCE =
+  ' Heart rate zone minutes and cardio load can rest on days estimated from age and resting heart '
+  + 'rate rather than measured; the formula days count says how many, and a finding should say so.'
+
+function formulaCountOf(points: readonly DailyPoint[]): { formula: number, of: number } {
+  return { formula: points.filter((point) => point.basis === ZONE_FORMULA_BASIS).length, of: points.length }
 }
 
 /**
@@ -209,7 +229,8 @@ export const getBaselines = defineTool({
     'A person\'s own center and spread for a metric, computed from the `windowDays` before `on` '
     + '(default 60), never including the day itself. `thin` says whether there was enough history to '
     + 'stand on — treat a thin baseline as low confidence rather than as evidence of nothing. Report '
-    + 'a reading against it as a distance in units of spread, and as association rather than cause.',
+    + 'a reading against it as a distance in units of spread, and as association rather than cause.'
+    + FORMULA_DAYS_SENTENCE,
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
@@ -225,6 +246,7 @@ export const getBaselines = defineTool({
       thin: z.boolean(),
     }).nullable(),
     filledDays: FILLED_DAYS,
+    formulaDays: FORMULA_DAYS,
   },
   run: (q, args) => {
     // baseline() answers center, spread and n, none of which carries `filled`, so its own window
@@ -241,6 +263,7 @@ export const getBaselines = defineTool({
         metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
       }),
       filledDays: filledCountOf(contributing),
+      formulaDays: formulaCountOf(contributing),
     }
   },
 })
@@ -254,7 +277,8 @@ export const comparePeriods = defineTool({
     + 'the coverage behind each side. Answers nulls and `suppressed: true` with a `reason` when '
     + 'either period has too few days or too little coverage to stand on — read a suppressed answer '
     + 'as "not enough data", never as "no change". Report a finding with `delta` and the two coverage '
-    + 'fields, and as association between the periods rather than a claim about cause.',
+    + 'fields, and as association between the periods rather than a claim about cause.'
+    + FORMULA_DAYS_SENTENCE,
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
@@ -277,6 +301,8 @@ export const comparePeriods = defineTool({
     reason: z.string().nullable(),
     currentFilledDays: FILLED_DAYS,
     previousFilledDays: FILLED_DAYS,
+    currentFormulaDays: FORMULA_DAYS,
+    previousFormulaDays: FORMULA_DAYS,
   },
   run: (q, args) => {
     requireToolRange(args.from, args.to)
@@ -297,6 +323,8 @@ export const comparePeriods = defineTool({
       ...insight,
       currentFilledDays: filledCountOf(currentWindow.points),
       previousFilledDays: filledCountOf(previousWindow.points),
+      currentFormulaDays: formulaCountOf(currentWindow.points),
+      previousFormulaDays: formulaCountOf(previousWindow.points),
     }
   },
 })
@@ -308,7 +336,8 @@ export const trend = defineTool({
     + 'exponentially weighted moving average, not a stored value. Short of three contributing days '
     + 'it answers an empty list rather than a noisy line. Read `summary` for the true range rather '
     + 'than assuming the last point is representative. Report a shape (rising, falling, flat) with '
-    + 'its coverage, and as association rather than cause.',
+    + 'its coverage, and as association rather than cause.'
+    + FORMULA_DAYS_SENTENCE,
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
@@ -320,6 +349,7 @@ export const trend = defineTool({
     points: z.array(z.object({ localDate: z.string(), value: z.number() })),
     summary: SUMMARY,
     filledDays: FILLED_DAYS,
+    formulaDays: FORMULA_DAYS,
   },
   run: (q, args) => {
     requireToolRange(args.from, args.to)
@@ -331,7 +361,10 @@ export const trend = defineTool({
     const raw = q.series({
       metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
     })
-    return { points, summary: summaryOf(points.map((p) => p.value)), filledDays: filledCountOf(raw.points) }
+    return {
+      points, summary: summaryOf(points.map((p) => p.value)),
+      filledDays: filledCountOf(raw.points), formulaDays: formulaCountOf(raw.points),
+    }
   },
 })
 
