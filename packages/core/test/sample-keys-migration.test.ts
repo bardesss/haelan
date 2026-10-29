@@ -209,7 +209,7 @@ describe('an override keyed on text, applied to rows keyed on refs', () => {
     expect(queue.claim(10)).toEqual([{ personId: 'p1', localDate: LOCAL_DATE }])
 
     db.transaction((tx) => deriveDayInto(tx, {
-      ...tuning, personId: 'p1', localDate: LOCAL_DATE, overrides: store.listFor('p1'),
+      ...tuning, personId: 'p1', localDate: LOCAL_DATE, birthDate: null, overrides: store.listFor('p1'),
     }))
 
     const maxRow = db.select().from(daily).where(eq(daily.metric, 'heart_rate')).all()

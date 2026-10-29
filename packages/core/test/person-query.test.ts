@@ -20,6 +20,7 @@ afterEach(() => test.cleanup())
 const insertDaily = (o: {
   localDate: string, value: number | null, metric?: string, agg?: string,
   source?: string, coverage?: number | null, personId?: string, updatedAtMs?: number | null,
+  basis?: string | null,
 }) => {
   test.db.insert(daily).values({
     personId: o.personId ?? 'p1',
@@ -32,6 +33,7 @@ const insertDaily = (o: {
     sourceMix: null,
     derivationVersion: DERIVATION_VERSION,
     updatedAtMs: o.updatedAtMs === undefined ? null : o.updatedAtMs,
+    basis: o.basis ?? null,
   }).run()
 }
 
@@ -67,6 +69,15 @@ describe('PersonQuery.series', () => {
     const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-03' })
     expect(points.map((p) => p.localDate)).toEqual(['2026-08-01', '2026-08-02', '2026-08-03'])
     expect(points.map((p) => p.value)).toEqual([100, 200, 300])
+  })
+
+  it('says which days rest on the zone formula', () => {
+    const metric = 'time_in_heart_rate_zone_moderate_minutes'
+    insertDaily({ localDate: '2026-08-01', value: 12, metric, basis: 'zone_formula' })
+    insertDaily({ localDate: '2026-08-02', value: 30, metric })
+
+    const { points } = query.series({ metric, agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
+    expect(points.map((p) => p.basis)).toEqual(['zone_formula', null])
   })
 
   it('includes both ends of the range', () => {

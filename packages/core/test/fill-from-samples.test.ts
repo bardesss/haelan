@@ -13,6 +13,7 @@ import { readWorkoutPage } from '../src/query/workoutPage.ts'
 import { readActivityPeriod } from '../src/query/activityPeriod.ts'
 import { contextFor, readDay } from '../src/query/glance.ts'
 import { readNightPage } from '../src/query/nightPage.ts'
+import { PeopleStore } from '../src/store/people.ts'
 import { hasGoogleGrant } from '../src/store/credentials.ts'
 import { getSource } from '../src/store/sources.ts'
 import { PENDING_WINDOW_MS } from '../src/query/fillFromSamples.ts'
@@ -226,6 +227,79 @@ describe('fillFromSamples, through the merged reads', () => {
     expect(workoutDetail(run.attrs).zones).toBeNull()
     expect(workoutSummary(run.attrs).averageHeartRateBpm).toBe(123)
     expect((run.attrs as { filled: string[] }).filled).not.toContain('heartRateZoneDurations')
+  })
+
+  describe('zones from the formula, for a phone that sends no ceilings', () => {
+    /** A minute of heart rate at each bpm in turn from the start of the run. */
+    function seedMinutes(bpms: readonly number[]) {
+      const rows: InsertSampleInput[] = []
+      bpms.forEach((bpm, i) => {
+        for (const agg of ['min', 'mean', 'max'] as const) {
+          rows.push({ personId: 'p1', sourceId: 'phone', metric: 'heart_rate', utcMs: START + i * MINUTE, tzOffsetMinutes: 120, agg, value: bpm })
+        }
+      })
+      insertSamples(t.db, rows)
+    }
+    function seedDaily(localDate: string, metric: string, value: number) {
+      t.db.insert(daily).values({
+        personId: 'p1', localDate, metric, agg: 'last', source: 'merged', value,
+        coverage: 1, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+      }).run()
+    }
+    /** A forty-year-old with a resting heart rate of 60: bounds 108, 132, 162 and a maximum of 180. */
+    function seedProfile(o: { birthDate?: string | null, restingOn?: string | null } = {}) {
+      const birthDate = o.birthDate === undefined ? '1986-01-01' : o.birthDate
+      if (birthDate !== null) new PeopleStore(t.db).setBirthDate('p1', birthDate)
+      const restingOn = o.restingOn === undefined ? DATE : o.restingOn
+      if (restingOn !== null) seedDaily(restingOn, 'resting_heart_rate', 60)
+    }
+    const filledRun = () => q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
+
+    it('fills zones from the formula for a phone workout on a day without ceilings', () => {
+      insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+      seedMinutes([100, 120, 140, 170])
+      seedProfile()
+
+      const run = filledRun()
+      const summary = (run.attrs as { metricsSummary: Record<string, unknown> }).metricsSummary
+      expect(summary.heartRateZoneDurations).toEqual({ lightTime: '60s', moderateTime: '60s', vigorousTime: '60s', peakTime: '60s' })
+      expect((run.attrs as { zoneBasis?: string }).zoneBasis).toBe('zoneFormula')
+    })
+
+    it("prefers the day's ceilings to the formula", () => {
+      insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+      seedMinutes([100, 120, 140, 170])
+      seedProfile()
+      // Ceilings that split the same minutes differently from the formula's bounds.
+      for (const [zone, value] of Object.entries({ light: 125, moderate: 145, vigorous: 165, peak: 190 })) {
+        seedDaily(DATE, `heart_rate_zone_${zone}_max_bpm`, value)
+      }
+
+      const run = filledRun()
+      const summary = (run.attrs as { metricsSummary: Record<string, unknown> }).metricsSummary
+      expect(summary.heartRateZoneDurations).toEqual({ lightTime: '120s', moderateTime: '60s', vigorousTime: '0s', peakTime: '60s' })
+      expect(run.attrs).not.toHaveProperty('zoneBasis')
+    })
+
+    it('fills no zones without a birthday', () => {
+      insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+      seedMinutes([100, 120, 140, 170])
+      seedProfile({ birthDate: null })
+
+      const run = filledRun()
+      expect((run.attrs as { metricsSummary: Record<string, unknown> }).metricsSummary).not.toHaveProperty('heartRateZoneDurations')
+      expect(run.attrs).not.toHaveProperty('zoneBasis')
+    })
+
+    it("fills no zones without that day's resting heart rate", () => {
+      insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+      seedMinutes([100, 120, 140, 170])
+      seedProfile({ restingOn: '2026-09-19' })
+
+      const run = filledRun()
+      expect((run.attrs as { metricsSummary: Record<string, unknown> }).metricsSummary).not.toHaveProperty('heartRateZoneDurations')
+      expect(run.attrs).not.toHaveProperty('zoneBasis')
+    })
   })
 
   it('marks a bare run with no samples at all as awaiting its summary, and as nothing filled', () => {
@@ -615,6 +689,20 @@ describe('the workout page says what is still coming and what was filled', () =>
       expect(merged.pending).toBe(false)
       expect(merged.filled).toEqual([])
     }
+  })
+
+  it('marks zones filled from the formula, and not a Google workout', () => {
+    new PeopleStore(t.db).setBirthDate('p1', '1986-01-01')
+    t.db.insert(daily).values({
+      personId: 'p1', localDate: DATE, metric: 'resting_heart_rate', agg: 'last', source: 'merged', value: 60,
+      coverage: 1, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples()
+    insertSession({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_TREADMILL, startMs: START - 24 * 60 * MINUTE, endMs: END - 24 * 60 * MINUTE, localDate: '2026-09-19' })
+
+    expect(page('phone-run').zoneFormula).toBe(true)
+    expect(page('google-run').zoneFormula).toBe(false)
   })
 
   it('is not pending for a bare Google exercise, which has no copy on its way', () => {

@@ -59,6 +59,13 @@ describe('GET /sleep/period and /activity/period', () => {
     }
   })
 
+  it('lists the days resting on the zone formula on the activity overview', async () => {
+    const { h, token } = await started()
+    const response = await get(h, token, '/activity/period?range=month&anchor=2026-08-14')
+    expect(response.statusCode).toBe(200)
+    expect(response.json().zoneFormulaDays).toEqual([])
+  })
+
   it('refuses a day range, an unknown range, a missing or malformed anchor and a period not yet started', async () => {
     const { h, token } = await started()
     for (const path of ['/sleep/period', '/activity/period']) {
@@ -556,7 +563,7 @@ describe('roundActivityPeriod', () => {
       yearEarlier: { from: '2025-08-31', to: '2025-09-06', value: null, delta: null },
       workoutCount: 2, figures: [], intensity: none, zoneMinutes: { fatBurn: null, cardio: null, peak: null },
       heartRateZones: { ...none, peak: null, hard: null }, maxHeartRate: null, workouts: [], workoutMonths: [], types: [],
-      cardioLoad: null, vo2max: null, more: [],
+      cardioLoad: null, zoneFormulaDays: [], vo2max: null, more: [],
       ...over,
     }
   }

@@ -72,6 +72,7 @@ export function seriesPoint(
     sourceMix: null,
     updatedAtMs: 1_755_000_000_000,
     filled: false,
+    basis: null,
     ...overrides,
   }
 }

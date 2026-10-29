@@ -76,6 +76,10 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
   const filledRate = filledRows.find((key) => key === 'pace' || key === 'speed')
   const filledClause = filledRows.length === 0 ? null
     : t(`activity.workout.page.compared.${filledRate === 'pace' ? 'filledPace' : filledRate === 'speed' ? 'filledSpeed' : 'filled'}`)
+  // The cardio load's row rests on formula zones when the page's zones do (filledNote's own
+  // comment), and the footnote is where this table says what a row rests on.
+  const zoneFormulaClause = page.zoneFormula === true && rows.some(({ key }) => key === 'cardioLoad')
+    ? t('activity.workout.page.compared.zoneFormula') : null
   const captionKey = previous === null ? 'captionAlone' : 'captionWith'
 
   return (
@@ -146,6 +150,7 @@ export function WorkoutCompared({ page }: { page: WorkoutPageData }) {
         {t('activity.workout.page.compared.caption')}
         {withBest && <span className="workout-compared-wide"> · {t('activity.workout.page.compared.captionBest')}</span>}
         {filledClause !== null && ` · ${filledClause}`}
+        {zoneFormulaClause !== null && ` · ${zoneFormulaClause}`}
       </p>
     </Card>
   )

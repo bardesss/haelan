@@ -279,11 +279,12 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         const retarget = retargetOverrides(tx, { personId, oldSessions })
 
         const priority = input.priority.load(personId)
+        const birthDate = input.peopleStore.get(personId)?.birthDate ?? null
         // Read after re-targeting, so a moved key is the one the derivation applies.
         const personOverrides = input.overrides.listFor(personId)
         for (const localDate of counts.localDates) {
           deriveDayInto(tx, {
-            personId, localDate, priority, overrides: personOverrides, gapMinutes, overlapRatio,
+            personId, localDate, birthDate, priority, overrides: personOverrides, gapMinutes, overlapRatio,
             nowMs: input.nowMs,
           })
         }

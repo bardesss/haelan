@@ -17,6 +17,7 @@ function seedDaily(h: Harness, input: {
   source?: string
   coverage?: number | null
   personId?: string
+  basis?: string | null
 }): void {
   h.app.haelan.instance.db.insert(schema.daily).values({
     personId: input.personId ?? 'p1',
@@ -28,6 +29,7 @@ function seedDaily(h: Harness, input: {
     coverage: input.coverage === undefined ? null : input.coverage,
     sourceMix: null,
     derivationVersion: DERIVATION_VERSION,
+    basis: input.basis ?? null,
   }).run()
 }
 
@@ -95,6 +97,15 @@ describe('GET /series', () => {
     const point = (await get(harness, token, '/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')).json().steps.points[0]
     expect(point.coverage).toBe(0.42)
     expect(point).toHaveProperty('sourceMix')
+  })
+
+  it('carries the basis through, so a formula zone minute says it was estimated', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const metric = 'time_in_heart_rate_zone_moderate_minutes'
+    seedDaily(harness, { localDate: '2026-08-01', metric, value: 12, basis: 'zone_formula' })
+    seedDaily(harness, { localDate: '2026-08-02', metric, value: 30 })
+    const points = (await get(harness, token, `/series?metric=${metric}&agg=sum&from=2026-08-01&to=2026-08-02`)).json()[metric].points
+    expect(points.map((p: { basis: string | null }) => p.basis)).toEqual(['zone_formula', null])
   })
 
   it('answers 400 when no metric is given, rather than an empty keyed object', async () => {

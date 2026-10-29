@@ -30,12 +30,16 @@ export const people = sqliteTable('people', {
   // Null is load-bearing: with either of these absent, Banister answers null rather than a number
   // standing on a guess.
   //
-  // Neither column invalidates a derived row, which is unusual for this table and is the reason it
-  // is written down here. The only stored cardio load is Edwards, which reads zone minutes and
-  // nothing else; Banister runs at read time on a workout. So these two are written like
-  // display_name and not like timezone, which clears the derivation stamp in the same statement.
-  // A future change that makes a stored metric depend on either column takes on that obligation at
-  // the same moment.
+  // The birthday is read by a stored derivation: the heart rate zone formula (derive/workoutZones.ts)
+  // takes the age on the day, and the zone minutes it produces are written to the workout's day. It
+  // still does not clear the derivation stamp the way `timezone` does, because only the days that
+  // carry workouts are affected and a rebuild would redo everything. The route that edits it queues
+  // exactly those days instead (DeriveQueue.markExerciseDays). A writer that bypasses the route owes
+  // the same call.
+  //
+  // `sex` is different: the only thing reading it is Banister, which runs at read time on a
+  // workout, so it is written like display_name. The only other stored cardio load is Edwards, which
+  // reads zone minutes and nothing else.
   birthDate: text('birth_date'),
   sex: text('sex', { enum: ['male', 'female'] }),
   // How this person connects. True when they chose the phone path. Null on

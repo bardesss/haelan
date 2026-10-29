@@ -391,6 +391,21 @@ describe('the Activity page: sections', () => {
     expect(nl.querySelector('.figure-row-verdict')?.textContent).toBe(`gemiddeld binnen je gebruikelijke bereik 163 – 165${NB}bpm voor een maand`)
   })
 
+  it('says which days of the zones are estimated, instead of claiming the whole day, in both languages', async () => {
+    await renderAt(MONTH_URL, { period: ACTIVITY_PERIOD_MONTH })
+    expect(cardFor('Heart-rate zones')!.querySelector('.dash-caption')?.textContent).toContain('through the whole day')
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: month({ zoneFormulaDays: ['2026-08-03', '2026-08-05'] }) })
+    const caption = cardFor('Heart-rate zones')!.querySelector('.dash-caption')!.textContent
+    expect(caption).toContain('2 days only during workouts, zones estimated from your age and resting heart rate')
+    act(() => { root?.unmount() })
+    root = createRoot(container!)
+    await renderAt(MONTH_URL, { period: month({ zoneFormulaDays: ['2026-08-03'] }) }, 'nl')
+    expect(cardFor('Hartslagzones')!.querySelector('.dash-caption')!.textContent)
+      .toContain('1 dag alleen tijdens trainingen, zones geschat uit je leeftijd en rusthartslag')
+  })
+
   it('keeps the heart-rate card for the highest heart rate alone, with no zones', async () => {
     const none = { light: null, moderate: null, vigorous: null, peak: null, hard: null }
     await renderAt(MONTH_URL, { period: month({ heartRateZones: none }) })

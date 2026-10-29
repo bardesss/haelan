@@ -204,6 +204,13 @@ export const daily = sqliteTable('daily', {
   // be inspectable against the per source rows, and this is the half the row itself owes.
   sourceMix: text('source_mix'),
   derivationVersion: integer('derivation_version').notNull(),
+  // What the figure rests on, when it does not rest on what a device recorded. Today the one
+  // value is 'zone_formula': minutes in heart rate zones, and the load built from them, that we
+  // computed from the person's age and resting heart rate rather than from zone minutes a
+  // watch reported. Null is the common case and means computed from what was recorded. The
+  // column exists so the Activity read can tell an estimate from a measurement and say so,
+  // instead of presenting both as the same kind of number.
+  basis: text('basis'),
   /**
    * When this row was last written. Nullable because rows derived before M3b have no honest
    * answer, and a fabricated one would make a client's "what changed since" skip real changes.

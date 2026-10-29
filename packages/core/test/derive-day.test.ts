@@ -27,6 +27,7 @@ const seedDay = (): { db: TestDatabase['db'], personId: string, localDate: strin
 // DeriveDayInput wants a real Priority (a rank function), not the DEFAULT_LIST metric key.
 // Nothing here configures a list, so every source falls back to the same unranked order.
 const tuning = {
+  birthDate: null,
   priority: priorityFrom({ lists: new Map(), sources: [] }),
   overrides: [],
   gapMinutes: DEFAULT_NIGHT_GAP_MINUTES,

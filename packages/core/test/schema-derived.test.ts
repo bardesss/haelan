@@ -46,6 +46,27 @@ describe('tier 2 and 3 schema', () => {
     expect(updatedAtMs?.notNull).toBe(false)
   })
 
+  it('a daily row stores its basis', () => {
+    const { db, cleanup } = createTestDatabase()
+    try {
+      seedPerson(db, 'p1')
+      const row = {
+        personId: 'p1', localDate: '2026-10-28', agg: 'sum', source: 'merged',
+        value: 12, coverage: null, sourceMix: null, derivationVersion: 1,
+      }
+      db.insert(daily).values([
+        { ...row, metric: 'time_in_heart_rate_zone_3_minutes', basis: 'zone_formula' },
+        { ...row, metric: 'steps' },
+      ]).run()
+
+      const stored = db.select().from(daily).all()
+      const basisOf = (metric: string) => stored.find((r) => r.metric === metric)?.basis
+      expect(basisOf('time_in_heart_rate_zone_3_minutes')).toBe('zone_formula')
+      // Absent means computed from what was recorded, and must read back as null, not as a default.
+      expect(basisOf('steps')).toBeNull()
+    } finally { cleanup() }
+  })
+
   it('queues a person and a local date, so one dirty day is one row however many metrics it touches', () => {
     const cols = columnNames(deriveQueue)
     expect(cols).toEqual(['local_date', 'person_id', 'queued_at_ms'])

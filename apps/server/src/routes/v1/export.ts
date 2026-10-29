@@ -29,7 +29,14 @@ interface ExportQuery {
 // way every other boolean this project ever put in a CSV would be, never folded into `source`
 // (still 'merged' or 'provider' on a filled row, exactly as it is on a genuine one) or into a
 // sourceMix that a filled row does not carry.
-const CSV_HEADER = 'localDate,metric,agg,source,value,coverage,sourceMix,filled'
+//
+// basis (DailyPoint.basis) follows filled, for the same reason: `zone_formula` marks heart rate
+// zone minutes, and the cardio load built on them, that the derive estimated from age and resting
+// heart rate rather than read off a device (derive/workoutZones.ts). The page says so in a
+// caption; a spreadsheet has none, so the fact rides in its own column or is lost. Empty for a
+// recorded row, through the same orEmpty every other nullable field here goes through, and appended
+// last so a reader indexing the earlier columns by position is not moved.
+const CSV_HEADER = 'localDate,metric,agg,source,value,coverage,sourceMix,filled,basis'
 
 /** RFC 4180: a field needing no quoting is written bare; one with a comma, a quote, a line feed
  *  or a carriage return is wrapped in double quotes, with an inner quote doubled. daily.source_mix
@@ -75,6 +82,7 @@ function toCsv(byMetric: Readonly<Record<string, SeriesResult>>, metrics: readon
       lines.push(csvRow([
         point.localDate, metric, agg, point.source,
         orEmpty(point.value), orEmpty(point.coverage), orEmpty(point.sourceMix), String(point.filled),
+        orEmpty(point.basis),
       ]))
     }
   }

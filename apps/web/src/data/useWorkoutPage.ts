@@ -82,6 +82,10 @@ export interface WorkoutPageData {
    *  sends; a filled pace or speed runs over elapsed time (workoutPage.ts's `filled`). Absent from
    *  a page cached before it was sent. */
   filled?: WorkoutFigureKey[]
+  /** Whether the heart rate zones were estimated from the person's age and resting heart rate
+   *  rather than the provider's ceilings (workoutPage.ts's `zoneFormula`). Absent from a page
+   *  cached before it was sent. */
+  zoneFormula?: boolean
   hero: WorkoutFigureKey
   nav: { previous: string | null, next: string | null }
   figures: Partial<Record<WorkoutFigureKey, WorkoutFigure>>

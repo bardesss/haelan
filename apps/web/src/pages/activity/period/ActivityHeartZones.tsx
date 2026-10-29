@@ -33,11 +33,13 @@ export function hasHeartZones(zones: ActivityPeriodData['heartRateZones'], maxHe
  * each zone's time, the day's highest heart rate as a figure row against its usual, and, with any
  * zone's time, a caption saying where that time comes from.
  */
-export function ActivityHeartZones({ zones, maxHeartRate, range, span }: {
+export function ActivityHeartZones({ zones, maxHeartRate, range, span, formulaDays }: {
   zones: ActivityPeriodData['heartRateZones']
   maxHeartRate: PeriodFigure | null
   range: PeriodRange
   span: number
+  /** The period's days whose zone minutes rest on the zone formula of issue 385 (the server's zoneFormulaDays). */
+  formulaDays: readonly string[]
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -82,8 +84,16 @@ export function ActivityHeartZones({ zones, maxHeartRate, range, span }: {
         </>
       )}
       <PeriodFigureRows figures={figures} labelOf={labelOf} noun="day" bars max={2} />
-      {/* The caption names the zones' time, so a card holding only the highest heart rate has none. */}
-      {rows.length > 0 && <p className="dash-caption">{t('activity.period.zones.caption', { period: thisPeriod(range, t) })}</p>}
+      {/* The caption names the zones' time, so a card holding only the highest heart rate has none.
+          A formula day counts workout time only and its zones are estimated, so "the whole day" is
+          not true of it: the caption says how many days that is rather than claim them too. */}
+      {rows.length > 0 && (
+        <p className="dash-caption">
+          {formulaDays.length === 0
+            ? t('activity.period.zones.caption', { period: thisPeriod(range, t) })
+            : t('activity.period.zones.captionFormula', { period: thisPeriod(range, t), count: formulaDays.length })}
+        </p>
+      )}
     </Card>
   )
 }

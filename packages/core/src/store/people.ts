@@ -214,8 +214,11 @@ export class PeopleStore {
   /**
    * A birthday, or null to clear it.
    *
-   * Cheap, like setDisplayName and unlike setTimezone: nothing derived reads this column. See the
-   * schema's own comment for why that is true and what would make it stop being true.
+   * Cheaper than setTimezone, which clears the derivation stamp and costs a full rebuild, but not
+   * free like setDisplayName: the heart rate zone formula reads this column, so the derived zone
+   * minutes of every workout day depend on it. This setter does not queue those days itself; the
+   * profile route does, through DeriveQueue.markExerciseDays, and only when the value changed. A
+   * new caller that changes a birthday has to do the same. See the schema's own comment.
    */
   setBirthDate(id: string, birthDate: string | null): void {
     if (birthDate !== null) {
@@ -249,7 +252,7 @@ export class PeopleStore {
    * The nightly figure the sleep balance card measures a night against, once this person has no
    * baseline of their own to be measured against instead.
    *
-   * Cheap, like setBirthDate and unlike setTimezone: nothing derived reads this column, so the
+   * Cheap, like setDisplayName and unlike setTimezone: nothing derived reads this column, so the
    * derivation stamp is deliberately not cleared here. The card computes at read time, from this
    * number and from whatever is already stored, so a change to it changes what the next page load
    * draws and nothing that has already been written. CONTRIBUTING asks a change like this for a

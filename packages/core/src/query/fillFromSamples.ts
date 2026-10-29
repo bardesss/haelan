@@ -1,10 +1,11 @@
 import type { DbOrTx } from '../db/open.ts'
 import { INTRADAY_WINDOW_MAX_MS, readIntradayWindow } from './intraday.ts'
 import { NO_THINNING, readSessionHeartRateMinutes } from './sessionHeartRate.ts'
-import { readWorkoutZoneBounds } from './workoutDerived.ts'
+import { readFillZoneBounds } from './workoutDerived.ts'
 import { sessionRateOf } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { zoneSecondsFromMinutes } from '../api/cardioLoad.ts'
+import type { ZoneBasis } from '../api/cardioLoad.ts'
 import { exerciseCategory, rateOf } from '../api/exerciseCategory.ts'
 import { getSource } from '../store/sources.ts'
 import { hasGoogleGrant } from '../store/credentials.ts'
@@ -88,7 +89,10 @@ export function samplesFiller(db: DbOrTx, input: { personId: string, nowMs?: num
  *   source that holds the most readings there, never two summed together: two devices counting
  *   the same steps would count them twice.
  * - average heart rate: the mean of readSessionHeartRateMinutes, the reader the cardio load uses.
- * - zones: those minutes against the day's zone bounds; none without bounds.
+ * - zones: those minutes against the day's zone bounds: the provider's ceilings when the day has
+ *   them, else the formula from the person's birthday and that day's resting heart rate
+ *   (readFillZoneBounds); none without either. Zones from the formula set `attrs.zoneBasis` to
+ *   `zoneFormula`, so the page can say they are estimated; ceilings leave it unset.
  * - pace (on foot) or speed (on a bike): distance over ELAPSED time, since pauses are unknown and
  *   moving time stays null. `filled` names them so the page can word them as elapsed.
  *
@@ -136,6 +140,8 @@ function fillOne(db: DbOrTx, input: {
   if (session.endMs - startMs > INTRADAY_WINDOW_MAX_MS) return unfilled
 
   const summary: Record<string, unknown> = {}
+  // Set only when the zones came from the formula, so the page can say they are an estimate.
+  let zoneBasis: ZoneBasis | undefined
   const sum = (metric: string) => sumOverSession(db, { personId, metric, startMs, endMs, sourceId: session.sourceId })
   const steps = sum('steps')
   if (steps !== null) summary.steps = steps
@@ -148,9 +154,10 @@ function fillOne(db: DbOrTx, input: {
   if (minutes.length > 0) {
     // Whole bpm, the provider's own shape for it.
     summary.averageHeartRateBeatsPerMinute = Math.round(minutes.reduce((total, m) => total + m.bpm, 0) / minutes.length)
-    const bounds = readWorkoutZoneBounds(db, { personId, session })
-    if (bounds !== null) {
-      const zones = zoneSecondsFromMinutes(minutes, bounds)
+    const zoned = readFillZoneBounds(db, { personId, session })
+    if (zoned !== null) {
+      if (zoned.basis === 'zoneFormula') zoneBasis = 'zoneFormula'
+      const zones = zoneSecondsFromMinutes(minutes, zoned.bounds)
       // The provider's own Duration strings, all four: a zero here is a zero, never an unknown.
       summary.heartRateZoneDurations = {
         lightTime: `${zones.lightSeconds}s`, moderateTime: `${zones.moderateSeconds}s`,
@@ -169,7 +176,10 @@ function fillOne(db: DbOrTx, input: {
 
   const filled = Object.keys(summary)
   if (filled.length === 0) return unfilled
-  const filledAttrs = { ...awaiting, metricsSummary: summary, filledFromSamples: true, filled }
+  const filledAttrs = {
+    ...awaiting, metricsSummary: summary, filledFromSamples: true, filled,
+    ...(zoneBasis === undefined ? {} : { zoneBasis }),
+  }
   return { ...session, attrs: filledAttrs, rate: sessionRateOf(filledAttrs) }
 }
 

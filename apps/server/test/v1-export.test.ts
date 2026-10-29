@@ -16,6 +16,7 @@ function seedDaily(h: Harness, input: {
   source?: string
   coverage?: number | null
   personId?: string
+  basis?: string | null
 }): void {
   h.app.haelan.instance.db.insert(schema.daily).values({
     personId: input.personId ?? 'p1',
@@ -27,6 +28,7 @@ function seedDaily(h: Harness, input: {
     coverage: input.coverage === undefined ? null : input.coverage,
     sourceMix: null,
     derivationVersion: DERIVATION_VERSION,
+    basis: input.basis ?? null,
   }).run()
 }
 
@@ -100,7 +102,7 @@ describe('GET /export', () => {
     seedDaily(harness, { localDate: '2026-08-01', value: 900 })
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const [header, first] = response.body.trim().split('\n')
-    expect(header).toBe('localDate,metric,agg,source,value,coverage,sourceMix,filled')
+    expect(header).toBe('localDate,metric,agg,source,value,coverage,sourceMix,filled,basis')
     expect(first).toContain('2026-08-01,steps,sum,merged,900')
   })
 
@@ -115,7 +117,7 @@ describe('GET /export', () => {
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const rows = parseCsv(response.body)
     expect(rows).toHaveLength(2)
-    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', sourceMix, 'false'])
+    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', sourceMix, 'false', ''])
   })
 
   // daily.source_mix is an unconstrained text column, so nothing stops a raw newline from landing
@@ -130,7 +132,7 @@ describe('GET /export', () => {
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const rows = parseCsv(response.body)
     expect(rows).toHaveLength(2)
-    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', sourceMix, 'false'])
+    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', sourceMix, 'false', ''])
   })
 
   // A lone carriage return is the same unconstrained column allowing the same kind of value, and
@@ -143,7 +145,7 @@ describe('GET /export', () => {
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const rows = parseCsv(response.body)
     expect(rows).toHaveLength(2)
-    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', sourceMix, 'false'])
+    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', sourceMix, 'false', ''])
   })
 
   it('answers a null coverage and sourceMix as an empty field, not the text null', async () => {
@@ -151,7 +153,7 @@ describe('GET /export', () => {
     seedDaily(harness, { localDate: '2026-08-01', value: 900, coverage: null })
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const [, first] = response.body.trim().split('\n')
-    expect(first).toBe('2026-08-01,steps,sum,merged,900,,,false')
+    expect(first).toBe('2026-08-01,steps,sum,merged,900,,,false,')
   })
 
   // coverage and sourceMix both state the basis of a merged number; nothing requires every row in
@@ -165,8 +167,8 @@ describe('GET /export', () => {
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-02')
     const rows = parseCsv(response.body)
     expect(rows).toHaveLength(3)
-    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', '', 'false'])
-    expect(rows[2]).toEqual(['2026-08-02', 'steps', 'sum', 'merged', '950', '', sourceMix, 'false'])
+    expect(rows[1]).toEqual(['2026-08-01', 'steps', 'sum', 'merged', '900', '', '', 'false', ''])
+    expect(rows[2]).toEqual(['2026-08-02', 'steps', 'sum', 'merged', '950', '', sourceMix, 'false', ''])
   })
 
   // The fallback that filled exists to mark, exercised through the real fallback rather than a
@@ -185,8 +187,24 @@ describe('GET /export', () => {
     )
     const rows = parseCsv(response.body)
     expect(rows).toHaveLength(3)
-    expect(rows[1]).toEqual(['2026-08-01', 'daily_hrv', 'last', 'merged', '42', '', '', 'true'])
-    expect(rows[2]).toEqual(['2026-08-02', 'daily_hrv', 'last', 'merged', '55', '', '', 'false'])
+    expect(rows[1]).toEqual(['2026-08-01', 'daily_hrv', 'last', 'merged', '42', '', '', 'true', ''])
+    expect(rows[2]).toEqual(['2026-08-02', 'daily_hrv', 'last', 'merged', '55', '', '', 'false', ''])
+  })
+
+  // basis is the same kind of fact filled is: a zone minute the derive estimated from age and
+  // resting heart rate (derive/workoutZones.ts) is captioned on the page, and a spreadsheet has
+  // no caption, so it survives the download as its own column or not at all. Empty for a
+  // recorded row, the way every other null field on this route is written.
+  it('carries the zone formula basis in its own column, and an empty one for a recorded row', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const metric = 'time_in_heart_rate_zone_moderate_minutes'
+    seedDaily(harness, { localDate: '2026-08-01', metric, value: 12, basis: 'zone_formula' })
+    seedDaily(harness, { localDate: '2026-08-02', metric, value: 30 })
+    const response = await get(harness, token, `/export?format=csv&metric=${metric}&agg=sum&from=2026-08-01&to=2026-08-02`)
+    const rows = parseCsv(response.body)
+    expect(rows).toHaveLength(3)
+    expect(rows[1]).toEqual(['2026-08-01', metric, 'sum', 'merged', '12', '', '', 'false', 'zone_formula'])
+    expect(rows[2]).toEqual(['2026-08-02', metric, 'sum', 'merged', '30', '', '', 'false', ''])
   })
 
   it('answers json as the same shape the read route returns, sourceMix included', async () => {

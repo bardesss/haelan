@@ -74,4 +74,16 @@ describe('the daily cardio load row', () => {
     }
     expect(derive([ceiling])).toEqual([])
   })
+
+  // A load computed from formula zone minutes is as much an estimate as the minutes are, and the
+  // page that draws it needs to be able to say so.
+  it('carries the formula basis from its zone rows', () => {
+    const rows = derive([
+      { ...zoneRow('phone', 'light', 10), basis: 'zone_formula' },
+      { ...zoneRow('phone', 'peak', 2), basis: 'zone_formula' },
+      zoneRow('watch', 'light', 10),
+    ])
+    expect(rows.find((r) => r.source === 'phone')?.basis).toBe('zone_formula')
+    expect(rows.find((r) => r.source === 'watch')?.basis ?? null).toBeNull()
+  })
 })

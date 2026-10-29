@@ -1,7 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, seedPerson, seedSession } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
+import { sessions } from '../src/db/schema/index.ts'
+import { eq } from 'drizzle-orm'
 
 let test: TestDatabase
 let queue: DeriveQueue
@@ -77,6 +79,22 @@ describe('the derive queue', () => {
     expect(queue.has({ personId: 'p2', localDate: '2026-08-22' })).toBe(false)
     queue.clear([{ personId: 'p1', localDate: '2026-08-22' }])
     expect(queue.has({ personId: 'p1', localDate: '2026-08-22' })).toBe(false)
+  })
+
+  // What a birthday edit queues: the zone formula only reaches workouts, so a sleep night's day
+  // is not dirtied by it, and two workouts on one day are one entry.
+  it('marks every day with a workout', () => {
+    const onDate = (id: string, kind: 'exercise' | 'sleep', localDate: string, personId = 'p1') => {
+      seedSession(test.db, { id, personId, kind, externalId: id })
+      test.db.update(sessions).set({ localDate }).where(eq(sessions.id, id)).run()
+    }
+    onDate('w1', 'exercise', '2026-08-20')
+    onDate('w2', 'exercise', '2026-08-22')
+    onDate('w3', 'exercise', '2026-08-22')
+    onDate('s1', 'sleep', '2026-08-21')
+    onDate('w4', 'exercise', '2026-08-23', 'p2')
+    queue.markExerciseDays({ personId: 'p1', nowMs: 5 })
+    expect(queue.claim(10).map((e) => `${e.personId} ${e.localDate}`)).toEqual(['p1 2026-08-20', 'p1 2026-08-22'])
   })
 
   it('clears nothing when handed nothing', () => {

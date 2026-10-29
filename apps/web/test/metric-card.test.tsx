@@ -86,7 +86,7 @@ afterEach(() => {
 
 const OK = { isError: false, isPending: false, refetch: () => {} }
 const point = (value: number, coverage: number | null): SeriesPoint =>
-  ({ localDate: '2026-08-01', source: 'merged', value, coverage, sourceMix: null, updatedAtMs: null, filled: false })
+  ({ localDate: '2026-08-01', source: 'merged', value, coverage, sourceMix: null, updatedAtMs: null, filled: false, basis: null })
 
 describe('MetricCard', () => {
   // Error outranks pending, and this is the case that inverts if the order is wrong: an errored

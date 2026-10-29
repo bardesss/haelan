@@ -23,6 +23,10 @@ export interface SeriesPoint {
   // every `point.filled` check downstream, which is exactly the silent "measured" claim this field
   // exists to rule out.
   filled: boolean
+  // `zone_formula` when the value rests on the heart rate zone formula (age and resting heart
+  // rate) rather than a device's reading, else null (personQuery.ts's DailyPoint.basis). Required
+  // for the reason filled is.
+  basis: string | null
 }
 
 export interface MetricSeries {

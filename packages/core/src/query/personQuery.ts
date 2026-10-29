@@ -8,7 +8,7 @@ import type { AllTime } from './allTime.ts'
 import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
 import { daily, metricDictionary, people, samples, sessions, overrides as overridesTable, SESSION_KINDS, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
-import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
+import { MERGED_SOURCE, PROVIDER_SOURCE, ZONE_FORMULA_BASIS } from '../derive/rollup.ts'
 import type { SampleLike } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
@@ -60,7 +60,7 @@ import { readWorkoutPage } from './workoutPage.ts'
 import type { WorkoutPage } from './workoutPage.ts'
 import { readSleepPeriod } from './sleepPeriod.ts'
 import type { SleepPeriod, SleepPeriodInput } from './sleepPeriod.ts'
-import { readActivityPeriod } from './activityPeriod.ts'
+import { HEART_RATE_ZONE_METRICS, readActivityPeriod } from './activityPeriod.ts'
 import type { ActivityPeriod, ActivityPeriodInput } from './activityPeriod.ts'
 import { readRecoveryPeriod } from './recoveryPeriod.ts'
 import type { RecoveryPeriod, RecoveryPeriodInput } from './recoveryPeriod.ts'
@@ -89,6 +89,14 @@ export interface DailyPoint {
    * point needs to say so rather than presenting it as one.
    */
   filled: boolean
+  /**
+   * What the number rests on when it is not what a device recorded: `zone_formula` for heart rate
+   * zone minutes, and the cardio load built on them, estimated from age and that day's resting
+   * heart rate (derive/workoutZones.ts). Null for a recorded number. Carried on every daily read,
+   * not only the Activity period's, because the codebase never prints a number without its basis
+   * and a series, an export or a tool answer is the number printed somewhere else.
+   */
+  basis: string | null
 }
 
 export interface SeriesResult {
@@ -223,6 +231,27 @@ export class PersonQuery {
       y: (entry) => entry.point.value,
     })
     return { points: thinned.points.map((entry) => entry.point), reduction: thinned.reduction }
+  }
+
+  /**
+   * The local dates, ascending, whose heart rate zone minutes were derived from the formula
+   * (`daily.basis = 'zone_formula'`) for the source, over an inclusive range.
+   *
+   * With no `source` this reads the merged rows: the derive writes a formula day only where Google
+   * has no zone rows of its own, so such a day never has a provider row to prefer. A source id
+   * reads that device's rows, and the validation is series()'s.
+   */
+  zoneFormulaDays(input: { from: string, to: string, source?: string }): string[] {
+    requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
+    return this.#db.selectDistinct({ localDate: daily.localDate }).from(daily).where(and(
+      eq(daily.personId, this.#personId),
+      inArray(daily.metric, HEART_RATE_ZONE_METRICS),
+      eq(daily.source, input.source ?? MERGED_SOURCE),
+      eq(daily.basis, ZONE_FORMULA_BASIS),
+      gte(daily.localDate, input.from),
+      lte(daily.localDate, input.to),
+    )).orderBy(asc(daily.localDate)).all().map((row) => row.localDate)
   }
 
   /**
@@ -1069,6 +1098,7 @@ export class PersonQuery {
       source: daily.source,
       sourceMix: daily.sourceMix,
       updatedAtMs: daily.updatedAtMs,
+      basis: daily.basis,
     }).from(daily).where(and(
       eq(daily.personId, this.#personId),
       eq(daily.metric, metric),

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
-  edwardsLoad, edwardsLoadFromSeconds, ageAt, banisterLoad, coefficientFor,
+  edwardsLoad, edwardsLoadFromSeconds, ageAt, banisterLoad, coefficientFor, zoneBoundsFromFormula,
 } from '../src/api/cardioLoad.ts'
 
 /**
@@ -156,5 +156,29 @@ describe('cardioLoad.ts stays importable from a browser bundle', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/api/cardioLoad.ts', import.meta.url)), 'utf8')
     const importLines = [...source.matchAll(IMPORT_LINE)].map((m) => m[0])
     expect(importLines, 'cardioLoad.ts must import nothing').toEqual([])
+  })
+})
+
+describe('zoneBoundsFromFormula', () => {
+  it('is Karvonen on a Tanaka maximum', () => {
+    // age 40 -> max 180, RHR 60 -> HRR 120
+    expect(zoneBoundsFromFormula({ birthDate: '1986-01-01', localDate: '2026-10-28', restingBpm: 60 }))
+      .toEqual({ moderateMin: 108, vigorousMin: 132, peakMin: 162, max: 180 })
+  })
+  it('rounds each bound half up, the maximum unrounded inside the sum', () => {
+    // age 35 -> max 183.5, RHR 55 -> HRR 128.5
+    expect(zoneBoundsFromFormula({ birthDate: '1991-01-01', localDate: '2026-10-28', restingBpm: 55 }))
+      .toEqual({ moderateMin: 106, vigorousMin: 132, peakMin: 164, max: 184 })
+  })
+  it('uses the age on the day itself', () => {
+    // birthday not yet come round on 2026-10-28 -> age 39 -> max 180.7
+    expect(zoneBoundsFromFormula({ birthDate: '1986-12-01', localDate: '2026-10-28', restingBpm: 60 })?.max).toBe(181)
+  })
+  it('answers null without a birthday or a resting heart rate', () => {
+    expect(zoneBoundsFromFormula({ birthDate: null, localDate: '2026-10-28', restingBpm: 60 })).toBeNull()
+    expect(zoneBoundsFromFormula({ birthDate: '1986-01-01', localDate: '2026-10-28', restingBpm: null })).toBeNull()
+  })
+  it('answers null when resting is at or above the maximum', () => {
+    expect(zoneBoundsFromFormula({ birthDate: '1926-01-01', localDate: '2026-10-28', restingBpm: 140 })).toBeNull()
   })
 })
