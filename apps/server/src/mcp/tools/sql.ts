@@ -1,25 +1,14 @@
 import { z } from 'zod'
 import { ConfigError } from '@haelan/core'
 import type { Tool } from '../contract.ts'
-import { defineTool } from '../contract.ts'
+import { defineTool, PRAGMA_REFUSAL, referencesPragma } from '../contract.ts'
 import { makeProjectionDir, runSql, SQL_ROW_CAP, SQL_DEADLINE_MS } from '../runSql.ts'
 
 /**
- * Refused before the sandbox ever sees it: this is defence in depth, not the boundary.
- *
- * A readonly better-sqlite3 connection happily answers a row-returning PRAGMA - `PRAGMA
- * database_list` names the host's own temp path, and on a desktop install the OS username, and
- * neither has anything to do with the one person this tool reads. That is a leak the driver's own
- * refusals (multi-statement, write, ATTACH - see sql-sandbox.test.ts) do not cover, because a
- * single PRAGMA is none of those things.
- *
- * The actual boundary - what SQL may run against the throwaway projection at all - lives in
- * sqlWorker.ts, which this fix does not touch. A leading-keyword check here catches the honest
- * case (an agent reasonably trying `PRAGMA table_info(...)`) with a sentence instead of a leaked
- * path; it is not asked to catch a PRAGMA hidden behind a comment or smuggled in as a second
- * statement; the sandbox already refuses more than one statement regardless of what the first one is.
+ * The fast refusal: an agent reasonably trying `PRAGMA table_info(...)` gets a sentence before a
+ * projection is built. It is not the boundary - sqlWorker.ts refuses the same text itself, so a
+ * PRAGMA behind a comment or a `pragma_*` table function is stopped there whatever happens here.
  */
-const PRAGMA_PATTERN = /^\s*pragma\b/i
 
 export const sqlQuery = defineTool({
   name: 'sql_query',
@@ -60,12 +49,7 @@ export const sqlQuery = defineTool({
     textTruncated: z.boolean(),
   },
   run: async (q, args) => {
-    if (PRAGMA_PATTERN.test(args.sql)) {
-      throw new ConfigError(
-        'sql_query refuses PRAGMA outright: several of them - database_list among them - answer '
-        + 'rows about this host rather than about the person this tool reads. Ask a plain SELECT instead.',
-      )
-    }
+    if (referencesPragma(args.sql)) throw new ConfigError(PRAGMA_REFUSAL)
     const projection = makeProjectionDir()
     try {
       q.writeProjection(projection.path)

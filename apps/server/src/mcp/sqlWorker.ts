@@ -13,8 +13,8 @@
  * itself is exactly as uninterruptible either way, but only one of the two lets the caller stop
  * waiting on it for real.
  *
- * The security boundary is unchanged from the thread version, and still **two** mechanisms, not
- * one - each covers what the other misses:
+ * The security boundary is the thread version's two mechanisms plus a third, not one - each
+ * covers what the others miss:
  *
  * 1. **The caller's SQL reaches `prepare().iterate()` and nothing else.** That refuses ATTACH (a
  *    statement returning no data, caught by `columns()`/`iterate()`), multi-statement SQL (the
@@ -26,8 +26,13 @@
  *    `INSERT INTO … RETURNING *`: it returns rows, so `iterate()` runs it exactly like a SELECT -
  *    `readonly: true` is the *only* thing that refuses it.
  *
- * Neither mechanism alone is the boundary; both are, and `sql-sandbox.test.ts`'s `RETURNING *`
- * and `VACUUM INTO` cases each pin the leg the other cannot.
+ * 3. **The caller's SQL may not mention `pragma` at all.** A read-only PRAGMA, and the
+ *    `pragma_*` table functions, are `readonly` to SQLite and return rows, so neither leg above
+ *    refuses them - and they answer about this host (the temp path, the OS username), not about
+ *    the person. Refused on the raw text, before the database is even opened.
+ *
+ * No single mechanism is the boundary; all three are, and `sql-sandbox.test.ts`'s `RETURNING *`,
+ * `VACUUM INTO` and PRAGMA cases each pin a leg the others cannot.
  *
  * Everything below - including opening the database - runs inside one `try`, and that is a
  * deliberate difference from the thread version this replaces. A worker thread that throws
@@ -40,7 +45,7 @@
  * over the IPC channel is what keeps that failure mode as informative as every other refusal.
  */
 import BetterSqlite3 from 'better-sqlite3'
-import { MAX_TEXT, MAX_RESULT_BYTES } from './contract.ts'
+import { MAX_TEXT, MAX_RESULT_BYTES, PRAGMA_REFUSAL, referencesPragma } from './contract.ts'
 
 interface SqlChildInput { projectionPath: string, sql: string, rowCap: number }
 
@@ -65,6 +70,7 @@ process.once('message', (input: SqlChildInput) => {
   const { projectionPath, sql, rowCap } = input
   let db: BetterSqlite3.Database | undefined
   try {
+    if (referencesPragma(sql)) throw new Error(PRAGMA_REFUSAL)
     db = new BetterSqlite3(projectionPath, { readonly: true, fileMustExist: true })
     const statement = db.prepare(sql)
     // raw() gives arrays rather than objects: it halves a 500-row payload and keeps the column
