@@ -82,7 +82,9 @@ jobs:
           name: token-palette
           path: apps/android/app/build/haelan-tokens/
           if-no-files-found: error
-          retention-days: 1
+          # Re-running only a failed release job downloads this again, so it has to outlive a day
+          # or two of someone looking into why it failed.
+          retention-days: 7
 
   release:
     needs: check
@@ -91,7 +93,12 @@ jobs:
       contents: write
     timeout-minutes: 30
     steps:
+      # Not persisted: this job holds contents: write while Gradle runs build scripts, and a token
+      # in .git/config is readable by all of them. The tag fetch below works anonymously on this
+      # public repository, and gh release create takes its token from GH_TOKEN.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # actions/checkout fetches a tag push by commit sha, which lands a lightweight tag in the
       # runner's clone and drops the tag object. gh release create --notes-from-tag then silently
@@ -150,9 +157,13 @@ jobs:
 
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
 
+      # No cache: the one it would restore is written on the default branch by android.yml, whose
+      # job runs dependency lifecycle scripts, and nothing that job leaves behind should reach the
+      # build that holds the keystore.
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-provider: basic
+          cache-disabled: true
 
       - name: Make gradlew executable
         run: chmod +x gradlew
@@ -194,9 +205,18 @@ jobs:
           APK="haelan-${{ steps.version.outputs.name }}.apk"
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/apksigner
           EXPECTED=$(tr -d '[:space:]' < apps/android/release-signing-cert.sha256)
+          # Two empty strings compare equal, so each side is checked on its own first.
+          if ! echo "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$'; then
+            echo "::error::release-signing-cert.sha256 does not hold a lowercase SHA-256 digest"
+            exit 1
+          fi
           CERTS=$("$APKSIGNER" verify --print-certs "$APK")
           if echo "$CERTS" | grep -q '^Signer #2'; then echo "::error::the APK carries more than one signer"; exit 1; fi
           FOUND=$(echo "$CERTS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          if [ -z "$FOUND" ]; then
+            echo "::error::apksigner printed no SHA-256 digest for the APK's signer"
+            exit 1
+          fi
           if [ "$FOUND" != "$EXPECTED" ]; then
             echo "::error::the APK is signed by $FOUND, the release key is $EXPECTED"
             exit 1

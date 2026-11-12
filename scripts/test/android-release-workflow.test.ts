@@ -132,6 +132,17 @@ describe('the android release workflow', () => {
   it('hands the generated palette from the check job to the release job', () => {
     expect(jobBody('check')).toMatch(/name: token-palette\n\s+path: apps\/android\/app\/build\/haelan-tokens\//)
     expect(jobBody('release')).toMatch(/name: token-palette\n\s+path: apps\/android\/app\/build\/haelan-tokens\//)
+    // Long enough that re-running only the release job a day or two later still finds it.
+    expect(jobBody('check')).toMatch(/^ {10}retention-days: 7$/m)
+  })
+
+  it('keeps the write token and the shared Gradle cache away from the signing build', () => {
+    const release = jobBody('release')
+    // A persisted token would sit in .git/config, readable by every build script Gradle runs.
+    expect(release).toMatch(/actions\/checkout@[0-9a-f]{40} # v\d+\n {8}with:\n {10}persist-credentials: false$/m)
+    // The default-branch cache is written by android.yml, whose job runs pnpm install lifecycle
+    // scripts; restoring it here would hand that job's output to the build that holds the keystore.
+    expect(release).toMatch(/gradle\/actions\/setup-gradle@[0-9a-f]{40} # v\d+\n {8}with:\n(?: {10}\S.*\n)*? {10}cache-disabled: true$/m)
   })
   it('refuses an APK signed by any key but the release key', () => {
     const step = at('The APK is signed by the release key')
@@ -140,6 +151,12 @@ describe('the android release workflow', () => {
     expect(yaml).toContain('--print-certs')
     expect(yaml).toContain('apps/android/release-signing-cert.sha256')
     expect(yaml).toContain('if [ "$FOUND" != "$EXPECTED" ]')
+    // Two empty strings compare equal, so a missing or blank cert file and an apksigner that
+    // printed no digest would pass the comparison above.
+    expect(yaml).toContain(`if ! echo "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$'; then`)
+    expect(yaml).toContain('if [ -z "$FOUND" ]; then')
+    expect(yaml.indexOf(`grep -Eq '^[0-9a-f]{64}$'`)).toBeLessThan(yaml.indexOf('if [ "$FOUND" != "$EXPECTED" ]'))
+    expect(yaml.indexOf('if [ -z "$FOUND" ]; then')).toBeLessThan(yaml.indexOf('if [ "$FOUND" != "$EXPECTED" ]'))
     const committed = readFileSync(new URL('../../apps/android/release-signing-cert.sha256', import.meta.url), 'utf8').trim()
     expect(committed, 'lowercase hex, no colons, as apksigner prints it').toMatch(/^[0-9a-f]{64}$/)
   })

@@ -53,6 +53,8 @@ describe('the pages workflow', () => {
 
   it('gives the Pages and OIDC scopes to the deploy job alone', () => {
     expect(topLevelPermissions()).toEqual(['contents: read'])
+    // Otherwise a renamed job hands the two checks below an empty string, which they pass.
+    expect(jobBody('build')).not.toBe('')
     expect(jobBody('build')).not.toContain('pages: write')
     expect(jobBody('build')).not.toContain('id-token: write')
     expect(jobBody('deploy')).toMatch(/^ {4}permissions:\n {6}pages: write\n {6}id-token: write$/m)
