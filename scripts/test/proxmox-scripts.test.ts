@@ -149,11 +149,65 @@ describe('the Proxmox LXC installer', () => {
   it('moves a container installed as root onto that user when it updates', () => {
     for (const step of [
       'useradd --system --no-create-home --home-dir /opt/haelan_data --shell /usr/sbin/nologin haelan',
+      'install -d -m 700 -o haelan -g haelan /opt/haelan_data',
       'chown -R haelan:haelan /opt/haelan_data',
       'chmod 700 /opt/haelan_data',
       'User=haelan',
       'systemctl daemon-reload',
-    ]) before(updateBody, step, 'systemctl start haelan')
+    ]) {
+      // After the stop too: a service still running as root could write a root-owned file into
+      // the data directory after the chown, and the haelan user could not open it.
+      before(updateBody, 'systemctl stop haelan', step)
+      before(updateBody, step, 'systemctl start haelan')
+    }
+    // A container whose data directory went missing would otherwise fail every update at the chown.
+    before(updateBody, 'install -d -m 700 -o haelan -g haelan /opt/haelan_data', 'chown -R haelan:haelan /opt/haelan_data')
+  })
+
+  // The two branches after the wait loop, each up to its exit.
+  const branch = (opening: string) => {
+    const start = updateBody.indexOf(opening)
+    expect(start, `${opening} is missing`).toBeGreaterThan(-1)
+    return updateBody.slice(start, updateBody.indexOf('exit 1', start))
+  }
+
+  it("waits for the new release with the unit's own port and host", () => {
+    // A drop-in that sets HAELAN_PORT or HAELAN_HOST would make a probe of the default address
+    // fail on every update.
+    expect(updateBody).not.toContain(`127.0.0.1:${defaults.port}`)
+    expect(updateBody).toContain('read -r -a probe_env <<<"$(systemctl show haelan -p Environment --value)"')
+    expect(updateBody).toContain('env "${probe_env[@]}" /usr/bin/node /opt/haelan/apps/server/src/healthcheck.ts')
+    before(updateBody, 'systemctl start haelan', 'apps/server/src/healthcheck.ts')
+  })
+
+  it('rolls back only when the unit failed, and leaves a slow start in place', () => {
+    // The server runs its migrations before it listens. Ten minutes of polling covers a long one,
+    // and a rollback after a migration committed would start the old release on a database it no
+    // longer understands, so a unit that is still up is never rolled back.
+    expect(updateBody).toContain('for _ in {1..300}; do')
+    expect(updateBody).toContain('systemctl is-failed --quiet haelan')
+    expect(updateBody).toContain('[[ "$(systemctl show haelan -p NRestarts --value)" != "0" ]]')
+    const crashed = branch('if [[ "$crashed" == "1" ]]; then')
+    expect(crashed).toContain('mv /opt/haelan.previous /opt/haelan')
+    const timedOut = branch('if [[ "$healthy" != "1" ]]; then')
+    // As commands, at the start of a line: the message below quotes them for the reader.
+    expect(timedOut).not.toMatch(/^\s*(?:mv|rm|systemctl) /m)
+    expect(timedOut, 'says how to go back by hand').toMatch(/msg_error ".*mv \/opt\/haelan\.previous \/opt\/haelan.*"$/m)
+    before(updateBody, 'if [[ "$crashed" == "1" ]]; then', 'if [[ "$healthy" != "1" ]]; then')
+  })
+
+  it('names the release even when core did not set its variable', () => {
+    expect(updateBody).toContain('${CHECK_UPDATE_RELEASE:-the new release}')
+    expect(updateBody).not.toContain('${CHECK_UPDATE_RELEASE}')
+  })
+
+  it('deletes the previous release only once the new one answered', () => {
+    // lastIndexOf: the same command clears a stale copy before the swap, so the first occurrence
+    // would satisfy any ordering assertion without saying anything about the probe.
+    const cleanup = updateBody.lastIndexOf('rm -rf /opt/haelan.previous')
+    expect(cleanup).toBeGreaterThan(updateBody.indexOf('rm -rf /opt/haelan.previous'))
+    expect(cleanup).toBeGreaterThan(updateBody.indexOf('apps/server/src/healthcheck.ts'))
+    expect(cleanup).toBeGreaterThan(updateBody.indexOf('if [[ "$healthy" != "1" ]]; then'))
   })
 
   it('builds an update beside the running tree and swaps only once it built', () => {
@@ -163,7 +217,7 @@ describe('the Proxmox LXC installer', () => {
     before(updateBody, '$STD pnpm build', 'systemctl stop haelan')
     before(updateBody, 'systemctl stop haelan', 'mv /opt/haelan /opt/haelan.previous')
     before(updateBody, 'mv /opt/haelan /opt/haelan.previous', 'mv /opt/haelan.staging /opt/haelan')
-    before(updateBody, `http://127.0.0.1:${defaults.port}/api/setup/state`, 'mv /opt/haelan.previous /opt/haelan')
+    before(updateBody, 'apps/server/src/healthcheck.ts', 'mv /opt/haelan.previous /opt/haelan')
   })
 
   it('fetches the engine and its own scripts from pinned refs', () => {

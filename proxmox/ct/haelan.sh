@@ -62,39 +62,62 @@ function update_script() {
     $STD pnpm build
     msg_ok "Built Haelan"
 
-    # Containers installed before the service had its own user ran it as root.
+    msg_info "Stopping Haelan"
+    systemctl stop haelan
+    msg_ok "Stopped Haelan"
+
+    # Containers installed before the service had its own user ran it as root. Done with the
+    # service stopped, so a root process cannot write a file into the data directory after the
+    # chown that the haelan user could then not open.
     msg_info "Securing Data Directory"
     id -u haelan >/dev/null 2>&1 || useradd --system --no-create-home --home-dir /opt/haelan_data --shell /usr/sbin/nologin haelan
+    install -d -m 700 -o haelan -g haelan /opt/haelan_data
     chown -R haelan:haelan /opt/haelan_data
     chmod 700 /opt/haelan_data
-    sed -i 's/^User=root$/User=haelan\nGroup=haelan\nUMask=0077/' /etc/systemd/system/haelan.service
+    sed -i 's/^User=root$/User=haelan
+Group=haelan
+UMask=0077/' /etc/systemd/system/haelan.service
     systemctl daemon-reload
     msg_ok "Secured Data Directory"
 
     msg_info "Swapping In New Release"
-    systemctl stop haelan
     rm -rf /opt/haelan.previous
     mv /opt/haelan /opt/haelan.previous
     mv /opt/haelan.staging /opt/haelan
     systemctl start haelan
     msg_ok "Swapped In New Release"
 
-    # The route the image healthcheck uses: it answers only once the database has opened.
+    # The image healthcheck's probe, run with the unit's environment so a drop-in that moves the
+    # port or host is honoured. The route answers only once the database has opened, which is
+    # after the server has applied any migrations, so a long migration can take minutes. Rolling
+    # back after one committed would start the old release on a database it no longer reads, so
+    # this waits for as long as the unit stays up and rolls back only when it failed or restarted.
     msg_info "Waiting for Haelan"
-    local healthy=0
-    for _ in {1..30}; do
-      if curl -fsS http://127.0.0.1:4235/api/setup/state >/dev/null 2>&1; then
+    local probe_env=() healthy=0 crashed=0
+    read -r -a probe_env <<<"$(systemctl show haelan -p Environment --value)"
+    for _ in {1..300}; do
+      if env "${probe_env[@]}" /usr/bin/node /opt/haelan/apps/server/src/healthcheck.ts; then
         healthy=1
+        break
+      fi
+      if systemctl is-failed --quiet haelan ||
+        [[ "$(systemctl show haelan -p NRestarts --value)" != "0" ]] ||
+        ! systemctl is-active --quiet haelan; then
+        crashed=1
         break
       fi
       sleep 2
     done
-    if [[ "$healthy" != "1" ]]; then
+    if [[ "$crashed" == "1" ]]; then
       systemctl stop haelan
       rm -rf /opt/haelan
       mv /opt/haelan.previous /opt/haelan
       systemctl start haelan
-      msg_error "Haelan ${CHECK_UPDATE_RELEASE} did not answer, so the previous release is running again"
+      msg_error "Haelan ${CHECK_UPDATE_RELEASE:-the new release} failed to start, so the previous release is running again"
+      exit 1
+    fi
+    if [[ "$healthy" != "1" ]]; then
+      msg_error "Haelan ${CHECK_UPDATE_RELEASE:-the new release} is running but has not answered in 10 minutes, so it was left in place in case it is still migrating the database. To go back to the previous release: systemctl stop haelan && rm -rf /opt/haelan && mv /opt/haelan.previous /opt/haelan && systemctl start haelan"
       exit 1
     fi
     rm -rf /opt/haelan.previous
