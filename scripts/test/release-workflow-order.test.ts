@@ -327,8 +327,8 @@ describe('the release workflow', () => {
 
   it('tests and builds the commit the release tag names, not the branch tip', () => {
     for (const job of ['verify', 'image']) {
-      expect(jobBody(job).join('\n'), `${job} checks out github.sha rather than the tag`)
-        .toMatch(/uses: actions\/checkout@[^\n]+\n {8}with:\n(?: {10}.+\n)*? {10}ref: \$\{\{ needs\.release-please\.outputs\.tag \}\}/)
+      expect(jobBody(job).join('\n'), `${job} checkout is missing the fully qualified tag ref`)
+        .toMatch(/uses: actions\/checkout@[^\n]+\n {8}with:\n(?: {10}.+\n)*? {10}ref: refs\/tags\/\$\{\{ needs\.release-please\.outputs\.tag \}\}/)
     }
   })
 
