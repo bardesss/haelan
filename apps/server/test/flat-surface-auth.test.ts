@@ -234,19 +234,22 @@ const MUTATING = new Set<InjectableMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
 /**
  * The setup gate answers /api/setup/* with 409 setup_complete once the wizard has finished, ahead
  * of any route's own preHandler (setupGate.ts). So the only state in which those routes reach
- * their session guard at all is the one they exist for: an instance mid-wizard. Derived from the
- * path rather than declared per entry, because that is precisely the rule the gate itself applies,
+ * their guards at all is an unfinished wizard. That is why the sweeps use two different
+ * harnesses: duringSetup (no account, nobody signed in) for the anonymous sweep, and midWizard
+ * (an admin exists and the instance URL is saved, so the wizard is unfinished, plus a signed-in
+ * member who is not an admin) for the member sweep. Everything else goes to afterSetup. Derived
+ * from the path rather than declared per entry, because that is the rule the gate itself applies,
  * so a new /api/setup route lands on the right side of it without a second edit here.
  *
-   * Four of them are exempt from that rule on a completed companion instance (opensForCompanion in
-   * setupGate.ts: the client writer, the two read-only helpers its form is built from, and the
-   * last-error read - which is what lets the phone path paste a client later). The derivation stays
- * right anyway, because neither harness below is that instance: afterSetup connects Google, so it
- * is companionMode false and the gate still shuts those two there. A companion harness would need
+ * Four of them are exempt from that rule on a completed companion instance (opensForCompanion in
+ * setupGate.ts: the client writer, the two read-only helpers its form is built from, and the
+ * last-error read - which is what lets the phone path paste a client later). The derivation stays
+ * right anyway, because no harness below is that instance: afterSetup connects Google, so it
+ * is companionMode false and the gate still shuts those there. A companion harness would need
  * the other side of the exemption proven as well - setup-routes.test.ts does that.
  *
- * /api/setup/state is in the gate's ALWAYS_OPEN and passes in both states; taking the mid-wizard
- * harness for it is harmless, since it is open either way.
+ * /api/setup/state is in the gate's ALWAYS_OPEN and passes in every state, so which harness it
+ * is swept against does not matter.
  */
 const onlyReachableDuringSetup = (route: string): boolean => route.includes(' /api/setup/')
 
