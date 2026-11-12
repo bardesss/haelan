@@ -39,6 +39,12 @@ async function memberConsent(h: Harness): Promise<{ admin: string, member: strin
   return { admin, member, state }
 }
 
+// The gate shuts /api/setup/last-error once setup is done, except on a companion instance, where
+// it stays open for the member whose own consent failed. Mark the instance so the slot is readable.
+function openLastError(h: Harness): void {
+  h.app.haelan.stores.settings.completeCompanionSetup(h.clock.nowMs)
+}
+
 describe('the consent handoff', () => {
   it('redirects to Google with the exact redirect URI the wizard showed', async () => {
     harness = await withServer()
@@ -215,12 +221,44 @@ describe('the consent handoff', () => {
     expect(harness.app.haelan.stores.credentials.listConnectedPeople()).toEqual([])
   })
 
-  it('passes a user refusal straight through', async () => {
+  it('passes a user refusal through, encoded, for the person whose state it is', async () => {
     harness = await withServer({ google: 'ok' })
-    await readyForConsent(harness)
-    const response = await harness.app.inject({ method: 'GET', url: '/oauth/callback?error=access_denied&state=x' })
-    expect(response.headers.location).toBe('/setup/google?error=access_denied')
+    const { member, admin, state } = await memberConsent(harness)
+    openLastError(harness)
+    const response = await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?error=${encodeURIComponent('x&next=//evil.invalid')}&state=${encodeURIComponent(state)}`,
+      headers, cookies: { haelan_session: member },
+    })
+    expect(response.headers.location).toBe('/setup/google?error=x%26next%3D%2F%2Fevil.invalid')
+    const own = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies: { haelan_session: member } })
+    expect(own.json()).toEqual({ code: 'x&next=//evil.invalid', message: 'Google reported x&next=//evil.invalid.' })
+    // Another member's slot is untouched.
+    const other = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies: { haelan_session: admin } })
+    expect(other.json()).toEqual({ code: 'none', message: '' })
   })
+
+  it('records nothing for an error that arrives without a verified state', async () => {
+    harness = await withServer({ google: 'ok' })
+    const { member } = await memberConsent(harness)
+    openLastError(harness)
+    const response = await harness.app.inject({ method: 'GET', url: '/oauth/callback?error=access_denied&state=x', headers })
+    expect(response.headers.location).toBe('/setup/google?error=bad_state')
+    const own = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies: { haelan_session: member } })
+    expect(own.json()).toEqual({ code: 'none', message: '' })
+  })
+
+  it('records nothing for an error with a verified state and no session', async () => {
+    harness = await withServer({ google: 'ok' })
+    const { member, state } = await memberConsent(harness)
+    openLastError(harness)
+    const response = await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`, headers,
+    })
+    expect(response.headers.location).toBe('/setup/google?error=no_session')
+    const own = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies: { haelan_session: member } })
+    expect(own.json()).toEqual({ code: 'none', message: '' })
+  })
+
   it('stores nothing when the callback arrives without a session', async () => {
     harness = await withServer({ google: 'ok' })
     const { state } = await memberConsent(harness)

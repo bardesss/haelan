@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { SCOPES } from '@haelan/core'
+import { signState } from '../src/oauth/state.ts'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -365,17 +366,18 @@ describe('setup routes', () => {
 
   it('answers the failed-consent screen on a completed companion instance', async () => {
     harness = await withServer()
-    const { cookies } = await companionInstance(harness)
+    const { cookies, personId } = await companionInstance(harness)
 
     const before = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies })
     expect(before.statusCode).toBe(200)
     expect(before.json()).toEqual({ code: 'none', message: '' })
 
     // The callback is open past 'done' - consent outlives setup - and a failure redirects to the
-    // screen that fetches the reason from the route above. No client is needed for the failure
-    // branch: the error query is read before the client is.
+    // screen that fetches the reason from the route above. A companion instance has no client to
+    // start consent with, so the state is minted directly.
+    const state = signState(harness.app.haelan.instance.key, { personId, issuedAtMs: harness.clock.nowMs })
     const failed = await harness.app.inject({
-      method: 'GET', url: '/oauth/callback?error=access_denied', headers,
+      method: 'GET', url: `/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`, headers, cookies,
     })
     expect(failed.statusCode).toBe(302)
     expect(failed.headers.location).toBe('/setup/google?error=access_denied')

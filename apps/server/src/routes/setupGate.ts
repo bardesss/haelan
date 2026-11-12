@@ -118,7 +118,7 @@ function hasReadableClient(app: FastifyInstance): boolean {
  *   the screen fetches the reason from here (SetupApp.tsx), and on a mixed instance the condition
  *   above has already turned the client's exemption off. The person who needs the message is the
  *   invited member whose own consent just failed, and this route is a read-only GET over an
- *   in-memory slot that rewrites nothing: refusing it protects nothing and costs the only
+ *   caller's own in-memory slot that rewrites nothing: refusing it protects nothing and costs the only
  *   explanation of the failure.
  *
  * None of these exceptions is an unauthenticated door. Every route keeps its own requireSession,
