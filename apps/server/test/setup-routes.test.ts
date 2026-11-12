@@ -246,6 +246,58 @@ describe('setup routes', () => {
     return { cookies, personId }
   }
 
+  async function memberCookies(h: Harness): Promise<{ haelan_session: string }> {
+    h.app.haelan.stores.people.create({
+      id: 'p2', displayName: 'Wilma', timezone: 'Europe/Amsterdam', nowMs: h.clock.nowMs,
+    })
+    await h.app.haelan.stores.accounts.create({
+      id: 'a-p2', personId: 'p2', username: 'wilma', password: 'a good long password',
+      isAdmin: false, nowMs: h.clock.nowMs,
+    })
+    const login = await h.app.inject({
+      method: 'POST', url: '/api/auth/login', headers,
+      payload: { username: 'wilma', password: 'a good long password' },
+    })
+    return { haelan_session: login.cookies.find((c) => c.name === 'haelan_session')!.value }
+  }
+
+  it('refuses a member on every wizard writer while the wizard is unfinished', async () => {
+    harness = await withServer()
+    const admin = { haelan_session: await accountCookie(harness) }
+    await harness.app.inject({
+      method: 'POST', url: '/api/setup/instance-url', headers, cookies: admin,
+      payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' },
+    })
+    const cookies = await memberCookies(harness)
+    const writes = [
+      { url: '/api/setup/instance-url', payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' } },
+      { url: '/api/setup/google-client', payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' } },
+      { url: '/api/setup/companion', payload: {} },
+    ]
+    for (const { url, payload } of writes) {
+      const response = await harness.app.inject({ method: 'POST', url, headers, cookies, payload })
+      expect(response.statusCode, url).toBe(403)
+      expect(response.json(), url).toEqual({ error: { kind: 'forbidden', code: 'not_admin', message: 'this needs an admin' } })
+    }
+    expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
+    expect(harness.app.haelan.stores.settings.get()?.companionMode).toBe(false)
+  })
+
+  it('refuses a member the late client paste on a companion instance, on every spelling', async () => {
+    harness = await withServer()
+    await companionInstance(harness)
+    const cookies = await memberCookies(harness)
+    for (const url of ['/api/setup/google-client', '/api/%73etup/google-client', '/%61pi/setup/google-client']) {
+      const response = await harness.app.inject({
+        method: 'POST', url, headers, cookies,
+        payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' },
+      })
+      expect(response.statusCode, url).toBe(403)
+      expect(response.json(), url).toEqual({ error: { kind: 'forbidden', code: 'not_admin', message: 'this needs an admin' } })
+    }
+    expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
+  })
+
   it('lets a phone-only instance paste a client later, and keeps every other wizard route shut', async () => {
     harness = await withServer()
     const { cookies } = await companionInstance(harness)

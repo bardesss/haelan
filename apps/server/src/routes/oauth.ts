@@ -12,7 +12,7 @@ export function registerOauth(app: FastifyInstance): void {
   // and nothing else ever does, so persisting it would outlive its only reader.
   let lastError: { code: string, message: string } | null = null
 
-  app.post<{ Body: ClientBody }>('/api/setup/google-client', { preHandler: [app.requireSession] }, async (request, reply) => {
+  app.post<{ Body: ClientBody }>('/api/setup/google-client', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     const { clientId, clientSecret } = request.body ?? {}
     if (typeof clientId !== 'string' || typeof clientSecret !== 'string'
       || clientId.trim() === '' || clientSecret.trim() === '') {

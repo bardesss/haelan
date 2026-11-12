@@ -13,6 +13,39 @@ describe('the setup gate', () => {
     expect(response.json()).toEqual({ step: 'account', companionMode: false, googleClientConfigured: false })
   })
 
+  it('gates a percent-encoded setup path exactly like the plain one', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    for (const url of ['/api/%73etup/google-client', '/%61pi/setup/google-client']) {
+      const response = await harness.app.inject({
+        method: 'POST', url, headers: { authorization: `Bearer ${token}` },
+        payload: { clientId: 'other.apps.googleusercontent.com', clientSecret: 'other' },
+      })
+      expect(response.statusCode, url).toBe(409)
+      expect(response.json(), url).toEqual({
+        error: { kind: 'setup_incomplete', code: 'setup_complete', message: 'setup is already finished' },
+      })
+    }
+    expect(harness.app.haelan.stores.credentials.getClient()?.clientId).toBe('id.apps.googleusercontent.com')
+  })
+
+  it('gates a percent-encoded API path on an unfinished instance', async () => {
+    harness = await withServer()
+    const response = await harness.app.inject({ method: 'GET', url: '/%61pi/auth/me' })
+    expect(response.statusCode).toBe(409)
+    expect(response.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'setup_incomplete', message: 'setup is at the account step' },
+    })
+  })
+
+  it('keeps an encoded spelling of the setup state open once setup is finished', async () => {
+    harness = await withServer()
+    await harness.connectPerson()
+    const response = await harness.app.inject({ method: 'GET', url: '/api/%73etup/state' })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ step: 'done', companionMode: false, googleClientConfigured: true })
+  })
+
   it('refuses every non setup route while setup is unfinished, and names the step that is due', async () => {
     harness = await withServer()
     const response = await harness.app.inject({ method: 'GET', url: '/api/auth/me' })

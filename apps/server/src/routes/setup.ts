@@ -49,7 +49,7 @@ export function registerSetup(app: FastifyInstance): void {
     }
   })
 
-  app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', { preHandler: [app.requireSession] }, async (request, reply) => {
+  app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     if (step() !== 'instance-url') {
       const current = step()
       return reply.code(409).send(errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`))
@@ -94,7 +94,7 @@ export function registerSetup(app: FastifyInstance): void {
   // recorded on their person row next to the instance flag. The flag alone could never say
   // which member walks which path on a mixed instance; the consent exit needs no twin write
   // because putRefreshToken already records that person's Google choice the same way.
-  app.post('/api/setup/companion', { preHandler: [app.requireSession] }, async (request, reply) => {
+  app.post('/api/setup/companion', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     const current = step()
     if (current !== 'google-client' && current !== 'consent') {
       return reply.code(409).send(errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`))

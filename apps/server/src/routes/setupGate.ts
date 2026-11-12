@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { setupStep } from '@haelan/core'
 import type { SetupStep } from '@haelan/core'
 import { errorBody } from '../api/envelope.ts'
@@ -20,8 +20,11 @@ export function registerSetupGate(app: FastifyInstance): void {
     googleClientConfigured: hasReadableClient(app),
   }))
 
+  // Decided on the matched route, not the raw URL: the router decodes percent escapes, so
+  // /api/%73etup/google-client reaches the setup handler while its raw string starts with nothing
+  // this hook recognises.
   app.addHook('preHandler', async (request, reply) => {
-    const path = request.url.split('?')[0] ?? ''
+    const path = gatedPath(request)
     if (ALWAYS_OPEN.has(path)) return
     // The gate governs the API, not the browser. A document request for /setup/google is how
     // the wizard is reached in the first place, and answering it with a 409 JSON body makes
@@ -69,6 +72,12 @@ export function registerSetupGate(app: FastifyInstance): void {
       return reply.code(409).send(errorBody('setup_incomplete', 'setup_complete', 'setup is already finished'))
     }
   })
+}
+
+// An unmatched request reaches no handler, so the raw-URL fallback only keeps today's 409 for
+// paths like /api/v1/daily without protecting anything.
+function gatedPath(request: FastifyRequest): string {
+  return request.routeOptions.url ?? request.url.split('?')[0] ?? ''
 }
 
 function currentStep(app: FastifyInstance): SetupStep {
