@@ -27,6 +27,14 @@ $STD pnpm install --frozen-lockfile
 $STD pnpm build
 msg_ok "Built Haelan"
 
+# The server runs as its own user and only /opt/haelan_data belongs to it: that directory holds
+# the encryption key and every person's health data. /opt/haelan stays root-owned and read-only to
+# the service, as in the Docker image, so the process cannot rewrite its own code.
+msg_info "Creating User"
+useradd --system --no-create-home --home-dir /opt/haelan_data --shell /usr/sbin/nologin haelan
+install -d -m 700 -o haelan -g haelan /opt/haelan_data
+msg_ok "Created User"
+
 msg_info "Creating Service"
 cat <<EOF >/etc/systemd/system/haelan.service
 [Unit]
@@ -35,11 +43,13 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=haelan
+Group=haelan
+UMask=0077
 WorkingDirectory=/opt/haelan
 Environment=NODE_ENV=production
-# Outside /opt/haelan deliberately: an update is a clean re-deploy of that directory, so the
-# database, the encryption key and the backups have to live somewhere it cannot reach.
+# Outside /opt/haelan deliberately: an update replaces that directory wholesale, so the database,
+# the encryption key and the backups have to live somewhere it cannot reach.
 Environment=HAELAN_DATA_DIR=/opt/haelan_data
 ExecStart=/usr/bin/node /opt/haelan/apps/server/src/index.ts
 Restart=on-failure

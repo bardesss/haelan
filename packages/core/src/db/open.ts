@@ -16,7 +16,8 @@ export type DbOrTx = BaseSQLiteDatabase<'sync', RunResult, Record<string, never>
 export const DATABASE_FILENAME = 'haelan.sqlite'
 
 export function openDatabase(dir: string): Database {
-  mkdirSync(dir, { recursive: true })
+  // Owner only: this directory holds the encryption key and every person's health data.
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
   const client = new BetterSqlite3(join(dir, DATABASE_FILENAME))
 
   // WAL is what lets the MCP server, the CLI and a running sync share the file. Spec section 6

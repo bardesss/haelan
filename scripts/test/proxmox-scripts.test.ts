@@ -14,8 +14,9 @@ import { readConfig } from '../../apps/server/src/config.js'
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-const ct = read('../../proxmox/ct/haelan.sh')
-const install = read('../../proxmox/install/haelan-install.sh')
+// A Windows checkout may hand these over with CRLF, which the line-anchored patterns below miss.
+const ct = read('../../proxmox/ct/haelan.sh').replace(/\r\n/g, '\n')
+const install = read('../../proxmox/install/haelan-install.sh').replace(/\r\n/g, '\n')
 const json = JSON.parse(read('../../proxmox/json/haelan.json'))
 const pkg = JSON.parse(read('../../package.json'))
 const dockerfile = read('../../Dockerfile')
@@ -25,8 +26,15 @@ const readme = read('../../README.md')
 // container actually gets rather than the defaults someone remembered.
 const defaults = readConfig({})
 
-// CLEAN_INSTALL=1 fetch_and_deploy_gh_release wipes this directory on every update.
+// Every update swaps this directory out for a freshly built one and deletes the old copy.
 const DEPLOY_DIR = '/opt/haelan'
+
+const updateBody = ct.slice(ct.indexOf('function update_script()'), ct.indexOf('\n}\n', ct.indexOf('function update_script()')))
+const before = (body: string, a: string, b: string) => {
+  expect(body.indexOf(a), `${a} is missing`).toBeGreaterThan(-1)
+  expect(body.indexOf(b), `${b} is missing`).toBeGreaterThan(-1)
+  expect(body.indexOf(a), `${a} must come before ${b}`).toBeLessThan(body.indexOf(b))
+}
 
 const nodeMajorIn = (script: string) => /NODE_VERSION="(\d+)"/.exec(script)?.[1]
 const pnpmFallbackIn = (script: string) => /pnpm@\$\{PNPM_VERSION:-([\d.]+)\}/.exec(script)?.[1]
@@ -127,5 +135,45 @@ describe('the Proxmox LXC installer', () => {
     expect(json.updateable).toBe(true)
     expect(ct).toContain('function update_script()')
     expect(ct).toContain('check_for_gh_release "haelan" "bardesss/haelan"')
+  })
+  it('runs the service as its own system user with a private data directory', () => {
+    expect(install).not.toMatch(/^User=root$/m)
+    expect(install).toMatch(/^User=haelan$/m)
+    expect(install).toMatch(/^Group=haelan$/m)
+    expect(install).toMatch(/^UMask=0077$/m)
+    expect(install).toContain('useradd --system --no-create-home --home-dir /opt/haelan_data --shell /usr/sbin/nologin haelan')
+    expect(install).toContain('install -d -m 700 -o haelan -g haelan /opt/haelan_data')
+    before(install, 'install -d -m 700 -o haelan -g haelan /opt/haelan_data', 'systemctl enable -q --now haelan')
+  })
+
+  it('moves a container installed as root onto that user when it updates', () => {
+    for (const step of [
+      'useradd --system --no-create-home --home-dir /opt/haelan_data --shell /usr/sbin/nologin haelan',
+      'chown -R haelan:haelan /opt/haelan_data',
+      'chmod 700 /opt/haelan_data',
+      'User=haelan',
+      'systemctl daemon-reload',
+    ]) before(updateBody, step, 'systemctl start haelan')
+  })
+
+  it('builds an update beside the running tree and swaps only once it built', () => {
+    expect(updateBody).toContain('CLEAN_INSTALL=1 fetch_and_deploy_gh_release "haelan" "bardesss/haelan" "tarball" "latest" "/opt/haelan.staging"')
+    expect(updateBody).not.toMatch(/fetch_and_deploy_gh_release "haelan" "bardesss\/haelan" "tarball"\s*$/m)
+    before(updateBody, 'cd /opt/haelan.staging', '$STD pnpm build')
+    before(updateBody, '$STD pnpm build', 'systemctl stop haelan')
+    before(updateBody, 'systemctl stop haelan', 'mv /opt/haelan /opt/haelan.previous')
+    before(updateBody, 'mv /opt/haelan /opt/haelan.previous', 'mv /opt/haelan.staging /opt/haelan')
+    before(updateBody, `http://127.0.0.1:${defaults.port}/api/setup/state`, 'mv /opt/haelan.previous /opt/haelan')
+  })
+
+  it('fetches the engine and its own scripts from pinned refs', () => {
+    expect(ct).toMatch(/^COMMUNITY_SCRIPTS_CORE_URL="\$\{COMMUNITY_SCRIPTS_CORE_URL:-https:\/\/raw\.githubusercontent\.com\/community-scripts\/core\/[0-9a-f]{40}\}"$/m)
+    expect(ct).toContain(`COMMUNITY_SCRIPTS_URL="\${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/bardesss/haelan/v${pkg.version}/proxmox}" # x-release-please-version`)
+    expect(ct).toMatch(/^export COMMUNITY_SCRIPTS_CORE_URL COMMUNITY_SCRIPTS_URL$/m)
+    expect(ct).not.toContain('community-scripts/core/main')
+    expect(readme).toContain(`https://raw.githubusercontent.com/bardesss/haelan/v${pkg.version}/proxmox/ct/haelan.sh`)
+    expect(readme).not.toContain('bardesss/haelan/master/proxmox')
+    const config = JSON.parse(read('../../release-please-config.json'))
+    expect(config.packages['.']['extra-files']).toEqual(expect.arrayContaining(['README.md', 'proxmox/ct/haelan.sh']))
   })
 })
