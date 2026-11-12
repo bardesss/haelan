@@ -34,8 +34,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Not cancel-in-progress: a half-finished Pages deployment is worse than a queued one.
 concurrency:
@@ -77,6 +75,11 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # The build job runs pnpm install and the demo capture, so it never holds a token that can
+    # publish the site.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
