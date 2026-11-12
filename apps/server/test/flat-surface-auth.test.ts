@@ -254,8 +254,8 @@ const MUTATING = new Set<InjectableMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
 const onlyReachableDuringSetup = (route: string): boolean => route.includes(' /api/setup/')
 
 /**
- * A request aimed at the pattern fastify registered. Every guard on this surface runs as a
- * preHandler, before the handler looks at a param, so what a `:segment` is filled with does not
+ * A request aimed at the pattern fastify registered. Every guard on this surface runs as an
+ * onRequest or preHandler hook, before the handler looks at a param, so what a `:segment` is filled with does not
  * matter - only that there is one.
  */
 async function call(app: Harness['app'], route: string, headers: Record<string, string> = {}) {
@@ -264,8 +264,8 @@ async function call(app: Harness['app'], route: string, headers: Record<string, 
     method,
     url: url.replace(/:[^/]+/g, 'x'),
     headers,
-    // An empty JSON body rather than none, because fastify parses the body before it runs any
-    // preHandler: a POST arriving with no content-type would be refused during parsing and the
+    // An empty JSON body rather than none, because the routes' own preHandler guards run after
+    // fastify parses the body: a POST arriving with no content-type would be refused during parsing and the
     // guard this file is about would never run, which would read here as a route that refuses
     // everyone. Origin is left off on purpose - auth.ts's origin hook passes a mutating request
     // that carries none, so omitting it reaches the guard without this file having to agree with

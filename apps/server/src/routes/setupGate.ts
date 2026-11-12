@@ -23,7 +23,7 @@ export function registerSetupGate(app: FastifyInstance): void {
   // Decided on the matched route, not the raw URL: the router decodes percent escapes, so
   // /api/%73etup/google-client reaches the setup handler while its raw string starts with nothing
   // this hook recognises.
-  app.addHook('preHandler', async (request, reply) => {
+  app.addHook('onRequest', async (request, reply) => {
     const path = gatedPath(request)
     if (ALWAYS_OPEN.has(path)) return
     // The gate governs the API, not the browser. A document request for /setup/google is how

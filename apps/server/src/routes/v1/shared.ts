@@ -10,7 +10,7 @@ interface PersonParams { personId: string }
 interface DateRangeQuery { from?: string, to?: string }
 
 /**
- * request.personQuery is decorated null and set by registerV1's preHandler hook, which every
+ * request.personQuery is decorated null and set by registerV1's onRequest hook, which every
  * route in this plugin runs behind. Narrowing here rather than asserting with ! keeps the reason
  * the type system carries: the guard, not the route, is what makes this safe. Shared rather than
  * copied per file, since every route file in this directory needs exactly this and a bug fixed in

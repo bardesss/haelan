@@ -548,4 +548,29 @@ describe('the companion ingest route for sessions', () => {
     const response = await ingest(token, '/api/v1/p/p1/ingest/weight', { dataPoints })
     expect(response.statusCode).toBe(400)
   })
+
+  it('refuses an unauthenticated upload before reading its body', async () => {
+    harness = await withServer()
+    await harness.connectPerson()
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/v1/p/p1/ingest/weight',
+      headers: { ...ORIGIN, 'content-type': 'application/json' },
+      payload: '{"dataPoints": [',
+    })
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toEqual({ error: { kind: 'unauthorized', code: 'no_session', message: 'sign in required' } })
+  })
+
+  it('refuses an upload to another person before reading its body', async () => {
+    harness = await withServer()
+    await harness.addPerson({ id: 'p2', displayName: 'Wilma', username: 'wilma' })
+    const token = await harness.signIn('wilma', 'a good long password')
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/v1/p/p1/ingest/weight',
+      headers: { ...ORIGIN, authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      payload: '{"dataPoints": [',
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json()).toEqual({ error: { kind: 'forbidden', code: 'not_your_person', message: 'this person is not yours' } })
+  })
 })
