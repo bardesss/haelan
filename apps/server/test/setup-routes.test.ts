@@ -38,6 +38,17 @@ describe('setup routes', () => {
     expect((await createAccount(harness, { username: 'other' })).statusCode).toBe(409)
   })
 
+  it('lets exactly one of two concurrent first accounts through', async () => {
+    harness = await withServer()
+    const [a, b] = await Promise.all([createAccount(harness), createAccount(harness, { username: 'wilma' })])
+    expect([a.statusCode, b.statusCode].sort()).toEqual([201, 409])
+    const loser = a.statusCode === 409 ? a : b
+    expect(loser.json()).toEqual({ error: { kind: 'setup_incomplete', code: 'account_exists', message: 'an account already exists' } })
+    expect(harness.app.haelan.stores.accounts.count()).toBe(1)
+    const people = harness.app.haelan.instance.db.$client.prepare('select count(*) as n from people').get() as { n: number }
+    expect(people.n).toBe(1)
+  })
+
   it('rejects a timezone the runtime does not know, and stores nothing', async () => {
     harness = await withServer()
     const response = await createAccount(harness, { timezone: 'Mars/Olympus' })

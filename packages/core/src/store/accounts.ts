@@ -83,14 +83,37 @@ export class AccountStore {
   }
 
   async create(input: CreateAccountInput): Promise<AccountRow> {
-    const username = normalise(input.username)
-    if (username === '') throw new ConfigError('username must not be empty')
+    const username = this.#checked(input)
     if (this.#db.select().from(accounts).where(eq(accounts.username, username)).get()) {
       throw new ConfigError(`username ${username} is already taken`)
     }
-    requireLongEnough(input.password)
     const passwordHash = await hash(input.password, ARGON2)
-    this.#db.insert(accounts).values({
+    return this.#insert(this.#db, input, username, passwordHash)
+  }
+
+  /** Hashes first, then checks that no account exists and inserts inside one
+   *  this.#db.transaction with no await between them. Null when an account already exists.
+   *  Two requests that both saw an empty instance cannot both get past the check, because the
+   *  second one's check runs after the first one's insert has committed. */
+  async createFirstAccount(input: CreateAccountInput): Promise<AccountRow | null> {
+    const username = this.#checked(input)
+    const passwordHash = await hash(input.password, ARGON2)
+    return this.#db.transaction((tx) => {
+      if (tx.select().from(accounts).limit(1).get()) return null
+      return this.#insert(tx, input, username, passwordHash)
+    })
+  }
+
+  // The normalising and the empty and length rules every way of creating an account shares.
+  #checked(input: CreateAccountInput): string {
+    const username = normalise(input.username)
+    if (username === '') throw new ConfigError('username must not be empty')
+    requireLongEnough(input.password)
+    return username
+  }
+
+  #insert(db: DbOrTx, input: CreateAccountInput, username: string, passwordHash: string): AccountRow {
+    db.insert(accounts).values({
       id: input.id,
       personId: input.personId,
       username,

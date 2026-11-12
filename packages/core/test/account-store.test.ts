@@ -31,6 +31,15 @@ describe('AccountStore', () => {
     expect(store.count()).toBe(0)
   })
 
+  it('createFirstAccount creates nothing once any account exists', async () => {
+    await create()
+    seedPerson(fixture.db, 'p2')
+    expect(await store.createFirstAccount({
+      id: 'a2', personId: 'p2', username: 'wilma', password: 'a good long password', isAdmin: true, nowMs: 2000,
+    })).toBeNull()
+    expect(store.count()).toBe(1)
+  })
+
   it('never stores the password itself', async () => {
     await create()
     const row = fixture.db.$client.prepare('select password_hash from accounts').get() as { password_hash: string }
