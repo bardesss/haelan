@@ -74,9 +74,7 @@ function update_script() {
     install -d -m 700 -o haelan -g haelan /opt/haelan_data
     chown -R haelan:haelan /opt/haelan_data
     chmod 700 /opt/haelan_data
-    sed -i 's/^User=root$/User=haelan
-Group=haelan
-UMask=0077/' /etc/systemd/system/haelan.service
+    sed -i 's/^User=root$/User=haelan\nGroup=haelan\nUMask=0077/' /etc/systemd/system/haelan.service
     systemctl daemon-reload
     msg_ok "Secured Data Directory"
 

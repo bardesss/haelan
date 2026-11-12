@@ -160,6 +160,9 @@ describe('the Proxmox LXC installer', () => {
       before(updateBody, 'systemctl stop haelan', step)
       before(updateBody, step, 'systemctl start haelan')
     }
+    // One line, with \n as sed's escape: a raw newline inside the s command is an unterminated
+    // `s' to GNU sed, which under set -e aborts the update with the service already stopped.
+    expect(updateBody).toMatch(/^ {4}sed -i 's\/\^User=root\$\/User=haelan\\nGroup=haelan\\nUMask=0077\/' \/etc\/systemd\/system\/haelan\.service$/m)
     // A container whose data directory went missing would otherwise fail every update at the chown.
     before(updateBody, 'install -d -m 700 -o haelan -g haelan /opt/haelan_data', 'chown -R haelan:haelan /opt/haelan_data')
   })
