@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useRoute, navigate, withQuery, readQuery } from '../../router.js'
 import { useSession } from '../../auth/session.js'
-import { isRealDate, localToday } from '../../controls/range.js'
+import { isRealDate } from '../../controls/range.js'
+import { useToday } from '../../controls/useToday.js'
 
 /**
  * The dashboard's own day, read from and written to `?day=` (M9c spec, "On screen": "URL:
@@ -20,7 +21,7 @@ export function useDashboardDay(): {
 } {
   const route = useRoute()
   const session = useSession()
-  const today = useMemo(() => localToday(session.data?.effectiveTimezone), [session.data?.effectiveTimezone])
+  const today = useToday(session.data?.effectiveTimezone)
 
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
   const raw = readQuery(search).get('day')

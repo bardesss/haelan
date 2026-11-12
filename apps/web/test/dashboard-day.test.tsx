@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
+import { navigate } from '../src/router.js'
 import { useDashboardDay } from '../src/pages/dashboard/useDashboardDay.js'
 
 let container: HTMLDivElement | null = null
@@ -176,5 +177,18 @@ describe('useDashboardDay', () => {
     const before = window.history.length
     act(() => { seen!.setDay('2020-01-14') })
     expect(window.history.length).toBe(before + 1)
+  })
+
+  it('treats yesterday as a past day once the dashboard has been open across midnight', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    try {
+      vi.setSystemTime(new Date('2026-03-10T22:59:30Z'))
+      mountProbe()
+      act(() => { vi.advanceTimersByTime(31_000) })
+      act(() => { navigate('/?day=2026-03-10') })
+      expect(seen!.day).toBe('2026-03-10')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
