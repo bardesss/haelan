@@ -6,6 +6,7 @@ import { apiGet, apiSend, ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import { PERIOD_KINDS } from './usePeriodRead.js'
+import { invalidateLog } from './useQuickLog.js'
 
 // Re-exported under the same name so nothing importing OverrideScope from here has to change:
 // AnnotatePanel.tsx (the panel that builds target keys) added a third browser safe subpath,
@@ -397,7 +398,7 @@ export function useWriteNote(): UseMutationResult<IdResult, ApiError, WriteNoteI
       return apiSend<IdResult>('PUT', `/api/v1/p/${id}/notes/${input.localDate}`, { body: input.body })
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'notes')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }
@@ -412,7 +413,7 @@ export function useRemoveNote(): UseMutationResult<IdResult, ApiError, RemoveNot
       return apiSend<IdResult>('DELETE', `/api/v1/p/${id}/notes/${input.localDate}`)
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'notes')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }
@@ -427,7 +428,7 @@ export function useWriteEvent(): UseMutationResult<IdResult, ApiError, WriteEven
       return apiSend<IdResult>('POST', `/api/v1/p/${id}/events`, input)
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'events')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }
@@ -442,7 +443,7 @@ export function useRemoveEvent(): UseMutationResult<IdResult, ApiError, RemoveEv
       return apiSend<IdResult>('DELETE', `/api/v1/p/${id}/events/${input.eventId}`)
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'events')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }

@@ -220,6 +220,19 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
   const textRef = useRef(text)
   textRef.current = text
   const savedRef = useRef(saved)
+  const noteField = useRef<HTMLTextAreaElement>(null)
+
+  // A note saved elsewhere (the annotate panel, the notes page) arrives through the day log. It is
+  // taken only while the reader is not typing here and holds no unsaved edit, so it never
+  // overwrites text in progress.
+  useEffect(() => {
+    if (document.activeElement === noteField.current) return
+    if (!unchanged(textRef.current, savedRef.current)) return
+    const next = log.note ?? ''
+    savedRef.current = next
+    setText(next)
+    setSaved(next)
+  }, [log.note])
 
   function commitNote() {
     if (unchanged(text, saved)) return
@@ -297,7 +310,7 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
       </section>
       <section className="log-sec">
         <label className="label" htmlFor={noteId}>{t('logPanel.note.label')}</label>
-        <textarea id={noteId} className="input log-note" rows={2} value={text} placeholder={t('logPanel.note.placeholder')}
+        <textarea id={noteId} ref={noteField} className="input log-note" rows={2} value={text} placeholder={t('logPanel.note.placeholder')}
           onChange={(event) => setText(event.target.value)} onBlur={commitNote} onKeyDown={onNoteKeyDown} />
         {noteError !== null && <p className="log-error" role="alert">{noteError}</p>}
       </section>

@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { LogPanel } from '../src/components/logPanel/LogPanel.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
+import { dayLogKey } from '../src/data/useQuickLog.js'
 import type { Session } from '../src/auth/session.js'
 import type { GlanceLog } from '../src/data/useGlance.js'
 import { glanceLog } from './glanceFixture.js'
@@ -401,6 +402,42 @@ describe('LogPanel note', () => {
     type(note(), 'half typed')
     render({ day: YESTERDAY, initial: glanceLog({ note: 'Travel day' }) })
     expect(note().value).toBe('Travel day')
+  })
+})
+
+describe('LogPanel note saved elsewhere', () => {
+  it('takes a note saved elsewhere while the field is not focused', async () => {
+    render({ initial: glanceLog({ note: 'Birthday' }) })
+    await act(async () => {
+      client!.setQueryData(dayLogKey('p1', TODAY), glanceLog({ note: 'Edited elsewhere' }))
+      // TanStack notifies observers on a timer, so the update lands a tick after the write.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(note().value).toBe('Edited elsewhere')
+    blur(note())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+    expect(writes()).toEqual([])
+  })
+
+  it('leaves the field alone while it has focus', async () => {
+    render({ initial: glanceLog({ note: 'Birthday' }) })
+    act(() => { note().focus() })
+    await act(async () => {
+      client!.setQueryData(dayLogKey('p1', TODAY), glanceLog({ note: 'Edited elsewhere' }))
+      // TanStack notifies observers on a timer, so the update lands a tick after the write.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(note().value).toBe('Birthday')
+  })
+
+  it('keeps unsaved text after a failed save rolls the note back', async () => {
+    render({ initial: glanceLog({ note: 'Birthday' }) })
+    handler = (req) => req.method === 'PUT' ? failure('note too long') : fakeServer(req)
+    type(note(), 'Late dinner')
+    blur(note())
+    await settle()
+    expect(note().value).toBe('Late dinner')
+    expect(errors()).toEqual(['note too long'])
   })
 })
 
