@@ -35,6 +35,24 @@ export function verifyState(key: Buffer, token: string, nowMs: number): StatePay
   return payload
 }
 
+// A signed state proves this instance issued it, not that it has not been used. Replaying a
+// callback URL from history must not store a grant again. In memory on purpose: a restart
+// forgets spent states, but every state outlives a restart by at most STATE_TTL_MS.
+export class ConsumedStates {
+  #seen: Map<string, number> = new Map()
+
+  /** True the first time `token` is offered, false on every later call. Prunes entries whose
+   *  issuedAtMs + STATE_TTL_MS is before nowMs, since verifyState refuses those anyway. */
+  consume(token: string, issuedAtMs: number, nowMs: number): boolean {
+    for (const [seen, issued] of this.#seen) {
+      if (issued + STATE_TTL_MS < nowMs) this.#seen.delete(seen)
+    }
+    if (this.#seen.has(token)) return false
+    this.#seen.set(token, issuedAtMs)
+    return true
+  }
+}
+
 function mac(key: Buffer, encoded: string): string {
   return createHmac('sha256', key).update(encoded).digest('base64url')
 }

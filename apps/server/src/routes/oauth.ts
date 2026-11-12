@@ -1,7 +1,8 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { buildConsentUrl, exchangeAuthorizationCode, probeAccess, setupStep } from '@haelan/core'
 import { redirectUriFor } from '../oauth/redirectUri.ts'
-import { signState, verifyState } from '../oauth/state.ts'
+import { ConsumedStates, signState, verifyState } from '../oauth/state.ts'
+import { SESSION_COOKIE } from '../auth/cookie.ts'
 import { errorBody } from '../api/envelope.ts'
 
 interface ClientBody { clientId?: unknown, clientSecret?: unknown }
@@ -11,6 +12,7 @@ export function registerOauth(app: FastifyInstance): void {
   // One slot, overwritten per attempt. The wizard reads it immediately after a failed callback
   // and nothing else ever does, so persisting it would outlive its only reader.
   let lastError: { code: string, message: string } | null = null
+  const consumed = new ConsumedStates()
 
   app.post<{ Body: ClientBody }>('/api/setup/google-client', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     const { clientId, clientSecret } = request.body ?? {}
@@ -56,14 +58,25 @@ export function registerOauth(app: FastifyInstance): void {
       lastError = { code, message }
       return reply.redirect(`/setup/google?error=${code}`, 302)
     }
+    // Records nothing: lastError is one slot anybody signed in can read, and a refusal here is
+    // about a caller who is not the person the state names.
+    const refuse = (code: string) => reply.redirect(`/setup/google?error=${encodeURIComponent(code)}`, 302)
 
     if (typeof request.query.error === 'string' && request.query.error !== '') {
       return fail(request.query.error, `Google reported ${request.query.error}.`)
     }
-    const payload = typeof request.query.state === 'string'
-      ? verifyState(app.haelan.instance.key, request.query.state, app.haelan.now())
-      : null
-    if (!payload) return fail('bad_state', 'The consent round trip could not be matched to this instance. Start the connect step again.')
+    const state = typeof request.query.state === 'string' ? request.query.state : null
+    const payload = state !== null ? verifyState(app.haelan.instance.key, state, app.haelan.now()) : null
+    if (!payload || state === null) return refuse('bad_state')
+    // The state names a person; only that person's own browser may finish the round trip.
+    // Otherwise a consent link opened by someone else stores their Google grant under the
+    // person who started it.
+    const sessionPerson = sessionPersonId(request)
+    if (sessionPerson === null) return refuse('no_session')
+    if (sessionPerson !== payload.personId) return refuse('wrong_person')
+    if (!consumed.consume(state, payload.issuedAtMs, app.haelan.now())) {
+      return refuse('bad_state')
+    }
     if (typeof request.query.code !== 'string' || request.query.code === '') {
       return fail('no_code', 'Google returned no authorization code.')
     }
@@ -119,6 +132,17 @@ export function registerOauth(app: FastifyInstance): void {
       return fail('exchange_failed', error instanceof Error ? error.message : 'the exchange failed')
     }
   })
+
+  // touch: false because this is a read on the way to a decision, not a request the session is
+  // being used for; the session's own routes keep lastSeen.
+  function sessionPersonId(request: FastifyRequest): string | null {
+    const raw = request.cookies[SESSION_COOKIE]
+    if (!raw) return null
+    const accountId = stores().sessions.resolve(raw, app.haelan.now(), { touch: false })
+    if (!accountId) return null
+    const account = stores().accounts.getById(accountId)
+    return account && account.disabledAtMs === null ? account.personId : null
+  }
 
   // A client sealed with a key this instance no longer holds is a client neither of these two
   // routes can spend: consent would be started with a secret the callback cannot read back to

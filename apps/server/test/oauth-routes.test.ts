@@ -25,6 +25,20 @@ async function readyForConsent(h: Harness): Promise<string> {
   return cookie
 }
 
+// Admin connected (connectPerson), member p2 'member' added and signed in, consent started as
+// the member. Returns both cookies and the member's state.
+async function memberConsent(h: Harness): Promise<{ admin: string, member: string, state: string }> {
+  await h.connectPerson()
+  await h.addPerson({ id: 'p2', displayName: 'Member', username: 'member' })
+  const admin = await h.signIn()
+  const member = await h.signIn('member')
+  const start = await h.app.inject({
+    method: 'GET', url: '/oauth/start', headers, cookies: { haelan_session: member },
+  })
+  const state = new URL(start.headers.location as string).searchParams.get('state')!
+  return { admin, member, state }
+}
+
 describe('the consent handoff', () => {
   it('redirects to Google with the exact redirect URI the wizard showed', async () => {
     harness = await withServer()
@@ -62,7 +76,7 @@ describe('the consent handoff', () => {
     const state = new URL(start.headers.location as string).searchParams.get('state')!
 
     const back = await harness.app.inject({
-      method: 'GET', url: `/oauth/callback?code=fresh-code&state=${encodeURIComponent(state)}`, headers,
+      method: 'GET', url: `/oauth/callback?code=fresh-code&state=${encodeURIComponent(state)}`, headers, cookies: { haelan_session: cookie },
     })
     expect(back.statusCode).toBe(302)
     expect(credentials.getRefreshToken('p1')?.revokedAtMs, 'a fresh grant is not a revoked one').toBeNull()
@@ -92,7 +106,7 @@ describe('the consent handoff', () => {
     const state = new URL(start.headers.location as string).searchParams.get('state')!
 
     const callback = await harness.app.inject({
-      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers,
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers, cookies: { haelan_session: cookie },
     })
     expect(callback.statusCode).toBe(302)
     expect(callback.headers.location).toBe('/')
@@ -126,7 +140,7 @@ describe('the consent handoff', () => {
     })
     const state = new URL(start.headers.location as string).searchParams.get('state')!
     const callback = await harness.app.inject({
-      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers,
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers, cookies: { haelan_session: cookie },
     })
     expect(callback.statusCode).toBe(302)
     expect(callback.headers.location).toBe('/setup/backfill')
@@ -145,7 +159,7 @@ describe('the consent handoff', () => {
     })
     const state = new URL(start.headers.location as string).searchParams.get('state')!
     await harness.app.inject({
-      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers,
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers, cookies: { haelan_session: cookie },
     })
     // The scheduler's first tick is a whole interval away, so without a kick here the screen
     // the callback redirects to would say nothing had started, and be right.
@@ -172,6 +186,7 @@ describe('the consent handoff', () => {
     const state = new URL(start.headers.location as string).searchParams.get('state')!
     const response = await harness.app.inject({
       method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`,
+      headers, cookies: { haelan_session: cookie },
     })
     expect(response.headers.location).toBe('/setup/google?error=exchange_failed')
     const detail = await harness.app.inject({
@@ -187,7 +202,7 @@ describe('the consent handoff', () => {
       method: 'GET', url: '/oauth/start', headers, cookies: { haelan_session: cookie },
     })
     const state = new URL(start.headers.location as string).searchParams.get('state')!
-    await harness.app.inject({ method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}` })
+    await harness.app.inject({ method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers, cookies: { haelan_session: cookie } })
     const detail = await harness.app.inject({
       method: 'GET', url: '/api/setup/last-error', headers, cookies: { haelan_session: cookie },
     })
@@ -205,5 +220,52 @@ describe('the consent handoff', () => {
     await readyForConsent(harness)
     const response = await harness.app.inject({ method: 'GET', url: '/oauth/callback?error=access_denied&state=x' })
     expect(response.headers.location).toBe('/setup/google?error=access_denied')
+  })
+  it('stores nothing when the callback arrives without a session', async () => {
+    harness = await withServer({ google: 'ok' })
+    const { state } = await memberConsent(harness)
+    const response = await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers,
+    })
+    expect(response.statusCode).toBe(302)
+    expect(response.headers.location).toBe('/setup/google?error=no_session')
+    expect(harness.app.haelan.stores.credentials.listConnectedPeople()).not.toContain('p2')
+  })
+
+  // The finding: a consent link opened by another member stores their grant under the first
+  // member's person.
+  it('stores nothing when another member opens the consent link', async () => {
+    harness = await withServer({ google: 'ok' })
+    const { admin, state } = await memberConsent(harness)
+    const response = await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`,
+      headers, cookies: { haelan_session: admin },
+    })
+    expect(response.headers.location).toBe('/setup/google?error=wrong_person')
+    expect(harness.app.haelan.stores.credentials.listConnectedPeople()).not.toContain('p2')
+  })
+
+  it('accepts a state only once', async () => {
+    harness = await withServer({ google: 'ok' })
+    const { member, state } = await memberConsent(harness)
+    const url = `/oauth/callback?code=good&state=${encodeURIComponent(state)}`
+    const first = await harness.app.inject({ method: 'GET', url, headers, cookies: { haelan_session: member } })
+    expect(first.headers.location).toBe('/')
+    const second = await harness.app.inject({ method: 'GET', url, headers, cookies: { haelan_session: member } })
+    expect(second.headers.location).toBe('/setup/google?error=bad_state')
+  })
+
+  // Review Focus 2. A cookie whose session no longer resolves. Destroyed rather than aged out,
+  // because SESSION_TTL_MS is longer than STATE_TTL_MS and ageing it would expire the state first.
+  it('treats a cookie whose session is gone as no session', async () => {
+    harness = await withServer({ google: 'ok' })
+    const { member, state } = await memberConsent(harness)
+    harness.app.haelan.stores.sessions.destroy(member)
+    const response = await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`,
+      headers, cookies: { haelan_session: member },
+    })
+    expect(response.headers.location).toBe('/setup/google?error=no_session')
+    expect(harness.app.haelan.stores.credentials.listConnectedPeople()).not.toContain('p2')
   })
 })

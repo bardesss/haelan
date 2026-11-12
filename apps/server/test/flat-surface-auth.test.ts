@@ -103,7 +103,7 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   {
     route: 'GET /oauth/callback',
     auth: 'open',
-    why: 'Google redirects a browser here with no cookie; it accepts only state this instance signed',
+    why: 'Google redirects the browser here; it acts only on state this instance signed, spent once, for the person whose session cookie rides the redirect, and refuses by redirect rather than 401',
   },
 
   {

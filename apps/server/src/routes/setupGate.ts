@@ -61,7 +61,7 @@ export function registerSetupGate(app: FastifyInstance): void {
     // re-running one silently rewrites what a working install depends on. /oauth/* is safe to
     // leave open because it does not rely on this gate for its protection - /oauth/start takes a
     // session, and /oauth/callback only accepts state this instance signed, for the person named
-    // inside it.
+    // inside it, and only from that person's own session, once.
     if (step === 'done' && isSetupRoute && !isConsentRoute) {
       // Named exceptions, and only on the phone path: see opensForCompanion below. They are
       // what keeps "no Google" a choice rather than a door that only closes.
