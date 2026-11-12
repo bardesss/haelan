@@ -1,4 +1,4 @@
-﻿import { asc, eq, sql } from 'drizzle-orm'
+﻿import { and, asc, eq, isNull, lte, or, sql } from 'drizzle-orm'
 import { hash, verify } from '@node-rs/argon2'
 import type { DbOrTx } from '../db/open.ts'
 import { accounts } from '../db/schema/index.ts'
@@ -108,28 +108,23 @@ export class AccountStore {
       await verify(await decoy(), input.password).catch(() => false)
       return { ok: false, reason: 'unknown' }
     }
-    if (row.lockedUntilMs !== null && row.lockedUntilMs > input.nowMs) {
-      return { ok: false, reason: 'locked' }
-    }
+    // The attempt is reserved before the verify, in one statement that also refuses a locked
+    // account. Guesses arriving in parallel would otherwise all pass a lock check made before any
+    // of them was counted, and every one would be verified: the lock would bound the counter but
+    // not the number of guesses checked. It also keeps the answer the same for a right and a wrong
+    // password once locked, so a burst cannot reveal which guess was right.
+    const reserved = this.#db.update(accounts).set({
+      failedAttempts: sql`${accounts.failedAttempts} + 1`,
+      lockedUntilMs: sql`CASE WHEN ${accounts.failedAttempts} + 1 >= ${MAX_ATTEMPTS} THEN ${input.nowMs + LOCK_MS} ELSE ${accounts.lockedUntilMs} END`,
+    }).where(and(
+      eq(accounts.id, row.id),
+      or(isNull(accounts.lockedUntilMs), lte(accounts.lockedUntilMs, input.nowMs)),
+    )).returning({ id: accounts.id }).get()
+    if (!reserved) return { ok: false, reason: 'locked' }
 
+    // A wrong password keeps the reserved increment; a right one clears it below with the rest.
     const matched = await verify(row.passwordHash, input.password).catch(() => false)
-    if (!matched) {
-      // One statement computed from the stored value, not from the row read before the verify:
-      // guesses verified in parallel all read the same count, and writing back "that + 1" would
-      // let forty guesses count as one.
-      this.#db.update(accounts).set({
-        failedAttempts: sql`${accounts.failedAttempts} + 1`,
-        lockedUntilMs: sql`CASE WHEN ${accounts.failedAttempts} + 1 >= ${MAX_ATTEMPTS} THEN ${input.nowMs + LOCK_MS} ELSE ${accounts.lockedUntilMs} END`,
-      }).where(eq(accounts.id, row.id)).run()
-      return { ok: false, reason: 'bad_password' }
-    }
-
-    // Guesses verified in parallel all read the row before any of them was counted, so the lock
-    // the first check looked for may have landed while this one was verifying.
-    const current = this.#db.select({ lockedUntilMs: accounts.lockedUntilMs }).from(accounts).where(eq(accounts.id, row.id)).get()
-    if (current?.lockedUntilMs != null && current.lockedUntilMs > input.nowMs) {
-      return { ok: false, reason: 'locked' }
-    }
+    if (!matched) return { ok: false, reason: 'bad_password' }
 
     // Checked after the verify rather than instead of it, so a disabled account costs the same
     // time as a live one and the answer is the same one a wrong password gets. Telling the two

@@ -1,8 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import * as argon2 from '@node-rs/argon2'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { AccountStore } from '../src/store/accounts.ts'
 import { ConfigError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
+
+// Wraps the real verifier so a test can count how many guesses were actually checked.
+vi.mock('@node-rs/argon2', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@node-rs/argon2')>()
+  return { ...real, verify: vi.fn(real.verify) }
+})
 
 let fixture: TestDatabase
 let store: AccountStore
@@ -49,22 +56,32 @@ describe('AccountStore', () => {
     })
   })
 
-  it('counts every one of forty parallel failures and locks the account', async () => {
+  it('locks the account within a burst of forty parallel failures, counting none past the lock', async () => {
     await create()
     await Promise.all(Array.from({ length: 40 }, () =>
       store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })))
     const row = fixture.db.$client.prepare('select failed_attempts as n from accounts').get() as { n: number }
-    expect(row.n).toBe(40)
+    expect(row.n).toBe(10)
     expect(await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 }))
       .toEqual({ ok: false, reason: 'locked' })
   })
 
-  it('refuses a right password when the account locked while it was being verified', async () => {
+  it('verifies at most ten of forty parallel wrong passwords', async () => {
     await create()
-    // login runs synchronously up to its argon2 verify, so this lands between the two checks.
-    const pending = store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 })
-    fixture.db.$client.prepare('update accounts set locked_until_ms = ? where id = ?').run(2000 + 15 * 60_000, 'a1')
-    expect(await pending).toEqual({ ok: false, reason: 'locked' })
+    vi.mocked(argon2.verify).mockClear()
+    await Promise.all(Array.from({ length: 40 }, () =>
+      store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })))
+    expect(vi.mocked(argon2.verify)).toHaveBeenCalledTimes(10)
+  })
+
+  it('answers a right password in a burst exactly as it answers wrong ones after the lock', async () => {
+    await create()
+    const results = await Promise.all(Array.from({ length: 40 }, (_, i) => store.login({
+      username: 'robin', nowMs: 2000,
+      password: i === 20 ? 'correct horse battery staple' : 'wrong',
+    })))
+    expect(results[20]).toEqual(results[30])
+    expect(results[20]).toEqual({ ok: false, reason: 'locked' })
   })
 
   // The stamp itself, held separately from the shape above: a sign-in is the only thing that writes
