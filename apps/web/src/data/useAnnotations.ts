@@ -212,6 +212,24 @@ export function useAnnotations(range: AnnotationRange): {
 }
 
 /**
+ * The note already stored for one day, or null. Keyed like the day-ranged read in useAnnotations so
+ * the invalidation a note write already does reaches it. `items` defensively for the reason the
+ * withoutHarvest comment gives.
+ */
+export function useDayNote(localDate: string): UseQueryResult<StoredNote | null> {
+  const session = useSession()
+  const personId = session.data?.personId
+
+  return useQuery({
+    queryKey: queryKeys.resource(personId ?? '', 'notes', { from: localDate, to: localDate }),
+    enabled: personId !== undefined,
+    queryFn: () => apiGet<{ items: StoredNote[] }>(notesPath(personId!, { from: localDate, to: localDate })),
+    select: (data: { items?: StoredNote[] }) =>
+      (data?.items ?? []).find((note) => note.localDate === localDate) ?? null,
+  })
+}
+
+/**
  * True when a cached query belongs to this person and is keyed by a from/to range that overlaps
  * `affected`. This is deliberately resource agnostic: queryKeys.resource gives every ranged read
  * in this app (series, baseline, nights, and the notes/events reads above) the same key shape, a

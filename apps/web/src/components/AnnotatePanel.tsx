@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { dayMetricTarget, sampleTarget, sessionTarget } from '@haelan/core/target-key'
 import { useTranslation } from '../i18n/index.js'
-import { useWriteEvent, useWriteNote, useWriteOverride } from '../data/useAnnotations.js'
+import { useDayNote, useWriteEvent, useWriteNote, useWriteOverride } from '../data/useAnnotations.js'
 import { usePresets } from '../data/useQuickLog.js'
 import { SEED_KINDS, kindLabel } from '../data/eventKinds.js'
 
@@ -91,12 +91,20 @@ export function AnnotatePanel({ target, onClose }: {
   const [action, setAction] = useState<Action>(actions[0]!)
   const [reason, setReason] = useState('')
   const [correctedValue, setCorrectedValue] = useState('')
-  const [noteBody, setNoteBody] = useState('')
+  // null until the reader types, so the day's stored note shows through once it loads without ever
+  // overwriting words typed before it arrived; any draft, even an emptied field, wins over it.
+  const [noteDraft, setNoteDraft] = useState<string | null>(null)
   const [kind, setKind] = useState('')
   const [startedAt, setStartedAt] = useState(() => `${target.localDate}T12:00`)
   const [endedAt, setEndedAt] = useState('')
   const [eventValue, setEventValue] = useState('')
   const [eventNote, setEventNote] = useState('')
+
+  const dayNote = useDayNote(target.localDate)
+  const existingNote = dayNote.data ?? null
+  const noteBody = noteDraft ?? existingNote?.body ?? ''
+  const actionLabel = (candidate: Action): string =>
+    candidate === 'note' && existingNote !== null ? t('annotate.actions.editNote') : t(`annotate.actions.${candidate}`)
 
   const writeOverride = useWriteOverride()
   const writeNote = useWriteNote()
@@ -223,7 +231,7 @@ export function AnnotatePanel({ target, onClose }: {
               aria-pressed={candidate === action}
               onClick={() => setAction(candidate)}
             >
-              {t(`annotate.actions.${candidate}`)}
+              {actionLabel(candidate)}
             </button>
           ))}
         </div>
@@ -260,7 +268,7 @@ export function AnnotatePanel({ target, onClose }: {
           {action === 'note' && (
             <label className="field">
               <span className="label">{t('annotate.noteLabel')}</span>
-              <input className="input" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} />
+              <input className="input" value={noteBody} onChange={(event) => setNoteDraft(event.target.value)} />
             </label>
           )}
 
@@ -303,7 +311,7 @@ export function AnnotatePanel({ target, onClose }: {
 
           <div className="form-actions">
             <button type="submit" className="button button-primary" disabled={!canSubmit || busy}>
-              {busy ? t('annotate.saving') : t(`annotate.actions.${action}`)}
+              {busy ? t('annotate.saving') : actionLabel(action)}
             </button>
           </div>
         </form>

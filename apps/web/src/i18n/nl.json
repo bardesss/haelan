@@ -1212,6 +1212,7 @@
       "exclude": "Uitsluiten",
       "correct": "Corrigeren",
       "note": "Notitie toevoegen",
+      "editNote": "Notitie bewerken",
       "event": "Gebeurtenis toevoegen"
     },
     "reasonLabel": "Reden",
