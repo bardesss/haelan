@@ -109,6 +109,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # github.sha is whatever push started this run, which can differ from the
+          # commit the tag names; the image is named after the tag, so build that.
+          ref: ${{ needs.release-please.outputs.tag }}
           persist-credentials: false
 
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
@@ -187,6 +190,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # The tag, not github.sha: see the checkout in `verify`.
+          ref: ${{ needs.release-please.outputs.tag }}
           persist-credentials: false
 
       # No docker/setup-qemu-action. Deliberately: see the comment on `verify` above.

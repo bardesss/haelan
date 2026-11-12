@@ -325,6 +325,13 @@ describe('the release workflow', () => {
     }
   })
 
+  it('tests and builds the commit the release tag names, not the branch tip', () => {
+    for (const job of ['verify', 'image']) {
+      expect(jobBody(job).join('\n'), `${job} checks out github.sha rather than the tag`)
+        .toMatch(/uses: actions\/checkout@[^\n]+\n {8}with:\n(?: {10}.+\n)*? {10}ref: \$\{\{ needs\.release-please\.outputs\.tag \}\}/)
+    }
+  })
+
   it('keeps a version in every release pull request title', () => {
     // release-please reads the version back OUT of the title it wrote, to match a merged release
     // pull request to the release it should now tag. Adding apps/android as a second package made
