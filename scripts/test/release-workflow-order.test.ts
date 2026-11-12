@@ -415,3 +415,12 @@ describe('the release workflow', () => {
     expect(yaml).toContain('RELEASE_ID: ${{ needs.release-please.outputs.release_id }}')
   })
 })
+
+describe('secrets in workflow text', () => {
+  it.each(['release.yml', 'android-tag.yml', 'android-release.yml'])('%s passes secrets through env or with, never into script text', (file) => {
+    const text = readFileSync(new URL(`../../.github/workflows/${file}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+    const offending = text.split('\n').filter(line => line.includes('${{ secrets.'))
+      .filter(line => !/^\s+[A-Za-z_][\w-]*: \$\{\{ secrets\.\w+(?: \|\| secrets\.\w+)? \}\}\s*$/.test(line))
+    expect(offending).toEqual([])
+  })
+})

@@ -133,4 +133,20 @@ describe('the android release workflow', () => {
     expect(jobBody('check')).toMatch(/name: token-palette\n\s+path: apps\/android\/app\/build\/haelan-tokens\//)
     expect(jobBody('release')).toMatch(/name: token-palette\n\s+path: apps\/android\/app\/build\/haelan-tokens\//)
   })
+  it('refuses an APK signed by any key but the release key', () => {
+    const step = at('The APK is signed by the release key')
+    expect(step).toBeGreaterThan(at('Verify the APK is signed'))
+    expect(step).toBeLessThan(at('Create the release'))
+    expect(yaml).toContain('--print-certs')
+    expect(yaml).toContain('apps/android/release-signing-cert.sha256')
+    expect(yaml).toContain('if [ "$FOUND" != "$EXPECTED" ]')
+    const committed = readFileSync(new URL('../../apps/android/release-signing-cert.sha256', import.meta.url), 'utf8').trim()
+    expect(committed, 'lowercase hex, no colons, as apksigner prints it').toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('checks the Gradle distribution it downloads', () => {
+    const props = readFileSync(new URL('../../apps/android/gradle/wrapper/gradle-wrapper.properties', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+    expect(props).toContain('distributionUrl=https\\://services.gradle.org/distributions/gradle-8.11.1-bin.zip')
+    expect(props).toMatch(/^distributionSha256Sum=f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6$/m)
+  })
 })

@@ -186,6 +186,22 @@ jobs:
           "$APKSIGNER" verify --verbose "$APK"
           cp "$APK" "haelan-${{ steps.version.outputs.name }}.apk"
 
+      # `apksigner verify` proves the APK is signed by some key; a phone refuses an update signed by
+      # a different one, so a leaked or swapped keystore secret is caught here rather than by every
+      # installed phone.
+      - name: The APK is signed by the release key
+        run: |
+          APK="haelan-${{ steps.version.outputs.name }}.apk"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/apksigner
+          EXPECTED=$(tr -d '[:space:]' < apps/android/release-signing-cert.sha256)
+          CERTS=$("$APKSIGNER" verify --print-certs "$APK")
+          if echo "$CERTS" | grep -q '^Signer #2'; then echo "::error::the APK carries more than one signer"; exit 1; fi
+          FOUND=$(echo "$CERTS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          if [ "$FOUND" != "$EXPECTED" ]; then
+            echo "::error::the APK is signed by $FOUND, the release key is $EXPECTED"
+            exit 1
+          fi
+
       # apksigner proves the APK is signed, not that it carries the version the tag demanded. The
       # Gradle guard above only proves the version step's own outputs were non-empty, which is a
       # different fact than the env: binding on the assemble step naming them correctly -- a typo in
