@@ -172,7 +172,10 @@ export function Shell() {
       {/* A backstop for what a card's own boundary cannot catch within a page: the page's own
           layout, its control row, anything above its cards. A reader hitting this one has lost
           the page rather than one card. */}
-      <main className="main"><ErrorBoundary>{active.element}</ErrorBoundary></main>
+      {/* Keyed on the matched pattern so that moving to another page remounts the boundary and
+          clears a failure from the last one. Keyed on the full route it would also remount on
+          every ?range= or ?on= change and throw away a page that is working. */}
+      <main className="main"><ErrorBoundary key={active.path}>{active.element}</ErrorBoundary></main>
       {/* "/" to go to a page by name and "?" for the list of keys, on every signed-in page. Given
           the same exclusions as the rail, so the go-to box offers exactly the pages the rail does. */}
       <Shortcuts excludedDataTypes={excludedDataTypes} />

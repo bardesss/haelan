@@ -10,16 +10,26 @@ import { Card } from '../src/components/Card.js'
 import { Shell } from '../src/Shell.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
+import { navigate } from '../src/router.js'
 
 // A stand-in route table, not the real pages: Shell renders whichever `.element` the matched
 // route carries, and a real page pulls in its own data hooks and charts, none of which this file
 // needs. This isolates the assertion below to what Shell itself wires up (the rail's boundary and
 // the page's), the same way `Boom` isolates the earlier tests to what `ErrorBoundary` itself does.
-vi.mock('../src/routes.js', () => ({
-  // A plain string, not JSX: the factory below is hoisted above every import in this file,
-  // including the JSX runtime's own, so JSX here throws before the mock can even install itself.
-  ROUTES: [{ path: '/', element: 'page still here' }],
-}))
+const mounts = vi.hoisted(() => ({ count: 0 }))
+vi.mock('../src/routes.js', async () => {
+  // createElement rather than JSX, for the same reason as the plain string below: this factory is
+  // hoisted above every import in this file, including the JSX runtime's own.
+  const { createElement, useEffect } = await import('react')
+  function Broken(): never { throw new Error('page threw') }
+  function Counted() { useEffect(() => { mounts.count += 1 }, []); return 'counted page' }
+  return { ROUTES: [
+    // A plain string, not JSX: see above.
+    { path: '/', element: 'page still here' },
+    { path: '/broken', element: createElement(Broken) },
+    { path: '/counted', element: createElement(Counted) },
+  ] }
+})
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -200,5 +210,63 @@ describe('ErrorBoundary', () => {
     })
 
     expect(container!.textContent).toContain('page still here')
+  })
+})
+
+describe('the page boundary', () => {
+  // A signed-in session the rail can render without throwing, so the only thing that can fail
+  // below is the page itself.
+  const signedIn = (): Session => ({
+    personId: 'p1',
+    displayName: 'Wilma',
+    username: 'wilma',
+    isAdmin: false,
+    timezone: 'Europe/Amsterdam',
+    effectiveTimezone: 'Europe/Amsterdam',
+    currentTimezone: null,
+    followPhoneZone: true,
+    birthDate: null,
+    sex: null,
+    sleepTargetMinutes: 480,
+    sleepUseBaseline: true,
+    quickLogEnabled: true,
+    connected: true,
+    credentialsUnreadable: false,
+    baseUrl: 'http://localhost:4235',
+  })
+
+  const mountShell = () => {
+    // staleTime: Infinity for the same reason as the rail test above: no background fetch.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), signedIn())
+    act(() => {
+      root?.render(
+        <QueryClientProvider client={client}>
+          <I18nProvider lng="en"><Shell /></I18nProvider>
+        </QueryClientProvider>,
+      )
+    })
+  }
+
+  // The reader's complaint: a page that threw kept its error screen after they clicked to another
+  // page, because the boundary was never remounted. Keyed on the matched pattern, so a new page
+  // gets a fresh boundary.
+  it('clears a failed page when the reader navigates to another one', () => {
+    window.history.replaceState(null, '', '/broken')
+    mountShell()
+    expect(container!.querySelector('main')!.textContent).toContain('This did not load.')
+
+    act(() => { navigate('/') })
+    expect(container!.querySelector('main')!.textContent).toBe('page still here')
+  })
+
+  // Keyed on the pattern rather than the full route, so a filter change in the query string does
+  // not throw away a page that is working fine.
+  it('keeps the page mounted when only the query string changes', () => {
+    mounts.count = 0
+    window.history.replaceState(null, '', '/counted')
+    mountShell()
+    act(() => { navigate('/counted?range=week', { replace: true }) })
+    expect(mounts.count).toBe(1)
   })
 })
