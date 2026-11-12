@@ -49,6 +49,24 @@ describe('AccountStore', () => {
     })
   })
 
+  it('counts every one of forty parallel failures and locks the account', async () => {
+    await create()
+    await Promise.all(Array.from({ length: 40 }, () =>
+      store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })))
+    const row = fixture.db.$client.prepare('select failed_attempts as n from accounts').get() as { n: number }
+    expect(row.n).toBe(40)
+    expect(await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 }))
+      .toEqual({ ok: false, reason: 'locked' })
+  })
+
+  it('refuses a right password when the account locked while it was being verified', async () => {
+    await create()
+    // login runs synchronously up to its argon2 verify, so this lands between the two checks.
+    const pending = store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 })
+    fixture.db.$client.prepare('update accounts set locked_until_ms = ? where id = ?').run(2000 + 15 * 60_000, 'a1')
+    expect(await pending).toEqual({ ok: false, reason: 'locked' })
+  })
+
   // The stamp itself, held separately from the shape above: a sign-in is the only thing that writes
   // it, and a failed one must not - an account somebody is guessing at is not an account in use.
   it('stamps the sign-in, and only a successful one', async () => {

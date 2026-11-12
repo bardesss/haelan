@@ -1,4 +1,4 @@
-﻿import { asc, eq } from 'drizzle-orm'
+﻿import { asc, eq, sql } from 'drizzle-orm'
 import { hash, verify } from '@node-rs/argon2'
 import type { DbOrTx } from '../db/open.ts'
 import { accounts } from '../db/schema/index.ts'
@@ -114,12 +114,21 @@ export class AccountStore {
 
     const matched = await verify(row.passwordHash, input.password).catch(() => false)
     if (!matched) {
-      const failedAttempts = row.failedAttempts + 1
+      // One statement computed from the stored value, not from the row read before the verify:
+      // guesses verified in parallel all read the same count, and writing back "that + 1" would
+      // let forty guesses count as one.
       this.#db.update(accounts).set({
-        failedAttempts,
-        lockedUntilMs: failedAttempts >= MAX_ATTEMPTS ? input.nowMs + LOCK_MS : row.lockedUntilMs,
+        failedAttempts: sql`${accounts.failedAttempts} + 1`,
+        lockedUntilMs: sql`CASE WHEN ${accounts.failedAttempts} + 1 >= ${MAX_ATTEMPTS} THEN ${input.nowMs + LOCK_MS} ELSE ${accounts.lockedUntilMs} END`,
       }).where(eq(accounts.id, row.id)).run()
       return { ok: false, reason: 'bad_password' }
+    }
+
+    // Guesses verified in parallel all read the row before any of them was counted, so the lock
+    // the first check looked for may have landed while this one was verifying.
+    const current = this.#db.select({ lockedUntilMs: accounts.lockedUntilMs }).from(accounts).where(eq(accounts.id, row.id)).get()
+    if (current?.lockedUntilMs != null && current.lockedUntilMs > input.nowMs) {
+      return { ok: false, reason: 'locked' }
     }
 
     // Checked after the verify rather than instead of it, so a disabled account costs the same
