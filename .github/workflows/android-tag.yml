@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The tag is pushed back to this repository, and a push made with GITHUB_TOKEN does not
           # trigger another workflow. That rule is the whole reason this file needs a PAT: without

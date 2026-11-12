@@ -14,6 +14,20 @@ const at = (label: string): number => {
 // Step labels in file order, for assertions about what comes after a given step rather than just
 // what comes before it: "before" alone would not catch a step appended past the end of the job.
 const stepLabels = [...yaml.matchAll(/- name: (.+)/g)].map(m => m[1])
+const lines = yaml.replace(/\r\n/g, '\n').split('\n')
+const jobBody = (name: string): string => {
+  const start = lines.findIndex(line => new RegExp(`^ {2}${name}:`).test(line))
+  if (start === -1) return ''
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex(line => /^ {2}\S/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n')
+}
+const topLevelPermissions = (): string[] => {
+  const start = lines.findIndex(line => /^permissions:/.test(line))
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex(line => /^\S/.test(line))
+  return rest.slice(0, end).filter(line => /^ {2}[a-z-]+: /.test(line)).map(line => line.trim())
+}
 
 describe('the android release workflow', () => {
   it('tests, assembles and verifies before it creates the release', () => {
@@ -97,5 +111,26 @@ describe('the android release workflow', () => {
   it('runs only on an android tag, never on a branch', () => {
     expect(yaml).toContain("tags: ['android-v*']")
     expect(yaml).not.toContain('branches:')
+  })
+
+  it('tests and lints in a job that never sees the keystore', () => {
+    const check = jobBody('check')
+    const release = jobBody('release')
+    expect(check, 'there is no check job').not.toBe('')
+    expect(release).toMatch(/^ {4}needs: check$/m)
+    expect(check).toContain('./gradlew testDebugUnitTest')
+    expect(check).toContain('./gradlew lintDebug')
+    expect(check).not.toContain('secrets.')
+    expect(release).toContain('HAELAN_KEYSTORE_BASE64: ${{ secrets.HAELAN_KEYSTORE_BASE64 }}')
+    expect(release).not.toContain('testDebugUnitTest')
+    expect(release).not.toContain('lintDebug')
+    expect(release, 'dependency install scripts must not run beside the keystore').not.toContain('pnpm install')
+    expect(topLevelPermissions()).toEqual(['contents: read'])
+    expect(release).toMatch(/^ {4}permissions:\n {6}contents: write$/m)
+  })
+
+  it('hands the generated palette from the check job to the release job', () => {
+    expect(jobBody('check')).toMatch(/name: token-palette\n\s+path: apps\/android\/app\/build\/haelan-tokens\//)
+    expect(jobBody('release')).toMatch(/name: token-palette\n\s+path: apps\/android\/app\/build\/haelan-tokens\//)
   })
 })
