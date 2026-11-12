@@ -93,7 +93,9 @@ EXPOSE 4235
 
 # The same route the boot check uses, and for the same reason: it reads accounts, settings and
 # credentials, so answering proves the database opened rather than only that a process is up.
+# The address comes from the same readConfig the server binds with, so HAELAN_PORT and HAELAN_HOST
+# changes do not leave the check probing a port nothing listens on.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:4235/api/setup/state').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["node", "apps/server/src/healthcheck.ts"]
 
 CMD ["node", "apps/server/src/index.ts"]
