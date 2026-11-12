@@ -177,6 +177,18 @@ describe('a finished sync', () => {
     expect(statusReads).toBe(0)
   })
 
+  // A cold load has no status at mount, so the first answer is the baseline, not a finished run.
+  it('leaves the data alone when the first status arrives after mount', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    client.setQueryData(DATA_KEY, { points: [] })
+    serverStatus = statusBody(false, 1_000)
+    mount(client)
+    await settle()
+    expect(statusReads).toBe(1)
+    expect(client.getQueryState(DATA_KEY)!.isInvalidated).toBe(false)
+  })
+
   // The workout page's "your watch's figures arrive with the next sync" waits on exactly this: the
   // run ending refreshes the page, which then reads the watch's summary if the run brought it.
   it('invalidates a workout page waiting for its figures when a watched run ends', async () => {

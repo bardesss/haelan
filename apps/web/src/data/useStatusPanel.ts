@@ -195,8 +195,9 @@ export function useRunSync(): UseMutationResult<unknown, ApiError, void> {
  * observes running === true for it at all, and a running-to-idle transition would miss it
  * entirely. lastFinishedAtMs moving forward is true of every run that ends, seen or not.
  *
- * The ref starts at whatever the first render saw, so mounting onto an already-finished status is
- * not a transition, and neither is the same finish time answered again.
+ * The ref holds whatever the first status seen was, so mounting onto an already-finished status, or
+ * a status that only arrives after mount, is not a transition, and neither is the same finish time
+ * answered again.
  */
 export function useRefreshOnSyncFinish(status: StatusPanel | undefined): void {
   const session = useSession()
@@ -204,17 +205,20 @@ export function useRefreshOnSyncFinish(status: StatusPanel | undefined): void {
   const queryClient = useQueryClient()
   const lastFinishedAtMs = status?.sync?.lastFinishedAtMs
   const previous = useRef(lastFinishedAtMs)
-  // The first effect run is always "the first read": whatever value mount happened to see is a
-  // baseline, never a rise, no matter what it is (null or an old real timestamp alike).
+  const loaded = status !== undefined
+  // The first run with a status is "the first read": whatever value it holds is a baseline, never
+  // a rise, no matter what it is (null or an old real timestamp alike). Runs before any status has
+  // arrived do not count, or a cold load's first answer would look like a run finishing.
   const seen = useRef(false)
   useEffect(() => {
+    if (!loaded) return
     const was = previous.current
     previous.current = lastFinishedAtMs
     if (!seen.current) { seen.current = true; return }
     if (lastFinishedAtMs != null && (was == null || lastFinishedAtMs > was) && personId !== undefined) {
       refreshPersonData(queryClient, personId)
     }
-  }, [lastFinishedAtMs, personId, queryClient])
+  }, [loaded, lastFinishedAtMs, personId, queryClient])
 }
 
 /**
