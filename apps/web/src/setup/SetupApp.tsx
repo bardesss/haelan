@@ -74,6 +74,7 @@ export function SetupApp() {
   const [callbackError, setCallbackError] = useState<SetupError | null>(null)
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [horizonFailure, setHorizonFailure] = useState<string | null>(null)
+  const [statusFailure, setStatusFailure] = useState<string | null>(null)
   // Not one of setupStep's values (see DataTypeStep.tsx's own doc comment for why): the server
   // has nothing to say about whether this screen has been shown, so the browser tracks it here,
   // the same way it already tracks candidates and scopes for the Google screen above. Written
@@ -140,23 +141,41 @@ export function SetupApp() {
   // screen would mean tearing an open EventSource down again the moment Continue is clicked,
   // for no reader-visible benefit.
   const showBackfill = onBackfill && dataTypesDone && !companionMode
+  // An expired session goes to sign-in like every other setup read; anything else is said on
+  // screen, since a rejected read here used to leave "loading" up forever.
+  const onStatusFailure = (cause: unknown): void => {
+    if (cause instanceof ApiError && cause.status === 401) {
+      setNeedsSignIn(true)
+      return
+    }
+    setStatusFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
+  }
+  const readStatus = (): void => {
+    void getSyncStatus().then((next) => { setStatus(next); setStatusFailure(null) }, onStatusFailure)
+  }
+  // Stops behind the sign-in screen (no poll against a dead session) and restarts after sign-in.
   useEffect(() => {
-    if (!showBackfill) return
-    void getSyncStatus().then(setStatus)
+    if (!showBackfill || needsSignIn) return
+    readStatus()
     // EventSource for live progress, with the status route as the fallback: a proxy that
     // buffers the stream would otherwise leave the page frozen at whatever it first drew.
     const stream = new EventSource('/api/sync/events')
     stream.onmessage = (event) => {
-      const parsed: unknown = JSON.parse(event.data as string)
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(event.data as string)
+      } catch {
+        parsed = null
+      }
       if (typeof parsed === 'object' && parsed !== null && 'running' in parsed) {
         setStatus(parsed as SyncStatus)
       } else {
-        void getSyncStatus().then(setStatus)
+        readStatus()
       }
     }
-    const poll = setInterval(() => { void getSyncStatus().then(setStatus) }, 5000)
+    const poll = setInterval(readStatus, 5000)
     return () => { stream.close(); clearInterval(poll) }
-  }, [showBackfill])
+  }, [showBackfill, needsSignIn])
 
   // On its own, the way Shell renders it, rather than inside the wizard's column: the rail is a
   // claim about progress through steps this reader cannot take a single one of until they are
@@ -207,7 +226,9 @@ export function SetupApp() {
                           })
                       }}
                     />
-                  : <p className="empty">{t('setup.app.loadingProgress')}</p>)
+                  : statusFailure !== null
+                    ? <p className="form-error" role="alert">{statusFailure}</p>
+                    : <p className="empty">{t('setup.app.loadingProgress')}</p>)
               : <AccountStep onDone={refresh} />}
       </div>
     </div>

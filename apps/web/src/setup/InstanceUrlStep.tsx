@@ -37,8 +37,9 @@ export function InstanceUrlStep({ onDone }: { onDone: () => void }) {
             .then(onDone)
             .catch((cause: unknown) => {
               setFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
-              setBusy(false)
             })
+            // Cleared on success too: onDone may leave the wizard on this very step.
+            .finally(() => setBusy(false))
         }}
       >
         {PATHS.map((path) => (
