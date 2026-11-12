@@ -58,6 +58,36 @@ describe('useToday', () => {
     expect(seen).toBe('2026-03-11')
   })
 
+  it('keeps rescheduling past the one-hour cap and still rolls over', () => {
+    vi.setSystemTime(new Date('2026-03-10T12:00:00Z'))
+    mountProbe('UTC')
+    expect(seen).toBe('2026-03-10')
+    for (let hour = 0; hour < 11; hour += 1) act(() => { vi.advanceTimersByTime(3_600_000) })
+    expect(seen).toBe('2026-03-10')
+    act(() => { vi.advanceTimersByTime(3_600_000) })
+    expect(seen).toBe('2026-03-11')
+  })
+
+  it('rolls over at Amsterdam midnight on the 23 hour spring-forward day', () => {
+    vi.setSystemTime(new Date('2026-03-29T00:30:00Z')) // 01:30 CET, before the 02:00 jump
+    mountProbe('Europe/Amsterdam')
+    expect(seen).toBe('2026-03-29')
+    // 21:59:30Z is 23:59:30 CEST on the 29th.
+    act(() => { vi.advanceTimersByTime(21 * 3_600_000 + 29 * 60_000) }) // to 21:59:00Z
+    expect(seen).toBe('2026-03-29')
+    act(() => { vi.advanceTimersByTime(2 * 60_000) }) // 22:01:00Z = 00:01 CEST
+    expect(seen).toBe('2026-03-30')
+  })
+
+  it('clears its pending timer on unmount', () => {
+    vi.setSystemTime(new Date('2026-03-10T12:00:00Z'))
+    mountProbe('UTC')
+    expect(vi.getTimerCount()).toBe(1)
+    act(() => { root?.unmount() })
+    expect(vi.getTimerCount()).toBe(0)
+    root = createRoot(container!)
+  })
+
   it('counts to the zone midnight', () => {
     expect(msUntilLocalMidnight('UTC', new Date('2026-03-10T23:59:30Z'))).toBe(30_000)
   })

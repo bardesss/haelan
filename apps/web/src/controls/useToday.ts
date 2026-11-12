@@ -23,20 +23,22 @@ const HOUR_MS = 3_600_000
  * trusted to one long timer.
  */
 export function useToday(timezone: string | undefined): string {
-  const [today, setToday] = useState(() => localToday(timezone))
+  const [state, setState] = useState(() => ({ timezone, day: localToday(timezone) }))
+  // A changed zone is answered in the same render, so no frame shows the old zone's day.
+  const today = state.timezone === timezone ? state.day : localToday(timezone)
 
   useEffect(() => {
-    // A changed zone changes what today is right now; the timer below then follows the new value.
-    const current = localToday(timezone)
-    if (current !== today) {
-      setToday(current)
-      return undefined
+    let handle: ReturnType<typeof setTimeout> | undefined
+    // Rescheduled by hand: a capped wake-up that finds the same day changes no state, so an effect
+    // keyed on the day would never run again and the page would stop rolling over.
+    const tick = (): void => {
+      const day = localToday(timezone)
+      setState((prev) => (prev.timezone === timezone && prev.day === day ? prev : { timezone, day }))
+      handle = setTimeout(tick, Math.min(msUntilLocalMidnight(timezone, new Date()) + 1_000, HOUR_MS))
     }
-    const timer = setTimeout(() => {
-      setToday(localToday(timezone))
-    }, Math.min(msUntilLocalMidnight(timezone, new Date()) + 1_000, HOUR_MS))
-    return () => { clearTimeout(timer) }
-  }, [timezone, today])
+    tick()
+    return () => { clearTimeout(handle) }
+  }, [timezone])
 
   return today
 }
