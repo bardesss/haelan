@@ -25,6 +25,22 @@ const jobBody = (name: string): string[] => {
   return end === -1 ? rest : rest.slice(0, end)
 }
 
+const topLevelPermissions = (): string[] => {
+  const start = lines.findIndex(line => /^permissions:/.test(line))
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex(line => /^\S/.test(line))
+  return rest.slice(0, end).filter(line => /^ {2}[a-z-]+: /.test(line)).map(line => line.trim())
+}
+const jobPermissions = (name: string): string[] => {
+  const body = jobBody(name)
+  const start = body.findIndex(line => /^ {4}permissions:/.test(line))
+  if (start === -1) return []
+  const rest = body.slice(start + 1)
+  const end = rest.findIndex(line => !/^ {6}/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end))
+    .filter(line => /^ {6}[a-z-]+: /.test(line)).map(line => line.trim())
+}
+
 const stepsOf = (name: string): { label: string; onlyOnFailure: boolean }[] => {
   const steps: { label: string; onlyOnFailure: boolean }[] = []
   for (const line of jobBody(name)) {
@@ -289,6 +305,24 @@ describe('the release workflow', () => {
     // the pull request `autorelease: pending` and every later run tries to release it again.
     // 1.15.0 was released and then left pending exactly that way.
     expect(yaml).toContain('issues: write')
+  })
+
+  it('grants writes per job and reads everywhere else', () => {
+    // A workflow level write is inherited by every job, including the one that runs the whole
+    // test suite and the ones that run third party actions. Each job asks for what it uses.
+    expect(topLevelPermissions()).toEqual(['contents: read'])
+    expect(jobPermissions('release-please').sort())
+      .toEqual(['contents: write', 'issues: write', 'pull-requests: write'])
+    expect(jobPermissions('verify')).toEqual(['contents: read'])
+    expect(jobPermissions('image').sort()).toEqual(['contents: read', 'packages: write'])
+    expect(jobPermissions('publish').sort()).toEqual(['contents: write', 'packages: write'])
+  })
+
+  it('keeps no git credentials on checkouts that never push', () => {
+    for (const job of ['verify', 'image']) {
+      expect(jobBody(job).join('\n'), `${job} leaves the token in .git/config`)
+        .toMatch(/uses: actions\/checkout@[^\n]+\n {8}with:\n(?: {10}.+\n)*? {10}persist-credentials: false/)
+    }
   })
 
   it('keeps a version in every release pull request title', () => {
