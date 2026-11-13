@@ -7,7 +7,13 @@ import type { RateLimiter } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import type { FastifyInstance } from 'fastify'
 
-export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled' | 'list_fails'
+export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled' | 'list_fails' | 'throttles_one_person'
+
+// throttles_one_person answers every data request made for the person holding this refresh token
+// with a 429 whose Retry-After is past the client's cap, so the client gives up on the first
+// attempt instead of sleeping through its backoff. Everyone else is answered as in 'ok'.
+export const THROTTLED_REFRESH_TOKEN = 'throttled-refresh-token'
+const THROTTLED_ACCESS_TOKEN = 'throttled-access-token'
 
 // list_fails fails this one type and no other, so a test can prove a healthy type keeps
 // advancing while this one is retried and never does - "a type that fails every window", not
@@ -70,14 +76,17 @@ const GOOGLE_STUB_ROOT = 'http://stub.invalid'
 // Answers the two endpoints the consent round trip touches, by URL, so no test ever reaches
 // Google. Anything else throws rather than returning a plausible empty answer.
 function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
-  return (async (input: string | URL | Request) => {
+  return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/token')) {
       if (mode === 'redirect_uri_mismatch') {
         return new Response(JSON.stringify({ error: 'redirect_uri_mismatch' }), { status: 400 })
       }
+      const throttled = mode === 'throttles_one_person'
+        && new URLSearchParams(String(init?.body ?? '')).get('refresh_token') === THROTTLED_REFRESH_TOKEN
       return new Response(JSON.stringify({
-        refresh_token: 'stub-refresh-token', access_token: 'stub-access-token',
+        refresh_token: 'stub-refresh-token',
+        access_token: throttled ? THROTTLED_ACCESS_TOKEN : 'stub-access-token',
         expires_in: 3599, scope: SCOPES.join(' '),
       }), { status: 200 })
     }
@@ -104,6 +113,10 @@ function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
     // An empty page in the shape the mappers expect. These tests are about the runner's
     // scheduling and progress, not its mapping; Task 16's end to end run is where real points
     // travel through and land as rows.
+    if (url.includes('/dataPoints') && mode === 'throttles_one_person'
+      && new Headers(init?.headers).get('authorization') === `Bearer ${THROTTLED_ACCESS_TOKEN}`) {
+      return new Response('slow down', { status: 429, headers: { 'retry-after': '3600' } })
+    }
     if (url.includes('/dataPoints')) return new Response(body([]), { status: 200 })
     throw new Error(`the stub was asked for ${url}, which it does not serve`)
   }) as unknown as typeof globalThis.fetch

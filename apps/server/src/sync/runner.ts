@@ -518,11 +518,14 @@ export class SyncRunner {
     // #aborted check while this was not. stop() sets #aborted and shutdown() then awaits
     // settle(), so without this a shutdown waited out a whole trailing sync of every connected
     // person and every listable type before anything noticed it had been asked to stop.
-    await runSync({
+    const synced = await runSync({
       personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps,
       shouldStop: () => this.#aborted,
     })
     if (this.#aborted) return
+    // People the quota already refused in this run. Every later pass skips them: the quota will
+    // not have recovered, and each request costs minutes of client backoff that hold the run.
+    const rateLimited = new Set(synced.rateLimitedPersonIds)
     // Here as well as at the end of the run, for the same reason the trailing window goes
     // first: a backfill that takes an hour must not be what stands between today's samples and
     // the dashboard reading them.
@@ -545,7 +548,7 @@ export class SyncRunner {
         // either way another pass buys nothing. windowsFetched used to be the signal here, but
         // runBackfill counts a failed window as fetched too, so a type failing every window
         // never produced a zero and burned every remaining pass alone.
-        const advanced = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays)
+        const advanced = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays, rateLimited)
         if (!advanced) break
       }
       // Reaching MAX_SPRINT_PASSES without ever seeing a pass that failed to advance means every
@@ -563,7 +566,7 @@ export class SyncRunner {
     // type held every other, healthy type at the sprint floor for good, since the sprint branch
     // above was the only place any of them ever got a chance to walk.
     if (this.#aborted) return
-    await this.#backfillPass(deps, personIds, userHorizonDays, null)
+    await this.#backfillPass(deps, personIds, userHorizonDays, null, rateLimited)
     this.#derive(personIds)
   }
 
@@ -676,13 +679,16 @@ export class SyncRunner {
    * already reached it, not by shrinking the horizonDays passed to runBackfill. See the comment
    * at the skip below for why that distinction is load-bearing. Returns whether any type's
    * cursor actually moved, which is what the sprint loop above uses to decide whether another
-   * pass is worth taking.
+   * pass is worth taking. rateLimited is the run's set of people the quota refused: they are
+   * skipped, and a person refused here is added to it.
    */
   async #backfillPass(
     deps: JobDeps, personIds: string[], userHorizonDays: number, capDays: number | null,
+    rateLimited: Set<string>,
   ): Promise<boolean> {
     let cursorAdvanced = false
     for (const personId of personIds) {
+      if (rateLimited.has(personId)) continue
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
       for (const dataType of this.#typesFor(personId)) {
@@ -750,6 +756,7 @@ export class SyncRunner {
           // person's pass ends here. Their failure was already recorded by runJob.
           if (result.stoppedBecause === 'rate_limited') {
             this.#backfillTotals.failed.add(`${personId}:${dataType.id}`)
+            rateLimited.add(personId)
             break
           }
         } catch (error) {

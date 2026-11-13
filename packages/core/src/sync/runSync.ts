@@ -15,6 +15,12 @@ export interface SyncReport {
   rowsWritten: number
   /** Ids in the caller's list with no person row. Reported rather than thrown; see runSync. */
   unknownPersonIds: string[]
+  /**
+   * People this run stopped asking because the client gave up on a 429. A caller that goes on to
+   * backfill in the same run skips them: the quota will not have recovered, and every request
+   * meets the same wall after minutes of backoff.
+   */
+  rateLimitedPersonIds: string[]
 }
 
 export interface SyncInput {
@@ -67,7 +73,7 @@ export function reachBackTo(
 }
 
 export async function runSync(input: SyncInput): Promise<SyncReport> {
-  const report: SyncReport = { jobs: 0, succeeded: 0, failed: 0, skipped: 0, rowsWritten: 0, unknownPersonIds: [] }
+  const report: SyncReport = { jobs: 0, succeeded: 0, failed: 0, skipped: 0, rowsWritten: 0, unknownPersonIds: [], rateLimitedPersonIds: [] }
   const toMs = input.deps.now()
   const trailingFromMs = toMs - input.trailingDays * DAY_MS
 
@@ -133,7 +139,10 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
           })
           report.failed++
           // The household shares one quota, so the person's remaining types would meet the same wall.
-          if (error instanceof RateLimitedError) break
+          if (error instanceof RateLimitedError) {
+            report.rateLimitedPersonIds.push(personId)
+            break
+          }
         }
         continue
       }
@@ -149,7 +158,10 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
       if (result.skipped) report.skipped++
       else if (result.failedWindows > result.skippedWindows) report.failed++
       else report.succeeded++
-      if (result.rateLimited) break
+      if (result.rateLimited) {
+        report.rateLimitedPersonIds.push(personId)
+        break
+      }
     }
   }
 
