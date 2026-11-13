@@ -2,6 +2,7 @@ package com.haelan.android
 
 import androidx.health.connect.client.records.metadata.Metadata
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -73,4 +74,23 @@ class SourceIdentityTest {
 
         assertEquals(2, setOf(watch, phone).size)
     }
+
+    @Test fun aRecordAfterTheCutoverNamesTheAppThatWroteIt() = assertEquals("com.google.android.apps.fitness",
+        SourceIdentity.of("Google", "Pixel 9", Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED, "com.google.android.apps.fitness", 2_000L, 1_000L).originPackage)
+
+    @Test fun aRecordBeforeTheCutoverKeepsTheIdentityItWasFirstSentUnder() = assertNull(
+        SourceIdentity.of("Google", "Pixel 9", Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED, "com.google.android.apps.fitness", 999L, 1_000L).originPackage)
+
+    @Test fun aRecordExactlyAtTheCutoverIsNew() = assertEquals("com.x",
+        SourceIdentity.of(null, null, Metadata.RECORDING_METHOD_UNKNOWN, "com.x", 1_000L, 1_000L).originPackage)
+
+    @Test fun noCutoverMeansNothingWasEverSentUnderTheOldIdentity() = assertEquals("com.x",
+        SourceIdentity.of(null, null, Metadata.RECORDING_METHOD_UNKNOWN, "com.x", 0L, null).originPackage)
+
+    @Test fun aBlankOriginIsNoOrigin() = assertNull(
+        SourceIdentity.of(null, null, Metadata.RECORDING_METHOD_UNKNOWN, "  ", 0L, null).originPackage)
+
+    @Test fun twoAppsOnOnePhoneAreTwoIdentities() = assertNotEquals(
+        SourceIdentity.of("Google", "Pixel 9", Metadata.RECORDING_METHOD_UNKNOWN, "com.a", 0L, null),
+        SourceIdentity.of("Google", "Pixel 9", Metadata.RECORDING_METHOD_UNKNOWN, "com.b", 0L, null))
 }
