@@ -385,7 +385,10 @@ object SyncEngine {
         val deleted = postDeletions(session, dataTypeId, read.deletions, post)
         if (deleted is InstanceClient.Outcome.Failed) return deleted
         val start = rebuildStart(windowStart, read.records.map { it.time }, read.deletions, RestingLedger.load(prefs, owner), fallbackStart)
-        val upserted = syncOne(session, packageName, prefs, "resting", WindowSource(client, start, end), cutoverMs, fallbackStart, post)
+        // Past the clock like a bootstrap read (syncType), so a reading dated ahead of it, or
+        // written since the run fixed its end, is rebuilt now and not one drain later.
+        val readEnd = SyncCursors.bootstrapReadEnd(end, Instant.now())
+        val upserted = syncOne(session, packageName, prefs, "resting", WindowSource(client, start, readEnd), cutoverMs, fallbackStart, post)
         return if (upserted is InstanceClient.Outcome.Ok) InstanceClient.Outcome.Ok(upserted.value || read.deletions.isNotEmpty()) else upserted
     }
 
