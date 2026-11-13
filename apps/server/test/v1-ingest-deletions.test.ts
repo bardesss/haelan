@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { samplePoint, schema, sleepPoint } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
+import { rebuildIfNeeded } from '../src/rebuild.ts'
 
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
@@ -9,8 +10,8 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 const ORIGIN = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 const MAX_DELETIONS = 1_000
 
-const weightAt = (physicalTime: string, name: string) => ({
-  ...samplePoint({ payloadKey: 'weight', valuePath: 'weightGrams', value: '80000', physicalTime }),
+const weightAt = (physicalTime: string, name: string, grams = '80000') => ({
+  ...samplePoint({ payloadKey: 'weight', valuePath: 'weightGrams', value: grams, physicalTime }),
   name,
 })
 
@@ -74,6 +75,22 @@ describe('the companion deletions route', () => {
     })
     const points = (series.json() as { weight: { points: { localDate: string }[] } }).weight.points
     expect(points.map((p) => p.localDate)).toEqual(['2026-08-18'])
+  })
+
+  it('a weight moved at the source leaves its old day and re-derives it', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    await ingest(token, 'weight', [weightAt('2026-08-17T07:00:00Z', 'hc-weight-1')])
+    const response = await ingest(token, 'weight', [weightAt('2026-08-21T07:00:00Z', 'hc-weight-1')])
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ affected: { from: '2026-08-17', to: '2026-08-21' }, applied: true })
+    const series = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/p/p1/series?metric=weight&agg=last&from=2026-08-17&to=2026-08-21',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const points = (series.json() as { weight: { points: { localDate: string }[] } }).weight.points
+    expect(points.map((p) => p.localDate)).toEqual(['2026-08-21'])
   })
 
   it('deleting a night removes the session', async () => {
@@ -159,5 +176,40 @@ describe('the companion deletions route', () => {
     const response = await remove(token, 'weight', ['hc-weight-1'])
     expect(response.statusCode).toBe(503)
     expect(response.json()).toMatchObject({ error: { kind: 'transient' } })
+  })
+})
+
+describe('a rebuild after companion moves ends where live did', () => {
+  // Samples and links as live left them, then as a forced rebuild leaves them. One source
+  // throughout, and a rebuild hands out its ref afresh, so the ref is left out.
+  async function liveThenRebuilt(): Promise<{ live: unknown, rebuilt: unknown }> {
+    if (!harness) throw new Error('no harness')
+    const db = harness.app.haelan.instance.db
+    const snapshot = () => ({
+      samples: db.select().from(schema.samples).all()
+        .map((r) => ({ ...r, sourceRef: undefined, rawPayloadRef: undefined }))
+        .sort((a, b) => a.utcMs - b.utcMs),
+      links: db.select().from(schema.companionRecordSamples).all()
+        .map((l) => ({ ...l, sourceRef: undefined }))
+        .sort((a, b) => (a.recordId < b.recordId ? -1 : 1)),
+    })
+    const live = snapshot()
+    db.update(schema.people).set({ builtMappingVersion: null, builtDerivationVersion: null }).run()
+    await rebuildIfNeeded({ instance: harness.app.haelan.instance, nowMs: () => Date.now(), log: () => {} })
+    return { live, rebuilt: snapshot() }
+  }
+
+  it('a weight deleted and then restored under the same id at another time', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'weight', [weightAt('2026-08-17T07:00:00Z', 'hc-weight-1')])).statusCode).toBe(200)
+    harness.clock.nowMs += 60_000
+    expect((await remove(token, 'weight', ['hc-weight-1'])).statusCode).toBe(200)
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'weight', [weightAt('2026-08-18T07:00:00Z', 'hc-weight-1', '81000')])).statusCode).toBe(200)
+    const { live, rebuilt } = await liveThenRebuilt()
+    expect((live as { samples: { utcMs: number }[] }).samples.map((r) => r.utcMs))
+      .toEqual([Date.parse('2026-08-18T07:00:00Z')])
+    expect(rebuilt).toEqual(live)
   })
 })

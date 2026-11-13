@@ -352,8 +352,10 @@ function writeSamples(
     rowsWritten++
   }
   // In the same transaction as the rows, so a record is never linked without its samples or the
-  // other way round. Prepared once inside link(), not per row.
-  new CompanionRecords(tx).link(personId, samples, keys)
+  // other way round. Prepared once inside link(), not per row. A record moved at the source
+  // leaves its old row's day, which is re-derived like a deleted record's (the deletions route).
+  const moved = new CompanionRecords(tx).link(personId, samples, keys)
+  for (const date of moved.localDates) localDates.add(date)
   return rowsWritten
 }
 

@@ -225,6 +225,74 @@ describe('CompanionRecords', () => {
     ctx.cleanup()
   })
 
+  it('a weight moved at the source takes its old row with it and names the old day', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const day = 86_400_000
+    store(ctx, [row({ recordId: 'hc-weight-moved' })])
+    const keys = new SampleKeys(ctx.db)
+    const moved = [row({ recordId: 'hc-weight-moved', utcMs: T0 + 4 * day })]
+    store(ctx, moved, false)
+    const out = new CompanionRecords(ctx.db).link('p1', moved, keys)
+    expect(readSamples(ctx.db).map((r) => r.utcMs)).toEqual([T0 + 4 * day])
+    expect(out).toEqual({ rowsDeleted: 1, localDates: ['2026-08-18'] })
+    // So a later delete of the record leaves nothing behind.
+    new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-weight-moved'], nowMs: 5 }, keys)
+    expect(readSamples(ctx.db)).toEqual([])
+    ctx.cleanup()
+  })
+
+  it('a moved weight keeps the old row a live record of the same source still covers', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const day = 86_400_000
+    store(ctx, [row({ recordId: 'hc-weight-moved' })])
+    store(ctx, [row({ recordId: 'hc-weight-other', value: 81 })])
+    const keys = new SampleKeys(ctx.db)
+    const moved = [row({ recordId: 'hc-weight-moved', utcMs: T0 + 4 * day })]
+    store(ctx, moved, false)
+    expect(new CompanionRecords(ctx.db).link('p1', moved, keys)).toEqual({ rowsDeleted: 0, localDates: [] })
+    expect(readSamples(ctx.db).map((r) => [r.utcMs, r.value])).toEqual([[T0, 81], [T0 + 4 * day, 80]])
+    ctx.cleanup()
+  })
+
+  it('a moved weight whose stored link is wider than one instant deletes nothing', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const day = 86_400_000
+    // A link widened before 2.24.0, when every metric's link widened: it spans Monday to
+    // Wednesday, and a row between them may belong to a record with no link at all.
+    store(ctx, [row({ recordId: 'hc-weight-old' }), row({ recordId: 'hc-weight-old', utcMs: T0 + 2 * day })])
+    store(ctx, [row({ utcMs: T0 + day, value: 81 })], false)
+    const keys = new SampleKeys(ctx.db)
+    expect(ctx.db.select().from(companionRecordSamples).all()).toMatchObject([{ firstUtcMs: T0, lastUtcMs: T0 + 2 * day }])
+    const moved = [row({ recordId: 'hc-weight-old', utcMs: T0 + 4 * day })]
+    store(ctx, moved, false)
+    expect(new CompanionRecords(ctx.db).link('p1', moved, keys)).toEqual({ rowsDeleted: 0, localDates: [] })
+    expect(readSamples(ctx.db).map((r) => r.utcMs)).toEqual([T0, T0 + day, T0 + 2 * day, T0 + 4 * day])
+    ctx.cleanup()
+  })
+
+  it('a heart-rate record widens and deletes nothing when a chunk is sent again', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const minute = (offset: number) => downsampleToMinute([
+      row({ metric: 'heart_rate', utcMs: T0 + offset, value: 60, recordId: 'hc-hr-1' }),
+    ])
+    store(ctx, minute(0))
+    const keys = new SampleKeys(ctx.db)
+    const records = new CompanionRecords(ctx.db)
+    store(ctx, minute(10 * 60_000), false)
+    expect(records.link('p1', minute(10 * 60_000), keys)).toEqual({ rowsDeleted: 0, localDates: [] })
+    store(ctx, minute(0), false)
+    expect(records.link('p1', minute(0), keys)).toEqual({ rowsDeleted: 0, localDates: [] })
+    expect(ctx.db.select().from(companionRecordSamples).all())
+      .toMatchObject([{ firstUtcMs: T0, lastUtcMs: T0 + 10 * 60_000 }])
+    expect(new Set(readSamples(ctx.db).map((r) => r.utcMs))).toEqual(new Set([T0, T0 + 10 * 60_000]))
+    ctx.cleanup()
+  })
+
   it('re-applying a tombstone keeps the row a surviving record wrote on the same key', () => {
     const ctx = createTestDatabase()
     seedPerson(ctx.db, 'p1')
