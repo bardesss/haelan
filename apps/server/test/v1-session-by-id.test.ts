@@ -113,7 +113,7 @@ describe('GET /sessions/:sessionId', () => {
     }
 
     const one = await sampleReads('/sessions?kind=exercise&from=2026-08-18&to=2026-08-18')
-    const paged = await sampleReads('/sessions?kind=exercise&from=2015-01-01&to=2026-12-31&limit=1')
+    const paged = await sampleReads('/sessions?kind=exercise&from=2017-01-01&to=2026-12-31&limit=1')
     expect(paged.body.items).toHaveLength(1)
     expect(paged.body.items[0].attrs).toMatchObject({ filledFromSamples: true, metricsSummary: { steps: 3000 } })
     // The one row it answers costs what a range of that one row does, the two rows it does not answer nothing.
