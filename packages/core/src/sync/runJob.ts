@@ -29,7 +29,7 @@ export type SyncProgress =
   | { kind: 'job_finished', personId: string, dataType: string, rowsWritten: number, skipped: JobResult['skipped'] }
   | { kind: 'run_finished', jobs: number, rowsWritten: number, failed: number }
 
-/** What runJob needs of a rate limiter. TokenBucket satisfies it. */
+/** What HealthClient needs of a rate limiter: one take per HTTP attempt. TokenBucket satisfies it. */
 export interface RateLimiter {
   take(cost?: number): Promise<void>
 }

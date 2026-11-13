@@ -5,6 +5,7 @@
 } from '@haelan/core'
 import type { DataType, JobDeps, RateLimiter, SkippedWindow, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
+import { logDayFailed } from '../derive/logDayFailed.ts'
 
 // probe/findings/scopes.md measured 300 requests per minute per user. Running at the ceiling is
 // how a transient 429 becomes a sustained one, so this sits at 60 percent of it and keeps the
@@ -645,9 +646,7 @@ export class SyncRunner {
           settings: this.#context.instance.settings,
           nowMs: this.#context.now(),
           personIds,
-          onDayFailed: (entry, error) => console.error(
-            `sync: deriving ${entry.personId} ${entry.localDate} failed, ${error instanceof Error ? error.message : String(error)}`,
-          ),
+          onDayFailed: logDayFailed('sync'),
         }).daysDerived === 0) return
       }
       console.log(`sync: derivation stopped after ${MAX_DERIVE_BATCHES} batches with days still queued`)

@@ -135,10 +135,13 @@ export class SyncStateStore {
     )).run()
   }
 
+  // Over the types this person syncs, for the reason failuresFor gives: a type they turned off is
+  // not theirs to have skipped days in.
   skippedWindowsFor(personId: string): SkippedWindow[] {
+    const due = new Set(this.dueJobs([personId], 0).map((job) => job.dataType))
     return this.#db.select().from(syncWindowFailures)
       .where(eq(syncWindowFailures.personId, personId)).orderBy(asc(syncWindowFailures.windowStartMs)).all()
-      .filter((row) => row.skippedAtMs !== null)
+      .filter((row) => row.skippedAtMs !== null && due.has(row.dataType))
       .map((row) => ({
         dataType: row.dataType, localDate: row.localDate,
         windowStartMs: row.windowStartMs, windowEndMs: row.windowEndMs,

@@ -1,6 +1,7 @@
 import { peopleNeedingRebuild, runDerive } from '@haelan/core'
 import type { Instance } from '@haelan/core'
 import type { Stores } from '../app.ts'
+import { logDayFailed } from './logDayFailed.ts'
 
 /**
  * Days per tick rather than a millisecond budget. The per-day cost is the thing that was
@@ -77,9 +78,7 @@ export function drainOnce(deps: DrainDeps): number {
       nowMs: deps.nowMs(),
       batch: DRAIN_DAYS_PER_TICK,
       personIds: eligible,
-      onDayFailed: (entry, error) => console.error(
-        `drainer: deriving ${entry.personId} ${entry.localDate} failed, ${error instanceof Error ? error.message : String(error)}`,
-      ),
+      onDayFailed: logDayFailed('drainer'),
     }).daysDerived
   } catch (error) {
     // Failures stay inside, the way SyncRunner#derive keeps its own: a derivation defect must

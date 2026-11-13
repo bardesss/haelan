@@ -455,5 +455,19 @@ describe('HealthClient', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(slept).toEqual([])
     })
+
+    it('treats a Retry-After too long to represent as past the cap, and says so in finite numbers', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () =>
+        new Response('slow down', { status: 429, headers: { 'retry-after': '9'.repeat(400) } }))
+      const client = new HealthClient(tokens, archive, {
+        fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0,
+      })
+      const error = await client.listDataPoints({ personId: 'p1', dataType: steps, ...WINDOW })
+        .catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(RateLimitedError)
+      expect(Number.isFinite((error as RateLimitedError).retryAfterMs)).toBe(true)
+      expect((error as Error).message).not.toContain('Infinity')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
   })
 })

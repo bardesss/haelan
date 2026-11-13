@@ -87,7 +87,9 @@ interface Tokens { accessTokenFor(personId: string): Promise<string> }
 function retryAfterMs(header: string | null, nowMs: number): number | null {
   if (header === null) return null
   const value = header.trim()
-  if (/^\d+$/.test(value)) return Number(value) * 1000
+  // Clamped, so a delay too long to represent (enough digits make it Infinity) still compares as
+  // past the cap and still prints as a number.
+  if (/^\d+$/.test(value)) return Math.min(Number(value) * 1000, Number.MAX_SAFE_INTEGER)
   const at = Date.parse(value)
   return Number.isNaN(at) ? null : Math.max(0, at - nowMs)
 }

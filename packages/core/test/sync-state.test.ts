@@ -202,6 +202,24 @@ describe('SyncStateStore', () => {
     })
   })
 
+  describe('skippedWindowsFor', () => {
+    const skip = (dataType: string, startMs: number) => {
+      for (let run = 0; run < 3; run++) {
+        store.recordWindowFailure({
+          personId: 'p1', dataType, window: { startMs, endMs: startMs + 86_400_000, localDate: '2026-08-17' },
+          error: new SchemaDriftError('400'), nowMs: 5000,
+        })
+      }
+    }
+
+    it('leaves out a skipped window of a type the person has since turned off, as failuresFor does', () => {
+      skip('steps', 1000)
+      skip('weight', 2000)
+      new ExcludedDataTypeStore(ctx.db).setFor({ personId: 'p1', dataTypeIds: ['weight'], nowMs: 6000 })
+      expect(store.skippedWindowsFor('p1').map((w) => w.dataType)).toEqual(['steps'])
+    })
+  })
+
   describe('dueJobs and exclusions', () => {
     let excluded: ExcludedDataTypeStore
 
