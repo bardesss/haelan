@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import fc from 'fast-check'
 import {
   DERIVATION_VERSION, MAPPING_VERSION, dayMetricTarget, insertSample, runDerive, sampleTarget,
-  schema,
+  schema, sessionTarget,
 } from '@haelan/core'
 import { DRAIN_BATCH_DAYS } from '../src/routes/v1/annotations.ts'
 import { withServer } from './harness.ts'
@@ -218,6 +218,30 @@ describe('POST /overrides', () => {
     expect(after.json().steps.points[0].value).toBe(900)
   })
 
+  it('reports the neighbour nights a sleep override re-derives, on the write and on the removal', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const instance = harness.app.haelan.instance
+    instance.db.insert(schema.sources).values({
+      id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch', kind: 'device', createdAtMs: 0,
+    }).onConflictDoNothing().run()
+    instance.db.insert(schema.sessions).values({
+      id: 'night-1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'night-1',
+      startMs: Date.parse('2026-08-14T22:00:00Z'), startOffsetMinutes: OFFSET_MINUTES,
+      endMs: Date.parse('2026-08-15T05:00:00Z'), endOffsetMinutes: OFFSET_MINUTES,
+      localDate: '2026-08-15', attrs: '{}', rawPayloadId: null,
+    }).run()
+    const write = await postRaw(harness, token, {
+      scope: 'session', targetKey: sessionTarget('night-1'), action: 'exclude', reason: 'not asleep',
+    })
+    expect(write.statusCode).toBe(200)
+    expect(write.json().affected).toEqual({ from: '2026-08-14', to: '2026-08-16' })
+    const removed = await harness.app.inject({
+      method: 'DELETE', url: `/api/v1/p/p1/overrides/${write.json().id}`,
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+    })
+    expect(removed.json().affected).toEqual({ from: '2026-08-14', to: '2026-08-16' })
+  })
+
   // Master design: an override never overwrites the original reading, so removing one restores
   // it exactly. "Exactly" is a claim about every value a day could have held, not about 900, the
   // one number the example test above happens to pick, so this is a property rather than another
@@ -378,7 +402,7 @@ describe('POST /overrides', () => {
   it('stores nothing when the affected day cannot be resolved', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const overrides = harness.app.haelan.instance.overrides
-    overrides.affectedLocalDate = () => { throw new Error('the day cannot be resolved') }
+    overrides.affectedLocalDates = () => { throw new Error('the day cannot be resolved') }
 
     const write = await postOverride(harness, token, 'steps', '2026-08-15')
     expect(write.statusCode).toBe(500)
