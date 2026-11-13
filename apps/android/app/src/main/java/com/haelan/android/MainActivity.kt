@@ -415,11 +415,13 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
             return
         }
         val owner = RouteLedger.ownerOf(engineSession())
-        val ready = mutableListOf<Pair<ExerciseSessionRecord, ExerciseRoute>>()
-        for (id in RouteLedger.load(prefs(), owner).withheld.sorted()) {
+        val ready = mutableListOf<Pair<ExerciseSessionRecord, ExerciseRoute?>>()
+        val ledger = RouteLedger.load(prefs(), owner)
+        for (id in ledger.withheld.sorted()) {
             val read = readSession(client, id)
-            when (val step = RouteLedger.triage(read.forTriage())) {
+            when (val step = RouteLedger.stepFor(id, read.forTriage(), ledger.sent)) {
                 is RouteLedger.Step.Send -> ready += (read as SessionRead.Found).record to step.route
+                RouteLedger.Step.SendWithoutRoute -> ready += (read as SessionRead.Found).record to null
                 RouteLedger.Step.Forget -> RouteLedger.forget(prefs(), owner, id)
                 // Not gone, only unreadable right now: left in the list for the next walk rather
                 // than forgotten, and not allowed to stop this one.
@@ -466,11 +468,13 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
             return
         }
         val owner = RouteLedger.ownerOf(engineSession())
-        val ready = mutableListOf<Pair<ExerciseSessionRecord, ExerciseRoute>>()
-        for (id in RouteLedger.load(prefs(), owner).withheld.sorted()) {
+        val ready = mutableListOf<Pair<ExerciseSessionRecord, ExerciseRoute?>>()
+        val ledger = RouteLedger.load(prefs(), owner)
+        for (id in ledger.withheld.sorted()) {
             val read = readSession(client, id)
-            when (val step = RouteLedger.triage(read.forTriage())) {
+            when (val step = RouteLedger.stepFor(id, read.forTriage(), ledger.sent)) {
                 is RouteLedger.Step.Send -> ready += (read as SessionRead.Found).record to step.route
+                RouteLedger.Step.SendWithoutRoute -> ready += (read as SessionRead.Found).record to null
                 RouteLedger.Step.Forget -> RouteLedger.forget(prefs(), owner, id)
                 RouteLedger.Step.MarkNone -> RouteLedger.record(prefs(), owner, mapOf(id to RouteLedger.Seen.NONE))
                 RouteLedger.Step.Ask, RouteLedger.Step.Skip -> Unit
@@ -561,8 +565,8 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         }
     }
 
-    /** Posts released routes; false when they did not land, having said why. */
-    private suspend fun sendReleased(released: List<Pair<ExerciseSessionRecord, ExerciseRoute>>): Boolean {
+    /** Posts released routes, a null one as a session without a route; false when they did not land, having said why. */
+    private suspend fun sendReleased(released: List<Pair<ExerciseSessionRecord, ExerciseRoute?>>): Boolean {
         if (released.isEmpty()) return true
         // The exercise session's key includes its source, so the route must be filed under the
         // identity the sync gave the session, and that depends on the instance's cutover. One

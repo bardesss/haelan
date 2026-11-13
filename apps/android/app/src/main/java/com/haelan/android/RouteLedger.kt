@@ -68,7 +68,8 @@ object RouteLedger {
      * already has everything else about the session from the delivery. An edit made at the source
      * still arrives, only later: a session refused in a change-feed drain is filed as withheld
      * ([refusalsToFile]), and the screen reads it in the foreground with its route: after its own
-     * run once the route is readable, or on the release tap.
+     * run once the route is readable, or on the release tap. A route gone at the source by then
+     * sends the session without one ([stepFor]).
      * A blank id is never refused: it is a record Health Connect has not named, so nothing here
      * could have been filed under it.
      */
@@ -144,6 +145,12 @@ object RouteLedger {
 
         /** Left in the list for a later walk. */
         data object Skip : Step
+
+        /**
+         * A delivered workout filed for its edit ([refusalsToFile]) whose route has gone at the
+         * source: the session travels without one, which is the edit and the route's removal both.
+         */
+        data object SendWithoutRoute : Step
     }
 
     fun triage(read: Read): Step = when (read) {
@@ -156,6 +163,16 @@ object RouteLedger {
             // NoData: the route is gone at the source.
             else -> Step.MarkNone
         }
+    }
+
+    /**
+     * [triage] for the walks of the withheld list, which also know what was delivered. An id in
+     * [sent] is an edit a drain refused, not a route waiting to be released; forgetting it when
+     * its route is gone would drop the edit, since no later read meets it again.
+     */
+    fun stepFor(id: String, read: Read, sent: Set<String>): Step {
+        val step = triage(read)
+        return if (step == Step.MarkNone && id in sent) Step.SendWithoutRoute else step
     }
 
     fun ownerOf(session: SyncEngine.Session): String = "${session.server}|${session.personId}"

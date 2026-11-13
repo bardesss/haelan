@@ -1434,6 +1434,9 @@ object SyncEngine {
      * name, which is the record id, so each lands on the session a sync already filed and
      * replaces its routeless copy rather than adding a second workout beside it.
      *
+     * A null route is a filed edit whose route has gone at the source (RouteLedger.Step
+     * .SendWithoutRoute): it goes as a session with none, which also clears the instance's copy.
+     *
      * The ledger is moved only for what landed: a release that did not arrive stays withheld, and
      * the screen goes on offering it.
      */
@@ -1441,22 +1444,23 @@ object SyncEngine {
         session: Session,
         packageName: String,
         prefs: SharedPreferences,
-        released: List<Pair<ExerciseSessionRecord, ExerciseRoute>>,
+        released: List<Pair<ExerciseSessionRecord, ExerciseRoute?>>,
         cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
         if (released.isEmpty()) return InstanceClient.Outcome.Ok(false)
+        val results = released.map { (record, route) ->
+            record to (route?.let { ExerciseRouteResult.Data(it) } ?: ExerciseRouteResult.NoData())
+        }
         val points = withContext(Dispatchers.Default) {
-            released.map { (record, route) ->
-                Point(identityOf(record, cutoverMs), exercisePoint(record, ExerciseRouteResult.Data(route)))
-            }
+            results.map { (record, result) -> Point(identityOf(record, cutoverMs), exercisePoint(record, result)) }
         }
         val outcome = uploadPoints(session, packageName, SyncTypes.forKey("exercise").dataTypeId, points, post)
         if (outcome is InstanceClient.Outcome.Ok) {
             RouteLedger.record(
                 prefs,
                 RouteLedger.ownerOf(session),
-                released.associate { (record, route) -> record.metadata.id to RouteLedger.seenOf(ExerciseRouteResult.Data(route)) },
+                results.associate { (record, result) -> record.metadata.id to RouteLedger.seenOf(result) },
             )
         }
         return outcome

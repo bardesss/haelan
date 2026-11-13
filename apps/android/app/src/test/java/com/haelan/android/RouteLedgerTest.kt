@@ -134,6 +134,30 @@ class RouteLedgerTest {
     }
 
     @Test
+    fun `a filed edit whose route has gone at the source is sent without one`() {
+        val gone = RouteLedger.Read.Found(ExerciseRouteResult.NoData())
+        assertEquals(RouteLedger.Step.SendWithoutRoute, RouteLedger.stepFor("a", gone, sent = setOf("a")))
+        val emptied = RouteLedger.Read.Found(ExerciseRouteResult.Data(ExerciseRoute(emptyList())))
+        assertEquals(RouteLedger.Step.SendWithoutRoute, RouteLedger.stepFor("a", emptied, sent = setOf("a")))
+    }
+
+    @Test
+    fun `a never delivered route gone at the source only leaves the list`() {
+        val gone = RouteLedger.Read.Found(ExerciseRouteResult.NoData())
+        assertEquals(RouteLedger.Step.MarkNone, RouteLedger.stepFor("a", gone, sent = setOf("b")))
+    }
+
+    @Test
+    fun `a delivered workout's other reads triage as before`() {
+        val route = ExerciseRoute(listOf(point))
+        assertEquals(
+            RouteLedger.Step.Send(route),
+            RouteLedger.stepFor("a", RouteLedger.Read.Found(ExerciseRouteResult.Data(route)), sent = setOf("a")),
+        )
+        assertEquals(RouteLedger.Step.Forget, RouteLedger.stepFor("a", RouteLedger.Read.Gone, sent = setOf("a")))
+    }
+
+    @Test
     fun `the request set never carries the route permission, which only the route screen grants`() {
         // Health Connect drops READ_EXERCISE_ROUTES from every request, so it is never in the answer:
         // in this set it would be counted as missing for ever, and with everything else granted the
