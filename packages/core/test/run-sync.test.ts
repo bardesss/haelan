@@ -74,6 +74,61 @@ describe('runSync', () => {
     return { listed: [...listed], rolledUp: [...rolledUp] }
   }
 
+  it('stops a person whose requests keep answering 429 and still syncs the next person', async () => {
+    const seen: string[] = []
+    const archive = new RawArchive(ctx.db)
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown, init?: RequestInit) => {
+      const authorization = new Headers(init?.headers).get('authorization') ?? ''
+      seen.push(authorization)
+      return authorization === 'Bearer at-alice'
+        ? new Response('slow down', { status: 429 })
+        : new Response(emptyFor(url), { status: 200 })
+    })
+    const deps = {
+      ...build(fetchMock),
+      client: new HealthClient(
+        { accessTokenFor: async (personId: string) => `at-${personId}` }, archive,
+        { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 },
+      ),
+    }
+    const report = await runSync({
+      personIds: ['alice', 'bob'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps,
+    })
+    expect(seen.filter((t) => t === 'Bearer at-alice')).toHaveLength(5)
+    expect(seen.some((t) => t === 'Bearer at-bob')).toBe(true)
+    expect(report.failed).toBe(1)
+    expect(report.rateLimitedPersonIds).toEqual(['alice'])
+  })
+
+  it('stops a person whose rollup keeps answering 429, reports them, and still syncs the next person', async () => {
+    const seen: Array<{ person: string, url: string }> = []
+    const archive = new RawArchive(ctx.db)
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown, init?: RequestInit) => {
+      const person = (new Headers(init?.headers).get('authorization') ?? '').replace('Bearer at-', '')
+      seen.push({ person, url: String(url) })
+      return person === 'alice' && String(url).includes(':dailyRollUp')
+        ? new Response('slow down', { status: 429 })
+        : new Response(emptyFor(url), { status: 200 })
+    })
+    const deps = {
+      ...build(fetchMock),
+      client: new HealthClient(
+        { accessTokenFor: async (personId: string) => `at-${personId}` }, archive,
+        { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 },
+      ),
+    }
+    const report = await runSync({
+      personIds: ['alice', 'bob'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps,
+    })
+    const aliceRollups = seen.filter((s) => s.person === 'alice' && s.url.includes(':dailyRollUp'))
+    // One rollup type's five attempts, and no second rollup type after it.
+    expect(aliceRollups).toHaveLength(5)
+    expect(new Set(aliceRollups.map((s) => /\/dataTypes\/([^/]+)\//.exec(s.url)?.[1])).size).toBe(1)
+    expect(seen.some((s) => s.person === 'bob' && s.url.includes(':dailyRollUp'))).toBe(true)
+    expect(report.rateLimitedPersonIds).toEqual(['alice'])
+    expect(report.failed).toBe(1)
+  })
+
   // Spec section 16 promises that after an offline stretch sync resumes from sync_state and
   // backfills the gap. The trailing window alone cannot keep that promise: it is a fixed span
   // ending at now, so an outage longer than the span leaves days that no trailing run will ever

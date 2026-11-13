@@ -5,6 +5,7 @@ import {
 import type { OverrideScope, StoredOverride } from '@haelan/core'
 import { parseSampleTarget } from '@haelan/core/target-key'
 import { errorBody, statusFor } from '../../api/envelope.ts'
+import { logDayFailed } from '../../derive/logDayFailed.ts'
 import {
   personIdOf, requireDateRange, roundMetricValue, sendHashed, textField,
 } from './shared.ts'
@@ -353,6 +354,7 @@ export function drainPersonDerivation(
         // days inside this request: work this caller did not ask for and, on a shared instance,
         // work about somebody else's data.
         personIds: [personId],
+        onDayFailed: logDayFailed(source),
       })
       if (report.daysDerived === 0) return
       if (performance.now() - startedAtMs >= DRAIN_BUDGET_MS) {

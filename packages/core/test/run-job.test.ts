@@ -11,8 +11,9 @@ import { dataTypeById } from '../src/api/catalogue.ts'
 import { runJob } from '../src/sync/runJob.ts'
 import { dayWindows } from '../src/sync/windows.ts'
 import { RevokedError } from '../src/api/tokens.ts'
+import { AuthError } from '../src/errors.ts'
 import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
-import { observations, samples, sessions, sources, syncState } from '../src/db/schema/index.ts'
+import { observations, samples, sessions, sources, syncState, syncWindowFailures } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 const AMS = 'Europe/Amsterdam'
@@ -499,21 +500,6 @@ describe('runJob', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('takes a limiter token before each window it fetches, not after', async () => {
-    const events: string[] = []
-    const fetchMock = vi.fn().mockImplementation(async () => {
-      events.push('fetch')
-      return new Response(body([]), { status: 200 })
-    })
-    const result = await runJob({
-      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
-      fromMs: Date.parse('2026-08-17T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
-      deps: { ...build(fetchMock), limiter: { take: async () => { events.push('take') } } },
-    })
-    expect(result.windows).toBeGreaterThan(1)
-    expect(events).toEqual(Array.from({ length: result.windows }, () => ['take', 'fetch']).flat())
-  })
-
   it('records a retry episode the client recovered from, because those bodies are never archived', async () => {
     const fetchMock = vi.fn()
       .mockImplementationOnce(async () => new Response('slow down', { status: 429 }))
@@ -707,4 +693,225 @@ describe('runJob', () => {
     expect(deps.syncState.get('p1', 'steps')?.highWaterMs).toBeGreaterThan(0)
   })
 
+  it('returns normally when recording the failure fails too, so the store error never replaces the window error', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response('{"error":{"code":400}}', { status: 400 }))
+    const deps = build(fetchMock)
+    vi.spyOn(deps.syncState, 'recordFailure').mockImplementation(() => { throw new Error('SQLITE_FULL') })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
+    })
+    expect(result.failedWindows).toBeGreaterThan(0)
+    expect(result.rowsWritten).toBe(0)
+    expect(logged).toHaveBeenCalledTimes(1)
+    const line = String(logged.mock.calls[0]?.[0])
+    expect(line).toContain('could not record sync failure')
+    expect(line).toContain('SQLITE_FULL')
+    expect(line).toContain('oxygen-saturation')
+  })
+
+  describe('window failures', () => {
+    const FROM = Date.parse('2026-08-16T00:00:00Z')
+    const TO = Date.parse('2026-08-19T00:00:00Z')
+    const windows = dayWindows({ fromMs: FROM, toMs: TO, timezone: AMS })
+    const type = dataTypeById('oxygen-saturation')!
+    let failingOn = true
+
+    const stub = () => vi.fn().mockImplementation(async (url: string | URL) => {
+      const filter = new URL(String(url)).searchParams.get('filter')!
+      if (failingOn && filter.includes(`>= "${new Date(windows[1]!.startMs).toISOString()}"`)) {
+        return new Response('{"error":{"code":400}}', { status: 400 })
+      }
+      return new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 })
+    })
+    const args = { personId: 'p1', dataType: type, timezone: AMS, fromMs: FROM, toMs: TO }
+    const store = () => new SyncStateStore(ctx.db)
+
+    beforeEach(() => { failingOn = true })
+
+    it('fetches the windows after a failing one and moves the mark only to the last contiguous good window', async () => {
+      const fetchMock = stub()
+      const result = await runJob({ ...args, trackWindowFailures: true, deps: build(fetchMock) })
+      expect(fetchMock).toHaveBeenCalledTimes(windows.length)
+      expect(result.failedWindows).toBe(1)
+      expect(result.skippedWindows).toBe(0)
+      expect(ctx.db.select().from(samples).all().length).toBeGreaterThan(0)
+      const state = store().get('p1', 'oxygen-saturation')
+      expect(state?.highWaterMs).toBe(windows[0]!.endMs)
+      expect(state?.consecutiveFailures).toBe(1)
+    })
+
+    it('skips a window that failed on three runs and lets the mark pass it', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 2; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(windows[0]!.endMs)
+      const third = await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(third.skippedWindows).toBe(1)
+      expect(store().skippedWindowsFor('p1')).toEqual([{
+        dataType: 'oxygen-saturation', localDate: windows[1]!.localDate,
+        windowStartMs: windows[1]!.startMs, windowEndMs: windows[1]!.endMs,
+        consecutiveRuns: 3, lastError: expect.stringContaining('[schema_drift]'),
+        skippedAtMs: Date.parse('2026-08-19T12:00:00Z'),
+      }])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(Date.parse('2026-08-19T12:00:00Z'))
+    })
+
+    it('does not report a type as failing once its only failure is a skipped window', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 3; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      const fourth = await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(fourth.failedWindows).toBe(1)
+      expect(fourth.skippedWindows).toBe(1)
+      expect(store().get('p1', 'oxygen-saturation')?.consecutiveFailures).toBe(0)
+    })
+
+    it('forgets a window failure once the window succeeds, so the next failure counts from one', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 2; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      failingOn = false
+      await runJob({ ...args, trackWindowFailures: true, deps })
+      failingOn = true
+      await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(ctx.db.select().from(syncWindowFailures).all().map((r) => r.consecutiveRuns)).toEqual([1])
+    })
+
+    it('never skips a window that fails transiently, so an outage cannot jump the mark over old days', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
+        const filter = new URL(String(url)).searchParams.get('filter')!
+        if (filter.includes(`>= "${new Date(windows[1]!.startMs).toISOString()}"`)) {
+          return new Response('unavailable', { status: 503 })
+        }
+        return new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 })
+      })
+      const deps = build(fetchMock)
+      for (let run = 0; run < 4; run++) {
+        const result = await runJob({ ...args, trackWindowFailures: true, deps })
+        expect(result.skippedWindows).toBe(0)
+      }
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(ctx.db.select().from(syncWindowFailures).all()).toEqual([])
+      const state = store().get('p1', 'oxygen-saturation')
+      expect(state?.highWaterMs).toBe(windows[0]!.endMs)
+      expect(state?.consecutiveFailures).toBe(4)
+    })
+
+    it('never skips a window whose fetch rejects, since a network outage is not a bad day', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
+        const filter = new URL(String(url)).searchParams.get('filter')!
+        if (filter.includes(`>= "${new Date(windows[1]!.startMs).toISOString()}"`)) throw new TypeError('fetch failed')
+        return new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 })
+      })
+      const deps = build(fetchMock)
+      for (let run = 0; run < 4; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(windows[0]!.endMs)
+    })
+
+    it('never skips a window for being rate limited', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => new Response('slow down', { status: 429 }))
+      const deps = build(fetchMock)
+      for (let run = 0; run < 3; run++) {
+        const result = await runJob({ ...args, trackWindowFailures: true, deps })
+        expect(result.rateLimited).toBe(true)
+        expect(result.skippedWindows).toBe(0)
+      }
+      expect(new SyncStateStore(ctx.db).skippedWindowsFor('p1')).toEqual([])
+      expect(ctx.db.select().from(syncWindowFailures).all()).toEqual([])
+    })
+
+    it('stops at the first rate limited window instead of asking for the rest', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => new Response('slow down', { status: 429 }))
+      const result = await runJob({ ...args, trackWindowFailures: true, deps: build(fetchMock) })
+      expect(result.failedWindows).toBe(1)
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+      expect(store().get('p1', 'oxygen-saturation')?.consecutiveFailures).toBe(1)
+    })
+
+    it('skips a window whose write throws a plain error on three runs while its neighbours succeed, since that is a poison day', async () => {
+      const poison = { platform: 'POISON', recordingMethod: 'PASSIVELY_MEASURED' }
+      const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
+        const filter = new URL(String(url)).searchParams.get('filter')!
+        const bad = filter.includes(`>= "${new Date(windows[1]!.startMs).toISOString()}"`)
+        return new Response(body([samplePoint({
+          payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 97,
+          physicalTime: '2026-08-18T10:00:00Z', ...(bad ? { dataSource: poison } : {}),
+        })]), { status: 200 })
+      })
+      const deps = build(fetchMock)
+      const resolve = deps.sources.resolve.bind(deps.sources)
+      vi.spyOn(deps.sources, 'resolve').mockImplementation((personId, dataSource, nowMs, tx) => {
+        if ((dataSource as { platform?: string }).platform === 'POISON') throw new Error('constraint failed')
+        return resolve(personId, dataSource, nowMs, tx)
+      })
+      for (let run = 0; run < 3; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1').map((w) => w.windowStartMs)).toEqual([windows[1]!.startMs])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(Date.parse('2026-08-19T12:00:00Z'))
+    })
+
+    it('skips nothing when every window of the job fails, since that is the type failing and not a day', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => new Response('{"error":{"code":403}}', { status: 403 }))
+      const deps = build(fetchMock)
+      for (let run = 0; run < 3; run++) {
+        const result = await runJob({ ...args, trackWindowFailures: true, deps })
+        expect(result.failedWindows).toBe(windows.length)
+        expect(result.skippedWindows).toBe(0)
+      }
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(ctx.db.select().from(syncWindowFailures).all()).toEqual([])
+      const state = store().get('p1', 'oxygen-saturation')
+      expect(state?.highWaterMs ?? null).toBeNull()
+      expect(state?.consecutiveFailures).toBe(3)
+      expect(state?.lastError).toContain('[schema_drift]')
+    })
+
+    it('never counts an auth failure toward the skip, since a refused token is not a bad day', async () => {
+      const archive = new RawArchive(ctx.db)
+      let calls = 0
+      const deps = {
+        ...build(stub()), archive,
+        client: new HealthClient(
+          {
+            accessTokenFor: async () => {
+              // The second window of every run, so its neighbours succeed around it.
+              if (calls++ % windows.length === 1) throw new AuthError('token refresh failed 401: invalid_client')
+              return 'at'
+            },
+          },
+          archive,
+          { fetch: stub(), now: () => 1_000_000, sleep: async () => {}, random: () => 0 },
+        ),
+      }
+      failingOn = false
+      for (let run = 0; run < 4; run++) {
+        const result = await runJob({ ...args, trackWindowFailures: true, deps })
+        expect(result.failedWindows).toBe(1)
+        expect(result.skippedWindows).toBe(0)
+      }
+      expect(ctx.db.select().from(syncWindowFailures).all()).toEqual([])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(windows[0]!.endMs)
+    })
+
+    it('logs a classified line when the window store cannot answer, and keeps the window blocking', async () => {
+      const deps = build(stub())
+      vi.spyOn(deps.syncState, 'isWindowSkipped').mockImplementation(() => { throw new Error('SQLITE_BUSY') })
+      vi.spyOn(deps.syncState, 'recordWindowFailure').mockImplementation(() => { throw new Error('SQLITE_FULL') })
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const result = await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(result.skippedWindows).toBe(0)
+      expect(logged.mock.calls.map((c) => String(c[0]))).toEqual([
+        'sync: could not read window skip for oxygen-saturation ([transient] Error: SQLITE_BUSY)',
+        'sync: could not record window failure for oxygen-saturation ([transient] Error: SQLITE_FULL)',
+      ])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(windows[0]!.endMs)
+    })
+
+    it('does not count a failure toward the skip when the caller is not tracking runs', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 4; run++) await runJob({ ...args, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+    })
+  })
 })

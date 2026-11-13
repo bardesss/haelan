@@ -10,6 +10,7 @@ import { MaintenanceTick } from './maintenance/tick.ts'
 import { DrainLoop } from './derive/drainLoop.ts'
 import { seedBackupPolicyFromEnv } from './maintenance/backupPolicySeed.ts'
 import { sweepStaleProjections } from './mcp/sweepProjections.ts'
+import { installProcessGuards } from './processGuards.ts'
 
 // Cheap and non-fatal, and first: a crash mid sql_query leaves its projection - a plaintext copy
 // of one person's health data - behind in os.tmpdir() forever, since nothing else ever revisits
@@ -21,6 +22,7 @@ try {
 } catch (error) {
   console.error('boot projection sweep failed', error)
 }
+installProcessGuards(process, (message, error) => { console.error(message, error) })
 
 const config = readConfig(process.env)
 // Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working

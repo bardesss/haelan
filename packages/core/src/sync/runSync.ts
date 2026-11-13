@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm'
 import { people } from '../db/schema/index.ts'
 import { dataTypeById, horizonDaysFor, supports } from '../api/catalogue.ts'
-import { runJob, classify } from './runJob.ts'
+import { runJob, classify, recordFailureSafely } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
 import { runRollupJob } from './runRollupJob.ts'
 import { RevokedError } from '../api/tokens.ts'
-import { CredentialsUnreadableError } from '../errors.ts'
+import { CredentialsUnreadableError, RateLimitedError } from '../errors.ts'
 
 export interface SyncReport {
   jobs: number
@@ -15,6 +15,12 @@ export interface SyncReport {
   rowsWritten: number
   /** Ids in the caller's list with no person row. Reported rather than thrown; see runSync. */
   unknownPersonIds: string[]
+  /**
+   * People this run stopped asking because the client gave up on a 429. A caller that goes on to
+   * backfill in the same run skips them: the quota will not have recovered, and every request
+   * meets the same wall after minutes of backoff.
+   */
+  rateLimitedPersonIds: string[]
 }
 
 export interface SyncInput {
@@ -67,7 +73,7 @@ export function reachBackTo(
 }
 
 export async function runSync(input: SyncInput): Promise<SyncReport> {
-  const report: SyncReport = { jobs: 0, succeeded: 0, failed: 0, skipped: 0, rowsWritten: 0, unknownPersonIds: [] }
+  const report: SyncReport = { jobs: 0, succeeded: 0, failed: 0, skipped: 0, rowsWritten: 0, unknownPersonIds: [], rateLimitedPersonIds: [] }
   const toMs = input.deps.now()
   const trailingFromMs = toMs - input.trailingDays * DAY_MS
 
@@ -128,26 +134,34 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
             report.skipped++
             continue
           }
-          input.deps.syncState.recordFailure({
+          recordFailureSafely(input.deps.syncState, {
             personId, dataType: job.dataType, error: classify(error), nowMs: toMs,
           })
           report.failed++
+          // The household shares one quota, so the person's remaining types would meet the same wall.
+          if (error instanceof RateLimitedError) {
+            report.rateLimitedPersonIds.push(personId)
+            break
+          }
         }
         continue
       }
 
       report.jobs++
       const state = input.deps.syncState.get(personId, job.dataType)
-      const before = state?.consecutiveFailures ?? 0
       const result = await runJob({
         personId, dataType, timezone: person.timezone,
         fromMs: reachBackTo(state?.highWaterMs ?? null, trailingFromMs, toMs, dataType, input.userHorizonDays),
-        toMs, deps: input.deps,
+        toMs, deps: input.deps, trackWindowFailures: true,
       })
       report.rowsWritten += result.rowsWritten
       if (result.skipped) report.skipped++
-      else if ((input.deps.syncState.get(personId, job.dataType)?.consecutiveFailures ?? 0) > before) report.failed++
+      else if (result.failedWindows > result.skippedWindows) report.failed++
       else report.succeeded++
+      if (result.rateLimited) {
+        report.rateLimitedPersonIds.push(personId)
+        break
+      }
     }
   }
 

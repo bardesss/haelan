@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { CredentialStore, DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, SCOPES, supports } from '@haelan/core'
-import { LIST_FAILS_TYPE, withServer } from './harness.ts'
+import { LIST_FAILS_TYPE, THROTTLED_REFRESH_TOKEN, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
-import { MAX_SPRINT_PASSES } from '../src/sync/runner.ts'
+import { MAX_SPRINT_PASSES, SyncRunner } from '../src/sync/runner.ts'
 
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
@@ -509,5 +509,57 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // called recordFailure, recordSchemaDrift or recordSuccess for this person and type.
     expect(harness.app.haelan.stores.syncState.get('p1', dataTypeId)).toBeNull()
     expect(lines.some((l) => l.includes('sprint used all'))).toBe(false)
+  })
+
+  it('does not backfill a person the trailing sync found rate limited, while still backfilling everyone else', async () => {
+    // Two types and a small sprint: the subject is which people the backfill passes ask for, and
+    // every pass that asks for the throttled person shows up as one more job_started for them.
+    harness = await withServer({
+      google: 'throttles_one_person', dataTypes: ['weight', 'steps'], sprintDays: 4, backfillBatchDays: 1,
+    })
+    await harness.connectPerson()
+    const { stores, instance } = harness.app.haelan
+    stores.people.create({
+      id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', nowMs: harness.clock.nowMs,
+    })
+    instance.credentials.putRefreshToken({
+      personId: 'p2', refreshToken: THROTTLED_REFRESH_TOKEN, scopes: [...SCOPES], nowMs: harness.clock.nowMs,
+    })
+    const started: string[] = []
+    harness.app.haelan.runner.subscribe((event) => {
+      if (event.kind === 'job_started') started.push(event.personId)
+    })
+
+    await harness.app.haelan.runner.trigger('manual')
+
+    // The trailing sync's one job for p2, which met the 429 and stopped that person.
+    expect(started.filter((id) => id === 'p2')).toHaveLength(1)
+    // p1's two trailing jobs, plus at least one backfill job: the passes still ran for them.
+    expect(started.filter((id) => id === 'p1').length).toBeGreaterThan(2)
+    expect(stores.syncState.get('p1', 'weight')?.backfillCursorMs).not.toBeNull()
+    expect(stores.syncState.get('p2', 'weight')?.backfillCursorMs ?? null).toBeNull()
+  })
+
+  it('logs a scheduled run that rejects rather than leaving the rejection unhandled', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    await harness.app.haelan.runner.settle()
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const runner = new SyncRunner({ ...harness.app.haelan })
+    vi.spyOn(runner, 'trigger').mockRejectedValue(new Error('disk full'))
+    try {
+      runner.start()
+      await vi.advanceTimersByTimeAsync(60 * 60_000)
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(logged).toHaveBeenCalledWith('sync: scheduled run failed', expect.objectContaining({ message: 'disk full' }))
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      runner.stop()
+      process.off('unhandledRejection', unhandled)
+      vi.useRealTimers()
+    }
   })
 })

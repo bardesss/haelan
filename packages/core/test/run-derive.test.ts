@@ -3,13 +3,14 @@ import { eq } from 'drizzle-orm'
 import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
+import type { QueueEntry } from '../src/store/deriveQueue.ts'
 import { runDerive } from '../src/derive/runDerive.ts'
 import { SourcePriorityStore } from '../src/store/sourcePriority.ts'
 import { OverrideStore } from '../src/store/overrides.ts'
 import { SettingsStore } from '../src/store/settings.ts'
 import { sampleTarget, dayMetricTarget, sessionTarget } from '../src/derive/targetKey.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, deriveQueue, samples, sessions, sources } from '../src/db/schema/index.ts'
 
 const OFFSET = 120
 const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
@@ -450,5 +451,50 @@ describe('runDerive', () => {
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 2_000 })
     expect(dailyRows().every((r) => r.updatedAtMs === 2_000)).toBe(true)
+  })
+
+  describe('a day that always throws', () => {
+    // The trigger fires on the queue delete, which runs after the day's rows are written, so the
+    // transaction rolls back rows that deriveDayInto had already counted.
+    const poison = (localDate: string) => test.db.$client.exec(
+      `CREATE TRIGGER poison BEFORE DELETE ON derive_queue WHEN OLD.local_date = '${localDate}' `
+      + `BEGIN SELECT RAISE(ABORT, 'poisoned day'); END`,
+    )
+    const run = (extra: { nowMs: number, batch?: number, onDayFailed?: (entry: QueueEntry, error: unknown) => void }) =>
+      runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, ...extra })
+
+    it('carries on past a day that throws and sends that day to the back of the queue', () => {
+      addSample({ metric: 'steps', value: 300, hour: -39 })
+      addSample({ metric: 'steps', value: 400, hour: -15 })
+      queue.markDirty({ personId: 'p1', localDate: '2026-08-20', nowMs: 1 })
+      queue.markDirty({ personId: 'p1', localDate: '2026-08-21', nowMs: 2 })
+      poison('2026-08-20')
+
+      const failed: Array<[QueueEntry, string]> = []
+      const report = run({ nowMs: 10, onDayFailed: (entry, error) => { failed.push([entry, (error as Error).message]) } })
+
+      expect(report.daysDerived).toBe(1)
+      expect(report.daysFailed).toBe(1)
+      // Only the good day's rows: the failed day's transaction rolled back, so its rows are not written.
+      expect(report.rowsWritten).toBe(dailyRows().length)
+      expect(report.rowsWritten).toBeGreaterThan(0)
+      expect(failed).toEqual([[{ personId: 'p1', localDate: '2026-08-20' }, 'poisoned day']])
+      expect(test.db.select().from(deriveQueue).all()).toEqual([
+        { personId: 'p1', localDate: '2026-08-20', queuedAtMs: 10, failures: 1 },
+      ])
+    })
+
+    it('derives a day queued after a failing one first', () => {
+      queue.markDirty({ personId: 'p1', localDate: '2026-08-20', nowMs: 1 })
+      queue.markDirty({ personId: 'p1', localDate: '2026-08-21', nowMs: 2 })
+      poison('2026-08-20')
+      run({ nowMs: 10 })
+      queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 5 })
+
+      const next = run({ nowMs: 20, batch: 1 })
+
+      expect(next.daysDerived).toBe(1)
+      expect(queue.has({ personId: 'p1', localDate: '2026-08-22' })).toBe(false)
+    })
   })
 })

@@ -123,19 +123,7 @@ describe('runRollupJob', () => {
     expect(test.db.select().from(daily).where(eq(daily.personId, 'p1')).all()).toHaveLength(1)
   })
 
-  it('takes from the limiter before every chunk, the same as runJob does per window', async () => {
-    const stub = stubClient([])
-    const takes: number[] = []
-    const limiter = { take: async () => { takes.push(takes.length) } }
-    const result = await runRollupJob({
-      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
-      fromMs: Date.UTC(2026, 6, 14), toMs: Date.UTC(2026, 7, 23),
-      deps: { ...depsWith(stub), limiter },
-    })
-    expect(takes).toHaveLength(result.chunks)
-  })
-
-  it('runs unrated when no limiter is given, since it is optional', async () => {
+  it('runs unrated, since the client owns rate limiting', async () => {
     const stub = stubClient([])
     await expect(runRollupJob({
       personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',

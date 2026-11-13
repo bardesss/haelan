@@ -39,15 +39,15 @@ export type { SessionRow, SegmentRow, RouteRow } from './api/mapSessions.ts'
 export { mapObservations } from './api/mapObservations.ts'
 export type { MapObservationsInput } from './api/mapObservations.ts'
 export {
-  HaelanError, AuthError, TransientError, SchemaDriftError, DataQualityError, ConfigError,
+  HaelanError, AuthError, TransientError, RateLimitedError, SchemaDriftError, DataQualityError, ConfigError,
   CredentialsUnreadableError, classifyHttp,
 } from './errors.ts'
 export type { ErrorKind } from './errors.ts'
 export { openHaelan } from './instance.ts'
 export type { Instance } from './instance.ts'
 export { SourceRegistry, isOriginScoped } from './store/sources.ts'
-export { SyncStateStore } from './store/syncState.ts'
-export type { SyncJob, SyncStateRow } from './store/syncState.ts'
+export { SyncStateStore, SKIP_WINDOW_AFTER_RUNS } from './store/syncState.ts'
+export type { SyncJob, SyncStateRow, SkippedWindow } from './store/syncState.ts'
 export { dayWindows, startOfLocalDay } from './sync/windows.ts'
 export type { Window } from './sync/windows.ts'
 export { TokenBucket } from './sync/tokenBucket.ts'

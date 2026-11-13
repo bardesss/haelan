@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import { TransientError } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -116,5 +117,28 @@ describe('sync routes', () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
     expect((await harness.app.inject({ method: 'GET', url: '/api/sync/events' })).statusCode).toBe(401)
+  })
+
+  it('lists a window sync gave up on in status, so a skipped day stays visible', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    await settle(harness)
+    const cookie = await sessionCookie(harness)
+    for (let run = 0; run < 3; run++) {
+      harness.app.haelan.stores.syncState.recordWindowFailure({
+        personId: 'p1', dataType: 'steps',
+        window: { startMs: 1_769_900_000_000, endMs: 1_769_986_400_000, localDate: '2026-02-01' },
+        error: new TransientError('boom'), nowMs: harness.clock.nowMs,
+      })
+    }
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/sync/status', cookies: { haelan_session: cookie },
+    })
+    const body = response.json() as { skippedWindows: unknown[] }
+    expect(body.skippedWindows).toEqual([{
+      dataType: 'steps', localDate: '2026-02-01',
+      windowStartMs: 1_769_900_000_000, windowEndMs: 1_769_986_400_000,
+      consecutiveRuns: 3, lastError: '[transient] boom', skippedAtMs: harness.clock.nowMs,
+    }])
   })
 })

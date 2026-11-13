@@ -34,6 +34,22 @@ export class TransientError extends HaelanError {
   constructor(message: string, options?: { cause?: unknown }) { super('transient', message, options) }
 }
 
+/**
+ * A 429 the client gave up on: the budget of attempts is spent, or Retry-After asks for longer
+ * than it will wait. A TransientError, so it never counts toward skipping a window, but a
+ * distinct class because the right response is to stop asking this person for a while, where a
+ * 5xx on one window says nothing about the next.
+ */
+export class RateLimitedError extends TransientError {
+  /** What the server asked for, or null when it sent no usable Retry-After. */
+  readonly retryAfterMs: number | null
+
+  constructor(message: string, retryAfterMs: number | null, options?: { cause?: unknown }) {
+    super(message, options)
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
 export class SchemaDriftError extends HaelanError {
   constructor(message: string, options?: { cause?: unknown }) { super('schema_drift', message, options) }
 }

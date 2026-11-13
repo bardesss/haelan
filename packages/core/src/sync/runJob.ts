@@ -8,7 +8,7 @@ import type { SourceRegistry } from '../store/sources.ts'
 import type { SyncStateStore } from '../store/syncState.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { RevokedError } from '../api/tokens.ts'
-import { CredentialsUnreadableError, HaelanError, TransientError } from '../errors.ts'
+import { AuthError, CredentialsUnreadableError, HaelanError, RateLimitedError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { sampleDirtyDates } from './dirtyDates.ts'
@@ -29,7 +29,7 @@ export type SyncProgress =
   | { kind: 'job_finished', personId: string, dataType: string, rowsWritten: number, skipped: JobResult['skipped'] }
   | { kind: 'run_finished', jobs: number, rowsWritten: number, failed: number }
 
-/** What runJob needs of a rate limiter. TokenBucket satisfies it. */
+/** What HealthClient needs of a rate limiter: one take per HTTP attempt. TokenBucket satisfies it. */
 export interface RateLimiter {
   take(cost?: number): Promise<void>
 }
@@ -41,17 +41,6 @@ export interface JobDeps {
   syncState: SyncStateStore
   client: HealthClient
   now: () => number
-  /**
-   * Optional, and unset by every caller today. dueJobs filters on carrying any action rather
-   * than on being listable specifically, and, since M5f, on the person not having excluded the
-   * type; the request volume this describes is therefore a person's own catalogue minus
-   * whatever they turned off, not a fixed count for every household. Measured before exclusions
-   * existed at roughly 720 requests for a trailing week across a five person household with
-   * everything on, issued as fast as the event loop allows, against the 300 per minute per user
-   * probe/findings/scopes.md measured. Choosing the rate is a settings decision and belongs to
-   * M1d; the seat is here so filling it then is not a breaking change to a published interface.
-   */
-  limiter?: RateLimiter
   /** Called as work completes. Optional: nothing in core needs it, the SSE stream does. */
   onProgress?: (event: SyncProgress) => void
   /**
@@ -68,6 +57,16 @@ export interface JobInput {
   fromMs: number
   toMs: number
   deps: JobDeps
+  /**
+   * Count a failing window toward giving up on it. runSync passes true, so every sync run counts,
+   * the scheduled one and a manual one alike; a backfill revisiting a day does not, because it
+   * is not another trailing run. A failure raised as transient (HTTP 429/5xx, the network) or as
+   * an AuthError does not count: an outage or a refused token must never be able to skip a window,
+   * since skipping lets the mark jump over days nothing ever read. Nor does any failure in a run
+   * where no window of the job succeeded, since every day failing at once is the type or the
+   * person failing (a missing scope, a dead client), not one bad day.
+   */
+  trackWindowFailures?: boolean
 }
 
 export interface JobResult {
@@ -75,6 +74,12 @@ export interface JobResult {
   points: number
   /** Windows whose body was not a shape this code knows. Non-zero withholds the mark. */
   unreadableWindows: number
+  /** Windows whose fetch or write threw in this call. */
+  failedWindows: number
+  /** The subset of failedWindows whose window is skipped: recorded as such now, or already was. */
+  skippedWindows: number
+  /** The client gave up on a 429, so the job stopped early. The caller should stop asking this person. */
+  rateLimited: boolean
   rowsWritten: number
   skipped: 'revoked' | 'credentials_unreadable' | 'unsupported' | null
 }
@@ -93,7 +98,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     return result
   }
 
-  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, skipped: null }
+  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, failedWindows: 0, skippedWindows: 0, rateLimited: false, skipped: null }
   if (!supports(t, 'list')) return { ...empty, skipped: 'unsupported' }
 
   report({ kind: 'job_started', personId: input.personId, dataType: t.id })
@@ -102,11 +107,18 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   let points = 0
   let unreadableWindows = 0
   let rowsWritten = 0
-  let highWaterMs = 0
+  // One entry per window attempted, in order. The mark may move to the end of the last window
+  // before the first one still failing: the windows after a failing one are fetched and written,
+  // but a mark past it would claim the failing day was read. 'pending' is a failure that may count
+  // toward the skip, settled after the loop because only then is it known whether any window of
+  // this job succeeded.
+  const outcomes: Array<{ endMs: number, state: 'ok' | 'skipped' | 'failed' | 'pending', error?: unknown }> = []
+  const pending: Array<{ index: number, window: typeof windows[number], error: unknown }> = []
+  let failedWindows = 0
+  let rateLimited = false
 
   for (const window of windows) {
     try {
-      await deps.limiter?.take()
       const listed = await deps.client.listDataPoints({
         personId: input.personId, dataType: t, timezone: input.timezone,
         windowStartMs: window.startMs, windowEndMs: window.endMs,
@@ -185,7 +197,14 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         localDate: window.localDate, rowsWritten: writtenHere,
       })
 
-      highWaterMs = Math.max(highWaterMs, window.endMs)
+      // Guarded: the window is committed by now, and a store that cannot forget its failure
+      // must not turn it into one.
+      try {
+        deps.syncState.clearWindowFailure(input.personId, t.id, window.startMs)
+      } catch (clearError) {
+        console.error(`sync: could not clear window failure for ${t.id} (${classify(clearError).message})`)
+      }
+      outcomes.push({ endMs: window.endMs, state: 'ok' })
     } catch (error) {
       // A rolled back window takes its sources rows with it, so the ids this person's cache
       // still holds may no longer exist. Every later write referencing one would fail the
@@ -193,22 +212,67 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       deps.sources.forget(input.personId)
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
-      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: 'revoked' })
+      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, rateLimited: false, skipped: 'revoked' })
       // Same treatment, for the same reason: a key that cannot open this person's token is not
       // this window failing, or this type, or this run - it is every window for this person
       // until they reconsent, and recording it as a failure would write that story to every
       // data type, every day, for a state that already has its own name.
       if (error instanceof CredentialsUnreadableError) {
-        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: 'credentials_unreadable' })
+        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, rateLimited: false, skipped: 'credentials_unreadable' })
       }
-      deps.syncState.recordFailure({
-        personId: input.personId, dataType: t.id,
-        error: classify(error),
-        nowMs: deps.now(),
-      })
-      return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: null })
+      failedWindows++
+      // The client already spent its attempts on this window, and the next one would meet the
+      // same quota. Not recorded against the window, since the window did nothing wrong, and the
+      // loop ends so the rest of the days are not each given five more requests.
+      if (error instanceof RateLimitedError) {
+        rateLimited = true
+        outcomes.push({ endMs: window.endMs, state: 'failed', error })
+        break
+      }
+      let alreadySkipped = false
+      try {
+        alreadySkipped = deps.syncState.isWindowSkipped(input.personId, t.id, window.startMs)
+      } catch (storeError) {
+        // Treated as not skipped, so the window keeps blocking: the safe direction for the mark.
+        console.error(`sync: could not read window skip for ${t.id} (${classify(storeError).message})`)
+      }
+      const counts = input.trackWindowFailures === true
+        && !(error instanceof TransientError) && !(error instanceof AuthError)
+      // Counted even when already skipped, so its record keeps the latest error.
+      if (counts) pending.push({ index: outcomes.length, window, error })
+      outcomes.push({ endMs: window.endMs, state: alreadySkipped ? 'skipped' : counts ? 'pending' : 'failed', error })
     }
   }
+
+  // A window that reaches the threshold here is skipped in this same run, so the poison day stops
+  // holding the mark on the run that gives up on it rather than one run later.
+  const anySucceeded = outcomes.some((o) => o.state === 'ok')
+  for (const { index, window, error } of pending) {
+    const outcome = outcomes[index]!
+    if (!anySucceeded) {
+      if (outcome.state === 'pending') outcome.state = 'failed'
+      continue
+    }
+    let skipped = false
+    try {
+      skipped = deps.syncState.recordWindowFailure({
+        personId: input.personId, dataType: t.id,
+        window: { startMs: window.startMs, endMs: window.endMs, localDate: window.localDate },
+        error: classify(error), nowMs: deps.now(),
+      }).skipped
+    } catch (storeError) {
+      console.error(`sync: could not record window failure for ${t.id} (${classify(storeError).message})`)
+    }
+    if (outcome.state === 'pending') outcome.state = skipped ? 'skipped' : 'failed'
+  }
+
+  let contiguousEndMs = 0
+  for (const outcome of outcomes) {
+    if (outcome.state === 'failed') break
+    contiguousEndMs = outcome.endMs
+  }
+  const skippedWindows = outcomes.filter((o) => o.state === 'skipped').length
+  const firstError = outcomes.find((o) => o.state === 'failed')?.error ?? null
 
   // A window we could not read is not a window with no data. Advancing over it marks days as
   // synced that nothing ever read, and intraday samples only stay fetchable for a recent window,
@@ -228,22 +292,48 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     })
   }
 
-  if (highWaterMs > 0 && unreadableWindows === 0) {
+  // After the drift record, so last_error keeps the failure. A job whose only failures are windows
+  // already given up on records none: they stay visible through skippedWindowsFor, and the type
+  // is not failing for them. consecutive_failures therefore moves once per job, not per window.
+  if (failedWindows > skippedWindows) {
+    recordFailureSafely(deps.syncState, {
+      personId: input.personId, dataType: t.id, error: classify(firstError), nowMs: deps.now(),
+    })
+  }
+
+  if (contiguousEndMs > 0 && unreadableWindows === 0) {
     const nowMs = deps.now()
     // Clamped, because today's window ends at the *next* local midnight and the mark would
     // otherwise sit up to a day ahead of now. A mark in the future is a claim to have synced
     // time that has not happened yet, and runSync's gap repair reads it as coverage: left
     // unclamped it would quietly subtract a day from what every run reaches back for.
-    deps.syncState.recordSuccess({
-      personId: input.personId, dataType: t.id, highWaterMs: Math.min(highWaterMs, nowMs), nowMs,
-    })
+    const mark = { personId: input.personId, dataType: t.id, highWaterMs: Math.min(contiguousEndMs, nowMs) }
+    if (failedWindows > skippedWindows) deps.syncState.advanceHighWater(mark)
+    else deps.syncState.recordSuccess({ ...mark, nowMs })
   }
   // Nothing threw, so nothing else in this job will ever mention it: the pages were full, the
   // points parsed, and every one of them was skipped by a mapper that could not find its field.
   // Left unreported, a rename upstream reads exactly like a person who stopped wearing a device.
   // Types whose mapping is deferred are excluded, because writing no rows is their design.
 
-  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: null })
+  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows, skippedWindows, rateLimited, skipped: null })
+}
+
+// A store that cannot record the failure (disk full, locked) must not replace the window error
+// with its own throw: that would escape runSync and end the whole run for every person.
+export function recordFailureSafely(
+  syncState: SyncStateStore,
+  input: { personId: string, dataType: string, error: Error, nowMs: number },
+): void {
+  try {
+    syncState.recordFailure(input)
+  } catch (storeError) {
+    // The window error would otherwise vanish with the failed write, so it is logged here as
+    // classified messages only, never raw objects.
+    console.error(
+      `sync: could not record sync failure for ${input.dataType} (${classify(storeError).message}); window error: ${input.error.message}`,
+    )
+  }
 }
 
 // last_error's first token is documented as the failure's class, so an unclassified throw from

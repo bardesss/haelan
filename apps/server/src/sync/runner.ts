@@ -3,8 +3,9 @@
   peopleNeedingRebuild, runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
   supports, isQuarantined, producedNothing,
 } from '@haelan/core'
-import type { DataType, JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
+import type { DataType, JobDeps, RateLimiter, SkippedWindow, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
+import { logDayFailed } from '../derive/logDayFailed.ts'
 
 // probe/findings/scopes.md measured 300 requests per minute per user. Running at the ceiling is
 // how a transient 429 becomes a sustained one, so this sits at 60 percent of it and keeps the
@@ -182,6 +183,8 @@ export interface RunnerStatus extends RunState {
   personId: string
   userHorizonDays: number
   backfill: BackfillSummary[]
+  /** Days sync gave up on after repeated failures; the data for them is missing until they fetch. */
+  skippedWindows: SkippedWindow[]
   rebuild: RebuildStatus
   /**
    * Whether index.ts's boot rebuild worker is running right now. Instance-wide, which is why it
@@ -368,6 +371,7 @@ export class SyncRunner {
       personId,
       userHorizonDays,
       backfill,
+      skippedWindows: this.#context.stores.syncState.skippedWindowsFor(personId),
       // Asked on every call, like the rebuild row above and for the same reason: the boot
       // rebuild settles while a dashboard is open, and a copy taken when this runner was
       // constructed would have been true for the whole life of the process.
@@ -447,10 +451,15 @@ export class SyncRunner {
     // often than its interval would never sync at all. A boot catches up first, then settles
     // into the schedule. tryStart, so a boot during a run is a no-op rather than a queue.
     this.tryStart('scheduled')
-    this.timer = setInterval(() => { void this.trigger('scheduled') }, minutes * 60_000)
+    this.timer = setInterval(() => { this.#scheduledTick() }, minutes * 60_000)
     // Without unref, an idle timer keeps the process alive through a shutdown that has already
     // closed the server.
     this.timer.unref()
+  }
+
+  // Not assigned to #inFlight: a refused trigger would replace the promise settle() waits on.
+  #scheduledTick(): void {
+    this.trigger('scheduled').catch((error: unknown) => { console.error('sync: scheduled run failed', error) })
   }
 
   stop(): void {
@@ -472,6 +481,7 @@ export class SyncRunner {
   }
 
   private buildDeps(): JobDeps {
+    const limiter = this.#context.limiter ?? defaultLimiter()
     const tokens = new TokenProvider(this.#context.stores.credentials, {
       fetch: this.#context.fetch,
       now: this.#context.now,
@@ -483,6 +493,7 @@ export class SyncRunner {
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       random: Math.random,
       apiRoot: this.#context.endpoints?.apiRoot,
+      limiter,
     })
     return {
       db: this.#context.instance.db,
@@ -491,7 +502,6 @@ export class SyncRunner {
       syncState: this.#context.stores.syncState,
       client,
       now: this.#context.now,
-      limiter: this.#context.limiter ?? defaultLimiter(),
       onProgress: (event) => this.emit(event),
       deriveQueue: this.#context.instance.deriveQueue,
     }
@@ -509,11 +519,14 @@ export class SyncRunner {
     // #aborted check while this was not. stop() sets #aborted and shutdown() then awaits
     // settle(), so without this a shutdown waited out a whole trailing sync of every connected
     // person and every listable type before anything noticed it had been asked to stop.
-    await runSync({
+    const synced = await runSync({
       personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps,
       shouldStop: () => this.#aborted,
     })
     if (this.#aborted) return
+    // People the quota already refused in this run. Every later pass skips them: the quota will
+    // not have recovered, and each request costs minutes of client backoff that hold the run.
+    const rateLimited = new Set(synced.rateLimitedPersonIds)
     // Here as well as at the end of the run, for the same reason the trailing window goes
     // first: a backfill that takes an hour must not be what stands between today's samples and
     // the dashboard reading them.
@@ -536,7 +549,7 @@ export class SyncRunner {
         // either way another pass buys nothing. windowsFetched used to be the signal here, but
         // runBackfill counts a failed window as fetched too, so a type failing every window
         // never produced a zero and burned every remaining pass alone.
-        const advanced = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays)
+        const advanced = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays, rateLimited)
         if (!advanced) break
       }
       // Reaching MAX_SPRINT_PASSES without ever seeing a pass that failed to advance means every
@@ -554,7 +567,7 @@ export class SyncRunner {
     // type held every other, healthy type at the sprint floor for good, since the sprint branch
     // above was the only place any of them ever got a chance to walk.
     if (this.#aborted) return
-    await this.#backfillPass(deps, personIds, userHorizonDays, null)
+    await this.#backfillPass(deps, personIds, userHorizonDays, null, rateLimited)
     this.#derive(personIds)
   }
 
@@ -633,6 +646,7 @@ export class SyncRunner {
           settings: this.#context.instance.settings,
           nowMs: this.#context.now(),
           personIds,
+          onDayFailed: logDayFailed('sync'),
         }).daysDerived === 0) return
       }
       console.log(`sync: derivation stopped after ${MAX_DERIVE_BATCHES} batches with days still queued`)
@@ -664,13 +678,16 @@ export class SyncRunner {
    * already reached it, not by shrinking the horizonDays passed to runBackfill. See the comment
    * at the skip below for why that distinction is load-bearing. Returns whether any type's
    * cursor actually moved, which is what the sprint loop above uses to decide whether another
-   * pass is worth taking.
+   * pass is worth taking. rateLimited is the run's set of people the quota refused: they are
+   * skipped, and a person refused here is added to it.
    */
   async #backfillPass(
     deps: JobDeps, personIds: string[], userHorizonDays: number, capDays: number | null,
+    rateLimited: Set<string>,
   ): Promise<boolean> {
     let cursorAdvanced = false
     for (const personId of personIds) {
+      if (rateLimited.has(personId)) continue
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
       for (const dataType of this.#typesFor(personId)) {
@@ -730,8 +747,16 @@ export class SyncRunner {
           // going to need one anyway. Conservative in the safe direction, and it stays that way.
           if (result.windowsFetched > 0
             && result.stoppedBecause !== 'error' && result.stoppedBecause !== 'revoked'
-            && result.stoppedBecause !== 'credentials_unreadable') {
+            && result.stoppedBecause !== 'credentials_unreadable'
+            && result.stoppedBecause !== 'rate_limited') {
             cursorAdvanced = true
+          }
+          // The quota is the household's and the next type would meet the same wall, so this
+          // person's pass ends here. Their failure was already recorded by runJob.
+          if (result.stoppedBecause === 'rate_limited') {
+            this.#backfillTotals.failed.add(`${personId}:${dataType.id}`)
+            rateLimited.add(personId)
+            break
           }
         } catch (error) {
           // Symmetric with runJob's own catch, which is where each of these is actually

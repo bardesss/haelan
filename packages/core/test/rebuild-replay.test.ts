@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import { replayPerson } from '../src/rebuild/replay.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
-import { daily, sessions, sessionRoutes, sources } from '../src/db/schema/index.ts'
+import { SyncStateStore } from '../src/store/syncState.ts'
+import { HealthClient } from '../src/api/client.ts'
+import { dataTypeById } from '../src/api/catalogue.ts'
+import { runJob } from '../src/sync/runJob.ts'
+import { daily, samples, sessions, sessionRoutes, sources } from '../src/db/schema/index.ts'
 import { samplePoint, sleepPoint, dailyRollupBody, body } from '../src/testing/payloads.ts'
 
 import { createTestDatabase, readSamples, seedPerson } from '../src/testing/fixtures.ts'
@@ -25,6 +29,12 @@ function pageWithBeats(beats: { atMs: number, bpm: number }[]): string {
     physicalTime: new Date(b.atMs).toISOString(),
     dataSource: { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
   })))
+}
+
+// A list page that tells the client there is another page after it, the way Google's
+// nextPageToken does.
+function withNextToken(text: string, token: string): string {
+  return JSON.stringify({ ...JSON.parse(text), nextPageToken: token })
 }
 
 // Same envelope shape map-rollups.test.ts uses for total-calories: rollupDataPoints keyed by
@@ -339,6 +349,128 @@ describe('replayPerson', () => {
     }))
 
     expect(meanAt(db, 120_000)).toMatchObject({ value: 100, n: 1 })
+  })
+
+  test('a call holding its own first page takes no leading page, even when a continuation sorts ahead of its start', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    const shared = {
+      personId: 'p1', dataType: 'heart-rate', windowStartMs: 0, windowEndMs: 86_400_000,
+      httpStatus: 200,
+    } as const
+    // An earlier call whose first page answered nextPageToken 'p2', the same token the later
+    // call's continuation was asked with.
+    archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 1, fetchEpisodeId: 'ep-1',
+      body: withNextToken(pageWithBeats([{ atMs: 60_000, bpm: 60 }]), 'p2'),
+    })
+    // The later call archived both its pages, in one millisecond. Its start was not deduplicated,
+    // so nothing is missing at its front, but its continuation sorts first and a search for that
+    // continuation's leading page would find the earlier call's first page and blend it in.
+    const start = archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 5, fetchEpisodeId: 'ep-2',
+      body: withNextToken(pageWithBeats([{ atMs: 60_000, bpm: 100 }]), 'p2'),
+    })
+    const continuation = archive.put({
+      ...shared, requestParams: { ...listParams, pageToken: 'p2' }, fetchedAtMs: 5,
+      fetchEpisodeId: 'ep-2', body: pageWithBeats([{ atMs: 90_000, bpm: 100 }]),
+    })
+    // Pinned rather than left to the random ids, so the continuation sorts ahead on every run.
+    db.run(sql`update raw_payloads set id = 'zzz-start' where id = ${start.id}`)
+    db.run(sql`update raw_payloads set id = 'aaa-continuation' where id = ${continuation.id}`)
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
+    }))
+
+    // The later call alone, as the sync wrote it: both its readings fall in minute one. A leading
+    // page would blend the earlier 60 in as a third reading.
+    expect(meanAt(db, 60_000)).toMatchObject({ value: 100, n: 2 })
+  })
+
+  test('a rebuild matches the live sync when a re-fetch deduplicated its first page', async () => {
+    const db = freshDb()
+    seedPerson(db, 'p1', { timezone: 'UTC' })
+    const archive = new RawArchive(db)
+    // Two sync runs over one day. Each is a two page call, and the second run's first page comes
+    // back byte identical, so the archive deduplicates it and keeps no row for it. The live sync
+    // still mapped that page together with the changed second page, so the 10:00 minute holds
+    // 60 and 100 at once. A replay that maps only the rows the second call archived has 100
+    // alone, and a rebuild would quietly rewrite what the sync left.
+    const firstPage = withNextToken(pageWithBeats([{ atMs: Date.parse('2026-08-18T10:00:10Z'), bpm: 60 }]), 'p2')
+    const answers = [
+      firstPage, pageWithBeats([{ atMs: Date.parse('2026-08-18T10:00:50Z'), bpm: 80 }]),
+      firstPage, pageWithBeats([{ atMs: Date.parse('2026-08-18T10:00:50Z'), bpm: 100 }]),
+    ]
+    const fetchMock = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => {
+      const next = answers.shift()
+      if (next === undefined) throw new Error('the test ran out of answers')
+      return new Response(next, { status: 200 })
+    })
+    // A clock that moves, so every archived page has its own fetch time and listFor never falls
+    // through to its random id tiebreak.
+    let clock = 1_000_000
+    const deps = {
+      db, archive,
+      sources: new SourceRegistry(db),
+      syncState: new SyncStateStore(db),
+      client: new HealthClient(
+        { accessTokenFor: async () => 'at' }, archive,
+        { fetch: fetchMock, now: () => clock++, sleep: async () => {}, random: () => 0 },
+      ),
+      now: () => Date.parse('2026-08-19T12:00:00Z'),
+    }
+    for (let run = 0; run < 2; run++) {
+      await runJob({
+        personId: 'p1', dataType: dataTypeById('heart-rate')!, timezone: 'UTC',
+        fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
+      })
+    }
+    expect(answers, 'both runs fetched both pages').toHaveLength(0)
+
+    const live = readSamples(db, 'p1')
+    db.delete(samples).run()
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
+    }))
+
+    expect(readSamples(db, 'p1')).toEqual(live)
+  })
+
+  test('replays episodes in fetch order across window groups', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // One date fetched three times across a timezone change and back: old bounds, new bounds,
+    // old bounds again. The two old-bounds fetches share a window group, so replaying group by
+    // group runs the middle fetch last and lands 100 where the sync itself ended on 80.
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 86_400_000, windowEndMs: 172_800_000, fetchedAtMs: 100, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 100_000_000, bpm: 60 }]),
+    })
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 79_200_000, windowEndMs: 165_600_000, fetchedAtMs: 200, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 100_000_000, bpm: 100 }]),
+    })
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 86_400_000, windowEndMs: 172_800_000, fetchedAtMs: 300, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 100_000_000, bpm: 80 }]),
+    })
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
+    }))
+
+    // The count row is a tally of readings, not a bpm figure, so it is left out.
+    const bpmRows = readSamples(db, 'p1').filter((row) => row.agg !== 'count')
+    expect(bpmRows.map((row) => row.value)).toEqual(bpmRows.map(() => 80))
   })
 
   test('a payload archived before the episode id existed still replays through the pageToken inference', () => {
