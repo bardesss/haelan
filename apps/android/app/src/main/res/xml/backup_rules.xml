@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="haelan_secure.xml"/>
+    <exclude domain="sharedpref" path="haelan.xml"/>
+</full-backup-content>

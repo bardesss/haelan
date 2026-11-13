@@ -46,22 +46,46 @@ object SessionStore {
         return synchronized(this) { cached ?: build(context).also { cached = it } }
     }
 
-    private fun build(context: Context): SharedPreferences {
-        val appCtx = context.applicationContext
-        val secure = try {
-            val masterKey = MasterKey.Builder(appCtx)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            EncryptedSharedPreferences.create(
-                appCtx,
-                FILE_SECURE,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
+    /**
+     * Calls [create]; if it throws, calls [reset] once and [create] once more. Null when the
+     * second try fails too, so the caller can fall back.
+     */
+    internal fun <T : Any> createOrRecover(create: () -> T, reset: () -> Unit): T? {
+        try {
+            return create()
+        } catch (e: Exception) {
+            reset()
+        }
+        return try {
+            create()
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * A restored secure file cannot be opened: its keyset is wrapped by a Keystore key, and that
+     * key does not travel with a backup. The backup rules (res/xml) exclude both prefs files so
+     * that never happens; the reset heals installs restored before the rules existed. The file is
+     * deleted and created again before the plaintext fallback is considered.
+     */
+    private fun build(context: Context): SharedPreferences {
+        val appCtx = context.applicationContext
+        val secure = createOrRecover(
+            create = {
+                val masterKey = MasterKey.Builder(appCtx)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    appCtx,
+                    FILE_SECURE,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+                )
+            },
+            reset = { appCtx.deleteSharedPreferences(FILE_SECURE) },
+        )
         val resolved = if (secure != null) {
             migrateLegacy(appCtx, secure)
             insecureFallback = false
