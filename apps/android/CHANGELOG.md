@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/bardesss/haelan/compare/android-v0.11.0...android-v0.12.0) (2026-11-13)
+
+
+### Features
+
+* **android:** deletions and backdated entries reach the instance ([#470](https://github.com/bardesss/haelan/issues/470)) ([f69f1cd](https://github.com/bardesss/haelan/commit/f69f1cdad7ea90a7976edfd1416436b9991c4fef))
+* **android:** the app that wrote a record is part of its source ([#467](https://github.com/bardesss/haelan/issues/467)) ([70ec812](https://github.com/bardesss/haelan/commit/70ec812b88d967eb0c6660c20c06df996e6b7230))
+
+
+### Bug Fixes
+
+* **android:** companion sync survives restores, bad clocks and flaky servers ([#464](https://github.com/bardesss/haelan/issues/464)) ([a7e0bfb](https://github.com/bardesss/haelan/commit/a7e0bfbe54c0c922016f378ca720e3aeccf0b7ed))
+* review leftovers (setup messages, glance rollover, sync and companion follow-ups) ([#471](https://github.com/bardesss/haelan/issues/471)) ([3669066](https://github.com/bardesss/haelan/commit/3669066b81a46992dd3cea4994bbd0c8f18c2811))
+
 ## [0.11.0](https://github.com/bardesss/haelan/compare/android-v0.10.0...android-v0.11.0) (2026-10-08)
 
 
