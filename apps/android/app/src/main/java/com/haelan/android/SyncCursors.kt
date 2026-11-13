@@ -17,6 +17,32 @@ import java.time.Instant
  */
 object SyncCursors {
 
+    /** What a successful cursors call holds: the per-type window ends the sync reads from. */
+    data class Answer(val ends: Map<String, Long>)
+
+    fun answerOf(body: String, nowMs: Long): Answer = Answer(cursorEndsFor(body, nowMs))
+
+    /**
+     * How the cursors call ended. A failed call is never read as "nothing sent yet": that would
+     * re-upload the whole history, so only a successful answer can lead to a full window.
+     */
+    sealed interface Fetch {
+        data class Ready(val answer: Answer) : Fetch
+        /** 401: the session is over. */
+        data object Expired : Fetch
+        /** Every other failure: try again later, before any Health Connect read. */
+        data class Unavailable(val error: Exception) : Fetch
+    }
+
+    fun fetchOf(outcome: InstanceClient.Outcome<Answer>): Fetch = when (outcome) {
+        is InstanceClient.Outcome.Ok -> Fetch.Ready(outcome.value)
+        is InstanceClient.Outcome.Failed -> {
+            val error = outcome.error
+            if (error is InstanceClient.InstanceHttpException && error.status == 401) Fetch.Expired
+            else Fetch.Unavailable(error)
+        }
+    }
+
     /** How far before the cursor a delta read starts, in milliseconds. */
     const val OVERLAP_MS: Long = 24L * 60L * 60L * 1000L
 

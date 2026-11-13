@@ -44,28 +44,25 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         var expired = false
         val runEnd = Instant.now()
         val prefs = SessionStore.prefs(context)
-        // Same cursors the screen reads: a background run that cannot reach them sends
-        // the full window rather than skipping, except on 401 which ends the session.
-        val cursorEnds = withContext(Dispatchers.IO) {
-            when (val fetched = InstanceClient.get(engineSession.server, SyncCursors.pathFor(engineSession.personId), engineSession.cookie) {
-                SyncCursors.cursorEndsFor(it.body, runEnd.toEpochMilli())
-            }) {
-                is InstanceClient.Outcome.Ok -> fetched.value
-                is InstanceClient.Outcome.Failed -> {
-                    val error = fetched.error
-                    if (error is InstanceClient.InstanceHttpException && error.status == 401) {
-                        expired = true
-                        return@withContext emptyMap()
-                    }
-                    if (error is IOException) transient = true
-                    Log.w(SyncEngine.TAG, "cursors not read, full window instead: ${error.message}")
-                    emptyMap()
-                }
-            }
+        // Same cursors the screen reads: a background run that cannot reach them retries later
+        // rather than re-sending the full window, and 401 ends the session.
+        val fetched = withContext(Dispatchers.IO) {
+            SyncCursors.fetchOf(
+                InstanceClient.get(engineSession.server, SyncCursors.pathFor(engineSession.personId), engineSession.cookie) {
+                    SyncCursors.answerOf(it.body, runEnd.toEpochMilli())
+                },
+            )
         }
-        if (expired) {
-            SessionStore.clearSession(SessionStore.prefs(context))
-            return Result.success()
+        val answer = when (fetched) {
+            is SyncCursors.Fetch.Ready -> fetched.answer
+            is SyncCursors.Fetch.Expired -> {
+                SessionStore.clearSession(SessionStore.prefs(context))
+                return Result.success()
+            }
+            is SyncCursors.Fetch.Unavailable -> {
+                Log.w(SyncEngine.TAG, "cursors not read, retrying later: ${fetched.error.message}")
+                return Result.retry()
+            }
         }
         SyncEngine.syncAll(
             client = client,
@@ -78,7 +75,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                     InstanceClient.ingest(engineSession.server, path, payload, engineSession.cookie) { }
                 }
             },
-            cursorEnds = cursorEnds,
+            cursorEnds = answer.ends,
             report = object : SyncEngine.Reporter {
                 override fun typeStarted(key: String) = Unit
                 override fun typeOk(key: String) {

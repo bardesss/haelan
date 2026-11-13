@@ -75,7 +75,7 @@ object InstanceClient {
 
     /**
      * One JSON GET. The cursors call reads through here: a cursor fetch that fails is not a sync
-     * failure, the caller falls back to the full window instead.
+     * failure, the caller stops the run and tries again later.
      *
      * [headers] is for the glance, which sends `If-None-Match` with the ETag of what it already
      * shows. That is also the only way a 304 can arrive: the instance answers one only to a

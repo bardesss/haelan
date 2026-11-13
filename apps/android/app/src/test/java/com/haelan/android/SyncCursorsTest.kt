@@ -44,6 +44,34 @@ class SyncCursorsTest {
     }
 
     @Test
+    fun `a cursor answer is ready to sync from`() {
+        val answer = SyncCursors.Answer(mapOf("weight" to 5L))
+        assertEquals(SyncCursors.Fetch.Ready(answer), SyncCursors.fetchOf(InstanceClient.Outcome.Ok(answer)))
+    }
+
+    @Test
+    fun `a 401 on the cursors ends the session`() {
+        assertEquals(
+            SyncCursors.Fetch.Expired,
+            SyncCursors.fetchOf(InstanceClient.Outcome.Failed(InstanceClient.InstanceHttpException(401, ""))),
+        )
+    }
+
+    @Test
+    fun `a 500 on the cursors is unavailable, never a full window`() {
+        assertTrue(
+            SyncCursors.fetchOf(InstanceClient.Outcome.Failed(InstanceClient.InstanceHttpException(500, "boom"))) is SyncCursors.Fetch.Unavailable,
+        )
+    }
+
+    @Test
+    fun `a dead socket on the cursors is unavailable too`() {
+        assertTrue(
+            SyncCursors.fetchOf(InstanceClient.Outcome.Failed(java.io.IOException("reset"))) is SyncCursors.Fetch.Unavailable,
+        )
+    }
+
+    @Test
     fun `the parse keeps values and drops nulls`() {
         val body = """{"items":[
             {"dataTypeId":"weight","lastWindowEndMs":1787047200001,"lastIngestAtMs":1770000000000},
@@ -119,8 +147,8 @@ class SyncCursorsTest {
         )
         assertTrue(
             "the watch's own pending reading at ${watchLateReadingMs}ms must still be inside " +
-                "the next delta, which starts at ${start?.toEpochMilli()}ms",
-            start != null && !start.isAfter(Instant.ofEpochMilli(watchLateReadingMs)),
+                "the next delta, which starts at ${start.toEpochMilli()}ms",
+            !start.isAfter(Instant.ofEpochMilli(watchLateReadingMs)),
         )
     }
 

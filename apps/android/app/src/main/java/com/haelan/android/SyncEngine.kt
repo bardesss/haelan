@@ -225,9 +225,9 @@ object SyncEngine {
         report: Reporter,
         // dataTypeId to the instance's last window end, already the minimum across that
         // type's own sources (SyncCursors.cursorEndsFor): a source that lags pulls the whole
-        // type's read back to it. Empty on a first sync or when the cursors fetch failed:
-        // every type then keeps the full window instead of skipping.
-        cursorEnds: Map<String, Long> = emptyMap(),
+        // type's read back to it. Empty on a first sync; a failed cursors fetch never reaches
+        // here, the caller stops the run instead of reading every type in full.
+        cursorEnds: Map<String, Long>,
     ) {
         // Read, not remembered: the permission can be granted or revoked between two syncs, and
         // the window that is honest is the one the provider will actually answer right now.
