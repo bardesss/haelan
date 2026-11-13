@@ -6,6 +6,7 @@ import { dataTypeById } from '../src/api/catalogue.ts'
 import { runRollupJob, rollupRangeCapDays } from '../src/sync/runRollupJob.ts'
 import { dailyRollupBody } from '../src/testing/payloads.ts'
 import { daily } from '../src/db/schema/index.ts'
+import { DeriveQueue } from '../src/store/deriveQueue.ts'
 
 const DAY_MS = 86_400_000
 let test: TestDatabase
@@ -98,6 +99,17 @@ describe('runRollupJob', () => {
     expect(rows[0]).toMatchObject({
       metric: 'total_calories', agg: 'sum', source: 'provider', coverage: null,
     })
+  })
+
+  it('marks every local date it wrote a provider row for, so a re-walk reaches derivation', async () => {
+    const stub = stubClient([])
+    const queue = new DeriveQueue(test.db)
+    await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23),
+      deps: { ...depsWith(stub), deriveQueue: queue },
+    })
+    expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-20'])
   })
 
   it('is idempotent: a second walk over the same range writes no new rows', async () => {

@@ -9,6 +9,7 @@ import {
 import { dayMetricTarget, sessionTarget } from '../src/derive/targetKey.ts'
 import { dailyRollupBody } from '../src/testing/payloads.ts'
 import { PROVIDER_SOURCE } from '../src/derive/rollup.ts'
+import { PersonQuery } from '../src/query/personQuery.ts'
 
 // Builds a database holding one person, one archived heart rate window and one archived sleep
 // window, plus a sync_state row. Returns the handles runRebuild needs.
@@ -279,7 +280,10 @@ describe('runRebuild', () => {
     const report = runRebuild({ ...h.deps, nowMs: 1 })
 
     const onThatDay = h.db.select().from(daily).where(eq(daily.localDate, lonelyDate)).all()
-    expect(onThatDay).toEqual([])
+    expect(onThatDay.map((r) => [r.source, r.value])).toEqual([['provider', 1900]])
+    expect(new PersonQuery(h.db, h.personId).series({
+      metric: 'total_calories', agg: 'sum', from: lonelyDate, to: lonelyDate,
+    }).points).toEqual([])
     // And the figure an operator reads matches the table. This is the case that catches a
     // dailyRows summed from what the replay counted plus what the derivation returned: the
     // exclusion above deleted a provider row the replay had already counted, so the sum

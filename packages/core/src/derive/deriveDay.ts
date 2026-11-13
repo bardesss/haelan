@@ -226,23 +226,14 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   )
 
   // Everything we derive for this day goes, then comes back. Provider rows are excluded
-  // because they are ingested rather than derived and nothing here could recompute them.
+  // because they are ingested rather than derived and nothing here could recompute them. That
+  // includes one a day_metric exclusion names: it is kept, and the exclusion is applied where
+  // it is read (query/dayExclusion.ts), so removing the override restores the figure.
   tx.delete(daily).where(and(
     eq(daily.personId, input.personId),
     eq(daily.localDate, input.localDate),
     ne(daily.source, PROVIDER_SOURCE),
   )).run()
-
-  // A day_metric exclusion reaches the provider rows too, which the delete above spares.
-  // Google's own reconciliation is still a number for the day somebody threw out, and it is
-  // rewritten by the next sync of that metric, which requeues the day and lands back here.
-  for (const metric of excluded) {
-    tx.delete(daily).where(and(
-      eq(daily.personId, input.personId),
-      eq(daily.localDate, input.localDate),
-      eq(daily.metric, metric),
-    )).run()
-  }
 
   // One multi-row insert per chunk rather than one statement per row. drizzle compiles and
   // prepares a fresh better-sqlite3 statement on every `.run()`, and a rebuild calls this function

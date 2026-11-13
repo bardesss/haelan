@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   PersonQuery, PROJECTION_TABLES, createTestDatabase, seedPerson, schema, DERIVATION_VERSION,
-  NoteStore, EventStore,
+  NoteStore, EventStore, dayMetricTarget,
 } from '../src/index.ts'
 import type { TestDatabase } from '../src/index.ts'
+import { seedOverride } from '../src/testing/fixtures.ts'
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
 
@@ -128,6 +129,21 @@ describe('the projection', () => {
     ]) {
       expect(dump).not.toContain(fingerprint)
     }
+  })
+
+  it('leaves out a provider row its person excluded for that day', () => {
+    test.db.insert(schema.daily).values({
+      personId: 'alice', localDate: '2026-08-01', metric: 'total_calories', agg: 'sum', source: 'provider',
+      value: 2100, coverage: null, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 0,
+    }).run()
+    seedOverride(test.db, {
+      personId: 'alice', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: '2026-08-01', metric: 'total_calories' }),
+    })
+    const { db, close } = openProjection('alice')
+    const values = (db.prepare('SELECT value FROM daily').all() as { value: number }[]).map((r) => r.value)
+    close()
+    expect(values).toEqual([1200])
   })
 
   it('refuses to resolve a source name across people even if a row is corrupted to point at one', () => {

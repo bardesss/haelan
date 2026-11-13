@@ -170,9 +170,9 @@ function formulaBoundsFor(tx: DbOrTx, input: {
  * ingested, never derived, deriveDayInto never deletes them, and so the table is the only place
  * they are.
  *
- * A metric the person excluded for the day is no value at all. deriveDayInto deletes every row of
- * an excluded metric, provider rows included, so dailyValue finds nothing for it afterwards, and
- * bounds computed from it here would be bounds the read side cannot reproduce.
+ * A metric the person excluded for the day is no value at all. deriveDayInto keeps the provider
+ * row but readers filter it out, so the read side finds nothing for it, and bounds computed from
+ * it here would be bounds the read side cannot reproduce.
  */
 function dayValue(tx: DbOrTx, input: {
   personId: string
