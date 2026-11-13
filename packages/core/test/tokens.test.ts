@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { CredentialStore } from '../src/store/credentials.ts'
 import { TokenProvider, RevokedError } from '../src/api/tokens.ts'
+import { TransientError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 const KEY = Buffer.alloc(32, 5)
@@ -126,6 +127,16 @@ describe('TokenProvider', () => {
     const provider = new TokenProvider(store, { fetch: fetchMock, now: () => 7000 })
     await expect(provider.accessTokenFor('p1')).rejects.not.toBeInstanceOf(RevokedError)
     expect(store.getRefreshToken('p1')?.revokedAtMs).toBeNull()
+  })
+
+  it('raises a rejected token fetch as transient, with neither the endpoint nor the refresh token in it', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
+    const provider = new TokenProvider(store, { fetch: fetchMock, now: () => 1000, tokenEndpoint: 'https://token.example.test/t' })
+    const error = await provider.accessTokenFor('p1').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(TransientError)
+    expect((error as Error).message).toBe('[transient] network: TypeError: fetch failed')
+    expect((error as Error).message).not.toContain('token.example.test')
+    expect((error as Error).message).not.toContain('rt')
   })
 
   it('rejects a malformed token response rather than caching an undefined access token', async () => {

@@ -60,16 +60,24 @@ export class TokenProvider {
     if (cached && cached.expiresAtMs > this.#deps.now() + EXPIRY_MARGIN_MS) return cached.accessToken
 
     const client = this.#credentials.getClientFor(personId)
-    const res = await this.#deps.fetch(this.#deps.tokenEndpoint ?? TOKEN_ENDPOINT, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: client.clientId,
-        client_secret: client.clientSecret,
-        refresh_token: stored.refreshToken,
-        grant_type: 'refresh_token',
-      }),
-    })
+    let res: Response
+    try {
+      res = await this.#deps.fetch(this.#deps.tokenEndpoint ?? TOKEN_ENDPOINT, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: client.clientId,
+          client_secret: client.clientSecret,
+          refresh_token: stored.refreshToken,
+          grant_type: 'refresh_token',
+        }),
+      })
+    } catch (err) {
+      // The network, as in client.ts: transient, so sync never counts it against a day. Name and
+      // message only, so neither the endpoint nor the refresh token reaches a stored error.
+      const detail = err instanceof Error ? `${err.name}: ${err.message}` : 'unknown error'
+      throw new TransientError(`network: ${detail}`, { cause: err })
+    }
 
     if (!res.ok) {
       const body = await res.text()

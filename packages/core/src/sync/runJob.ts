@@ -8,7 +8,7 @@ import type { SourceRegistry } from '../store/sources.ts'
 import type { SyncStateStore } from '../store/syncState.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { RevokedError } from '../api/tokens.ts'
-import { CredentialsUnreadableError, HaelanError, RateLimitedError, TransientError } from '../errors.ts'
+import { AuthError, CredentialsUnreadableError, HaelanError, RateLimitedError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { sampleDirtyDates } from './dirtyDates.ts'
@@ -60,8 +60,11 @@ export interface JobInput {
   /**
    * Count a failing window toward giving up on it. runSync passes true, so every sync run counts,
    * the scheduled one and a manual one alike; a backfill revisiting a day does not, because it
-   * is not another trailing run. A failure raised as transient (HTTP 429/5xx) does not count: an
-   * outage must never be able to skip a window, since skipping lets the mark jump over days nothing ever read.
+   * is not another trailing run. A failure raised as transient (HTTP 429/5xx, the network) or as
+   * an AuthError does not count: an outage or a refused token must never be able to skip a window,
+   * since skipping lets the mark jump over days nothing ever read. Nor does any failure in a run
+   * where no window of the job succeeded, since every day failing at once is the type or the
+   * person failing (a missing scope, a dead client), not one bad day.
    */
   trackWindowFailures?: boolean
 }
@@ -104,15 +107,15 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   let points = 0
   let unreadableWindows = 0
   let rowsWritten = 0
-  // Where the mark may move to: the end of the last window before the first one still failing.
-  // The windows after a failing one are fetched and written, but a mark past it would claim the
-  // failing day was read.
-  let contiguousEndMs = 0
-  let blocked = false
+  // One entry per window attempted, in order. The mark may move to the end of the last window
+  // before the first one still failing: the windows after a failing one are fetched and written,
+  // but a mark past it would claim the failing day was read. 'pending' is a failure that may count
+  // toward the skip, settled after the loop because only then is it known whether any window of
+  // this job succeeded.
+  const outcomes: Array<{ endMs: number, state: 'ok' | 'skipped' | 'failed' | 'pending', error?: unknown }> = []
+  const pending: Array<{ index: number, window: typeof windows[number], error: unknown }> = []
   let failedWindows = 0
-  let skippedWindows = 0
   let rateLimited = false
-  let firstError: unknown = null
 
   for (const window of windows) {
     try {
@@ -201,7 +204,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       } catch (clearError) {
         console.error(`sync: could not clear window failure for ${t.id} (${classify(clearError).message})`)
       }
-      if (!blocked) contiguousEndMs = window.endMs
+      outcomes.push({ endMs: window.endMs, state: 'ok' })
     } catch (error) {
       // A rolled back window takes its sources rows with it, so the ids this person's cache
       // still holds may no longer exist. Every later write referencing one would fail the
@@ -223,30 +226,53 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       // loop ends so the rest of the days are not each given five more requests.
       if (error instanceof RateLimitedError) {
         rateLimited = true
-        firstError ??= error
-        blocked = true
+        outcomes.push({ endMs: window.endMs, state: 'failed', error })
         break
       }
-      let skipped = false
+      let alreadySkipped = false
       try {
-        const classified = classify(error)
-        skipped = input.trackWindowFailures && !(error instanceof TransientError)
-          ? deps.syncState.recordWindowFailure({
-            personId: input.personId, dataType: t.id,
-            window: { startMs: window.startMs, endMs: window.endMs, localDate: window.localDate },
-            error: classified, nowMs: deps.now(),
-          }).skipped
-          : deps.syncState.isWindowSkipped(input.personId, t.id, window.startMs)
-      } catch { /* a store that cannot say is treated as not skipped: the window keeps blocking */ }
-      if (skipped) {
-        skippedWindows++
-        if (!blocked) contiguousEndMs = window.endMs
-      } else {
-        firstError ??= error
-        blocked = true
+        alreadySkipped = deps.syncState.isWindowSkipped(input.personId, t.id, window.startMs)
+      } catch (storeError) {
+        // Treated as not skipped, so the window keeps blocking: the safe direction for the mark.
+        console.error(`sync: could not read window skip for ${t.id} (${classify(storeError).message})`)
       }
+      const counts = input.trackWindowFailures === true
+        && !(error instanceof TransientError) && !(error instanceof AuthError)
+      // Counted even when already skipped, so its record keeps the latest error.
+      if (counts) pending.push({ index: outcomes.length, window, error })
+      outcomes.push({ endMs: window.endMs, state: alreadySkipped ? 'skipped' : counts ? 'pending' : 'failed', error })
     }
   }
+
+  // A window that reaches the threshold here is skipped in this same run, so the poison day stops
+  // holding the mark on the run that gives up on it rather than one run later.
+  const anySucceeded = outcomes.some((o) => o.state === 'ok')
+  for (const { index, window, error } of pending) {
+    const outcome = outcomes[index]!
+    if (!anySucceeded) {
+      if (outcome.state === 'pending') outcome.state = 'failed'
+      continue
+    }
+    let skipped = false
+    try {
+      skipped = deps.syncState.recordWindowFailure({
+        personId: input.personId, dataType: t.id,
+        window: { startMs: window.startMs, endMs: window.endMs, localDate: window.localDate },
+        error: classify(error), nowMs: deps.now(),
+      }).skipped
+    } catch (storeError) {
+      console.error(`sync: could not record window failure for ${t.id} (${classify(storeError).message})`)
+    }
+    if (outcome.state === 'pending') outcome.state = skipped ? 'skipped' : 'failed'
+  }
+
+  let contiguousEndMs = 0
+  for (const outcome of outcomes) {
+    if (outcome.state === 'failed') break
+    contiguousEndMs = outcome.endMs
+  }
+  const skippedWindows = outcomes.filter((o) => o.state === 'skipped').length
+  const firstError = outcomes.find((o) => o.state === 'failed')?.error ?? null
 
   // A window we could not read is not a window with no data. Advancing over it marks days as
   // synced that nothing ever read, and intraday samples only stay fetchable for a recent window,
