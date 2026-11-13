@@ -79,6 +79,35 @@ describe('SourceRegistry', () => {
     expect(derived).toBe(passive)
   })
 
+  const phoneDevice = { displayName: 'Google Pixel 9' }
+  const fromApp = (packageName: string) => ({
+    platform: 'HEALTH_CONNECT', recordingMethod: 'PASSIVELY_MEASURED',
+    device: phoneDevice, application: { packageName }, originScoped: true,
+  })
+
+  it('separates two apps writing through one phone when the payload says the package is the writer', () => {
+    const fit = registry.resolve('p1', fromApp('com.google.android.apps.fitness'), 1000)
+    const scale = registry.resolve('p1', fromApp('com.withings.wiscale2'), 1000)
+    expect(scale).not.toBe(fit)
+    expect(ctx.db.select().from(sources).all().map((r) => [r.externalId, r.displayName, r.kind]).sort()).toEqual([
+      ['HEALTH_CONNECT:Google Pixel 9:com.google.android.apps.fitness', 'Google Pixel 9 (com.google.android.apps.fitness)', 'device'],
+      ['HEALTH_CONNECT:Google Pixel 9:com.withings.wiscale2', 'Google Pixel 9 (com.withings.wiscale2)', 'device'],
+    ])
+  })
+
+  it('keeps a device payload without the marker on the device alone, whatever package rides with it', () => {
+    const { originScoped: _, ...unmarked } = fromApp('com.google.android.apps.fitness')
+    const a = registry.resolve('p1', unmarked, 1000)
+    const b = registry.resolve('p1', { ...unmarked, application: { packageName: 'com.withings.wiscale2' } }, 1000)
+    expect(b).toBe(a)
+    expect(ctx.db.select().from(sources).all()[0]?.externalId).toBe('HEALTH_CONNECT:Google Pixel 9')
+  })
+
+  it('files an origin-scoped payload with no device exactly where the package alone always filed it', () => {
+    const marked = registry.resolve('p1', { ...scaleApp, originScoped: true }, 1000)
+    expect(marked).toBe(registry.resolve('p1', scaleApp, 1000))
+  })
+
   // Widening the identity re-keys only what was genuinely ambiguous. A device source and a bare
   // platform source carry neither a package name nor a manual flag, so their ids are unchanged
   // and the rows already written against them stay attached. These two literals are what the

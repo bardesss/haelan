@@ -8,6 +8,11 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 interface Described { externalId: string, displayName: string, kind: 'device' | 'app' | 'manual' }
 
+/** The phone's marker that the package, not the device, is the writer of this payload. */
+export function isOriginScoped(dataSource: Record<string, unknown>): boolean {
+  return dataSource['originScoped'] === true
+}
+
 /**
  * What identifies a source, in the order the payload answers it.
  *
@@ -27,6 +32,12 @@ interface Described { externalId: string, displayName: string, kind: 'device' | 
  * Widening this re-keys only what was genuinely ambiguous. A payload with a device, or with
  * neither a package name nor a manual flag, produces exactly the externalId it produced before,
  * so rows already written against it keep pointing at the same source (pinned in sources.test.ts).
+ *
+ * The one exception to "a device wins over the package" is a payload that sets `originScoped`.
+ * Health Connect reports the phone as the device and the writing app as the package, so two apps
+ * on one phone would share a source. Google payloads carry a device and a package together too
+ * and must not be re-keyed, so the change is gated on a marker rather than on the shape. The
+ * phone sets the marker, and only when it has both names does the source key on both.
  */
 function describe(dataSource: unknown): Described {
   if (!isRecord(dataSource)) return { externalId: 'unknown', displayName: 'unknown', kind: 'app' }
@@ -40,6 +51,14 @@ function describe(dataSource: unknown): Described {
     ? application['packageName']
     : null
   const isManual = dataSource['recordingMethod'] === 'MANUAL'
+
+  if (isOriginScoped(dataSource) && deviceName !== null && packageName !== null) {
+    return {
+      externalId: [platform, deviceName, packageName, isManual ? 'MANUAL' : null].filter((p) => p !== null).join(':'),
+      displayName: `${deviceName} (${packageName})`,
+      kind: isManual ? 'manual' : 'device',
+    }
+  }
 
   const who = deviceName ?? packageName
   const externalId = [platform, who, isManual ? 'MANUAL' : null].filter((p) => p !== null).join(':')
