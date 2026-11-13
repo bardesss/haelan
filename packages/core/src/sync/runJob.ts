@@ -71,8 +71,8 @@ export interface JobInput {
   /**
    * Count a failing window toward giving up on it. runSync passes true, so every sync run counts,
    * the scheduled one and a manual one alike; a backfill revisiting a day does not, because it
-   * is not another trailing run. Only a non-transient failure counts: an outage must never be
-   * able to skip a window, since skipping lets the mark jump over days nothing ever read.
+   * is not another trailing run. A failure raised as transient (HTTP 429/5xx) does not count: an
+   * outage must never be able to skip a window, since skipping lets the mark jump over days nothing ever read.
    */
   trackWindowFailures?: boolean
 }
@@ -230,7 +230,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       let skipped = false
       try {
         const classified = classify(error)
-        skipped = input.trackWindowFailures && classified.kind !== 'transient'
+        skipped = input.trackWindowFailures && !(error instanceof TransientError)
           ? deps.syncState.recordWindowFailure({
             personId: input.personId, dataType: t.id,
             window: { startMs: window.startMs, endMs: window.endMs, localDate: window.localDate },

@@ -812,6 +812,14 @@ describe('runJob', () => {
       expect(state?.consecutiveFailures).toBe(4)
     })
 
+    it('skips a window whose write throws a plain error on three runs, since that is a poison day', async () => {
+      const deps = build(stub())
+      failingOn = false
+      vi.spyOn(deps.sources, 'resolve').mockImplementation(() => { throw new Error('constraint failed') })
+      for (let run = 0; run < 3; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1').length).toBeGreaterThan(0)
+    })
+
     it('does not count a failure toward the skip when the caller is not tracking runs', async () => {
       const deps = build(stub())
       for (let run = 0; run < 4; run++) await runJob({ ...args, deps })
