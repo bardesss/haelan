@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.24.1](https://github.com/bardesss/haelan/compare/v2.24.0...v2.24.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **core:** a companion record moved at the source takes its old row with it ([#474](https://github.com/bardesss/haelan/issues/474)) ([be36c8f](https://github.com/bardesss/haelan/commit/be36c8f1393f4c79f83cc3549e344d8f3f30b242))
+* **deps:** move hono and @hono/node-server past their advisories ([#472](https://github.com/bardesss/haelan/issues/472)) ([cc45aec](https://github.com/bardesss/haelan/commit/cc45aec0730bfb19e60af00654bd11e0bc90223d))
+
 ## [2.24.0](https://github.com/bardesss/haelan/compare/v2.23.0...v2.24.0) (2026-11-13)
 
 

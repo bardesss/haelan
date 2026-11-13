@@ -246,7 +246,7 @@ because that catalogue takes bare-metal installs and not Docker. Run it on the P
 
 <!-- x-release-please-start-version -->
 ```
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/bardesss/haelan/v2.24.0/proxmox/ct/haelan.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/bardesss/haelan/v2.24.1/proxmox/ct/haelan.sh)"
 ```
 <!-- x-release-please-end -->
 
