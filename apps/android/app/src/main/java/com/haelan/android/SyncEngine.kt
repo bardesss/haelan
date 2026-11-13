@@ -349,7 +349,7 @@ object SyncEngine {
         val readEnd = SyncCursors.bootstrapReadEnd(end, Instant.now())
         // Only a window read can start inside a minute, so only it names a first minute to drop;
         // a drain reads whole changed records and passes none.
-        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, fallbackStart, post, partialMinuteStart(start, fallbackStart))
+        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, fallbackStart, post, partialMinuteStart(start, cursorEndMs))
         if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh, cursorEndMs)
         return outcome
     }
@@ -1184,12 +1184,14 @@ object SyncEngine {
         }
 
     /**
-     * Where a heart-rate window read starts inside a minute it holds only part of, or null when
-     * its first minute is as whole as a read can make it: [start] on a minute boundary, or no
-     * later than [fallbackStart], before which the permission answers nothing.
+     * Where a heart-rate window read starts inside a minute the instance may already hold whole,
+     * or null when there is nothing to protect: [start] on a minute boundary, or no
+     * [cursorEndMs], so the instance holds nothing of this type. Whether the phone can read
+     * further back does not decide it: without the history permission every bootstrap starts at
+     * the thirty-day fallback, which slides forward daily past minutes an earlier run sent whole.
      */
-    internal fun partialMinuteStart(start: Instant, fallbackStart: Instant): Instant? =
-        if (!start.isAfter(fallbackStart) || start == start.truncatedTo(ChronoUnit.MINUTES)) null else start
+    internal fun partialMinuteStart(start: Instant, cursorEndMs: Long?): Instant? =
+        if (cursorEndMs == null || start == start.truncatedTo(ChronoUnit.MINUTES)) null else start
 
     /**
      * Drops the heart-rate points in [windowStart]'s minute (phase 6 ledger F5): the instance

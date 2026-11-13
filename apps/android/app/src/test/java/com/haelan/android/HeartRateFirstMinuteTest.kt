@@ -40,22 +40,29 @@ class HeartRateFirstMinuteTest {
         assertEquals(points, SyncEngine.dropMinuteOf(points, null))
     }
 
+    private val cursor = Instant.parse("2026-08-18T09:00:00Z").toEpochMilli()
+
     @Test
-    fun `a window at the oldest readable instant has no partial minute`() {
-        val fallback = Instant.parse("2026-07-19T10:00:17Z")
-        assertNull(SyncEngine.partialMinuteStart(fallback, fallback))
+    fun `a window for an instance that holds nothing of the type has no partial minute`() {
+        assertNull(SyncEngine.partialMinuteStart(Instant.parse("2026-07-19T10:00:17Z"), null))
     }
 
     @Test
-    fun `a window that starts later than what can be read has a partial first minute`() {
+    fun `a window for an instance that already holds the type has a partial first minute`() {
+        val start = Instant.parse("2026-07-19T10:00:17Z").plus(Duration.ofDays(1))
+        assertEquals(start, SyncEngine.partialMinuteStart(start, cursor))
+    }
+
+    @Test
+    fun `without the history permission a window at the fallback start has a partial first minute`() {
+        // Without the permission every bootstrap starts at the fallback, thirty days back, and
+        // the instance holds the minutes there whole from an earlier run whose fallback was older.
         val fallback = Instant.parse("2026-07-19T10:00:17Z")
-        val start = fallback.plus(Duration.ofDays(1))
-        assertEquals(start, SyncEngine.partialMinuteStart(start, fallback))
+        assertEquals(fallback, SyncEngine.partialMinuteStart(fallback, cursor))
     }
 
     @Test
     fun `a window that starts on a minute boundary has a whole first minute`() {
-        val fallback = Instant.parse("2026-07-19T10:00:17Z")
-        assertNull(SyncEngine.partialMinuteStart(Instant.parse("2026-07-20T10:01:00Z"), fallback))
+        assertNull(SyncEngine.partialMinuteStart(Instant.parse("2026-07-20T10:01:00Z"), cursor))
     }
 }
