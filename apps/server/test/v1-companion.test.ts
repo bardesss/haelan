@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { RawArchive, SCOPES, samplePoint, schema, sleepPoint } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
@@ -338,15 +339,18 @@ describe('GET /companion/cursors', () => {
   })
 })
 
-/**
- * The zero row upload. A page whose points all drop is not a rare shape: the mapper drops a
- * value it cannot parse and a session whose interval it cannot read, both of which a real
- * Health Connect payload produces (a reading with no value, a stage with a bad bound).
- */
 const LEGACY = { platform: 'HEALTH_CONNECT', application: { packageName: 'com.haelan.android' }, recordingMethod: 'PASSIVELY_MEASURED' }
 const ORIGIN_SCALE = {
   platform: 'HEALTH_CONNECT', application: { packageName: 'health.openscale.sync.oss' },
   recordingMethod: 'PASSIVELY_MEASURED', originScoped: true,
+}
+function p1WeightRowsAt(time: string): number {
+  if (!harness) throw new Error('no harness')
+  const db = harness.app.haelan.instance.db
+  return db.select({ utcMs: schema.samples.utcMs }).from(schema.samples)
+    .innerJoin(schema.people, eq(schema.people.ref, schema.samples.personRef))
+    .where(eq(schema.people.id, 'p1')).all()
+    .filter((r) => r.utcMs === Date.parse(time)).length
 }
 const nightPoint = (start: string, end: string) => sleepPoint({
   startTime: start, endTime: end,
@@ -374,9 +378,24 @@ describe('GET /companion/cursors identity cutovers', () => {
     expect(body.items.filter((i) => i.dataTypeId === 'weight' && i.dataSource !== undefined)).toHaveLength(2)
     expect(parseCursorEndsLikeThePhone(JSON.stringify(body)).get('weight')).toBe(Date.parse('2026-08-12T10:00:00Z') + 1)
 
-    if (!harness) throw new Error('no harness')
-    const rows = harness.app.haelan.instance.db.select({ utcMs: schema.samples.utcMs }).from(schema.samples).all()
-    expect(rows.filter((r) => r.utcMs === Date.parse('2026-08-10T10:00:00Z'))).toHaveLength(1)
+    // The late record is still written, and an identical re-send of the first leaves one row.
+    expect(p1WeightRowsAt('2026-08-11T10:00:00Z')).toBe(1)
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-10T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    expect(p1WeightRowsAt('2026-08-10T10:00:00Z')).toBe(1)
+    expect(((await cursors(token)).json() as { identityCutovers: Record<string, number> }).identityCutovers).toEqual({ weight: cutover })
+  })
+
+  it('settles a same-millisecond legacy and origin upload toward the lower cutover', async () => {
+    harness = await serverAfterFixtures()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-10T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    harness.clock.nowMs += 60_000
+    // Same clock instant for both uploads: the legacy one must not count as before the origin one.
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-11T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-12T10:00:00Z')], dataSource: ORIGIN_SCALE })).statusCode).toBe(200)
+    const body = (await cursors(token)).json() as { identityCutovers: Record<string, number> }
+    expect(body.identityCutovers).toEqual({ weight: Date.parse('2026-08-10T10:00:00Z') + 1 })
   })
 
   it('does not let a legacy interval record that straddles the change move the cutover', async () => {
@@ -408,6 +427,11 @@ describe('GET /companion/cursors identity cutovers', () => {
   })
 })
 
+/**
+ * The zero row upload. A page whose points all drop is not a rare shape: the mapper drops a
+ * value it cannot parse and a session whose interval it cannot read, both of which a real
+ * Health Connect payload produces (a reading with no value, a stage with a bad bound).
+ */
 describe('a companion upload that maps to no rows', () => {
   const RAW_PAYLOADS = "select count(*) as n from raw_payloads where person_id = 'p1'"
 

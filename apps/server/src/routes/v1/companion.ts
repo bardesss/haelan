@@ -94,6 +94,11 @@ function requestIdentityOf(requestParams: string): { dataSource: string, origin:
   }
 }
 
+function commitBucket(cutoverMs: number | null, bucketMaxMs: number | null): number | null {
+  if (bucketMaxMs === null) return cutoverMs
+  return cutoverMs === null ? bucketMaxMs : Math.max(cutoverMs, bucketMaxMs)
+}
+
 export function registerCompanionRoutes(app: FastifyInstance): void {
   app.get<{ Params: PersonParams, Querystring: CursorsQuery }>('/p/:personId/companion/cursors', async (request, reply) => {
     normalizePlatform(request.query.platform)
@@ -122,7 +127,12 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     // a legacy row that shows up after the type's first origin row is a late or re-sent record and
     // must not move the cutover: the phone reads everything past it under the new identity, and a
     // cutover that climbed would re-read history it already holds. `sawOrigin` freezes the type.
-    const legacyEnds = new Map<string, { cutoverMs: number | null, sawOrigin: boolean }>()
+    // Only legacy rows fetched strictly before the first origin row count, so rows are bucketed by
+    // fetchedAtMs: a bucket is committed once a later fetch time arrives and discarded if an origin
+    // row lands in it, which settles a same-millisecond tie toward the lower cutover.
+    const legacyEnds = new Map<string, {
+      cutoverMs: number | null, sawOrigin: boolean, bucketAtMs: number, bucketMaxMs: number | null
+    }>()
     let historyStartMs: number | null = null
     // A point dated ahead of the server's clock (a watch with a wrong clock) archives a window
     // that ends in the future. Left as is, the cursor answers that future time and the phone
@@ -145,10 +155,20 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
         })
       }
 
-      const ends = legacyEnds.get(row.dataType) ?? { cutoverMs: null, sawOrigin: false }
+      const ends = legacyEnds.get(row.dataType)
+        ?? { cutoverMs: null, sawOrigin: false, bucketAtMs: row.fetchedAtMs, bucketMaxMs: null }
       legacyEnds.set(row.dataType, ends)
-      if (origin) ends.sawOrigin = true
-      else if (!ends.sawOrigin && (ends.cutoverMs === null || row.windowEndMs > ends.cutoverMs)) ends.cutoverMs = row.windowEndMs
+      if (!ends.sawOrigin && row.fetchedAtMs !== ends.bucketAtMs) {
+        ends.cutoverMs = commitBucket(ends.cutoverMs, ends.bucketMaxMs)
+        ends.bucketAtMs = row.fetchedAtMs
+        ends.bucketMaxMs = null
+      }
+      if (origin) {
+        ends.sawOrigin = true
+        ends.bucketMaxMs = null
+      } else if (!ends.sawOrigin && (ends.bucketMaxMs === null || row.windowEndMs > ends.bucketMaxMs)) {
+        ends.bucketMaxMs = row.windowEndMs
+      }
 
       if (historyStartMs === null || row.windowStartMs < historyStartMs) historyStartMs = row.windowStartMs
     }
@@ -180,6 +200,8 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
       // Once a type has new-identity rows the old identity is retired: letting its frozen end hold
       // the minimum would widen every read until STALE_SOURCE_MS ran out. It stays in
       // perSourceItems below, and in the minimum on a type that never saw a device source.
+      // Trade-off, deliberate: where a 0.1.0 phone keeps writing the legacy identity beside an
+      // upgraded phone, the type-level minimum follows the origin sources alone.
       const origins = allSources.filter((s) => s.origin)
       const sources = origins.length > 0 ? origins : allSources
       // This source stays in bySource and perSourceItems below regardless of live or aged out,
@@ -195,7 +217,8 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     // Clamped to now like every cursor: a future-dated legacy point must not freeze the change.
     const identityCutovers: Record<string, number> = {}
     for (const [dataTypeId, ends] of legacyEnds) {
-      if (ends.cutoverMs !== null && ingestible.has(dataTypeId)) identityCutovers[dataTypeId] = Math.min(ends.cutoverMs, nowMs)
+      const cutoverMs = ends.sawOrigin ? ends.cutoverMs : commitBucket(ends.cutoverMs, ends.bucketMaxMs)
+      if (cutoverMs !== null && ingestible.has(dataTypeId)) identityCutovers[dataTypeId] = Math.min(cutoverMs, nowMs)
     }
 
     // Field order matters here and nowhere else in this file: SyncCursors.parseCursorEnds on an
