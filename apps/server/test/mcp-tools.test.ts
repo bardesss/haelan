@@ -137,6 +137,18 @@ describe('list_metrics', () => {
 })
 
 describe('query_series', () => {
+  it('summarises every day in range, not the thinned points it returns', () => {
+    // 730 days, a 20000 spike every tenth day over a 5000 floor: lttb keeps spikes, so a summary
+    // over the 200 returned points overstates the mean.
+    for (let i = 0; i < 730; i += 1) seedDaily({ localDate: dateOf(i), value: i % 10 === 0 ? 20000 : 5000 })
+    const out = tool('query_series').run(q(), { metric: 'steps', agg: 'sum', from: dateOf(0), to: dateOf(729) }) as {
+      points: unknown[], reduction: { from: number } | null, summary: Record<string, number | null>
+    }
+    expect(out.points.length).toBeLessThanOrEqual(DEFAULT_DAILY_POINTS)
+    expect(out.reduction?.from).toBe(730)
+    expect(out.summary).toEqual({ n: 730, min: 5000, max: 20000, mean: 6500, median: 5000, first: 20000, last: 5000 })
+  })
+
   it('answers the seeded points with a summary and no reduction', () => {
     seedDaily({ localDate: '2026-08-01', value: 1000 })
     seedDaily({ localDate: '2026-08-02', value: 2000 })
@@ -367,6 +379,11 @@ describe('get_daily', () => {
 // Each case is exercised through the real intraday fallback (hrv/mean seeded, daily_hrv absent),
 // the same reason v1-export.test.ts's and this file's own query_series/get_daily filled cases do.
 describe('get_baselines, filledDays', () => {
+  it('refuses a window wider than the range maximum with the cap sentence', () => {
+    expect(() => tool('get_baselines').run(q(), { metric: 'steps', agg: 'sum', on: '2026-01-01', windowDays: 999999999999 }))
+      .toThrow(ConfigError)
+  })
+
   it('counts how many of the days behind a baseline were filled in, out of how many', () => {
     seedDaily({ localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 42 })
     seedDaily({ localDate: '2026-08-02', metric: 'daily_hrv', agg: 'last', value: 55 })
@@ -478,6 +495,41 @@ describe('formula days behind a blended statistic', () => {
 })
 
 describe('get_intraday', () => {
+  function seedMinutes(sourceId: string, midnight: number, count: number, value: (i: number) => number): void {
+    test.db.transaction((tx) => {
+      for (let i = 0; i < count; i += 1) {
+        for (const agg of ['min', 'mean', 'max'] as const) {
+          insertSample(tx, { personId: 'robin', sourceId, metric: 'heart_rate',
+            utcMs: midnight + i * 60_000, tzOffsetMinutes: 120, agg, value: value(i) })
+        }
+      }
+    })
+  }
+
+  it('summarises every minute of the day, not the thinned points it returns', () => {
+    seedMinutes('watch', Date.UTC(2026, 7, 9, 22, 0), 600, (i) => (i % 60 === 0 ? 180 : 60))
+    const out = tool('get_intraday').run(q(), { metric: 'heart_rate', localDate: '2026-08-10' }) as {
+      points: unknown[], reduction: unknown, summary: { n: number, mean: number | null, max: number | null }
+    }
+    expect(out.reduction).not.toBeNull()
+    expect(out.points.length).toBeLessThan(600)
+    expect(out.summary).toMatchObject({ n: 600, mean: 62, max: 180 })
+  })
+
+  it('summarises every source blended, not a share of each', () => {
+    test.db.insert(schema.sources).values({
+      id: 'phone', personId: 'robin', externalId: 'phone', displayName: 'Phone',
+      kind: 'device', createdAtMs: 0,
+    }).run()
+    const midnight = Date.UTC(2026, 7, 9, 22, 0)
+    seedMinutes('watch', midnight, 400, (i) => (i % 60 === 0 ? 180 : 60))
+    seedMinutes('phone', midnight, 400, () => 70)
+    const out = tool('get_intraday').run(q(), { metric: 'heart_rate', localDate: '2026-08-10' }) as {
+      summary: { n: number }
+    }
+    expect(out.summary.n).toBe(800)
+  })
+
   it('returns a day of samples with a summary and no reduction at the default budget', () => {
     const nineAm = Date.UTC(2026, 7, 10, 7, 0) // 09:00 local at +120 on 2026-08-10.
     for (let i = 0; i < 90; i += 1) {
@@ -693,6 +745,40 @@ describe('get_workouts and get_workout, a workout two sources recorded', () => {
 })
 
 describe('get_workout', () => {
+  function seedLongRun(sourceId: string): void {
+    const start = Date.UTC(2026, 7, 10, 5, 0)
+    seedExerciseSession({ id: 'long-run', startMs: start, endMs: start + 400 * 60_000, localDate: '2026-08-10',
+      attrs: { exerciseType: 'RUNNING' } })
+    for (let i = 0; i < 400; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(test.db, { personId: 'robin', sourceId, metric: 'heart_rate',
+          utcMs: start + i * 60_000, tzOffsetMinutes: 120, agg, value: i % 40 === 0 ? 170 : 120 })
+      }
+    }
+  }
+
+  it('summarises every minute of a long workout, not the thinned trace', () => {
+    seedLongRun('watch')
+    const out = tool('get_workout').run(q(), { sessionId: 'long-run' }) as {
+      trace: { points: unknown[], reduction: unknown, summary: { n: number, mean: number | null } }[]
+    }
+    expect(out.trace[0]!.reduction).not.toBeNull()
+    expect(out.trace[0]!.summary).toMatchObject({ n: 400, mean: 121.25 })
+  })
+
+  it('summarises the whole fallback source when the recording device logged nothing', () => {
+    test.db.insert(schema.sources).values({
+      id: 'phone', personId: 'robin', externalId: 'phone', displayName: 'Phone',
+      kind: 'device', createdAtMs: 0,
+    }).run()
+    seedLongRun('phone')
+    const out = tool('get_workout').run(q(), { sessionId: 'long-run' }) as {
+      trace: { traceSource: string, summary: { n: number } }[]
+    }
+    expect(out.trace[0]!.traceSource).toBe('otherSources')
+    expect(out.trace[0]!.summary.n).toBe(400)
+  })
+
   const START = Date.UTC(2026, 7, 10, 7, 0)
   const END = START + 10 * 60_000
 

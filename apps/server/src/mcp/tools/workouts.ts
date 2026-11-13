@@ -331,9 +331,9 @@ export const getWorkout = defineTool({
         // blend every source reporting in their span, because a calendar day or a night can be
         // legitimately covered by two devices and picking one would hide real disagreement — but
         // a workout is one device's artifact, and `session.sourceId` already names it. `summary`
-        // and `reduction` below are computed over whichever source this ends up as, and only the
-        // per-point `sourceId` would otherwise say which: blending here would put an unlabelled
-        // multi-device average in front of an agent with nothing to say it was one.
+        // (from an unthinned read) and `reduction` below cover whichever source this ends up as,
+        // and only the per-point `sourceId` would otherwise say which: blending here would put an
+        // unlabelled multi-device average in front of an agent with nothing to say it was one.
         const pinnedSourceId = args.source ?? session.sourceId
         let result = q.intradayWindow({
           metric, startMs: session.startMs, endMs: session.endMs, points, sourceId: pinnedSourceId,
@@ -356,6 +356,10 @@ export const getWorkout = defineTool({
             traceSource = 'otherSources'
           }
         }
+        const full = q.intradayWindow({
+          metric, startMs: session.startMs, endMs: session.endMs, points: 'all',
+          sourceId: traceSource === 'pinnedSource' ? pinnedSourceId : undefined,
+        })
         return {
           metric,
           traceSource,
@@ -364,7 +368,7 @@ export const getWorkout = defineTool({
             n: p.n, excluded: p.excluded,
           })),
           reduction: result.reduction,
-          summary: summaryOf(result.points.map((p) => p.mean).filter((v) => v !== null)),
+          summary: summaryOf(full.points.map((p) => p.mean).filter((v) => v !== null)),
         }
       }),
     }

@@ -150,4 +150,13 @@ describe('the error envelope', () => {
     expect(JSON.stringify(reply.sent.body)).not.toContain('haelan.sqlite')
     expect(JSON.stringify(reply.sent.body)).not.toContain('busy_probe')
   })
+
+  // Only a Fastify error (FST_ code) keeps its own 4xx. Anything else that happens to carry a
+  // statusCode, such as an upstream client's error, is still a bug in us.
+  it('answers 500 for a non-Fastify throw that carries a statusCode of its own', () => {
+    const reply = fakeReply()
+    sendCoreError(reply as never, Object.assign(new Error('upstream said 404'), { statusCode: 404 }))
+    expect(reply.sent.status).toBe(500)
+    expect(reply.sent.body).toMatchObject({ error: { kind: 'internal' } })
+  })
 })

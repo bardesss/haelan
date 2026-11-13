@@ -1,7 +1,7 @@
 import type { DbOrTx } from '../db/open.ts'
 import { groupSessions, DEFAULT_OVERLAP_RATIO } from '../derive/sessionOverlap.ts'
 import type { Priority } from '../derive/priority.ts'
-import { shiftLocalDate } from '../derive/localDay.ts'
+import { shiftLocalDateClamped } from '../derive/localDay.ts'
 import { loadPriority } from '../store/sourcePriority.ts'
 import { SettingsStore } from '../store/settings.ts'
 import { workoutSummary } from '../api/workoutSummary.ts'
@@ -178,8 +178,8 @@ export function readMergedWorkouts(db: DbOrTx, input: {
   const raw = readSessions(db, {
     personId: input.personId,
     kind: 'exercise',
-    from: shiftLocalDate(input.from, -1),
-    to: shiftLocalDate(input.to, 1),
+    from: shiftLocalDateClamped(input.from, -1),
+    to: shiftLocalDateClamped(input.to, 1),
   })
   const inRange = mergeWorkouts(raw, input.rule)
     .filter((w) => w.localDate >= input.from && w.localDate <= input.to)
@@ -214,8 +214,8 @@ export function mergedWorkoutFor(db: DbOrTx, input: {
   const around = readSessions(db, {
     personId: input.personId,
     kind: 'exercise',
-    from: shiftLocalDate(session.localDate, -1),
-    to: shiftLocalDate(session.localDate, 1),
+    from: shiftLocalDateClamped(session.localDate, -1),
+    to: shiftLocalDateClamped(session.localDate, 1),
   })
   const merged = mergeWorkouts(around, input.rule)
   const found = merged.find((w) => w.id === session.id || w.alternateIds.includes(session.id)) ?? session

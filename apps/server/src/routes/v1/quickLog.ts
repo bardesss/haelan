@@ -35,7 +35,7 @@ export function registerQuickLogRoutes(app: FastifyInstance): void {
   }
 
   // `field` names the caller's own parameter in the 400 (`day` for the POST body, `localDate` for
-  // the two path params), the same way requiredNumberField names an event's `startedAtMs`: a
+  // the two path params), the same way requiredIntegerField names an event's `startedAtMs`: a
   // malformed `day` must not be reported back to the caller as a problem with `localDate`, a name
   // that appears nowhere in that request.
   function notAfterToday(field: string, value: string, today: string): void {
@@ -107,7 +107,7 @@ export function registerQuickLogRoutes(app: FastifyInstance): void {
     const body = request.body ?? {}
     // Narrowed here rather than left to MoodStore.put's own Number.isInteger check, which throws
     // the same ConfigError for a non-number and for a fractional or out-of-range one alike: this
-    // route's own message names `score` specifically, the same way requiredNumberField does for an
+    // route's own message names `score` specifically, the same way requiredIntegerField does for an
     // event's startedAtMs, before the value ever reaches the store.
     if (typeof body.score !== 'number') throw new ConfigError('score must be a number')
     const score = body.score

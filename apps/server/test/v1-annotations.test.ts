@@ -19,7 +19,7 @@ async function putNote(h: Harness, token: string, localDate: string, body: strin
 }
 
 async function postEvent(
-  h: Harness, token: string, input: { kind: string, startedAtMs: number, startedAtOffsetMinutes?: number },
+  h: Harness, token: string, input: Record<string, unknown>,
 ) {
   return h.app.inject({
     method: 'POST', url: '/api/v1/p/p1/events',
@@ -138,6 +138,38 @@ describe('the note and event routes', () => {
     })
     // Refused before the route ran, so the note is still there.
     expect(harness.app.haelan.instance.notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(1)
+  })
+
+  // Fastify refuses these before the route runs, each with its own FST_ 4xx. They are the caller's
+  // mistake, so they keep that status in the error envelope rather than reading as a bug in us.
+  const postEvents = (h: Awaited<ReturnType<typeof withServer>>, token: string, payload: string) =>
+    h.app.inject({
+      method: 'POST', url: '/api/v1/p/p1/events',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN, 'content-type': 'application/json' }, payload,
+    })
+
+  it('answers 400 config for a body that is not JSON, not 500', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await postEvents(harness, token, '{bad json')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: { kind: 'config', code: 'bad_request', message: expect.any(String) } })
+  })
+
+  it('answers 400 config for an empty JSON body', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await postEvents(harness, token, '')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: { kind: 'config', code: 'bad_request', message: expect.any(String) } })
+  })
+
+  it('answers 413 config for a body over the default limit', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await postEvents(harness, token,
+      JSON.stringify({ kind: 'x', startedAtMs: 0, note: 'a'.repeat(1_100_000) }))
+    expect(response.statusCode).toBe(413)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'payload_too_large', message: expect.any(String) },
+    })
   })
 
   it('answers 200 removing a date that was never noted, and leaves other days alone', async () => {
@@ -354,5 +386,40 @@ describe('GET /overrides', () => {
     const list = await get(harness, token, '/overrides')
     expect(list.json().items).toHaveLength(5)
     expect(list.json().cursor).toBeUndefined()
+  })
+})
+
+describe('event and day override writes refuse junk', () => {
+  it.each([
+    ['a fractional startedAtMs', { startedAtMs: 1.5 }],
+    ['a fractional endedAtMs', { startedAtMs: 0, endedAtMs: 1.5 }],
+    ['a startedAtOffsetMinutes past +840', { startedAtMs: 0, startedAtOffsetMinutes: 841 }],
+    ['a startedAtOffsetMinutes past -840', { startedAtMs: 0, startedAtOffsetMinutes: -841 }],
+    ['a fractional offset', { startedAtMs: 0, startedAtOffsetMinutes: 30.5 }],
+    ['an endedAtOffsetMinutes past +840', { startedAtMs: 0, endedAtMs: 60_000, endedAtOffsetMinutes: 900 }],
+  ])('answers 400 for an event with %s, and stores nothing', async (_label, fields) => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await postEvent(harness, token, { kind: 'caffeine', ...fields })
+    expect(response.statusCode).toBe(400)
+    expect(harness.app.haelan.instance.events.listFor('p1', '1969-12-31', '1970-01-02')).toHaveLength(0)
+  })
+
+  it('accepts offsets of exactly 840 and -840', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (const offset of [840, -840]) {
+      const response = await postEvent(harness, token, { kind: 'caffeine', startedAtMs: 0, startedAtOffsetMinutes: offset })
+      expect(response.statusCode).toBe(200)
+    }
+  })
+
+  it.each(['2026-13-45', 'yesterday'])('answers 400 for a day_metric override on %s, and stores nothing', async (localDate) => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/v1/p/p1/overrides',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      payload: { scope: 'day_metric', targetKey: JSON.stringify({ localDate, metric: 'steps' }), action: 'exclude', reason: 'test' },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(harness.app.haelan.instance.overrides.listFor('p1')).toHaveLength(0)
   })
 })

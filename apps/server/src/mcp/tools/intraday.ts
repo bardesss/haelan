@@ -39,13 +39,15 @@ export const getIntraday = defineTool({
       metric: args.metric, localDate: args.localDate,
       points: budgetFor(args.points, DEFAULT_INTRADAY_POINTS), sourceId: args.source,
     })
+    // Summarised from the unthinned read: minmax thinning keeps extremes, which biases a mean.
+    const full = q.intraday({ metric: args.metric, localDate: args.localDate, points: 'all', sourceId: args.source })
     return {
       points: result.points.map((p) => ({
         sourceId: p.sourceId, utcMs: p.utcMs, min: p.min, mean: p.mean, max: p.max,
         n: p.n, excluded: p.excluded,
       })),
       reduction: result.reduction,
-      summary: summaryOf(result.points.map((p) => p.mean).filter((v) => v !== null)),
+      summary: summaryOf(full.points.map((p) => p.mean).filter((v) => v !== null)),
     }
   },
 })

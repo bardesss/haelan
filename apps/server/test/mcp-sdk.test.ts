@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { MAX_RANGE_DAYS, PersonQuery, createTestDatabase, seedPerson, schema } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
-import { buildMcpServer } from '../src/mcp/adapter.ts'
+import { INTERNAL_TOOL_ERROR, buildMcpServer } from '../src/mcp/adapter.ts'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
 
 /**
@@ -68,6 +68,18 @@ describe('a tool result over the real protocol', () => {
     expect(blocks[0]).toBe('describe_person: sources 1.')
     expect(JSON.parse(blocks[1]!)).toEqual(result.structuredContent)
 
+    await client.close()
+  })
+
+  it('answers a generic refusal for an unexpected throw, and logs the real one', async () => {
+    const leak = new Error('SQLITE_CORRUPT: database disk image is malformed at /data/haelan.db')
+    vi.spyOn(PersonQuery.prototype, 'describe').mockImplementation(() => { throw leak })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const client = await connected()
+    const result = await client.callTool({ name: 'describe_person', arguments: {} })
+    expect(result.isError).toBe(true)
+    expect(result.content).toEqual([{ type: 'text', text: INTERNAL_TOOL_ERROR }])
+    expect(logged).toHaveBeenCalledWith('mcp: describe_person failed', leak)
     await client.close()
   })
 

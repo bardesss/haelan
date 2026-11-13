@@ -117,7 +117,7 @@ export function readSleepNights(db: DbOrTx, input: {
   // Read here rather than taken as a parameter, the same call readSessions makes for the same
   // reason: every caller of this reader wants the same answer, and one that forgot to pass
   // overrides through would silently draw a night the person had already corrected out from
-  // under the daily figures — the exact bug this function exists to close. Overrides are
+  // under the daily figures, the exact bug this function exists to close. Overrides are
   // hand-entered and few, so this is one small indexed read scoped by person and scope.
   const overrideRows = db.select().from(overridesTable).where(and(
     eq(overridesTable.personId, input.personId),
@@ -194,6 +194,9 @@ export function readSleepNights(db: DbOrTx, input: {
     startOffsetMinutes: row.startOffsetMinutes, endOffsetMinutes: row.endOffsetMinutes,
   }]))
 
+  // Each session id maps to its night's segment list so segmentRows, already in start order, is
+  // walked once rather than filtered whole for every night.
+  const segmentsOf = new Map<string, Night['segments']>()
   const nights: Night[] = []
   for (const [filedOn, bySource] of byDate) {
     for (const group of bySource.values()) {
@@ -218,8 +221,10 @@ export function readSleepNights(db: DbOrTx, input: {
       const end = Math.max(...night.map((s) => s.endMs))
       const first = night.find((s) => s.startMs === start)!
       const last = night.find((s) => s.endMs === end)!
-      const ids = new Set(night.map((s) => s.id))
       const excludedSessions = excludedByDate.get(filedOn)?.get(group[0]!.sourceId) ?? []
+
+      const segments: Night['segments'] = []
+      for (const id of night.map((s) => s.id)) segmentsOf.set(id, segments)
 
       nights.push({
         localDate: filedOn,
@@ -230,13 +235,15 @@ export function readSleepNights(db: DbOrTx, input: {
         startOffsetMinutes: first.startOffsetMinutes,
         endOffsetMinutes: last.endOffsetMinutes,
         naps: naps.map((s) => s.startMs),
-        segments: segmentRows
-          .filter((segment) => ids.has(segment.sessionId))
-          .map((segment) => ({ stage: segment.stage, startMs: segment.startMs, endMs: segment.endMs })),
+        segments,
         excludedSessions,
         sessionSpans: [...night.map((s) => s.id), ...excludedSessions].map((id) => spanOf.get(id)!),
       })
     }
+  }
+
+  for (const segment of segmentRows) {
+    segmentsOf.get(segment.sessionId)?.push({ stage: segment.stage, startMs: segment.startMs, endMs: segment.endMs })
   }
 
   return nights.sort((a, b) => a.localDate.localeCompare(b.localDate) || a.sourceId.localeCompare(b.sourceId))

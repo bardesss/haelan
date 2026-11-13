@@ -136,6 +136,19 @@ describe('GET /series', () => {
 })
 
 describe('GET /baselines', () => {
+  it('answers 400 naming the limit for a window wider than the range maximum', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-01-01&windowDays=999999999999')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toBe(`windowDays must be at most ${MAX_RANGE_DAYS} days, got 999999999999`)
+  })
+
+  it('accepts a window of exactly the maximum', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, `/baselines?metric=steps&agg=sum&on=2026-01-01&windowDays=${MAX_RANGE_DAYS}`)
+    expect(response.statusCode).toBe(200)
+  })
+
   it("answers the person's own baseline for a metric as of a date", async () => {
     harness = await withServer(); const token = await harness.signIn()
     for (let day = 1; day <= 5; day += 1) {

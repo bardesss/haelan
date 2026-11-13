@@ -70,9 +70,18 @@ function isDatabaseBusy(error: unknown): boolean {
   return typeof code === 'string' && (code.startsWith('SQLITE_BUSY') || code.startsWith('SQLITE_LOCKED'))
 }
 
-/** Whether a throw is Fastify refusing a request's content type: FST_ERR_CTP_INVALID_MEDIA_TYPE, a 415. */
-function isUnsupportedMediaType(error: unknown): error is Error {
-  return error instanceof Error && (error as { code?: unknown }).code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE'
+/**
+ * A throw that is Fastify refusing the request itself (bad JSON, empty body, too large, no parser
+ * for the content type), before or around the route. Trusted only with an FST_ code and a 4xx
+ * statusCode: any other object carrying a statusCode (an upstream client's error, say) is not
+ * Fastify speaking and stays a 500.
+ */
+function fastifyClientError(error: unknown): { status: number, message: string } | null {
+  if (!(error instanceof Error)) return null
+  const { code, statusCode } = error as { code?: unknown, statusCode?: unknown }
+  if (typeof code !== 'string' || !code.startsWith('FST_')) return null
+  if (typeof statusCode !== 'number' || statusCode < 400 || statusCode > 499) return null
+  return { status: statusCode, message: error.message }
 }
 
 /**
@@ -111,14 +120,17 @@ export function sendCoreError(reply: FastifyReply, error: unknown): FastifyReply
     return reply.code(statusFor('transient'))
       .send(errorBody('transient', 'database_busy', 'the instance is busy writing, so try again shortly'))
   }
-  // Fastify's own refusal of a body it has no parser for (a form post, say), thrown before the
-  // route runs. It is the caller's mistake, not a bug in us, so it keeps Fastify's 415 rather than
-  // falling to the 500 below. Under 'config', the kind for a request the caller has to change, with
-  // a real code saying which change; no new kind, since a client branching on kind already knows
-  // what 'config' asks of it. The message is Fastify's, which names only the media type the
-  // caller itself sent.
-  if (isUnsupportedMediaType(error)) {
-    return reply.code(415).send(errorBody('config', 'unsupported_media_type', error.message))
+  // Fastify's own refusal of a request (a form post it has no parser for, a body that is not JSON,
+  // one over the size limit), thrown before the route runs. It is the caller's mistake, not a bug
+  // in us, so it keeps Fastify's 4xx rather than falling to the 500 below. Under 'config', the kind
+  // for a request the caller has to change, with a real code saying which change; no new kind,
+  // since a client branching on kind already knows what 'config' asks of it. The message is
+  // Fastify's, which names only what the caller itself sent.
+  const clientError = fastifyClientError(error)
+  if (clientError) {
+    const code = clientError.status === 413 ? 'payload_too_large'
+      : clientError.status === 415 ? 'unsupported_media_type' : 'bad_request'
+    return reply.code(clientError.status).send(errorBody('config', code, clientError.message))
   }
   console.error(error)
   return reply.code(statusFor('internal')).send(errorBody('internal', 'internal_error', 'something went wrong'))

@@ -3,7 +3,7 @@ import {
   ConfigError, peopleNeedingRebuild, requireDate, runDerive,
 } from '@haelan/core'
 import type { OverrideScope, StoredOverride } from '@haelan/core'
-import { parseSampleTarget } from '@haelan/core/target-key'
+import { parseDayMetricTarget, parseSampleTarget } from '@haelan/core/target-key'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { logDayFailed } from '../../derive/logDayFailed.ts'
 import {
@@ -114,6 +114,8 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     // and a throw after put has committed would be a 500 over a saved override, which is the
     // outcome the 200 with applied false exists to avoid. A malformed key throws here instead,
     // where nothing has been written and the shared 400 is the right answer.
+    // A day_metric key carries its date as free text, and the store would accept junk and mark it dirty.
+    if (scope === 'day_metric') requireDate('targetKey localDate', parseDayMetricTarget(targetKey).localDate)
     const localDate = overrides.affectedLocalDate({ personId, scope, targetKey })
     // No try/catch and no second transaction: put wraps the row and the queue mark in one
     // already, and registerV1's error handler turns its ConfigError into the shared 400.
@@ -189,12 +191,12 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     // names a seed set but declined to enforce it, so refusing an unlisted kind here would add
     // back a rule the schema chose not to make.
     const kind = textField(body.kind, 'kind')
-    const startedAtMs = requiredNumberField(body.startedAtMs, 'startedAtMs')
+    const startedAtMs = requiredIntegerField(body.startedAtMs, 'startedAtMs')
     // Offset defaults to 0 (UTC) rather than being required: a caller that only has an instant,
     // with no local timezone to attach to it, still has an event worth recording.
-    const startedAtOffsetMinutes = numberField(body.startedAtOffsetMinutes, 'startedAtOffsetMinutes') ?? 0
-    const endedAtMs = numberField(body.endedAtMs, 'endedAtMs')
-    const endedAtOffsetMinutes = numberField(body.endedAtOffsetMinutes, 'endedAtOffsetMinutes')
+    const startedAtOffsetMinutes = offsetField(body.startedAtOffsetMinutes, 'startedAtOffsetMinutes') ?? 0
+    const endedAtMs = integerField(body.endedAtMs, 'endedAtMs')
+    const endedAtOffsetMinutes = offsetField(body.endedAtOffsetMinutes, 'endedAtOffsetMinutes')
     const value = numberField(body.value, 'value')
     const note = optionalTextField(body.note, 'note')
 
@@ -405,10 +407,30 @@ function numberField(value: unknown, name: string): number | undefined {
   return value
 }
 
-/** Like numberField, but absent is refused rather than passed through: an event needs a start. */
-function requiredNumberField(value: unknown, name: string): number {
+/** UTC+14 is the widest real offset; the sign is the same bound the other way. */
+const MAX_OFFSET_MINUTES = 840
+
+/** Absent and null mean "not given". A fraction is refused: an instant or offset is a whole number. */
+function integerField(value: unknown, name: string): number | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    throw new ConfigError(`${name} must be a whole number`)
+  }
+  return value
+}
+
+/** Like integerField, but absent is refused rather than passed through: an event needs a start. */
+function requiredIntegerField(value: unknown, name: string): number {
   if (value === undefined || value === null) throw new ConfigError(`${name} is required`)
-  return numberField(value, name) as number
+  return integerField(value, name) as number
+}
+
+function offsetField(value: unknown, name: string): number | undefined {
+  const minutes = integerField(value, name)
+  if (minutes !== undefined && Math.abs(minutes) > MAX_OFFSET_MINUTES) {
+    throw new ConfigError(`${name} must be within -840 and 840 minutes, got ${minutes}`)
+  }
+  return minutes
 }
 
 /**

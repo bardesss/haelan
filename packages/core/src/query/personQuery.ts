@@ -13,6 +13,7 @@ import { MERGED_SOURCE, PROVIDER_SOURCE, ZONE_FORMULA_BASIS } from '../derive/ro
 import type { SampleLike } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
+import { effectiveTimezone } from '../store/people.ts'
 import { ConfigError } from '../errors.ts'
 import { baselinesOver, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
@@ -22,7 +23,7 @@ import { coverageIsMeaningful } from './coverageSignal.ts'
 // confusing to read.
 import { comparePeriods as comparePeriodPoints, INSIGHT_MIN_COVERAGE } from './insights.ts'
 import type { Insight, PeriodPoint } from './insights.ts'
-import { localDateOf, localMinuteOf, shiftLocalDate, widenedUtcWindow } from '../derive/localDay.ts'
+import { localDateOf, localMinuteOf, MAX_RANGE_DAYS, shiftLocalDate, widenedUtcWindow } from '../derive/localDay.ts'
 import { thin } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
 import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS, readIntraday, readIntradayWindow } from './intraday.ts'
@@ -438,6 +439,11 @@ export class PersonQuery {
 
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
     requirePositiveInteger('windowDays', windowDays)
+    // Refused here, before baselineWindow shifts the date: a window past the calendar made
+    // shiftLocalDate throw an opaque RangeError that surfaced as a 500.
+    if (windowDays > MAX_RANGE_DAYS) {
+      throw new ConfigError(`windowDays must be at most ${MAX_RANGE_DAYS} days, got ${windowDays}`)
+    }
     const { points } = this.series({
       metric: input.metric, agg: input.agg,
       from: baselineWindow(input.from, windowDays).from, to: baselineWindow(input.to, windowDays).to, source: input.source,
@@ -524,12 +530,12 @@ export class PersonQuery {
   intraday(input: {
     metric: string
     localDate: string
-    points?: number
+    points?: number | 'all'
     sourceId?: string
   }): IntradayResult {
     requireMetric(input.metric)
     requireDate('localDate', input.localDate)
-    requireOptionalPositiveInteger('points', input.points)
+    if (input.points !== 'all') requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntraday(this.#db, {
       personId: this.#personId,
@@ -555,7 +561,7 @@ export class PersonQuery {
     metric: string
     startMs: number
     endMs: number
-    points?: number
+    points?: number | 'all'
     sourceId?: string
   }): IntradayResult {
     requireMetric(input.metric)
@@ -574,7 +580,7 @@ export class PersonQuery {
         + 'a longer span, which read derived rows rather than every sample in it.',
       )
     }
-    requireOptionalPositiveInteger('points', input.points)
+    if (input.points !== 'all') requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntradayWindow(this.#db, {
       personId: this.#personId,
@@ -1019,6 +1025,15 @@ export class PersonQuery {
   }): StoredEvent[] {
     requireRange(input.from, input.to)
     return new EventStore(this.#db).listFor(this.#personId, input.from, input.to)
+  }
+
+  /** The zone the person's days are read in now: the phone's while it is followed, else home. */
+  effectiveTimezone(): string {
+    const person = this.#db.select({
+      timezone: people.timezone, currentTimezone: people.currentTimezone, followPhoneZone: people.followPhoneZone,
+    }).from(people).where(eq(people.id, this.#personId)).get()
+    if (person === undefined) throw new ConfigError(`no person named '${this.#personId}'`)
+    return effectiveTimezone(person)
   }
 
   /**

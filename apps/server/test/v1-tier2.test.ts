@@ -105,6 +105,14 @@ describe('GET /intraday', () => {
 })
 
 describe('GET /sessions', () => {
+  it('answers 400 naming the limit for a range wider than the maximum, not an empty list', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, { localDate: '2025-06-01' })
+    const response = await get(harness, token, '/sessions?kind=exercise&from=2025-01-01&to=9999-12-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toContain(`more than the ${MAX_RANGE_DAYS} day maximum`)
+  })
+
   // A phone asking for a year of nights should not be handed a year of nights.
   it('caps a list at limit and hands back a cursor', async () => {
     harness = await withServer(); const token = await harness.signIn()

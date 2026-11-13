@@ -239,9 +239,8 @@ export function walkDay(q: PersonQuery, localDate: string, today: string): {
   // Refused rather than answered: without a clock the tool cannot know a day is still running, and
   // a running day's steps judged against whole days' usual would read as a quiet day.
   if (localDate >= today) throw new ConfigError(`localDate '${localDate}' is not before today '${today}': only a finished day is explained`)
-  const person = q.describe()
-  // The home zone: a finished day's end bounds nothing a reader sees (the glance route says why).
-  const dayEndMs = localMidnightMs(shiftLocalDate(localDate, 1), person.timezone) - 1
+  // The effective zone, as /glance uses: a finished day's end bounds nothing a reader sees (the glance route says why).
+  const dayEndMs = localMidnightMs(shiftLocalDate(localDate, 1), q.effectiveTimezone()) - 1
   const glance = q.glance({ today, nowMs: dayEndMs, day: localDate, dayEndMs })
 
   const figures: Record<FigureKey, GlanceFigure | null | undefined> = {

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { and, eq, gt, lte } from 'drizzle-orm'
 import { PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, shiftLocalDate } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
@@ -93,6 +93,15 @@ describe('explain, kind day', () => {
     expect(raw.walked.at(-1)).toBe(raw.stoppedAt)
     return { ...raw, evidence: raw.evidence.day }
   }
+
+  it('ends the day at midnight in the zone the phone is in, as the glance does', () => {
+    seed()
+    test.db.update(schema.people).set({ currentTimezone: 'America/Los_Angeles' }).where(eq(schema.people.id, 'robin')).run()
+    const glance = vi.spyOn(q, 'glance')
+    explain()
+    // 2026-08-21 00:00 in Los Angeles (UTC-7 in August) is 07:00Z; robin's home zone is UTC.
+    expect(glance.mock.calls[0]![0]).toMatchObject({ day: D, dayEndMs: Date.parse('2026-08-21T07:00:00Z') - 1 })
+  })
 
   it('refuses a day that is not over, and needs today', () => {
     seed()
