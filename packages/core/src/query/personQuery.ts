@@ -718,9 +718,9 @@ export class PersonQuery {
   }
 
   /**
-   * The metrics this person excluded on one local date, sorted. Derivation drops an excluded
-   * metric's rows before they are written (`applyToDay`), so a day like that has no `daily` row
-   * and nothing else on this class can say why: this is the one reader that can.
+   * The metrics this person excluded on one local date, sorted. Derivation leaves an excluded
+   * metric's derived rows out (`applyToDay`) and readers hide its provider row, so a day like that
+   * shows no value and nothing else on this class can say why: this is the one reader that can.
    */
   excludedDayMetrics(input: { localDate: string }): string[] {
     requireDate('localDate', input.localDate)
