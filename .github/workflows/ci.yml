@@ -30,11 +30,11 @@ jobs:
         node: ['22.14', '24', '26']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
@@ -125,7 +125,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { fetch-depth: 0 }
 
       - id: touched
@@ -156,9 +156,9 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           # 26, matching pages.yml's build job: this rehearses that job's own chain, so it runs on
           # the same runtime pages.yml deploys with rather than the verify matrix's three floors.
@@ -206,9 +206,9 @@ jobs:
     # worse than a red check because nobody watches a job that is still running.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'
           cache: pnpm
@@ -243,7 +243,7 @@ jobs:
       # writes, leaving nothing restored to survive into the build. That is the stale-fixture bug
       # review already closed once, left closed.
       - id: fixtures
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: demo/capture/out
           key: demo-fixtures-${{ hashFiles('demo/capture/**', 'scripts/capture-demo.mjs', 'scripts/seed-demo.mjs', 'apps/server/src/routes/v1/**', 'packages/core/src/**', 'apps/web/src/**') }}
