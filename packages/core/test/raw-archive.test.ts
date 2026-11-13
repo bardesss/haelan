@@ -156,15 +156,47 @@ describe('RawArchive', () => {
     expect(rows[0]!.fetch_episode_id).toBe('ep-1')
   })
 
-  it('archives an identical body again when the caller opts out of dedup, and lists both in order', () => {
-    const first = archive.put({ ...base, body, fetchedAtMs: 10 })
-    const second = archive.put({ ...base, body, fetchedAtMs: 20, deduplicate: false })
-    expect(second).toEqual({ id: expect.any(String), deduplicated: false })
-    expect(second.id).not.toBe(first.id)
-    expect(archive.getBody('p1', second.id)).toBe(body)
-    expect(archive.listFor('p1').map((p) => p.id)).toEqual([first.id, second.id])
-    // An ordinary put still lands on the first row.
-    expect(archive.put({ ...base, body, fetchedAtMs: 30 })).toEqual({ id: first.id, deduplicated: true })
+  describe('deduplicating against the latest row only', () => {
+    const named = (dataSource: string) => ({
+      ...base, requestParams: { source: COMPANION_SOURCE, dataSource }, deduplicate: 'latest' as const,
+    })
+    const other = JSON.stringify({ dataPoints: [{ steps: { count: 2 } }] })
+
+    it('archives a body again when another body came between, and lists all three in order', () => {
+      const first = archive.put({ ...named('phone'), body, fetchedAtMs: 10 })
+      const between = archive.put({ ...named('phone'), body: other, fetchedAtMs: 20 })
+      const again = archive.put({ ...named('phone'), body, fetchedAtMs: 30 })
+      expect(again).toEqual({ id: expect.any(String), deduplicated: false })
+      expect(again.id).not.toBe(first.id)
+      expect(archive.getBody('p1', again.id)).toBe(body)
+      expect(archive.listFor('p1').map((p) => p.id)).toEqual([first.id, between.id, again.id])
+    })
+
+    it('deduplicates an immediate identical re-send onto the latest row', () => {
+      const first = archive.put({ ...named('phone'), body: other, fetchedAtMs: 5 })
+      const latest = archive.put({ ...named('phone'), body, fetchedAtMs: 10 })
+      expect(archive.put({ ...named('phone'), body, fetchedAtMs: 20 })).toEqual({ id: latest.id, deduplicated: true })
+      expect(archive.listFor('p1').map((p) => p.id)).toEqual([first.id, latest.id])
+    })
+
+    it('only weighs rows of the same source and data source', () => {
+      const first = archive.put({ ...named('phone'), body, fetchedAtMs: 10 })
+      archive.put({ ...named('watch'), body: other, fetchedAtMs: 20 })
+      archive.put({ ...base, body: other, fetchedAtMs: 25 })
+      expect(archive.put({ ...named('phone'), body, fetchedAtMs: 30 })).toEqual({ id: first.id, deduplicated: true })
+    })
+
+    it('deduplicates onto a latest row archived before the option existed', () => {
+      const first = archive.put({ ...base, requestParams: { source: COMPANION_SOURCE, dataSource: 'phone' }, body, fetchedAtMs: 10 })
+      expect(archive.put({ ...named('phone'), body, fetchedAtMs: 20 })).toEqual({ id: first.id, deduplicated: true })
+    })
+
+    it('an ordinary put still lands on the first row of a body', () => {
+      const first = archive.put({ ...base, body, fetchedAtMs: 10 })
+      archive.put({ ...base, body: other, fetchedAtMs: 15 })
+      archive.put({ ...base, body, fetchedAtMs: 20, deduplicate: 'latest' })
+      expect(archive.put({ ...base, body, fetchedAtMs: 30 })).toEqual({ id: first.id, deduplicated: true })
+    })
   })
 })
 

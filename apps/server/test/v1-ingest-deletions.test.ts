@@ -199,6 +199,20 @@ describe('a rebuild after companion moves ends where live did', () => {
     return { live, rebuilt: snapshot() }
   }
 
+  // A phone before 0.12.0 re-posts its last day every two hours: the same named body, again.
+  it('an immediate identical re-send of a named weight deduplicates', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const monday = [weightAt('2026-08-17T07:00:00Z', 'hc-weight-1')]
+    const first = await ingest(token, 'weight', monday)
+    harness.clock.nowMs += 2 * 3_600_000
+    const second = await ingest(token, 'weight', monday)
+    expect(second.json()).toMatchObject({
+      deduplicated: true, payloadId: (first.json() as { payloadId: string }).payloadId,
+    })
+    expect(harness.app.haelan.instance.db.select().from(schema.rawPayloads).all()).toHaveLength(1)
+  })
+
   it('a weight moved away and back again, the last upload identical to the first', async () => {
     harness = await withServer()
     const token = await harness.signIn()

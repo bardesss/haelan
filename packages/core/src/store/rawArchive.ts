@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { rawPayloads } from '../db/schema/index.ts'
 import { ConfigError, TransientError } from '../errors.ts'
@@ -21,12 +21,15 @@ export interface PutInput {
    */
   fetchEpisodeId?: string
   /**
-   * False archives the body as a row of its own even when an identical one is stored for the
-   * same window. For a companion upload carrying record ids, where a later upload can move a
-   * record and an identical one can move it back: replay applies each row once, at its own
-   * place in fetch order, so a deduplicated move back would never be replayed. Defaults to true.
+   * 'any' (the default) stores a body once per window. 'latest' deduplicates only onto the
+   * newest row of the same person, data type and requestParams `source` and `dataSource`, and
+   * otherwise archives the body as a row of its own. For a companion upload carrying record ids,
+   * where a later upload can move a record and an identical one can move it back: replay
+   * applies each row once, at its own place in fetch order, so a move back deduplicated onto an
+   * older row would never be replayed. An identical re-send of the newest body changes nothing
+   * a replay could see, so it still deduplicates.
    */
-  deduplicate?: boolean
+  deduplicate?: 'any' | 'latest'
 }
 
 export interface PutResult { id: string, deduplicated: boolean }
@@ -78,10 +81,18 @@ export class RawArchive {
 
   put(input: PutInput): PutResult {
     const id = randomUUID()
-    // body_hash is read by nothing but the unique index below, so a row that opts out of dedup
-    // carries its own id beside the hash: it never conflicts, and nothing deduplicates onto it.
     const contentHash = createHash('sha256').update(input.body).digest('hex')
-    const bodyHash = input.deduplicate === false ? `${contentHash}:${id}` : contentHash
+    let bodyHash = contentHash
+    if (input.deduplicate === 'latest') {
+      const latest = this.#latestOfSource(input)
+      if (latest && latest.bodyHash.split(':')[0] === contentHash
+        && latest.windowStartMs === input.windowStartMs && latest.windowEndMs === input.windowEndMs) {
+        return { id: latest.id, deduplicated: true }
+      }
+      // Nothing outside put reads body_hash, so a row that must not be deduplicated onto an
+      // older one carries its own id beside the hash: the unique index never matches it.
+      bodyHash = `${contentHash}:${id}`
+    }
 
     // Insert first and let the unique constraint decide, rather than select-then-insert: two
     // processes racing on the same new body (WAL mode lets the MCP server, the CLI and a sync
@@ -124,6 +135,25 @@ export class RawArchive {
     )).get()
     if (!existing) throw new TransientError('insert conflicted but no existing row found')
     return { id: existing.id, deduplicated: true }
+  }
+
+  /** The row listFor would list last among `input`'s person, data type, source and data source. */
+  #latestOfSource(input: PutInput) {
+    const param = (key: string): string | null => {
+      const value = input.requestParams[key]
+      return typeof value === 'string' ? value : null
+    }
+    return this.#db.select({
+      id: rawPayloads.id, bodyHash: rawPayloads.bodyHash,
+      windowStartMs: rawPayloads.windowStartMs, windowEndMs: rawPayloads.windowEndMs,
+    }).from(rawPayloads).where(and(
+      eq(rawPayloads.personId, input.personId),
+      eq(rawPayloads.dataType, input.dataType),
+      eq(rawPayloads.httpStatus, 200),
+      sql`json_valid(${rawPayloads.requestParams})
+        AND json_extract(${rawPayloads.requestParams}, '$.source') IS ${param('source')}
+        AND json_extract(${rawPayloads.requestParams}, '$.dataSource') IS ${param('dataSource')}`,
+    )).orderBy(desc(rawPayloads.fetchedAtMs), desc(rawPayloads.id)).limit(1).get()
   }
 
   /**
