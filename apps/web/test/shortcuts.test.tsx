@@ -76,6 +76,15 @@ describe('isForeignKey', () => {
     expect(isForeignKey(key({ metaKey: true }))).toBe(true)
     expect(isForeignKey(key({ altKey: true }))).toBe(true)
   })
+
+  it('claims a key while a role="dialog" panel is open', () => {
+    const panel = document.createElement('div')
+    panel.setAttribute('role', 'dialog')
+    document.body.appendChild(panel)
+    expect(isForeignKey(key())).toBe(true)
+    panel.remove()
+    expect(isForeignKey(key())).toBe(false)
+  })
 })
 
 describe('the go-to box', () => {
