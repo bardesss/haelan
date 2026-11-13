@@ -161,6 +161,8 @@ export function mergeActivityBandsDay(input: {
   const family = new Set(BAND_FAMILY)
 
   // instant the local hour began -> source -> that source's rows in the hour
+  // Sources that disagree on the offset by a fraction of an hour get different keys. That is rare,
+  // and the instant key is right for whole-hour mismatches.
   const byHour = new Map<number, Map<string, SampleLike[]>>()
   for (const row of input.rows) {
     if (!family.has(row.metric) || row.value === null) continue

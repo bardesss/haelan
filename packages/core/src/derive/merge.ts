@@ -27,6 +27,8 @@ export function selectHourWinners(
   rows: readonly SampleLike[], priority: Priority,
 ): { winning: SampleLike[], mixes: Map<string, Map<string, number>> } {
   // metric -> instant the local hour began -> source -> rows
+  // Sources that disagree on the offset by a fraction of an hour get different keys. That is rare,
+  // and the instant key is right for whole-hour mismatches.
   const byMetric = new Map<string, Map<number, Map<string, SampleLike[]>>>()
 
   for (const row of rows) {

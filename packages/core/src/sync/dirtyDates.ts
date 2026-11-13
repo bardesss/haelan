@@ -27,6 +27,8 @@ export function exerciseDatesSpanning(
     if (t < min) min = t
     if (t > max) max = t
   }
+  // The SQL bounds are only a coarse prefilter over [min, max]; the per-instant half-open check
+  // below, in memory, is what decides, so a session lying between two distant instants is not marked.
   const candidates = tx.select({
     startMs: sessions.startMs, endMs: sessions.endMs, localDate: sessions.localDate,
   }).from(sessions).where(and(
