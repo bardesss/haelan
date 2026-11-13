@@ -351,6 +351,45 @@ describe('replayPerson', () => {
     expect(meanAt(db, 120_000)).toMatchObject({ value: 100, n: 1 })
   })
 
+  test('a call holding its own first page takes no leading page, even when a continuation sorts ahead of its start', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    const shared = {
+      personId: 'p1', dataType: 'heart-rate', windowStartMs: 0, windowEndMs: 86_400_000,
+      httpStatus: 200,
+    } as const
+    // An earlier call whose first page answered nextPageToken 'p2', the same token the later
+    // call's continuation was asked with.
+    archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 1, fetchEpisodeId: 'ep-1',
+      body: withNextToken(pageWithBeats([{ atMs: 60_000, bpm: 60 }]), 'p2'),
+    })
+    // The later call archived both its pages, in one millisecond. Its start was not deduplicated,
+    // so nothing is missing at its front, but its continuation sorts first and a search for that
+    // continuation's leading page would find the earlier call's first page and blend it in.
+    const start = archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 5, fetchEpisodeId: 'ep-2',
+      body: withNextToken(pageWithBeats([{ atMs: 60_000, bpm: 100 }]), 'p2'),
+    })
+    const continuation = archive.put({
+      ...shared, requestParams: { ...listParams, pageToken: 'p2' }, fetchedAtMs: 5,
+      fetchEpisodeId: 'ep-2', body: pageWithBeats([{ atMs: 90_000, bpm: 100 }]),
+    })
+    // Pinned rather than left to the random ids, so the continuation sorts ahead on every run.
+    db.run(sql`update raw_payloads set id = 'zzz-start' where id = ${start.id}`)
+    db.run(sql`update raw_payloads set id = 'aaa-continuation' where id = ${continuation.id}`)
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
+    }))
+
+    // The later call alone, as the sync wrote it: both its readings fall in minute one. A leading
+    // page would blend the earlier 60 in as a third reading.
+    expect(meanAt(db, 60_000)).toMatchObject({ value: 100, n: 2 })
+  })
+
   test('a rebuild matches the live sync when a re-fetch deduplicated its first page', async () => {
     const db = freshDb()
     seedPerson(db, 'p1', { timezone: 'UTC' })

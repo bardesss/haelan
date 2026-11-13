@@ -245,11 +245,18 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // timezone change gives the same date different bounds. The sync wrote them in fetch order, so
   // the last upsert onto a minute has to come from the last fetch here too.
   const position = new Map(input.payloads.map((payload, index) => [payload.id, index]))
+  // Memoized per page id: withLeadingPages scans a window's pages backwards once per leading page
+  // it looks for, and each uncached answer is a body read, a gunzip and a JSON parse.
+  const tokens = new Map<string, string | null>()
   const nextPageTokenOf = (page: ArchivedPayload): string | null => {
+    const known = tokens.get(page.id)
+    if (known !== undefined) return known
     const envelope = readEnvelope(input.archive.getBody(input.personId, page.id), 'dataPoints')
-    if (!envelope.readable) return null
-    const token = envelope.body['nextPageToken']
-    return typeof token === 'string' ? token : null
+    const token = envelope.readable && typeof envelope.body['nextPageToken'] === 'string'
+      ? envelope.body['nextPageToken']
+      : null
+    tokens.set(page.id, token)
+    return token
   }
   const plan = planUnits(groupIntoWindows(input.payloads), position, nextPageTokenOf)
   counts.unmappable += plan.unmappable
@@ -656,6 +663,12 @@ function planUnits(
  * this one that answered with the right token is the page this call saw. Repeated while the
  * earliest page so far is itself a continuation, since more than one leading page can have been
  * deduplicated, and stopped when nothing matches.
+ *
+ * The latest matching page is taken, and that can be the wrong body when a value flips back. A
+ * window whose first page read A, then B, then A again holds one row for A, stored at the first
+ * fetch, and one for B. If A and B answered the same token, the third call's continuation matches
+ * B as the latest page before it, though the call began with A, whose row sits further back.
+ * Nothing in the archive tells the two apart.
  *
  * Only for a recorded episode, whose pages are known to be one call, and only when none of its
  * own pages is a first page: an episode that holds its own start deduplicated nothing at the
