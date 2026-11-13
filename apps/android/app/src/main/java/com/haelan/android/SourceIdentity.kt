@@ -70,9 +70,5 @@ data class SourceIdentity(
             }
             return SourceIdentity(deviceName(manufacturer, model), recordingMethod(healthConnectMethod), origin)
         }
-
-        /** Task 5 removes this overload once SyncEngine passes the origin and the cutover. */
-        fun of(manufacturer: String?, model: String?, healthConnectMethod: Int): SourceIdentity =
-            of(manufacturer, model, healthConnectMethod, null, 0L, null)
     }
 }

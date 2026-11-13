@@ -59,7 +59,7 @@ class SourceIdentityTest {
 
     @Test
     fun aTypedReadingCarriesNoDeviceAndSaysManual() {
-        val identity = SourceIdentity.of(null, null, Metadata.RECORDING_METHOD_MANUAL_ENTRY)
+        val identity = SourceIdentity.of(null, null, Metadata.RECORDING_METHOD_MANUAL_ENTRY, null, 0L, null)
 
         // No device is what makes the package name the `who` of the identity, and MANUAL is what
         // makes the instance file the row under a source of its own, kind manual.
@@ -69,8 +69,8 @@ class SourceIdentityTest {
 
     @Test
     fun aWatchAndAPhoneAreTwoIdentitiesAndNotOne() {
-        val watch = SourceIdentity.of("Google", "Pixel Watch 3", Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED)
-        val phone = SourceIdentity.of("Google", "Pixel 9 Pro", Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED)
+        val watch = SourceIdentity.of("Google", "Pixel Watch 3", Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED, null, 0L, null)
+        val phone = SourceIdentity.of("Google", "Pixel 9 Pro", Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED, null, 0L, null)
 
         assertEquals(2, setOf(watch, phone).size)
     }

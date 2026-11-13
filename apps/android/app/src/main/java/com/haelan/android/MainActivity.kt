@@ -521,22 +521,43 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
     /** Posts released routes; false when they did not land, having said why. */
     private suspend fun sendReleased(released: List<Pair<ExerciseSessionRecord, ExerciseRoute>>): Boolean {
         if (released.isEmpty()) return true
-        val outcome = SyncEngine.uploadReleased(engineSession(), packageName, prefs(), released) { path, payload ->
+        // The exercise session's key includes its source, so the route must be filed under the
+        // identity the sync gave the session, and that depends on the instance's cutover. One
+        // cursors request per release is the cost of asking instead of remembering.
+        val fetched = withContext(Dispatchers.IO) {
+            SyncCursors.fetchOf(
+                InstanceClient.get(server, SyncCursors.pathFor(personId), cookie) {
+                    SyncCursors.answerOf(it.body, System.currentTimeMillis())
+                },
+            )
+        }
+        val cutoverMs = when (fetched) {
+            is SyncCursors.Fetch.Ready -> fetched.answer.cutovers[SyncTypes.forKey("exercise").dataTypeId]
+            is SyncCursors.Fetch.Expired -> return endSession()
+            is SyncCursors.Fetch.Unavailable -> return releaseFailed(fetched.error)
+        }
+        val outcome = SyncEngine.uploadReleased(engineSession(), packageName, prefs(), released, cutoverMs) { path, payload ->
             withContext(Dispatchers.IO) { InstanceClient.ingest(server, path, payload, cookie) { } }
         }
         if (outcome is InstanceClient.Outcome.Failed) {
             val error = outcome.error
-            if (error is InstanceClient.InstanceHttpException && error.status == 401) {
-                // The same end a run's 401 gets: the cookie is forgotten and login says why.
-                SessionStore.clearSession(prefs())
-                goLogin(expired = true)
-                return false
-            }
-            Toast.makeText(this, getString(R.string.sync_failed, SyncRun.reasonFor(this, error)), Toast.LENGTH_LONG)
-                .show()
-            return false
+            if (error is InstanceClient.InstanceHttpException && error.status == 401) return endSession()
+            return releaseFailed(error)
         }
         return true
+    }
+
+    /** The same end a run's 401 gets: the cookie is forgotten and login says why. */
+    private fun endSession(): Boolean {
+        SessionStore.clearSession(prefs())
+        goLogin(expired = true)
+        return false
+    }
+
+    private fun releaseFailed(error: Throwable): Boolean {
+        Toast.makeText(this, getString(R.string.sync_failed, SyncRun.reasonFor(this, error)), Toast.LENGTH_LONG)
+            .show()
+        return false
     }
 
     /**

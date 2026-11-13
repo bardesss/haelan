@@ -76,6 +76,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 }
             },
             cursorEnds = answer.ends,
+            cutovers = answer.cutovers,
             report = object : SyncEngine.Reporter {
                 override fun typeStarted(key: String) = Unit
                 override fun typeOk(key: String) {
