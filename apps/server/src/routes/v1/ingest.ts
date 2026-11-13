@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq, sql } from 'drizzle-orm'
 import {
-  COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
+  COMPANION_SOURCE, CompanionRecords, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
   isOriginScoped, mapSessions, mapWindowSamples, sampleDirtyDates, schema, sleepNeighbourDates, supports,
 } from '@haelan/core'
-import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
+import type { DataType, DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
 import { drainPersonDerivation } from './annotations.ts'
 
 interface PersonParams { personId: string }
@@ -20,6 +20,10 @@ interface IngestBody {
 // mapper downsamples to the minute before anything is written, and a request carrying more
 // than this is a client bug rather than a day worth holding the event loop for.
 const MAX_POINTS = 10_000
+
+const MAX_DELETIONS = 1_000
+
+interface DeletionsBody { recordIds?: unknown }
 
 // The body that carries MAX_POINTS, with room to spare. Fastify's own default is one mebibyte,
 // which is smaller than a legitimate request: a thousand heart rate samples are a couple of
@@ -67,13 +71,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     }
 
     const personId = personIdOf(request)
-    const dataType = dataTypeById(request.params.dataTypeId)
-    if (!dataType) throw new ConfigError(`unknown data type '${request.params.dataTypeId}'`)
-    if (!supports(dataType, 'list') || dataType.mappingDeferred
-      || (dataType.target !== 'samples' && dataType.target !== 'sessions')
-      || (dataType.alsoTargets?.length ?? 0) > 0) {
-      throw new ConfigError(`'${dataType.id}' cannot be ingested by the companion app yet`)
-    }
+    const dataType = ingestibleType(request.params.dataTypeId)
 
     const body = request.body ?? {}
     if (!Array.isArray(body.dataPoints)) throw new ConfigError('dataPoints must be an array')
@@ -85,6 +83,16 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     if (typeof dataSource !== 'object' || dataSource === null || Array.isArray(dataSource)) {
       throw new ConfigError('dataSource must be an object')
     }
+
+    // A point naming a tombstoned record is written, and its tombstone lifted in the transaction
+    // below. Health Connect only re-sends a deleted id when that record exists again (a writer's
+    // clientRecordId makes the id the same every time), and a type that failed mid-drain re-sends
+    // its upserts before its deletions, so it still ends deleted. Refusing it instead would lose
+    // an entry restored by its own app for good.
+    const recordIds = [...new Set(body.dataPoints.flatMap((point) => {
+      const name = (point as { name?: unknown } | null)?.name
+      return typeof name === 'string' && name !== '' ? [name] : []
+    }))]
 
     // The archived body carries the request's own dataSource beside its points, and that is the
     // identity every row below is written under. The archive is the only thing a rebuild can
@@ -173,6 +181,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     const windowEndMs = Math.max(...ends) + 1
 
     const written = instance.db.transaction((tx) => {
+      if (recordIds.length > 0) new CompanionRecords(tx).lift(personId, recordIds)
       const archive = new RawArchive(tx)
       const { id, deduplicated } = archive.put({
         personId,
@@ -190,7 +199,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       })
       const localDates = new Set<string>()
       const rowsWritten = dataType.target === 'samples'
-        ? writeSamples(tx, mapped.samples, id, localDates)
+        ? writeSamples(tx, mapped.samples, id, localDates, personId)
         : writeSessions(tx, mapped.sessions, mapped.segments, mapped.routes, id, localDates)
       for (const localDate of localDates) {
         instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
@@ -236,6 +245,66 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       applied,
     })
   })
+
+  // Deletions are not archived in raw_payloads: /companion/cursors reads every companion archive
+  // row as a window and as a history start, and a delete has neither. The tombstone in
+  // companion_deletions is what survives a rebuild instead.
+  app.post<{ Params: IngestParams, Body: DeletionsBody }>('/p/:personId/ingest/:dataTypeId/deletions', async (request, reply) => {
+    if (app.haelan.rebuildInFlight?.()) {
+      throw new TransientError('a rebuild is in progress, try again shortly')
+    }
+    const personId = personIdOf(request)
+    const dataType = ingestibleType(request.params.dataTypeId)
+    const recordIds = request.body?.recordIds
+    if (!Array.isArray(recordIds) || recordIds.length === 0 || recordIds.length > MAX_DELETIONS
+      || recordIds.some((id) => typeof id !== 'string' || id === '')) {
+      throw new ConfigError(`recordIds must be an array of 1 to ${MAX_DELETIONS} non-empty strings`)
+    }
+
+    const nowMs = app.haelan.now()
+    const instance = app.haelan.instance
+    const removed = instance.db.transaction((tx) => {
+      const result = new CompanionRecords(tx).deleteRecords(
+        { personId, dataType, recordIds: recordIds as string[], nowMs }, new SampleKeys(tx),
+      )
+      for (const localDate of result.localDates) {
+        instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
+      }
+      // As ingest does: removing a night changes which chain its neighbours join. Queued a
+      // millisecond later and kept out of `affected` for the same reasons given there.
+      if (dataType.id === 'sleep') {
+        const own = new Set(result.localDates)
+        for (const localDate of sleepNeighbourDates(result.localDates)) {
+          if (own.has(localDate)) continue
+          instance.deriveQueue.markDirty({ personId, localDate, nowMs: nowMs + 1 }, tx)
+        }
+      }
+      return result
+    })
+
+    drainPersonDerivation(app, personId, 'ingest', 1)
+    const applied = !removed.localDates.some((localDate) => stillQueued(app, personId, localDate))
+    recordPhoneZone(app, request, personId)
+    return reply.send({
+      rowsWritten: 0,
+      rowsDeleted: removed.rowsDeleted,
+      affected: removed.localDates.length > 0
+        ? { from: removed.localDates[0], to: removed.localDates[removed.localDates.length - 1] }
+        : null,
+      applied,
+    })
+  })
+}
+
+function ingestibleType(id: string): DataType {
+  const dataType = dataTypeById(id)
+  if (!dataType) throw new ConfigError(`unknown data type '${id}'`)
+  if (!supports(dataType, 'list') || dataType.mappingDeferred
+    || (dataType.target !== 'samples' && dataType.target !== 'sessions')
+    || (dataType.alsoTargets?.length ?? 0) > 0) {
+    throw new ConfigError(`'${dataType.id}' cannot be ingested by the companion app yet`)
+  }
+  return dataType
 }
 
 // Translated here rather than in the mapper, the same line runJob draws: the mapper reads
@@ -245,6 +314,7 @@ function writeSamples(
   samples: SampleRow[],
   rawPayloadId: string,
   localDates: Set<string>,
+  personId: string,
 ): number {
   // One per transaction, never hoisted: the same staleness runJob's own comment names,
   // a rolled back window leaving refs behind that the next write would trip over.
@@ -281,6 +351,9 @@ function writeSamples(
     insertSample.run(stored)
     rowsWritten++
   }
+  // In the same transaction as the rows, so a record is never linked without its samples or the
+  // other way round. Prepared once inside link(), not per row.
+  new CompanionRecords(tx).link(personId, samples, keys)
   return rowsWritten
 }
 

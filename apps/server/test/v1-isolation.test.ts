@@ -744,6 +744,7 @@ describe('the versioned surface, beyond the per-route table', () => {
     'PUT /api/v1/p/:personId/data-types',
     'PUT /api/v1/p/:personId/source-priority',
     'POST /api/v1/p/:personId/ingest/:dataTypeId',
+    'POST /api/v1/p/:personId/ingest/:dataTypeId/deletions',
     'PUT /api/v1/p/:personId/quick-log/presets',
     'POST /api/v1/p/:personId/quick-log',
     'PUT /api/v1/p/:personId/moods/:localDate',

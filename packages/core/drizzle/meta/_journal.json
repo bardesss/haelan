@@ -253,6 +253,20 @@
       "when": 1794540232219,
       "tag": "0035_complete_the_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794548112296,
+      "tag": "0036_sour_doctor_octopus",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1794559505522,
+      "tag": "0037_silly_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

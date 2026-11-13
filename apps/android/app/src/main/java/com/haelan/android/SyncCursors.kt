@@ -1,6 +1,7 @@
 package com.haelan.android
 
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 /**
  * What the instance already holds for each type, so a sync reads what is new.
@@ -152,21 +153,15 @@ object SyncCursors {
     }
 
     /**
-     * Where one type starts reading.
-     *
-     * A first sync keeps the fallback window, a later one starts at the cursor minus the
-     * overlap, clamped inside the fallback: never before what the permission will answer.
-     *
-     * A cursor ahead of the phone's own clock is read as the window end: a watch or a phone with
-     * a wrong clock can write a point timestamped in the future, and the instance's cursor
-     * follows it. The type then re-reads its last overlap each sync, which is never empty, so
-     * connect-client never gets a zero width range and the type keeps syncing.
+     * Where a type starts when it has no change token to drain. A first sync keeps the fallback;
+     * a type the instance already holds reads the last [SyncWindow.WITHOUT_HISTORY_DAYS] days
+     * rather than the whole history again, or from its cursor less [OVERLAP_MS] when that is
+     * earlier, so a type last synced more than thirty days ago does not skip the gap. Never
+     * before what the permission answers.
      */
-    fun startFor(lastWindowEndMs: Long?, fallbackStart: Instant, end: Instant): Instant {
-        if (lastWindowEndMs == null) return fallbackStart
-        val cursor = minOf(lastWindowEndMs, end.toEpochMilli())
-        val candidate = Instant.ofEpochMilli(cursor - OVERLAP_MS)
-        if (candidate.isBefore(fallbackStart)) return fallbackStart
-        return candidate
+    fun bootstrapStartFor(cursorEndMs: Long?, fallbackStart: Instant, end: Instant): Instant {
+        if (cursorEndMs == null) return fallbackStart
+        val fromCursor = Instant.ofEpochMilli(cursorEndMs - OVERLAP_MS)
+        return maxOf(fallbackStart, minOf(end.minus(SyncWindow.WITHOUT_HISTORY_DAYS, ChronoUnit.DAYS), fromCursor))
     }
 }

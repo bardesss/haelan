@@ -58,6 +58,11 @@ function localDateOfEnd(endMs: number, endOffsetMinutes: number): string {
   return new Date(endMs + endOffsetMinutes * 60_000).toISOString().slice(0, 10)
 }
 
+/** The session kind a sessions data type writes. */
+export function sessionKindOf(dataType: { id: string }): SessionKind {
+  return dataType.id === 'sleep' ? 'sleep' : dataType.id === 'electrocardiogram' ? 'ecg' : 'exercise'
+}
+
 export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], segments: SegmentRow[], routes: RouteRow[] } {
   const t = input.dataType
   // A type may write here as its primary target, or as an extra one named in alsoTargets (Task
@@ -128,7 +133,7 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
       id,
       personId: input.personId,
       sourceId,
-      kind: t.id === 'sleep' ? 'sleep' : t.id === 'electrocardiogram' ? 'ecg' : 'exercise',
+      kind: sessionKindOf(t),
       externalId,
       startMs: start.utcMs,
       startOffsetMinutes: start.tzOffsetMinutes,

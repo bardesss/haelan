@@ -9,6 +9,11 @@ const at = (seconds: number, value: number): SampleRow => ({
 })
 
 describe('downsampleToMinute', () => {
+  it('keeps the record id of a minute first reading on every aggregate', () => {
+    const out = downsampleToMinute([{ ...at(0, 60), recordId: 'hc-hr-1' }, { ...at(10, 62), recordId: 'hc-hr-2' }])
+    expect(out.map((r) => r.recordId)).toEqual(['hc-hr-1', 'hc-hr-1', 'hc-hr-1', 'hc-hr-1'])
+  })
+
   it('turns a minute of readings into min, mean and max', () => {
     const out = downsampleToMinute([at(0, 60), at(2, 70), at(4, 65)])
     expect(out).toHaveLength(4)

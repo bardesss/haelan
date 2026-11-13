@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, unique, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, unique, index, primaryKey } from 'drizzle-orm/sqlite-core'
 import { people, sources } from './people.ts'
 import { rawPayloads } from './raw.ts'
 
@@ -97,6 +97,23 @@ export const samples = sqliteTable('samples', {
   // a window rather than the first, which is a defect a single sync run cannot see.
   unique('samples_natural').on(t.personRef, t.sourceRef, t.metricRef, t.utcMs, t.aggRef),
   index('samples_person_metric_time').on(t.personRef, t.metricRef, t.utcMs),
+])
+
+// Tier 2, rebuilt from the archive: which companion record produced which metric over what span, so
+// deleting a record by id removes exactly the samples it wrote. `sourceRef` has no foreign key
+// because dropUnreferencedSources must stay free to drop a source, and it is part of the key because
+// one record id can be re-sent under another source and the old source's rows must stay deletable.
+export const companionRecordSamples = sqliteTable('companion_record_samples', {
+  personRef: integer('person_ref').notNull().references(() => people.ref),
+  recordId: text('record_id').notNull(),
+  sourceRef: integer('source_ref').notNull(),
+  metricRef: integer('metric_ref').notNull().references(() => metricDictionary.ref),
+  firstUtcMs: integer('first_utc_ms').notNull(),
+  lastUtcMs: integer('last_utc_ms').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.personRef, t.recordId, t.metricRef, t.sourceRef] }),
+  // A delete reads the live links overlapping the deleted one's range in its own series.
+  index('companion_record_samples_series').on(t.personRef, t.sourceRef, t.metricRef, t.firstUtcMs, t.lastUtcMs),
 ])
 
 export const sessions = sqliteTable('sessions', {

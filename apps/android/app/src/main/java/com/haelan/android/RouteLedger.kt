@@ -64,8 +64,9 @@ object RouteLedger {
      *
      * The one refusal: a route that is withheld now and was delivered before. Posting that copy
      * would replace the delivered route with nothing (see the class comment), and the instance
-     * already has everything else about the session from the delivery. A foreground read with the
-     * route in hand sends it again, so an edit made at the source still arrives, only later.
+     * already has everything else about the session from the delivery. An edit made at the source
+     * still arrives, only later: a session refused in a change-feed drain is filed as withheld
+     * ([refusalsToFile]), and the release tap reads it in the foreground with its route.
      * A blank id is never refused: it is a record Health Connect has not named, so nothing here
      * could have been filed under it.
      */
@@ -101,6 +102,20 @@ object RouteLedger {
         return State(withheld, sent)
     }
 
+    /**
+     * Which sessions [shouldPost] refused in a run go on the withheld list. A change feed names
+     * a delivered workout only when it changed at the source, and once the token moves past it no
+     * later background read meets it again, so the release tap is what sends the edit. A window
+     * read meets every delivered workout in it, edited or not, and offering them all again would
+     * fill the list with routes the instance already holds.
+     */
+    fun refusalsToFile(refused: Set<String>, drained: Boolean): Set<String> =
+        if (drained) refused.filterTo(mutableSetOf()) { it.isNotEmpty() } else emptySet()
+
+    /** The ledger after [refused] sessions were filed for release; their delivery stays recorded. */
+    fun afterRefused(state: State, refused: Set<String>): State =
+        State(state.withheld + refused.filter { it.isNotEmpty() }, state.sent)
+
     fun ownerOf(session: SyncEngine.Session): String = "${session.server}|${session.personId}"
 
     // Synchronized because the ledger has two writers in one process - the screen's release and
@@ -118,9 +133,9 @@ object RouteLedger {
     }
 
     @Synchronized
-    fun record(prefs: SharedPreferences, owner: String, seen: Map<String, Seen>) {
-        if (seen.isEmpty()) return
-        val next = after(load(prefs, owner), seen)
+    fun record(prefs: SharedPreferences, owner: String, seen: Map<String, Seen>, refused: Set<String> = emptySet()) {
+        if (seen.isEmpty() && refused.isEmpty()) return
+        val next = afterRefused(after(load(prefs, owner), seen), refused)
         // commit rather than apply: the next load, possibly on another thread a moment later,
         // has to read this and not the value before it.
         prefs.edit()

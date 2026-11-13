@@ -48,6 +48,26 @@ class RouteLedgerTest {
     }
 
     @Test
+    fun `a delivered workout refused in a drain is offered for release, and the release clears the offer`() {
+        val delivered = RouteLedger.after(empty, mapOf("a" to RouteLedger.Seen.SENT))
+        // A drained change to a delivered workout is an edit the instance has not seen. Refused,
+        // it waits in the withheld list so the release tap sends it with its route.
+        val refused = RouteLedger.afterRefused(delivered, RouteLedger.refusalsToFile(setOf("a", ""), drained = true))
+        assertEquals(setOf("a"), refused.withheld)
+        assertEquals(setOf("a"), refused.sent)
+        val released = RouteLedger.after(refused, mapOf("a" to RouteLedger.Seen.SENT))
+        assertEquals(emptySet<String>(), released.withheld)
+        assertEquals(setOf("a"), released.sent)
+    }
+
+    @Test
+    fun `a delivered workout refused in a window read is not offered again`() {
+        // A window read meets every delivered workout in it, edited or not: offering them all
+        // again would fill the list with routes the instance already holds.
+        assertEquals(emptySet<String>(), RouteLedger.refusalsToFile(setOf("a"), drained = false))
+    }
+
+    @Test
     fun `everything else still travels`() {
         val sent = setOf("a")
         // Withheld but never delivered: posted, so the instance can say a route exists.

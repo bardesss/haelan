@@ -1,5 +1,6 @@
+import { gunzipSync } from 'node:zlib'
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { COMPANION_SOURCE, RawArchive, samplePoint, schema, sleepPoint } from '@haelan/core'
+import { COMPANION_SOURCE, CompanionRecords, RawArchive, SampleKeys, dataTypeById, samplePoint, schema, sleepPoint } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { rebuildIfNeeded } from '../src/rebuild.ts'
@@ -94,6 +95,82 @@ describe('the companion ingest route', () => {
       displayName: 'com.haelan.android',
       kind: 'app',
     })
+  })
+
+  it('links a named sample to its record, so it can be deleted by id', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const response = await ingest(token, '/api/v1/p/p1/ingest/weight', {
+      dataPoints: [{ ...weightPoint(), name: 'hc-weight-1' }],
+    })
+    expect(response.statusCode).toBe(200)
+    const links = harness.app.haelan.instance.db.select().from(schema.companionRecordSamples).all()
+    expect(links).toHaveLength(1)
+    expect(links[0]?.recordId).toBe('hc-weight-1')
+  })
+
+  // Health Connect gives a record written with a clientRecordId the same id every time, so an
+  // app restoring a deleted entry re-sends the deleted id. The tombstone is lifted, not obeyed.
+  it('brings back a record written again under a deleted id, and forgets its tombstone', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    const weight = dataTypeById('weight')
+    if (!weight) throw new Error('no weight type')
+    new CompanionRecords(db).deleteRecords(
+      { personId: 'p1', dataType: weight, recordIds: ['hc-weight-1'], nowMs: 5 }, new SampleKeys(db),
+    )
+    const response = await ingest(token, '/api/v1/p/p1/ingest/weight', {
+      dataPoints: [{ ...weightPoint(), name: 'hc-weight-1' }],
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ rowsWritten: 1 })
+    expect(db.select().from(schema.samples).all()).toHaveLength(1)
+    expect(db.select().from(schema.rawPayloads).all()).toHaveLength(1)
+    expect(db.select().from(schema.companionDeletions).all()).toEqual([])
+    expect(db.select().from(schema.companionRecordSamples).all().map((l) => l.recordId)).toEqual(['hc-weight-1'])
+  })
+
+  it('keeps every reading of a minute shared by a re-sent record and a live one', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    const heartRate = dataTypeById('heart-rate')
+    if (!heartRate) throw new Error('no heart-rate type')
+    new CompanionRecords(db).deleteRecords(
+      { personId: 'p1', dataType: heartRate, recordIds: ['hc-hr-back'], nowMs: 5 }, new SampleKeys(db),
+    )
+    const beat = (value: number, second: string, name: string) => ({
+      ...samplePoint({
+        payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value, physicalTime: `2026-08-18T10:00:${second}Z`,
+      }),
+      name,
+    })
+    const response = await ingest(token, '/api/v1/p/p1/ingest/heart-rate', {
+      dataPoints: [beat(200, '05', 'hc-hr-back'), beat(60, '30', 'hc-hr-live')],
+    })
+    expect(response.statusCode).toBe(200)
+    expect((response.json() as { rowsWritten: number }).rowsWritten).toBeGreaterThan(0)
+    const values = db.select().from(schema.samples).all()
+      .filter((r) => r.aggRef === 2 || r.aggRef === 4).map((r) => r.value ?? 0).sort((a, b) => a - b)
+    expect(values).toEqual([60, 200])
+    expect(db.select().from(schema.companionDeletions).all()).toEqual([])
+    const archived = db.select().from(schema.rawPayloads).all()
+    expect(archived.map((r) => gunzipSync(r.bodyGzip).toString('utf8')).join('')).toContain('hc-hr-back')
+  })
+
+  it('lifts a tombstone only for the person whose upload re-sent the id', async () => {
+    harness = await withServer()
+    await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    const weight = dataTypeById('weight')
+    if (!weight) throw new Error('no weight type')
+    new CompanionRecords(db).deleteRecords(
+      { personId: 'p2', dataType: weight, recordIds: ['hc-weight-1'], nowMs: 5 }, new SampleKeys(db),
+    )
+    await ingest(token, '/api/v1/p/p1/ingest/weight', { dataPoints: [{ ...weightPoint(), name: 'hc-weight-1' }] })
+    expect(db.select().from(schema.companionDeletions).all().map((d) => d.personId)).toEqual(['p2'])
   })
 
   it('files two devices as two sources rather than one', async () => {

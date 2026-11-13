@@ -10,7 +10,7 @@ import type { SampleText } from '../db/keys.ts'
 import { migrateToLatest } from '../db/migrate.ts'
 import {
   people, sources, sourcePriority, samples, sessions, sessionSegments, overrides, rawPayloads,
-  syncState, syncWindowFailures, deriveQueue, daily,
+  companionDeletions, companionRecordSamples, syncState, syncWindowFailures, deriveQueue, daily,
 } from '../db/schema/index.ts'
 import type { SessionKind, SampleAgg } from '../db/schema/index.ts'
 import type { Database } from '../db/open.ts'
@@ -662,6 +662,8 @@ export function openRebuildLab(): RebuildLab {
     db.delete(sourcePriority).run()
     db.delete(overrides).run()
     db.delete(daily).run()
+    db.delete(companionRecordSamples).run()
+    db.delete(companionDeletions).run()
     db.delete(sources).run()
     db.delete(rawPayloads).run()
     db.delete(syncWindowFailures).run()

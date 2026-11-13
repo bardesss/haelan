@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Database, DbOrTx } from '../db/open.ts'
 import { checkpointTruncate } from '../db/open.ts'
 import {
-  daily, observations, samples, sessions, sources, sourceAliases, sourcePriority, sourcePanelVisibility,
+  companionRecordSamples, daily, observations, samples, sessions, sources, sourceAliases, sourcePriority, sourcePanelVisibility,
 } from '../db/schema/index.ts'
 import { SampleKeys } from '../db/keys.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
@@ -19,6 +19,7 @@ import type { SettingsStore } from '../store/settings.ts'
 import type { RebuildStateStore } from '../store/rebuildState.ts'
 import { ObservationStore } from '../store/observations.ts'
 import { peopleNeedingRebuild } from './versions.ts'
+import { CompanionRecords } from '../store/companionRecords.ts'
 import { replayPerson } from './replay.ts'
 import { retargetOverrides } from './retarget.ts'
 import type { OldSession, OrphanedOverride } from './retarget.ts'
@@ -258,6 +259,8 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         // would cost correctness.
         const keys = new SampleKeys(tx)
         tx.delete(samples).where(eq(samples.personRef, keys.personRef(personId))).run()
+        // Tier 2, rebuilt by the replay. companion_deletions is tier 1 and is not touched.
+        tx.delete(companionRecordSamples).where(eq(companionRecordSamples.personRef, keys.personRef(personId))).run()
         // Provider rows included. They are mapped from archived rollup responses like everything
         // else, so the replay puts them back.
         tx.delete(daily).where(eq(daily.personId, personId)).run()
@@ -274,6 +277,11 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           client: input.db.$client,
         })
 
+        // The archive still holds the payload of a record deleted before tombstones existed, so
+        // the replay has just put it back. Its days are derived again below.
+        const reapplied = new CompanionRecords(tx).reapplyDeletions(personId, keys)
+        const datesToDerive = [...new Set([...counts.localDates, ...reapplied.localDates])].sort()
+
         const dropped = dropUnreferencedSources(tx, personId, keys)
 
         const retarget = retargetOverrides(tx, { personId, oldSessions })
@@ -282,7 +290,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         const birthDate = input.peopleStore.get(personId)?.birthDate ?? null
         // Read after re-targeting, so a moved key is the one the derivation applies.
         const personOverrides = input.overrides.listFor(personId)
-        for (const localDate of counts.localDates) {
+        for (const localDate of datesToDerive) {
           deriveDayInto(tx, {
             personId, localDate, birthDate, priority, overrides: personOverrides, gapMinutes, overlapRatio,
             nowMs: input.nowMs,
@@ -308,7 +316,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           samples: counts.samples,
           sessions: counts.sessions,
           observations: counts.observations,
-          daysDerived: counts.localDates.length,
+          daysDerived: datesToDerive.length,
           dailyRows,
           sourcesRemoved: dropped.sources,
           rankingsRemoved: dropped.rankings,

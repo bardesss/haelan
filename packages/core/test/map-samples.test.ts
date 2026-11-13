@@ -6,6 +6,12 @@ import { samplePoint, intervalPoint, dailyPoint, body } from '../src/testing/pay
 const ctx = { personId: 'p1', resolveSource: () => 's1', rawPayloadId: 'r1' }
 
 describe('mapSamples', () => {
+  it('carries a point name as the record id of the row it maps to', () => {
+    const point = { ...samplePoint({ payloadKey: 'weight', valuePath: 'weightGrams', value: '80000', physicalTime: '2026-08-18T07:00:00Z' }), name: 'hc-weight-1' }
+    const rows = mapSamples({ dataType: dataTypeById('weight')!, body: body([point]), ...ctx })
+    expect(rows.map((r) => r.recordId)).toEqual(['hc-weight-1'])
+  })
+
   it('maps an instantaneous reading to one row at its own instant', () => {
     const spo2 = dataTypeById('oxygen-saturation')!
     const rows = mapSamples({

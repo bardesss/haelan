@@ -9,39 +9,6 @@ import java.time.temporal.ChronoUnit
 class SyncCursorsTest {
 
     private val end: Instant = Instant.parse("2026-09-14T12:00:00Z")
-    private val fallback: Instant = end.minus(30, ChronoUnit.DAYS)
-
-    @Test
-    fun `a type never sent keeps the full window`() {
-        assertEquals(fallback, SyncCursors.startFor(null, fallback, end))
-    }
-
-    @Test
-    fun `a recent cursor starts a day before it, not thirty days back`() {
-        val cursor = end.minus(2, ChronoUnit.DAYS).toEpochMilli()
-        assertEquals(
-            Instant.ofEpochMilli(cursor - SyncCursors.OVERLAP_MS),
-            SyncCursors.startFor(cursor, fallback, end),
-        )
-    }
-
-    @Test
-    fun `a cursor older than the fallback keeps the fallback`() {
-        val cursor = end.minus(60, ChronoUnit.DAYS).toEpochMilli()
-        assertEquals(fallback, SyncCursors.startFor(cursor, fallback, end))
-    }
-
-    @Test
-    fun `a cursor past the end is read as the end, so the type reads its last overlap`() {
-        val cursor = end.plus(25, ChronoUnit.HOURS).toEpochMilli()
-        assertEquals(end.minusMillis(SyncCursors.OVERLAP_MS), SyncCursors.startFor(cursor, fallback, end))
-    }
-
-    @Test
-    fun `a cursor exactly one overlap past the end reads the same last overlap`() {
-        val cursor = end.plus(SyncCursors.OVERLAP_MS, ChronoUnit.MILLIS).toEpochMilli()
-        assertEquals(end.minusMillis(SyncCursors.OVERLAP_MS), SyncCursors.startFor(cursor, fallback, end))
-    }
 
     @Test
     fun `a cursor answer is ready to sync from`() {
@@ -127,23 +94,16 @@ class SyncCursorsTest {
      *
      * The watch has not synced in three days; its own cursor, watchCursorMs, is stale. The phone
      * synced moments ago; phoneCursorMs is current. A cursor keyed on whichever source is newest
-     * -- .max() -- reads the type's next delta starting one overlap behind the phone, which is
-     * long after the watch's own last known progress. watchLateReadingMs, timestamped shortly
-     * after the watch's stale cursor, then falls before that delta's start and the app never
-     * asks for it again: the exact loss Finding A names. Keyed on the minimum, the delta reaches
-     * back to the watch's own progress instead, comfortably inside where watchLateReadingMs sits.
+     * -- .max() -- would tell the phone the type is current up to the phone's own progress, long
+     * after the watch's. Keyed on the minimum, the type's cursor stays at the watch's progress.
      *
-     * This lives here rather than in UploadCursorHoleTest because that file's retryStartFor
-     * models the minimum in the test's own Kotlin, never calling cursorEndsFor at all -- a
-     * fixture built on top of it cannot tell .min() from .max() no matter how it is tuned, which
-     * is exactly what going red only for an even reading count turned out to mean. This test
-     * calls the production parse and selection directly, the way SyncRun and SyncWorker do.
+     * This test calls the production parse and selection directly, the way SyncRun and
+     * SyncWorker do.
      */
     @Test
-    fun `a laggard's own late reading still falls inside the delta keyed on the minimum, not the maximum`() {
+    fun `a laggard holds the type's cursor at its own progress, not the leader's`() {
         val phoneCursorMs = 1_787_040_000_000L
         val watchCursorMs = phoneCursorMs - 3 * SyncCursors.OVERLAP_MS
-        val watchLateReadingMs = watchCursorMs + SyncCursors.OVERLAP_MS / 2
         val nowMs = phoneCursorMs
 
         // Both sources ingested at their own cursor, three days apart -- nowhere near
@@ -159,17 +119,6 @@ class SyncCursorsTest {
             "the type's cursor is the watch's own stale progress, not the phone's fresh one",
             watchCursorMs,
             SyncCursors.cursorEndsFor(body, nowMs)["steps"],
-        )
-
-        val start = SyncCursors.startFor(
-            SyncCursors.cursorEndsFor(body, nowMs)["steps"],
-            Instant.EPOCH,
-            Instant.ofEpochMilli(phoneCursorMs).plus(1, ChronoUnit.DAYS),
-        )
-        assertTrue(
-            "the watch's own pending reading at ${watchLateReadingMs}ms must still be inside " +
-                "the next delta, which starts at ${start.toEpochMilli()}ms",
-            !start.isAfter(Instant.ofEpochMilli(watchLateReadingMs)),
         )
     }
 
@@ -219,7 +168,7 @@ class SyncCursorsTest {
 
     /**
      * The re-review's finding: ageing every source of a type out answered null for it, and
-     * startFor(null, ...) reads that as "never sent" -- EPOCH with the history permission
+     * a type without a cursor reads as "never sent" -- EPOCH with the history permission
      * granted, so the app would read its entire history every sync, forever, and never recover
      * (a deduplicated re-upload never refreshes lastIngestAtMs). Ageing exists to stop a DEAD
      * source holding a type back while LIVE ones carry it; when none are live there is no one
@@ -242,5 +191,33 @@ class SyncCursorsTest {
             newerCursorMs,
             SyncCursors.cursorEndsFor(body, nowMs)["steps"],
         )
+    }
+
+    @Test
+    fun `a cursor two days old bootstraps the last thirty days`() {
+        val cursor = end.minus(2, ChronoUnit.DAYS).toEpochMilli()
+        assertEquals(end.minus(30, ChronoUnit.DAYS), SyncCursors.bootstrapStartFor(cursor, Instant.EPOCH, end))
+    }
+
+    @Test
+    fun `a cursor sixty days old bootstraps from the cursor, less the overlap`() {
+        val cursor = end.minus(60, ChronoUnit.DAYS).toEpochMilli()
+        assertEquals(
+            Instant.ofEpochMilli(cursor - SyncCursors.OVERLAP_MS),
+            SyncCursors.bootstrapStartFor(cursor, Instant.EPOCH, end),
+        )
+    }
+
+    @Test
+    fun `a cursor older than the permission still starts at what the permission answers`() {
+        val noHistory = end.minus(30, ChronoUnit.DAYS)
+        val cursor = end.minus(60, ChronoUnit.DAYS).toEpochMilli()
+        assertEquals(noHistory, SyncCursors.bootstrapStartFor(cursor, noHistory, end))
+    }
+
+    @Test
+    fun `the thirty days never reach past what the permission answers`() {
+        val noHistory = end.minus(30, ChronoUnit.DAYS)
+        assertEquals(noHistory, SyncCursors.bootstrapStartFor(5L, noHistory, end))
     }
 }

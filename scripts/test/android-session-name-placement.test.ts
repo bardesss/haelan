@@ -32,7 +32,8 @@ function functionBody(functionName: string): string {
   const start = declared!.index
   const after = new RegExp(DECLARATION, 'g')
   after.lastIndex = start + 1
-  const nextFun = after.exec(source)?.index ?? -1
+  // The last function of the class has no declaration after it; the class's closing brace ends it.
+  const nextFun = after.exec(source)?.index ?? source.lastIndexOf('\n}')
   expect(
     nextFun,
     `${SYNC_ENGINE_PATH}: could not find the end of '${functionName}' - no class level function declaration `
@@ -114,6 +115,35 @@ describe('SyncEngine.kt: session name stays a sibling of its payload', () => {
     // one workout at a time (MainActivity's route walk) travels in the very same shape, and
     // toExercisePoints is now only its map over a page.
     assertNameIsSiblingOfPayload('exercisePoint', 'exercise')
+  })
+})
+
+/**
+ * Every other sample mapper names its point with the Health Connect record id too, so the server
+ * can delete by id later. Same sibling rule as sleep and exercise, and the same reason: the server
+ * reads `name` off the point (valueAt(point, 'name')), never out of the payload.
+ */
+describe('SyncEngine.kt: every sample mapper names its point beside the payload', () => {
+  it.each([
+    ['toStepPoints', 'steps'],
+    ['toHeartRatePoints', 'heartRate'],
+    ['toWeightPoints', 'weight'],
+    ['toDistancePoints', 'distance'],
+    ['toAltitudePoints', 'altitude'],
+    ['toHeightPoints', 'height'],
+    ['toBodyFatPoints', 'bodyFat'],
+    ['toHrvPoints', 'heartRateVariability'],
+    ['toSpo2Points', 'oxygenSaturation'],
+    ['toBodyTempPoints', 'coreBodyTemperature'],
+    ['toBloodGlucosePoints', 'bloodGlucose'],
+    ['toHydrationPoints', 'hydrationLog'],
+    ['toVo2Points', 'vo2Max'],
+    ['toSleepRespPoints', 'respiratoryRateSleepSummary'],
+    ['toCaloriesPoints', 'activeEnergyBurned'],
+    ['basalPoint', 'basalEnergyBurned'],
+    ['dailyRestingPoint', 'dailyRestingHeartRate'],
+  ])('%s puts name beside its payload', (functionName, payloadKey) => {
+    assertNameIsSiblingOfPayload(functionName, payloadKey)
   })
 })
 

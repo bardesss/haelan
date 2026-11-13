@@ -56,13 +56,17 @@ const OVERRIDDEN_LOCAL_DATE = '2026-02-22'
 // Everything a rebuild cannot regenerate. `people` and `sources` are the rows the rest hang off,
 // `raw_payloads` is the archive the rebuild reads back, and `overrides`, `notes` and `events` are
 // the household's own writing - the only rows in this database whose loss is permanent.
-const TIER_1 = ['people', 'sources', 'raw_payloads', 'overrides', 'notes', 'events'] as const
+const TIER_1 = ['people', 'sources', 'raw_payloads', 'companion_deletions', 'overrides', 'notes', 'events'] as const
+
+// Tier 1 tables a migration created after LAST_OLD_TAG: absent from the old database, so there is
+// nothing to compare across the migration, only a table that must exist, empty, afterwards.
+const CREATED_SINCE = ['companion_deletions'] as const
 
 // What a rebuild is allowed to touch of tier 1, and therefore what step 3 leaves out of its
 // comparison: the version stamp on `people` is the rebuild's own record that it ran, and the
 // replay legitimately adds the `sources` row the moods payloads describe. Everything else on the
 // list above has to come through both the migration and the rebuild untouched.
-const UNTOUCHED_BY_A_REBUILD = ['raw_payloads', 'overrides', 'notes', 'events'] as const
+const UNTOUCHED_BY_A_REBUILD = ['raw_payloads', 'companion_deletions', 'overrides', 'notes', 'events'] as const
 
 // A name the household member typed on the heart-rate source before the upgrade. Tier-1 by any
 // definition - nobody can regenerate a name somebody typed - even though no table in TIER_1
@@ -84,7 +88,11 @@ const STALE_OBSERVATION_ID = 'stale-pre-upgrade-observation'
 type Rows = Record<string, unknown[]>
 
 const rowsOf = (db: Database, tables: readonly string[]): Rows => Object.fromEntries(
-  tables.map((t) => [t, db.$client.prepare(`select * from ${t} order by id`).all()]),
+  tables.map((t) => {
+    const cols = columnsOf(db, t)
+    if (cols.length === 0) return [t, []]
+    return [t, db.$client.prepare(`select * from ${t} order by ${cols.includes('id') ? 'id' : 'rowid'}`).all()]
+  }),
 )
 
 // sqlite's own column list for a table, in declaration order. Read from the database itself
@@ -386,6 +394,11 @@ describe('the upgrade path', () => {
       // too: it simply is not in that list, so the projection below still expects it and sqlite
       // throws no such column.
       for (const t of TIER_1) {
+        if ((CREATED_SINCE as readonly string[]).includes(t)) {
+          expect(columnsOf(db, t).length, `${t}: the migration did not create it`).toBeGreaterThan(0)
+          expect(countOf(db, t), `${t}: created with rows in it`).toBe(0)
+          continue
+        }
         const oldCols = tier1OldColumns[t]!
         const newCols = columnsOf(db, t)
         const addedCols = newCols.filter((c) => !oldCols.includes(c))
@@ -477,6 +490,7 @@ describe('the upgrade path', () => {
         people: schema.people,
         sources: schema.sources,
         raw_payloads: schema.rawPayloads,
+        companion_deletions: schema.companionDeletions,
         overrides: schema.overrides,
         notes: schema.notes,
         events: schema.events,
@@ -506,6 +520,13 @@ describe('the upgrade path', () => {
       expect(instance.overrides.affectedLocalDate({
         personId: PERSON, scope: 'sample', targetKey,
       })).toBeNull()
+
+      // A tombstone written after the upgrade and before the rebuild: nothing in the archive can
+      // regenerate it, so the rebuild below must leave it exactly as it is.
+      db.$client.prepare(
+        'insert into companion_deletions (person_id, data_type, record_id, deleted_at_ms) values (?, ?, ?, ?)',
+      ).run(PERSON, 'weight', 'synthetic-record-1', 1_700_000_000_000)
+      tier1Before.companion_deletions = rowsOf(db, ['companion_deletions']).companion_deletions!
 
       // ---- 3. The rebuild the version stamps ask for ---------------------------------------
       // Not forced. The person carries no built-version stamp, which is what an upgrading
