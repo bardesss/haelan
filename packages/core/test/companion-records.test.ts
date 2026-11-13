@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { describe, it, expect } from 'vitest'
 import { createTestDatabase, seedPerson, seedSession, readSamples } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -33,9 +34,11 @@ function row(over: Partial<SampleRow>): SampleRow {
 // Stores rows and their links the way ingest will: through sampleRefs, then link.
 function store(ctx: TestDatabase, rows: SampleRow[], withLinks = true): void {
   const { db } = ctx
-  db.insert(sources).values({
-    id: 'phone', personId: 'p1', externalId: 'phone', displayName: 'phone', kind: 'device', createdAtMs: 0,
-  }).onConflictDoNothing().run()
+  for (const sourceId of new Set(rows.map((r) => r.sourceId))) {
+    db.insert(sources).values({
+      id: sourceId, personId: 'p1', externalId: sourceId, displayName: sourceId, kind: 'device', createdAtMs: 0,
+    }).onConflictDoNothing().run()
+  }
   const keys = new SampleKeys(db)
   for (const r of rows) db.insert(samples).values(keys.sampleRefs({ ...r, rawPayloadId: null })).run()
   if (withLinks) new CompanionRecords(db).link('p1', rows, keys)
@@ -86,14 +89,55 @@ describe('CompanionRecords', () => {
     ctx.cleanup()
   })
 
+  it('a record whose earlier chunk arrives second keeps the range of both', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const minute = (offset: number) => downsampleToMinute([
+      row({ metric: 'heart_rate', utcMs: T0 + offset, value: 60, recordId: 'hc-hr-1' }),
+    ])
+    store(ctx, minute(10 * 60_000))
+    store(ctx, minute(0))
+    const out = new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: HEART_RATE, recordIds: ['hc-hr-1'], nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(out.rowsDeleted).toBe(8)
+    expect(readSamples(ctx.db)).toEqual([])
+    ctx.cleanup()
+  })
+
+  it('another source in the same range survives the delete', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    store(ctx, [row({ recordId: 'hc-weight-1' })])
+    store(ctx, [row({ sourceId: 'scale', value: 82 })], false)
+    new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-weight-1'], nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(readSamples(ctx.db).map((r) => [r.sourceId, r.value])).toEqual([['scale', 82]])
+    ctx.cleanup()
+  })
+
+  it('deletes ids beyond the first chunk of 500', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    store(ctx, [row({ recordId: 'hc-weight-500' })])
+    const ids = Array.from({ length: 501 }, (_, i) => `hc-weight-${i}`)
+    const records = new CompanionRecords(ctx.db)
+    const out = records.deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ids, nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(out.rowsDeleted).toBe(1)
+    expect(readSamples(ctx.db)).toEqual([])
+    expect(records.tombstoned('p1', ids).size).toBe(501)
+    ctx.cleanup()
+  })
+
   it('deleting a night removes the session by its external id', () => {
     const ctx = createTestDatabase()
     seedPerson(ctx.db, 'p1')
     seedSession(ctx.db, { id: 's1', personId: 'p1', kind: 'sleep', externalId: 'hc-night-1' })
+    ctx.db.update(sessions).set({ localDate: '2026-08-18' }).where(eq(sessions.id, 's1')).run()
     seedSession(ctx.db, { id: 's2', personId: 'p1', kind: 'sleep', externalId: 'hc-night-2' })
     const out = new CompanionRecords(ctx.db).deleteRecords(
       { personId: 'p1', dataType: SLEEP, recordIds: ['hc-night-1'], nowMs: 5 }, new SampleKeys(ctx.db))
-    expect(out).toEqual({ rowsDeleted: 1, localDates: ['1970-01-01'] })
+    expect(out).toEqual({ rowsDeleted: 1, localDates: ['2026-08-18'] })
     expect(ctx.db.select({ id: sessions.id }).from(sessions).all()).toEqual([{ id: 's2' }])
     ctx.cleanup()
   })
