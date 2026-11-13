@@ -11,7 +11,7 @@ import { RevokedError } from '../api/tokens.ts'
 import { CredentialsUnreadableError, HaelanError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
-import { localDateOf } from '../derive/localDay.ts'
+import { sampleDirtyDates } from './dirtyDates.ts'
 import { sleepNeighbourDates } from '../derive/sleep.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { mapObservations } from '../api/mapObservations.ts'
@@ -266,7 +266,8 @@ function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   pages: Array<{ body: string, rawPayloadId: string }>, keys: SampleKeys,
 }): Written {
   const rows = mapWindowSamples(args)
-  const localDates = new Set<string>()
+  // Before the upsert: the stored offsets it is compared with are about to be overwritten.
+  const localDates = sampleDirtyDates(tx, rows, args.keys)
   // Prepared once per window rather than once per row, for the reason replay.ts's identical
   // statement spells out: drizzle prepares a new better-sqlite3 statement on every
   // `insert().values().run()`, and better-sqlite3 keeps every statement a connection ever prepares
@@ -300,7 +301,6 @@ function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0],
     // a second copy of every minute it already holds instead of updating it.
     const stored = args.keys.sampleRefs(row)
     insertSample.run(stored)
-    localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
   return { rows: rows.length, localDates: [...localDates] }
 }

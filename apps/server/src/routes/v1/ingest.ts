@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq, sql } from 'drizzle-orm'
 import {
   COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
-  localDateOf, mapSessions, mapWindowSamples, schema, sleepNeighbourDates, supports,
+  mapSessions, mapWindowSamples, sampleDirtyDates, schema, sleepNeighbourDates, supports,
 } from '@haelan/core'
 import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
 import { drainPersonDerivation } from './annotations.ts'
@@ -270,12 +270,13 @@ function writeSamples(
       rawPayloadRef: sql.placeholder('rawPayloadRef'),
     } as unknown as Partial<typeof schema.samples.$inferInsert>,
   }).prepare()
+  // Before the upsert: the stored offsets it is compared with are about to be overwritten.
+  for (const date of sampleDirtyDates(tx, samples, keys)) localDates.add(date)
   let rowsWritten = 0
   for (const row of samples) {
     const stored = keys.sampleRefs({ ...row, rawPayloadId })
     insertSample.run(stored)
     rowsWritten++
-    localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
   return rowsWritten
 }

@@ -441,6 +441,53 @@ describe('runJob', () => {
     expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20'])
   })
 
+  describe('heart rate near midnight', () => {
+    const insertRun = (startIso: string, endIso: string) => {
+      ctx.db.insert(sources).values({
+        id: 'other', personId: 'p1', externalId: 'other', displayName: 'other', kind: 'app', createdAtMs: 0,
+      }).run()
+      ctx.db.insert(sessions).values({
+        id: 'run', personId: 'p1', sourceId: 'other', kind: 'exercise', externalId: 'run',
+        startMs: Date.parse(startIso), startOffsetMinutes: 120,
+        endMs: Date.parse(endIso), endOffsetMinutes: 120,
+        localDate: '2026-08-19', attrs: '{}',
+      }).run()
+    }
+    const runHeartRate = (queue: DeriveQueue, physicalTime: string, utcOffset: string) => runJob({
+      personId: 'p1', dataType: dataTypeById('heart-rate')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+      deps: {
+        ...build(vi.fn().mockImplementation(async () => new Response(body([samplePoint({
+          payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: 120, physicalTime, utcOffset,
+        })]), { status: 200 }))),
+        deriveQueue: queue,
+      },
+    })
+
+    it('marks the day of a workout that spans a heart rate reading on the other side of midnight', async () => {
+      insertRun('2026-08-18T21:30:00Z', '2026-08-18T22:30:00Z')
+      const queue = new DeriveQueue(ctx.db)
+      await runHeartRate(queue, '2026-08-18T21:45:00Z', '7200s')
+      expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-18', '2026-08-19'])
+    })
+
+    it("does not mark a workout that ended on the reading's instant", async () => {
+      insertRun('2026-08-18T21:00:00Z', '2026-08-18T21:45:00Z')
+      const queue = new DeriveQueue(ctx.db)
+      await runHeartRate(queue, '2026-08-18T21:45:00Z', '7200s')
+      expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-18'])
+    })
+
+    it('marks the day a reading left when a revised offset moves it across midnight', async () => {
+      const queue = new DeriveQueue(ctx.db)
+      await runHeartRate(queue, '2026-08-18T22:30:00Z', '7200s')
+      expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-19'])
+      queue.clear(queue.claim(10))
+      await runHeartRate(queue, '2026-08-18T22:30:00Z', '3600s')
+      expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-18', '2026-08-19'])
+    })
+  })
+
   it('skips a type the API cannot list without calling it', async () => {
     const fetchMock = vi.fn()
     const result = await runJob({

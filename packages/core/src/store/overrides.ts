@@ -7,6 +7,7 @@ import type { DeriveQueue } from './deriveQueue.ts'
 import { ConfigError } from '../errors.ts'
 import { localDateOf } from '../derive/localDay.ts'
 import { sleepNeighbourDates } from '../derive/sleep.ts'
+import { exerciseDatesSpanning } from '../sync/dirtyDates.ts'
 import { parseDayMetricTarget, parseSampleTarget, parseSessionTarget } from '../derive/targetKey.ts'
 import type { OverrideScope } from '../derive/targetKey.ts'
 import type { OverrideLike } from '../derive/overrides.ts'
@@ -113,6 +114,16 @@ export class OverrideStore {
         .where(and(eq(sessions.id, parseSessionTarget(targetKey)), eq(sessions.personId, personId))).get()?.kind
       if (kind === 'sleep') {
         for (const date of sleepNeighbourDates([localDate])) this.#queue.markDirty({ personId, localDate: date, nowMs }, tx)
+      }
+    }
+    // A workout is filed on the date it ends, so a heart rate reading before midnight belongs to
+    // a workout on the next date, and workoutZones reads that reading.
+    if (scope === 'sample') {
+      const target = parseSampleTarget(targetKey)
+      if (target.metric === 'heart_rate') {
+        for (const date of exerciseDatesSpanning(tx, { personId, utcMs: [target.utcMs] })) {
+          this.#queue.markDirty({ personId, localDate: date, nowMs }, tx)
+        }
       }
     }
   }

@@ -99,6 +99,26 @@ describe('OverrideStore', () => {
     expect(queue.claim(10)).toEqual([{ personId: 'p1', localDate: LOCAL_DATE }])
   })
 
+  it("marks the workout's day when a heart rate reading before midnight is excluded", () => {
+    const reading = Date.UTC(2026, 7, 18, 21, 45)
+    test.db.insert(sessions).values({
+      id: 'run', personId: 'p1', sourceId: 'watch', kind: 'exercise', externalId: 'run',
+      startMs: Date.UTC(2026, 7, 18, 21, 30), startOffsetMinutes: OFFSET,
+      endMs: Date.UTC(2026, 7, 18, 22, 30), endOffsetMinutes: OFFSET,
+      localDate: '2026-08-19', attrs: '{}',
+    }).run()
+    insertSample(test.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: reading,
+      tzOffsetMinutes: OFFSET, value: 150,
+    })
+    store.put({
+      personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: reading }),
+      action: 'exclude', reason: 'strap glitch', nowMs: 1,
+    })
+    expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-18', '2026-08-19'])
+  })
+
   it('marks the nights either side when a sleep session is excluded', () => {
     test.db.insert(sessions).values({
       id: 'sleep-1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'x',

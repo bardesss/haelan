@@ -445,6 +445,28 @@ describe('the companion ingest route for sessions', () => {
     for (const m of neighbours) expect(m.nowMs).toBeGreaterThan(own[0]!.nowMs)
   })
 
+  it("reports the workout's day as affected when its heart rate lands before midnight", async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const db = harness.app.haelan.instance.db
+    db.insert(schema.sources).values({
+      id: 'other', personId: 'p1', externalId: 'other', displayName: 'other', kind: 'app', createdAtMs: 0,
+    }).run()
+    db.insert(schema.sessions).values({
+      id: 'run', personId: 'p1', sourceId: 'other', kind: 'exercise', externalId: 'run',
+      startMs: Date.parse('2026-08-18T21:30:00Z'), startOffsetMinutes: 120,
+      endMs: Date.parse('2026-08-18T22:30:00Z'), endOffsetMinutes: 120,
+      localDate: '2026-08-19', attrs: '{}',
+    }).run()
+
+    const point = samplePoint({
+      payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: 120, physicalTime: '2026-08-18T21:45:00Z',
+    })
+    const response = await ingest(token, '/api/v1/p/p1/ingest/heart-rate', { dataPoints: [point] })
+    expect(response.statusCode).toBe(200)
+    expect((response.json() as { affected: unknown }).affected).toEqual({ from: '2026-08-18', to: '2026-08-19' })
+  })
+
   it('a repeated night deduplicates instead of doubling', async () => {
     harness = await withServer()
     const token = await harness.signIn()
