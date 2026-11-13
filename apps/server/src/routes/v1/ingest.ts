@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq, sql } from 'drizzle-orm'
 import {
-  COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
+  COMPANION_SOURCE, CompanionRecords, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
   isOriginScoped, mapSessions, mapWindowSamples, sampleDirtyDates, schema, sleepNeighbourDates, supports,
 } from '@haelan/core'
 import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
@@ -86,11 +86,29 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       throw new ConfigError('dataSource must be an object')
     }
 
+    // Points whose record was deleted on the phone are dropped before anything reads them, not
+    // after mapping: a downsampled minute carries only its first reading's id, so filtering mapped
+    // rows would keep or drop a minute shared by a live and a deleted record by the order they
+    // arrived in, and the archive would still hold the resurrected record for a rebuild to replay.
+    const names = body.dataPoints.flatMap((point) => {
+      const name = (point as { name?: unknown } | null)?.name
+      return typeof name === 'string' && name !== '' ? [name] : []
+    })
+    const dropped = names.length > 0
+      ? new CompanionRecords(app.haelan.instance.db).tombstoned(personId, names)
+      : new Set<string>()
+    const dataPoints = dropped.size === 0
+      ? body.dataPoints
+      : body.dataPoints.filter((point) => {
+        const name = (point as { name?: unknown } | null)?.name
+        return !(typeof name === 'string' && dropped.has(name))
+      })
+
     // The archived body carries the request's own dataSource beside its points, and that is the
     // identity every row below is written under. The archive is the only thing a rebuild can
     // read, so a body holding the points alone would replay under `unknown` forever; the points
     // themselves carry no source, since a point's own is deliberately not read here.
-    const payload = JSON.stringify({ dataPoints: body.dataPoints, dataSource })
+    const payload = JSON.stringify({ dataPoints, dataSource })
     const nowMs = app.haelan.now()
     const instance = app.haelan.instance
     const sources = app.haelan.stores.sources
@@ -190,7 +208,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       })
       const localDates = new Set<string>()
       const rowsWritten = dataType.target === 'samples'
-        ? writeSamples(tx, mapped.samples, id, localDates)
+        ? writeSamples(tx, mapped.samples, id, localDates, personId)
         : writeSessions(tx, mapped.sessions, mapped.segments, mapped.routes, id, localDates)
       for (const localDate of localDates) {
         instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
@@ -245,6 +263,7 @@ function writeSamples(
   samples: SampleRow[],
   rawPayloadId: string,
   localDates: Set<string>,
+  personId: string,
 ): number {
   // One per transaction, never hoisted: the same staleness runJob's own comment names,
   // a rolled back window leaving refs behind that the next write would trip over.
@@ -281,6 +300,9 @@ function writeSamples(
     insertSample.run(stored)
     rowsWritten++
   }
+  // In the same transaction as the rows, so a record is never linked without its samples or the
+  // other way round. Prepared once inside link(), not per row.
+  new CompanionRecords(tx).link(personId, samples, keys)
   return rowsWritten
 }
 
