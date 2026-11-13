@@ -838,10 +838,12 @@ object SyncEngine {
     /**
      * The dataSource one request carries. An identity with an origin package names the app that
      * wrote the record and marks itself origin scoped, so the instance files it under that app.
-     * Without one (a record from before the cutover) the object is what it always was: this
-     * install's own package, read rather than written down because a review build installs under
-     * its own id and a source naming the release package would file a reviewer's push under the
-     * app somebody actually paired.
+     * Without one (a record from before the cutover) it names the same source id it always did:
+     * this install's own package, read rather than written down because a review build installs
+     * under its own id and a source naming the release package would file a reviewer's push under
+     * the app somebody actually paired. That object ends with `originScoped: false`, which the
+     * source id ignores and the instance reads as "an upgraded phone's old identity", so these
+     * posts never move the cutover the way a 0.1.0 phone's would.
      */
     internal fun dataSourceOf(identity: SourceIdentity, packageName: String): JSONObject = JSONObject()
         .put("platform", "HEALTH_CONNECT")
@@ -851,6 +853,7 @@ object SyncEngine {
         // what makes the package name the identity, and an unstated method is not a claim.
         .apply { identity.deviceName?.let { put("device", JSONObject().put("displayName", it)) } }
         .apply { identity.recordingMethod?.let { put("recordingMethod", it) } }
+        .apply { if (identity.originPackage == null) put("originScoped", false) }
 
     private fun toStepPoints(records: List<StepsRecord>): List<JSONObject> = records.map { record ->
         JSONObject()

@@ -103,6 +103,17 @@ describe('SourceRegistry', () => {
     expect(ctx.db.select().from(sources).all()[0]?.externalId).toBe('HEALTH_CONNECT:Google Pixel 9')
   })
 
+  // An upgraded phone marks its pre-cutover identity `originScoped: false` so the instance can
+  // tell it from a 0.1.0 phone's; the source it names must be the one 0.1.0 always filed it under.
+  it('files a payload marked originScoped false exactly where the unmarked payload is filed', () => {
+    const { originScoped: _, ...unmarked } = fromApp('com.haelan.android')
+    const plain = registry.resolve('p1', unmarked, 1000)
+    const upgraded = registry.resolve('p1', { ...unmarked, originScoped: false }, 1000)
+    expect(upgraded).toBe(plain)
+    expect(ctx.db.select().from(sources).all().map((r) => [r.id, r.externalId]))
+      .toEqual([[plain, 'HEALTH_CONNECT:Google Pixel 9']])
+  })
+
   it('files an origin-scoped payload with no device exactly where the package alone always filed it', () => {
     const marked = registry.resolve('p1', { ...scaleApp, originScoped: true }, 1000)
     expect(marked).toBe(registry.resolve('p1', scaleApp, 1000))

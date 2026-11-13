@@ -411,6 +411,26 @@ describe('GET /companion/cursors identity cutovers', () => {
     expect(body.identityCutovers).toEqual({ sleep: cutover })
   })
 
+  // The first sync after the upgrade re-reads a day of overlap and sends what starts before the
+  // cutover under the old identity first, before any origin row exists. A record that starts
+  // before the cutover but ends after it must not raise the cutover, or records already sent as
+  // origin flip back to legacy on the next run and history is filed twice.
+  it("does not let an upgraded phone's old-identity posts raise the cutover before its first origin post", async () => {
+    harness = await serverAfterFixtures()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'sleep', { dataPoints: [nightPoint('2026-08-09T21:00:00Z', '2026-08-10T05:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    const cutover = Date.parse('2026-08-10T05:00:00Z') + 1
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'sleep', {
+      dataPoints: [nightPoint('2026-08-10T04:30:00Z', '2026-08-10T09:00:00Z')],
+      dataSource: { ...LEGACY, originScoped: false },
+    })).statusCode).toBe(200)
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'sleep', { dataPoints: [nightPoint('2026-08-10T21:00:00Z', '2026-08-11T05:00:00Z')], dataSource: ORIGIN_SCALE })).statusCode).toBe(200)
+    const body = (await cursors(token)).json() as { identityCutovers: Record<string, number> }
+    expect(body.identityCutovers).toEqual({ sleep: cutover })
+  })
+
   it('clamps a future-dated legacy cutover to the server clock', async () => {
     harness = await serverAfterFixtures()
     const token = await harness.signIn()

@@ -14,6 +14,9 @@ function mustContain(path: string, needle: string): void {
 describe('android origin identity parity', () => {
   it('the phone sends the marker the core store keys on', () => {
     mustContain('apps/android/app/src/main/java/com/haelan/android/SyncEngine.kt', 'put("originScoped", true)')
+    // The old identity's marker, which the instance archives as 'upgraded' and keeps off the cutover.
+    mustContain('apps/android/app/src/main/java/com/haelan/android/SyncEngine.kt', 'put("originScoped", false)')
+    mustContain('apps/server/src/routes/v1/ingest.ts', "marker === false ? { identity: 'upgraded' }")
     mustContain('packages/core/src/store/sources.ts', "dataSource['originScoped'] === true")
   })
 

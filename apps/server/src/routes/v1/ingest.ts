@@ -177,11 +177,10 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       const { id, deduplicated } = archive.put({
         personId,
         dataType: dataType.id,
-        // `identity: 'origin'` lets /companion/cursors tell a device source from the app-scoped
-        // identity it replaces; rows without the key are legacy.
-        requestParams: isOriginScoped(dataSource as Record<string, unknown>)
-          ? { source: COMPANION_SOURCE, dataType: dataType.id, dataSource: resolvedSourceId, identity: 'origin' }
-          : { source: COMPANION_SOURCE, dataType: dataType.id, dataSource: resolvedSourceId },
+        // `identity` lets /companion/cursors tell the identities apart: 'origin' is the new one,
+        // 'upgraded' is the old one sent by a phone that already knows the cutover, and a row
+        // without the key came from a 0.1.0 phone. Only those last rows may move the cutover.
+        requestParams: { source: COMPANION_SOURCE, dataType: dataType.id, dataSource: resolvedSourceId, ...identityOf(dataSource) },
         fetchEpisodeId: randomUUID(),
         windowStartMs,
         windowEndMs,
@@ -361,6 +360,17 @@ function writeSessions(
     for (const route of routes) insertRoute.run(route as unknown as typeof schema.sessionRoutes.$inferInsert)
   }
   return rowsWritten
+}
+
+/**
+ * The archive's stamp for the identity a request names. Exactly `false` is the stamp of an
+ * upgraded phone's old identity; anything else that is not `true` is read as unmarked, the way
+ * describe() reads it, so an odd value cannot claim the upgraded phone's exemption.
+ */
+function identityOf(dataSource: object): { identity?: 'origin' | 'upgraded' } {
+  const marker = (dataSource as Record<string, unknown>)['originScoped']
+  if (isOriginScoped(dataSource as Record<string, unknown>)) return { identity: 'origin' }
+  return marker === false ? { identity: 'upgraded' } : {}
 }
 
 /**

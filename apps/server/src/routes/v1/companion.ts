@@ -80,17 +80,18 @@ function normalizePlatform(value: string | string[] | undefined): void {
 
 /**
  * The source identity ingest.ts resolves and archives beside `source` and `dataType`
- * (requestParams.dataSource) and whether it is a device (origin) identity. Every row this route reads has already passed listForSource's
- * `json_valid` guard, so parsing here cannot throw; a row archived before this field existed, or
- * one seeded directly by a test, answers 'unknown' -- one merged bucket for history a phone
- * already re-reads today, not a crash.
+ * (requestParams.dataSource), and which identity the phone sent it under (requestParams.identity).
+ * Every row this route reads has already passed listForSource's `json_valid` guard, so parsing
+ * here cannot throw; a row archived before this field existed, or one seeded directly by a test,
+ * answers 'unknown' -- one merged bucket for history a phone already re-reads today, not a crash.
  */
-function requestIdentityOf(requestParams: string): { dataSource: string, origin: boolean } {
+function requestIdentityOf(requestParams: string): { dataSource: string, identity: 'origin' | 'upgraded' | null } {
   const parsed = JSON.parse(requestParams) as { dataSource?: unknown, identity?: unknown }
   return {
     dataSource: typeof parsed.dataSource === 'string' ? parsed.dataSource : 'unknown',
-    // ingest.ts stamps 'origin' on a device source; every earlier row is the app-scoped identity.
-    origin: parsed.identity === 'origin',
+    // ingest.ts stamps 'origin' on the new identity and 'upgraded' on the old identity sent by a
+    // phone that already read the cutover. A row without either came from a 0.1.0 phone.
+    identity: parsed.identity === 'origin' || parsed.identity === 'upgraded' ? parsed.identity : null,
   }
 }
 
@@ -123,13 +124,17 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
       lastWindowEndMs: number
       lastIngestAtMs: number
     }>()
-    // Per type, the legacy (app-scoped) identity's newest end. Rows arrive oldest fetch first, so
-    // a legacy row that shows up after the type's first origin row is a late or re-sent record and
-    // must not move the cutover: the phone reads everything past it under the new identity, and a
-    // cutover that climbed would re-read history it already holds. `sawOrigin` freezes the type.
-    // Only legacy rows fetched strictly before the first origin row count, so rows are bucketed by
-    // fetchedAtMs: a bucket is committed once a later fetch time arrives and discarded if an origin
-    // row lands in it, which settles a same-millisecond tie toward the lower cutover.
+    // Per type, the newest end a 0.1.0 phone sent under the old identity, which is where the
+    // upgraded phone's new identity begins. Only unstamped rows count: an upgraded phone's own
+    // old-identity posts ('upgraded') re-send its overlap before any origin row exists, and a
+    // record in them that ends past the cutover would otherwise raise it, flipping records already
+    // sent as origin back to legacy. Rows arrive oldest fetch first, so a legacy row that shows up
+    // after the type's first origin row is a late or re-sent record and must not move the cutover
+    // either: `sawOrigin` freezes the type. Only legacy rows fetched strictly before the first
+    // origin row count, so rows are bucketed by fetchedAtMs: a bucket is committed once a later
+    // fetch time arrives and discarded if an origin row lands in it. A 0.1.0 phone beside an
+    // upgraded one can still post in the origin row's millisecond, and the tie settles toward the
+    // lower cutover.
     const legacyEnds = new Map<string, {
       cutoverMs: number | null, sawOrigin: boolean, bucketAtMs: number, bucketMaxMs: number | null
     }>()
@@ -140,7 +145,8 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     const nowMs = app.haelan.now()
 
     for (const row of archive.listForSource(personId, COMPANION_SOURCE)) {
-      const { dataSource, origin } = requestIdentityOf(row.requestParams)
+      const { dataSource, identity } = requestIdentityOf(row.requestParams)
+      const origin = identity === 'origin'
       const sourceKey = `${row.dataType}:${dataSource}`
       const windowEndMs = Math.min(row.windowEndMs, nowMs)
       const perSource = bySource.get(sourceKey)
@@ -166,7 +172,7 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
       if (origin) {
         ends.sawOrigin = true
         ends.bucketMaxMs = null
-      } else if (!ends.sawOrigin && (ends.bucketMaxMs === null || row.windowEndMs > ends.bucketMaxMs)) {
+      } else if (identity === null && !ends.sawOrigin && (ends.bucketMaxMs === null || row.windowEndMs > ends.bucketMaxMs)) {
         ends.bucketMaxMs = row.windowEndMs
       }
 

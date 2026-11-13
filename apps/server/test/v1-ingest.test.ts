@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { samplePoint, schema, sleepPoint } from '@haelan/core'
+import { COMPANION_SOURCE, RawArchive, samplePoint, schema, sleepPoint } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { rebuildIfNeeded } from '../src/rebuild.ts'
@@ -223,6 +223,26 @@ describe('the companion ingest route', () => {
     await rebuildIfNeeded({ instance: harness.app.haelan.instance, nowMs: () => Date.now(), log: () => {} })
 
     expect(await sources(token)).toEqual(before)
+  })
+
+  // /companion/cursors reads this stamp: only an unstamped row may move a type's identity cutover.
+  it('archives which identity the phone sent: origin, upgraded, or none for an unmarked or odd marker', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const base = { platform: 'HEALTH_CONNECT', application: { packageName: 'com.haelan.android' } }
+    const markers: Array<[string, unknown]> = [['10', true], ['11', false], ['12', undefined], ['13', 'false']]
+    for (const [day, marker] of markers) {
+      const dataSource = marker === undefined ? base : { ...base, originScoped: marker }
+      const response = await ingest(token, '/api/v1/p/p1/ingest/weight', {
+        dataPoints: [samplePoint({ payloadKey: 'weight', valuePath: 'weightGrams', value: '80000', physicalTime: `2026-08-${day}T10:00:00Z` })],
+        dataSource,
+      })
+      expect(response.statusCode).toBe(200)
+    }
+    const archived = new RawArchive(harness.app.haelan.instance.db).listForSource('p1', COMPANION_SOURCE)
+      .sort((a, b) => a.windowStartMs - b.windowStartMs)
+      .map((row) => (JSON.parse(row.requestParams) as { identity?: string }).identity ?? null)
+    expect(archived).toEqual(['origin', 'upgraded', null, null])
   })
 
   it('a repeated upload deduplicates instead of doubling', async () => {
