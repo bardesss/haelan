@@ -4,7 +4,7 @@ import {
   DERIVATION_VERSION, MAPPING_VERSION, dayMetricTarget, insertSample, runDerive, sampleTarget,
   schema, sessionTarget,
 } from '@haelan/core'
-import { DRAIN_BATCH_DAYS } from '../src/routes/v1/annotations.ts'
+import { DRAIN_BATCH_DAYS, drainPersonDerivation } from '../src/routes/v1/annotations.ts'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -529,5 +529,35 @@ describe('DELETE /overrides/:overrideId', () => {
     expect(removed.statusCode).toBe(404)
     expect(removed.json().error.kind).toBe('not_found')
     expect(harness.app.haelan.instance.overrides.listFor('p2')).toHaveLength(1)
+  })
+})
+
+describe('drainPersonDerivation past days that only fail', () => {
+  it('derives a good day queued behind a batch that only fails', async () => {
+    harness = await withServer(); await harness.signIn()
+    const { db } = harness.app.haelan.instance
+    db.$client.exec(`CREATE TRIGGER poison BEFORE DELETE ON derive_queue WHEN OLD.local_date IN ('2026-08-01', '2026-08-02') BEGIN SELECT RAISE(ABORT, 'poisoned day'); END`)
+    const queue = harness.app.haelan.instance.deriveQueue
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-01', nowMs: 1 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-02', nowMs: 2 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-03', nowMs: 3 })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    drainPersonDerivation(harness.app, 'p1', 'test', 2)
+    expect(queue.has({ personId: 'p1', localDate: '2026-08-03' })).toBe(false)
+  })
+
+  // Characterization: passes before the fix (the old loop stops at once). It pins that the new
+  // loop keeps that bound. Mutation: make `stalled` always false and the claims reach the batch cap.
+  it('stops after two claims when only the poisoned days are queued', async () => {
+    harness = await withServer(); await harness.signIn()
+    const { db } = harness.app.haelan.instance
+    db.$client.exec(`CREATE TRIGGER poison BEFORE DELETE ON derive_queue WHEN OLD.local_date IN ('2026-08-01', '2026-08-02') BEGIN SELECT RAISE(ABORT, 'poisoned day'); END`)
+    const queue = harness.app.haelan.instance.deriveQueue
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-01', nowMs: 1 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-02', nowMs: 2 })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const claim = vi.spyOn(queue, 'claim')
+    drainPersonDerivation(harness.app, 'p1', 'test', 2)
+    expect(claim.mock.calls.length).toBeLessThanOrEqual(2)
   })
 })

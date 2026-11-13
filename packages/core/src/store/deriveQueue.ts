@@ -87,11 +87,13 @@ export class DeriveQueue {
    * that always throws would otherwise sit at the front of every batch and starve the days behind
    * it. It stays queued, because its rows were not written.
    */
-  recordFailure(entry: QueueEntry, nowMs: number): void {
-    this.#db.update(deriveQueue)
+  recordFailure(entry: QueueEntry, nowMs: number): number {
+    const row = this.#db.update(deriveQueue)
       .set({ queuedAtMs: nowMs, failures: sql`${deriveQueue.failures} + 1` })
       .where(and(eq(deriveQueue.personId, entry.personId), eq(deriveQueue.localDate, entry.localDate)))
-      .run()
+      .returning({ failures: deriveQueue.failures })
+      .get()
+    return row?.failures ?? 0
   }
 
   /**

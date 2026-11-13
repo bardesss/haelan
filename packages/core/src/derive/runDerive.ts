@@ -13,6 +13,9 @@ import { deriveDayInto } from './deriveDay.ts'
 
 const DEFAULT_BATCH = 64
 
+/** `failures` is the day's new failure count, or null when recording it threw. */
+export type OnDayFailed = (entry: QueueEntry, error: unknown, failures: number | null) => void
+
 export interface DeriveReport { daysDerived: number, daysFailed: number, rowsWritten: number }
 
 /**
@@ -41,7 +44,7 @@ export function runDerive(input: {
    * Called for a day whose transaction threw. The day is rolled back, sent to the back of the
    * queue and the drain carries on, so one day that always throws cannot block the rest.
    */
-  onDayFailed?: (entry: QueueEntry, error: unknown) => void
+  onDayFailed?: OnDayFailed
 }): DeriveReport {
   const claimed = input.queue.claim(input.batch ?? DEFAULT_BATCH, input.personIds)
   let rowsWritten = 0
@@ -111,12 +114,13 @@ export function runDerive(input: {
       daysDerived++
     } catch (error) {
       daysFailed++
+      let failures: number | null = null
       try {
-        input.queue.recordFailure(entry, input.nowMs)
+        failures = input.queue.recordFailure(entry, input.nowMs)
       } catch {
         // The day stays where it was; the next drain tries it again.
       }
-      input.onDayFailed?.(entry, error)
+      input.onDayFailed?.(entry, error, failures)
     }
   }
 

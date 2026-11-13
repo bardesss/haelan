@@ -460,7 +460,7 @@ describe('runDerive', () => {
       `CREATE TRIGGER poison BEFORE DELETE ON derive_queue WHEN OLD.local_date = '${localDate}' `
       + `BEGIN SELECT RAISE(ABORT, 'poisoned day'); END`,
     )
-    const run = (extra: { nowMs: number, batch?: number, onDayFailed?: (entry: QueueEntry, error: unknown) => void }) =>
+    const run = (extra: { nowMs: number, batch?: number, onDayFailed?: (entry: QueueEntry, error: unknown, failures: number | null) => void }) =>
       runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, ...extra })
 
     it('carries on past a day that throws and sends that day to the back of the queue', () => {
@@ -482,6 +482,15 @@ describe('runDerive', () => {
       expect(test.db.select().from(deriveQueue).all()).toEqual([
         { personId: 'p1', localDate: '2026-08-20', queuedAtMs: 10, failures: 1 },
       ])
+    })
+
+    it('tells onDayFailed how many times the day has now failed', () => {
+      queue.markDirty({ personId: 'p1', localDate: '2026-08-21', nowMs: 1 })
+      poison('2026-08-21')
+      const counts: Array<number | null> = []
+      run({ nowMs: 10, onDayFailed: (_entry, _error, failures) => { counts.push(failures) } })
+      run({ nowMs: 20, onDayFailed: (_entry, _error, failures) => { counts.push(failures) } })
+      expect(counts).toEqual([1, 2])
     })
 
     it('derives a day queued after a failing one first', () => {

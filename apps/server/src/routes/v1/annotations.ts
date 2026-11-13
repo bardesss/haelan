@@ -5,6 +5,7 @@ import {
 import type { OverrideScope, StoredOverride } from '@haelan/core'
 import { parseDayMetricTarget, parseSampleTarget } from '@haelan/core/target-key'
 import { errorBody, statusFor } from '../../api/envelope.ts'
+import { trackFailures } from '../../derive/drainProgress.ts'
 import { logDayFailed } from '../../derive/logDayFailed.ts'
 import {
   personIdOf, requireDateRange, roundMetricValue, sendHashed, textField,
@@ -346,6 +347,7 @@ export function drainPersonDerivation(
   if (!person || peopleNeedingRebuild([person]).length > 0) return
 
   const startedAtMs = performance.now()
+  const progress = trackFailures(logDayFailed(source))
   try {
     for (let batch = 0; batch < MAX_DRAIN_BATCHES; batch++) {
       const report = runDerive({
@@ -360,9 +362,9 @@ export function drainPersonDerivation(
         // days inside this request: work this caller did not ask for and, on a shared instance,
         // work about somebody else's data.
         personIds: [personId],
-        onDayFailed: logDayFailed(source),
+        onDayFailed: progress.onDayFailed,
       })
-      if (report.daysDerived === 0) return
+      if (progress.stalled(report)) return
       if (performance.now() - startedAtMs >= DRAIN_BUDGET_MS) {
         // Neither line claims anything about what is left queued. A final full batch can have
         // emptied the queue, and stillQueued asks a line later rather than guessing here.
