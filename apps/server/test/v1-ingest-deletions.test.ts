@@ -111,6 +111,22 @@ describe('the companion deletions route', () => {
     for (const m of neighbours) expect(m.nowMs).toBeGreaterThan(own[0]!.nowMs)
   })
 
+  // An app re-writing an entry as delete A, insert B at the same instant: B's upsert lands on
+  // A's row, and A's deletion, posted after it in the same drain, must not take it.
+  it('deleting a record keeps the row a surviving record wrote on the same key', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    await ingest(token, 'weight', [weightAt('2026-08-18T07:00:00Z', 'hc-weight-a')])
+    await ingest(token, 'weight', [{
+      ...samplePoint({ payloadKey: 'weight', valuePath: 'weightGrams', value: '81000', physicalTime: '2026-08-18T07:00:00Z' }),
+      name: 'hc-weight-b',
+    }])
+    const response = await remove(token, 'weight', ['hc-weight-a'])
+    expect(response.json()).toMatchObject({ rowsDeleted: 0, affected: null })
+    const db = harness.app.haelan.instance.db
+    expect(db.select().from(schema.samples).all().map((r) => r.value)).toEqual([81000])
+  })
+
   it('answers an unknown record id with nothing deleted', async () => {
     harness = await withServer()
     const token = await harness.signIn()

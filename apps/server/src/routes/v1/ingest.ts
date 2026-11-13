@@ -84,29 +84,21 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       throw new ConfigError('dataSource must be an object')
     }
 
-    // Points whose record was deleted on the phone are dropped before anything reads them, not
-    // after mapping: a downsampled minute carries only its first reading's id, so filtering mapped
-    // rows would keep or drop a minute shared by a live and a deleted record by the order they
-    // arrived in, and the archive would still hold the resurrected record for a rebuild to replay.
-    const names = body.dataPoints.flatMap((point) => {
+    // A point naming a tombstoned record is written, and its tombstone lifted in the transaction
+    // below. Health Connect only re-sends a deleted id when that record exists again (a writer's
+    // clientRecordId makes the id the same every time), and a type that failed mid-drain re-sends
+    // its upserts before its deletions, so it still ends deleted. Refusing it instead would lose
+    // an entry restored by its own app for good.
+    const recordIds = [...new Set(body.dataPoints.flatMap((point) => {
       const name = (point as { name?: unknown } | null)?.name
       return typeof name === 'string' && name !== '' ? [name] : []
-    })
-    const dropped = names.length > 0
-      ? new CompanionRecords(app.haelan.instance.db).tombstoned(personId, names)
-      : new Set<string>()
-    const dataPoints = dropped.size === 0
-      ? body.dataPoints
-      : body.dataPoints.filter((point) => {
-        const name = (point as { name?: unknown } | null)?.name
-        return !(typeof name === 'string' && dropped.has(name))
-      })
+    }))]
 
     // The archived body carries the request's own dataSource beside its points, and that is the
     // identity every row below is written under. The archive is the only thing a rebuild can
     // read, so a body holding the points alone would replay under `unknown` forever; the points
     // themselves carry no source, since a point's own is deliberately not read here.
-    const payload = JSON.stringify({ dataPoints, dataSource })
+    const payload = JSON.stringify({ dataPoints: body.dataPoints, dataSource })
     const nowMs = app.haelan.now()
     const instance = app.haelan.instance
     const sources = app.haelan.stores.sources
@@ -189,6 +181,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     const windowEndMs = Math.max(...ends) + 1
 
     const written = instance.db.transaction((tx) => {
+      if (recordIds.length > 0) new CompanionRecords(tx).lift(personId, recordIds)
       const archive = new RawArchive(tx)
       const { id, deduplicated } = archive.put({
         personId,
