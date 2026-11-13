@@ -130,3 +130,12 @@ describe('the shape a failed session check answers with', () => {
     }
   })
 })
+
+describe('a v1 caller authenticated by cookie', () => {
+  it('still resolves from the session cookie alone', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const response = await harness.app.inject({ method: 'GET', url: '/api/v1/p/p1/sources', cookies: { haelan_session: token } })
+    expect(response.statusCode).toBe(200)
+  })
+})

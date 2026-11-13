@@ -7,7 +7,7 @@ import {
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
-import { budgetFor, MAX_POINTS, DEFAULT_DAILY_POINTS } from '../src/mcp/contract.ts'
+import { budgetFor, MAX_POINTS, DEFAULT_DAILY_POINTS, PRAGMA_REFUSAL } from '../src/mcp/contract.ts'
 import { insertSession } from './mcp-fixtures.ts'
 
 let test: TestDatabase
@@ -1029,6 +1029,17 @@ describe('sql_query', () => {
     await expect(tool('sql_query').run(q(), { sql: 'PRAGMA database_list' })).rejects.toThrow(ConfigError)
     // Leading whitespace does not smuggle it past a naive check.
     await expect(tool('sql_query').run(q(), { sql: '   pragma table_info(daily)' })).rejects.toThrow(ConfigError)
+  })
+
+  it('refuses PRAGMA behind a comment or as a table function', async () => {
+    for (const sql of [
+      '/* x */ PRAGMA database_list',
+      '-- c\nPRAGMA database_list',
+      'SELECT * FROM pragma_database_list',
+      "SELECT * FROM PrAgMa_table_info('daily')",
+    ]) {
+      await expect(tool('sql_query').run(q(), { sql }), sql).rejects.toThrow(PRAGMA_REFUSAL)
+    }
   })
 })
 

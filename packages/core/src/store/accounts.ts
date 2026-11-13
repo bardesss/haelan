@@ -1,4 +1,4 @@
-﻿import { asc, eq } from 'drizzle-orm'
+﻿import { and, asc, eq, isNull, lte, or, sql } from 'drizzle-orm'
 import { hash, verify } from '@node-rs/argon2'
 import type { DbOrTx } from '../db/open.ts'
 import { accounts } from '../db/schema/index.ts'
@@ -83,14 +83,37 @@ export class AccountStore {
   }
 
   async create(input: CreateAccountInput): Promise<AccountRow> {
-    const username = normalise(input.username)
-    if (username === '') throw new ConfigError('username must not be empty')
+    const username = this.#checked(input)
     if (this.#db.select().from(accounts).where(eq(accounts.username, username)).get()) {
       throw new ConfigError(`username ${username} is already taken`)
     }
-    requireLongEnough(input.password)
     const passwordHash = await hash(input.password, ARGON2)
-    this.#db.insert(accounts).values({
+    return this.#insert(this.#db, input, username, passwordHash)
+  }
+
+  /** Hashes first, then checks that no account exists and inserts inside one
+   *  this.#db.transaction with no await between them. Null when an account already exists.
+   *  Two requests that both saw an empty instance cannot both get past the check, because the
+   *  second one's check runs after the first one's insert has committed. */
+  async createFirstAccount(input: CreateAccountInput): Promise<AccountRow | null> {
+    const username = this.#checked(input)
+    const passwordHash = await hash(input.password, ARGON2)
+    return this.#db.transaction((tx) => {
+      if (tx.select().from(accounts).limit(1).get()) return null
+      return this.#insert(tx, input, username, passwordHash)
+    })
+  }
+
+  // The normalising and the empty and length rules every way of creating an account shares.
+  #checked(input: CreateAccountInput): string {
+    const username = normalise(input.username)
+    if (username === '') throw new ConfigError('username must not be empty')
+    requireLongEnough(input.password)
+    return username
+  }
+
+  #insert(db: DbOrTx, input: CreateAccountInput, username: string, passwordHash: string): AccountRow {
+    db.insert(accounts).values({
       id: input.id,
       personId: input.personId,
       username,
@@ -108,24 +131,30 @@ export class AccountStore {
       await verify(await decoy(), input.password).catch(() => false)
       return { ok: false, reason: 'unknown' }
     }
-    if (row.lockedUntilMs !== null && row.lockedUntilMs > input.nowMs) {
-      return { ok: false, reason: 'locked' }
-    }
+    // The attempt is reserved before the verify, in one statement that also refuses a locked
+    // account. Guesses arriving in parallel would otherwise all pass a lock check made before any
+    // of them was counted, and every one would be verified: the lock would bound the counter but
+    // not the number of guesses checked. It also keeps the answer the same for a right and a wrong
+    // password once locked, so a burst cannot reveal which guess was right.
+    const reserved = this.#db.update(accounts).set({
+      failedAttempts: sql`${accounts.failedAttempts} + 1`,
+      lockedUntilMs: sql`CASE WHEN ${accounts.failedAttempts} + 1 >= ${MAX_ATTEMPTS} THEN ${input.nowMs + LOCK_MS} ELSE ${accounts.lockedUntilMs} END`,
+    }).where(and(
+      eq(accounts.id, row.id),
+      or(isNull(accounts.lockedUntilMs), lte(accounts.lockedUntilMs, input.nowMs)),
+    )).returning({ id: accounts.id }).get()
+    if (!reserved) return { ok: false, reason: 'locked' }
 
+    // A wrong password keeps the reserved increment; a right one clears it below with the rest.
     const matched = await verify(row.passwordHash, input.password).catch(() => false)
-    if (!matched) {
-      const failedAttempts = row.failedAttempts + 1
-      this.#db.update(accounts).set({
-        failedAttempts,
-        lockedUntilMs: failedAttempts >= MAX_ATTEMPTS ? input.nowMs + LOCK_MS : row.lockedUntilMs,
-      }).where(eq(accounts.id, row.id)).run()
-      return { ok: false, reason: 'bad_password' }
-    }
+    if (!matched) return { ok: false, reason: 'bad_password' }
 
     // Checked after the verify rather than instead of it, so a disabled account costs the same
     // time as a live one and the answer is the same one a wrong password gets. Telling the two
     // apart would confirm to anyone trying a username that the account exists, and the admin who
     // disabled it is the one who tells the member - the app has no way to reach them.
+    // The reserved attempt is kept here too, so a disabled account given its right password can
+    // lock; after an admin re-enables it, it may stay locked until expiry or `unlock`.
     if (row.disabledAtMs !== null) return { ok: false, reason: 'bad_password' }
 
     // The one write that stamps a sign-in, in the same update that clears the lockout: this is the

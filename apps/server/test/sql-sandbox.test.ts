@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { PersonQuery, createTestDatabase, seedPerson, schema, ConfigError, DATABASE_FILENAME } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
-import { SQL_ROW_CAP } from '../src/mcp/runSql.ts'
+import { SQL_ROW_CAP, runSql, makeProjectionDir } from '../src/mcp/runSql.ts'
+import { PRAGMA_REFUSAL } from '../src/mcp/contract.ts'
 import { seedToolData } from './mcp-fixtures.ts'
 
 const tool = () => CATALOGUE.find((t) => t.name === 'sql_query')!
@@ -25,6 +26,13 @@ const run = (sql: string) => tool().run(alice, { sql }) as Promise<{
 }>
 
 describe('what the caller\'s SQL cannot reach', () => {
+  it('refuses a PRAGMA table function in the worker itself, not only in the tool', async () => {
+    const projection = makeProjectionDir()
+    alice.writeProjection(projection.path)
+    await expect(runSql({ projectionPath: projection.path, sql: 'SELECT * FROM pragma_database_list', cleanup: projection.remove }))
+      .rejects.toThrow(PRAGMA_REFUSAL)
+  })
+
   // The header comment this replaced claimed all seven cases below rest on one thing: the
   // caller's string reaching prepare().iterate() and nothing else. Measured, that is true of
   // exactly one of them (VACUUM INTO). The rest are refused by a *different* leg - readonly, the

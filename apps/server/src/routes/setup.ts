@@ -34,13 +34,20 @@ export function registerSetup(app: FastifyInstance): void {
     const personId = randomUUID()
     const nowMs = app.haelan.now()
     // The person row must exist before the account's foreign key can point at it, and hashing
-    // is async so this cannot be one better-sqlite3 transaction. The catch is the rollback:
-    // an instance with a person and no account cannot be recovered through the wizard.
+    // is async so this cannot be one better-sqlite3 transaction. The account insert is the
+    // serialised step: it refuses once any account exists, so of two requests that both passed the
+    // check above only one keeps its person row. A losing request undoes that row the same way a
+    // failed one does, because an instance with a person and no account cannot be recovered
+    // through the wizard.
     stores().people.create({ id: personId, displayName, timezone, nowMs })
     try {
-      const account = await stores().accounts.create({
+      const account = await stores().accounts.createFirstAccount({
         id: randomUUID(), personId, username, password, isAdmin: true, nowMs,
       })
+      if (!account) {
+        stores().people.remove(personId)
+        return reply.code(409).send(errorBody('setup_incomplete', 'account_exists', 'an account already exists'))
+      }
       setSessionCookie(request, reply, stores().sessions.create(account.id, nowMs))
       return reply.code(201).send({ personId, step: step() })
     } catch (error) {
@@ -49,7 +56,7 @@ export function registerSetup(app: FastifyInstance): void {
     }
   })
 
-  app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', { preHandler: [app.requireSession] }, async (request, reply) => {
+  app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     if (step() !== 'instance-url') {
       const current = step()
       return reply.code(409).send(errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`))
@@ -94,7 +101,7 @@ export function registerSetup(app: FastifyInstance): void {
   // recorded on their person row next to the instance flag. The flag alone could never say
   // which member walks which path on a mixed instance; the consent exit needs no twin write
   // because putRefreshToken already records that person's Google choice the same way.
-  app.post('/api/setup/companion', { preHandler: [app.requireSession] }, async (request, reply) => {
+  app.post('/api/setup/companion', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     const current = step()
     if (current !== 'google-client' && current !== 'consent') {
       return reply.code(409).send(errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`))

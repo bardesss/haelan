@@ -36,11 +36,12 @@ import { registerCompanionRoutes } from './companion.ts'
 export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyInstance) => void): void {
   registerRequirePerson(app)
 
+  // onRequest, so a caller without a session or a person is refused before its body is read or parsed.
   // A plugin-wide hook rather than a per-route preHandler array: the isolation rule has to be a
   // property of this file, not of a list every route author has to remember to update. Five more
   // tasks add routes here; a forgotten array is a silent, fully unauthenticated endpoint, and a
   // hook at this level guards a route whether or not its author thought about it.
-  app.addHook('preHandler', async (request, reply) => {
+  app.addHook('onRequest', async (request, reply) => {
     await app.requireSession(request, reply)
     if (reply.sent) return
     await app.requirePerson(request, reply)

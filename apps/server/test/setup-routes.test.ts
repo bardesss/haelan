@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { SCOPES } from '@haelan/core'
+import { signState } from '../src/oauth/state.ts'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -35,6 +36,17 @@ describe('setup routes', () => {
     harness = await withServer()
     await createAccount(harness)
     expect((await createAccount(harness, { username: 'other' })).statusCode).toBe(409)
+  })
+
+  it('lets exactly one of two concurrent first accounts through', async () => {
+    harness = await withServer()
+    const [a, b] = await Promise.all([createAccount(harness), createAccount(harness, { username: 'wilma' })])
+    expect([a.statusCode, b.statusCode].sort()).toEqual([201, 409])
+    const loser = a.statusCode === 409 ? a : b
+    expect(loser.json()).toEqual({ error: { kind: 'setup_incomplete', code: 'account_exists', message: 'an account already exists' } })
+    expect(harness.app.haelan.stores.accounts.count()).toBe(1)
+    const people = harness.app.haelan.instance.db.$client.prepare('select count(*) as n from people').get() as { n: number }
+    expect(people.n).toBe(1)
   })
 
   it('rejects a timezone the runtime does not know, and stores nothing', async () => {
@@ -246,6 +258,58 @@ describe('setup routes', () => {
     return { cookies, personId }
   }
 
+  async function memberCookies(h: Harness): Promise<{ haelan_session: string }> {
+    h.app.haelan.stores.people.create({
+      id: 'p2', displayName: 'Wilma', timezone: 'Europe/Amsterdam', nowMs: h.clock.nowMs,
+    })
+    await h.app.haelan.stores.accounts.create({
+      id: 'a-p2', personId: 'p2', username: 'wilma', password: 'a good long password',
+      isAdmin: false, nowMs: h.clock.nowMs,
+    })
+    const login = await h.app.inject({
+      method: 'POST', url: '/api/auth/login', headers,
+      payload: { username: 'wilma', password: 'a good long password' },
+    })
+    return { haelan_session: login.cookies.find((c) => c.name === 'haelan_session')!.value }
+  }
+
+  it('refuses a member on every wizard writer while the wizard is unfinished', async () => {
+    harness = await withServer()
+    const admin = { haelan_session: await accountCookie(harness) }
+    await harness.app.inject({
+      method: 'POST', url: '/api/setup/instance-url', headers, cookies: admin,
+      payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' },
+    })
+    const cookies = await memberCookies(harness)
+    const writes = [
+      { url: '/api/setup/instance-url', payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' } },
+      { url: '/api/setup/google-client', payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' } },
+      { url: '/api/setup/companion', payload: {} },
+    ]
+    for (const { url, payload } of writes) {
+      const response = await harness.app.inject({ method: 'POST', url, headers, cookies, payload })
+      expect(response.statusCode, url).toBe(403)
+      expect(response.json(), url).toEqual({ error: { kind: 'forbidden', code: 'not_admin', message: 'this needs an admin' } })
+    }
+    expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
+    expect(harness.app.haelan.stores.settings.get()?.companionMode).toBe(false)
+  })
+
+  it('refuses a member the late client paste on a companion instance, on every spelling', async () => {
+    harness = await withServer()
+    await companionInstance(harness)
+    const cookies = await memberCookies(harness)
+    for (const url of ['/api/setup/google-client', '/api/%73etup/google-client', '/%61pi/setup/google-client']) {
+      const response = await harness.app.inject({
+        method: 'POST', url, headers, cookies,
+        payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' },
+      })
+      expect(response.statusCode, url).toBe(403)
+      expect(response.json(), url).toEqual({ error: { kind: 'forbidden', code: 'not_admin', message: 'this needs an admin' } })
+    }
+    expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
+  })
+
   it('lets a phone-only instance paste a client later, and keeps every other wizard route shut', async () => {
     harness = await withServer()
     const { cookies } = await companionInstance(harness)
@@ -313,17 +377,18 @@ describe('setup routes', () => {
 
   it('answers the failed-consent screen on a completed companion instance', async () => {
     harness = await withServer()
-    const { cookies } = await companionInstance(harness)
+    const { cookies, personId } = await companionInstance(harness)
 
     const before = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies })
     expect(before.statusCode).toBe(200)
     expect(before.json()).toEqual({ code: 'none', message: '' })
 
     // The callback is open past 'done' - consent outlives setup - and a failure redirects to the
-    // screen that fetches the reason from the route above. No client is needed for the failure
-    // branch: the error query is read before the client is.
+    // screen that fetches the reason from the route above. A companion instance has no client to
+    // start consent with, so the state is minted directly.
+    const state = signState(harness.app.haelan.instance.key, { personId, issuedAtMs: harness.clock.nowMs })
     const failed = await harness.app.inject({
-      method: 'GET', url: '/oauth/callback?error=access_denied', headers,
+      method: 'GET', url: `/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`, headers, cookies,
     })
     expect(failed.statusCode).toBe(302)
     expect(failed.headers.location).toBe('/setup/google?error=access_denied')

@@ -130,6 +130,23 @@ export function summaryOf(values: readonly number[]): Summary {
 export const MAX_TEXT = 2000
 
 /**
+ * What sql_query says when the caller's SQL mentions PRAGMA anywhere. One sentence, shared by the
+ * tool's fast refusal and the worker's own, so the agent reads the same thing from either.
+ */
+export const PRAGMA_REFUSAL =
+  'sql_query refuses PRAGMA outright: several of them - database_list among them - answer '
+  + 'rows about this host rather than about the person this tool reads. Ask a plain SELECT instead.'
+
+/**
+ * Whether the raw text mentions `pragma` at all, in any case, with no comment stripping. Deliberately
+ * blunt: a PRAGMA behind a comment, or a `pragma_*` table function, is as much a leak as the
+ * statement, and no real query over the projection's seven tables needs the word.
+ */
+export function referencesPragma(sql: string): boolean {
+  return /pragma/i.test(sql)
+}
+
+/**
  * The sandbox's total result budget, summed across every cell of every row together.
  *
  * `MAX_TEXT` bounds one cell; `SQL_ROW_CAP` (runSql.ts) bounds the row count; nothing before this

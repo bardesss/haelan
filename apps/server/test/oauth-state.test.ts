@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { randomBytes } from 'node:crypto'
-import { signState, verifyState, STATE_TTL_MS } from '../src/oauth/state.ts'
+import { ConsumedStates, signState, verifyState, STATE_TTL_MS } from '../src/oauth/state.ts'
 
 const key = randomBytes(32)
 
@@ -32,5 +32,19 @@ describe('the state parameter', () => {
     for (const junk of ['', '.', 'a.b', 'not-base64!.x', 'a'.repeat(5000)]) {
       expect(verifyState(key, junk, 1000)).toBeNull()
     }
+  })
+  it('spends a state once', () => {
+    const states = new ConsumedStates()
+    const token = signState(key, { personId: 'p1', issuedAtMs: 1000 })
+    expect(states.consume(token, 1000, 2000)).toBe(true)
+    expect(states.consume(token, 1000, 3000)).toBe(false)
+  })
+
+  it('forgets a state once it is too old to verify', () => {
+    const states = new ConsumedStates()
+    const token = signState(key, { personId: 'p1', issuedAtMs: 1000 })
+    states.consume(token, 1000, 2000)
+    states.consume(signState(key, { personId: 'p2', issuedAtMs: 1000 + STATE_TTL_MS + 5 }), 1000 + STATE_TTL_MS + 5, 1000 + STATE_TTL_MS + 5)
+    expect(states.consume(token, 1000, 1000 + STATE_TTL_MS + 5)).toBe(true)
   })
 })

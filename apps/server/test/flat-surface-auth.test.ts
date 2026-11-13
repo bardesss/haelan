@@ -76,11 +76,7 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
     auth: 'open',
     why: 'it mints the first session, so there is none to require; it 409s the moment an account exists',
   },
-  {
-    route: 'POST /api/setup/instance-url',
-    auth: 'session',
-    why: 'a wizard step behind the account step that minted the session, and the gate shuts it once setup is done',
-  },
+  { route: 'POST /api/setup/instance-url', auth: 'admin' },
   {
     route: 'GET /api/setup/redirect-uris',
     auth: 'session',
@@ -91,21 +87,13 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
     auth: 'session',
     why: 'the same wizard window; it returns this build\'s scope list, which is not instance state, and it stays open beside the client writer on the same companion exception',
   },
-  {
-    route: 'POST /api/setup/google-client',
-    auth: 'session',
-    why: 'the same wizard window; re-running it on a finished instance is what the gate\'s 409 exists to stop, a completed companion instance that has never connected Google being the one exception',
-  },
+  { route: 'POST /api/setup/google-client', auth: 'admin' },
   {
     route: 'GET /api/setup/last-error',
     auth: 'session',
     why: 'the same wizard window; it reports the last consent failure to whoever is walking the wizard, and stays open on a completed companion instance for the member whose consent just failed',
   },
-  {
-    route: 'POST /api/setup/companion',
-    auth: 'session',
-    why: 'the same wizard window; it finishes setup without a Google client, and the gate shuts it once setup is done',
-  },
+  { route: 'POST /api/setup/companion', auth: 'admin' },
 
   {
     route: 'GET /oauth/start',
@@ -115,7 +103,7 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   {
     route: 'GET /oauth/callback',
     auth: 'open',
-    why: 'Google redirects a browser here with no cookie; it accepts only state this instance signed',
+    why: 'Google redirects the browser here; it acts only on state this instance signed, spent once, for the person whose session cookie rides the redirect, and refuses by redirect rather than 401',
   },
 
   {
@@ -246,25 +234,28 @@ const MUTATING = new Set<InjectableMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
 /**
  * The setup gate answers /api/setup/* with 409 setup_complete once the wizard has finished, ahead
  * of any route's own preHandler (setupGate.ts). So the only state in which those routes reach
- * their session guard at all is the one they exist for: an instance mid-wizard. Derived from the
- * path rather than declared per entry, because that is precisely the rule the gate itself applies,
+ * their guards at all is an unfinished wizard. That is why the sweeps use two different
+ * harnesses: duringSetup (no account, nobody signed in) for the anonymous sweep, and midWizard
+ * (an admin exists and the instance URL is saved, so the wizard is unfinished, plus a signed-in
+ * member who is not an admin) for the member sweep. Everything else goes to afterSetup. Derived
+ * from the path rather than declared per entry, because that is the rule the gate itself applies,
  * so a new /api/setup route lands on the right side of it without a second edit here.
  *
-   * Four of them are exempt from that rule on a completed companion instance (opensForCompanion in
-   * setupGate.ts: the client writer, the two read-only helpers its form is built from, and the
-   * last-error read - which is what lets the phone path paste a client later). The derivation stays
- * right anyway, because neither harness below is that instance: afterSetup connects Google, so it
- * is companionMode false and the gate still shuts those two there. A companion harness would need
+ * Four of them are exempt from that rule on a completed companion instance (opensForCompanion in
+ * setupGate.ts: the client writer, the two read-only helpers its form is built from, and the
+ * last-error read - which is what lets the phone path paste a client later). The derivation stays
+ * right anyway, because no harness below is that instance: afterSetup connects Google, so it
+ * is companionMode false and the gate still shuts those there. A companion harness would need
  * the other side of the exemption proven as well - setup-routes.test.ts does that.
  *
- * /api/setup/state is in the gate's ALWAYS_OPEN and passes in both states; taking the mid-wizard
- * harness for it is harmless, since it is open either way.
+ * /api/setup/state is in the gate's ALWAYS_OPEN and passes in every state, so which harness it
+ * is swept against does not matter.
  */
 const onlyReachableDuringSetup = (route: string): boolean => route.includes(' /api/setup/')
 
 /**
- * A request aimed at the pattern fastify registered. Every guard on this surface runs as a
- * preHandler, before the handler looks at a param, so what a `:segment` is filled with does not
+ * A request aimed at the pattern fastify registered. Every guard on this surface runs as an
+ * onRequest or preHandler hook, before the handler looks at a param, so what a `:segment` is filled with does not
  * matter - only that there is one.
  */
 async function call(app: Harness['app'], route: string, headers: Record<string, string> = {}) {
@@ -273,8 +264,8 @@ async function call(app: Harness['app'], route: string, headers: Record<string, 
     method,
     url: url.replace(/:[^/]+/g, 'x'),
     headers,
-    // An empty JSON body rather than none, because fastify parses the body before it runs any
-    // preHandler: a POST arriving with no content-type would be refused during parsing and the
+    // An empty JSON body rather than none, because the routes' own preHandler guards run after
+    // fastify parses the body: a POST arriving with no content-type would be refused during parsing and the
     // guard this file is about would never run, which would read here as a route that refuses
     // everyone. Origin is left off on purpose - auth.ts's origin hook passes a mutating request
     // that carries none, so omitting it reaches the guard without this file having to agree with
@@ -331,7 +322,9 @@ describe('the flat surface outside /api/v1 is guarded', () => {
   // never has completeSetup called on it, which is what keeps it mid-wizard.
   let duringSetup: Harness
   let afterSetup: Harness
+  let midWizard: Harness
   let memberToken: string
+  let midWizardMemberToken: string
 
   beforeAll(async () => {
     duringSetup = await withServer()
@@ -340,11 +333,43 @@ describe('the flat surface outside /api/v1 is guarded', () => {
     // admin sweep below needs, and the one a session-only check cannot tell from an admin.
     await afterSetup.addPerson({ id: 'p2', displayName: 'Wilma', username: 'wilma' })
     memberToken = await afterSetup.signIn('wilma', 'a good long password')
+
+    // The only state where the admin-only wizard writers reach their guards: an admin exists and
+    // the wizard is unfinished. The member is made through the stores because addPerson would
+    // finish setup first.
+    midWizard = await withServer()
+    const origin = { origin: 'http://localhost:4235', host: 'localhost:4235' }
+    const created = await midWizard.app.inject({
+      method: 'POST', url: '/api/setup/account', headers: origin,
+      payload: {
+        username: 'robin', password: 'a good long password',
+        displayName: 'Robin', timezone: 'Europe/Amsterdam',
+      },
+    })
+    const adminCookie = created.cookies.find((c) => c.name === 'haelan_session')!.value
+    await midWizard.app.inject({
+      method: 'POST', url: '/api/setup/instance-url', headers: origin,
+      cookies: { haelan_session: adminCookie },
+      payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' },
+    })
+    midWizard.app.haelan.stores.people.create({
+      id: 'p2', displayName: 'Wilma', timezone: 'Europe/Amsterdam', nowMs: midWizard.clock.nowMs,
+    })
+    await midWizard.app.haelan.stores.accounts.create({
+      id: 'a-p2', personId: 'p2', username: 'wilma', password: 'a good long password',
+      isAdmin: false, nowMs: midWizard.clock.nowMs,
+    })
+    const login = await midWizard.app.inject({
+      method: 'POST', url: '/api/auth/login', headers: origin,
+      payload: { username: 'wilma', password: 'a good long password' },
+    })
+    midWizardMemberToken = login.cookies.find((c) => c.name === 'haelan_session')!.value
   })
 
   afterAll(async () => {
     await duringSetup.cleanup()
     await afterSetup.cleanup()
+    await midWizard.cleanup()
   })
 
   // Compared as a set in both directions, not a count, so a mismatch names the offending route
@@ -409,15 +434,11 @@ describe('the flat surface outside /api/v1 is guarded', () => {
     const wrong: string[] = []
     for (const entry of FLAT_ROUTES) {
       if (entry.auth !== 'admin') continue
-      if (onlyReachableDuringSetup(entry.route)) {
-        // No state has both a signed-in member and an open /api/setup/*: the gate shuts those the
-        // moment setup completes, and before that there is no account to sign in as. A route
-        // declared admin here could not be proven either way, so the declaration would be a claim
-        // rather than a fact - which is the one thing this file is not willing to hold.
-        wrong.push(`${entry.route} is declared admin, but the setup gate closes /api/setup/* once setup is done, so no session ever reaches its guard`)
-        continue
-      }
-      const response = await call(afterSetup.app, entry.route, { authorization: `Bearer ${memberToken}` })
+      // The gate shuts /api/setup/* once setup is done, so those are called mid-wizard instead.
+      const [target, token] = onlyReachableDuringSetup(entry.route)
+        ? [midWizard, midWizardMemberToken] as const
+        : [afterSetup, memberToken] as const
+      const response = await call(target.app, entry.route, { authorization: `Bearer ${token}` })
       if (!refusedForNotAdmin(response)) {
         wrong.push(`${entry.route} is declared admin but answered a non-admin member ${response.statusCode} ${response.body}`)
       }

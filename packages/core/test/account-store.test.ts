@@ -1,8 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import * as argon2 from '@node-rs/argon2'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { AccountStore } from '../src/store/accounts.ts'
 import { ConfigError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
+
+// Wraps the real verifier so a test can count how many guesses were actually checked.
+vi.mock('@node-rs/argon2', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@node-rs/argon2')>()
+  return { ...real, verify: vi.fn(real.verify) }
+})
 
 let fixture: TestDatabase
 let store: AccountStore
@@ -22,6 +29,15 @@ const create = () => store.create({
 describe('AccountStore', () => {
   it('counts zero on an empty instance, which is what puts the wizard on screen', () => {
     expect(store.count()).toBe(0)
+  })
+
+  it('createFirstAccount creates nothing once any account exists', async () => {
+    await create()
+    seedPerson(fixture.db, 'p2')
+    expect(await store.createFirstAccount({
+      id: 'a2', personId: 'p2', username: 'wilma', password: 'a good long password', isAdmin: true, nowMs: 2000,
+    })).toBeNull()
+    expect(store.count()).toBe(1)
   })
 
   it('never stores the password itself', async () => {
@@ -47,6 +63,34 @@ describe('AccountStore', () => {
       // signed somebody in should not be holding a value one sign-in out of date.
       account: { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null, lastLoginAtMs: 2000 },
     })
+  })
+
+  it('locks the account within a burst of forty parallel failures, counting none past the lock', async () => {
+    await create()
+    await Promise.all(Array.from({ length: 40 }, () =>
+      store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })))
+    const row = fixture.db.$client.prepare('select failed_attempts as n from accounts').get() as { n: number }
+    expect(row.n).toBe(10)
+    expect(await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 }))
+      .toEqual({ ok: false, reason: 'locked' })
+  })
+
+  it('verifies at most ten of forty parallel wrong passwords', async () => {
+    await create()
+    vi.mocked(argon2.verify).mockClear()
+    await Promise.all(Array.from({ length: 40 }, () =>
+      store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })))
+    expect(vi.mocked(argon2.verify)).toHaveBeenCalledTimes(10)
+  })
+
+  it('answers a right password in a burst exactly as it answers wrong ones after the lock', async () => {
+    await create()
+    const results = await Promise.all(Array.from({ length: 40 }, (_, i) => store.login({
+      username: 'robin', nowMs: 2000,
+      password: i === 20 ? 'correct horse battery staple' : 'wrong',
+    })))
+    expect(results[20]).toEqual(results[30])
+    expect(results[20]).toEqual({ ok: false, reason: 'locked' })
   })
 
   // The stamp itself, held separately from the shape above: a sign-in is the only thing that writes
@@ -90,6 +134,25 @@ describe('AccountStore', () => {
       username: 'robin', password: 'correct horse battery staple', nowMs: 2000 + 15 * 60_000 + 1,
     })
     expect(after.ok).toBe(true)
+  })
+
+  // A guard for the recovery path: expiry alone lets the owner back in and leaves a clean counter.
+  it('lets the right password in once the lock has expired and leaves the failure count at zero', async () => {
+    await create()
+    for (let i = 0; i < 10; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
+    const failed = () => (fixture.db.$client.prepare('select failed_attempts as n from accounts').get() as { n: number }).n
+    const lockEnd = 2000 + 15 * 60_000
+
+    // Still inside the window: refused, and the verifier is not reached at all.
+    vi.mocked(argon2.verify).mockClear()
+    expect(await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: lockEnd - 1 }))
+      .toEqual({ ok: false, reason: 'locked' })
+    expect(argon2.verify).not.toHaveBeenCalled()
+
+    const after = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: lockEnd + 1 })
+    expect(after.ok).toBe(true)
+    expect(failed()).toBe(0)
+    expect(store.list()[0]!.lockedUntilMs).toBeNull()
   })
 
   it('lists every account in username order, without a hash among the fields', async () => {

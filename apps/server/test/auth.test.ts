@@ -31,6 +31,15 @@ describe('auth', () => {
     expect(cookie?.path).toBe('/')
   })
 
+  it('locks the account after forty parallel wrong passwords', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    await Promise.all(Array.from({ length: 40 }, () => login(harness!, 'wrong')))
+    const response = await login(harness)
+    expect(response.statusCode).toBe(423)
+    expect(response.json()).toEqual({ error: { kind: 'unauthorized', code: 'locked', message: 'this account is locked' } })
+  })
+
   it('does not set Secure over plain http, because the browser would then drop the cookie', async () => {
     harness = await withServer()
     await harness.completeSetup()

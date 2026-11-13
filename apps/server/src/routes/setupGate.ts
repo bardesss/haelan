@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { setupStep } from '@haelan/core'
 import type { SetupStep } from '@haelan/core'
 import { errorBody } from '../api/envelope.ts'
@@ -20,8 +20,11 @@ export function registerSetupGate(app: FastifyInstance): void {
     googleClientConfigured: hasReadableClient(app),
   }))
 
-  app.addHook('preHandler', async (request, reply) => {
-    const path = request.url.split('?')[0] ?? ''
+  // Decided on the matched route, not the raw URL: the router decodes percent escapes, so
+  // /api/%73etup/google-client reaches the setup handler while its raw string starts with nothing
+  // this hook recognises.
+  app.addHook('onRequest', async (request, reply) => {
+    const path = gatedPath(request)
     if (ALWAYS_OPEN.has(path)) return
     // The gate governs the API, not the browser. A document request for /setup/google is how
     // the wizard is reached in the first place, and answering it with a 409 JSON body makes
@@ -58,7 +61,7 @@ export function registerSetupGate(app: FastifyInstance): void {
     // re-running one silently rewrites what a working install depends on. /oauth/* is safe to
     // leave open because it does not rely on this gate for its protection - /oauth/start takes a
     // session, and /oauth/callback only accepts state this instance signed, for the person named
-    // inside it.
+    // inside it, and only from that person's own session, once.
     if (step === 'done' && isSetupRoute && !isConsentRoute) {
       // Named exceptions, and only on the phone path: see opensForCompanion below. They are
       // what keeps "no Google" a choice rather than a door that only closes.
@@ -69,6 +72,14 @@ export function registerSetupGate(app: FastifyInstance): void {
       return reply.code(409).send(errorBody('setup_incomplete', 'setup_complete', 'setup is already finished'))
     }
   })
+}
+
+// An unmatched request reaches no handler, so the raw-URL fallback protects nothing. Without
+// @fastify/static it keeps today's 409 for paths like /api/v1/daily; in production the static
+// '/*' route matches unmatched GETs, so they skip the gate, which is harmless because no handler
+// acts on them.
+function gatedPath(request: FastifyRequest): string {
+  return request.routeOptions.url ?? request.url.split('?')[0] ?? ''
 }
 
 function currentStep(app: FastifyInstance): SetupStep {
@@ -109,7 +120,7 @@ function hasReadableClient(app: FastifyInstance): boolean {
  *   the screen fetches the reason from here (SetupApp.tsx), and on a mixed instance the condition
  *   above has already turned the client's exemption off. The person who needs the message is the
  *   invited member whose own consent just failed, and this route is a read-only GET over an
- *   in-memory slot that rewrites nothing: refusing it protects nothing and costs the only
+ *   caller's own in-memory slot that rewrites nothing: refusing it protects nothing and costs the only
  *   explanation of the failure.
  *
  * None of these exceptions is an unauthenticated door. Every route keeps its own requireSession,
