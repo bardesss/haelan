@@ -4,10 +4,10 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 export { people, sources, sourcePriority, sourceAliases, sourcePanelVisibility } from './people.ts'
 export { oauthClient, credentials } from './credentials.ts'
 export { notes, events, overrides } from './annotations.ts'
-export { rawPayloads } from './raw.ts'
+export { rawPayloads, companionDeletions } from './raw.ts'
 export { moods } from './moods.ts'
 export {
-  samples, sessions, sessionSegments, sessionRoutes, daily, observations, metricDictionary,
+  samples, companionRecordSamples, sessions, sessionSegments, sessionRoutes, daily, observations, metricDictionary,
   SAMPLE_AGGS, SAMPLE_AGG_REFS, sampleAggOf, SESSION_KINDS,
 } from './derived.ts'
 export type { SampleAgg, SessionKind } from './derived.ts'

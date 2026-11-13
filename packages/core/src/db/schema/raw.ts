@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, blob, index, unique } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, blob, index, unique, primaryKey } from 'drizzle-orm/sqlite-core'
 import { people } from './people.ts'
 
 // Append only. Tier 1 truth: tiers 2 and 3 are rebuilt from these bodies and are never the
@@ -39,3 +39,12 @@ export const rawPayloads = sqliteTable('raw_payloads', {
   unique('raw_payloads_body_hash').on(t.personId, t.dataType, t.bodyHash, t.windowStartMs, t.windowEndMs),
   index('raw_payloads_person_type_window').on(t.personId, t.dataType, t.windowStartMs),
 ])
+
+// Tier 1, survives a rebuild: a record the phone said was deleted. Nothing in the archive records a
+// deletion, so a rebuild or a late upload would otherwise bring the record back.
+export const companionDeletions = sqliteTable('companion_deletions', {
+  personId: text('person_id').notNull().references(() => people.id),
+  dataType: text('data_type').notNull(),
+  recordId: text('record_id').notNull(),
+  deletedAtMs: integer('deleted_at_ms').notNull(),
+}, (t) => [primaryKey({ columns: [t.personId, t.recordId] })])

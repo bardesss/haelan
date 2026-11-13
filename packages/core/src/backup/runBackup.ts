@@ -62,7 +62,7 @@ export function listBackups(dir: string): BackupFile[] {
 // and sources are ours rather than the spec's, and stay - they are the rows every other table
 // hangs off. moods (M9c) is typed in by hand like notes and events, so no rebuild brings it back.
 const COUNTED = [
-  'people', 'sources', 'raw_payloads', 'overrides', 'notes', 'events', 'moods', 'samples', 'daily', 'sessions',
+  'people', 'sources', 'raw_payloads', 'companion_deletions', 'overrides', 'notes', 'events', 'moods', 'samples', 'daily', 'sessions',
 ]
 
 /**
