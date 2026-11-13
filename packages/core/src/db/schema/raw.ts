@@ -38,6 +38,9 @@ export const rawPayloads = sqliteTable('raw_payloads', {
   // end, and collapsing them would discard the wider fetch's record of having happened.
   unique('raw_payloads_body_hash').on(t.personId, t.dataType, t.bodyHash, t.windowStartMs, t.windowEndMs),
   index('raw_payloads_person_type_window').on(t.personId, t.dataType, t.windowStartMs),
+  // RawArchive.put's newest-row lookup for a named companion upload, in listFor's order (fetch
+  // time, then id): with id in the index the ORDER BY needs no sort of the person's rows.
+  index('raw_payloads_person_type_fetched').on(t.personId, t.dataType, t.fetchedAtMs, t.id),
 ])
 
 // Tier 1, survives a rebuild: a record the phone said was deleted. Nothing in the archive records a
