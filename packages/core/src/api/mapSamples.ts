@@ -14,6 +14,8 @@ export interface SampleRow {
   value: number | null
   n: number
   rawPayloadId: string
+  // The Health Connect record the point came from, so a deleted record can find its samples.
+  recordId?: string
 }
 
 export interface MapSamplesInput {
@@ -62,6 +64,8 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
   for (const point of points) {
     const payload = valueAt(point, t.payloadKey)
     if (payload === undefined) continue
+    const name = valueAt(point, 'name')
+    const recordId = typeof name === 'string' && name !== '' ? { recordId: name } : {}
 
     // The interval or sample instant is the row's clock for both an ordinary type and a
     // sub-dimension type, so it is resolved once here rather than twice.
@@ -116,6 +120,7 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
           value,
           n: 1,
           rawPayloadId: input.rawPayloadId,
+          ...recordId,
         })
       }
     }
@@ -148,6 +153,7 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
           value: minutes,
           n: 1,
           rawPayloadId: input.rawPayloadId,
+          ...recordId,
         })
       }
     }

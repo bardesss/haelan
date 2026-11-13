@@ -33,6 +33,7 @@ export function downsampleToMinute(rows: SampleRow[]): SampleRow[] {
       tzOffsetMinutes: first.tzOffsetMinutes,
       n: bucket.length,
       rawPayloadId: first.rawPayloadId,
+      ...(first.recordId !== undefined ? { recordId: first.recordId } : {}),
     }
     out.push(
       { ...base, agg: 'min', value: Math.min(...values) },
