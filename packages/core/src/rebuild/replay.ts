@@ -239,16 +239,28 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
     verticalAccuracyMetres: sql.placeholder('verticalAccuracyMetres'),
   } as unknown as typeof sessionRoutes.$inferInsert).prepare()
 
-  for (const group of groupIntoWindows(input.payloads)) {
-    const t = dataTypeById(group.dataType)
-    // A data type the catalogue no longer describes leaves payloads nobody can map. Counted and
-    // reported rather than thrown, because one retired type must not cost a person the rebuild
-    // of every other type they have. The bodies stay in tier 1 either way.
-    if (t === undefined) { counts.unmappable += group.pages.length; continue }
+  // Every unit in the order its own first page was fetched, across window groups as well as
+  // within one. Grouping by window is what puts a call's pages back together, but replaying group
+  // by group would run a later fetch before an earlier one whenever their bounds differ, and a
+  // timezone change gives the same date different bounds. The sync wrote them in fetch order, so
+  // the last upsert onto a minute has to come from the last fetch here too.
+  const position = new Map(input.payloads.map((payload, index) => [payload.id, index]))
+  const nextPageTokenOf = (page: ArchivedPayload): string | null => {
+    const envelope = readEnvelope(input.archive.getBody(input.personId, page.id), 'dataPoints')
+    if (!envelope.readable) return null
+    const token = envelope.body['nextPageToken']
+    return typeof token === 'string' ? token : null
+  }
+  const plan = planUnits(groupIntoWindows(input.payloads), position, nextPageTokenOf)
+  counts.unmappable += plan.unmappable
 
-    if (group.isRollup) {
-      for (const page of group.pages) {
-        const unit = { dataType: group.dataType, pages: 1 }
+  for (const planned of plan.units) {
+    // planUnits only plans a unit for a type the catalogue still describes.
+    const t = dataTypeById(planned.dataType)!
+
+    if (planned.kind === 'rollup') {
+      for (const page of planned.pages) {
+        const unit = { dataType: planned.dataType, pages: 1 }
         const committed = withPage(input.client, unit, collector, () => {
           const mapped = mapRollups({
             dataType: t, personId: input.personId,
@@ -283,166 +295,168 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
       continue
     }
 
-    // ECG (and any future type like it) names one primary target plus alsoTargets, and one
-    // archived page has to replay into each: the branch below used to run only for t.target,
-    // which is what let a rebuild delete the alsoTargets rows a live sync had written and never
-    // put them back. runJob.ts's writeFor has the identical shape and the identical reason
-    // (runJob.ts:154): every mapper already accepts a foreign-looking dataType through its own
-    // "target is mine, or alsoTargets includes mine" guard, so running one branch per named
-    // target is the other half of that contract.
-    for (const target of [t.target, ...(t.alsoTargets ?? [])]) {
-      if (target === 'sessions') {
-        // No lookup of a session's previous localDate here, unlike writeSessions in the live sync
-        // path. That lookup exists to mark the day a session left dirty when Google revises its end
-        // time across midnight, but the caller of replayPerson has already emptied this person's
-        // tier 2, so every row inserted below is new: there is no previous row for any session to
-        // have moved away from.
-        for (const page of group.pages) {
-          const unit = { dataType: group.dataType, pages: 1 }
-          const committed = withPage(input.client, unit, collector, () => {
-            const body = input.archive.getBody(input.personId, page.id)
-            const { sessions: rows, segments, routes } = mapSessions({
-              dataType: t, personId: input.personId, resolveSource,
-              body, rawPayloadId: page.id,
-            })
-            // Rows imply points, since a row is made out of one, so a productive page is counted
-            // without re-reading it. Only a page that produced nothing is asked, which is where
-            // the two answers actually differ and where the cost is worth paying.
-            if (rows.length > 0 || carriedData(body, 'dataPoints')) counts.payloadsWithData += 1
-            for (const row of rows) {
-              tx.insert(sessions).values(row).onConflictDoUpdate({
-                target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
-                set: {
-                  startMs: row.startMs,
-                  startOffsetMinutes: row.startOffsetMinutes,
-                  endMs: row.endMs,
-                  endOffsetMinutes: row.endOffsetMinutes,
-                  localDate: row.localDate,
-                  attrs: row.attrs,
-                  rawPayloadId: row.rawPayloadId,
-                },
-              }).run()
-              localDates.add(row.localDate)
-            }
-            // Replaced wholesale for the sessions in this page, the same as ingest, a window
-            // fetched twice legitimately revises a night's stage timeline or a run's route, and
-            // merging both versions of either would interleave them. The route delete rides
-            // beside the segment delete for the reason ingest.ts's writeSessions gives for
-            // pairing them there too: a session whose route half survived a partial write and
-            // whose segments did not (or the other way round) is worse than a session with
-            // neither, and this whole unit is one savepoint, so nothing here can land half done.
-            for (const row of rows) {
-              tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
-              tx.delete(sessionRoutes).where(eq(sessionRoutes.sessionId, row.id)).run()
-            }
-            for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
-            for (const route of routes) {
-              insertRoute.run(route as unknown as typeof sessionRoutes.$inferInsert)
-            }
-          })
-          afterUnit(committed)
-        }
-        continue
-      }
-
-      if (target === 'observations') {
-        // One mapObservations call per page, the same granularity writeObservations in runJob.ts
-        // uses. Unlike samples there is no coverage or aggregate to get wrong by mapping a page on
-        // its own, so there is no reason to reassemble fetch episodes the way the samples path below
-        // has to.
-        for (const page of group.pages) {
-          const unit = { dataType: group.dataType, pages: 1 }
-          const committed = withPage(input.client, unit, collector, () => {
-            const body = input.archive.getBody(input.personId, page.id)
-            const rows = mapObservations({
-              dataType: t, personId: input.personId, resolveSource,
-              body, rawPayloadId: page.id,
-            })
-            // Same lazy test the sessions path above makes, for the same reason.
-            if (rows.length > 0 || carriedData(body, 'dataPoints')) counts.payloadsWithData += 1
-            for (const row of rows) {
-              tx.insert(observations).values(row).onConflictDoUpdate({
-                target: observations.id,
-                set: {
-                  personId: row.personId,
-                  sourceId: row.sourceId,
-                  kind: row.kind,
-                  startedAtMs: row.startedAtMs,
-                  startedAtOffsetMinutes: row.startedAtOffsetMinutes,
-                  endedAtMs: row.endedAtMs,
-                  endedAtOffsetMinutes: row.endedAtOffsetMinutes,
-                  localDate: row.localDate,
-                  value: row.value,
-                  rawPayloadId: row.rawPayloadId,
-                },
-              }).run()
-              localDates.add(row.localDate)
-            }
-          })
-          afterUnit(committed)
-        }
-        continue
-      }
-
-      // One mapWindowSamples call per fetch episode, oldest first, not one call over the whole
-      // group. Pagination pages of a single fetch must still be mapped together, which is the
-      // reason groupIntoWindows exists at all, so this splits WITHIN a group rather than reverting
-      // to one call per page. splitIntoEpisodes reads the episode the client recorded where there
-      // is one and infers it from pageToken where there is not. But runJob calls listDataPoints
-      // once per sync run, and the trailing window is re-fetched on every run by design, so two
-      // archived rows sharing a window's bounds are just as often two separate fetch episodes as
-      // two pages of one. Merging them into a single mapWindowSamples call would downsample
-      // across readings the original sync never saw
-      // together: a minute Google revised from 60 bpm to 100 bpm between two fetches would leave
-      // min 60, mean 80, max 100, n 2, where the sync itself left min 100, mean 100, max 100, n 1.
-      for (const episode of splitIntoEpisodes(group.pages)) {
-        // The whole episode is one unit, where the three loops above take a page each. Not an
-        // inconsistency: mapWindowSamples takes a fetch episode, and isolating a page inside one
-        // would mean calling it once per page, which downsamples across readings the original
-        // sync deliberately kept apart - the exact failure splitIntoEpisodes exists to prevent,
-        // and the comment above it spells out what a blended minute costs. A dropped episode
-        // therefore costs every page in it, which is why `pages` is its length rather than 1:
-        // the number an operator reads has to be how much of the archive went unreplayed, not
-        // how many times this loop gave up.
-        const unit = { dataType: group.dataType, pages: episode.length }
+    if (planned.kind === 'sessions') {
+      // No lookup of a session's previous localDate here, unlike writeSessions in the live sync
+      // path. That lookup exists to mark the day a session left dirty when Google revises its end
+      // time across midnight, but the caller of replayPerson has already emptied this person's
+      // tier 2, so every row inserted below is new: there is no previous row for any session to
+      // have moved away from.
+      for (const page of planned.pages) {
+        const unit = { dataType: planned.dataType, pages: 1 }
         const committed = withPage(input.client, unit, collector, () => {
-          const pages = episode.map((p) => ({
-            body: input.archive.getBody(input.personId, p.id),
-            rawPayloadId: p.id,
-          }))
-          const rows = mapWindowSamples({ dataType: t, personId: input.personId, resolveSource, pages })
-          // The one path where a unit is more than one page, so the same lazy test needs a word
-          // about what it can get wrong. An episode that produced rows counts all of its pages,
-          // which is exact for the single-page episode that is the overwhelming majority and can
-          // overcount by the empty tail page of a paginated fetch. That overcount is reachable
-          // only when rows were written, and a rebuild that wrote rows is one where nothing ever
-          // reads this number - producedNothing tests rowsWritten === 0 first. An episode that
-          // produced nothing is asked page by page, and that is the case the number is read in.
-          //
-          // "Exact" there is about this loop only, not about the total. A type that names
-          // alsoTargets is replayed once per target by the loop above - ECG declares target
-          // 'sessions' with alsoTargets 'samples' and 'observations' (api/catalogue.ts) - so one
-          // ECG page can reach this counter three times and the total is an upper bound rather
-          // than a page count. Harmless for what the number is for, since producedNothing only
-          // ever asks whether it is above zero, and anything reading it as a magnitude would be
-          // reading something this loop never promised.
-          if (rows.length > 0) counts.payloadsWithData += pages.length
-          else for (const page of pages) {
-            if (carriedData(page.body, 'dataPoints')) counts.payloadsWithData += 1
-          }
+          const body = input.archive.getBody(input.personId, page.id)
+          const { sessions: rows, segments, routes } = mapSessions({
+            dataType: t, personId: input.personId, resolveSource,
+            body, rawPayloadId: page.id,
+          })
+          // Rows imply points, since a row is made out of one, so a productive page is counted
+          // without re-reading it. Only a page that produced nothing is asked, which is where
+          // the two answers actually differ and where the cost is worth paying.
+          if (rows.length > 0 || carriedData(body, 'dataPoints')) counts.payloadsWithData += 1
           for (const row of rows) {
-            // The same translation and the same upsert target runJob's writeSamples uses, and
-            // they have to stay the same: a replay that keyed a row differently from the sync
-            // would upsert onto a key the sync never wrote and double the table on the first
-            // rebuild.
-            const stored = keys.sampleRefs(row)
-            insertSample.run(stored)
-            localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
+            tx.insert(sessions).values(row).onConflictDoUpdate({
+              target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
+              set: {
+                startMs: row.startMs,
+                startOffsetMinutes: row.startOffsetMinutes,
+                endMs: row.endMs,
+                endOffsetMinutes: row.endOffsetMinutes,
+                localDate: row.localDate,
+                attrs: row.attrs,
+                rawPayloadId: row.rawPayloadId,
+              },
+            }).run()
+            localDates.add(row.localDate)
+          }
+          // Replaced wholesale for the sessions in this page, the same as ingest, a window
+          // fetched twice legitimately revises a night's stage timeline or a run's route, and
+          // merging both versions of either would interleave them. The route delete rides
+          // beside the segment delete for the reason ingest.ts's writeSessions gives for
+          // pairing them there too: a session whose route half survived a partial write and
+          // whose segments did not (or the other way round) is worse than a session with
+          // neither, and this whole unit is one savepoint, so nothing here can land half done.
+          for (const row of rows) {
+            tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
+            tx.delete(sessionRoutes).where(eq(sessionRoutes.sessionId, row.id)).run()
+          }
+          for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
+          for (const route of routes) {
+            insertRoute.run(route as unknown as typeof sessionRoutes.$inferInsert)
           }
         })
         afterUnit(committed)
       }
+      continue
     }
+
+    if (planned.kind === 'observations') {
+      // One mapObservations call per page, the same granularity writeObservations in runJob.ts
+      // uses. Unlike samples there is no coverage or aggregate to get wrong by mapping a page on
+      // its own, so there is no reason to reassemble fetch episodes the way the samples path below
+      // has to.
+      for (const page of planned.pages) {
+        const unit = { dataType: planned.dataType, pages: 1 }
+        const committed = withPage(input.client, unit, collector, () => {
+          const body = input.archive.getBody(input.personId, page.id)
+          const rows = mapObservations({
+            dataType: t, personId: input.personId, resolveSource,
+            body, rawPayloadId: page.id,
+          })
+          // Same lazy test the sessions path above makes, for the same reason.
+          if (rows.length > 0 || carriedData(body, 'dataPoints')) counts.payloadsWithData += 1
+          for (const row of rows) {
+            tx.insert(observations).values(row).onConflictDoUpdate({
+              target: observations.id,
+              set: {
+                personId: row.personId,
+                sourceId: row.sourceId,
+                kind: row.kind,
+                startedAtMs: row.startedAtMs,
+                startedAtOffsetMinutes: row.startedAtOffsetMinutes,
+                endedAtMs: row.endedAtMs,
+                endedAtOffsetMinutes: row.endedAtOffsetMinutes,
+                localDate: row.localDate,
+                value: row.value,
+                rawPayloadId: row.rawPayloadId,
+              },
+            }).run()
+            localDates.add(row.localDate)
+          }
+        })
+        afterUnit(committed)
+      }
+      continue
+    }
+
+    // One mapWindowSamples call per fetch episode, not one call over the whole window group.
+    // Pagination pages of a single fetch must still be mapped together, which is the reason
+    // groupIntoWindows exists at all, so planUnits splits WITHIN a group rather than reverting to
+    // one call per page. splitIntoEpisodes reads the episode the client recorded where there is
+    // one and infers it from pageToken where there is not. But runJob calls listDataPoints once
+    // per sync run, and the trailing window is re-fetched on every run by design, so two archived
+    // rows sharing a window's bounds are just as often two separate fetch episodes as two pages
+    // of one. Merging them into a single mapWindowSamples call would downsample across readings
+    // the original sync never saw together: a minute Google revised from 60 bpm to 100 bpm
+    // between two fetches would leave min 60, mean 80, max 100, n 2, where the sync itself left
+    // min 100, mean 100, max 100, n 1.
+    //
+    // The whole episode is one unit, where the three branches above take a page each. Not an
+    // inconsistency: mapWindowSamples takes a fetch episode, and isolating a page inside one
+    // would mean calling it once per page, which downsamples across readings the original
+    // sync deliberately kept apart - the exact failure splitIntoEpisodes exists to prevent,
+    // and the comment above spells out what a blended minute costs. A dropped episode
+    // therefore costs every page in it, which is why `pages` is its length rather than 1:
+    // the number an operator reads has to be how much of the archive went unreplayed, not
+    // how many times this loop gave up. The leading pages are left out of it: each is an
+    // archived row of an earlier call, and counted with that call.
+    const episode = planned.pages
+    const unit = { dataType: planned.dataType, pages: episode.length }
+    const committed = withPage(input.client, unit, collector, () => {
+      const pages = episode.map((p) => ({
+        body: input.archive.getBody(input.personId, p.id),
+        rawPayloadId: p.id,
+      }))
+      // The pages this call fetched whose bodies the archive deduplicated onto an earlier row
+      // (see withLeadingPages). The sync mapped them together with the rest of the call, so the
+      // replay has to as well.
+      const leading = planned.leading.map((p) => ({
+        body: input.archive.getBody(input.personId, p.id),
+        rawPayloadId: p.id,
+      }))
+      const rows = mapWindowSamples({
+        dataType: t, personId: input.personId, resolveSource, pages: [...leading, ...pages],
+      })
+      // The one path where a unit is more than one page, so the same lazy test needs a word
+      // about what it can get wrong. An episode that produced rows counts all of its pages,
+      // which is exact for the single-page episode that is the overwhelming majority and can
+      // overcount by the empty tail page of a paginated fetch. That overcount is reachable
+      // only when rows were written, and a rebuild that wrote rows is one where nothing ever
+      // reads this number - producedNothing tests rowsWritten === 0 first. An episode that
+      // produced nothing is asked page by page, and that is the case the number is read in.
+      // Only the episode's own pages are counted, never its leading ones, for the reason above.
+      //
+      // "Exact" there is about this branch only, not about the total. A type that names
+      // alsoTargets is replayed once per target - planUnits plans a unit for each, and ECG
+      // declares target 'sessions' with alsoTargets 'samples' and 'observations'
+      // (api/catalogue.ts) - so one ECG page can reach this counter three times and the total is
+      // an upper bound rather than a page count. Harmless for what the number is for, since
+      // producedNothing only ever asks whether it is above zero, and anything reading it as a
+      // magnitude would be reading something this branch never promised.
+      if (rows.length > 0) counts.payloadsWithData += pages.length
+      else for (const page of pages) {
+        if (carriedData(page.body, 'dataPoints')) counts.payloadsWithData += 1
+      }
+      for (const row of rows) {
+        // The same translation and the same upsert target runJob's writeSamples uses, and
+        // they have to stay the same: a replay that keyed a row differently from the sync
+        // would upsert onto a key the sync never wrote and double the table on the first
+        // rebuild.
+        const stored = keys.sampleRefs(row)
+        insertSample.run(stored)
+        localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
+      }
+    })
+    afterUnit(committed)
   }
 
   // The second breaker, and the one that catches what DROP_BREAKER cannot.
@@ -459,7 +473,8 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   //
   // The third condition is the one that is easy to get wrong, and it was wrong here first.
   // `committedUnits` only counts units that reached withPage, and an unmappable group never
-  // does - it is counted into `unmappable` and skipped above, before any write is attempted. So
+  // does - planUnits counts it into `unmappable` and plans no unit for it, so no write is ever
+  // attempted. So
   // a person holding payloads of a type the catalogue retired, plus one page that will not read,
   // has committed nothing and dropped something, and the rule without this condition abandoned
   // them for it: deterministically, on every boot, which is #274's own failure restored for that
@@ -551,6 +566,143 @@ function groupIntoWindows(payloads: readonly ArchivedPayload[]): Window[] {
   return [...byKey.values()]
 }
 
+/** One withPage unit of the replay: a page, or for samples a whole fetch episode. */
+interface ReplayUnit {
+  /** The index in `input.payloads` of the unit's own first page, which is its fetch order. */
+  order: number
+  kind: 'rollup' | 'sessions' | 'observations' | 'samples'
+  dataType: string
+  pages: ArchivedPayload[]
+  /** Pages mapped ahead of `pages` but not counted as the unit's own. Only ever set for samples. */
+  leading: ArchivedPayload[]
+}
+
+/**
+ * Turns the window groups into the units the replay runs, in the order they were fetched.
+ *
+ * Grouping by window is still what puts a call's pages back together, but it cannot be the replay
+ * order: a person's timezone changing gives the same date different window bounds, so one date's
+ * fetches land in two groups, and walking group by group replays a later fetch before an earlier
+ * one. The sync wrote every fetch as it arrived, so the last write onto a minute was the last
+ * fetch, and a rebuild has to end on the same one. Sorting the units on their first page's
+ * position in the archive's fetch order gives that. The sort is stable, so units that share a
+ * first page keep group and then target order.
+ */
+function planUnits(
+  groups: Window[],
+  position: ReadonlyMap<string, number>,
+  nextPageTokenOf: (page: ArchivedPayload) => string | null,
+): { units: ReplayUnit[], unmappable: number } {
+  const units: ReplayUnit[] = []
+  let unmappable = 0
+  const orderOf = (page: ArchivedPayload): number => position.get(page.id)!
+  for (const group of groups) {
+    const t = dataTypeById(group.dataType)
+    // A data type the catalogue no longer describes leaves payloads nobody can map. Counted and
+    // reported rather than thrown, because one retired type must not cost a person the rebuild
+    // of every other type they have. The bodies stay in tier 1 either way.
+    if (t === undefined) { unmappable += group.pages.length; continue }
+
+    if (group.isRollup) {
+      for (const page of group.pages) {
+        units.push({
+          order: orderOf(page), kind: 'rollup', dataType: group.dataType, pages: [page], leading: [],
+        })
+      }
+      continue
+    }
+
+    // ECG (and any future type like it) names one primary target plus alsoTargets, and one
+    // archived page has to replay into each: the replay used to run only for t.target,
+    // which is what let a rebuild delete the alsoTargets rows a live sync had written and never
+    // put them back. runJob.ts's writeFor has the identical shape and the identical reason
+    // (runJob.ts:154): every mapper already accepts a foreign-looking dataType through its own
+    // "target is mine, or alsoTargets includes mine" guard, so planning one unit per named
+    // target is the other half of that contract.
+    for (const target of [t.target, ...(t.alsoTargets ?? [])]) {
+      if (target === 'sessions' || target === 'observations') {
+        for (const page of group.pages) {
+          units.push({
+            order: orderOf(page), kind: target, dataType: group.dataType, pages: [page], leading: [],
+          })
+        }
+        continue
+      }
+      for (const episode of splitIntoEpisodes(group.pages)) {
+        units.push({
+          order: orderOf(episode[0]!), kind: 'samples', dataType: group.dataType, pages: episode,
+          leading: withLeadingPages(episode, group.pages, position, nextPageTokenOf),
+        })
+      }
+    }
+  }
+  units.sort((a, b) => a.order - b.order)
+  return { units, unmappable }
+}
+
+/**
+ * The leading pages of a recorded fetch that the archive deduplicated away, found again.
+ *
+ * RawArchive.put stores a body once per person, so a re-fetch whose first page came back byte
+ * identical archives no row for it: the call's own rows begin at a continuation page. The sync
+ * still mapped that first page together with the rest of the call, and per minute downsampling
+ * runs across a call, so a minute split between the first page and a changed later one came out
+ * as the blend of both. Replaying only the rows the call archived leaves the later page alone in
+ * that minute, and the rebuild quietly differs from what the sync wrote.
+ *
+ * A continuation page records the token it was asked with, and the page before it in the same
+ * call answered with that token as its nextPageToken. The deduplicated page is the row it was
+ * stored as, which an earlier call archived, so the latest page of the window fetched before
+ * this one that answered with the right token is the page this call saw. Repeated while the
+ * earliest page so far is itself a continuation, since more than one leading page can have been
+ * deduplicated, and stopped when nothing matches.
+ *
+ * Only for a recorded episode, whose pages are known to be one call, and only when none of its
+ * own pages is a first page: an episode that holds its own start deduplicated nothing at the
+ * front, whatever order its pages were archived in. An inferred episode is left alone, since
+ * the pageToken inference already decides where it starts.
+ */
+function withLeadingPages(
+  episode: ArchivedPayload[],
+  windowPages: readonly ArchivedPayload[],
+  position: ReadonlyMap<string, number>,
+  nextPageTokenOf: (page: ArchivedPayload) => string | null,
+): ArchivedPayload[] {
+  const first = episode[0]
+  if (first === undefined || first.fetchEpisodeId === null) return []
+  if (episode.some((page) => isEpisodeStart(page.requestParams))) return []
+
+  const leading: ArchivedPayload[] = []
+  let earliest = first
+  while (!isEpisodeStart(earliest.requestParams)) {
+    const token = requestedPageToken(earliest.requestParams)
+    if (token === null) break
+    const before = position.get(earliest.id)!
+    let found: ArchivedPayload | undefined
+    for (let i = windowPages.length - 1; i >= 0; i--) {
+      const candidate = windowPages[i]!
+      if (position.get(candidate.id)! >= before) continue
+      if (nextPageTokenOf(candidate) === token) { found = candidate; break }
+    }
+    if (found === undefined) break
+    leading.unshift(found)
+    earliest = found
+  }
+  return leading
+}
+
+/** The pageToken a list page was requested with, or null when it has none. */
+function requestedPageToken(requestParams: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(requestParams)
+    if (typeof parsed !== 'object' || parsed === null || !('pageToken' in parsed)) return null
+    const token = (parsed as { pageToken: unknown }).pageToken
+    return typeof token === 'string' ? token : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Which call fetched this payload. dailyRollUpDataPoints records a range and the list call
  * records a filter, and several data types answer both, so nothing else in the row can say.
@@ -599,8 +751,9 @@ function isRollupRequest(requestParams: string): boolean {
  *
  * If a re-fetch's first page came back byte-identical to what was already archived, RawArchive.put
  * deduplicated it and no new row exists at all. The stored row stays with the episode that first
- * archived it, and the re-fetch replays as whatever pages it did add: the deduplicated page would
- * have mapped to the same values it already did, so nothing is lost by not repeating it.
+ * archived it, and this function returns the re-fetch as only the pages it did add. That is not
+ * all the call mapped, since the sync downsampled the deduplicated page together with the rest,
+ * so withLeadingPages finds it again for a recorded episode and the replay maps it in front.
  */
 function splitIntoEpisodes(pages: readonly ArchivedPayload[]): ArchivedPayload[][] {
   const episodes: ArchivedPayload[][] = []
