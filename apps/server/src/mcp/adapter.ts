@@ -183,6 +183,8 @@ export function countRows(outputSchema: z.ZodRawShape, result: unknown): number 
   return total
 }
 
+export const INTERNAL_TOOL_ERROR = 'the server could not answer this call; the failure is in its log'
+
 /**
  * Registers one catalogue entry as an MCP tool.
  *
@@ -204,7 +206,9 @@ export function countRows(outputSchema: z.ZodRawShape, result: unknown): number 
  * a tool result with `isError` set, which is a refusal an agent can read, and not a dead session.
  *
  * That path does not pass through `summarise`, which puts core's error messages inside the
- * untrusted rule's scope rather than outside it. A `ConfigError` thrown by `PersonQuery` reaches
+ * untrusted rule's scope rather than outside it. Only a `HaelanError`'s detail reaches an agent;
+ * any other throw (a driver error naming a file path, say) is logged here and answered with
+ * `INTERNAL_TOOL_ERROR`, so its text never does. A `ConfigError` thrown by `PersonQuery` reaches
  * an agent as prose, unfiltered, so a message template there must interpolate only what a caller
  * sent or what this repository's own source names - which is what all seventeen of them do today
  * (`requireSource` lists source ids rather than display names for exactly this reason). Whoever
@@ -242,7 +246,9 @@ function register(
         // strips it for the HTTP surface by sending `.detail` instead of `.message`, and this is
         // that same rule's MCP side. Without it an agent reads `[config] no session 'nope'`
         // rather than the sentence a caller actually wrote.
-        throw error instanceof HaelanError ? new Error(error.detail) : error
+        if (error instanceof HaelanError) throw new Error(error.detail)
+        console.error(`mcp: ${tool.name} failed`, error)
+        throw new Error(INTERNAL_TOOL_ERROR)
       }
       observe?.({
         tool: tool.name, rowCount: countRows(tool.outputSchema, structuredContent),
