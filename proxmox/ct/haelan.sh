@@ -3,7 +3,7 @@
 # core has no tags, so its commit moves by hand. Exported because build.func only keeps a value
 # that is already set and otherwise fetches every later file from main.
 COMMUNITY_SCRIPTS_CORE_URL="${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/1bbf08250c009d8fae6491ea52196d5f9a465428}"
-COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/bardesss/haelan/v2.24.0/proxmox}" # x-release-please-version
+COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/bardesss/haelan/v2.24.1/proxmox}" # x-release-please-version
 export COMMUNITY_SCRIPTS_CORE_URL COMMUNITY_SCRIPTS_URL
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL}/core/build.func")
