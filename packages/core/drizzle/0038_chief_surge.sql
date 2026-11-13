@@ -1,0 +1,1 @@
+CREATE INDEX `raw_payloads_person_type_fetched` ON `raw_payloads` (`person_id`,`data_type`,`fetched_at_ms`,`id`);

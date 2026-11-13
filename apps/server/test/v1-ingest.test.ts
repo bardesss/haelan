@@ -564,6 +564,8 @@ describe('the companion ingest route for sessions', () => {
     expect((response.json() as { affected: unknown }).affected).toEqual({ from: '2026-08-18', to: '2026-08-19' })
   })
 
+  // A night carries a record id (its name): an identical re-send of the newest body still
+  // deduplicates (see the archive.put call in ingest.ts).
   it('a repeated night deduplicates instead of doubling', async () => {
     harness = await withServer()
     const token = await harness.signIn()

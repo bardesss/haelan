@@ -267,6 +267,13 @@
       "when": 1794559505522,
       "tag": "0037_silly_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1794582422961,
+      "tag": "0038_chief_surge",
+      "breakpoints": true
     }
   ]
 }

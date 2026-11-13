@@ -196,6 +196,13 @@ export function registerIngestRoutes(app: FastifyInstance): void {
         fetchedAtMs: nowMs,
         httpStatus: 200,
         body: payload,
+        // A body naming records deduplicates only onto the newest row of its type and source.
+        // Moved at the source and back again, the last upload is byte identical to the first,
+        // and a rebuild only replays a body where it was archived: deduplicated onto the first,
+        // the rebuild would end on the move. A retry, or a phone before 0.12.0 re-posting a
+        // quiet type's last day every two hours, re-sends the newest body and still
+        // deduplicates. The archive grows by a body that returns after another came between.
+        deduplicate: recordIds.length > 0 ? 'latest' : 'any',
       })
       const localDates = new Set<string>()
       const rowsWritten = dataType.target === 'samples'
@@ -352,8 +359,10 @@ function writeSamples(
     rowsWritten++
   }
   // In the same transaction as the rows, so a record is never linked without its samples or the
-  // other way round. Prepared once inside link(), not per row.
-  new CompanionRecords(tx).link(personId, samples, keys)
+  // other way round. Prepared once inside link(), not per row. A record moved at the source
+  // leaves its old row's day, which is re-derived like a deleted record's (the deletions route).
+  const moved = new CompanionRecords(tx).link(personId, samples, keys)
+  for (const date of moved.localDates) localDates.add(date)
   return rowsWritten
 }
 

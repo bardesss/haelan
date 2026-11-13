@@ -464,7 +464,9 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
       }
       // Rows without a recordId (everything Google sent) are skipped by link, so no page needs
-      // telling apart. Links are tier 2 and only the archive can bring them back.
+      // telling apart. Links are tier 2 and only the archive can bring them back. The dates of
+      // rows a move removes are not needed: tier 2 was emptied first, so this replay wrote each
+      // such row earlier and its date is in localDates already.
       new CompanionRecords(tx).link(input.personId, rows, keys)
     })
     afterUnit(committed)
