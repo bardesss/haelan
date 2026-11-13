@@ -2,6 +2,7 @@
 // against periods of its own length. Computed on read from existing rows, one read per metric.
 import type { PersonQuery } from './personQuery.ts'
 import type { FigureDirection, GlanceStanding, Judged } from './glance.ts'
+import { shiftLocalDate } from '../derive/localDay.ts'
 import { oneNightPerDate } from '../api/nights.ts'
 import { sleepWeekSeries } from '../api/recoveryIndex.ts'
 import { balanceOf, balanceZeroLine } from '../api/sleepBalance.ts'
@@ -151,7 +152,8 @@ export function readSleepPeriod(q: PersonQuery, input: SleepPeriodInput): SleepP
 
   // The three figures only the provider's summary holds, from one read of the nights and their sessions.
   const nightsInSpan = oneNightPerDate(q.sleepNights({ from: span.from, to: lastDay, sourceId: source }))
-  const attrsById = new Map(q.sessions({ kind: 'sleep', from: span.from, to: lastDay, sourceId: source }).map((s) => [s.id, s.attrs]))
+  // From a day before the span: a night filed on its first date can hold a piece filed the day before.
+  const attrsById = new Map(q.sessions({ kind: 'sleep', from: shiftLocalDate(span.from, -1), to: lastDay, sourceId: source }).map((s) => [s.id, s.attrs]))
   const summaries = nightsInSpan.map((n) => [n.localDate, summaryOf(n, attrsById)] as const)
   const summaryValues = (key: keyof SleepSummary) =>
     new Map(summaries.flatMap(([date, s]) => (s === null || s[key] === null ? [] : [[date, s[key]] as const])))

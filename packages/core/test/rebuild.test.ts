@@ -9,6 +9,7 @@ import {
 import { dayMetricTarget, sessionTarget } from '../src/derive/targetKey.ts'
 import { dailyRollupBody } from '../src/testing/payloads.ts'
 import { PROVIDER_SOURCE } from '../src/derive/rollup.ts'
+import { PersonQuery } from '../src/query/personQuery.ts'
 
 // Builds a database holding one person, one archived heart rate window and one archived sleep
 // window, plus a sync_state row. Returns the handles runRebuild needs.
@@ -266,10 +267,9 @@ describe('runRebuild', () => {
         { date: { year: 2026, month: 7, day: 4 }, value: { kcalSum: 1900 } },
       ]),
     })
-    // The correction somebody made on that figure. deriveDayInto is the only thing in the system
-    // that ever applies a day metric exclusion to a PROVIDER_SOURCE row, so a rebuild that never
-    // derives this day puts the excluded calorie figure straight back on their dashboard, with
-    // nothing anywhere saying it did.
+    // The correction somebody made on that figure. The exclusion is applied where provider rows
+    // are read, so the replayed row must still be there for the override to hide, and removing the
+    // override later must be able to bring the figure back.
     seedOverride(h.db, {
       personId: h.personId, scope: 'day_metric',
       targetKey: dayMetricTarget({ localDate: lonelyDate, metric: 'total_calories' }),
@@ -279,14 +279,16 @@ describe('runRebuild', () => {
     const report = runRebuild({ ...h.deps, nowMs: 1 })
 
     const onThatDay = h.db.select().from(daily).where(eq(daily.localDate, lonelyDate)).all()
-    expect(onThatDay).toEqual([])
+    expect(onThatDay.map((r) => [r.source, r.value])).toEqual([['provider', 1900]])
+    expect(new PersonQuery(h.db, h.personId).series({
+      metric: 'total_calories', agg: 'sum', from: lonelyDate, to: lonelyDate,
+    }).points).toEqual([])
     // And the figure an operator reads matches the table. This is the case that catches a
     // dailyRows summed from what the replay counted plus what the derivation returned: the
-    // exclusion above deleted a provider row the replay had already counted, so the sum
-    // overstates the table by exactly one.
+    // excluded provider row is kept in the table, so the count has to include it.
     expect(report.people[0]!.dailyRows).toBe(h.db.select().from(daily).all().length)
-    // And the day really did carry a provider row to throw away, so an assertion that passed
-    // because the replay never wrote one would not read as a pass.
+    // And the other day really did carry a provider row, so an assertion that passed because the
+    // replay never wrote one would not read as a pass.
     const stillThere = h.db.select().from(daily).where(eq(daily.localDate, REBUILDABLE_DATE)).all()
     expect(stillThere.some((r) => r.source === PROVIDER_SOURCE)).toBe(true)
   })

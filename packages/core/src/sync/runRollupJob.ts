@@ -1,6 +1,7 @@
 import type { Database } from '../db/open.ts'
 import type { DataType } from '../api/catalogue.ts'
 import type { RateLimiter } from './runJob.ts'
+import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { daily } from '../db/schema/index.ts'
 import { mapRollups } from '../api/mapRollups.ts'
 import { localDateOf } from './localDate.ts'
@@ -40,6 +41,11 @@ export interface RollupJobDeps {
    * rollup chunk is a request too and must not get to skip the household's shared quota.
    */
   limiter?: RateLimiter
+  /**
+   * Optional, the same interface JobDeps carries. A re-walk that changes a provider row has to
+   * reach that day's derivation, so each date written is marked dirty with the rows.
+   */
+  deriveQueue?: DeriveQueue
 }
 
 export interface RollupJobInput {
@@ -75,8 +81,9 @@ const civilDaysBetween = (fromDate: string, toDate: string): number =>
  * than paginating, because these methods do not paginate: `pageSize` is a floor the request must
  * clear rather than a page size, and no response carries a `nextPageToken`.
  *
- * It marks nothing dirty. These rows are ingested rather than derived, which is the same reason
- * `runDerive` leaves `provider` rows alone: nothing local could recompute them.
+ * It marks each date it wrote dirty. The rows are ingested rather than derived, which is why
+ * `runDerive` leaves `provider` rows alone, but `workoutZones.dayValue` reads them, so a re-walk
+ * that changes one has to reach that day's derivation.
  */
 export async function runRollupJob(
   input: RollupJobInput,
@@ -135,6 +142,9 @@ export async function runRollupJob(
             updatedAtMs: nowMs,
           },
         }).run()
+      }
+      for (const localDate of new Set(rows.map((row) => row.localDate))) {
+        input.deps.deriveQueue?.markDirty({ personId: input.personId, localDate, nowMs }, tx)
       }
     })
     rowsWritten += rows.length

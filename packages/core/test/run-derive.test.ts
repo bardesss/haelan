@@ -8,6 +8,7 @@ import { SourcePriorityStore } from '../src/store/sourcePriority.ts'
 import { OverrideStore } from '../src/store/overrides.ts'
 import { SettingsStore } from '../src/store/settings.ts'
 import { sampleTarget, dayMetricTarget, sessionTarget } from '../src/derive/targetKey.ts'
+import { PersonQuery } from '../src/query/personQuery.ts'
 import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
 
 const OFFSET = 120
@@ -265,13 +266,13 @@ describe('runDerive', () => {
     expect(perSourceRows().find((r) => r.agg === 'last')?.value).toBe(80.5)
   })
 
-  it('drops a day_metric exclusion from every row for that metric, provider rows included', () => {
+  it('keeps a provider row under a day_metric exclusion and gives it back when the exclusion is removed', () => {
     test.db.insert(daily).values({
       personId: 'p1', localDate: LOCAL_DATE, metric: 'total_calories', agg: 'sum',
       source: 'provider', value: 2500, coverage: null, sourceMix: null, derivationVersion: 1,
     }).run()
     addSample({ metric: 'steps', value: 400, hour: 9 })
-    overrideStore.put({
+    const id = overrideStore.put({
       personId: 'p1', scope: 'day_metric',
       targetKey: dayMetricTarget({ localDate: LOCAL_DATE, metric: 'total_calories' }),
       action: 'exclude', reason: 'device was on the dog', nowMs: 1,
@@ -279,8 +280,17 @@ describe('runDerive', () => {
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
-    expect(dailyRows().filter((r) => r.metric === 'total_calories')).toEqual([])
+    // The row stays: the exclusion is applied where it is read, so removing it can restore it.
+    expect(dailyRows().filter((r) => r.source === 'provider').map((r) => r.value)).toEqual([2500])
+    const series = () => new PersonQuery(test.db, 'p1').series({
+      metric: 'total_calories', agg: 'sum', from: LOCAL_DATE, to: LOCAL_DATE,
+    }).points
+    expect(series()).toEqual([])
     expect(dailyRows().filter((r) => r.metric === 'steps').length).toBeGreaterThan(0)
+
+    overrideStore.remove({ personId: 'p1', id, nowMs: 2 })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 2 })
+    expect(series().map((p) => p.value)).toEqual([2500])
   })
 
   it('leaves another day of the same metric alone', () => {
@@ -293,6 +303,29 @@ describe('runDerive', () => {
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(perSourceRows().map((r) => r.value)).toEqual([400])
+  })
+
+  it('files a night joined across midnight on the date its last piece ends', () => {
+    const insertSleepAt = (o: { id: string, startIso: string, endIso: string, localDate: string }) => {
+      test.db.insert(sessions).values({
+        id: o.id, personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: o.id,
+        startMs: Date.parse(o.startIso), startOffsetMinutes: 120,
+        endMs: Date.parse(o.endIso), endOffsetMinutes: 120,
+        localDate: o.localDate, attrs: JSON.stringify({ mainSleep: null }), rawPayloadId: null,
+      }).run()
+    }
+    insertSleepAt({ id: 'p1', startIso: '2026-08-21T19:30:00Z', endIso: '2026-08-21T21:40:00Z', localDate: '2026-08-21' })
+    insertSleepAt({ id: 'p2', startIso: '2026-08-21T22:20:00Z', endIso: '2026-08-22T04:30:00Z', localDate: '2026-08-22' })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-21', nowMs: 1 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
+
+    const onDate = (localDate: string, metric: string, source: string) =>
+      dailyRows().find((r) => r.localDate === localDate && r.metric === metric && r.source === source)?.value
+    expect(onDate('2026-08-22', 'sleep_in_bed_minutes', 'watch')).toBe(540)
+    expect(onDate('2026-08-22', 'sleep_in_bed_minutes', 'merged')).toBe(540)
+    expect(onDate('2026-08-22', 'sleep_nap_count', 'merged')).toBe(0)
+    expect(dailyRows().filter((r) => r.localDate === '2026-08-21' && r.metric.startsWith('sleep_'))).toEqual([])
   })
 
   it('derives a night into daily rows, per source and merged', () => {

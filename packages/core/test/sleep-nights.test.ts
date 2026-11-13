@@ -1,8 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { readSleepNights } from '../src/query/sleepNights.ts'
-import { sessions, sessionSegments, sources } from '../src/db/schema/index.ts'
+import { readExcludedNightSessions, readSleepNights } from '../src/query/sleepNights.ts'
+import { overrides, sessions, sessionSegments, sources } from '../src/db/schema/index.ts'
+import { sessionTarget } from '../src/derive/targetKey.ts'
 
 const H = 3_600_000
 // 23:00 local on 2026-08-21 at +120 is 21:00Z, so the night starts before the date it belongs to.
@@ -178,5 +179,30 @@ describe('readSleepNights', () => {
     })
 
     expect(readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })).toEqual([])
+  })
+
+  // 21:30-23:40 local on the 21st, then 00:20-06:30 on the 22nd, both at +120.
+  const insertSplitNight = () => {
+    insertSession({ id: 'p1', startMs: Date.parse('2026-08-21T19:30:00Z'), endMs: Date.parse('2026-08-21T21:40:00Z'), localDate: '2026-08-21' })
+    insertSession({ id: 'p2', startMs: Date.parse('2026-08-21T22:20:00Z'), endMs: Date.parse('2026-08-22T04:30:00Z'), localDate: '2026-08-22' })
+  }
+
+  it('reads a night joined across midnight on the date its last piece ends', () => {
+    insertSplitNight()
+    const onEnd = readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })
+    expect(onEnd).toHaveLength(1)
+    expect(onEnd[0]).toMatchObject({
+      localDate: '2026-08-22', sessionIds: ['p1', 'p2'], startMs: Date.parse('2026-08-21T19:30:00Z'), naps: [],
+    })
+    expect(readSleepNights(test.db, { personId: 'p1', from: '2026-08-21', to: '2026-08-21' })).toEqual([])
+  })
+
+  it('names an excluded piece from the evening before as part of the night', () => {
+    insertSplitNight()
+    test.db.insert(overrides).values({
+      id: 'o1', personId: 'p1', scope: 'session', targetKey: sessionTarget('p1'),
+      action: 'exclude', correctedValue: null, reason: 'test', createdAtMs: 0,
+    }).run()
+    expect(readExcludedNightSessions(test.db, { personId: 'p1', localDate: '2026-08-22' })).toEqual(['p1'])
   })
 })

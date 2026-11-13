@@ -55,11 +55,11 @@ function seedWorkout(attrs: unknown): WorkoutSession {
 /** Heart rate across the whole session span, one reading a minute rising from 100 to 179 bpm,
  *  three rows per minute (min, mean, max) because heart_rate is stored downsampled to the
  *  minute - the same pattern intraday-window.test.ts seeds. */
-function seedHeartRate(): void {
+function seedHeartRate(sourceId = 'watch'): void {
   for (let i = 0; i < SESSION_MINUTES; i += 1) {
     for (const agg of ['min', 'mean', 'max'] as const) {
       insertSample(t.db, {
-        personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
+        personId: 'p1', sourceId, metric: 'heart_rate',
         utcMs: START_MS + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: 100 + i,
       })
     }
@@ -102,6 +102,25 @@ describe('a workout cardio load', () => {
       k: 1.92,
       minutes: 80,
     })
+  })
+
+  it('sums one reading a minute when two straps recorded the workout and its own device did not', () => {
+    seedPersonAndSource()
+    for (const id of ['strapA', 'strapB']) {
+      t.db.insert(sources).values({ id, personId: 'p1', externalId: id, displayName: id, kind: 'device', createdAtMs: 0 }).run()
+    }
+    const session = seedWorkout(FULL_ZONE_ATTRS)
+    seedHeartRate('strapA')
+    seedHeartRate('strapB')
+    new PeopleStore(t.db).setBirthDate('p1', '1985-03-04')
+    new PeopleStore(t.db).setSex('p1', 'male')
+    seedDaily('resting_heart_rate', 52, PROVIDER_SOURCE)
+    seedDaily('heart_rate_zone_peak_max_bpm', 185, PROVIDER_SOURCE)
+
+    const single: MinuteBpm[] = Array.from({ length: SESSION_MINUTES }, (_, i) => ({ utcMs: START_MS + i * 60_000, bpm: 100 + i }))
+    const load = readWorkoutCardioLoad(t.db, { personId: 'p1', session })!
+    expect(load.banisterBasis?.minutes).toBe(80)
+    expect(load.banister).toBeCloseTo(banisterLoad(single, { restingBpm: 52, maxBpm: 185, k: 1.92 })!, 10)
   })
 
   // IMPORTANT 2. readSessionHeartRateMinutes drops a sample-scope exclusion rather than merely

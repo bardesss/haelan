@@ -11,7 +11,8 @@ import { RevokedError } from '../api/tokens.ts'
 import { CredentialsUnreadableError, HaelanError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
-import { localDateOf } from '../derive/localDay.ts'
+import { sampleDirtyDates } from './dirtyDates.ts'
+import { sleepNeighbourDates } from '../derive/sleep.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { mapObservations } from '../api/mapObservations.ts'
 import { ObservationStore } from '../store/observations.ts'
@@ -265,7 +266,8 @@ function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   pages: Array<{ body: string, rawPayloadId: string }>, keys: SampleKeys,
 }): Written {
   const rows = mapWindowSamples(args)
-  const localDates = new Set<string>()
+  // Before the upsert: the stored offsets it is compared with are about to be overwritten.
+  const localDates = sampleDirtyDates(tx, rows, args.keys)
   // Prepared once per window rather than once per row, for the reason replay.ts's identical
   // statement spells out: drizzle prepares a new better-sqlite3 statement on every
   // `insert().values().run()`, and better-sqlite3 keeps every statement a connection ever prepares
@@ -299,7 +301,6 @@ function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0],
     // a second copy of every minute it already holds instead of updating it.
     const stored = args.keys.sampleRefs(row)
     insertSample.run(stored)
-    localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
   return { rows: rows.length, localDates: [...localDates] }
 }
@@ -342,6 +343,14 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
       }).run()
       written++
       localDates.add(row.localDate)
+      // A sleep session joins or leaves a chain that can reach the night on the next or the
+      // previous date, so those are re-derived too. The ingest route marks them separately and
+      // keeps them out of its own dates; here they are marked with the rest.
+      if (row.kind === 'sleep') {
+        for (const date of sleepNeighbourDates([row.localDate, previous?.localDate].filter((d): d is string => d !== undefined))) {
+          localDates.add(date)
+        }
+      }
     }
     // Segments are replaced wholesale for the sessions in this page: a re-fetch after Google
     // finishes processing a night legitimately changes the stage timeline, and merging two

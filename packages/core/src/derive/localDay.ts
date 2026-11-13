@@ -46,6 +46,16 @@ export function absoluteHourOf(utcMs: number, offsetMinutes: number): number {
   return Math.floor((utcMs + offsetMinutes * 60_000) / HOUR_MS)
 }
 
+/**
+ * The UTC instant at which a reading's local hour began. Unlike `localHourOf` it tells the two
+ * 02:00 hours of a fall-back night apart, because their offsets differ and so do their start
+ * instants. `absoluteHourOf` cannot: both of those hours shift to the same index, so it would
+ * file them in one bucket.
+ */
+export function localHourStartUtcMs(utcMs: number, offsetMinutes: number): number {
+  return absoluteHourOf(utcMs, offsetMinutes) * HOUR_MS - offsetMinutes * 60_000
+}
+
 const DAY_MS = 86_400_000
 
 /**

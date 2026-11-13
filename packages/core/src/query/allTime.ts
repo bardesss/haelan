@@ -5,6 +5,7 @@ import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
 import { readsEfforts, sessionForRecords, sessionRecordsOf } from '../api/sessionRecords.ts'
 import { countsForDistanceRecords, exerciseCategory } from '../api/exerciseCategory.ts'
 import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
+import { dayMetricNotExcluded } from './dayExclusion.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
 import type { NamedSource } from '../store/sourceAliases.ts'
 import type { DefaultName } from '../api/sourceNames.ts'
@@ -30,9 +31,10 @@ import { readRouteSummaries } from './workoutDerived.ts'
  * - **Override actions:** both, and the two tables this reads need opposite treatment - which is
  *   the distinction an earlier version of this header got wrong by stating only the first half.
  *
- *   For `daily`, nothing is re-applied: `deriveDay` deletes an excluded metric's rows for the
- *   day, across every source including `provider` (its second delete, the one the first spares),
- *   and a correction's value is already in the row. Filtering again would apply a rule twice.
+ *   For `daily`, only `day_metric` `exclude` is applied here, and only to what derivation does
+ *   not remove: `deriveDay` leaves an excluded metric's derived rows out, but it keeps the
+ *   `provider` row, so `dayMetricNotExcluded` filters that one at read. A correction's value is
+ *   already in the row; filtering it again would apply a rule twice.
  *
  *   For `sessions`, this reader must filter, because `sessions` is the INGESTED table and
  *   nothing deletes from it: `sleepNights` and `deriveDay` both drop excluded sessions at read
@@ -163,6 +165,7 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
     SELECT local_date AS localDate, value FROM daily
      WHERE person_id = ${personId} AND metric = ${metric} AND source = ${tier}
        AND agg = 'sum' AND value IS NOT NULL
+       AND ${dayMetricNotExcluded()}
      ORDER BY local_date`)
 
   const records: MetricRecord[] = []
@@ -213,7 +216,8 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
   const span = db.all<{ from: string, to: string, days: number }>(sql`
     SELECT MIN(local_date) AS "from", MAX(local_date) AS "to",
            COUNT(DISTINCT local_date) AS days
-      FROM daily WHERE person_id = ${personId} AND value IS NOT NULL`)[0]
+      FROM daily WHERE person_id = ${personId} AND value IS NOT NULL
+       AND ${dayMetricNotExcluded()}`)[0]
     ?? { from: '', to: '', days: 0 }
 
   const eddington = stepDays.length === 0 ? null : {

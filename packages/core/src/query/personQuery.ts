@@ -1,5 +1,6 @@
 import { and, asc, eq, gt, gte, inArray, isNotNull, lt, lte, max, min } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
+import { dayMetricNotExcluded } from './dayExclusion.ts'
 import { readSourceActivity } from './sourceActivity.ts'
 import { readAllTime } from './allTime.ts'
 import { readBodyAge } from './bodyAgeRead.ts'
@@ -717,9 +718,9 @@ export class PersonQuery {
   }
 
   /**
-   * The metrics this person excluded on one local date, sorted. Derivation drops an excluded
-   * metric's rows before they are written (`applyToDay`), so a day like that has no `daily` row
-   * and nothing else on this class can say why: this is the one reader that can.
+   * The metrics this person excluded on one local date, sorted. Derivation leaves an excluded
+   * metric's derived rows out (`applyToDay`) and readers hide its provider row, so a day like that
+   * shows no value and nothing else on this class can say why: this is the one reader that can.
    */
   excludedDayMetrics(input: { localDate: string }): string[] {
     requireDate('localDate', input.localDate)
@@ -1089,6 +1090,11 @@ export class PersonQuery {
    *
    * A row with no value is not a measurement, and letting one through would put a hole in every
    * mean computed downstream. Nothing writes one today; this is the guard for later.
+   *
+   * Override actions honoured: `day_metric` `exclude`, filtered here for provider rows, which
+   * derivation keeps; the derived rows of an excluded metric are already absent. `sample` and
+   * `session` overrides (exclude and correct) were applied when the day was derived, so they are
+   * not re-applied here.
    */
   #rowsOf(metric: string, agg: string, from: string, to: string, source: string | undefined): DailyPoint[] {
     const rows = this.#db.select({
@@ -1109,6 +1115,7 @@ export class PersonQuery {
       gte(daily.localDate, from),
       lte(daily.localDate, to),
       isNotNull(daily.value),
+      dayMetricNotExcluded(),
     )).orderBy(asc(daily.localDate)).all() as Omit<DailyPoint, 'filled'>[]
     // Every row read here is the requested name's own: merged, provider, or a specific device,
     // never DEVICE_ROLLED_EQUIVALENT's stand-in. Only withFilledDays marks a row filled.

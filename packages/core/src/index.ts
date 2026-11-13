@@ -53,6 +53,7 @@ export type { Window } from './sync/windows.ts'
 export { TokenBucket } from './sync/tokenBucket.ts'
 export type { TokenBucketDeps } from './sync/tokenBucket.ts'
 export { runJob } from './sync/runJob.ts'
+export { sampleDirtyDates } from './sync/dirtyDates.ts'
 export type { JobDeps, JobInput, JobResult, RateLimiter } from './sync/runJob.ts'
 export { runSync } from './sync/runSync.ts'
 export type { SyncInput, SyncReport } from './sync/runSync.ts'
@@ -180,7 +181,7 @@ export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts
 export type { SessionGroup, GroupSessionsInput } from './derive/sessionOverlap.ts'
 
 // M2c. Sleep, from sessions and their stages to a day's figures.
-export { assembleNights, deriveSleepDay, DEFAULT_NIGHT_GAP_MINUTES, ASLEEP_STAGES, AWAKE_STAGES } from './derive/sleep.ts'
+export { assembleNights, sleepNeighbourDates, deriveSleepDay, DEFAULT_NIGHT_GAP_MINUTES, ASLEEP_STAGES, AWAKE_STAGES } from './derive/sleep.ts'
 export type { SleepSessionLike, SleepSegmentLike, NightAssembly } from './derive/sleep.ts'
 export { mergeSleepDay } from './derive/sleepMerge.ts'
 export { SLEEP_METRICS } from './derive/metrics.ts'

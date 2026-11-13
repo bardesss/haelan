@@ -5,9 +5,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   PersonQuery, PROJECTION_TABLES, createTestDatabase, seedPerson, schema, DERIVATION_VERSION,
-  NoteStore, EventStore,
+  NoteStore, EventStore, dayMetricTarget,
 } from '../src/index.ts'
 import type { TestDatabase } from '../src/index.ts'
+import { seedOverride } from '../src/testing/fixtures.ts'
+import { dayMetricNotExcluded } from '../src/query/dayExclusion.ts'
+import { and, eq } from 'drizzle-orm'
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
 
@@ -128,6 +131,49 @@ describe('the projection', () => {
     ]) {
       expect(dump).not.toContain(fingerprint)
     }
+  })
+
+  it('leaves out a provider row its person excluded for that day', () => {
+    test.db.insert(schema.daily).values({
+      personId: 'alice', localDate: '2026-08-01', metric: 'total_calories', agg: 'sum', source: 'provider',
+      value: 2100, coverage: null, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 0,
+    }).run()
+    seedOverride(test.db, {
+      personId: 'alice', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: '2026-08-01', metric: 'total_calories' }),
+    })
+    const { db, close } = openProjection('alice')
+    const values = (db.prepare('SELECT value FROM daily').all() as { value: number }[]).map((r) => r.value)
+    close()
+    expect(values).toEqual([1200])
+  })
+
+  it('keeps a derived row of an excluded metric and drops the provider row, as the read path does', () => {
+    const base = { personId: 'alice', localDate: '2026-08-01', agg: 'sum', coverage: null, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 0 }
+    for (const [metric, source] of [
+      ['total_calories', 'provider'], ['total_calories', 'merged'], ['total_calories', 'alice-watch'],
+      ['distance', 'provider'], ['distance', 'merged'],
+    ] as const) {
+      test.db.insert(schema.daily).values({ ...base, metric, source, value: 10 }).run()
+    }
+    seedOverride(test.db, {
+      personId: 'alice', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: '2026-08-01', metric: 'total_calories' }),
+    })
+    const { db, close } = openProjection('alice')
+    const projected = (db.prepare('SELECT metric, source FROM daily ORDER BY metric, source').all() as
+      { metric: string, source: string }[]).map((r) => `${r.metric}/${r.source}`)
+    close()
+    expect(projected).toContain('total_calories/merged')
+    expect(projected).toContain('total_calories/alice-watch')
+    expect(projected).not.toContain('total_calories/provider')
+    expect(projected).toContain('distance/provider')
+
+    // Drift guard: the read path's predicate must select the very same rows.
+    const read = test.db.select({ metric: schema.daily.metric, source: schema.daily.source })
+      .from(schema.daily).where(and(eq(schema.daily.personId, 'alice'), dayMetricNotExcluded()))
+      .orderBy(schema.daily.metric, schema.daily.source).all().map((r) => `${r.metric}/${r.source}`)
+    expect(projected).toEqual(read)
   })
 
   it('refuses to resolve a source name across people even if a row is corrupted to point at one', () => {

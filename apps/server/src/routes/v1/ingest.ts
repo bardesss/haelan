@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq, sql } from 'drizzle-orm'
 import {
   COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
-  localDateOf, mapSessions, mapWindowSamples, schema, supports,
+  mapSessions, mapWindowSamples, sampleDirtyDates, schema, sleepNeighbourDates, supports,
 } from '@haelan/core'
 import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
 import { drainPersonDerivation } from './annotations.ts'
@@ -192,6 +192,17 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       for (const localDate of localDates) {
         instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
       }
+      // A sleep session joins or leaves a chain that can reach the night on a neighbouring date.
+      // Marked beside the dates above but never added to `localDates`, so `affected` and
+      // `applied` in the response keep naming only the dates the upload wrote or left. Queued a
+      // millisecond later: claim takes the oldest first and the drain stops after one day, so
+      // a neighbour at the same instant could be derived ahead of the night just uploaded.
+      if (mapped.sessions.some((row) => row.kind === 'sleep')) {
+        for (const localDate of sleepNeighbourDates(localDates)) {
+          if (localDates.has(localDate)) continue
+          instance.deriveQueue.markDirty({ personId, localDate, nowMs: nowMs + 1 }, tx)
+        }
+      }
       return { id, deduplicated, rowsWritten, localDates: [...localDates] }
     })
 
@@ -259,12 +270,13 @@ function writeSamples(
       rawPayloadRef: sql.placeholder('rawPayloadRef'),
     } as unknown as Partial<typeof schema.samples.$inferInsert>,
   }).prepare()
+  // Before the upsert: the stored offsets it is compared with are about to be overwritten.
+  for (const date of sampleDirtyDates(tx, samples, keys)) localDates.add(date)
   let rowsWritten = 0
   for (const row of samples) {
     const stored = keys.sampleRefs({ ...row, rawPayloadId })
     insertSample.run(stored)
     rowsWritten++
-    localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
   return rowsWritten
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { localDateOf, localHourOf, shiftLocalDate } from '../src/derive/localDay.ts'
+import { absoluteHourOf, localDateOf, localHourOf, localHourStartUtcMs, shiftLocalDate } from '../src/derive/localDay.ts'
 
 const AMSTERDAM_SUMMER = 120
 const AMSTERDAM_WINTER = 60
@@ -56,5 +56,19 @@ describe('shiftLocalDate', () => {
   it('handles a leap day', () => {
     expect(shiftLocalDate('2028-02-28', 1)).toBe('2028-02-29')
     expect(shiftLocalDate('2028-02-29', 1)).toBe('2028-03-01')
+  })
+})
+
+describe('localHourStartUtcMs', () => {
+  it('separates the two 02:00 hours of a fall-back night, which absoluteHourOf cannot', () => {
+    const first = Date.UTC(2026, 9, 25, 0, 30)
+    const second = Date.UTC(2026, 9, 25, 1, 30)
+    expect(localHourStartUtcMs(first, 120)).toBe(Date.UTC(2026, 9, 25, 0, 0))
+    expect(localHourStartUtcMs(second, 60)).toBe(Date.UTC(2026, 9, 25, 1, 0))
+    expect(absoluteHourOf(first, 120)).toBe(absoluteHourOf(second, 60))
+  })
+
+  it('starts a +05:30 bucket on the local hour', () => {
+    expect(localHourStartUtcMs(Date.UTC(2026, 0, 1, 4, 45), 330)).toBe(Date.UTC(2026, 0, 1, 4, 30))
   })
 })

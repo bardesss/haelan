@@ -71,7 +71,7 @@ export function mergeSleepDay(input: {
 
 /**
  * The `daily.source_mix` column means "how many of the day's hours this source won" everywhere
- * else it is written, counted by mergeDay as distinct local hour buckets. A merged night's mix
+ * else it is written, counted by mergeDay as distinct local hours, each keyed by the instant it began. A merged night's mix
  * has to count the same thing, not the session's elapsed span, or the field means two different
  * things depending on which code wrote it.
  */

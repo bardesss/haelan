@@ -3,6 +3,7 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sessionRoutes, sessions, sourcePriority, sources } from '../src/db/schema/index.ts'
 import { seedOverride } from '../src/testing/fixtures.ts'
+import { dayMetricTarget } from '../src/derive/targetKey.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { MIN_RUN_DAYS } from '../src/api/runs.ts'
 import { readAllTime } from '../src/query/allTime.ts'
@@ -94,6 +95,34 @@ describe('readAllTime', () => {
     insertDaily({ metric: 'steps', localDate: '2026-01-01', value: 9000 })
     const metrics = readAllTime(test.db, 'p1').records.map((r) => r.metric)
     expect(metrics).toEqual(['steps'])
+  })
+
+  it('leaves out a provider day its person excluded, in the record and in the span', () => {
+    insertDaily({ metric: 'total_calories', source: 'provider', localDate: '2024-08-25', value: 9000 })
+    insertDaily({ metric: 'total_calories', source: 'provider', localDate: '2026-01-01', value: 2000 })
+    seedOverride(test.db, {
+      personId: 'p1', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: '2024-08-25', metric: 'total_calories' }),
+    })
+
+    const { records, span } = readAllTime(test.db, 'p1')
+    expect(records.find((r) => r.metric === 'total_calories')).toMatchObject({ value: 2000, localDate: '2026-01-01', days: 1 })
+    expect(span.from).toBe('2026-01-01')
+  })
+
+  it('keeps a derived day its person excluded until it is re-derived, and hides the provider one', () => {
+    insertDaily({ metric: 'total_calories', source: 'provider', localDate: '2024-08-25', value: 9000 })
+    insertDaily({ metric: 'steps', source: 'merged', localDate: '2024-08-26', value: 7000 })
+    insertDaily({ metric: 'steps', source: 'watch', localDate: '2024-08-27', value: 6000 })
+    for (const [localDate, metric] of [
+      ['2024-08-25', 'total_calories'], ['2024-08-26', 'steps'], ['2024-08-27', 'steps'],
+    ] as const) {
+      seedOverride(test.db, { personId: 'p1', scope: 'day_metric', targetKey: dayMetricTarget({ localDate, metric }) })
+    }
+
+    const { records } = readAllTime(test.db, 'p1')
+    expect(records.find((r) => r.metric === 'total_calories')).toBeUndefined()
+    expect(records.find((r) => r.metric === 'steps')).toMatchObject({ value: 7000, localDate: '2024-08-26' })
   })
 
   it('gives the eddington number its own window, not the page span', () => {

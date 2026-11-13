@@ -1,4 +1,4 @@
-import { localHourOf } from './localDay.ts'
+import { localHourStartUtcMs } from './localDay.ts'
 import { rollUpDay, MERGED_SOURCE } from './rollup.ts'
 import type { DailyRow, SampleLike } from './rollup.ts'
 import type { Priority } from './priority.ts'
@@ -26,14 +26,16 @@ export interface MergeDayInput {
 export function selectHourWinners(
   rows: readonly SampleLike[], priority: Priority,
 ): { winning: SampleLike[], mixes: Map<string, Map<string, number>> } {
-  // metric -> local hour -> source -> rows
+  // metric -> instant the local hour began -> source -> rows
+  // Sources that disagree on the offset by a fraction of an hour get different keys. That is rare,
+  // and the instant key is right for whole-hour mismatches.
   const byMetric = new Map<string, Map<number, Map<string, SampleLike[]>>>()
 
   for (const row of rows) {
     // A null is a reading the device did not take, so it cannot win an hour. Letting it win
     // would hand the hour to a source that observed nothing and hide the one that did.
     if (row.value === null) continue
-    const hour = localHourOf(row.utcMs, row.tzOffsetMinutes)
+    const hour = localHourStartUtcMs(row.utcMs, row.tzOffsetMinutes)
     let byHour = byMetric.get(row.metric)
     if (!byHour) { byHour = new Map(); byMetric.set(row.metric, byHour) }
     let bySource = byHour.get(hour)
@@ -77,7 +79,8 @@ export function selectHourWinners(
  * averaging two devices into a number neither of them measured.
  *
  * The hour is the bucket because coverageOf already partitions the day that way, so a merged
- * row's mix and its coverage describe the same partition rather than two different ones.
+ * row's mix and its coverage describe the same hours on every day except a daylight saving
+ * change. There the repeated hour is its own bucket here, while coverage stays capped at 24.
  *
  * It decides only which rows survive. The arithmetic stays rollUpDay's, run over the winning
  * rows with their source rewritten, so a merged mean and a per source mean cannot come to

@@ -1,7 +1,9 @@
 import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { sessions, sessionSegments, overrides as overridesTable } from '../db/schema/index.ts'
-import { assembleNights, mainSleepOf, DEFAULT_NIGHT_GAP_MINUTES } from '../derive/sleep.ts'
+import { assembleNights, filingDates, mainSleepOf, sessionsFiledOn, DEFAULT_NIGHT_GAP_MINUTES } from '../derive/sleep.ts'
+import type { DatedSleepSession } from '../derive/sleep.ts'
+import { shiftLocalDate } from '../derive/localDay.ts'
 import { applyToSessions } from '../derive/overrides.ts'
 import type { OverrideLike } from '../derive/overrides.ts'
 import { SettingsStore } from '../store/settings.ts'
@@ -49,14 +51,29 @@ export interface SessionSpan {
   endOffsetMinutes: number
 }
 
+function datedSleepOf(row: typeof sessions.$inferSelect): DatedSleepSession {
+  return {
+    id: row.id,
+    sourceId: row.sourceId,
+    startMs: row.startMs,
+    startOffsetMinutes: row.startOffsetMinutes,
+    endMs: row.endMs,
+    endOffsetMinutes: row.endOffsetMinutes,
+    mainSleep: mainSleepOf(row.attrs),
+    localDate: row.localDate,
+  }
+}
+
 /**
  * The sleep sessions in a local date range, one entry per night per source rather than one per
  * session.
  *
- * Which sessions belong to the same night is settled at derivation time by `derive/sleep.ts`:
- * every one of them carries the same `local_date`, computed once and stored, so grouping them
- * is a read of that column. The night's span is a second question, and the group does not answer
- * it. An afternoon nap carries the local date of the night before it, so a span taken from the
+ * Which sessions belong to the same night is settled by `derive/sleep.ts`: pieces of one source
+ * within the gap of each other are one chain, filed on the date its last piece ends
+ * (`filingDates`), so a night split at midnight is one night on the morning it ends. The rows are
+ * read from a day either side of the range to find the chains that reach into it. The night's
+ * span is a second question, and the group does not answer it. An afternoon nap carries the
+ * local date of the night before it, so a span taken from the
  * group's earliest start to its latest end runs from bedtime to the end of the nap: eight dates
  * in the reporting household's database came out that way, four of them 15 hours or longer.
  *
@@ -85,8 +102,8 @@ export function readSleepNights(db: DbOrTx, input: {
   const sessionRows = db.select().from(sessions).where(and(
     eq(sessions.personId, input.personId),
     eq(sessions.kind, 'sleep'),
-    gte(sessions.localDate, input.from),
-    lte(sessions.localDate, input.to),
+    gte(sessions.localDate, shiftLocalDate(input.from, -1)),
+    lte(sessions.localDate, shiftLocalDate(input.to, 1)),
     input.sourceId === undefined ? undefined : eq(sessions.sourceId, input.sourceId),
   // The same (startMs, id) key assembleNights sorts on below, id breaking a tie between two
   // sessions sharing a startMs that startMs alone leaves to sqlite's own unspecified order. That
@@ -119,7 +136,20 @@ export function readSleepNights(db: DbOrTx, input: {
     overrideLikes,
   )
   const keptIds = new Set(kept.map((s) => s.id))
-  const filteredRows = sessionRows.filter((row) => keptIds.has(row.id))
+  // The instance's own gap, read here rather than taken from the default, because a night
+  // assembled at one gap and read back at another is two different nights. runDerive.ts and
+  // runRebuild.ts read it the same way; the default stands in only for an instance that has not
+  // been set up yet.
+  const gapMinutes = new SettingsStore(db).get()?.nightGapMinutes ?? DEFAULT_NIGHT_GAP_MINUTES
+
+  // Filed after the exclusions, as derivation does, and filed again with them put back for the
+  // excluded sessions below: an excluded piece belongs to the night its chain would have made.
+  const keptFiled = filingDates(
+    sessionRows.filter((row) => keptIds.has(row.id)).map(datedSleepOf), gapMinutes,
+  )
+  const allFiled = filingDates(sessionRows.map(datedSleepOf), gapMinutes)
+  const inRange = (date: string | undefined): date is string => date !== undefined && date >= input.from && date <= input.to
+  const filteredRows = sessionRows.filter((row) => keptIds.has(row.id) && inRange(keptFiled.get(row.id)))
 
   if (filteredRows.length === 0) return []
 
@@ -129,18 +159,13 @@ export function readSleepNights(db: DbOrTx, input: {
   const excludedByDate = new Map<string, Map<string, string[]>>()
   for (const row of sessionRows) {
     if (keptIds.has(row.id)) continue
-    const bySource = excludedByDate.get(row.localDate) ?? new Map<string, string[]>()
-    excludedByDate.set(row.localDate, bySource)
+    const filedOn = allFiled.get(row.id)!
+    const bySource = excludedByDate.get(filedOn) ?? new Map<string, string[]>()
+    excludedByDate.set(filedOn, bySource)
     const list = bySource.get(row.sourceId)
     if (list) list.push(row.id)
     else bySource.set(row.sourceId, [row.id])
   }
-
-  // The instance's own gap, read here rather than taken from the default, because a night
-  // assembled at one gap and read back at another is two different nights. runDerive.ts and
-  // runRebuild.ts read it the same way; the default stands in only for an instance that has not
-  // been set up yet.
-  const gapMinutes = new SettingsStore(db).get()?.nightGapMinutes ?? DEFAULT_NIGHT_GAP_MINUTES
 
   // session_segments_session covers the IN lookup on session_id, but it is ordered
   // (session_id, start_ms), which sorts each session's own segments, not the merged list across
@@ -156,8 +181,9 @@ export function readSleepNights(db: DbOrTx, input: {
   // different local dates or sources can never collide on the same key.
   const byDate = new Map<string, Map<string, typeof filteredRows>>()
   for (const row of filteredRows) {
-    const bySource = byDate.get(row.localDate) ?? new Map<string, typeof filteredRows>()
-    byDate.set(row.localDate, bySource)
+    const filedOn = keptFiled.get(row.id)!
+    const bySource = byDate.get(filedOn) ?? new Map<string, typeof filteredRows>()
+    byDate.set(filedOn, bySource)
     const group = bySource.get(row.sourceId)
     if (group) group.push(row)
     else bySource.set(row.sourceId, [row])
@@ -169,7 +195,7 @@ export function readSleepNights(db: DbOrTx, input: {
   }]))
 
   const nights: Night[] = []
-  for (const bySource of byDate.values()) {
+  for (const [filedOn, bySource] of byDate) {
     for (const group of bySource.values()) {
       const { night, naps } = assembleNights({
         sessions: group.map((row) => ({
@@ -193,10 +219,10 @@ export function readSleepNights(db: DbOrTx, input: {
       const first = night.find((s) => s.startMs === start)!
       const last = night.find((s) => s.endMs === end)!
       const ids = new Set(night.map((s) => s.id))
-      const excludedSessions = excludedByDate.get(group[0]!.localDate)?.get(group[0]!.sourceId) ?? []
+      const excludedSessions = excludedByDate.get(filedOn)?.get(group[0]!.sourceId) ?? []
 
       nights.push({
-        localDate: group[0]!.localDate,
+        localDate: filedOn,
         sourceId: group[0]!.sourceId,
         sessionIds: night.map((s) => s.id),
         startMs: start,
@@ -217,25 +243,36 @@ export function readSleepNights(db: DbOrTx, input: {
 }
 
 /**
- * The excluded sleep sessions on one local date that would have been part of its night, sorted.
+ * The excluded sleep sessions that would have been part of the night filed on one local date, sorted.
  *
  * `Night.excludedSessions` answers every excluded session on the date, an excluded nap included,
- * so it cannot say whether an exclusion is why a date has no night. This assembles each source's
- * sessions again with the exclusions put back, through the same `assembleNights` and the same
- * gap, and keeps only the excluded ones that land in the night. An excluded nap on a date whose
- * night was simply never recorded is then not an account of the missing night.
+ * so it cannot say whether an exclusion is why a date has no night. This reads a day either side
+ * of the date, since a night filed here can hold a piece from the evening before, and files the
+ * sessions with the exclusions put back, through the same `sessionsFiledOn` and the same gap. It
+ * keeps only the excluded ones that land in the night. An excluded nap on a date whose night was
+ * simply never recorded is then not an account of the missing night.
  */
 export function readExcludedNightSessions(db: DbOrTx, input: {
   personId: string
   localDate: string
   sourceId?: string
 }): string[] {
-  const sessionRows = db.select().from(sessions).where(and(
+  const loaded = db.select().from(sessions).where(and(
     eq(sessions.personId, input.personId),
     eq(sessions.kind, 'sleep'),
-    eq(sessions.localDate, input.localDate),
+    gte(sessions.localDate, shiftLocalDate(input.localDate, -1)),
+    lte(sessions.localDate, shiftLocalDate(input.localDate, 1)),
     input.sourceId === undefined ? undefined : eq(sessions.sourceId, input.sourceId),
   )).orderBy(asc(sessions.startMs), asc(sessions.id)).all()
+  if (loaded.length === 0) return []
+
+  // Only the pieces of chains filed on this date, with the exclusions still in: the night an
+  // excluded piece belonged to is the one its chain makes.
+  const gapMinutes = new SettingsStore(db).get()?.nightGapMinutes ?? DEFAULT_NIGHT_GAP_MINUTES
+  const filedIds = new Set(sessionsFiledOn({
+    sessions: loaded.map(datedSleepOf), localDate: input.localDate, gapMinutes,
+  }).map((s) => s.id))
+  const sessionRows = loaded.filter((row) => filedIds.has(row.id))
   if (sessionRows.length === 0) return []
 
   const overrideLikes: OverrideLike[] = db.select().from(overridesTable).where(and(
@@ -250,7 +287,6 @@ export function readExcludedNightSessions(db: DbOrTx, input: {
   ).map((s) => s.id))
   if (keptIds.size === sessionRows.length) return []
 
-  const gapMinutes = new SettingsStore(db).get()?.nightGapMinutes ?? DEFAULT_NIGHT_GAP_MINUTES
   const bySource = new Map<string, typeof sessionRows>()
   for (const row of sessionRows) {
     const group = bySource.get(row.sourceId)

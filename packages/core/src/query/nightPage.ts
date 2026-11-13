@@ -88,7 +88,8 @@ export function summaryOf(night: Night, attrsById: ReadonlyMap<string, unknown>)
 
 // Answers: the three figures only the provider's summary holds, each against the nights before this one.
 function summaryFigures(q: PersonQuery, night: Night, history: readonly Night[], window: { from: string }) {
-  const attrsById = new Map(q.sessions({ kind: 'sleep', from: window.from, to: night.localDate }).map((s) => [s.id, s.attrs]))
+  // From a day before the window: the oldest night in it can hold a piece filed the day before.
+  const attrsById = new Map(q.sessions({ kind: 'sleep', from: shiftLocalDate(window.from, -1), to: night.localDate }).map((s) => [s.id, s.attrs]))
   const own = summaryOf(night, attrsById)
   const earlier = history.map((n) => summaryOf(n, attrsById)).filter((s) => s !== null)
   const figure = (metric: string, key: keyof SleepSummary, unit: string, direction: 'down' | 'neutral') => figureFromValues({

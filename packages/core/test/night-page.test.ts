@@ -241,6 +241,30 @@ describe('readNightPage', () => {
     expect(page.figures.minutesToFallAsleep.value).toBe(12)
   })
 
+  it('reads the summary of the first night in the window from the evening piece filed a day earlier', () => {
+    // The oldest night the usual reaches is split at midnight: its evening piece, filed on the day
+    // before the window, is the main sleep and holds the latency; its morning piece holds none.
+    // Left out of the lookup, the night would have no latency and the usual would stay thin.
+    const first = shiftLocalDate(NIGHT, -60)
+    const piece = (id: string, localDate: string, startLocal: string, endLocal: string, attrs: object) => {
+      const startMs = at(localDate, startLocal)
+      const endMs = at(localDate, endLocal)
+      test.db.insert(sessions).values({
+        id, personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: id,
+        startMs, startOffsetMinutes: OFFSET, endMs, endOffsetMinutes: OFFSET, localDate, rawPayloadId: null,
+        attrs: JSON.stringify(attrs),
+      }).run()
+      test.db.insert(sessionSegments).values({ id: `${id}-1`, sessionId: id, stage: 'light', startMs, endMs }).run()
+    }
+    piece('evening', shiftLocalDate(first, -1), '22:00', '23:40', { type: null, mainSleep: true, stagesStatus: 'SUCCEEDED', summary: { minutesToFallAsleep: '77' } })
+    piece('morning', first, '00:20', '06:30', { type: null, mainSleep: false, stagesStatus: 'SUCCEEDED', summary: {} })
+    seedDaily(first, 'sleep_asleep_minutes', 'sum', 420)
+    for (let i = 1; i <= 13; i += 1) seedNight(shiftLocalDate(NIGHT, -i), { latency: 10 + (i % 2) })
+    seedNight(NIGHT, { latency: 12 })
+    const page = readNightPage(q(), input(NIGHT))!
+    expect(page.figures.minutesToFallAsleep.baseline?.thin).toBe(false)
+  })
+
   it('reads every other figure from its own metric', () => {
     seedNight(NIGHT, {})
     seedDaily(NIGHT, 'sleep_efficiency', 'last', 91)

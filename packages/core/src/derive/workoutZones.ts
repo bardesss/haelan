@@ -4,7 +4,7 @@ import { daily } from '../db/schema/index.ts'
 import { zoneBoundsFromFormula, zoneSecondsFromMinutes } from '../api/cardioLoad.ts'
 import type { ZoneBounds } from '../api/cardioLoad.ts'
 import { INTRADAY_WINDOW_MAX_MS } from '../query/intraday.ts'
-import { readSessionHeartRateMinutes } from '../query/sessionHeartRate.ts'
+import { onePerMinute, readSessionHeartRateMinutes } from '../query/sessionHeartRate.ts'
 import { groupSessions } from './sessionOverlap.ts'
 import type { SessionLike } from './overrides.ts'
 import type { ExerciseSessionLike } from './exercise.ts'
@@ -90,8 +90,8 @@ export function deriveWorkoutZonesDay(tx: DbOrTx, input: {
       .filter((s) => s.endMs - s.startMs <= INTRADAY_WINDOW_MAX_MS)
     // Through groupSessions even for one source's own list, exactly as deriveExerciseDay does: a
     // resync can store the same workout twice under one source, and for the merged view the same
-    // run recorded by a watch and a phone is one workout. Only each group's primary is read, so
-    // neither case counts the same minutes twice.
+    // run recorded by a watch and a phone is one workout. Only each group's primary is read, but
+    // primaries can still overlap, which is why the joined minutes are reduced again below.
     const primaries = groupSessions({
       sessions: own.map((s): SessionLike => (
         { id: s.id, sourceId: s.sourceId, kind: 'exercise', startMs: s.startMs, endMs: s.endMs }
@@ -104,12 +104,13 @@ export function deriveWorkoutZonesDay(tx: DbOrTx, input: {
     // person's sample exclusions and corrections, inside this transaction. endMs - 1 because a
     // session's span is half open, the read fillOne makes too: a reading stamped on the end
     // instant belongs to whatever came after.
-    const minutes = primaries.flatMap((s) => readSessionHeartRateMinutes(tx, {
+    const minutes = onePerMinute(primaries.flatMap((s) => readSessionHeartRateMinutes(tx, {
       personId: input.personId,
       startMs: s.startMs,
       endMs: s.endMs - 1,
       sessionSourceId: s.sourceId,
-    }).minutes)
+      priority: input.priority,
+    }).minutes), input.priority)
     // No heart rate at all is no zone minutes, not four zeros: a zero would read as a workout
     // measured at rest and put a load of nothing on the day.
     if (minutes.length === 0) continue
@@ -169,9 +170,9 @@ function formulaBoundsFor(tx: DbOrTx, input: {
  * ingested, never derived, deriveDayInto never deletes them, and so the table is the only place
  * they are.
  *
- * A metric the person excluded for the day is no value at all. deriveDayInto deletes every row of
- * an excluded metric, provider rows included, so dailyValue finds nothing for it afterwards, and
- * bounds computed from it here would be bounds the read side cannot reproduce.
+ * A metric the person excluded for the day is no value at all. deriveDayInto keeps the provider
+ * row but readers filter it out, so the read side finds nothing for it, and bounds computed from
+ * it here would be bounds the read side cannot reproduce.
  */
 function dayValue(tx: DbOrTx, input: {
   personId: string

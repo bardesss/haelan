@@ -143,7 +143,7 @@ describe('the session heart rate reader', () => {
       personId: 'p1', startMs: distinctAt, endMs: distinctAt, sessionSourceId: 'ring',
     })
 
-    expect(result.minutes).toEqual([{ utcMs: distinctAt, bpm: 110 }])
+    expect(result.minutes).toEqual([{ utcMs: distinctAt, bpm: 110, sourceId: 'ring' }])
   })
 
   it('answers no minutes when nobody recorded a heart rate in the span', () => {

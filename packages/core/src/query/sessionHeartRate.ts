@@ -1,6 +1,8 @@
 import type { DbOrTx } from '../db/open.ts'
 import { readIntradayWindow } from './intraday.ts'
 import type { MinuteBpm } from '../api/cardioLoad.ts'
+import type { Priority } from '../derive/priority.ts'
+import { loadPriority } from '../store/sourcePriority.ts'
 
 /**
  * A workout's heart rate over its own span, at full stored resolution.
@@ -22,11 +24,19 @@ import type { MinuteBpm } from '../api/cardioLoad.ts'
  * which is false. `useSourceTrace.ts` and `get_workout` state and implement the same four cases;
  * this is the third surface and it must not become a fourth opinion.
  *
+ * One reading per minute. A pinned read is one source. The blended fallback can hold one point per
+ * source per minute, so it keeps the reading from the source ranked first for `heart_rate`. A
+ * number built from it therefore counts each minute once, as it would for a single device. A
+ * caller that joins the minutes of several reads (several sessions) reduces them again with
+ * `onePerMinute`.
+ *
  * A caller that named a source never falls back. An empty answer to a specific question is honest,
  * and silently answering a different question is the failure the rule exists to prevent.
  */
+export interface SourcedMinuteBpm extends MinuteBpm { sourceId: string }
+
 export interface SessionHeartRate {
-  minutes: MinuteBpm[]
+  minutes: SourcedMinuteBpm[]
   traceSource: 'pinnedSource' | 'otherSources'
   /** Which source the minutes came from, or null when there were none. `otherSources` can blend
    *  several, in which case this is null too - the blend has no single source to name. */
@@ -40,6 +50,21 @@ export interface SessionHeartRate {
 // 2,880 minutes.
 export const NO_THINNING = 1_000_000
 
+/**
+ * One reading per `utcMs`, sorted by time. Where several sources share a minute the one ranked
+ * best for `heart_rate` wins, a tie goes to the lower source id, then to the first one seen.
+ */
+export function onePerMinute(minutes: readonly SourcedMinuteBpm[], priority: Priority): SourcedMinuteBpm[] {
+  const best = new Map<number, SourcedMinuteBpm>()
+  for (const minute of minutes) {
+    const held = best.get(minute.utcMs)
+    if (held === undefined) { best.set(minute.utcMs, minute); continue }
+    const diff = priority.rank('heart_rate', minute.sourceId) - priority.rank('heart_rate', held.sourceId)
+    if (diff < 0 || (diff === 0 && minute.sourceId < held.sourceId)) best.set(minute.utcMs, minute)
+  }
+  return [...best.values()].sort((a, b) => a.utcMs - b.utcMs)
+}
+
 export function readSessionHeartRateMinutes(db: DbOrTx, input: {
   personId: string
   startMs: number
@@ -48,6 +73,8 @@ export function readSessionHeartRateMinutes(db: DbOrTx, input: {
   sessionSourceId: string
   /** A source the caller named. Present means never fall back. */
   chosenSourceId?: string
+  /** Ranks the sources of a blended read. Loaded for the person when omitted. */
+  priority?: Priority
 }): SessionHeartRate {
   const pinnedSourceId = input.chosenSourceId ?? input.sessionSourceId
   const read = (sourceId: string | undefined) => readIntradayWindow(db, {
@@ -72,7 +99,7 @@ export function readSessionHeartRateMinutes(db: DbOrTx, input: {
   // `mean` rather than min or max: heart rate is the one metric stored downsampled to the minute
   // (api/catalogue.ts, `downsampleToMinute`), so a point's mean is that minute's own average and
   // the three together describe one minute rather than three readings.
-  const minutes: MinuteBpm[] = result.points
+  const minutes: SourcedMinuteBpm[] = result.points
     .filter((point) => point.mean !== null)
     // readIntradayWindow marks a sample-scope exclusion on the point (`excluded: true`) rather
     // than dropping it, because a chart needs the point to anchor a marker on - that is a display
@@ -84,7 +111,7 @@ export function readSessionHeartRateMinutes(db: DbOrTx, input: {
     // comment on not producing a second answer to the same question). A reading the person
     // excluded is not corrected, it is disowned, so it is dropped here rather than merely flagged.
     .filter((point) => !point.excluded)
-    .map((point) => ({ utcMs: point.utcMs, bpm: point.mean! }))
+    .map((point) => ({ utcMs: point.utcMs, bpm: point.mean!, sourceId: point.sourceId }))
     // Belt and braces, not a fix for anything broken today: readWindow's own final line already
     // sorts by utcMs before returning (query/intraday.ts, the `.sort` on `perSourcePoints.flat()`).
     // Every consumer here reads the series as a strict timeline - a split's window, a running sum
@@ -96,7 +123,7 @@ export function readSessionHeartRateMinutes(db: DbOrTx, input: {
 
   const sources = new Set(result.points.map((point) => point.sourceId))
   return {
-    minutes,
+    minutes: traceSource === 'otherSources' ? onePerMinute(minutes, input.priority ?? loadPriority(db, input.personId)) : minutes,
     traceSource,
     sourceId: sources.size === 1 ? [...sources][0]! : null,
   }
