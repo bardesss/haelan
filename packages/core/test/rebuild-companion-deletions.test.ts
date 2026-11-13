@@ -80,3 +80,32 @@ describe('a rebuild keeps companion deletions', () => {
     expect(weights()).toEqual([T1, T2])
   })
 })
+
+describe('a rebuild that drops a source', () => {
+  let h: Rebuildable
+  afterEach(() => { h.cleanup() })
+
+  const scale = { platform: 'HEALTH_CONNECT', application: { packageName: 'com.example.scale' }, recordingMethod: 'ACTIVELY_MEASURED' }
+  const scalePoint = (name: string, atMs: number, grams: string): Record<string, unknown> => ({
+    ...samplePoint({
+      payloadKey: 'weight', valuePath: 'weightGrams', value: grams,
+      physicalTime: new Date(atMs).toISOString(), dataSource: scale,
+    }),
+    name,
+  })
+
+  it('takes the links that named it with it', () => {
+    h = seedRebuildable()
+    // Two weights on the scale's only key. hc-scale-2 is deleted as a weight. hc-scale-1 shares
+    // its id with a deleted workout, so it does not count as live and does not keep the row, and
+    // the weight delete leaves its link behind on a source with nothing left.
+    putPage(h, [scalePoint('hc-scale-1', T1, '80000'), scalePoint('hc-scale-2', T1, '80500')])
+    h.db.insert(companionDeletions).values([
+      { personId: h.personId, dataType: 'weight', recordId: 'hc-scale-2', deletedAtMs: 5 },
+      { personId: h.personId, dataType: 'exercise', recordId: 'hc-scale-1', deletedAtMs: 5 },
+    ]).run()
+    const report = runRebuild({ ...h.deps, nowMs: 1, force: true })
+    expect(report.people[0]?.sourcesRemoved).toBe(1)
+    expect(h.db.select().from(companionRecordSamples).all()).toEqual([])
+  })
+})
