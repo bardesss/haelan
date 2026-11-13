@@ -1,8 +1,21 @@
-﻿import { and, eq, inArray } from 'drizzle-orm'
+﻿import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { syncState, excludedDataTypes } from '../db/schema/index.ts'
+import { syncState, syncWindowFailures, excludedDataTypes } from '../db/schema/index.ts'
 import { DATA_TYPES } from '../api/catalogue.ts'
 import { SchemaDriftError } from '../errors.ts'
+
+/** Runs a day window may fail in a row before sync stops holding the rest of its type for it. */
+export const SKIP_WINDOW_AFTER_RUNS = 3
+
+export interface SkippedWindow {
+  dataType: string
+  localDate: string
+  windowStartMs: number
+  windowEndMs: number
+  consecutiveRuns: number
+  lastError: string | null
+  skippedAtMs: number
+}
 
 export interface SyncJob { personId: string, dataType: string }
 
@@ -72,6 +85,73 @@ export class SyncStateStore {
       lastErrorAtMs: input.nowMs,
       lastError: String(input.error.message).slice(0, 500),
       consecutiveFailures: (existing?.consecutiveFailures ?? 0) + 1,
+    })
+  }
+
+  /**
+   * Counts one more run in which this window failed. The first time the count reaches
+   * SKIP_WINDOW_AFTER_RUNS the window is stamped skipped, and it stays skipped (and keeps
+   * counting) until clearWindowFailure runs for it.
+   */
+  recordWindowFailure(input: {
+    personId: string, dataType: string,
+    window: { startMs: number, endMs: number, localDate: string },
+    error: Error, nowMs: number,
+  }): { consecutiveRuns: number, skipped: boolean } {
+    const key = and(
+      eq(syncWindowFailures.personId, input.personId), eq(syncWindowFailures.dataType, input.dataType),
+      eq(syncWindowFailures.windowStartMs, input.window.startMs),
+    )
+    const existing = this.#db.select().from(syncWindowFailures).where(key).get()
+    const consecutiveRuns = (existing?.consecutiveRuns ?? 0) + 1
+    const skippedAtMs = existing?.skippedAtMs ?? (consecutiveRuns >= SKIP_WINDOW_AFTER_RUNS ? input.nowMs : null)
+    const values = {
+      windowEndMs: input.window.endMs, localDate: input.window.localDate, consecutiveRuns,
+      lastError: String(input.error.message).slice(0, 500), lastFailedAtMs: input.nowMs, skippedAtMs,
+    }
+    this.#db.insert(syncWindowFailures)
+      .values({ personId: input.personId, dataType: input.dataType, windowStartMs: input.window.startMs, ...values })
+      .onConflictDoUpdate({
+        target: [syncWindowFailures.personId, syncWindowFailures.dataType, syncWindowFailures.windowStartMs],
+        set: values,
+      })
+      .run()
+    return { consecutiveRuns, skipped: skippedAtMs !== null }
+  }
+
+  isWindowSkipped(personId: string, dataType: string, windowStartMs: number): boolean {
+    const row = this.#db.select({ skippedAtMs: syncWindowFailures.skippedAtMs }).from(syncWindowFailures)
+      .where(and(
+        eq(syncWindowFailures.personId, personId), eq(syncWindowFailures.dataType, dataType),
+        eq(syncWindowFailures.windowStartMs, windowStartMs),
+      )).get()
+    return row?.skippedAtMs != null
+  }
+
+  clearWindowFailure(personId: string, dataType: string, windowStartMs: number): void {
+    this.#db.delete(syncWindowFailures).where(and(
+      eq(syncWindowFailures.personId, personId), eq(syncWindowFailures.dataType, dataType),
+      eq(syncWindowFailures.windowStartMs, windowStartMs),
+    )).run()
+  }
+
+  skippedWindowsFor(personId: string): SkippedWindow[] {
+    return this.#db.select().from(syncWindowFailures)
+      .where(eq(syncWindowFailures.personId, personId)).orderBy(asc(syncWindowFailures.windowStartMs)).all()
+      .filter((row) => row.skippedAtMs !== null)
+      .map((row) => ({
+        dataType: row.dataType, localDate: row.localDate,
+        windowStartMs: row.windowStartMs, windowEndMs: row.windowEndMs,
+        consecutiveRuns: row.consecutiveRuns, lastError: row.lastError ?? null, skippedAtMs: row.skippedAtMs!,
+      }))
+  }
+
+  // Moves the mark forward past windows that were read, without the success bookkeeping: a job
+  // with a failing window must not reset consecutive_failures or stamp last_success.
+  advanceHighWater(input: { personId: string, dataType: string, highWaterMs: number }): void {
+    const existing = this.get(input.personId, input.dataType)
+    this.upsert(input.personId, input.dataType, {
+      highWaterMs: Math.max(input.highWaterMs, existing?.highWaterMs ?? Number.NEGATIVE_INFINITY),
     })
   }
 

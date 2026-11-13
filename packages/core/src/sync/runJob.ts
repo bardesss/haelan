@@ -68,6 +68,12 @@ export interface JobInput {
   fromMs: number
   toMs: number
   deps: JobDeps
+  /**
+   * Count a failing window toward giving up on it. Only the scheduled trailing sync passes true:
+   * a backfill or a manual retry revisiting the same day in one sitting is not another run, and
+   * would otherwise skip a window that has failed once.
+   */
+  trackWindowFailures?: boolean
 }
 
 export interface JobResult {
@@ -77,6 +83,8 @@ export interface JobResult {
   unreadableWindows: number
   /** Windows whose fetch or write threw in this call. */
   failedWindows: number
+  /** The subset of failedWindows whose window is skipped: recorded as such now, or already was. */
+  skippedWindows: number
   rowsWritten: number
   skipped: 'revoked' | 'credentials_unreadable' | 'unsupported' | null
 }
@@ -95,7 +103,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     return result
   }
 
-  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, failedWindows: 0, skipped: null }
+  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, failedWindows: 0, skippedWindows: 0, skipped: null }
   if (!supports(t, 'list')) return { ...empty, skipped: 'unsupported' }
 
   report({ kind: 'job_started', personId: input.personId, dataType: t.id })
@@ -104,7 +112,14 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   let points = 0
   let unreadableWindows = 0
   let rowsWritten = 0
-  let highWaterMs = 0
+  // Where the mark may move to: the end of the last window before the first one still failing.
+  // The windows after a failing one are fetched and written, but a mark past it would claim the
+  // failing day was read.
+  let contiguousEndMs = 0
+  let blocked = false
+  let failedWindows = 0
+  let skippedWindows = 0
+  let firstError: unknown = null
 
   for (const window of windows) {
     try {
@@ -187,7 +202,8 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         localDate: window.localDate, rowsWritten: writtenHere,
       })
 
-      highWaterMs = Math.max(highWaterMs, window.endMs)
+      deps.syncState.clearWindowFailure(input.personId, t.id, window.startMs)
+      if (!blocked) contiguousEndMs = window.endMs
     } catch (error) {
       // A rolled back window takes its sources rows with it, so the ids this person's cache
       // still holds may no longer exist. Every later write referencing one would fail the
@@ -195,20 +211,32 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       deps.sources.forget(input.personId)
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
-      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skipped: 'revoked' })
+      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, skipped: 'revoked' })
       // Same treatment, for the same reason: a key that cannot open this person's token is not
       // this window failing, or this type, or this run - it is every window for this person
       // until they reconsent, and recording it as a failure would write that story to every
       // data type, every day, for a state that already has its own name.
       if (error instanceof CredentialsUnreadableError) {
-        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skipped: 'credentials_unreadable' })
+        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, skipped: 'credentials_unreadable' })
       }
-      recordFailureSafely(deps.syncState, {
-        personId: input.personId, dataType: t.id,
-        error: classify(error),
-        nowMs: deps.now(),
-      })
-      return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 1, skipped: null })
+      failedWindows++
+      let skipped = false
+      try {
+        skipped = input.trackWindowFailures
+          ? deps.syncState.recordWindowFailure({
+            personId: input.personId, dataType: t.id,
+            window: { startMs: window.startMs, endMs: window.endMs, localDate: window.localDate },
+            error: classify(error), nowMs: deps.now(),
+          }).skipped
+          : deps.syncState.isWindowSkipped(input.personId, t.id, window.startMs)
+      } catch { /* a store that cannot say is treated as not skipped: the window keeps blocking */ }
+      if (skipped) {
+        skippedWindows++
+        if (!blocked) contiguousEndMs = window.endMs
+      } else {
+        firstError ??= error
+        blocked = true
+      }
     }
   }
 
@@ -230,22 +258,31 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     })
   }
 
-  if (highWaterMs > 0 && unreadableWindows === 0) {
+  // After the drift record, so last_error keeps the failure. A job whose only failures are windows
+  // already given up on records none: they stay visible through skippedWindowsFor, and the type
+  // is not failing for them. consecutive_failures therefore moves once per job, not per window.
+  if (failedWindows > skippedWindows) {
+    recordFailureSafely(deps.syncState, {
+      personId: input.personId, dataType: t.id, error: classify(firstError), nowMs: deps.now(),
+    })
+  }
+
+  if (contiguousEndMs > 0 && unreadableWindows === 0) {
     const nowMs = deps.now()
     // Clamped, because today's window ends at the *next* local midnight and the mark would
     // otherwise sit up to a day ahead of now. A mark in the future is a claim to have synced
     // time that has not happened yet, and runSync's gap repair reads it as coverage: left
     // unclamped it would quietly subtract a day from what every run reaches back for.
-    deps.syncState.recordSuccess({
-      personId: input.personId, dataType: t.id, highWaterMs: Math.min(highWaterMs, nowMs), nowMs,
-    })
+    const mark = { personId: input.personId, dataType: t.id, highWaterMs: Math.min(contiguousEndMs, nowMs) }
+    if (failedWindows > skippedWindows) deps.syncState.advanceHighWater(mark)
+    else deps.syncState.recordSuccess({ ...mark, nowMs })
   }
   // Nothing threw, so nothing else in this job will ever mention it: the pages were full, the
   // points parsed, and every one of them was skipped by a mapper that could not find its field.
   // Left unreported, a rename upstream reads exactly like a person who stopped wearing a device.
   // Types whose mapping is deferred are excluded, because writing no rows is their design.
 
-  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skipped: null })
+  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows, skippedWindows, skipped: null })
 }
 
 // A store that cannot record the failure (disk full, locked) must not replace the window error

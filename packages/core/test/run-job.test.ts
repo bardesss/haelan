@@ -12,7 +12,7 @@ import { runJob } from '../src/sync/runJob.ts'
 import { dayWindows } from '../src/sync/windows.ts'
 import { RevokedError } from '../src/api/tokens.ts'
 import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
-import { observations, samples, sessions, sources, syncState } from '../src/db/schema/index.ts'
+import { observations, samples, sessions, sources, syncState, syncWindowFailures } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 const AMS = 'Europe/Amsterdam'
@@ -723,5 +723,79 @@ describe('runJob', () => {
     expect(line).toContain('could not record sync failure')
     expect(line).toContain('SQLITE_FULL')
     expect(line).toContain('oxygen-saturation')
+  })
+
+  describe('window failures', () => {
+    const FROM = Date.parse('2026-08-16T00:00:00Z')
+    const TO = Date.parse('2026-08-19T00:00:00Z')
+    const windows = dayWindows({ fromMs: FROM, toMs: TO, timezone: AMS })
+    const type = dataTypeById('oxygen-saturation')!
+    let failingOn = true
+
+    const stub = () => vi.fn().mockImplementation(async (url: string | URL) => {
+      const filter = new URL(String(url)).searchParams.get('filter')!
+      if (failingOn && filter.includes(`>= "${new Date(windows[1]!.startMs).toISOString()}"`)) {
+        return new Response('{"error":{"code":400}}', { status: 400 })
+      }
+      return new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 })
+    })
+    const args = { personId: 'p1', dataType: type, timezone: AMS, fromMs: FROM, toMs: TO }
+    const store = () => new SyncStateStore(ctx.db)
+
+    beforeEach(() => { failingOn = true })
+
+    it('fetches the windows after a failing one and moves the mark only to the last contiguous good window', async () => {
+      const fetchMock = stub()
+      const result = await runJob({ ...args, trackWindowFailures: true, deps: build(fetchMock) })
+      expect(fetchMock).toHaveBeenCalledTimes(windows.length)
+      expect(result.failedWindows).toBe(1)
+      expect(result.skippedWindows).toBe(0)
+      expect(ctx.db.select().from(samples).all().length).toBeGreaterThan(0)
+      const state = store().get('p1', 'oxygen-saturation')
+      expect(state?.highWaterMs).toBe(windows[0]!.endMs)
+      expect(state?.consecutiveFailures).toBe(1)
+    })
+
+    it('skips a window that failed on three runs and lets the mark pass it', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 2; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(windows[0]!.endMs)
+      const third = await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(third.skippedWindows).toBe(1)
+      expect(store().skippedWindowsFor('p1')).toEqual([{
+        dataType: 'oxygen-saturation', localDate: windows[1]!.localDate,
+        windowStartMs: windows[1]!.startMs, windowEndMs: windows[1]!.endMs,
+        consecutiveRuns: 3, lastError: expect.stringContaining('[schema_drift]'),
+        skippedAtMs: Date.parse('2026-08-19T12:00:00Z'),
+      }])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(Date.parse('2026-08-19T12:00:00Z'))
+    })
+
+    it('does not report a type as failing once its only failure is a skipped window', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 3; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      const fourth = await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(fourth.failedWindows).toBe(1)
+      expect(fourth.skippedWindows).toBe(1)
+      expect(store().get('p1', 'oxygen-saturation')?.consecutiveFailures).toBe(0)
+    })
+
+    it('forgets a window failure once the window succeeds, so the next failure counts from one', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 2; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      failingOn = false
+      await runJob({ ...args, trackWindowFailures: true, deps })
+      failingOn = true
+      await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(ctx.db.select().from(syncWindowFailures).all().map((r) => r.consecutiveRuns)).toEqual([1])
+    })
+
+    it('does not count a failure toward the skip when the caller is not tracking runs', async () => {
+      const deps = build(stub())
+      for (let run = 0; run < 4; run++) await runJob({ ...args, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+    })
   })
 })

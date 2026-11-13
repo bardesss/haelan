@@ -13,6 +13,22 @@ export const syncState = sqliteTable('sync_state', {
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.personId, t.dataType] })])
 
+// A day window that failed to fetch or write, counted per run. One bad day used to stop its whole
+// type; now the job carries on past it and this table is how a day that keeps failing is given up
+// on (skipped_at_ms) instead of being retried for ever. Deleted again the first time the window
+// succeeds, so the count is of consecutive runs.
+export const syncWindowFailures = sqliteTable('sync_window_failures', {
+  personId: text('person_id').notNull().references(() => people.id),
+  dataType: text('data_type').notNull(),
+  windowStartMs: integer('window_start_ms').notNull(),
+  windowEndMs: integer('window_end_ms').notNull(),
+  localDate: text('local_date').notNull(),
+  consecutiveRuns: integer('consecutive_runs').notNull().default(0),
+  lastError: text('last_error'),
+  lastFailedAtMs: integer('last_failed_at_ms').notNull(),
+  skippedAtMs: integer('skipped_at_ms'),
+}, (t) => [primaryKey({ columns: [t.personId, t.dataType, t.windowStartMs] })])
+
 // One row per dirty person-day, not per metric: a day whose samples changed has to be
 // recomputed for every metric anyway, and a per metric queue would be a hundred rows saying
 // the same thing. Written by sync as it commits a window, by an override as it is added or

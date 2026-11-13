@@ -73,7 +73,6 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
     const window = candidates.filter((candidate) => candidate.endMs <= cursorMs).at(-1)
     if (!window) return done('horizon', true, windowsFetched, rowsWritten)
 
-    const before = deps.syncState.get(input.personId, t.id)?.consecutiveFailures ?? 0
     const result = await runJob({
       personId: input.personId, dataType: t, timezone: input.timezone,
       fromMs: window.startMs, toMs: window.endMs, deps,
@@ -85,11 +84,11 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
     if (result.skipped === 'credentials_unreadable') {
       return done('credentials_unreadable', false, windowsFetched, rowsWritten)
     }
-    // runJob swallows its own failures and records them, so the failure counter moving is the
-    // only signal that this window did not land. Marching on to the horizon after it would
-    // mean walking five years of days against an API that is refusing every one of them.
-    const after = deps.syncState.get(input.personId, t.id)?.consecutiveFailures ?? 0
-    if (after > before) return done('error', false, windowsFetched, rowsWritten)
+    // runJob swallows its own failures and records them, so its own count is the signal that
+    // this window did not land. Marching on to the horizon after it would mean walking five years
+    // of days against an API that is refusing every one of them. A window runSync already gave
+    // up on is passed over like a good one, or the walk could never get beyond it.
+    if (result.failedWindows > result.skippedWindows) return done('error', false, windowsFetched, rowsWritten)
 
     // Drift is not a failure, so the counter above never moves for it, and a backfill is one
     // shot: it would walk the whole horizon against bodies it cannot read, advance the cursor

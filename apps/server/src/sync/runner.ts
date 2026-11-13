@@ -3,7 +3,7 @@
   peopleNeedingRebuild, runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
   supports, isQuarantined, producedNothing,
 } from '@haelan/core'
-import type { DataType, JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
+import type { DataType, JobDeps, RateLimiter, SkippedWindow, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
 
 // probe/findings/scopes.md measured 300 requests per minute per user. Running at the ceiling is
@@ -182,6 +182,8 @@ export interface RunnerStatus extends RunState {
   personId: string
   userHorizonDays: number
   backfill: BackfillSummary[]
+  /** Days sync gave up on after repeated failures; the data for them is missing until they fetch. */
+  skippedWindows: SkippedWindow[]
   rebuild: RebuildStatus
   /**
    * Whether index.ts's boot rebuild worker is running right now. Instance-wide, which is why it
@@ -368,6 +370,7 @@ export class SyncRunner {
       personId,
       userHorizonDays,
       backfill,
+      skippedWindows: this.#context.stores.syncState.skippedWindowsFor(personId),
       // Asked on every call, like the rebuild row above and for the same reason: the boot
       // rebuild settles while a dashboard is open, and a copy taken when this runner was
       // constructed would have been true for the whole life of the process.

@@ -4,6 +4,8 @@ import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
+import { dayWindows, startOfLocalDay } from '../src/sync/windows.ts'
+import { TransientError } from '../src/errors.ts'
 import { runBackfill } from '../src/sync/runBackfill.ts'
 import type { HealthClient, ListInput, ListResult } from '../src/api/client.ts'
 import type { JobDeps } from '../src/sync/runJob.ts'
@@ -146,6 +148,28 @@ describe('runBackfill', () => {
     })
     expect(result.stoppedBecause).toBe('error')
     expect(windows.length).toBeLessThan(10)
+  })
+
+  it('walks past a window sync already skipped instead of stopping on it', async () => {
+    const { deps, windows } = buildDeps(fixture)
+    const cursorMs = startOfLocalDay(NOW_MS - 10 * DAY_MS, AMS)
+    syncState.setBackfillCursor({ personId: 'p1', dataType: 'weight', cursorMs, nowMs: NOW_MS })
+    const bad = dayWindows({ fromMs: cursorMs - DAY_MS - 3_600_000, toMs: cursorMs, timezone: AMS })
+      .filter((w) => w.endMs <= cursorMs).at(-1)!
+    for (let run = 0; run < 3; run++) {
+      syncState.recordWindowFailure({
+        personId: 'p1', dataType: 'weight',
+        window: { startMs: bad.startMs, endMs: bad.endMs, localDate: bad.localDate },
+        error: new TransientError('boom'), nowMs: NOW_MS,
+      })
+    }
+    deps.client.failNextWith = new Error('boom')
+    const result = await runBackfill({
+      personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 3, deps,
+    })
+    expect(result.stoppedBecause).toBe('batch')
+    expect(windows).toHaveLength(3)
   })
 
   it('skips a type the API cannot list at all', async () => {

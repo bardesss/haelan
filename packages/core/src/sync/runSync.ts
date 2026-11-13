@@ -141,11 +141,11 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
       const result = await runJob({
         personId, dataType, timezone: person.timezone,
         fromMs: reachBackTo(state?.highWaterMs ?? null, trailingFromMs, toMs, dataType, input.userHorizonDays),
-        toMs, deps: input.deps,
+        toMs, deps: input.deps, trackWindowFailures: true,
       })
       report.rowsWritten += result.rowsWritten
       if (result.skipped) report.skipped++
-      else if (result.failedWindows > 0) report.failed++
+      else if (result.failedWindows > result.skippedWindows) report.failed++
       else report.succeeded++
     }
   }
