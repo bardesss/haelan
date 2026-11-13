@@ -316,7 +316,7 @@ object SyncEngine {
                         .groupBy { identityOf(it, cutoverMs) }
                         .flatMap { (identity, records) ->
                             val readings = records.map {
-                                BasalMetabolicRate.Reading(it.time, it.zoneOffset, it.basalMetabolicRate)
+                                BasalMetabolicRate.Reading(it.time, it.zoneOffset, it.basalMetabolicRate, it.metadata.id)
                             }
                             BasalMetabolicRate.points(readings).map { Point(identity, basalPoint(it)) }
                         }
@@ -332,10 +332,10 @@ object SyncEngine {
                         .groupBy { identityOf(it, cutoverMs) }
                         .flatMap { (identity, records) ->
                             val readings = records.map {
-                                DailyRestingHeartRate.Reading(it.time, it.zoneOffset, it.beatsPerMinute)
+                                DailyRestingHeartRate.Reading(it.time, it.zoneOffset, it.beatsPerMinute, it.metadata.id)
                             }
                             DailyRestingHeartRate.daily(readings).map {
-                                Point(identity, dailyRestingPoint(it.date, it.beatsPerMinute.toString()))
+                                Point(identity, dailyRestingPoint(it.date, it.beatsPerMinute.toString(), it.id))
                             }
                         }
                 }
@@ -520,8 +520,9 @@ object SyncEngine {
      * own (mapSamples.reads sampleTime first, then the interval), so the two sides agree on which
      * clock a point is filed under.
      */
-    private fun instantMsOf(body: JSONObject): Long? {
-        val key = body.keys().asSequence().firstOrNull() ?: return null
+    internal fun instantMsOf(body: JSONObject): Long? {
+        // `name` rides beside the payload as the record id, so the payload is the first other key.
+        val key = body.keys().asSequence().firstOrNull { it != "name" } ?: return null
         val payload = body.optJSONObject(key) ?: return null
         payload.optJSONObject("sampleTime")?.let { sample ->
             return instantMsOf(sample.optString("physicalTime"), sample.opt("utcOffset"))
@@ -857,6 +858,7 @@ object SyncEngine {
 
     private fun toStepPoints(records: List<StepsRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("steps", JSONObject()
                 .put("interval", JSONObject()
                     .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
@@ -866,10 +868,11 @@ object SyncEngine {
                 .put("count", record.count))
     }
 
-    private fun toHeartRatePoints(records: List<HeartRateRecord>): List<JSONObject> =
+    internal fun toHeartRatePoints(records: List<HeartRateRecord>): List<JSONObject> =
         records.flatMap { record ->
             record.samples.map { sample ->
                 JSONObject()
+                    .put("name", record.metadata.id)
                     .put("heartRate", JSONObject()
                         .put("sampleTime", JSONObject()
                             .put("physicalTime", sample.time.toString())
@@ -878,9 +881,10 @@ object SyncEngine {
             }
         }
 
-    private fun toWeightPoints(records: List<WeightRecord>): List<JSONObject> = records.map { record ->
+    internal fun toWeightPoints(records: List<WeightRecord>): List<JSONObject> = records.map { record ->
         val grams = Math.round(record.weight.inKilograms * 1000.0)
         JSONObject()
+            .put("name", record.metadata.id)
             .put("weight", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -890,6 +894,7 @@ object SyncEngine {
 
     private fun toDistancePoints(records: List<DistanceRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("distance", JSONObject()
                 .put("interval", JSONObject()
                     .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
@@ -901,6 +906,7 @@ object SyncEngine {
 
     private fun toAltitudePoints(records: List<ElevationGainedRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("altitude", JSONObject()
                 .put("interval", JSONObject()
                     .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
@@ -912,6 +918,7 @@ object SyncEngine {
 
     private fun toHeightPoints(records: List<HeightRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("height", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -921,6 +928,7 @@ object SyncEngine {
 
     private fun toBodyFatPoints(records: List<BodyFatRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("bodyFat", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -930,6 +938,7 @@ object SyncEngine {
 
     private fun toHrvPoints(records: List<HeartRateVariabilityRmssdRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("heartRateVariability", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -939,6 +948,7 @@ object SyncEngine {
 
     private fun toSpo2Points(records: List<OxygenSaturationRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("oxygenSaturation", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -948,6 +958,7 @@ object SyncEngine {
 
     private fun toBodyTempPoints(records: List<BodyTemperatureRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("coreBodyTemperature", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -957,6 +968,7 @@ object SyncEngine {
 
     private fun toBloodGlucosePoints(records: List<BloodGlucoseRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("bloodGlucose", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -966,6 +978,7 @@ object SyncEngine {
 
     private fun toHydrationPoints(records: List<HydrationRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("hydrationLog", JSONObject()
                 .put("interval", JSONObject()
                     .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
@@ -977,6 +990,7 @@ object SyncEngine {
 
     private fun toVo2Points(records: List<Vo2MaxRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("vo2Max", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -987,6 +1001,7 @@ object SyncEngine {
     // The nightly breathing summary travels on the sleep type with fullSleepStats.
     private fun toSleepRespPoints(records: List<RespiratoryRateRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("respiratoryRateSleepSummary", JSONObject()
                 .put("sampleTime", JSONObject()
                     .put("physicalTime", record.time.toString())
@@ -997,8 +1012,9 @@ object SyncEngine {
     private fun dateJson(date: LocalDate): JSONObject =
         JSONObject().put("year", date.year).put("month", date.monthValue).put("day", date.dayOfMonth)
 
-    private fun dailyRestingPoint(date: LocalDate, beatsPerMinute: String): JSONObject =
+    private fun dailyRestingPoint(date: LocalDate, beatsPerMinute: String, id: String): JSONObject =
         JSONObject()
+            .put("name", id)
             .put("dailyRestingHeartRate", JSONObject()
                 .put("date", dateJson(date))
                 .put("beatsPerMinute", beatsPerMinute))
@@ -1175,6 +1191,7 @@ object SyncEngine {
 
     private fun toCaloriesPoints(records: List<ActiveCaloriesBurnedRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            .put("name", record.metadata.id)
             .put("activeEnergyBurned", JSONObject()
                 .put("interval", JSONObject()
                     .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
@@ -1189,6 +1206,7 @@ object SyncEngine {
     // here, and the figure is the one Health Connect shows for the day the instant falls in.
     private fun basalPoint(point: BasalMetabolicRate.Point): JSONObject =
         JSONObject()
+            .put("name", point.id)
             .put("basalEnergyBurned", JSONObject()
                 .put("interval", JSONObject()
                     .put("startTime", WireTime.atOffset(point.time, point.zoneOffset))

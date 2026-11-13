@@ -15,7 +15,7 @@ class BasalMetabolicRateTest {
 
     private val at = Instant.parse("2026-03-08T03:00:00Z")
 
-    private fun reading(rate: Power) = BasalMetabolicRate.Reading(at, ZoneOffset.ofHours(1), rate)
+    private fun reading(rate: Power) = BasalMetabolicRate.Reading(at, ZoneOffset.ofHours(1), rate, "hc-bmr-1")
 
     @Test
     fun theDaysFigureCrossesInKilocaloriesAndNotInWatts() {
@@ -38,8 +38,15 @@ class BasalMetabolicRateTest {
     }
 
     @Test
+    fun theRecordIdPassesThrough() {
+        val point = BasalMetabolicRate.points(listOf(reading(Power.kilocaloriesPerDay(1500.0)))).single()
+
+        assertEquals("hc-bmr-1", point.id)
+    }
+
+    @Test
     fun aReadingTheDeviceFiledWithNoOffsetStillCrosses() {
-        val noOffset = BasalMetabolicRate.Reading(at, null, Power.kilocaloriesPerDay(1500.0))
+        val noOffset = BasalMetabolicRate.Reading(at, null, Power.kilocaloriesPerDay(1500.0), "hc-bmr-1")
 
         val point = BasalMetabolicRate.points(listOf(noOffset)).single()
 

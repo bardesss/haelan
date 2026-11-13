@@ -14,15 +14,18 @@ import java.time.ZoneOffset
  */
 object DailyRestingHeartRate {
 
-    data class Reading(val at: Instant, val zoneOffset: ZoneOffset?, val beatsPerMinute: Long)
+    data class Reading(val at: Instant, val zoneOffset: ZoneOffset?, val beatsPerMinute: Long, val id: String)
 
-    data class Daily(val date: LocalDate, val beatsPerMinute: Long)
+    data class Daily(val date: LocalDate, val beatsPerMinute: Long, val id: String)
 
     fun daily(readings: List<Reading>): List<Daily> =
         readings
             // atZone().toLocalDate() rather than LocalDate.ofInstant: the latter only exists
             // from API 34, and the app runs from 26.
             .groupBy { it.at.atZone(it.zoneOffset ?: ZoneOffset.UTC).toLocalDate() }
-            .map { (date, sameDay) -> Daily(date, sameDay.maxBy { it.at }.beatsPerMinute) }
+            .map { (date, sameDay) ->
+                val kept = sameDay.maxBy { it.at }
+                Daily(date, kept.beatsPerMinute, kept.id)
+            }
             .sortedBy { it.date }
 }

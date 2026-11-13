@@ -18,15 +18,15 @@ import java.time.ZoneOffset
  */
 object BasalMetabolicRate {
 
-    data class Reading(val time: Instant, val zoneOffset: ZoneOffset?, val rate: Power)
+    data class Reading(val time: Instant, val zoneOffset: ZoneOffset?, val rate: Power, val id: String)
 
     /**
      * The clock is the reading's own instant and the interval is empty, because an instantaneous
      * record has no duration to report: inventing a day-long interval here would be this app
      * deciding where a day starts, which is exactly the derivation the phone no longer does.
      */
-    data class Point(val time: Instant, val zoneOffset: ZoneOffset?, val kcal: Double)
+    data class Point(val time: Instant, val zoneOffset: ZoneOffset?, val kcal: Double, val id: String)
 
     fun points(readings: List<Reading>): List<Point> =
-        readings.map { Point(it.time, it.zoneOffset, it.rate.inKilocaloriesPerDay) }
+        readings.map { Point(it.time, it.zoneOffset, it.rate.inKilocaloriesPerDay, it.id) }
 }

@@ -8,11 +8,12 @@ import java.time.ZoneOffset
 
 class DailyRestingHeartRateTest {
 
-    private fun reading(instant: String, offsetHours: Int, beatsPerMinute: Long) =
+    private fun reading(instant: String, offsetHours: Int, beatsPerMinute: Long, id: String = "hc-rhr") =
         DailyRestingHeartRate.Reading(
             Instant.parse(instant),
             ZoneOffset.ofHours(offsetHours),
             beatsPerMinute,
+            id,
         )
 
     @Test
@@ -45,6 +46,18 @@ class DailyRestingHeartRateTest {
     }
 
     @Test
+    fun theDayKeepsTheIdOfTheReadingItKept() {
+        val daily = DailyRestingHeartRate.daily(
+            listOf(
+                reading("2026-03-01T06:00:00Z", 1, 50L, "hc-rhr-1"),
+                reading("2026-03-01T20:00:00Z", 1, 60L, "hc-rhr-2"),
+            ),
+        )
+
+        assertEquals("hc-rhr-2", daily.single().id)
+    }
+
+    @Test
     fun theLocalDayComesFromTheReadingOwnOffset() {
         // 23:30 UTC on 1 March is already 2 March at +02:00.
         val daily = DailyRestingHeartRate.daily(listOf(reading("2026-03-01T23:30:00Z", 2, 51L)))
@@ -55,7 +68,7 @@ class DailyRestingHeartRateTest {
     @Test
     fun aReadingWithNoOffsetIsFiledUnderUtcRatherThanDropped() {
         val daily = DailyRestingHeartRate.daily(
-            listOf(DailyRestingHeartRate.Reading(Instant.parse("2026-03-01T23:30:00Z"), null, 51L)),
+            listOf(DailyRestingHeartRate.Reading(Instant.parse("2026-03-01T23:30:00Z"), null, 51L, "hc-rhr")),
         )
 
         assertEquals(LocalDate.of(2026, 3, 1), daily.single().date)
