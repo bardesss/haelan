@@ -50,6 +50,20 @@ const seedWorkout = (db: TestDatabase['db'], id: string, sourceId: string, bpms:
   }
 }
 
+const seedHeartRate = (db: TestDatabase['db'], sourceId: string, bpms: number[], offsetMs = 0) => {
+  for (const [at, bpm] of bpms.entries()) {
+    insertSample(db, { personId: PERSON, sourceId, metric: 'heart_rate', utcMs: START + offsetMs + at * MINUTE, value: bpm })
+  }
+}
+
+const seedSession = (db: TestDatabase['db'], id: string, sourceId: string, startMs: number, minutes: number) => {
+  db.insert(sessions).values({
+    id, personId: PERSON, sourceId, kind: 'exercise', externalId: id,
+    startMs, startOffsetMinutes: 0, endMs: startMs + minutes * MINUTE, endOffsetMinutes: 0,
+    localDate: DATE, attrs: '{}', rawPayloadId: null,
+  }).run()
+}
+
 const seedDayValue = (db: TestDatabase['db'], sourceId: string, metric: string, value: number) => {
   insertSample(db, { personId: PERSON, sourceId, metric, utcMs: Date.parse(`${DATE}T05:00:00Z`), value })
 }
@@ -83,6 +97,42 @@ const exclude = (scope: OverrideLike['scope'], targetKey: string): OverrideLike 
   ({ scope, targetKey, action: 'exclude', correctedValue: null })
 
 describe('daily heart rate zone minutes from workouts', () => {
+  test('counts a minute two straps both recorded once when the workout\'s own source has none', () => {
+    const db = seed(['app', 'strapA', 'strapB'])
+    seedWorkout(db, 'run', 'app', null)
+    seedHeartRate(db, 'strapA', ONE_MINUTE_EACH)
+    seedHeartRate(db, 'strapB', ONE_MINUTE_EACH)
+    seedDayValue(db, 'strapA', 'resting_heart_rate', 60)
+    derive(db)
+    const oneEach = { light: 1, moderate: 1, vigorous: 1, peak: 1 }
+    expect(zonesOf(db, 'app')).toEqual(oneEach)
+    expect(zonesOf(db, MERGED_SOURCE)).toEqual(oneEach)
+    const load = db.select().from(daily).where(and(eq(daily.metric, 'cardio_load_edwards'), eq(daily.source, MERGED_SOURCE))).get()
+    expect(load?.value).toBe(10)
+  })
+
+  test('takes a shared minute from the source ranked first for heart_rate', () => {
+    const db = seed(['app', 'strapA', 'strapB'])
+    seedWorkout(db, 'run', 'app', null)
+    seedHeartRate(db, 'strapA', [100, 100, 100, 100])
+    seedHeartRate(db, 'strapB', ONE_MINUTE_EACH)
+    seedDayValue(db, 'strapA', 'resting_heart_rate', 60)
+    derive(db, { priority: priorityFrom({ lists: new Map([['heart_rate', ['strapB', 'strapA']]]), sources: [] }) })
+    expect(zonesOf(db, MERGED_SOURCE)).toEqual({ light: 1, moderate: 1, vigorous: 1, peak: 1 })
+  })
+
+  test('counts the minutes two overlapping workouts share once', () => {
+    const db = seed(['phone'])
+    seedSession(db, 'a', 'phone', START, 10) // 07:00-07:10
+    seedSession(db, 'b', 'phone', START + 8 * MINUTE, 10) // 07:08-07:18, overlap 0.2 < 0.5 so not grouped
+    seedHeartRate(db, 'phone', Array(18).fill(100))
+    seedDayValue(db, 'phone', 'resting_heart_rate', 60)
+    derive(db)
+    const eighteenLight = { light: 18, moderate: 0, vigorous: 0, peak: 0 }
+    expect(zonesOf(db, 'phone')).toEqual(eighteenLight)
+    expect(zonesOf(db, MERGED_SOURCE)).toEqual(eighteenLight)
+  })
+
   test('writes zone minutes from the formula for a phone workout', () => {
     const db = seed(['phone'])
     seedWorkout(db, 'run', 'phone', ONE_MINUTE_EACH)

@@ -145,6 +145,15 @@ describe('zoneSecondsFromMinutes', () => {
 })
 
 describe('fillFromSamples, through the merged reads', () => {
+  it('fills zone durations from one reading a minute when two other sources recorded the run', () => {
+    insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
+    seedSamples('google')
+    seedSamples('scale')
+    seedZoneCeilings(DATE)
+    const run = q().sessionById({ sessionId: 'phone-run', fill: true, nowMs: SOON })!
+    expect(workoutDetail(run.attrs).zones).toEqual({ lightSeconds: 600, moderateSeconds: 600, vigorousSeconds: 600, peakSeconds: 0 })
+  })
+
   it('fills a bare treadmill run from its own samples and marks it', () => {
     insertSession({ id: 'phone-run', sourceId: 'phone', attrs: PHONE_TREADMILL })
     seedSamples()
