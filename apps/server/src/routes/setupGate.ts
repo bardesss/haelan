@@ -63,6 +63,12 @@ export function registerSetupGate(app: FastifyInstance): void {
     // session, and /oauth/callback only accepts state this instance signed, for the person named
     // inside it, and only from that person's own session, once.
     if (step === 'done' && isSetupRoute && !isConsentRoute) {
+      // A failed callback redirects to /setup/google?error=<code> and the screen fetches the
+      // reason from here (SetupApp.tsx). The person who needs it is the invited member whose own
+      // consent just failed, on any finished instance: this is a read-only GET over the caller's
+      // own in-memory slot that rewrites nothing, so refusing it protects nothing and costs the
+      // only explanation of the failure. The route keeps its own requireSession.
+      if (path === '/api/setup/last-error') return
       // Named exceptions, and only on the phone path: see opensForCompanion below. They are
       // what keeps "no Google" a choice rather than a door that only closes.
       if (opensForCompanion(app, path)) return
@@ -104,7 +110,7 @@ function hasReadableClient(app: FastifyInstance): boolean {
  * without this the phone choice could never be undone: no client was ever pasted, and pasting one
  * was refused. That is a one-way door, and it was found as one.
  *
- * Two groups, on purpose, and both only on a completed companion instance:
+ * Only on a completed companion instance:
  *
  * - the client itself, and only while nobody has connected Google here. That condition is what
  *   keeps the refusal above alive on a mixed instance, where rewriting the client silently
@@ -116,12 +122,6 @@ function hasReadableClient(app: FastifyInstance): boolean {
  *   no scope list, so the open writer would still be unreachable from any screen. They answer
  *   nothing instance-specific - the scope list is this build's own, the candidates derive from
  *   the request - and both keep their requireSession.
- * - the last error, unconditionally. A failed callback redirects to /setup/google?error=<code> and
- *   the screen fetches the reason from here (SetupApp.tsx), and on a mixed instance the condition
- *   above has already turned the client's exemption off. The person who needs the message is the
- *   invited member whose own consent just failed, and this route is a read-only GET over an
- *   caller's own in-memory slot that rewrites nothing: refusing it protects nothing and costs the only
- *   explanation of the failure.
  *
  * None of these exceptions is an unauthenticated door. Every route keeps its own requireSession,
  * which this hook runs ahead of and does not replace; what opens here is the gate, not the guard.
@@ -129,7 +129,6 @@ function hasReadableClient(app: FastifyInstance): boolean {
 function opensForCompanion(app: FastifyInstance, path: string): boolean {
   const settings = app.haelan.stores.settings.get()
   if (settings?.companionMode !== true || settings.setupCompletedAtMs === null) return false
-  if (path === '/api/setup/last-error') return true
   if (app.haelan.stores.credentials.listTokenPeople().length !== 0) return false
   return path === '/api/setup/google-client'
     || path === '/api/setup/scopes'
