@@ -3,7 +3,7 @@ import fc from 'fast-check'
 import { z } from 'zod'
 import {
   PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, insertSample,
-  NoteStore, EventStore, ConfigError, PeopleStore,
+  NoteStore, EventStore, ConfigError, PeopleStore, sampleTarget,
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
@@ -530,6 +530,20 @@ describe('get_intraday', () => {
     expect(out.summary.n).toBe(800)
   })
 
+  it('leaves an excluded minute out of the summary and still returns it flagged', () => {
+    const midnight = Date.UTC(2026, 7, 9, 22, 0)
+    seedMinutes('watch', midnight, 10, (i) => (i === 3 ? 250 : 60))
+    test.db.insert(schema.overrides).values({
+      id: 'o-spike', personId: 'robin', scope: 'sample', action: 'exclude', reason: 'test', createdAtMs: 0,
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: midnight + 3 * 60_000 }),
+    }).run()
+    const out = tool('get_intraday').run(q(), { metric: 'heart_rate', localDate: '2026-08-10' }) as {
+      points: { excluded: boolean }[], summary: { n: number, max: number | null }
+    }
+    expect(out.summary).toMatchObject({ n: 9, max: 60 })
+    expect(out.points.filter((p) => p.excluded)).toHaveLength(1)
+  })
+
   it('returns a day of samples with a summary and no reduction at the default budget', () => {
     const nineAm = Date.UTC(2026, 7, 10, 7, 0) // 09:00 local at +120 on 2026-08-10.
     for (let i = 0; i < 90; i += 1) {
@@ -777,6 +791,27 @@ describe('get_workout', () => {
     }
     expect(out.trace[0]!.traceSource).toBe('otherSources')
     expect(out.trace[0]!.summary.n).toBe(400)
+  })
+
+  it('leaves an excluded minute of a workout out of the trace summary', () => {
+    const start = Date.UTC(2026, 7, 10, 5, 0)
+    seedExerciseSession({ id: 'short-run', startMs: start, endMs: start + 10 * 60_000, localDate: '2026-08-10',
+      attrs: { exerciseType: 'RUNNING' } })
+    for (let i = 0; i < 10; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(test.db, { personId: 'robin', sourceId: 'watch', metric: 'heart_rate',
+          utcMs: start + i * 60_000, tzOffsetMinutes: 120, agg, value: i === 3 ? 250 : 60 })
+      }
+    }
+    test.db.insert(schema.overrides).values({
+      id: 'o-spike', personId: 'robin', scope: 'sample', action: 'exclude', reason: 'test', createdAtMs: 0,
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: start + 3 * 60_000 }),
+    }).run()
+    const out = tool('get_workout').run(q(), { sessionId: 'short-run' }) as {
+      trace: { points: { excluded: boolean }[], summary: { n: number, max: number | null } }[]
+    }
+    expect(out.trace[0]!.summary).toMatchObject({ n: 9, max: 60 })
+    expect(out.trace[0]!.points.filter((p) => p.excluded)).toHaveLength(1)
   })
 
   const START = Date.UTC(2026, 7, 10, 7, 0)

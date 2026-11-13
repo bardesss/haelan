@@ -368,7 +368,7 @@ export const getWorkout = defineTool({
             n: p.n, excluded: p.excluded,
           })),
           reduction: result.reduction,
-          summary: summaryOf(full.points.map((p) => p.mean).filter((v) => v !== null)),
+          summary: summaryOf(full.points.filter((p) => !p.excluded && p.mean !== null).map((p) => p.mean!)),
         }
       }),
     }
