@@ -143,6 +143,7 @@ object SyncRun {
             },
             report = report,
             cursorEnds = answer.ends,
+            cutovers = answer.cutovers,
         )
     }
 

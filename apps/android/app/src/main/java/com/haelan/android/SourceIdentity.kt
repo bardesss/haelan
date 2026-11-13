@@ -15,7 +15,11 @@ import androidx.health.connect.client.records.metadata.Metadata
  * the name v4 wants is the two of them together. That is formatting rather than invention: both
  * strings come off the record, and the guard below only keeps the brand from being written twice.
  */
-data class SourceIdentity(val deviceName: String?, val recordingMethod: String?) {
+data class SourceIdentity(
+    val deviceName: String?,
+    val recordingMethod: String?,
+    val originPackage: String? = null,
+) {
 
     companion object {
 
@@ -47,7 +51,24 @@ data class SourceIdentity(val deviceName: String?, val recordingMethod: String?)
             }
         }
 
-        fun of(manufacturer: String?, model: String?, healthConnectMethod: Int): SourceIdentity =
-            SourceIdentity(deviceName(manufacturer, model), recordingMethod(healthConnectMethod))
+        /**
+         * The identity a record is sent under. The writing app's package joins it only for records
+         * that start at or after [cutoverMs], the moment the app began sending it: history already
+         * filed under the device-only identity stays put rather than splitting into a second
+         * source on the next sync. A null cutover means nothing was ever sent the old way.
+         */
+        fun of(
+            manufacturer: String?,
+            model: String?,
+            healthConnectMethod: Int,
+            originPackage: String?,
+            recordStartMs: Long,
+            cutoverMs: Long?,
+        ): SourceIdentity {
+            val origin = originPackage?.trim()?.takeIf {
+                it.isNotEmpty() && (cutoverMs == null || recordStartMs >= cutoverMs)
+            }
+            return SourceIdentity(deviceName(manufacturer, model), recordingMethod(healthConnectMethod), origin)
+        }
     }
 }

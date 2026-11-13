@@ -77,6 +77,17 @@ class SyncCursorsTest {
     }
 
     @Test
+    fun `the answer carries each type's identity cutover`() {
+        val body = """{"items":[],"historyStartMs":null,"identityCutovers":{"weight":1786356000001,"steps":1786300000000},"googleConnected":false}"""
+        assertEquals(mapOf("weight" to 1786356000001L, "steps" to 1786300000000L), SyncCursors.answerOf(body, 0L).cutovers)
+    }
+
+    @Test
+    fun `an instance that predates cutovers answers none rather than failing`() {
+        assertEquals(emptyMap<String, Long>(), SyncCursors.answerOf("""{"items":[]}""", 0L).cutovers)
+    }
+
+    @Test
     fun `a cursors answer with empty items is a first sync`() {
         assertEquals(SyncCursors.Answer(emptyMap()), SyncCursors.answerOf("""{"items":[],"historyStartMs":null}""", 0L))
     }
