@@ -355,7 +355,9 @@ object SyncEngine {
      * reading, so the changed records alone cannot rebuild it: a deleted latest reading leaves
      * an earlier one standing that the feed never mentions. So the feed only supplies the
      * deletions, which go first and take the day's row with them, and the days are then rebuilt
-     * from a read of the last thirty days, the span a token can cover.
+     * from a read of [window], which starts where a bootstrap would (SyncCursors.bootstrapStartFor):
+     * thirty days back, the span a token can cover, or from the instance's older cursor, never
+     * before what the permission answers.
      */
     private suspend fun drainResting(
         session: Session,
