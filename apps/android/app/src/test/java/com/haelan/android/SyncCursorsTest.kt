@@ -194,6 +194,28 @@ class SyncCursorsTest {
     }
 
     @Test
+    fun `a cursor two days old bootstraps the last thirty days`() {
+        val cursor = end.minus(2, ChronoUnit.DAYS).toEpochMilli()
+        assertEquals(end.minus(30, ChronoUnit.DAYS), SyncCursors.bootstrapStartFor(cursor, Instant.EPOCH, end))
+    }
+
+    @Test
+    fun `a cursor sixty days old bootstraps from the cursor, less the overlap`() {
+        val cursor = end.minus(60, ChronoUnit.DAYS).toEpochMilli()
+        assertEquals(
+            Instant.ofEpochMilli(cursor - SyncCursors.OVERLAP_MS),
+            SyncCursors.bootstrapStartFor(cursor, Instant.EPOCH, end),
+        )
+    }
+
+    @Test
+    fun `a cursor older than the permission still starts at what the permission answers`() {
+        val noHistory = end.minus(30, ChronoUnit.DAYS)
+        val cursor = end.minus(60, ChronoUnit.DAYS).toEpochMilli()
+        assertEquals(noHistory, SyncCursors.bootstrapStartFor(cursor, noHistory, end))
+    }
+
+    @Test
     fun `the thirty days never reach past what the permission answers`() {
         val noHistory = end.minus(30, ChronoUnit.DAYS)
         assertEquals(noHistory, SyncCursors.bootstrapStartFor(5L, noHistory, end))

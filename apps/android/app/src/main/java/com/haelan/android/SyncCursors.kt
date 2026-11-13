@@ -154,11 +154,14 @@ object SyncCursors {
 
     /**
      * Where a type starts when it has no change token to drain. A first sync keeps the fallback;
-     * a type the instance already holds reads only the last [SyncWindow.WITHOUT_HISTORY_DAYS]
-     * days, never before what the permission answers, rather than the whole history again.
+     * a type the instance already holds reads the last [SyncWindow.WITHOUT_HISTORY_DAYS] days
+     * rather than the whole history again, or from its cursor less [OVERLAP_MS] when that is
+     * earlier, so a type last synced more than thirty days ago does not skip the gap. Never
+     * before what the permission answers.
      */
     fun bootstrapStartFor(cursorEndMs: Long?, fallbackStart: Instant, end: Instant): Instant {
         if (cursorEndMs == null) return fallbackStart
-        return maxOf(fallbackStart, end.minus(SyncWindow.WITHOUT_HISTORY_DAYS, ChronoUnit.DAYS))
+        val fromCursor = Instant.ofEpochMilli(cursorEndMs - OVERLAP_MS)
+        return maxOf(fallbackStart, minOf(end.minus(SyncWindow.WITHOUT_HISTORY_DAYS, ChronoUnit.DAYS), fromCursor))
     }
 }

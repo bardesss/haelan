@@ -298,7 +298,9 @@ object SyncEngine {
      * One type, from its Health Connect change feed when the token can be trusted and from a
      * window read otherwise (ChangeFeed.modeFor). The token is saved only once everything the
      * type read has landed: a failed type saves nothing, so the next run drains the same changes
-     * again, which ingest's upserts and the instance's tombstones make safe.
+     * again, which is safe because ingest upserts and a type posts its deletions after its upserts.
+     * The token is saved beside the cursor this run started from, so a later run can tell the
+     * instance went back behind it (ChangeFeed.modeFor).
      */
     private suspend fun syncType(
         client: HealthConnectClient,
@@ -324,7 +326,7 @@ object SyncEngine {
                 syncOne(session, packageName, prefs, key, changes, cutoverMs, post)
             }
             if (!changes.expired) {
-                if (outcome is InstanceClient.Outcome.Ok) changes.nextToken?.let { ChangeFeed.save(prefs, owner, dataTypeId, it) }
+                if (outcome is InstanceClient.Outcome.Ok) changes.nextToken?.let { ChangeFeed.save(prefs, owner, dataTypeId, it, cursorEndMs) }
                 return outcome
             }
             // Pages read before the expiry may already have been sent. That is harmless: nothing
@@ -344,7 +346,7 @@ object SyncEngine {
         // after it would otherwise fall before the token and outside the window both.
         val readEnd = maxOf(end, Instant.now())
         val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, post)
-        if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh)
+        if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh, cursorEndMs)
         return outcome
     }
 
