@@ -327,7 +327,8 @@ object SyncEngine {
                 if (outcome is InstanceClient.Outcome.Ok) changes.nextToken?.let { ChangeFeed.save(prefs, owner, dataTypeId, it) }
                 return outcome
             }
-            // An expired feed answered nothing (see ChangesSource), so nothing was sent from it.
+            // Pages read before the expiry may already have been sent. That is harmless: nothing
+            // is saved, the type reads the permission's whole window next, and ingest upserts.
             if (outcome is InstanceClient.Outcome.Failed) return outcome
             ChangeFeed.clear(prefs, owner, dataTypeId)
             mode = ChangeFeed.fallbackAfterExpiry(fallbackStart)
@@ -338,7 +339,11 @@ object SyncEngine {
         val fresh = withContext(Dispatchers.IO) {
             client.getChangesToken(ChangesTokenRequest(setOf(recordTypeOf(key))))
         }
-        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, end), cutoverMs, post)
+        // Read up to a moment after the token, not to the run's end: the run's end was fixed
+        // before the cursors call and every earlier type, and a record written since with a time
+        // after it would otherwise fall before the token and outside the window both.
+        val readEnd = maxOf(end, Instant.now())
+        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, post)
         if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh)
         return outcome
     }
@@ -565,24 +570,39 @@ object SyncEngine {
     }
 
     /**
-     * The first chunk [points] holds, cut to its own bytes, to [MAX_CHUNK_SPAN_MS] and to
-     * [MAX_CHUNK_POINTS], or null while they still fit in one and the buffer should keep
-     * growing.
+     * Adds [incoming] to one identity's [buffer], puts the buffer in time order, and takes every
+     * chunk it now holds, each cut to its own bytes, to [MAX_CHUNK_SPAN_MS] and to
+     * [MAX_CHUNK_POINTS]. None while the buffer still fits in one and should keep growing.
      *
      * Every chunk this hands back is closed by reaching a ceiling and never by running out of
      * points, which is the whole point: what stays in the buffer is what a refusal can leave
      * unposted, and a chunk closed by its own limit bounds that to one chunk's worth of time.
-     * What is left after a cut is a fragment, and it grows into the next full chunk as the pages
+     * What is left after a cut is a fragment, and it grows into the next full chunk as the batches
      * arrive rather than being posted as it is.
+     *
+     * The order comes first because [chunkEnds] compares neighbours, and a drained change feed
+     * lists records in the order they changed; one record's samples can also reach past the next
+     * record's start. Generic over the point so a JVM test can run it without org.json.
      */
-    private fun readyChunk(points: MutableList<JSONObject>, alignToMinute: Boolean): List<JSONObject>? {
-        val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
-        val times = points.map { instantMsOf(it) }
-        val ends = chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS, alignToMinute)
-        val end = flushEnd(ends) ?: return null
-        val ready = points.subList(0, end).toList()
-        points.subList(0, end).clear()
-        return ready
+    internal fun <P> readyChunks(
+        buffer: MutableList<P>,
+        incoming: List<P>,
+        alignToMinute: Boolean,
+        sizeOf: (P) -> Int,
+        timeOf: (P) -> Long?,
+    ): List<List<P>> {
+        buffer += incoming
+        val ordered = inTimeOrder(buffer, timeOf)
+        buffer.clear()
+        buffer += ordered
+        val out = mutableListOf<List<P>>()
+        while (true) {
+            val ends = chunkEnds(buffer.map(sizeOf), MAX_CHUNK_BYTES, buffer.map(timeOf), MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS, alignToMinute)
+            val end = flushEnd(ends) ?: break
+            out += buffer.subList(0, end).toList()
+            buffer.subList(0, end).clear()
+        }
+        return out
     }
 
     /**
@@ -602,15 +622,22 @@ object SyncEngine {
      */
     internal fun flushEnd(ends: List<Int>): Int? = if (ends.size < 2) null else ends[0]
 
-    /** Whatever the buffer still holds once the read is over: the tail, cut to the same ceilings. */
-    private fun chunksBySize(points: List<JSONObject>, alignToMinute: Boolean): List<List<JSONObject>> {
-        val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
-        val times = points.map { instantMsOf(it) }
+    /** Whatever a buffer still holds once the read is over: the tail, in time order and cut to the same ceilings. */
+    internal fun <P> chunksInTimeOrder(
+        points: List<P>,
+        alignToMinute: Boolean,
+        sizeOf: (P) -> Int,
+        timeOf: (P) -> Long?,
+    ): List<List<P>> {
+        val ordered = inTimeOrder(points, timeOf)
         var from = 0
-        return chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS, alignToMinute).map { end ->
-            points.subList(from, end).toList().also { from = end }
+        return chunkEnds(ordered.map(sizeOf), MAX_CHUNK_BYTES, ordered.map(timeOf), MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS, alignToMinute).map { end ->
+            ordered.subList(from, end).toList().also { from = end }
         }
     }
+
+    /** What one point costs a request: its JSON plus the separator before the next one. */
+    private fun jsonBytes(point: JSONObject): Int = point.toString().toByteArray(Charsets.UTF_8).size + 1
 
     /**
      * The instant a mapped point carries, which is the clock [chunkEnds] measures a chunk's reach
@@ -673,8 +700,9 @@ object SyncEngine {
      * a watch's readings, the phone's and somebody's typed-in ones, and each of those is a source
      * the instance keeps apart, so the split happens here and not inside a request.
      *
-     * Streams the source's batches instead of materializing the window: a real watch writes
-     * heart-rate every few seconds, and 30 days of that is hundreds of thousands of samples.
+     * Streams the source's batches (a provider page, or a change feed page) instead of
+     * materializing the window: a real watch writes heart-rate every few seconds, and 30 days of
+     * that is hundreds of thousands of samples.
      * Mapping them all to JSONObjects at once exhausted the 256 MB heap on a real phone
      * (OOM on the main thread, after an ANR). One batch is mapped, buffered per identity
      * and posted as soon as its buffer reaches a ceiling, then forgotten. Chunk
@@ -716,16 +744,8 @@ object SyncEngine {
                 if (page.isNotEmpty()) sentAny = true
                 for ((identity, bodies) in page.groupBy({ it.source }, { it.body })) {
                     val buffer = buffers.getOrPut(identity) { mutableListOf() }
-                    buffer += bodies
-                    // A drained feed arrives in change order, and one record's samples can
-                    // reach past the next record's start: the cut compares neighbours.
-                    val ordered = inTimeOrder(buffer)
-                    buffer.clear()
-                    buffer += ordered
-                    while (true) {
-                        val chunk = readyChunk(buffer, alignToMinute) ?: break
-                        out += identity to chunk
-                    }
+                    readyChunks(buffer, bodies, alignToMinute, { jsonBytes(it) }, { instantMsOf(it) })
+                        .forEach { out += identity to it }
                 }
                 out
             }
@@ -738,7 +758,7 @@ object SyncEngine {
         }
         val tail: List<Pair<SourceIdentity, List<JSONObject>>> = withContext(Dispatchers.Default) {
             buffers.flatMap { (identity, buffer) ->
-                if (buffer.isEmpty()) emptyList() else chunksBySize(buffer, alignToMinute).map { identity to it }
+                if (buffer.isEmpty()) emptyList() else chunksInTimeOrder(buffer, alignToMinute, { jsonBytes(it) }, { instantMsOf(it) }).map { identity to it }
             }
         }
         for ((identity, chunk) in tail) {
@@ -756,8 +776,8 @@ object SyncEngine {
     internal fun ascendingOrder(timesMs: List<Long?>): List<Int> =
         timesMs.indices.sortedWith(compareBy(nullsLast()) { timesMs[it] })
 
-    private fun inTimeOrder(points: List<JSONObject>): List<JSONObject> =
-        ascendingOrder(points.map { instantMsOf(it) }).map { points[it] }
+    private fun <P> inTimeOrder(points: List<P>, timeOf: (P) -> Long?): List<P> =
+        ascendingOrder(points.map(timeOf)).map { points[it] }
 
     /** How many record ids one deletions request carries: ten below the route's MAX_DELETIONS. */
     internal const val MAX_DELETIONS_PER_REQUEST = 990
@@ -903,7 +923,7 @@ object SyncEngine {
             // The endpoint refuses more than 10000 points: chunks are capped by bytes, by span
             // and by count, and every piece of one hour is posted here in order, none skipped -
             // a cut changes how many requests the hour travels in, never which readings travel.
-            for (chunk in chunksBySize(inTimeOrder(group.map { it.body }), dataTypeId in MINUTE_ALIGNED_TYPES)) {
+            for (chunk in chunksInTimeOrder(group.map { it.body }, dataTypeId in MINUTE_ALIGNED_TYPES, { jsonBytes(it) }, { instantMsOf(it) })) {
                 val outcome = postChunk(session, packageName, dataTypeId, identity, chunk, post)
                 // The first refusal stops this type: the chunks after it would carry the same
                 // answer, and a caller that kept going would only be slower at saying so.
@@ -971,10 +991,11 @@ object SyncEngine {
     }
 
     /**
-     * The changes since [token], as one batch: the feed's pages are drained first and the records
-     * sorted by start, because a feed lists records in the order they changed. [nextToken] is the
-     * token to save once the type landed. A token Health Connect no longer honours sets [expired]
-     * and answers no batch at all, so nothing from a partial feed is sent.
+     * The changes since [token], one batch per getChanges page: that page's records of the type,
+     * sorted by start, and its deletions. A feed lists records in the order they changed, and
+     * uploadType orders each identity's buffer across batches as well. [nextToken] is set after
+     * the last page and is the token to save once the type landed. A token Health Connect no
+     * longer honours sets [expired] and ends the feed.
      */
     private class ChangesSource(private val client: HealthConnectClient, private val token: String) : BatchSource {
         var nextToken: String? = null
@@ -983,37 +1004,35 @@ object SyncEngine {
             private set
 
         override fun <T : Record> batches(type: KClass<T>): suspend () -> Batch<T>? {
-            var drained = false
+            var current = token
+            var done = false
             return {
-                if (drained) {
+                if (done) {
                     null
                 } else {
-                    drained = true
-                    drain(type)
-                }
-            }
-        }
-
-        private suspend fun <T : Record> drain(type: KClass<T>): Batch<T>? {
-            val records = mutableListOf<T>()
-            val deletions = mutableListOf<String>()
-            var current = token
-            do {
-                val response = withContext(Dispatchers.IO) { client.getChanges(current) }
-                if (response.changesTokenExpired) {
-                    expired = true
-                    return null
-                }
-                for (change in response.changes) {
-                    when (change) {
-                        is UpsertionChange -> if (type.java.isInstance(change.record)) records += type.java.cast(change.record)!!
-                        is DeletionChange -> deletions += change.recordId
+                    val response = withContext(Dispatchers.IO) { client.getChanges(current) }
+                    if (response.changesTokenExpired) {
+                        expired = true
+                        done = true
+                        null
+                    } else {
+                        val records = mutableListOf<T>()
+                        val deletions = mutableListOf<String>()
+                        for (change in response.changes) {
+                            when (change) {
+                                is UpsertionChange -> if (type.java.isInstance(change.record)) records += type.java.cast(change.record)!!
+                                is DeletionChange -> deletions += change.recordId
+                            }
+                        }
+                        current = response.nextChangesToken
+                        if (!response.hasMore) {
+                            done = true
+                            nextToken = current
+                        }
+                        Batch(records.sortedBy { startOf(it) }, deletions)
                     }
                 }
-                current = response.nextChangesToken
-            } while (response.hasMore)
-            nextToken = current
-            return Batch(records.sortedBy { startOf(it) }, deletions)
+            }
         }
     }
 

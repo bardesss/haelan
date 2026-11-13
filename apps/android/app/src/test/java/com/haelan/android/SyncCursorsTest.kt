@@ -97,11 +97,8 @@ class SyncCursorsTest {
      * -- .max() -- would tell the phone the type is current up to the phone's own progress, long
      * after the watch's. Keyed on the minimum, the type's cursor stays at the watch's progress.
      *
-     * This lives here rather than in UploadCursorHoleTest because that file's retryStartFor
-     * models the minimum in the test's own Kotlin, never calling cursorEndsFor at all -- a
-     * fixture built on top of it cannot tell .min() from .max() no matter how it is tuned, which
-     * is exactly what going red only for an even reading count turned out to mean. This test
-     * calls the production parse and selection directly, the way SyncRun and SyncWorker do.
+     * This test calls the production parse and selection directly, the way SyncRun and
+     * SyncWorker do.
      */
     @Test
     fun `a laggard holds the type's cursor at its own progress, not the leader's`() {
