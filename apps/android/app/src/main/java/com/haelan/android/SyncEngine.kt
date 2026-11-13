@@ -40,6 +40,7 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.reflect.KClass
 
 /**
@@ -345,7 +346,9 @@ object SyncEngine {
         // before the cursors call and every earlier type, and a record written since with a time
         // after it would otherwise fall before the token and outside the window both.
         val readEnd = maxOf(end, Instant.now())
-        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, post)
+        // Only a window read can start inside a minute, so only it names a first minute to drop;
+        // a drain reads whole changed records and passes none.
+        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, post, partialMinuteStart(start, fallbackStart))
         if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh, cursorEndMs)
         return outcome
     }
@@ -409,6 +412,7 @@ object SyncEngine {
         source: BatchSource,
         cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
+        firstMinute: Instant? = null,
     ): InstanceClient.Outcome<Boolean> {
         // The key is a toggle, the id is what the instance files: SyncTypes.forKey is what
         // ties them, and its test keeps the knot tied.
@@ -489,7 +493,7 @@ object SyncEngine {
             "body_temp" -> return uploadType(session, packageName, dataTypeId, source.batches(BodyTemperatureRecord::class), cutoverMs, post) { toBodyTempPoints(it) }
             "glucose" -> return uploadType(session, packageName, dataTypeId, source.batches(BloodGlucoseRecord::class), cutoverMs, post) { toBloodGlucosePoints(it) }
             "hydration" -> return uploadType(session, packageName, dataTypeId, source.batches(HydrationRecord::class), cutoverMs, post) { toHydrationPoints(it) }
-            "heart_rate" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateRecord::class), cutoverMs, post) { toHeartRatePoints(it) }
+            "heart_rate" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateRecord::class), cutoverMs, post) { dropMinuteOf(toHeartRatePoints(it), firstMinute) }
             "hrv" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateVariabilityRmssdRecord::class), cutoverMs, post) { toHrvPoints(it) }
             "spo2" -> return uploadType(session, packageName, dataTypeId, source.batches(OxygenSaturationRecord::class), cutoverMs, post) { toSpo2Points(it) }
             "breathing" -> {
@@ -1143,6 +1147,29 @@ object SyncEngine {
                         .put("beatsPerMinute", sample.beatsPerMinute))
             }
         }
+
+    /**
+     * Where a heart-rate window read starts inside a minute it holds only part of, or null when
+     * its first minute is as whole as a read can make it: [start] on a minute boundary, or no
+     * later than [fallbackStart], before which the permission answers nothing.
+     */
+    internal fun partialMinuteStart(start: Instant, fallbackStart: Instant): Instant? =
+        if (!start.isAfter(fallbackStart) || start == start.truncatedTo(ChronoUnit.MINUTES)) null else start
+
+    /**
+     * Drops the heart-rate points in [windowStart]'s minute (phase 6 ledger F5): the instance
+     * overwrites a minute's aggregate with whatever one upload carried, so the samples of a
+     * minute the window cut in two would replace the whole minute an earlier read already sent.
+     * A null [windowStart] keeps every point.
+     */
+    internal fun dropMinuteOf(points: List<JSONObject>, windowStart: Instant?): List<JSONObject> {
+        if (windowStart == null) return points
+        val minute = windowStart.truncatedTo(ChronoUnit.MINUTES)
+        return points.filter {
+            val time = it.getJSONObject("heartRate").getJSONObject("sampleTime").getString("physicalTime")
+            Instant.parse(time).truncatedTo(ChronoUnit.MINUTES) != minute
+        }
+    }
 
     internal fun toWeightPoints(records: List<WeightRecord>): List<JSONObject> = records.map { record ->
         val grams = Math.round(record.weight.inKilograms * 1000.0)
