@@ -1,6 +1,7 @@
 package com.haelan.android
 
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 /**
  * What the instance already holds for each type, so a sync reads what is new.
@@ -168,5 +169,15 @@ object SyncCursors {
         val candidate = Instant.ofEpochMilli(cursor - OVERLAP_MS)
         if (candidate.isBefore(fallbackStart)) return fallbackStart
         return candidate
+    }
+
+    /**
+     * Where a type starts when it has no change token to drain. A first sync keeps the fallback;
+     * a type the instance already holds reads only the last [SyncWindow.WITHOUT_HISTORY_DAYS]
+     * days, never before what the permission answers, rather than the whole history again.
+     */
+    fun bootstrapStartFor(cursorEndMs: Long?, fallbackStart: Instant, end: Instant): Instant {
+        if (cursorEndMs == null) return fallbackStart
+        return maxOf(fallbackStart, end.minus(SyncWindow.WITHOUT_HISTORY_DAYS, ChronoUnit.DAYS))
     }
 }

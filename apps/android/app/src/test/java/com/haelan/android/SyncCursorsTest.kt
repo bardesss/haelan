@@ -243,4 +243,10 @@ class SyncCursorsTest {
             SyncCursors.cursorEndsFor(body, nowMs)["steps"],
         )
     }
+
+    @Test
+    fun `the thirty days never reach past what the permission answers`() {
+        val noHistory = end.minus(30, ChronoUnit.DAYS)
+        assertEquals(noHistory, SyncCursors.bootstrapStartFor(5L, noHistory, end))
+    }
 }
