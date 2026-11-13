@@ -40,7 +40,14 @@ function store(ctx: TestDatabase, rows: SampleRow[], withLinks = true): void {
     }).onConflictDoNothing().run()
   }
   const keys = new SampleKeys(db)
-  for (const r of rows) db.insert(samples).values(keys.sampleRefs({ ...r, rawPayloadId: null })).run()
+  // An upsert on the natural key, as ingest writes: a second record on the same key overwrites.
+  for (const r of rows) {
+    const stored = keys.sampleRefs({ ...r, rawPayloadId: null })
+    db.insert(samples).values(stored).onConflictDoUpdate({
+      target: [samples.personRef, samples.sourceRef, samples.metricRef, samples.utcMs, samples.aggRef],
+      set: { value: stored.value, n: stored.n },
+    }).run()
+  }
   if (withLinks) new CompanionRecords(db).link('p1', rows, keys)
 }
 
@@ -150,6 +157,98 @@ describe('CompanionRecords', () => {
       { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-unknown'], nowMs: 5 }, new SampleKeys(ctx.db))
     expect(out).toEqual({ rowsDeleted: 0, localDates: [] })
     expect(records.tombstoned('p1', ['hc-unknown', 'other'])).toEqual(new Set(['hc-unknown']))
+    ctx.cleanup()
+  })
+
+  it('a delete keeps the row a surviving record wrote on the same key', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    store(ctx, [row({ recordId: 'hc-weight-a' })])
+    store(ctx, [row({ recordId: 'hc-weight-b', value: 81 })])
+    const out = new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-weight-a'], nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(out).toEqual({ rowsDeleted: 0, localDates: [] })
+    expect(readSamples(ctx.db).map((r) => r.value)).toEqual([81])
+    expect(ctx.db.select().from(companionRecordSamples).all().map((l) => l.recordId)).toEqual(['hc-weight-b'])
+    ctx.cleanup()
+  })
+
+  it('a heart-rate delete keeps only the minutes a surviving record also covers', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    store(ctx, downsampleToMinute([
+      row({ metric: 'heart_rate', utcMs: T0, value: 60, recordId: 'hc-hr-a' }),
+      row({ metric: 'heart_rate', utcMs: T0 + 60_000, value: 70, recordId: 'hc-hr-a' }),
+    ]))
+    store(ctx, downsampleToMinute([
+      row({ metric: 'heart_rate', utcMs: T0 + 60_000, value: 70, recordId: 'hc-hr-b' }),
+    ]))
+    const out = new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: HEART_RATE, recordIds: ['hc-hr-a'], nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(out.rowsDeleted).toBe(4)
+    expect(new Set(readSamples(ctx.db).map((r) => r.utcMs))).toEqual(new Set([T0 + 60_000]))
+    ctx.cleanup()
+  })
+
+  it('a delete of two records on one key removes the row, since neither survives', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    store(ctx, [row({ recordId: 'hc-weight-a' })])
+    store(ctx, [row({ recordId: 'hc-weight-b', value: 81 })])
+    const out = new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-weight-a', 'hc-weight-b'], nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(out).toEqual({ rowsDeleted: 1, localDates: ['2026-08-18'] })
+    expect(readSamples(ctx.db)).toEqual([])
+    ctx.cleanup()
+  })
+
+  it('re-applying a tombstone keeps the row a surviving record wrote on the same key', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const records = new CompanionRecords(ctx.db)
+    records.deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-weight-a'], nowMs: 5 }, new SampleKeys(ctx.db))
+    store(ctx, [row({ recordId: 'hc-weight-a' })])
+    store(ctx, [row({ recordId: 'hc-weight-b', value: 81 })])
+    const out = records.reapplyDeletions('p1', new SampleKeys(ctx.db))
+    expect(out).toEqual({ rowsDeleted: 0, localDates: [] })
+    expect(readSamples(ctx.db).map((r) => r.value)).toEqual([81])
+    ctx.cleanup()
+  })
+
+  it('lifting a tombstone forgets it, beyond the first chunk of 500 too', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const records = new CompanionRecords(ctx.db)
+    const ids = Array.from({ length: 501 }, (_, i) => `hc-weight-${i}`)
+    records.deleteRecords({ personId: 'p1', dataType: WEIGHT, recordIds: ids, nowMs: 5 }, new SampleKeys(ctx.db))
+    records.lift('p1', ids)
+    expect(records.tombstoned('p1', ids).size).toBe(0)
+    ctx.cleanup()
+  })
+
+  it('a lifted tombstone is not re-applied', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const records = new CompanionRecords(ctx.db)
+    records.deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-weight-1'], nowMs: 5 }, new SampleKeys(ctx.db))
+    records.lift('p1', ['hc-weight-1'])
+    store(ctx, [row({ recordId: 'hc-weight-1' })])
+    expect(records.reapplyDeletions('p1', new SampleKeys(ctx.db))).toEqual({ rowsDeleted: 0, localDates: [] })
+    expect(readSamples(ctx.db)).toHaveLength(1)
+    ctx.cleanup()
+  })
+
+  it('deleting a night leaves a workout that shares its external id', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    seedSession(ctx.db, { id: 's1', personId: 'p1', kind: 'sleep', externalId: 'hc-shared' })
+    seedSession(ctx.db, { id: 's2', personId: 'p1', kind: 'exercise', externalId: 'hc-shared' })
+    const out = new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: SLEEP, recordIds: ['hc-shared'], nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(out.rowsDeleted).toBe(1)
+    expect(ctx.db.select({ id: sessions.id }).from(sessions).all()).toEqual([{ id: 's2' }])
     ctx.cleanup()
   })
 

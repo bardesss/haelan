@@ -5,6 +5,7 @@ import { companionDeletions, companionRecordSamples, samples, sessions } from '.
 import type { SampleRow } from '../api/mapSamples.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import type { DataType } from '../api/catalogue.ts'
+import { sessionKindOf } from '../api/mapSessions.ts'
 import { localDateOf } from '../derive/localDay.ts'
 
 export interface DeletedRows { rowsDeleted: number, localDates: string[] }
@@ -21,9 +22,11 @@ const ID_CHUNK = 500
  * Links are tier 2 and are rebuilt from the archive.
  *
  * Tombstones are tier 1. The archive still holds the payload a deleted record arrived in, so a
- * rebuild would bring it back; `reapplyDeletions` is what runs after replay to take it out again,
- * and `tombstoned` is what ingest asks so a late re-send cannot resurrect it. Deletions are not
- * archived in raw_payloads (plan Decisions): the cursors route reads every archive row as a window.
+ * rebuild would bring it back; `reapplyDeletions` is what runs after replay to take it out again.
+ * A tombstone means "gone until it is written again": Health Connect gives a record written with
+ * a clientRecordId the same id every time, so an app restoring a deleted entry re-sends that id,
+ * and ingest `lift`s the tombstone instead of refusing the record. Deletions are not archived in
+ * raw_payloads (plan Decisions): the cursors route reads every archive row as a window.
  */
 export class CompanionRecords {
   readonly #db: DbOrTx
@@ -91,6 +94,17 @@ export class CompanionRecords {
     return found
   }
 
+  /** Forgets the tombstones of records that were written again. */
+  lift(personId: string, recordIds: readonly string[]): void {
+    const unique = [...new Set(recordIds)]
+    for (let i = 0; i < unique.length; i += ID_CHUNK) {
+      this.#db.delete(companionDeletions).where(and(
+        eq(companionDeletions.personId, personId),
+        inArray(companionDeletions.recordId, unique.slice(i, i + ID_CHUNK)),
+      )).run()
+    }
+  }
+
   deleteRecords(
     input: { personId: string, dataType: DataType, recordIds: readonly string[], nowMs: number },
     keys: SampleKeys,
@@ -130,11 +144,21 @@ export class CompanionRecords {
     let rowsDeleted = 0
     if (dataType.target === 'samples') {
       const personRef = keys.personRef(personId)
+      // A row another record of the same source and metric also covers is kept, as long as that
+      // record is not itself tombstoned: an app that re-writes an entry as delete A, insert B on
+      // the same key would otherwise lose B to A's delete, live and again on every rebuild. The
+      // record being deleted is tombstoned before this runs, so its own links never count.
       const inRange = and(
         eq(samples.personRef, personRef),
         eq(samples.sourceRef, sql.placeholder('sourceRef')),
         eq(samples.metricRef, sql.placeholder('metricRef')),
         between(samples.utcMs, sql.placeholder('first'), sql.placeholder('last')),
+        sql`not exists (select 1 from companion_record_samples l
+          where l.person_ref = samples.person_ref and l.source_ref = samples.source_ref
+            and l.metric_ref = samples.metric_ref
+            and samples.utc_ms between l.first_utc_ms and l.last_utc_ms
+            and not exists (select 1 from companion_deletions d
+              where d.person_id = ${personId} and d.record_id = l.record_id))`,
       )
       const readRows = this.#db.select({ utcMs: samples.utcMs, offset: samples.tzOffsetMinutes })
         .from(samples).where(inRange).prepare()
@@ -157,8 +181,11 @@ export class CompanionRecords {
       }
     } else if (dataType.target === 'sessions') {
       for (let i = 0; i < recordIds.length; i += ID_CHUNK) {
+        // Scoped to the type's own kind: an external id names a record of one type, and a
+        // night and a workout that happened to share one must not take each other with them.
         const where = and(
           eq(sessions.personId, personId),
+          eq(sessions.kind, sessionKindOf(dataType)),
           inArray(sessions.externalId, recordIds.slice(i, i + ID_CHUNK)),
         )
         for (const row of this.#db.select({ localDate: sessions.localDate }).from(sessions).where(where).all()) {
