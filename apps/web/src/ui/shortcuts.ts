@@ -8,7 +8,9 @@ import { useEffect, useRef } from 'react'
  * and "t" there is a letter, not "go to today". A modifier means the browser or the system owns
  * the combination (Ctrl+1 switches tabs). An open dialog - the phone's period sheet, the rail
  * drawer, either of the two shortcut dialogs - has its own keys, and a period stepping behind it
- * would change the page under a sheet the reader is still looking at.
+ * would change the page under a sheet the reader is still looking at. The popovers (annotate
+ * panel, log popover, status popover, calendar, point panel) count too: each is a role="dialog"
+ * element rendered only while it is open, so its presence in the document means it is open.
  *
  * Shift is not in that list: "?" is Shift+/ on most layouts, and refusing Shift would make the
  * help key unreachable. A shortcut that must not fire with Shift checks it itself.
@@ -22,7 +24,7 @@ export function isForeignKey(event: KeyboardEvent): boolean {
     const tag = target.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
   }
-  return document.querySelector('dialog[open]') !== null
+  return document.querySelector('dialog[open], [role="dialog"]') !== null
 }
 
 /**

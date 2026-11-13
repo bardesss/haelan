@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { apiGet, apiSend } from '../api/client.js'
 import type { ApiError } from '../api/client.js'
+import { queryKeys } from '../api/queryKeys.js'
+import { useSession } from '../auth/session.js'
 
 export interface McpTokenRow {
   id: string
@@ -28,16 +30,17 @@ export interface MintedToken { token: McpTokenRow, secret: string }
 
 /**
  * Shared by the query and both mutations' invalidations, so all three agree on one cache entry.
- * No personId in it, like membersKey: the route answers for whoever is asking, so keying it to a
- * person would be one entry per caller under a key naming the wrong thing.
+ * The key carries the person so a sign-in as someone else never reads the previous person's list.
  */
-export function mcpTokensKey(): readonly unknown[] { return ['mcp-tokens'] }
-export function mcpCallsKey(): readonly unknown[] { return ['mcp-calls'] }
+export function mcpTokensKey(personId: string): readonly unknown[] { return queryKeys.resource(personId, 'mcp-tokens') }
+export function mcpCallsKey(personId: string): readonly unknown[] { return queryKeys.resource(personId, 'mcp-calls') }
 
 export function useMcpTokens(): UseQueryResult<{ tokens: McpTokenRow[] }> {
+  const personId = useSession().data?.personId
   return useQuery({
-    queryKey: mcpTokensKey(),
+    queryKey: mcpTokensKey(personId ?? ''),
     queryFn: () => apiGet<{ tokens: McpTokenRow[] }>('/api/profile/mcp-tokens'),
+    enabled: personId !== undefined,
   })
 }
 
@@ -47,9 +50,11 @@ export function useMcpTokens(): UseQueryResult<{ tokens: McpTokenRow[] }> {
  * point of revocation being a stamp.
  */
 export function useMcpCalls(): UseQueryResult<{ calls: McpCallRow[] }> {
+  const personId = useSession().data?.personId
   return useQuery({
-    queryKey: mcpCallsKey(),
+    queryKey: mcpCallsKey(personId ?? ''),
     queryFn: () => apiGet<{ calls: McpCallRow[] }>('/api/profile/mcp-calls'),
+    enabled: personId !== undefined,
   })
 }
 
@@ -60,16 +65,22 @@ export function useMcpCalls(): UseQueryResult<{ calls: McpCallRow[] }> {
  */
 export function useCreateMcpToken(): UseMutationResult<MintedToken, ApiError, { label: string, days: number }> {
   const queryClient = useQueryClient()
+  const personId = useSession().data?.personId
   return useMutation({
     mutationFn: (input) => apiSend<MintedToken>('POST', '/api/profile/mcp-tokens', input),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: mcpTokensKey() }) },
+    onSuccess: () => {
+      if (personId !== undefined) void queryClient.invalidateQueries({ queryKey: mcpTokensKey(personId) })
+    },
   })
 }
 
 export function useRevokeMcpToken(): UseMutationResult<void, ApiError, { id: string }> {
   const queryClient = useQueryClient()
+  const personId = useSession().data?.personId
   return useMutation({
     mutationFn: (input) => apiSend<void>('DELETE', `/api/profile/mcp-tokens/${input.id}`),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: mcpTokensKey() }) },
+    onSuccess: () => {
+      if (personId !== undefined) void queryClient.invalidateQueries({ queryKey: mcpTokensKey(personId) })
+    },
   })
 }

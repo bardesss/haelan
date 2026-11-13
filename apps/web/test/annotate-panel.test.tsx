@@ -15,13 +15,20 @@ import type { AnnotateTarget } from '../src/components/AnnotatePanel.js'
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 
+const realFetch = globalThis.fetch
+
 beforeEach(() => {
+  // The panel reads the day's note on mount; tests that stub nothing themselves must not reach the network.
+  globalThis.fetch = (async () => new Response(JSON.stringify({ items: [] }), {
+    status: 200, headers: { 'content-type': 'application/json' },
+  })) as typeof fetch
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
 })
 
 afterEach(() => {
+  globalThis.fetch = realFetch
   act(() => { root?.unmount() })
   container?.remove()
   container = null
@@ -128,6 +135,7 @@ describe('the target key the panel writes with', () => {
     let posted: Record<string, unknown> | null = null
     const original = globalThis.fetch
     globalThis.fetch = (async (_input, init) => {
+      if (init?.method === 'GET') return respond(200, { items: [] })
       posted = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null
       return respond(200, { id: 'o1', affected: null, applied: true })
     }) as typeof fetch
@@ -173,6 +181,7 @@ describe('the actions the panel offers', () => {
     let posted: Record<string, unknown> | null = null
     const original = globalThis.fetch
     globalThis.fetch = (async (_input, init) => {
+      if (init?.method === 'GET') return respond(200, { items: [] })
       posted = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null
       return respond(200, { id: 'o1', affected: null, applied: true })
     }) as typeof fetch
@@ -218,11 +227,14 @@ describe('the panel\'s actions depend on what the click named', () => {
     let posted: { url: string, body: Record<string, unknown> | null } | null = null
     const original = globalThis.fetch
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'GET') return respond(200, { items: [] })
       posted = { url: String(input), body: init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null }
       return respond(200, { id: 'n1' })
     }) as typeof fetch
 
     mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    // The submit waits for the day's stored note to be known.
+    await settle()
     expect(actionLabels()).toEqual(['Add a note', 'Add an event'])
     expect(container!.querySelector('h2')?.textContent).toBe('This day, 2026-08-21')
     type(fieldFor('Note'), 'slept badly')
@@ -238,6 +250,7 @@ describe('the panel\'s actions depend on what the click named', () => {
     let posted: Record<string, unknown> | null = null
     const original = globalThis.fetch
     globalThis.fetch = (async (_input, init) => {
+      if (init?.method === 'GET') return respond(200, { items: [] })
       posted = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null
       return respond(200, { id: 'o1', affected: null, applied: true })
     }) as typeof fetch
@@ -333,6 +346,7 @@ describe('the event kind field', () => {
     let posted: Record<string, unknown> | null = null
     const original = globalThis.fetch
     globalThis.fetch = (async (_input, init) => {
+      if (init?.method === 'GET') return respond(200, { items: [] })
       posted = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null
       return respond(200, { id: 'e1' })
     }) as typeof fetch
@@ -430,5 +444,77 @@ describe('excluding a workout several sources recorded', () => {
       ['session', sessionTarget('phone-run'), 'exclude', 'treadmill glitch'],
     ])
     expect(closed).toBe(true)
+  })
+})
+
+describe('a day that already has a note', () => {
+  const NOTE = { id: 'n1', localDate: '2026-08-21', body: 'slept badly', updatedAtMs: 1 }
+
+  it('prefills the note and offers to edit it rather than add one', async () => {
+    const writes: { url: string, body: unknown }[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'GET' && url.includes('/notes?')) return respond(200, { items: [NOTE] })
+      if (init?.method !== 'GET') writes.push({ url, body: JSON.parse(String(init?.body)) })
+      return respond(200, { id: 'n1' })
+    }) as typeof fetch
+    mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    await settle()
+    expect(actionLabels()).toEqual(['Edit note', 'Add an event'])
+    expect(fieldFor('Note').value).toBe('slept badly')
+    expect(submitButton().textContent).toBe('Edit note')
+    type(fieldFor('Note'), 'slept badly, woke at four')
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+    expect(writes).toEqual([{ url: '/api/v1/p/p1/notes/2026-08-21', body: { body: 'slept badly, woke at four' } }])
+  })
+
+  it('still says "Add a note" with an empty field on a day with no note', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, { items: [] })) as typeof fetch
+    mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    await settle()
+    globalThis.fetch = original
+    expect(actionLabels()).toEqual(['Add a note', 'Add an event'])
+    expect(fieldFor('Note').value).toBe('')
+  })
+
+  it("keeps a draft typed before the day's note arrives", async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'GET' && String(input).includes('/notes?')) {
+        await gate
+        return respond(200, { items: [NOTE] })
+      }
+      return respond(200, {})
+    }) as typeof fetch
+    mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    type(fieldFor('Note'), 'my own words')
+    release()
+    await settle()
+    globalThis.fetch = original
+    expect(fieldFor('Note').value).toBe('my own words')
+  })
+
+  it("sends nothing while the day's note failed to load", async () => {
+    const writes: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'GET' && String(input).includes('/notes?')) return respond(500, { error: { kind: 'internal', message: 'down' } })
+      if (init?.method === 'PUT') writes.push(String(input))
+      return respond(200, { items: [] })
+    }) as typeof fetch
+    mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    await settle()
+    type(fieldFor('Note'), 'my own words')
+    expect(submitButton().disabled).toBe(true)
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+    expect(writes).toEqual([])
   })
 })

@@ -6,7 +6,7 @@ import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
-  useAnnotations, useWriteOverride, useWriteNote,
+  useAnnotations, useWriteOverride, useWriteNote, useRemoveNote, useWriteEvent, useRemoveEvent,
   notesPath, eventsPath, overridesPath,
 } from '../src/data/useAnnotations.js'
 import type { WriteOverrideInput, WriteNoteInput } from '../src/data/useAnnotations.js'
@@ -15,6 +15,8 @@ import type { Session } from '../src/auth/session.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 import { useBaseline } from '../src/data/useBaseline.js'
 import { glanceKey } from '../src/data/useGlance.js'
+import { dayLogKey } from '../src/data/useQuickLog.js'
+import { glanceLog } from './glanceFixture.js'
 import { glanceCalendarKey } from '../src/data/useGlanceCalendar.js'
 import { sleepPeriodKey } from '../src/data/useSleepPeriod.js'
 import { nightPageKey } from '../src/data/useNightPage.js'
@@ -86,6 +88,21 @@ function WriteOverrideButton({ input }: { input: WriteOverrideInput }) {
 function WriteNoteButton({ input }: { input: WriteNoteInput }) {
   const mutation = useWriteNote()
   return <button type="button" onClick={() => mutation.mutate(input)}>write note</button>
+}
+
+function RemoveNoteButton() {
+  const mutation = useRemoveNote()
+  return <button type="button" onClick={() => mutation.mutate({ localDate: '2026-08-15' })}>remove note</button>
+}
+
+function WriteEventButton() {
+  const mutation = useWriteEvent()
+  return <button type="button" onClick={() => mutation.mutate({ kind: 'travel', startedAtMs: 1 })}>write event</button>
+}
+
+function RemoveEventButton() {
+  const mutation = useRemoveEvent()
+  return <button type="button" onClick={() => mutation.mutate({ eventId: 'e1' })}>remove event</button>
 }
 
 /** Mounts the overrides list as a real active query, alongside the write button, so an
@@ -459,4 +476,36 @@ describe('useWriteNote', () => {
 
     expect(client.getQueryState(cached)?.isInvalidated).toBe(true)
   })
+})
+
+describe('note and event writes outside the Log panel', () => {
+  const cases: Array<[string, () => ReactNode]> = [
+    ['useWriteNote', () => <WriteNoteButton input={{ localDate: '2026-08-15', body: 'flew to Tokyo' }} />],
+    ['useRemoveNote', () => <RemoveNoteButton />],
+    ['useWriteEvent', () => <WriteEventButton />],
+    ['useRemoveEvent', () => <RemoveEventButton />],
+  ]
+  for (const [name, button] of cases) {
+    it(`${name} refreshes the glance and the day log`, async () => {
+      const { client, tree } = withSession(button())
+      const glance = glanceKey('p1', '2026-08-15')
+      const dayLog = dayLogKey('p1', '2026-08-15')
+      const otherGlance = glanceKey('p2', '2026-08-15')
+      client.setQueryData(glance, {})
+      client.setQueryData(dayLog, glanceLog())
+      client.setQueryData(otherGlance, {})
+
+      const original = globalThis.fetch
+      globalThis.fetch = (async () => respond(200, { id: 'x1' })) as typeof fetch
+
+      mount(tree)
+      click()
+      await settle()
+      globalThis.fetch = original
+
+      expect(client.getQueryState(glance)?.isInvalidated).toBe(true)
+      expect(client.getQueryState(dayLog)?.isInvalidated).toBe(true)
+      expect(client.getQueryState(otherGlance)?.isInvalidated).toBe(false)
+    })
+  }
 })

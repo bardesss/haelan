@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
 import { useRoute, navigate, withQuery } from '../router.js'
 import { useSession } from '../auth/session.js'
 import { useHistoryStart } from '../data/useHistoryStart.js'
 import { parseControls, datesFor, stepAnchor, clampFromToHistory } from './range.js'
 import type { RangeKey } from './range.js'
+import { useToday } from './useToday.js'
 import { readRange, writeRange } from '../ui/rangePreference.js'
 
 export interface PageControlsState {
@@ -62,14 +62,8 @@ export function usePageControls(): PageControlsState {
   const route = useRoute()
   const session = useSession()
 
-  // The person's today, not the browser's. en-CA formats as YYYY-MM-DD, which is the shape every
-  // local date in this system already has.
-  const today = useMemo(() => {
-    const timezone = session.data?.effectiveTimezone
-    const options: Intl.DateTimeFormatOptions = timezone === undefined ? {} : { timeZone: timezone }
-    return new Intl.DateTimeFormat('en-CA', { ...options, year: 'numeric', month: '2-digit', day: '2-digit' })
-      .format(new Date())
-  }, [session.data?.effectiveTimezone])
+  // The person's today, not the browser's, and moving on at their midnight.
+  const today = useToday(session.data?.effectiveTimezone)
 
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
   // Read on every render rather than held in state, and that is the point rather than an

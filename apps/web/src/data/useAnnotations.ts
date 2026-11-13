@@ -6,6 +6,7 @@ import { apiGet, apiSend, ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import { PERIOD_KINDS } from './usePeriodRead.js'
+import { invalidateLog } from './useQuickLog.js'
 
 // Re-exported under the same name so nothing importing OverrideScope from here has to change:
 // AnnotatePanel.tsx (the panel that builds target keys) added a third browser safe subpath,
@@ -212,6 +213,24 @@ export function useAnnotations(range: AnnotationRange): {
 }
 
 /**
+ * The note already stored for one day, or null. Keyed like the day-ranged read in useAnnotations so
+ * the invalidation a note write already does reaches it. `items` defensively for the reason the
+ * withoutHarvest comment gives.
+ */
+export function useDayNote(localDate: string): UseQueryResult<StoredNote | null> {
+  const session = useSession()
+  const personId = session.data?.personId
+
+  return useQuery({
+    queryKey: queryKeys.resource(personId ?? '', 'notes', { from: localDate, to: localDate }),
+    enabled: personId !== undefined,
+    queryFn: () => apiGet<{ items: StoredNote[] }>(notesPath(personId!, { from: localDate, to: localDate })),
+    select: (data: { items?: StoredNote[] }) =>
+      (data?.items ?? []).find((note) => note.localDate === localDate) ?? null,
+  })
+}
+
+/**
  * True when a cached query belongs to this person and is keyed by a from/to range that overlaps
  * `affected`. This is deliberately resource agnostic: queryKeys.resource gives every ranged read
  * in this app (series, baseline, nights, and the notes/events reads above) the same key shape, a
@@ -379,7 +398,7 @@ export function useWriteNote(): UseMutationResult<IdResult, ApiError, WriteNoteI
       return apiSend<IdResult>('PUT', `/api/v1/p/${id}/notes/${input.localDate}`, { body: input.body })
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'notes')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }
@@ -394,7 +413,7 @@ export function useRemoveNote(): UseMutationResult<IdResult, ApiError, RemoveNot
       return apiSend<IdResult>('DELETE', `/api/v1/p/${id}/notes/${input.localDate}`)
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'notes')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }
@@ -409,7 +428,7 @@ export function useWriteEvent(): UseMutationResult<IdResult, ApiError, WriteEven
       return apiSend<IdResult>('POST', `/api/v1/p/${id}/events`, input)
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'events')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }
@@ -424,7 +443,7 @@ export function useRemoveEvent(): UseMutationResult<IdResult, ApiError, RemoveEv
       return apiSend<IdResult>('DELETE', `/api/v1/p/${id}/events/${input.eventId}`)
     },
     onSuccess: () => {
-      if (personId !== undefined) invalidateResource(queryClient, personId, 'events')
+      if (personId !== undefined) invalidateLog(queryClient, personId)
     },
   })
 }

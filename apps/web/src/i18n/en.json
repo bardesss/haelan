@@ -1212,6 +1212,7 @@
       "exclude": "Exclude",
       "correct": "Correct",
       "note": "Add a note",
+      "editNote": "Edit note",
       "event": "Add an event"
     },
     "reasonLabel": "Reason",

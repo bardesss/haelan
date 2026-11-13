@@ -62,8 +62,8 @@ const SESSION: Session = {
  */
 function mount(tokens: McpTokenRow[], calls: McpCallRow[] = [], session: Session = SESSION): QueryClient {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  client.setQueryData(mcpTokensKey(), { tokens })
-  client.setQueryData(mcpCallsKey(), { calls })
+  client.setQueryData(mcpTokensKey(session.personId), { tokens })
+  client.setQueryData(mcpCallsKey(session.personId), { calls })
   client.setQueryData(queryKeys.session(), session)
   act(() => {
     root?.render(
@@ -90,6 +90,25 @@ function type(input: HTMLInputElement, value: string): void {
 }
 
 describe('the Agent access card', () => {
+  it('does not show the previous person\'s tokens to the person now signed in', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), SESSION)
+    client.setQueryData(mcpTokensKey('p2'), { tokens: [{ ...TOKEN, id: 't2', label: 'their phone' }] })
+    globalThis.fetch = (async (input: RequestInfo | URL) => new Response(JSON.stringify(
+      String(input).endsWith('/mcp-tokens') ? { tokens: [TOKEN] } : { calls: [] },
+    ), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch
+    act(() => {
+      root?.render(
+        <QueryClientProvider client={client}>
+          <I18nProvider lng="en"><McpTokens /></I18nProvider>
+        </QueryClientProvider>,
+      )
+    })
+    await flush(client, () => container!.innerHTML)
+    expect(text()).toContain('the laptop')
+    expect(text()).not.toContain('their phone')
+  })
+
   it('says the surface is invisible until a token exists', () => {
     mount([])
     expect(text()).toContain('answers as though it were not there at all')

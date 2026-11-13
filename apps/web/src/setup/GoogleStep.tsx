@@ -64,8 +64,8 @@ export function GoogleStep({ candidates, scopes = [], error, onDone, onCompanion
               .then(onCompanion)
               .catch((cause: unknown) => {
                 setFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
-                setCompanionBusy(false)
               })
+              .finally(() => setCompanionBusy(false))
           }}
         >
           {companionBusy ? t('setup.google.saving') : t('setup.google.withoutGoogle')}
@@ -129,8 +129,8 @@ export function GoogleStep({ candidates, scopes = [], error, onDone, onCompanion
             .then(onDone)
             .catch((cause: unknown) => {
               setFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
-              setBusy(false)
             })
+            .finally(() => setBusy(false))
         }}
       >
         <label className="field">
