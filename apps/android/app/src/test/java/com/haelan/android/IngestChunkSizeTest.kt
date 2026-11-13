@@ -8,7 +8,7 @@ import java.time.Instant
 /**
  * The ceiling the sync has to stay under, measured instead of assumed.
  *
- * The app splits a type's points by size (SyncEngine.chunksBySize, half a mebibyte), by span
+ * The app splits a type's points by size (SyncEngine.chunkEnds, half a mebibyte), by span
  * and by count, while the route refuses a request carrying more than 10000 points (ingest.ts,
  * MAX_POINTS). Three different units bounding one request is only safe while the smallest one
  * bites first, and a dense hour of heart rate fits tens of thousands of small points inside the
