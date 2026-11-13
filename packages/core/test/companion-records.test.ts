@@ -1,8 +1,8 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { describe, it, expect } from 'vitest'
 import { createTestDatabase, seedPerson, seedSession, readSamples } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { CompanionRecords } from '../src/store/companionRecords.ts'
+import { CompanionRecords, uncovered } from '../src/store/companionRecords.ts'
 import { SampleKeys } from '../src/db/keys.ts'
 import { samples, sources, sessions, companionDeletions, companionRecordSamples } from '../src/db/schema/index.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
@@ -23,6 +23,16 @@ const WEIGHT = dataTypeById('weight')!
 const HEART_RATE = dataTypeById('heart-rate')!
 const SLEEP = dataTypeById('sleep')!
 const T0 = Date.parse('2026-08-18T07:00:00Z')
+
+function tombstones(ctx: TestDatabase, ids: readonly string[]): Set<string> {
+  const found = new Set<string>()
+  for (let i = 0; i < ids.length; i += 500) {
+    for (const r of ctx.db.select({ recordId: companionDeletions.recordId }).from(companionDeletions)
+      .where(and(eq(companionDeletions.personId, 'p1'), inArray(companionDeletions.recordId, ids.slice(i, i + 500))))
+      .all()) found.add(r.recordId)
+  }
+  return found
+}
 
 function row(over: Partial<SampleRow>): SampleRow {
   return {
@@ -132,7 +142,7 @@ describe('CompanionRecords', () => {
       { personId: 'p1', dataType: WEIGHT, recordIds: ids, nowMs: 5 }, new SampleKeys(ctx.db))
     expect(out.rowsDeleted).toBe(1)
     expect(readSamples(ctx.db)).toEqual([])
-    expect(records.tombstoned('p1', ids).size).toBe(501)
+    expect(tombstones(ctx, ids).size).toBe(501)
     ctx.cleanup()
   })
 
@@ -156,7 +166,7 @@ describe('CompanionRecords', () => {
     const out = records.deleteRecords(
       { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-unknown'], nowMs: 5 }, new SampleKeys(ctx.db))
     expect(out).toEqual({ rowsDeleted: 0, localDates: [] })
-    expect(records.tombstoned('p1', ['hc-unknown', 'other'])).toEqual(new Set(['hc-unknown']))
+    expect(tombstones(ctx, ['hc-unknown', 'other'])).toEqual(new Set(['hc-unknown']))
     ctx.cleanup()
   })
 
@@ -223,7 +233,7 @@ describe('CompanionRecords', () => {
     const ids = Array.from({ length: 501 }, (_, i) => `hc-weight-${i}`)
     records.deleteRecords({ personId: 'p1', dataType: WEIGHT, recordIds: ids, nowMs: 5 }, new SampleKeys(ctx.db))
     records.lift('p1', ids)
-    expect(records.tombstoned('p1', ids).size).toBe(0)
+    expect(tombstones(ctx, ids).size).toBe(0)
     ctx.cleanup()
   })
 
@@ -265,5 +275,53 @@ describe('CompanionRecords', () => {
     expect(readSamples(ctx.db)).toEqual([])
     expect(ctx.db.select().from(companionDeletions).all()).toHaveLength(1)
     ctx.cleanup()
+  })
+
+  // A range delete once asked, for every candidate row, whether any live link covered it, and that
+  // scanned the whole link table per row: 200 heart-rate records took minutes inside the deletions
+  // route's write transaction. The bound is generous for a loaded machine; the scan blows it many
+  // times over.
+  it('deleting 200 heart-rate records among thousands of links stays fast', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    store(ctx, [row({ metric: 'heart_rate', recordId: 'seed' })])
+    const keys = new SampleKeys(ctx.db)
+    const ref = keys.sampleRefs({ ...row({ metric: 'heart_rate' }), rawPayloadId: null })
+    const client = ctx.db.$client
+    const insertSample = client.prepare(`insert or ignore into samples
+      (person_ref, source_ref, metric_ref, utc_ms, tz_offset_minutes, agg_ref, value, n)
+      values (?, ?, ?, ?, 120, ?, 60, 1)`)
+    const insertLink = client.prepare(`insert into companion_record_samples
+      (person_ref, record_id, source_ref, metric_ref, first_utc_ms, last_utc_ms) values (?, ?, ?, ?, ?, ?)`)
+    const LINKS = 5000
+    const HOUR = 3_600_000
+    client.transaction(() => {
+      for (let i = 0; i < LINKS; i++) {
+        const first = T0 + (i + 1) * HOUR
+        for (let m = 0; m < 60; m++) {
+          insertSample.run(ref.personRef, ref.sourceRef, ref.metricRef, first + m * 60_000, ref.aggRef)
+        }
+        insertLink.run(ref.personRef, `hc-hr-${i}`, ref.sourceRef, ref.metricRef, first, first + 59 * 60_000)
+      }
+    })()
+    const ids = Array.from({ length: 200 }, (_, i) => `hc-hr-${LINKS - 1 - i}`)
+    const started = performance.now()
+    const out = new CompanionRecords(ctx.db)
+      .deleteRecords({ personId: 'p1', dataType: HEART_RATE, recordIds: ids, nowMs: 5 }, keys)
+    const elapsed = performance.now() - started
+    expect(out.rowsDeleted).toBe(200 * 60)
+    expect(elapsed).toBeLessThan(3000)
+    ctx.cleanup()
+  }, 300_000)
+})
+
+describe('uncovered', () => {
+  it('takes covered ranges out of a closed range, whatever their order and overlap', () => {
+    expect(uncovered(0, 10, [])).toEqual([{ first: 0, last: 10 }])
+    expect(uncovered(0, 10, [{ first: 3, last: 4 }])).toEqual([{ first: 0, last: 2 }, { first: 5, last: 10 }])
+    expect(uncovered(0, 10, [{ first: 6, last: 20 }, { first: -5, last: 2 }, { first: 1, last: 3 }]))
+      .toEqual([{ first: 4, last: 5 }])
+    expect(uncovered(0, 10, [{ first: -1, last: 10 }])).toEqual([])
+    expect(uncovered(0, 10, [{ first: 10, last: 10 }, { first: 0, last: 0 }])).toEqual([{ first: 1, last: 9 }])
   })
 })

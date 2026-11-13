@@ -1,4 +1,4 @@
-import { and, between, eq, inArray, sql } from 'drizzle-orm'
+import { and, between, eq, gte, inArray, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import type { SampleKeys } from '../db/keys.ts'
 import { companionDeletions, companionRecordSamples, samples, sessions } from '../db/schema/index.ts'
@@ -81,19 +81,6 @@ export class CompanionRecords {
     }
   }
 
-  tombstoned(personId: string, recordIds: readonly string[]): Set<string> {
-    const found = new Set<string>()
-    for (let i = 0; i < recordIds.length; i += ID_CHUNK) {
-      const rows = this.#db.select({ recordId: companionDeletions.recordId }).from(companionDeletions)
-        .where(and(
-          eq(companionDeletions.personId, personId),
-          inArray(companionDeletions.recordId, recordIds.slice(i, i + ID_CHUNK)),
-        )).all()
-      for (const row of rows) found.add(row.recordId)
-    }
-    return found
-  }
-
   /** Forgets the tombstones of records that were written again. */
   lift(personId: string, recordIds: readonly string[]): void {
     const unique = [...new Set(recordIds)]
@@ -147,22 +134,39 @@ export class CompanionRecords {
       // A row another record of the same source and metric also covers is kept, as long as that
       // record is not itself tombstoned: an app that re-writes an entry as delete A, insert B on
       // the same key would otherwise lose B to A's delete, live and again on every rebuild. The
-      // record being deleted is tombstoned before this runs, so its own links never count.
+      // record being deleted is tombstoned before this runs, so its own links never count. The
+      // live links are read once per deleted link and subtracted here rather than tested per row
+      // in SQL: a correlated test per row scanned every link for every heart-rate minute.
       const inRange = and(
         eq(samples.personRef, personRef),
         eq(samples.sourceRef, sql.placeholder('sourceRef')),
         eq(samples.metricRef, sql.placeholder('metricRef')),
         between(samples.utcMs, sql.placeholder('first'), sql.placeholder('last')),
-        sql`not exists (select 1 from companion_record_samples l
-          where l.person_ref = samples.person_ref and l.source_ref = samples.source_ref
-            and l.metric_ref = samples.metric_ref
-            and samples.utc_ms between l.first_utc_ms and l.last_utc_ms
-            and not exists (select 1 from companion_deletions d
-              where d.person_id = ${personId} and d.record_id = l.record_id))`,
       )
       const readRows = this.#db.select({ utcMs: samples.utcMs, offset: samples.tzOffsetMinutes })
         .from(samples).where(inRange).prepare()
       const deleteRows = this.#db.delete(samples).where(inRange).prepare()
+      // The longest link of a series bounds how early an overlapping link can start, so the
+      // overlap read is a short range on companion_record_samples_series, not every earlier link.
+      const longest = this.#db.select({
+        span: sql<number | null>`max(${companionRecordSamples.lastUtcMs} - ${companionRecordSamples.firstUtcMs})`,
+      }).from(companionRecordSamples).where(and(
+        eq(companionRecordSamples.personRef, personRef),
+        eq(companionRecordSamples.sourceRef, sql.placeholder('sourceRef')),
+        eq(companionRecordSamples.metricRef, sql.placeholder('metricRef')),
+      )).prepare()
+      const covering = this.#db.select({
+        first: companionRecordSamples.firstUtcMs, last: companionRecordSamples.lastUtcMs,
+      }).from(companionRecordSamples).where(and(
+        eq(companionRecordSamples.personRef, personRef),
+        eq(companionRecordSamples.sourceRef, sql.placeholder('sourceRef')),
+        eq(companionRecordSamples.metricRef, sql.placeholder('metricRef')),
+        between(companionRecordSamples.firstUtcMs, sql.placeholder('from'), sql.placeholder('last')),
+        gte(companionRecordSamples.lastUtcMs, sql.placeholder('first')),
+        sql`not exists (select 1 from companion_deletions d
+          where d.person_id = ${personId} and d.record_id = ${companionRecordSamples.recordId})`,
+      )).prepare()
+      const spans = new Map<string, number>()
       for (let i = 0; i < recordIds.length; i += ID_CHUNK) {
         const ids = recordIds.slice(i, i + ID_CHUNK)
         const linkWhere = and(
@@ -170,12 +174,21 @@ export class CompanionRecords {
           inArray(companionRecordSamples.recordId, ids),
         )
         for (const link of this.#db.select().from(companionRecordSamples).where(linkWhere).all()) {
-          const range = {
-            sourceRef: link.sourceRef, metricRef: link.metricRef,
-            first: link.firstUtcMs, last: link.lastUtcMs,
+          const series = { sourceRef: link.sourceRef, metricRef: link.metricRef }
+          const seriesKey = `${link.sourceRef}:${link.metricRef}`
+          let span = spans.get(seriesKey)
+          if (span === undefined) {
+            span = longest.get(series)?.span ?? 0
+            spans.set(seriesKey, span)
           }
-          for (const row of readRows.all(range)) dates.add(localDateOf(row.utcMs, row.offset))
-          rowsDeleted += deleteRows.run(range).changes
+          const live = covering.all({
+            ...series, from: link.firstUtcMs - span, first: link.firstUtcMs, last: link.lastUtcMs,
+          })
+          for (const part of uncovered(link.firstUtcMs, link.lastUtcMs, live)) {
+            const range = { ...series, ...part }
+            for (const row of readRows.all(range)) dates.add(localDateOf(row.utcMs, row.offset))
+            rowsDeleted += deleteRows.run(range).changes
+          }
         }
         this.#db.delete(companionRecordSamples).where(linkWhere).run()
       }
@@ -197,4 +210,23 @@ export class CompanionRecords {
     }
     return { rowsDeleted, localDates: [...dates].sort() }
   }
+}
+
+/**
+ * What is left of [first, last] once every covered range is taken out, as closed ranges. Sample
+ * times are whole milliseconds, so a range ends one before a covered one starts.
+ */
+export function uncovered(
+  first: number, last: number, covered: readonly { first: number, last: number }[],
+): { first: number, last: number }[] {
+  const parts: { first: number, last: number }[] = []
+  let from = first
+  for (const c of [...covered].sort((a, b) => a.first - b.first)) {
+    if (from > last) break
+    if (c.last < from) continue
+    if (c.first > from) parts.push({ first: from, last: Math.min(c.first - 1, last) })
+    from = Math.max(from, c.last + 1)
+  }
+  if (from <= last) parts.push({ first: from, last })
+  return parts
 }

@@ -1,0 +1,1 @@
+CREATE INDEX `companion_record_samples_series` ON `companion_record_samples` (`person_ref`,`source_ref`,`metric_ref`,`first_utc_ms`,`last_utc_ms`);

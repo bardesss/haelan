@@ -110,7 +110,11 @@ export const companionRecordSamples = sqliteTable('companion_record_samples', {
   metricRef: integer('metric_ref').notNull().references(() => metricDictionary.ref),
   firstUtcMs: integer('first_utc_ms').notNull(),
   lastUtcMs: integer('last_utc_ms').notNull(),
-}, (t) => [primaryKey({ columns: [t.personRef, t.recordId, t.metricRef, t.sourceRef] })])
+}, (t) => [
+  primaryKey({ columns: [t.personRef, t.recordId, t.metricRef, t.sourceRef] }),
+  // A delete reads the live links overlapping the deleted one's range in its own series.
+  index('companion_record_samples_series').on(t.personRef, t.sourceRef, t.metricRef, t.firstUtcMs, t.lastUtcMs),
+])
 
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
