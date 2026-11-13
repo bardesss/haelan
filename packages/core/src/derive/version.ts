@@ -43,5 +43,11 @@
  *    day has no provider ceilings (derive/workoutZones.ts). A day derived under 9 lacks the
  *    time_in_heart_rate_zone_* and cardio_load_edwards rows it should have, and nothing marks it
  *    dirty on its own: its samples and sessions have not changed, only what deriveDay makes of them.
+ * 11: the phase 2 review fixes change what deriveDay makes of unchanged data. Zone minutes count
+ *    each minute once (D1, D2). A provider rollup is no longer deleted by an exclusion (D3). A
+ *    night split at midnight is filed on the date of its last piece (D4). The two hours a DST
+ *    change repeats are bucketed apart rather than merged (D5). A heart rate reading across
+ *    midnight now marks the workout's day dirty (D6). Every stored day can be wrong under 10, and
+ *    nothing marks those days dirty on its own.
  */
-export const DERIVATION_VERSION = 10
+export const DERIVATION_VERSION = 11
