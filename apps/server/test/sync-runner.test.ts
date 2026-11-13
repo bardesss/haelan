@@ -540,6 +540,34 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     expect(stores.syncState.get('p2', 'weight')?.backfillCursorMs ?? null).toBeNull()
   })
 
+  it('stops asking for a person once a backfill pass met the rate limit, and backfills everyone else', async () => {
+    // Characterization: the runner already adds the person to rateLimited in #backfillPass.
+    // The stub answers p2's trailing sync and refuses only its backfill windows.
+    harness = await withServer({
+      google: 'throttles_one_persons_backfill', dataTypes: ['weight', 'steps'], sprintDays: 4, backfillBatchDays: 1,
+    })
+    await harness.connectPerson()
+    const { stores, instance } = harness.app.haelan
+    stores.people.create({
+      id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', nowMs: harness.clock.nowMs,
+    })
+    instance.credentials.putRefreshToken({
+      personId: 'p2', refreshToken: THROTTLED_REFRESH_TOKEN, scopes: [...SCOPES], nowMs: harness.clock.nowMs,
+    })
+    const started: string[] = []
+    harness.app.haelan.runner.subscribe((event) => {
+      if (event.kind === 'job_started' && event.personId === 'p2') started.push(event.dataType)
+    })
+
+    await harness.app.haelan.runner.trigger('manual')
+
+    // The trailing sync walks every listable type for p2 (dataTypes narrows only the backfill),
+    // so it was not refused. Then exactly one backfill job, which met the 429, and no more passes.
+    expect(started.length).toBeGreaterThan(2)
+    expect(started).toHaveLength(new Set(started).size + 1)
+    expect(stores.syncState.get('p1', 'weight')?.backfillCursorMs).not.toBeNull()
+  })
+
   it('logs a scheduled run that rejects rather than leaving the rejection unhandled', async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
