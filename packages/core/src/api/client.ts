@@ -289,11 +289,20 @@ export class HealthClient {
 
       const headers: Record<string, string> = { authorization: `Bearer ${token}` }
       if (init) headers['content-type'] = 'application/json'
-      const res = await this.#deps.fetch(url.toString(), {
-        method: init?.method,
-        headers,
-        body: init ? JSON.stringify(init.body) : undefined,
-      })
+      let res: Response
+      try {
+        res = await this.#deps.fetch(url.toString(), {
+          method: init?.method,
+          headers,
+          body: init ? JSON.stringify(init.body) : undefined,
+        })
+      } catch (err) {
+        // A rejection here is the network (fetch TypeError, DNS, timeout), never a verdict on
+        // the day being fetched. Raised as transient so sync does not count it toward skipping
+        // the window. Name and message only: the request URL and token stay out of the record.
+        const detail = err instanceof Error ? `${err.name}: ${err.message}` : 'unknown error'
+        throw new TransientError(`network: ${detail}`, { cause: err })
+      }
       lastStatus = res.status
       lastBody = await res.text()
 

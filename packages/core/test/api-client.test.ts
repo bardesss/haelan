@@ -350,4 +350,14 @@ describe('HealthClient', () => {
     expect(rows[0]!.fetchEpisodeId).not.toBe(null)
   })
 
+  it('surfaces a rejected fetch as a TransientError, so an outage is never mistaken for a bad day', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    const error = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('heart-rate')!, ...WINDOW })
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(TransientError)
+    expect((error as Error).message).toBe('[transient] network: TypeError: fetch failed')
+    expect((error as Error).cause).toBeInstanceOf(TypeError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })

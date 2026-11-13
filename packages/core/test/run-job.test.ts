@@ -812,6 +812,18 @@ describe('runJob', () => {
       expect(state?.consecutiveFailures).toBe(4)
     })
 
+    it('never skips a window whose fetch rejects, since a network outage is not a bad day', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
+        const filter = new URL(String(url)).searchParams.get('filter')!
+        if (filter.includes(`>= "${new Date(windows[1]!.startMs).toISOString()}"`)) throw new TypeError('fetch failed')
+        return new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 })
+      })
+      const deps = build(fetchMock)
+      for (let run = 0; run < 4; run++) await runJob({ ...args, trackWindowFailures: true, deps })
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(windows[0]!.endMs)
+    })
+
     it('skips a window whose write throws a plain error on three runs, since that is a poison day', async () => {
       const deps = build(stub())
       failingOn = false
