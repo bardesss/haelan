@@ -109,14 +109,15 @@ export function writeProjection(db: DbOrTx, personId: string, destPath: string):
     out.exec(DDL)
     out.exec(`ATTACH DATABASE '${livePath.replace(/'/g, "''")}' AS live`)
     out.transaction(() => {
-      // The same exclusion dayMetricNotExcluded applies for PersonQuery, in SQL because this
-      // reads the attached file: a provider row survives derivation, so it is dropped here.
+      // Mirrors dayMetricNotExcluded (query/dayExclusion.ts), written out because this reads the
+      // attached file: only a provider row is dropped, a derived row stays until derivation
+      // rebuilds it. A test compares the two on a fixture so they cannot drift apart.
       out.prepare(`INSERT INTO daily SELECT d.local_date, d.metric, d.agg, d.source, d.value, d.coverage,
         d.source_mix, d.updated_at_ms FROM live.daily d WHERE d.person_id = ?
-        AND NOT EXISTS (SELECT 1 FROM live.overrides o WHERE o.person_id = d.person_id
+        AND (d.source <> 'provider' OR NOT EXISTS (SELECT 1 FROM live.overrides o WHERE o.person_id = d.person_id
           AND o.scope = 'day_metric' AND o.action = 'exclude'
           AND json_extract(o.target_key, '$.localDate') = d.local_date
-          AND json_extract(o.target_key, '$.metric') = d.metric)`).run(personId)
+          AND json_extract(o.target_key, '$.metric') = d.metric))`).run(personId)
       // `src.person_id = ?` in the join, not only the row's own `WHERE`: `sessions.source_id` is
       // a foreign key into `sources.id`, which is a global primary key with no composite
       // constraint tying a session's source to a source owned by the same person. Nothing but an
