@@ -524,12 +524,12 @@ export class PersonQuery {
   intraday(input: {
     metric: string
     localDate: string
-    points?: number
+    points?: number | 'all'
     sourceId?: string
   }): IntradayResult {
     requireMetric(input.metric)
     requireDate('localDate', input.localDate)
-    requireOptionalPositiveInteger('points', input.points)
+    if (input.points !== 'all') requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntraday(this.#db, {
       personId: this.#personId,
@@ -555,7 +555,7 @@ export class PersonQuery {
     metric: string
     startMs: number
     endMs: number
-    points?: number
+    points?: number | 'all'
     sourceId?: string
   }): IntradayResult {
     requireMetric(input.metric)
@@ -574,7 +574,7 @@ export class PersonQuery {
         + 'a longer span, which read derived rows rather than every sample in it.',
       )
     }
-    requireOptionalPositiveInteger('points', input.points)
+    if (input.points !== 'all') requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntradayWindow(this.#db, {
       personId: this.#personId,

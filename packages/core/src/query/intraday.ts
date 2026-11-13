@@ -20,6 +20,7 @@ import type { Thinned } from './downsample.ts'
  * - **Points are THINNED to a caller supplied budget.** `thinBand`'s `minmax` bucketing keeps each
  *   bucket's extremes, so any mean taken over the result is biased, and biased by an argument about
  *   display: the same span answers a different number at `points: 50` than at `points: 300`.
+ *   `points: 'all'` reads every point, and is what a summary is computed from.
  *
  * So a caller whose output is a stored or printed number does not reuse these readers without
  * saying what it does about both. CONTRIBUTING.md states the rule, `query/sessionHeartRate.ts` is
@@ -113,7 +114,7 @@ export function readIntraday(db: DbOrTx, input: {
   metric: string
   localDate: string
   sourceId?: string
-  points?: number
+  points?: number | 'all'
 }): IntradayResult {
   // Widened the way deriveDayInto widens, because a provider offset can put a local day's
   // instants up to 14 hours either side of its UTC midnight; the predicate below is what narrows
@@ -148,7 +149,7 @@ export function readIntradayWindow(db: DbOrTx, input: {
   startMs: number
   endMs: number
   sourceId?: string
-  points?: number
+  points?: number | 'all'
 }): IntradayResult {
   return readWindow(db, {
     personId: input.personId,
@@ -174,7 +175,7 @@ function readWindow(db: DbOrTx, input: {
   personId: string
   metric: string
   sourceId?: string
-  points?: number
+  points?: number | 'all'
   windowStart: number
   windowEnd: number
   keep: (row: { utcMs: number, tzOffsetMinutes: number }) => boolean
@@ -282,7 +283,7 @@ function readWindow(db: DbOrTx, input: {
   const sourceIds = [...bySource.keys()]
   if (sourceIds.length === 0) return { points: [], reduction: null, offsetMinutes: null }
 
-  const requested = input.points ?? DEFAULT_POINTS
+  const requested = input.points === 'all' ? DEFAULT_POINTS : input.points ?? DEFAULT_POINTS
   // Divided across the sources present, so a caller asking for 500 points still gets at most 500
   // rather than 500 per source, in the ordinary case. The floor of 2 is a deliberate exception to
   // that budget, not a bug in it: thin always keeps at least the first and last point of whatever
@@ -292,7 +293,10 @@ function readWindow(db: DbOrTx, input: {
   // chart; a chart that came back with a few more points than asked for is still every device's
   // real shape. reduction below reports what was actually returned, so a caller can see the
   // budget was exceeded rather than being told it was met.
-  const perSource = Math.max(2, Math.floor(requested / sourceIds.length))
+  // 'all' skips the budget: thinBand returns its input untouched when the target is not below its length.
+  const perSource = input.points === 'all'
+    ? Infinity
+    : Math.max(2, Math.floor(requested / sourceIds.length))
 
   let totalFrom = 0
   let totalTo = 0
