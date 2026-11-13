@@ -17,6 +17,38 @@ import java.time.Instant
  */
 object SyncCursors {
 
+    /** What a successful cursors call holds: the per-type window ends the sync reads from. */
+    data class Answer(val ends: Map<String, Long>)
+
+    private val ITEMS = Regex(""""items"\s*:\s*\[""")
+
+    /** An answer without an items list is not the instance's: refused rather than read as a first sync. */
+    fun answerOf(body: String, nowMs: Long): Answer {
+        if (!ITEMS.containsMatchIn(body)) throw InstanceClient.UnexpectedAnswerException("the cursors answer carries no items")
+        return Answer(cursorEndsFor(body, nowMs))
+    }
+
+    /**
+     * How the cursors call ended. A failed call is never read as "nothing sent yet": that would
+     * re-upload the whole history, so only a successful answer can lead to a full window.
+     */
+    sealed interface Fetch {
+        data class Ready(val answer: Answer) : Fetch
+        /** 401: the session is over. */
+        data object Expired : Fetch
+        /** Every other failure: try again later, before any Health Connect read. */
+        data class Unavailable(val error: Exception) : Fetch
+    }
+
+    fun fetchOf(outcome: InstanceClient.Outcome<Answer>): Fetch = when (outcome) {
+        is InstanceClient.Outcome.Ok -> Fetch.Ready(outcome.value)
+        is InstanceClient.Outcome.Failed -> {
+            val error = outcome.error
+            if (error is InstanceClient.InstanceHttpException && error.status == 401) Fetch.Expired
+            else Fetch.Unavailable(error)
+        }
+    }
+
     /** How far before the cursor a delta read starts, in milliseconds. */
     const val OVERLAP_MS: Long = 24L * 60L * 60L * 1000L
 
@@ -112,25 +144,21 @@ object SyncCursors {
     }
 
     /**
-     * Where one type starts reading, or null when there is nothing left to read this run.
+     * Where one type starts reading.
      *
      * A first sync keeps the fallback window, a later one starts at the cursor minus the
      * overlap, clamped inside the fallback: never before what the permission will answer.
      *
-     * A cursor ahead of the phone's own clock is a normal state, not an error: a watch or a
-     * phone with a wrong clock at the previous sync can write a point timestamped in the
-     * future, and the instance's cursor follows whatever it was sent. Clamping the start to
-     * exactly [end] used to build TimeRangeFilter.between(end, end), which connect-client
-     * refuses, and every type then failed with a connection error until the wall clock caught
-     * up. Answering null instead says what is actually true: nothing to read this run, not a
-     * failure, and the caller skips the read rather than asking Health Connect for an empty
-     * range.
+     * A cursor ahead of the phone's own clock is read as the window end: a watch or a phone with
+     * a wrong clock can write a point timestamped in the future, and the instance's cursor
+     * follows it. The type then re-reads its last overlap each sync, which is never empty, so
+     * connect-client never gets a zero width range and the type keeps syncing.
      */
-    fun startFor(lastWindowEndMs: Long?, fallbackStart: Instant, end: Instant): Instant? {
+    fun startFor(lastWindowEndMs: Long?, fallbackStart: Instant, end: Instant): Instant {
         if (lastWindowEndMs == null) return fallbackStart
-        val candidate = Instant.ofEpochMilli(lastWindowEndMs - OVERLAP_MS)
+        val cursor = minOf(lastWindowEndMs, end.toEpochMilli())
+        val candidate = Instant.ofEpochMilli(cursor - OVERLAP_MS)
         if (candidate.isBefore(fallbackStart)) return fallbackStart
-        if (!candidate.isBefore(end)) return null
         return candidate
     }
 }

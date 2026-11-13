@@ -107,20 +107,26 @@ object SyncRun {
             // would answer 401. The engine already stopped the rest, so this stops the run.
             override fun sessionExpired() = expire(context)
         }
-        // What the instance already holds, so each type reads its delta. A fetch that fails is not
-        // a sync failure: every type then keeps the full window instead of skipping.
-        val cursors = withContext(Dispatchers.IO) {
-            InstanceClient.get(session.server, SyncCursors.pathFor(session.personId), session.cookie) {
-                SyncCursors.cursorEndsFor(it.body, runEnd.toEpochMilli())
-            }
+        // What the instance already holds, so each type reads its delta. A fetch that fails ends
+        // the run: guessing "nothing sent" would re-upload the whole history.
+        val fetched = withContext(Dispatchers.IO) {
+            SyncCursors.fetchOf(
+                InstanceClient.get(session.server, SyncCursors.pathFor(session.personId), session.cookie) {
+                    SyncCursors.answerOf(it.body, runEnd.toEpochMilli())
+                },
+            )
         }
-        if (cursors is InstanceClient.Outcome.Failed) {
-            val error = cursors.error
-            if (error is InstanceClient.InstanceHttpException && error.status == 401) {
+        val answer = when (fetched) {
+            is SyncCursors.Fetch.Ready -> fetched.answer
+            is SyncCursors.Fetch.Expired -> {
                 expire(context)
                 return
             }
-            Log.w(TAG, "cursors not read, full window instead: ${reasonFor(context, error)}")
+            is SyncCursors.Fetch.Unavailable -> {
+                Log.w(TAG, "cursors not read, retrying later: ${reasonFor(context, fetched.error)}")
+                state.failed(fetched.error)
+                return
+            }
         }
         SyncEngine.syncAll(
             client = client,
@@ -136,7 +142,7 @@ object SyncRun {
                 }
             },
             report = report,
-            cursorEnds = (cursors as? InstanceClient.Outcome.Ok)?.value ?: emptyMap(),
+            cursorEnds = answer.ends,
         )
     }
 

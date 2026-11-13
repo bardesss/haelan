@@ -143,4 +143,23 @@ class InstanceClientHttpTest {
         val outcome = InstanceClient.get(TestInstance.closedAddress(), "/x") { }
         assertTrue(outcome is InstanceClient.Outcome.Failed)
     }
+
+    @Test
+    fun `an ingest answered 200 without rowsWritten is a failure, not an acknowledgement`() {
+        instance.body = "{}"
+        val outcome = InstanceClient.ingest(instance.address, "/api/v1/p/p1/ingest/weight", "{}", null) { }
+        assertTrue((outcome as InstanceClient.Outcome.Failed).error is InstanceClient.UnexpectedAnswerException)
+    }
+
+    @Test
+    fun `an ingest answered by a page that is not the instance is a failure`() {
+        instance.body = "<html>sign in to the wifi</html>"
+        assertTrue(InstanceClient.ingest(instance.address, "/api/v1/p/p1/ingest/weight", "{}", null) { } is InstanceClient.Outcome.Failed)
+    }
+
+    @Test
+    fun `an ingest answered with rowsWritten is acknowledged`() {
+        instance.body = """{"payloadId":null,"deduplicated":false,"rowsWritten":0,"affected":null,"applied":true}"""
+        assertEquals(InstanceClient.Outcome.Ok(Unit), InstanceClient.ingest(instance.address, "/api/v1/p/p1/ingest/weight", "{}", null) { })
+    }
 }

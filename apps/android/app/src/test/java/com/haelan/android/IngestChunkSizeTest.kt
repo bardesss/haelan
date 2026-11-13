@@ -3,6 +3,7 @@ package com.haelan.android
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 /**
  * The ceiling the sync has to stay under, measured instead of assumed.
@@ -231,6 +232,55 @@ class IngestChunkSizeTest {
             "reversed, it looks like a four hour reach and is not split at all",
             listOf(17),
             SyncEngine.chunkEnds(List(17) { 1 }, 1024, newestFirst, span),
+        )
+    }
+
+    private val minuteBase = Instant.parse("2026-09-14T10:00:00Z").toEpochMilli()
+
+    @Test
+    fun `a heart rate cut never splits a minute`() {
+        // Twelve points, three per minute, a count ceiling of five: unaligned cuts land at 5 and 10.
+        val times = (0 until 12).map { minuteBase + (it / 3) * 60_000L + (it % 3) * 10_000L }
+        assertEquals(
+            listOf(3, 6, 9, 12),
+            SyncEngine.chunkEnds(List(12) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5, alignToMinute = true),
+        )
+    }
+
+    @Test
+    fun `a minute larger than the ceiling is still cut at the ceiling`() {
+        val times = (0 until 12).map { minuteBase + it * 1_000L }
+        assertEquals(
+            listOf(5, 10, 12),
+            SyncEngine.chunkEnds(List(12) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5, alignToMinute = true),
+        )
+    }
+
+    @Test
+    fun `types that are not downsampled keep the unaligned cut`() {
+        val times = (0 until 12).map { minuteBase + (it / 3) * 60_000L + (it % 3) * 10_000L }
+        assertEquals(listOf(5, 10, 12), SyncEngine.chunkEnds(List(12) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5))
+    }
+
+    @Test
+    fun `an aligned cut whose carry-over is still over the count ceiling is cut again`() {
+        // One point in minute 0, ten in minute 1, a ceiling of five: the cut moves back to 1, and
+        // the ten-point minute is then cut at the ceiling because it holds no boundary.
+        val times = (0 until 11).map { if (it == 0) minuteBase else minuteBase + 60_000L + it * 1_000L }
+        assertEquals(
+            listOf(1, 6, 11),
+            SyncEngine.chunkEnds(List(11) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5, alignToMinute = true),
+        )
+    }
+
+    @Test
+    fun `an aligned cut whose carry-over is still over the byte ceiling is cut again`() {
+        // The cut moves back to 1, but the carried-over point plus the big one (10 + 40) is still
+        // over 45 bytes, so the chunk is cut once more at the big point.
+        val times = listOf(minuteBase, minuteBase + 60_000L, minuteBase + 61_000L)
+        assertEquals(
+            listOf(1, 2, 3),
+            SyncEngine.chunkEnds(listOf(5, 10, 40), 45, times, Long.MAX_VALUE, Int.MAX_VALUE, alignToMinute = true),
         )
     }
 }

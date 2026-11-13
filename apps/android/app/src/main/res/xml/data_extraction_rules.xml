@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="haelan_secure.xml"/>
+        <exclude domain="sharedpref" path="haelan.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="haelan_secure.xml"/>
+        <exclude domain="sharedpref" path="haelan.xml"/>
+    </device-transfer>
+</data-extraction-rules>

@@ -29,6 +29,7 @@ import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -49,6 +50,12 @@ import kotlin.reflect.KClass
  * exchange through [post]. The screen reports rows and toasts; the worker logs and counts.
  */
 object SyncEngine {
+
+    /**
+     * Types whose uploads are cut on minute boundaries: the ones the instance downsamples to a
+     * minute per request (downsampleToMinute in the catalogue; a vitest guard keeps the two equal).
+     */
+    internal val MINUTE_ALIGNED_TYPES: Set<String> = setOf("heart-rate")
 
     /** Where the sync's own answers go, which is the only place a failure is written now. */
     const val TAG = "haelan-sync"
@@ -225,9 +232,9 @@ object SyncEngine {
         report: Reporter,
         // dataTypeId to the instance's last window end, already the minimum across that
         // type's own sources (SyncCursors.cursorEndsFor): a source that lags pulls the whole
-        // type's read back to it. Empty on a first sync or when the cursors fetch failed:
-        // every type then keeps the full window instead of skipping.
-        cursorEnds: Map<String, Long> = emptyMap(),
+        // type's read back to it. Empty on a first sync; a failed cursors fetch never reaches
+        // here, the caller stops the run instead of reading every type in full.
+        cursorEnds: Map<String, Long>,
     ) {
         // Read, not remembered: the permission can be granted or revoked between two syncs, and
         // the window that is honest is the one the provider will actually answer right now.
@@ -241,21 +248,8 @@ object SyncEngine {
             // under what the instance files, so the lookup goes through the same knot.
             val dataTypeId = SyncTypes.forKey(key).dataTypeId
             val start = SyncCursors.startFor(cursorEnds[dataTypeId], fallbackStart, end)
-            // Null is a cursor ahead of the phone's own clock, not a failure: see
-            // SyncCursors.startFor. There is nothing to read yet, so the type is reported
-            // exactly as a read that found nothing would be, and Health Connect is never
-            // asked for a range that ends where it starts.
-            if (start == null) {
-                report.typeEmpty(key)
-                continue
-            }
-            // Whatever the block threw - a Health Connect read, a socket - is this type's own
-            // failure, and becomes an outcome here so there is one path below rather than two.
-            val outcome = try {
-                syncOne(client, session, packageName, prefs, key, start, end, post)
-            } catch (e: Exception) {
-                InstanceClient.Outcome.Failed(e)
-            }
+            // A throw becomes an outcome here so there is one path below rather than two.
+            val outcome = runType { syncOne(client, session, packageName, prefs, key, start, end, post) }
             when (outcome) {
                 // The one answer that is not this type's business: the whole session is over.
                 is InstanceClient.Outcome.Failed -> {
@@ -279,6 +273,20 @@ object SyncEngine {
                 .contains(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
             SyncWindow.forHistoryGranted(historyGranted, end)
         }
+
+    /**
+     * Whatever the block threw - a Health Connect read, a socket - is this type's own failure.
+     * A cancellation is not: a stopped worker must stop, not be counted as one failed type.
+     */
+    internal suspend fun runType(
+        block: suspend () -> InstanceClient.Outcome<Boolean>,
+    ): InstanceClient.Outcome<Boolean> = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        InstanceClient.Outcome.Failed(e)
+    }
 
     private suspend fun syncOne(
         client: HealthConnectClient,
@@ -395,6 +403,15 @@ object SyncEngine {
      *
      * A single point over either ceiling still travels, alone: a record the provider answered with
      * cannot be split, and dropping it here would lose a reading the instance never got to refuse.
+     *
+     * With [alignToMinute], a cut a ceiling forces moves back to the latest minute boundary inside
+     * the chunk, so no minute straddles two requests. Heart rate needs it: the instance
+     * downsamples each upload's minutes on their own and upserts on the natural key, so a minute
+     * split across two requests is overwritten by the aggregate of its second half. A chunk
+     * holding no boundary (one minute larger than a ceiling) is cut at the ceiling as before.
+     *
+     * The times are expected in ascending order: the minute alignment and the span ceiling both
+     * compare neighbouring points.
      */
     internal fun chunkEnds(
         sizes: List<Int>,
@@ -402,7 +419,17 @@ object SyncEngine {
         timesMs: List<Long?> = emptyList(),
         maxSpanMs: Long = Long.MAX_VALUE,
         maxPoints: Int = Int.MAX_VALUE,
+        alignToMinute: Boolean = false,
     ): List<Int> {
+        // The largest j in (start, i] where point j opens a new minute, or null.
+        fun minuteBoundary(start: Int, i: Int): Int? {
+            for (j in i downTo start + 1) {
+                val before = timesMs.getOrNull(j - 1)
+                val after = timesMs.getOrNull(j)
+                if (before != null && after != null && Math.floorDiv(before, 60_000L) != Math.floorDiv(after, 60_000L)) return j
+            }
+            return null
+        }
         val ends = mutableListOf<Int>()
         var start = 0
         var size = 0
@@ -410,15 +437,19 @@ object SyncEngine {
             // A chunk holding points [start, i) is full: close it before this point, which
             // then opens the next one. A point whose own instant is unknown measures no span,
             // so a type the mappers give no clock for is bounded by bytes exactly as before.
-            val from = timesMs.getOrNull(start)
-            val at = timesMs.getOrNull(i)
-            val overBytes = size + sizes[i] > maxBytes
-            val overSpan = from != null && at != null && at - from > maxSpanMs
-            val overCount = i - start >= maxPoints
-            if (i > start && (overBytes || overSpan || overCount)) {
-                ends += i
-                start = i
-                size = 0
+            // A loop because an aligned cut leaves point i with a shorter chunk that may still be
+            // over a ceiling; every pass moves start forward, so it ends.
+            while (i > start) {
+                val from = timesMs.getOrNull(start)
+                val at = timesMs.getOrNull(i)
+                val overBytes = size + sizes[i] > maxBytes
+                val overSpan = from != null && at != null && at - from > maxSpanMs
+                val overCount = i - start >= maxPoints
+                if (!(overBytes || overSpan || overCount)) break
+                val cut = (if (alignToMinute) minuteBoundary(start, i) else null) ?: i
+                ends += cut
+                size = (cut until i).sumOf { sizes[it] }
+                start = cut
             }
             size += sizes[i]
         }
@@ -437,10 +468,10 @@ object SyncEngine {
      * What is left after a cut is a fragment, and it grows into the next full chunk as the pages
      * arrive rather than being posted as it is.
      */
-    private fun readyChunk(points: MutableList<JSONObject>): List<JSONObject>? {
+    private fun readyChunk(points: MutableList<JSONObject>, alignToMinute: Boolean): List<JSONObject>? {
         val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
         val times = points.map { instantMsOf(it) }
-        val ends = chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS)
+        val ends = chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS, alignToMinute)
         val end = flushEnd(ends) ?: return null
         val ready = points.subList(0, end).toList()
         points.subList(0, end).clear()
@@ -465,11 +496,11 @@ object SyncEngine {
     internal fun flushEnd(ends: List<Int>): Int? = if (ends.size < 2) null else ends[0]
 
     /** Whatever the buffer still holds once the read is over: the tail, cut to the same ceilings. */
-    private fun chunksBySize(points: List<JSONObject>): List<List<JSONObject>> {
+    private fun chunksBySize(points: List<JSONObject>, alignToMinute: Boolean): List<List<JSONObject>> {
         val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
         val times = points.map { instantMsOf(it) }
         var from = 0
-        return chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS).map { end ->
+        return chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS, alignToMinute).map { end ->
             points.subList(from, end).toList().also { from = end }
         }
     }
@@ -562,6 +593,7 @@ object SyncEngine {
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
         map: (List<T>) -> List<JSONObject>,
     ): InstanceClient.Outcome<Boolean> {
+        val alignToMinute = dataTypeId in MINUTE_ALIGNED_TYPES
         val buffers = mutableMapOf<SourceIdentity, MutableList<JSONObject>>()
         var sentAny = false
         var pageToken: String? = null
@@ -595,7 +627,7 @@ object SyncEngine {
                     val buffer = buffers.getOrPut(identity) { mutableListOf() }
                     buffer += bodies
                     while (true) {
-                        val chunk = readyChunk(buffer) ?: break
+                        val chunk = readyChunk(buffer, alignToMinute) ?: break
                         out += identity to chunk
                     }
                 }
@@ -611,7 +643,7 @@ object SyncEngine {
         } while (pageToken != null)
         val tail: List<Pair<SourceIdentity, List<JSONObject>>> = withContext(Dispatchers.Default) {
             buffers.flatMap { (identity, buffer) ->
-                if (buffer.isEmpty()) emptyList() else chunksBySize(buffer).map { identity to it }
+                if (buffer.isEmpty()) emptyList() else chunksBySize(buffer, alignToMinute).map { identity to it }
             }
         }
         for ((identity, chunk) in tail) {
@@ -721,7 +753,7 @@ object SyncEngine {
             // The endpoint refuses more than 10000 points: chunks are capped by bytes, by span
             // and by count, and every piece of one hour is posted here in order, none skipped -
             // a cut changes how many requests the hour travels in, never which readings travel.
-            for (chunk in chunksBySize(group.map { it.body })) {
+            for (chunk in chunksBySize(group.map { it.body }, dataTypeId in MINUTE_ALIGNED_TYPES)) {
                 val outcome = postChunk(session, packageName, dataTypeId, identity, chunk, post)
                 // The first refusal stops this type: the chunks after it would carry the same
                 // answer, and a caller that kept going would only be slower at saying so.

@@ -1,7 +1,6 @@
 package com.haelan.android
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -33,20 +32,53 @@ class SyncCursorsTest {
     }
 
     @Test
-    fun `a cursor past the end answers null instead of clamping to a degenerate range`() {
-        // Past the end by more than the overlap: the candidate would land after the end.
-        // TimeRangeFilter.between(end, end) is what clamping to end used to build, and
-        // connect-client refuses it; null is how the caller learns to skip the read instead.
+    fun `a cursor past the end is read as the end, so the type reads its last overlap`() {
         val cursor = end.plus(25, ChronoUnit.HOURS).toEpochMilli()
-        assertNull(SyncCursors.startFor(cursor, fallback, end))
+        assertEquals(end.minusMillis(SyncCursors.OVERLAP_MS), SyncCursors.startFor(cursor, fallback, end))
     }
 
     @Test
-    fun `a cursor exactly one overlap past the end also answers null, not a zero width range`() {
-        // The candidate lands exactly on end -- the precise boundary TimeRangeFilter.between
-        // rejects -- so this is the case Finding C's connection error came from.
+    fun `a cursor exactly one overlap past the end reads the same last overlap`() {
         val cursor = end.plus(SyncCursors.OVERLAP_MS, ChronoUnit.MILLIS).toEpochMilli()
-        assertNull(SyncCursors.startFor(cursor, fallback, end))
+        assertEquals(end.minusMillis(SyncCursors.OVERLAP_MS), SyncCursors.startFor(cursor, fallback, end))
+    }
+
+    @Test
+    fun `a cursor answer is ready to sync from`() {
+        val answer = SyncCursors.Answer(mapOf("weight" to 5L))
+        assertEquals(SyncCursors.Fetch.Ready(answer), SyncCursors.fetchOf(InstanceClient.Outcome.Ok(answer)))
+    }
+
+    @Test
+    fun `a 401 on the cursors ends the session`() {
+        assertEquals(
+            SyncCursors.Fetch.Expired,
+            SyncCursors.fetchOf(InstanceClient.Outcome.Failed(InstanceClient.InstanceHttpException(401, ""))),
+        )
+    }
+
+    @Test
+    fun `a 500 on the cursors is unavailable, never a full window`() {
+        assertTrue(
+            SyncCursors.fetchOf(InstanceClient.Outcome.Failed(InstanceClient.InstanceHttpException(500, "boom"))) is SyncCursors.Fetch.Unavailable,
+        )
+    }
+
+    @Test
+    fun `a dead socket on the cursors is unavailable too`() {
+        assertTrue(
+            SyncCursors.fetchOf(InstanceClient.Outcome.Failed(java.io.IOException("reset"))) is SyncCursors.Fetch.Unavailable,
+        )
+    }
+
+    @Test(expected = InstanceClient.UnexpectedAnswerException::class)
+    fun `a cursors answer without items is refused`() {
+        SyncCursors.answerOf("{}", 0L)
+    }
+
+    @Test
+    fun `a cursors answer with empty items is a first sync`() {
+        assertEquals(SyncCursors.Answer(emptyMap()), SyncCursors.answerOf("""{"items":[],"historyStartMs":null}""", 0L))
     }
 
     @Test
@@ -125,8 +157,8 @@ class SyncCursorsTest {
         )
         assertTrue(
             "the watch's own pending reading at ${watchLateReadingMs}ms must still be inside " +
-                "the next delta, which starts at ${start?.toEpochMilli()}ms",
-            start != null && !start.isAfter(Instant.ofEpochMilli(watchLateReadingMs)),
+                "the next delta, which starts at ${start.toEpochMilli()}ms",
+            !start.isAfter(Instant.ofEpochMilli(watchLateReadingMs)),
         )
     }
 

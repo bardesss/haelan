@@ -114,18 +114,23 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
       lastIngestAtMs: number
     }>()
     let historyStartMs: number | null = null
+    // A point dated ahead of the server's clock (a watch with a wrong clock) archives a window
+    // that ends in the future. Left as is, the cursor answers that future time and the phone
+    // would never read the type again until the clock caught up, so it is capped at now.
+    const nowMs = app.haelan.now()
 
     for (const row of archive.listForSource(personId, COMPANION_SOURCE)) {
       const dataSource = sourceIdentityOf(row.requestParams)
       const sourceKey = `${row.dataType}:${dataSource}`
+      const windowEndMs = Math.min(row.windowEndMs, nowMs)
       const perSource = bySource.get(sourceKey)
       if (perSource) {
-        if (row.windowEndMs > perSource.lastWindowEndMs) perSource.lastWindowEndMs = row.windowEndMs
+        if (windowEndMs > perSource.lastWindowEndMs) perSource.lastWindowEndMs = windowEndMs
         if (row.fetchedAtMs > perSource.lastIngestAtMs) perSource.lastIngestAtMs = row.fetchedAtMs
       } else {
         bySource.set(sourceKey, {
           dataTypeId: row.dataType, dataSource,
-          lastWindowEndMs: row.windowEndMs, lastIngestAtMs: row.fetchedAtMs,
+          lastWindowEndMs: windowEndMs, lastIngestAtMs: row.fetchedAtMs,
         })
       }
 
@@ -148,7 +153,6 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     // stop a DEAD source holding a type back while LIVE ones carry it; when nothing is live
     // there is no one left to hold back, and the honest answer is the newest cursor this
     // instance has ever seen for the type, not "we have nothing".
-    const nowMs = app.haelan.now()
     const sourcesByType = new Map<string, Array<{ lastWindowEndMs: number, lastIngestAtMs: number }>>()
     for (const cursor of bySource.values()) {
       const list = sourcesByType.get(cursor.dataTypeId)

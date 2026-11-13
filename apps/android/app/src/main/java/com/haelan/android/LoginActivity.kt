@@ -40,6 +40,9 @@ class LoginActivity : ComponentActivity() {
      * move the glance by task affinity and apply to every future caller without being visible here.
      */
     private fun startMain(session: SessionStore.Session) {
+        // The glance is where a session lands and the sync screen may never be opened, so the
+        // background sync is scheduled here, where both sign-in paths pass.
+        SyncSchedule.enqueue(this)
         startActivity(Intent(this, GlanceActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(EXTRA_SERVER, session.server)
