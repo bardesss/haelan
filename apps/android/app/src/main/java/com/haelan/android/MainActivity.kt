@@ -911,7 +911,9 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
             watchingRun = true
         } else if (watchingRun) {
             watchingRun = false
-            if (endedOk(status)) startReadableRoutes()
+            // Only while the screen is in front: a run outlives a stopped screen, and a pass from
+            // there could post, then meet a 401 and open the login, or toast over another app.
+            if (endedOk(status) && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) startReadableRoutes()
         }
     }
 
