@@ -1,9 +1,10 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { readExcludedNightSessions, readSleepNights } from '../src/query/sleepNights.ts'
 import { overrides, sessions, sessionSegments, sources } from '../src/db/schema/index.ts'
 import { sessionTarget } from '../src/derive/targetKey.ts'
+import { shiftLocalDate } from '../src/derive/localDay.ts'
 
 const H = 3_600_000
 // 23:00 local on 2026-08-21 at +120 is 21:00Z, so the night starts before the date it belongs to.
@@ -186,6 +187,25 @@ describe('readSleepNights', () => {
     insertSession({ id: 'p1', startMs: Date.parse('2026-08-21T19:30:00Z'), endMs: Date.parse('2026-08-21T21:40:00Z'), localDate: '2026-08-21' })
     insertSession({ id: 'p2', startMs: Date.parse('2026-08-21T22:20:00Z'), endMs: Date.parse('2026-08-22T04:30:00Z'), localDate: '2026-08-22' })
   }
+
+  it('assigns each segment to its night in one pass, not once per night', () => {
+    for (let i = 0; i < 365; i += 1) {
+      const date = shiftLocalDate('2025-01-02', i)
+      const start = Date.parse(`${shiftLocalDate(date, -1)}T21:00:00Z`)
+      insertSession({ id: `n${i}`, startMs: start, endMs: start + 8 * H, localDate: date })
+      for (let k = 0; k < 4; k += 1) {
+        insertSegment({ id: `n${i}-${k}`, sessionId: `n${i}`, stage: 'light', startMs: start + k * 2 * H, endMs: start + (k + 1) * 2 * H })
+      }
+    }
+    const has = vi.spyOn(Set.prototype, 'has')
+    const nights = readSleepNights(test.db, { personId: 'p1', from: '2025-01-02', to: shiftLocalDate('2025-01-02', 364) })
+    const calls = has.mock.calls.length
+    has.mockRestore()
+    expect(nights).toHaveLength(365)
+    expect(nights.every((n) => n.segments.length === 4)).toBe(true)
+    // 365 nights x 1460 segments is 532,900 lookups when every night filters every segment.
+    expect(calls).toBeLessThan(10_000)
+  })
 
   it('reads a night joined across midnight on the date its last piece ends', () => {
     insertSplitNight()
