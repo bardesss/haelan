@@ -178,6 +178,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const personQuery = personQueryOf(request)
     const kind = requireString(request.query.kind, 'kind')
     const { from, to } = requireDateRange(request.query)
+    requireBoundedRange(from, to)
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
     const type = request.query.type

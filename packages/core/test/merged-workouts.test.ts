@@ -204,6 +204,12 @@ describe('mergeWorkouts', () => {
 })
 
 describe('PersonQuery workouts, merged', () => {
+  it('still finds a workout when the range ends on the last date the calendar holds', () => {
+    insert({ id: 'google-run', sourceId: 'google', attrs: GOOGLE_RUN })
+    const found = q().sessions({ kind: 'exercise', from: '2026-09-20', to: '9999-12-31' })
+    expect(found.map((w) => w.id)).toEqual(['google-run'])
+  })
+
   let t: TestDatabase
   beforeEach(() => {
     t = createTestDatabase()

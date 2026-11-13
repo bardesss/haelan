@@ -68,6 +68,21 @@ export function shiftLocalDate(localDate: string, days: number): string {
   return new Date(Date.parse(`${localDate}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
 }
 
+export const MIN_LOCAL_DATE = '0000-01-01'
+export const MAX_LOCAL_DATE = '9999-12-31'
+
+/**
+ * shiftLocalDate held to the dates the calendar can write. Stepping 9999-12-31 forward formats as
+ * a six digit year that sorts before every real date, so a widened window silently matched
+ * nothing. Compared on the epoch millisecond because the overflowed string is what sorts wrongly.
+ */
+export function shiftLocalDateClamped(localDate: string, days: number): string {
+  const ms = Date.parse(`${localDate}T00:00:00Z`) + days * DAY_MS
+  if (ms > Date.parse(`${MAX_LOCAL_DATE}T00:00:00Z`)) return MAX_LOCAL_DATE
+  if (ms < Date.parse(`${MIN_LOCAL_DATE}T00:00:00Z`)) return MIN_LOCAL_DATE
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
 /**
  * Ten years, inclusive of both ends. Generous on purpose: the widest view a real dashboard offers
  * is "all time", and a self hosted instance holding a decade of imported wearable history is
