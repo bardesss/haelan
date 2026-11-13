@@ -7,7 +7,8 @@ import { describe, it, expect } from 'vitest'
 const root = new URL('../../', import.meta.url)
 
 function mustContain(path: string, needle: string): void {
-  const text = readFileSync(new URL(path, root), 'utf8')
+  // A checkout with CRLF line endings still has to match a needle spanning lines.
+  const text = readFileSync(new URL(path, root), 'utf8').replace(/\r\n/g, '\n')
   expect(text.includes(needle), `${path}: ${needle} not found - has it moved or been renamed?`).toBe(true)
 }
 
@@ -21,7 +22,8 @@ describe('android origin identity parity', () => {
   })
 
   it('the phone reads the cutovers the companion route answers', () => {
-    mustContain('apps/server/src/routes/v1/companion.ts', 'identityCutovers')
+    // The key as the reply object spells it, not the word, which comments also carry.
+    mustContain('apps/server/src/routes/v1/companion.ts', 'items: [...legacyItems, ...perSourceItems],\n      identityCutovers,\n')
     mustContain('apps/android/app/src/main/java/com/haelan/android/SyncCursors.kt', '"identityCutovers"')
   })
 })
