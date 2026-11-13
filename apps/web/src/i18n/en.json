@@ -1136,7 +1136,9 @@
     "callback": {
       "badState": "That link to Google expired or was already used. Connect Google again.",
       "wrongPerson": "Google sent back a consent that someone else in this household started. Sign in as yourself and connect Google again.",
-      "noSession": "You were not signed in at {{baseUrl}}, the address Google sends you back to. Open haelan at {{baseUrl}}, sign in there, and connect Google again."
+      "noSession": "You were not signed in at {{baseUrl}}, the address Google sends you back to. Open haelan at {{baseUrl}}, sign in there, and connect Google again.",
+      "failedTitle": "Connecting Google did not work",
+      "backToAccount": "Back to your account"
     },
     "google": {
       "title": "Connect Google",

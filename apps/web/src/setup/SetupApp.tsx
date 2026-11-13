@@ -4,6 +4,7 @@ import { useRoute, navigate } from '../router.js'
 import { AccountStep } from './AccountStep.js'
 import { InstanceUrlStep } from './InstanceUrlStep.js'
 import { GoogleStep } from './GoogleStep.js'
+import { ConsentFailed } from './ConsentFailed.js'
 import { BackfillStep } from './BackfillStep.js'
 import { CompanionHistoryStep } from './CompanionHistoryStep.js'
 import { DataTypeStep } from './DataTypeStep.js'
@@ -120,17 +121,25 @@ export function SetupApp() {
       // wizard on that step's working state, with the clicked button reading "saving" and
       // no error to explain it. pathForStep falls through to backfill for done, which is
       // where CompanionHistoryStep renders on a companion instance.
+      //
+      // The exception is a finished instance that was sent here by a failed consent: the failure
+      // is what the reader came to read, and the backfill screen would bury it.
       const target = pathForStep(due)
-      if (!route.startsWith(target)) navigate(target)
+      const showsFailure = due === 'done' && route.startsWith('/setup/google') && callbackCodeOf(route) !== null
+      if (!route.startsWith(target) && !showsFailure) navigate(target)
     })
   }
   useEffect(refresh, [])
 
   const onGoogleRoute = route.startsWith('/setup/google')
   useEffect(() => {
-    if (!onGoogleRoute || needsSignIn) return
-    void getRedirectUris(window.location.hostname).then((r) => setCandidates(r.candidates)).catch(orSignIn)
-    void getScopes().then((r) => setScopes(r.scopes)).catch(orSignIn)
+    // Waits for the step: a finished instance has no use for the console form's lists, and
+    // asking for them would answer 4xx and flash a sign-in over the failure it came to show.
+    if (!onGoogleRoute || needsSignIn || step === null) return
+    if (step !== 'done') {
+      void getRedirectUris(window.location.hostname).then((r) => setCandidates(r.candidates)).catch(orSignIn)
+      void getScopes().then((r) => setScopes(r.scopes)).catch(orSignIn)
+    }
     // The callback redirects here with an error code in the query, and the message that goes
     // with it lives on the server. Fetching it is what puts the console fix on screen.
     // The three refusals that come before the exchange have no server message, so they are
@@ -140,7 +149,7 @@ export function SetupApp() {
     const message = refusalMessage(code, window.location.origin, t)
     if (message !== null) setCallbackError({ code, message })
     else void getLastError().then(setCallbackError).catch(orSignIn)
-  }, [onGoogleRoute, route, needsSignIn])
+  }, [onGoogleRoute, route, needsSignIn, step])
 
   const onBackfill = route.startsWith('/setup/backfill')
   // Gated on dataTypesDone as well as the route: fetching progress and opening the live stream
@@ -201,15 +210,15 @@ export function SetupApp() {
         {route.startsWith('/setup/instance-url')
           ? <InstanceUrlStep onDone={refresh} />
           : onGoogleRoute
-            ? (
-              <GoogleStep
+            ? (step === 'done'
+              ? <ConsentFailed error={callbackError} />
+              : <GoogleStep
                 candidates={candidates}
                 scopes={scopes}
                 error={callbackError}
                 onDone={() => { window.location.assign('/oauth/start') }}
                 onCompanion={refresh}
-              />
-            )
+              />)
             : onBackfill
               ? (!dataTypesDone && !companionMode
                 ? <DataTypeStep onDone={() => setDataTypesDone(true)} />

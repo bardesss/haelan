@@ -1136,7 +1136,9 @@
     "callback": {
       "badState": "Die koppeling met Google is verlopen of al gebruikt. Koppel Google opnieuw.",
       "wrongPerson": "Google gaf een toestemming terug die iemand anders in dit huishouden heeft gestart. Log in als jezelf en koppel Google opnieuw.",
-      "noSession": "Je was niet ingelogd op {{baseUrl}}, het adres waar Google je naar terugstuurt. Open haelan op {{baseUrl}}, log daar in en koppel Google opnieuw."
+      "noSession": "Je was niet ingelogd op {{baseUrl}}, het adres waar Google je naar terugstuurt. Open haelan op {{baseUrl}}, log daar in en koppel Google opnieuw.",
+      "failedTitle": "Google koppelen is niet gelukt",
+      "backToAccount": "Terug naar je account"
     },
     "google": {
       "title": "Google verbinden",

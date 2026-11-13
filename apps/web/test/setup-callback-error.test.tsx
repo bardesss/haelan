@@ -106,3 +106,28 @@ describe('the Google callback refusals', () => {
     expect(alertText()).toBe('redirect_uri_mismatch: not registered')
   })
 })
+
+describe('a finished instance after a failed consent', () => {
+  const done = { step: 'done', companionMode: false }
+
+  it('keeps a finished instance on the failure and offers the way back', async () => {
+    navigate('/setup/google?error=exchange_failed', { replace: true })
+    const asked = stubApi({
+      state: done,
+      lastError: { code: 'exchange_failed', message: 'redirect_uri_mismatch: not registered' },
+    })
+    mount()
+    await pumpUntil(() => container!.textContent!.includes('redirect_uri_mismatch'), 'the failure text')
+    expect(window.location.pathname).toBe('/setup/google')
+    expect(container!.querySelector('a[href="/account"]')).not.toBeNull()
+    expect(asked.filter((u) => u.includes('/redirect-uris') || u.includes('/scopes'))).toEqual([])
+  })
+
+  it('shows a no_session failure on a finished instance without any session read', async () => {
+    navigate('/setup/google?error=no_session', { replace: true })
+    const asked = stubApi({ state: done })
+    mount()
+    await pumpUntil(() => container!.textContent!.includes('sign in there'), 'the no_session text')
+    expect(asked).toEqual(['/api/setup/state'])
+  })
+})
