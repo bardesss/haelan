@@ -280,7 +280,6 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         // The archive still holds the payload of a record deleted before tombstones existed, so
         // the replay has just put it back. Its days are derived again below.
         const reapplied = new CompanionRecords(tx).reapplyDeletions(personId, keys)
-        counts.samples -= reapplied.rowsDeleted
         const datesToDerive = [...new Set([...counts.localDates, ...reapplied.localDates])].sort()
 
         const dropped = dropUnreferencedSources(tx, personId, keys)
