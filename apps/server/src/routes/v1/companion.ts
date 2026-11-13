@@ -120,7 +120,6 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     const bySource = new Map<string, {
       dataTypeId: string
       dataSource: string
-      origin: boolean
       lastWindowEndMs: number
       lastIngestAtMs: number
     }>()
@@ -146,17 +145,15 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
 
     for (const row of archive.listForSource(personId, COMPANION_SOURCE)) {
       const { dataSource, identity } = requestIdentityOf(row.requestParams)
-      const origin = identity === 'origin'
       const sourceKey = `${row.dataType}:${dataSource}`
       const windowEndMs = Math.min(row.windowEndMs, nowMs)
       const perSource = bySource.get(sourceKey)
       if (perSource) {
-        if (origin) perSource.origin = true
         if (windowEndMs > perSource.lastWindowEndMs) perSource.lastWindowEndMs = windowEndMs
         if (row.fetchedAtMs > perSource.lastIngestAtMs) perSource.lastIngestAtMs = row.fetchedAtMs
       } else {
         bySource.set(sourceKey, {
-          dataTypeId: row.dataType, dataSource, origin,
+          dataTypeId: row.dataType, dataSource,
           lastWindowEndMs: windowEndMs, lastIngestAtMs: row.fetchedAtMs,
         })
       }
@@ -169,7 +166,7 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
         ends.bucketAtMs = row.fetchedAtMs
         ends.bucketMaxMs = null
       }
-      if (origin) {
+      if (identity === 'origin') {
         ends.sawOrigin = true
         ends.bucketMaxMs = null
       } else if (identity === null && !ends.sawOrigin) {
@@ -199,21 +196,14 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     // stop a DEAD source holding a type back while LIVE ones carry it; when nothing is live
     // there is no one left to hold back, and the honest answer is the newest cursor this
     // instance has ever seen for the type, not "we have nothing".
-    const sourcesByType = new Map<string, Array<{ origin: boolean, lastWindowEndMs: number, lastIngestAtMs: number }>>()
+    const sourcesByType = new Map<string, Array<{ lastWindowEndMs: number, lastIngestAtMs: number }>>()
     for (const cursor of bySource.values()) {
       const list = sourcesByType.get(cursor.dataTypeId)
       if (list) list.push(cursor)
       else sourcesByType.set(cursor.dataTypeId, [cursor])
     }
     const byType = new Map<string, { minWindowEndMs: number, lastIngestAtMs: number }>()
-    for (const [dataTypeId, allSources] of sourcesByType) {
-      // Once a type has new-identity rows the old identity is retired: letting its frozen end hold
-      // the minimum would widen every read until STALE_SOURCE_MS ran out. It stays in
-      // perSourceItems below, and in the minimum on a type that never saw a device source.
-      // Trade-off, deliberate: where a 0.1.0 phone keeps writing the legacy identity beside an
-      // upgraded phone, the type-level minimum follows the origin sources alone.
-      const origins = allSources.filter((s) => s.origin)
-      const sources = origins.length > 0 ? origins : allSources
+    for (const [dataTypeId, sources] of sourcesByType) {
       // This source stays in bySource and perSourceItems below regardless of live or aged out,
       // so a phone that resumes writing under an identity just picks its progress back up.
       const live = sources.filter((s) => nowMs - s.lastIngestAtMs <= STALE_SOURCE_MS)

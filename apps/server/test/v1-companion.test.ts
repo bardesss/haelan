@@ -358,7 +358,7 @@ const nightPoint = (start: string, end: string) => sleepPoint({
 })
 
 describe('GET /companion/cursors identity cutovers', () => {
-  it("answers the old identity's newest end as the cutover and stops it holding the minimum back", async () => {
+  it("answers the old identity's newest end as the cutover and keeps it in the type's plain minimum", async () => {
     harness = await serverAfterFixtures()
     const token = await harness.signIn()
     expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-10T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
@@ -373,10 +373,12 @@ describe('GET /companion/cursors identity cutovers', () => {
 
     const body = (await cursors(token)).json() as { items: CursorItem[], identityCutovers: Record<string, number> }
     expect(body.identityCutovers).toEqual({ weight: cutover })
+    // The type-level item is what a 0.1.0 phone reads, and one may still be writing the old
+    // identity beside the upgraded phone, so its minimum spans every source, old identity included.
     expect(body.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)?.lastWindowEndMs)
-      .toBe(Date.parse('2026-08-12T10:00:00Z') + 1)
+      .toBe(Date.parse('2026-08-11T10:00:00Z') + 1)
     expect(body.items.filter((i) => i.dataTypeId === 'weight' && i.dataSource !== undefined)).toHaveLength(2)
-    expect(parseCursorEndsLikeThePhone(JSON.stringify(body)).get('weight')).toBe(Date.parse('2026-08-12T10:00:00Z') + 1)
+    expect(parseCursorEndsLikeThePhone(JSON.stringify(body)).get('weight')).toBe(Date.parse('2026-08-11T10:00:00Z') + 1)
 
     // The late record is still written, and an identical re-send of the first leaves one row.
     expect(p1WeightRowsAt('2026-08-11T10:00:00Z')).toBe(1)
