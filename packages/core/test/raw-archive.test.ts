@@ -155,6 +155,17 @@ describe('RawArchive', () => {
     )
     expect(rows[0]!.fetch_episode_id).toBe('ep-1')
   })
+
+  it('archives an identical body again when the caller opts out of dedup, and lists both in order', () => {
+    const first = archive.put({ ...base, body, fetchedAtMs: 10 })
+    const second = archive.put({ ...base, body, fetchedAtMs: 20, deduplicate: false })
+    expect(second).toEqual({ id: expect.any(String), deduplicated: false })
+    expect(second.id).not.toBe(first.id)
+    expect(archive.getBody('p1', second.id)).toBe(body)
+    expect(archive.listFor('p1').map((p) => p.id)).toEqual([first.id, second.id])
+    // An ordinary put still lands on the first row.
+    expect(archive.put({ ...base, body, fetchedAtMs: 30 })).toEqual({ id: first.id, deduplicated: true })
+  })
 })
 
 describe('listFor', () => {

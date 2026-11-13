@@ -196,6 +196,12 @@ export function registerIngestRoutes(app: FastifyInstance): void {
         fetchedAtMs: nowMs,
         httpStatus: 200,
         body: payload,
+        // A body naming records is archived every time it arrives. Moved at the source and
+        // back again, the last upload is byte identical to the first, and a rebuild only
+        // replays it where it was archived: deduplicated, the rebuild would end on the move.
+        // Re-applying a row is idempotent, and in drain mode the phone re-sends an identical
+        // body only on a retry or a re-read, so the archive grows by those alone.
+        deduplicate: recordIds.length === 0,
       })
       const localDates = new Set<string>()
       const rowsWritten = dataType.target === 'samples'

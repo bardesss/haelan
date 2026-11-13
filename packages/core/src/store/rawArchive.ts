@@ -20,6 +20,13 @@ export interface PutInput {
    * stores null, which is what every row archived before this existed looks like.
    */
   fetchEpisodeId?: string
+  /**
+   * False archives the body as a row of its own even when an identical one is stored for the
+   * same window. For a companion upload carrying record ids, where a later upload can move a
+   * record and an identical one can move it back: replay applies each row once, at its own
+   * place in fetch order, so a deduplicated move back would never be replayed. Defaults to true.
+   */
+  deduplicate?: boolean
 }
 
 export interface PutResult { id: string, deduplicated: boolean }
@@ -70,8 +77,11 @@ export class RawArchive {
   constructor(db: DbOrTx) { this.#db = db }
 
   put(input: PutInput): PutResult {
-    const bodyHash = createHash('sha256').update(input.body).digest('hex')
     const id = randomUUID()
+    // body_hash is read by nothing but the unique index below, so a row that opts out of dedup
+    // carries its own id beside the hash: it never conflicts, and nothing deduplicates onto it.
+    const contentHash = createHash('sha256').update(input.body).digest('hex')
+    const bodyHash = input.deduplicate === false ? `${contentHash}:${id}` : contentHash
 
     // Insert first and let the unique constraint decide, rather than select-then-insert: two
     // processes racing on the same new body (WAL mode lets the MCP server, the CLI and a sync

@@ -564,7 +564,9 @@ describe('the companion ingest route for sessions', () => {
     expect((response.json() as { affected: unknown }).affected).toEqual({ from: '2026-08-18', to: '2026-08-19' })
   })
 
-  it('a repeated night deduplicates instead of doubling', async () => {
+  // A night carries a record id (its name), so its body is archived again rather than
+  // deduplicated (see the archive.put call in ingest.ts); the night itself is still one.
+  it('a repeated night is archived again and still does not double', async () => {
     harness = await withServer()
     const token = await harness.signIn()
     const payload = { dataPoints: [sleepPointFor()] }
@@ -574,8 +576,8 @@ describe('the companion ingest route for sessions', () => {
     const second = await ingest(token, '/api/v1/p/p1/ingest/sleep', payload)
     expect(second.statusCode).toBe(200)
     const repeated = second.json() as { payloadId: string, deduplicated: boolean }
-    expect(repeated.deduplicated).toBe(true)
-    expect(repeated.payloadId).toBe((first.json() as { payloadId: string }).payloadId)
+    expect(repeated.deduplicated).toBe(false)
+    expect(repeated.payloadId).not.toBe((first.json() as { payloadId: string }).payloadId)
 
     const nights = await harness.app.inject({
       method: 'GET', url: '/api/v1/p/p1/sleep/nights?from=2026-08-18&to=2026-08-18',

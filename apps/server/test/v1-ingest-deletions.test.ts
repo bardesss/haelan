@@ -199,6 +199,20 @@ describe('a rebuild after companion moves ends where live did', () => {
     return { live, rebuilt: snapshot() }
   }
 
+  it('a weight moved away and back again, the last upload identical to the first', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const monday = [weightAt('2026-08-17T07:00:00Z', 'hc-weight-1')]
+    for (const dataPoints of [monday, [weightAt('2026-08-21T07:00:00Z', 'hc-weight-1')], monday]) {
+      expect((await ingest(token, 'weight', dataPoints)).statusCode).toBe(200)
+      harness.clock.nowMs += 60_000
+    }
+    const { live, rebuilt } = await liveThenRebuilt()
+    expect((live as { samples: { utcMs: number }[] }).samples.map((r) => r.utcMs))
+      .toEqual([Date.parse('2026-08-17T07:00:00Z')])
+    expect(rebuilt).toEqual(live)
+  })
+
   it('a weight deleted and then restored under the same id at another time', async () => {
     harness = await withServer()
     const token = await harness.signIn()
