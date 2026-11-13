@@ -202,9 +202,10 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         cookie = session.cookie
         pendingRouteId = savedInstanceState?.getString(STATE_PENDING_ROUTE)
 
-        // The background sync lives as long as a sign-in does: keep the schedule on every start
-        // (the first enqueue wins), and the sign-out needs no matching cancel because a worker
-        // with no session no-ops until the next sign-in enqueues again.
+        // The background sync lives as long as a sign-in does: it is scheduled at sign-in and
+        // again on every start here (a repeat enqueue updates the same work), and the sign-out
+        // needs no matching cancel because a worker with no session no-ops until the next
+        // sign-in enqueues again.
         SyncSchedule.enqueue(this)
 
         // As the glance and the web page do: the status bar's icons then follow the phone's light or
