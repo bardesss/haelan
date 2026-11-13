@@ -168,6 +168,44 @@ describe('OverrideStore', () => {
     expect(store.affectedLocalDate({ personId: 'p2', scope: 'sample', targetKey: sample })).toBeNull()
   })
 
+  describe('affectedLocalDates', () => {
+    it('lists the nights either side of a sleep session, sorted', () => {
+      test.db.insert(sessions).values({
+        id: 'sleep-1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'x',
+        startMs: MIDNIGHT_UTC, startOffsetMinutes: OFFSET, endMs: NINE_AM, endOffsetMinutes: OFFSET,
+        localDate: '2026-08-15', attrs: '{}', rawPayloadId: null,
+      }).run()
+      expect(store.affectedLocalDates({
+        personId: 'p1', scope: 'session', targetKey: sessionTarget('sleep-1'),
+      })).toEqual(['2026-08-14', '2026-08-15', '2026-08-16'])
+    })
+
+    it('adds the workout day a late heart rate reading belongs to', () => {
+      const reading = Date.UTC(2026, 7, 14, 21, 50)
+      test.db.insert(sessions).values({
+        id: 'run', personId: 'p1', sourceId: 'watch', kind: 'exercise', externalId: 'run',
+        startMs: Date.UTC(2026, 7, 14, 21, 30), startOffsetMinutes: OFFSET,
+        endMs: Date.UTC(2026, 7, 14, 22, 30), endOffsetMinutes: OFFSET,
+        localDate: '2026-08-15', attrs: '{}',
+      }).run()
+      insertSample(test.db, {
+        personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: reading,
+        tzOffsetMinutes: OFFSET, value: 150,
+      })
+      expect(store.affectedLocalDates({
+        personId: 'p1', scope: 'sample',
+        targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: reading }),
+      })).toEqual(['2026-08-14', '2026-08-15'])
+    })
+
+    it('is empty for a sample that has not been synced', () => {
+      expect(store.affectedLocalDates({
+        personId: 'p1', scope: 'sample',
+        targetKey: sampleTarget({ source: 'watch', metric: 'steps', utcMs: 5 }),
+      })).toEqual([])
+    })
+  })
+
   // The delete route reads one override by id before removing it, and an id is not a secret.
   it('reads one override by id, and nothing of another person by theirs', () => {
     const id = excludeSample()

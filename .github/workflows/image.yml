@@ -13,7 +13,7 @@ jobs:
   build-and-boot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # The file a person downloads and runs, checked the one way CI can: :latest doesn't resolve
       # until a release has run, so this can't be `up`-ed here, but `config` needs no registry and
@@ -21,12 +21,12 @@ jobs:
       - name: Validate compose.yaml
         run: docker compose -f compose.yaml config -q
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       # Loaded into the local daemon rather than pushed: this job proves the image works, and
       # nothing here should be able to publish one.
       - name: Build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           load: true

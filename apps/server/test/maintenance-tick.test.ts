@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   closeDatabase, listBackups, openHaelan, schema, seedPerson,
-  McpCallLog, McpTokenStore, MCP_CALL_LOG_TTL_MS,
+  McpCallLog, McpTokenStore, MCP_CALL_LOG_TTL_MS, SyncStateStore,
 } from '@haelan/core'
 import type { Instance } from '@haelan/core'
 import { MaintenanceTick } from '../src/maintenance/tick.ts'
@@ -184,6 +184,48 @@ describe('MaintenanceTick', () => {
         tick.stop()
         vi.useRealTimers()
       }
+    })
+  })
+})
+
+describe('the window failure prune', () => {
+  const NOW = 1_770_000_000_000
+  const DAY = 86_400_000
+
+  it('removes a window past the horizon', () => {
+    withDir((dir) => {
+      const instance = openHaelan(dir, {})
+      try {
+        seedPerson(instance.db, 'alice')
+        const endMs = NOW - 400 * DAY
+        new SyncStateStore(instance.db).recordWindowFailure({
+          personId: 'alice', dataType: 'heart-rate',
+          window: { startMs: endMs - DAY, endMs, localDate: '2025-01-01' }, error: new Error('400'), nowMs: NOW,
+        })
+        const tick = new MaintenanceTick({
+          instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => NOW,
+        })
+        expect(tick.pruneWindowFailures()).toBe(1)
+      } finally { instance.close() }
+    })
+  })
+
+  it('survives a throw and logs the prefixed line', () => {
+    withDir((dir) => {
+      const instance = openHaelan(dir, {})
+      try {
+        instance.db.$client.exec('DROP TABLE sync_window_failures')
+        const tick = new MaintenanceTick({
+          instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => NOW,
+        })
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        try {
+          expect(tick.pruneWindowFailures()).toBe(0)
+          expect(spy.mock.calls.map((c) => String(c[0]))).toEqual([
+            expect.stringMatching(/^maintenance: window failure prune failed, /),
+          ])
+        } finally { spy.mockRestore() }
+      } finally { instance.close() }
     })
   })
 })

@@ -1,18 +1,19 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 
 const root = new URL('../../', import.meta.url)
-const WORKFLOWS = [
-  '.github/workflows/android-release.yml',
-  '.github/workflows/android-tag.yml',
-  '.github/workflows/release.yml',
-  '.github/workflows/pages.yml',
-]
-describe('workflows that hold a secret or a write token run pinned actions', () => {
+const WORKFLOWS = readdirSync(new URL('.github/workflows/', root))
+  .filter((name) => name.endsWith('.yml'))
+  .map((name) => `.github/workflows/${name}`)
+describe('every workflow runs pinned actions', () => {
+  it('finds the workflow files', () => {
+    expect(WORKFLOWS.length).toBeGreaterThan(0)
+  })
   it.each(WORKFLOWS)('%s pins every action to a commit', (path) => {
     const text = readFileSync(new URL(path, root), 'utf8').replace(/\r\n/g, '\n')
     const uses = [...text.matchAll(/^\s+(?:- )?uses: (\S+)@(\S+)(.*)$/gm)]
-    expect(uses.length, `${path}: no uses: lines parsed`).toBeGreaterThan(0)
+    const mentions = text.split('\n').filter((line) => line.includes('uses:')).length
+    expect(uses.length, `${path}: a uses: line did not parse`).toBe(mentions)
     for (const [line, action, ref, rest] of uses) {
       expect(ref, `${path}: '${line.trim()}' is pinned to a movable ref. Resolve it with `
         + `gh api repos/<owner>/<repo>/commits/${ref} --jq .sha and write ${action}@<sha> # ${ref}.`)

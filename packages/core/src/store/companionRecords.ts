@@ -13,6 +13,11 @@ export interface DeletedRows { rowsDeleted: number, localDates: string[] }
 // Under SQLite's 999 bound-parameter cap once the person and a few fixed values ride along.
 const ID_CHUNK = 500
 
+// Metrics whose one record is a series of readings: a heart-rate record is chunked across
+// uploads, so its link has to widen to hold every chunk. Every other companion record is one
+// reading, and an upload of it says where the whole record now is.
+const SERIES_METRICS: ReadonlySet<string> = new Set(['heart_rate'])
+
 /**
  * Deleting what a companion record produced, and remembering that it was deleted.
  *
@@ -34,12 +39,14 @@ export class CompanionRecords {
   constructor(db: DbOrTx) { this.#db = db }
 
   /**
-   * One link per (record, metric, source) of the rows that carry a recordId. A record arrives in
-   * several uploads (a heart-rate record is chunked), so the stored range only ever widens.
+   * One link per (record, metric, source) of the rows that carry a recordId. A series record
+   * arrives in several uploads (a heart-rate record is chunked), so its stored range only ever
+   * widens. A one-reading record's upload replaces its range: a weight moved from Monday to
+   * Friday at the source would otherwise cover Wednesday, and keep a deleted record's row there.
    */
   link(personId: string, rows: readonly SampleRow[], keys: SampleKeys): void {
     const spans = new Map<string, {
-      recordId: string, metricRef: number, sourceRef: number, first: number, last: number,
+      recordId: string, metric: string, metricRef: number, sourceRef: number, first: number, last: number,
     }>()
     for (const row of rows) {
       if (row.recordId === undefined) continue
@@ -51,12 +58,12 @@ export class CompanionRecords {
         span.first = Math.min(span.first, row.utcMs)
         span.last = Math.max(span.last, row.utcMs)
       } else {
-        spans.set(key, { recordId: row.recordId, metricRef, sourceRef, first: row.utcMs, last: row.utcMs })
+        spans.set(key, { recordId: row.recordId, metric: row.metric, metricRef, sourceRef, first: row.utcMs, last: row.utcMs })
       }
     }
     if (spans.size === 0) return
     const personRef = keys.personRef(personId)
-    const upsert = this.#db.insert(companionRecordSamples).values({
+    const upsert = (widen: boolean) => this.#db.insert(companionRecordSamples).values({
       personRef: sql.placeholder('personRef'),
       recordId: sql.placeholder('recordId'),
       sourceRef: sql.placeholder('sourceRef'),
@@ -68,13 +75,21 @@ export class CompanionRecords {
         companionRecordSamples.personRef, companionRecordSamples.recordId,
         companionRecordSamples.metricRef, companionRecordSamples.sourceRef,
       ],
-      set: {
-        firstUtcMs: sql`min(${companionRecordSamples.firstUtcMs}, excluded.first_utc_ms)`,
-        lastUtcMs: sql`max(${companionRecordSamples.lastUtcMs}, excluded.last_utc_ms)`,
-      },
+      set: widen
+        ? {
+            firstUtcMs: sql`min(${companionRecordSamples.firstUtcMs}, excluded.first_utc_ms)`,
+            lastUtcMs: sql`max(${companionRecordSamples.lastUtcMs}, excluded.last_utc_ms)`,
+          }
+        : {
+            firstUtcMs: sql`excluded.first_utc_ms`,
+            lastUtcMs: sql`excluded.last_utc_ms`,
+          },
     }).prepare()
+    const widening = upsert(true)
+    const replacing = upsert(false)
     for (const span of spans.values()) {
-      upsert.run({
+      const statement = SERIES_METRICS.has(span.metric) ? widening : replacing
+      statement.run({
         personRef, recordId: span.recordId, sourceRef: span.sourceRef, metricRef: span.metricRef,
         first: span.first, last: span.last,
       })

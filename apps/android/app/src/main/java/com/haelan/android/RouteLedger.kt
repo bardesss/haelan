@@ -1,6 +1,7 @@
 package com.haelan.android
 
 import android.content.SharedPreferences
+import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseRouteResult
 
 /**
@@ -66,7 +67,9 @@ object RouteLedger {
      * would replace the delivered route with nothing (see the class comment), and the instance
      * already has everything else about the session from the delivery. An edit made at the source
      * still arrives, only later: a session refused in a change-feed drain is filed as withheld
-     * ([refusalsToFile]), and the release tap reads it in the foreground with its route.
+     * ([refusalsToFile]), and the screen reads it in the foreground with its route: after its own
+     * run once the route is readable, or on the release tap. A route gone at the source by then
+     * sends the session without one ([stepFor]).
      * A blank id is never refused: it is a record Health Connect has not named, so nothing here
      * could have been filed under it.
      */
@@ -105,9 +108,9 @@ object RouteLedger {
     /**
      * Which sessions [shouldPost] refused in a run go on the withheld list. A change feed names
      * a delivered workout only when it changed at the source, and once the token moves past it no
-     * later background read meets it again, so the release tap is what sends the edit. A window
-     * read meets every delivered workout in it, edited or not, and offering them all again would
-     * fill the list with routes the instance already holds.
+     * later background read meets it again, so the screen's walk of the list is what sends the
+     * edit. A window read meets every delivered workout in it, edited or not, and offering them all
+     * again would fill the list with routes the instance already holds.
      */
     fun refusalsToFile(refused: Set<String>, drained: Boolean): Set<String> =
         if (drained) refused.filterTo(mutableSetOf()) { it.isNotEmpty() } else emptySet()
@@ -115,6 +118,62 @@ object RouteLedger {
     /** The ledger after [refused] sessions were filed for release; their delivery stays recorded. */
     fun afterRefused(state: State, refused: Set<String>): State =
         State(state.withheld + refused.filter { it.isNotEmpty() }, state.sent)
+
+    /** One foreground read of a withheld workout by its id. */
+    sealed interface Read {
+        data class Found(val result: ExerciseRouteResult) : Read
+
+        /** Health Connect no longer holds the workout. */
+        data object Gone : Read
+
+        /** Not readable now, which is not gone: a restarting provider, a revoked permission. */
+        data object Failed : Read
+    }
+
+    /** What a walk of the withheld list does with one workout. */
+    sealed interface Step {
+        data class Send(val route: ExerciseRoute) : Step
+
+        /** Only the household can release it, from Health Connect's route dialog. */
+        data object Ask : Step
+
+        /** Nothing is left to release. */
+        data object Forget : Step
+
+        /** The workout has no route now, so it leaves the list as one with none. */
+        data object MarkNone : Step
+
+        /** Left in the list for a later walk. */
+        data object Skip : Step
+
+        /**
+         * A delivered workout filed for its edit ([refusalsToFile]) whose route has gone at the
+         * source: the session travels without one, which is the edit and the route's removal both.
+         */
+        data object SendWithoutRoute : Step
+    }
+
+    fun triage(read: Read): Step = when (read) {
+        Read.Gone -> Step.Forget
+        Read.Failed -> Step.Skip
+        is Read.Found -> when (val result = read.result) {
+            is ExerciseRouteResult.Data ->
+                if (result.exerciseRoute.route.isEmpty()) Step.MarkNone else Step.Send(result.exerciseRoute)
+            is ExerciseRouteResult.ConsentRequired -> Step.Ask
+            // NoData: the route is gone at the source.
+            else -> Step.MarkNone
+        }
+    }
+
+    /**
+     * [triage] for the walks of the withheld list, which also know what was delivered. An id in
+     * [sent] is an edit a drain refused, not a route waiting to be released; forgetting it when
+     * its route is gone would drop the edit, since no later read meets it again.
+     */
+    fun stepFor(id: String, read: Read, sent: Set<String>): Step {
+        val step = triage(read)
+        return if (step == Step.MarkNone && id in sent) Step.SendWithoutRoute else step
+    }
 
     fun ownerOf(session: SyncEngine.Session): String = "${session.server}|${session.personId}"
 

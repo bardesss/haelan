@@ -101,19 +101,35 @@ export class OverrideStore {
     return this.#localDateOf(this.#db, input.personId, input.scope, input.targetKey)
   }
 
+  /**
+   * Every local day a write to this target re-derives, sorted and without repeats: the target's own
+   * day, the nights either side of a sleep session, and the workout days a heart rate reading
+   * feeds. Empty when nothing names a day yet. The same list `#markAffected` marks, for the reason
+   * `affectedLocalDate` gives.
+   */
+  affectedLocalDates(input: { personId: string, scope: OverrideScope, targetKey: string }): string[] {
+    return this.#affectedDates(this.#db, input.personId, input.scope, input.targetKey)
+  }
+
   #markAffected(tx: DbOrTx, personId: string, scope: OverrideScope, targetKey: string, nowMs: number): void {
-    const localDate = this.#localDateOf(tx, personId, scope, targetKey)
     // Nothing to mark is an ordinary answer: an override can be written before a backfill has
     // reached the day it targets, and the sync that writes those rows marks the day itself.
-    if (localDate === null) return
-    this.#queue.markDirty({ personId, localDate, nowMs }, tx)
+    for (const localDate of this.#affectedDates(tx, personId, scope, targetKey)) {
+      this.#queue.markDirty({ personId, localDate, nowMs }, tx)
+    }
+  }
+
+  #affectedDates(tx: DbOrTx, personId: string, scope: OverrideScope, targetKey: string): string[] {
+    const localDate = this.#localDateOf(tx, personId, scope, targetKey)
+    if (localDate === null) return []
+    const dates = new Set<string>([localDate])
     // An excluded or restored sleep piece changes the chain it was in, which can reach the night
-    // on either side. Sample overrides add their own dates alongside, here, when they need to.
+    // on either side.
     if (scope === 'session') {
       const kind = tx.select({ kind: sessions.kind }).from(sessions)
         .where(and(eq(sessions.id, parseSessionTarget(targetKey)), eq(sessions.personId, personId))).get()?.kind
       if (kind === 'sleep') {
-        for (const date of sleepNeighbourDates([localDate])) this.#queue.markDirty({ personId, localDate: date, nowMs }, tx)
+        for (const date of sleepNeighbourDates([localDate])) dates.add(date)
       }
     }
     // A workout is filed on the date it ends, so a heart rate reading before midnight belongs to
@@ -121,11 +137,10 @@ export class OverrideStore {
     if (scope === 'sample') {
       const target = parseSampleTarget(targetKey)
       if (target.metric === 'heart_rate') {
-        for (const date of exerciseDatesSpanning(tx, { personId, utcMs: [target.utcMs] })) {
-          this.#queue.markDirty({ personId, localDate: date, nowMs }, tx)
-        }
+        for (const date of exerciseDatesSpanning(tx, { personId, utcMs: [target.utcMs] })) dates.add(date)
       }
     }
+    return [...dates].sort()
   }
 
   #localDateOf(tx: DbOrTx, personId: string, scope: OverrideScope, targetKey: string): string | null {

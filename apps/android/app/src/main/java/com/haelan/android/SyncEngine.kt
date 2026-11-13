@@ -40,6 +40,7 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.reflect.KClass
 
 /**
@@ -320,10 +321,10 @@ object SyncEngine {
         if (mode is ChangeFeed.Mode.Drain) {
             val changes = ChangesSource(client, mode.token)
             val outcome = if (key == "resting") {
-                val window = WindowSource(client, SyncCursors.bootstrapStartFor(cursorEndMs, fallbackStart, end), end)
-                drainResting(session, packageName, prefs, changes, window, cutoverMs, post)
+                val windowStart = SyncCursors.bootstrapStartFor(cursorEndMs, fallbackStart, end)
+                drainResting(client, session, packageName, prefs, owner, changes, windowStart, end, fallbackStart, cutoverMs, post)
             } else {
-                syncOne(session, packageName, prefs, key, changes, cutoverMs, post)
+                syncOne(session, packageName, prefs, key, changes, cutoverMs, fallbackStart, post)
             }
             if (!changes.expired) {
                 if (outcome is InstanceClient.Outcome.Ok) changes.nextToken?.let { ChangeFeed.save(prefs, owner, dataTypeId, it, cursorEndMs) }
@@ -343,9 +344,12 @@ object SyncEngine {
         }
         // Read up to a moment after the token, not to the run's end: the run's end was fixed
         // before the cursors call and every earlier type, and a record written since with a time
-        // after it would otherwise fall before the token and outside the window both.
-        val readEnd = maxOf(end, Instant.now())
-        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, post)
+        // after it would otherwise fall before the token and outside the window both. The margin
+        // past it reaches a record dated ahead of the clock.
+        val readEnd = SyncCursors.bootstrapReadEnd(end, Instant.now())
+        // Only a window read can start inside a minute, so only it names a first minute to drop;
+        // a drain reads whole changed records and passes none.
+        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, fallbackStart, post, partialMinuteStart(start, cursorEndMs))
         if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh, cursorEndMs)
         return outcome
     }
@@ -353,28 +357,57 @@ object SyncEngine {
     /**
      * Resting heart rate from its change feed. A day's point is built from that day's latest
      * reading, so the changed records alone cannot rebuild it: a deleted latest reading leaves
-     * an earlier one standing that the feed never mentions. So the feed only supplies the
-     * deletions, which go first and take the day's row with them, and the days are then rebuilt
-     * from a read of [window], which starts where a bootstrap would (SyncCursors.bootstrapStartFor):
-     * thirty days back, the span a token can cover, or from the instance's older cursor, never
-     * before what the permission answers.
+     * an earlier one standing that the feed never mentions. So the feed supplies the
+     * deletions, which go first and take the day's row with them, and says which days it
+     * touched; the days are then rebuilt from a window read. [windowStart] is where a bootstrap
+     * would start (SyncCursors.bootstrapStartFor), thirty days back or the instance's older
+     * cursor, and it is now a floor rather than the reach: the read goes back further to the day
+     * of any reading the feed upserted, or of any deleted one RestingLedger can date
+     * (rebuildStart). A feed with nothing in it posts nothing.
      */
     private suspend fun drainResting(
+        client: HealthConnectClient,
         session: Session,
         packageName: String,
         prefs: SharedPreferences,
+        owner: String,
         changes: ChangesSource,
-        window: BatchSource,
+        windowStart: Instant,
+        end: Instant,
+        fallbackStart: Instant,
         cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
-        val deletions = collect(changes.batches(RestingHeartRateRecord::class)).deletions
+        val read = collect(changes.batches(RestingHeartRateRecord::class))
         if (changes.expired) return InstanceClient.Outcome.Ok(false)
+        if (read.records.isEmpty() && read.deletions.isEmpty()) return InstanceClient.Outcome.Ok(false)
         val dataTypeId = SyncTypes.forKey("resting").dataTypeId
-        val deleted = postDeletions(session, dataTypeId, deletions, post)
+        val deleted = postDeletions(session, dataTypeId, read.deletions, post)
         if (deleted is InstanceClient.Outcome.Failed) return deleted
-        val upserted = syncOne(session, packageName, prefs, "resting", window, cutoverMs, post)
-        return if (upserted is InstanceClient.Outcome.Ok) InstanceClient.Outcome.Ok(upserted.value || deletions.isNotEmpty()) else upserted
+        val start = rebuildStart(windowStart, read.records.map { it.time }, read.deletions, RestingLedger.load(prefs, owner), fallbackStart)
+        // Past the clock like a bootstrap read (syncType), so a reading dated ahead of it, or
+        // written since the run fixed its end, is rebuilt now and not one drain later.
+        val readEnd = SyncCursors.bootstrapReadEnd(end, Instant.now())
+        val upserted = syncOne(session, packageName, prefs, "resting", WindowSource(client, start, readEnd), cutoverMs, fallbackStart, post)
+        return if (upserted is InstanceClient.Outcome.Ok) InstanceClient.Outcome.Ok(upserted.value || read.deletions.isNotEmpty()) else upserted
+    }
+
+    /**
+     * Where a resting rebuild reads from: the earliest of [windowStart] and one day before each
+     * of [upsertTimes] and each of [deletedIds] that [known] dates, so the whole local day of
+     * every touched reading is read again whatever its offset. Never before [fallbackStart]. A
+     * deleted id the ledger never filed (posted before it existed, or pruned) is ignored.
+     */
+    internal fun rebuildStart(
+        windowStart: Instant,
+        upsertTimes: List<Instant>,
+        deletedIds: List<String>,
+        known: Map<String, Long>,
+        fallbackStart: Instant,
+    ): Instant {
+        val touched = upsertTimes + deletedIds.mapNotNull { known[it] }.map { Instant.ofEpochMilli(it) }
+        val earliest = touched.map { it.minus(1, ChronoUnit.DAYS) }.fold(windowStart) { a, b -> minOf(a, b) }
+        return maxOf(earliest, fallbackStart)
     }
 
     /** The record class each toggle reads, which is also the class its change token is taken for. */
@@ -408,7 +441,9 @@ object SyncEngine {
         key: String,
         source: BatchSource,
         cutoverMs: Long?,
+        fallbackStart: Instant,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
+        firstMinute: Instant? = null,
     ): InstanceClient.Outcome<Boolean> {
         // The key is a toggle, the id is what the instance files: SyncTypes.forKey is what
         // ties them, and its test keeps the knot tied.
@@ -438,6 +473,7 @@ object SyncEngine {
                 // records are split by identity first, because a day whose later reading came
                 // off another device is that device's reading and not this app's merge.
                 val read = collect(source.batches(RestingHeartRateRecord::class))
+                val takenAt = read.records.associate { it.metadata.id to it.time.toEpochMilli() }
                 val points = withContext(Dispatchers.Default) {
                     read.records
                         .groupBy { identityOf(it, cutoverMs) }
@@ -451,6 +487,12 @@ object SyncEngine {
                         }
                 }
                 val outcome = uploadPoints(session, packageName, "daily-resting-heart-rate", points, post)
+                // Filed only once the instance took the points: a later feed reports a deleted
+                // reading by this id alone, and the ledger is what dates its day (drainResting).
+                if (outcome is InstanceClient.Outcome.Ok) {
+                    val sent = points.map { it.body.getString("name") }.mapNotNull { id -> takenAt[id]?.let { id to it } }.toMap()
+                    RestingLedger.record(prefs, RouteLedger.ownerOf(session), sent, fallbackStart)
+                }
                 return thenDeletions(outcome, session, "daily-resting-heart-rate", read.deletions, post)
             }
             "steps" -> return uploadType(session, packageName, dataTypeId, source.batches(StepsRecord::class), cutoverMs, post) { toStepPoints(it) }
@@ -489,7 +531,7 @@ object SyncEngine {
             "body_temp" -> return uploadType(session, packageName, dataTypeId, source.batches(BodyTemperatureRecord::class), cutoverMs, post) { toBodyTempPoints(it) }
             "glucose" -> return uploadType(session, packageName, dataTypeId, source.batches(BloodGlucoseRecord::class), cutoverMs, post) { toBloodGlucosePoints(it) }
             "hydration" -> return uploadType(session, packageName, dataTypeId, source.batches(HydrationRecord::class), cutoverMs, post) { toHydrationPoints(it) }
-            "heart_rate" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateRecord::class), cutoverMs, post) { toHeartRatePoints(it) }
+            "heart_rate" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateRecord::class), cutoverMs, post) { dropMinuteOf(toHeartRatePoints(it), firstMinute) }
             "hrv" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateVariabilityRmssdRecord::class), cutoverMs, post) { toHrvPoints(it) }
             "spo2" -> return uploadType(session, packageName, dataTypeId, source.batches(OxygenSaturationRecord::class), cutoverMs, post) { toSpo2Points(it) }
             "breathing" -> {
@@ -1144,6 +1186,31 @@ object SyncEngine {
             }
         }
 
+    /**
+     * Where a heart-rate window read starts inside a minute the instance may already hold whole,
+     * or null when there is nothing to protect: [start] on a minute boundary, or no
+     * [cursorEndMs], so the instance holds nothing of this type. Whether the phone can read
+     * further back does not decide it: without the history permission every bootstrap starts at
+     * the thirty-day fallback, which slides forward daily past minutes an earlier run sent whole.
+     */
+    internal fun partialMinuteStart(start: Instant, cursorEndMs: Long?): Instant? =
+        if (cursorEndMs == null || start == start.truncatedTo(ChronoUnit.MINUTES)) null else start
+
+    /**
+     * Drops the heart-rate points in [windowStart]'s minute (phase 6 ledger F5): the instance
+     * overwrites a minute's aggregate with whatever one upload carried, so the samples of a
+     * minute the window cut in two would replace the whole minute an earlier read already sent.
+     * A null [windowStart] keeps every point.
+     */
+    internal fun dropMinuteOf(points: List<JSONObject>, windowStart: Instant?): List<JSONObject> {
+        if (windowStart == null) return points
+        val minute = windowStart.truncatedTo(ChronoUnit.MINUTES)
+        return points.filter {
+            val time = it.getJSONObject("heartRate").getJSONObject("sampleTime").getString("physicalTime")
+            Instant.parse(time).truncatedTo(ChronoUnit.MINUTES) != minute
+        }
+    }
+
     internal fun toWeightPoints(records: List<WeightRecord>): List<JSONObject> = records.map { record ->
         val grams = Math.round(record.weight.inKilograms * 1000.0)
         JSONObject()
@@ -1372,6 +1439,9 @@ object SyncEngine {
      * name, which is the record id, so each lands on the session a sync already filed and
      * replaces its routeless copy rather than adding a second workout beside it.
      *
+     * A null route is a filed edit whose route has gone at the source (RouteLedger.Step
+     * .SendWithoutRoute): it goes as a session with none, which also clears the instance's copy.
+     *
      * The ledger is moved only for what landed: a release that did not arrive stays withheld, and
      * the screen goes on offering it.
      */
@@ -1379,22 +1449,23 @@ object SyncEngine {
         session: Session,
         packageName: String,
         prefs: SharedPreferences,
-        released: List<Pair<ExerciseSessionRecord, ExerciseRoute>>,
+        released: List<Pair<ExerciseSessionRecord, ExerciseRoute?>>,
         cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
         if (released.isEmpty()) return InstanceClient.Outcome.Ok(false)
+        val results = released.map { (record, route) ->
+            record to (route?.let { ExerciseRouteResult.Data(it) } ?: ExerciseRouteResult.NoData())
+        }
         val points = withContext(Dispatchers.Default) {
-            released.map { (record, route) ->
-                Point(identityOf(record, cutoverMs), exercisePoint(record, ExerciseRouteResult.Data(route)))
-            }
+            results.map { (record, result) -> Point(identityOf(record, cutoverMs), exercisePoint(record, result)) }
         }
         val outcome = uploadPoints(session, packageName, SyncTypes.forKey("exercise").dataTypeId, points, post)
         if (outcome is InstanceClient.Outcome.Ok) {
             RouteLedger.record(
                 prefs,
                 RouteLedger.ownerOf(session),
-                released.associate { (record, route) -> record.metadata.id to RouteLedger.seenOf(ExerciseRouteResult.Data(route)) },
+                results.associate { (record, result) -> record.metadata.id to RouteLedger.seenOf(result) },
             )
         }
         return outcome

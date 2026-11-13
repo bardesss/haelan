@@ -5,6 +5,7 @@
 } from '@haelan/core'
 import type { DataType, JobDeps, RateLimiter, SkippedWindow, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
+import { trackFailures } from '../derive/drainProgress.ts'
 import { logDayFailed } from '../derive/logDayFailed.ts'
 
 // probe/findings/scopes.md measured 300 requests per minute per user. Running at the ceiling is
@@ -636,18 +637,20 @@ export class SyncRunner {
    * by an older mapper. Their days stay queued until a boot rebuilds them.
    */
   #derive(personIds: string[]): void {
+    const progress = trackFailures(logDayFailed('sync'))
     try {
       for (let batch = 0; batch < MAX_DERIVE_BATCHES; batch++) {
         if (this.#aborted) return
-        if (runDerive({
+        const report = runDerive({
           db: this.#context.instance.db, queue: this.#context.instance.deriveQueue,
           priority: this.#context.instance.sourcePriority,
           overrides: this.#context.instance.overrides,
           settings: this.#context.instance.settings,
           nowMs: this.#context.now(),
           personIds,
-          onDayFailed: logDayFailed('sync'),
-        }).daysDerived === 0) return
+          onDayFailed: progress.onDayFailed,
+        })
+        if (progress.stalled(report)) return
       }
       console.log(`sync: derivation stopped after ${MAX_DERIVE_BATCHES} batches with days still queued`)
     } catch (error) {

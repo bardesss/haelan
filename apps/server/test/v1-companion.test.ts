@@ -190,6 +190,14 @@ describe('GET /companion/cursors', () => {
     expect(perSource.map((i) => i.lastWindowEndMs)).toEqual([harness.clock.nowMs])
   })
 
+  it('clamps a history start that a future-dated first point pushed past now back to now', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2027-06-01T00:00:00Z')] })).statusCode).toBe(200)
+    const body = (await cursors(token)).json() as { historyStartMs: number | null }
+    expect(body.historyStartMs).toBe(harness.clock.nowMs)
+  })
+
   it('cannot be read for another person', async () => {
     harness = await withServer()
     const token = await harness.signIn()

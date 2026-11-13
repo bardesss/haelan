@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // happy-dom: every case here mounts a tiny probe component and lets its query or mutation settle
 // for real, the same reason glance-page.test.tsx does (L1-91's own comment on why).
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -137,13 +137,18 @@ describe('useQuickLogTap', () => {
       return json(body)
     })
     const client = newClient()
-    client.setQueryData(glanceKey('p1'), body)
+    // The seed is the entry GlanceMount reads, so the only glance request is the one the tap's
+    // invalidation causes; the today key carries the local date, hence the fixed clock.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-23T10:00:00Z'))
+    client.setQueryData(glanceKey('p1', null, '2026-09-23'), body)
     mount(client, <><Probe /><GlanceMount /></>)
     await flush(client, () => container!.innerHTML)
 
     click(container!.querySelector('button')!)
     await flush(client, () => container!.innerHTML)
     restore()
+    vi.useRealTimers()
 
     const posted = requests.find((r) => r.method === 'POST' && r.url.includes('/quick-log'))
     expect(posted).toBeDefined()

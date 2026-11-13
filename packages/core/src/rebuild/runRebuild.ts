@@ -507,6 +507,14 @@ function dropUnreferencedSources(tx: DbOrTx, personId: string, keys: SampleKeys)
     inArray(sourcePanelVisibility.sourceId, stale),
   )).run()
 
+  // A link whose rows are all gone can still name the source. The source's ref is a rowid that
+  // SQLite may hand to a new source later, and a delete through the leftover link would then
+  // range-delete that other source's rows.
+  tx.delete(companionRecordSamples).where(and(
+    eq(companionRecordSamples.personRef, keys.personRef(personId)),
+    inArray(companionRecordSamples.sourceRef, stale.map((id) => keys.sourceRef(id))),
+  )).run()
+
   tx.delete(sources).where(inArray(sources.id, stale)).run()
   return { sources: stale.length, rankings, aliases }
 }

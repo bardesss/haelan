@@ -1133,6 +1133,13 @@
       "literalLoopback": "This machine, literal loopback",
       "proxyOrTailscale": "Reverse proxy or Tailscale"
     },
+    "callback": {
+      "badState": "That link to Google expired or was already used. Connect Google again.",
+      "wrongPerson": "Google sent back a consent that someone else in this household started. Sign in as yourself and connect Google again.",
+      "noSession": "You were not signed in at {{baseUrl}}, the address Google sends you back to. Open haelan at {{baseUrl}}, sign in there, and connect Google again.",
+      "failedTitle": "Connecting Google did not work",
+      "backToAccount": "Back to your account"
+    },
     "google": {
       "title": "Connect Google",
       "intro": "This is the one step nobody can automate. Google exposes no API for creating an OAuth client, so you create one once, in the console, and paste it back here.",

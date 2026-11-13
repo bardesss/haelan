@@ -5,6 +5,7 @@ import {
 import type { OverrideScope, StoredOverride } from '@haelan/core'
 import { parseDayMetricTarget, parseSampleTarget } from '@haelan/core/target-key'
 import { errorBody, statusFor } from '../../api/envelope.ts'
+import { trackFailures } from '../../derive/drainProgress.ts'
 import { logDayFailed } from '../../derive/logDayFailed.ts'
 import {
   personIdOf, requireDateRange, roundMetricValue, sendHashed, textField,
@@ -116,11 +117,11 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     // where nothing has been written and the shared 400 is the right answer.
     // A day_metric key carries its date as free text, and the store would accept junk and mark it dirty.
     if (scope === 'day_metric') requireDate('targetKey localDate', parseDayMetricTarget(targetKey).localDate)
-    const localDate = overrides.affectedLocalDate({ personId, scope, targetKey })
+    const dates = overrides.affectedLocalDates({ personId, scope, targetKey })
     // No try/catch and no second transaction: put wraps the row and the queue mark in one
     // already, and registerV1's error handler turns its ConfigError into the shared 400.
     const id = overrides.put({ personId, scope, targetKey, action, correctedValue, reason, nowMs: app.haelan.now() })
-    return reply.send({ id, ...applyOverride(app, personId, localDate) })
+    return reply.send({ id, ...applyOverride(app, personId, dates) })
   })
 
   app.delete<{ Params: OverrideParams }>('/p/:personId/overrides/:overrideId', async (request, reply) => {
@@ -140,11 +141,11 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
 
     // Resolved before the removal, because the stored row is the only place the target was
     // recorded and the day to re-derive is a function of it.
-    const localDate = overrides.affectedLocalDate({
+    const dates = overrides.affectedLocalDates({
       personId, scope: stored.scope, targetKey: stored.targetKey,
     })
     overrides.remove({ personId, id: overrideId, nowMs: app.haelan.now() })
-    return reply.send({ id: overrideId, ...applyOverride(app, personId, localDate) })
+    return reply.send({ id: overrideId, ...applyOverride(app, personId, dates) })
   })
 
   // The four routes below take no drain, no loop, no budget and no `applied` field, which is not
@@ -291,14 +292,18 @@ function roundCorrectedValue(item: StoredOverride): StoredOverride {
  * cleanly without ever reaching it. Reporting that as applied would be exactly the failure this
  * field exists to prevent, so the loop bounds the work and the queue decides the answer.
  *
- * A null day means the store marked nothing, which is not a failure: the override names a sample
+ * No dates means the store marked nothing, which is not a failure: the override names a sample
  * or a session that has not been synced yet, and the sync that writes those rows marks the day
- * itself. There is nothing queued to apply, so nothing is claimed to be pending either.
+ * itself. There is nothing queued to apply, so nothing is claimed to be pending either. The dates
+ * are sorted, so the range spans every day the write re-derived, neighbour nights included.
  */
-function applyOverride(app: FastifyInstance, personId: string, localDate: string | null): WriteResult {
-  if (localDate === null) return { affected: null, applied: true }
+function applyOverride(app: FastifyInstance, personId: string, dates: readonly string[]): WriteResult {
+  if (dates.length === 0) return { affected: null, applied: true }
   drainPersonDerivation(app, personId)
-  return { affected: { from: localDate, to: localDate }, applied: !stillQueued(app, personId, localDate) }
+  return {
+    affected: { from: dates[0]!, to: dates[dates.length - 1]! },
+    applied: !dates.some((date) => stillQueued(app, personId, date)),
+  }
 }
 
 /**
@@ -342,6 +347,7 @@ export function drainPersonDerivation(
   if (!person || peopleNeedingRebuild([person]).length > 0) return
 
   const startedAtMs = performance.now()
+  const progress = trackFailures(logDayFailed(source))
   try {
     for (let batch = 0; batch < MAX_DRAIN_BATCHES; batch++) {
       const report = runDerive({
@@ -356,9 +362,9 @@ export function drainPersonDerivation(
         // days inside this request: work this caller did not ask for and, on a shared instance,
         // work about somebody else's data.
         personIds: [personId],
-        onDayFailed: logDayFailed(source),
+        onDayFailed: progress.onDayFailed,
       })
-      if (report.daysDerived === 0) return
+      if (progress.stalled(report)) return
       if (performance.now() - startedAtMs >= DRAIN_BUDGET_MS) {
         // Neither line claims anything about what is left queued. A final full batch can have
         // emptied the queue, and stillQueued asks a line later rather than guessing here.

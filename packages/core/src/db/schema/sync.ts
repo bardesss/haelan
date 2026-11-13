@@ -16,7 +16,8 @@ export const syncState = sqliteTable('sync_state', {
 // A day window that failed to fetch or write, counted per run. One bad day used to stop its whole
 // type; now the job carries on past it and this table is how a day that keeps failing is given up
 // on (skipped_at_ms) instead of being retried for ever. Deleted again the first time the window
-// succeeds, so the count is of consecutive runs.
+// succeeds, so the count is of consecutive runs. Rows past the type's horizon are pruned on the
+// maintenance tick.
 export const syncWindowFailures = sqliteTable('sync_window_failures', {
   personId: text('person_id').notNull().references(() => people.id),
   dataType: text('data_type').notNull(),

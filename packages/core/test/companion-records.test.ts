@@ -212,6 +212,19 @@ describe('CompanionRecords', () => {
     ctx.cleanup()
   })
 
+  it('a weight moved at the source no longer covers the days between its old and new time', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const day = 86_400_000
+    store(ctx, [row({ recordId: 'hc-weight-moved' })])
+    store(ctx, [row({ recordId: 'hc-weight-moved', utcMs: T0 + 4 * day })])
+    store(ctx, [row({ recordId: 'hc-weight-between', utcMs: T0 + 2 * day, value: 81 })])
+    new CompanionRecords(ctx.db).deleteRecords(
+      { personId: 'p1', dataType: WEIGHT, recordIds: ['hc-weight-between'], nowMs: 5 }, new SampleKeys(ctx.db))
+    expect(readSamples(ctx.db).map((r) => r.utcMs)).not.toContain(T0 + 2 * day)
+    ctx.cleanup()
+  })
+
   it('re-applying a tombstone keeps the row a surviving record wrote on the same key', () => {
     const ctx = createTestDatabase()
     seedPerson(ctx.db, 'p1')

@@ -5,6 +5,7 @@ import type { WorkoutSession } from './useSessions.js'
 import { apiGet, ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
+import { useToday } from '../controls/useToday.js'
 
 // Mirrors the glance payload in packages/core/src/query/glance.ts, which the route sends whole - the same
 // choice useAllTime.ts makes, and for the same reason: apps/web imports only @haelan/core's browser-safe
@@ -161,12 +162,16 @@ export interface Glance {
  * `day` is folded into the key rather than left off it, so a day someone opened, browsed away
  * from and came back to reads from cache instead of refetching - the same reason `useSeries` and
  * every other ranged read here keys on its own arguments. `'today'` in place of `null` keeps the
- * key one shape TanStack can hash consistently; `queryKeys.resource(personId, 'glance')` stays the
- * prefix so PR 371's `invalidateResource(..., 'glance')` (useAnnotations.ts), which matches on
+ * key one shape TanStack can hash consistently, and the today key also carries the person's local
+ * date (`today`), so the key changes at their midnight and the open page asks for the new day;
+ * `queryKeys.resource(personId, 'glance')` stays the prefix so PR 371's `invalidateResource(..., 'glance')` (useAnnotations.ts), which matches on
  * `queryKey[2]` alone, still reaches every day's cached entry after a write.
  */
-export function glanceKey(personId: string, day: string | null = null): readonly unknown[] {
-  return [...queryKeys.resource(personId, 'glance'), day ?? 'today']
+export function glanceKey(personId: string, day: string | null = null, today: string | null = null): readonly unknown[] {
+  if (day !== null) return [...queryKeys.resource(personId, 'glance'), day]
+  return today === null
+    ? [...queryKeys.resource(personId, 'glance'), 'today']
+    : [...queryKeys.resource(personId, 'glance'), 'today', today]
 }
 
 /** The `{ nearest }` a 404 answers with, when `day` names a gap in the archive. Read off the raw
@@ -200,8 +205,9 @@ export function useGlance(day: string | null = null): {
 } {
   const session = useSession()
   const personId = session.data?.personId
+  const today = useToday(session.data?.effectiveTimezone)
   const query = useQuery({
-    queryKey: glanceKey(personId ?? '', day),
+    queryKey: glanceKey(personId ?? '', day, day === null ? today : null),
     // The same race useSeries and useSourceNames guard: asking before the session resolves would
     // cache an answer under a key naming no person.
     enabled: personId !== undefined,

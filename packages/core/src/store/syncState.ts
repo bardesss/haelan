@@ -1,11 +1,12 @@
 ﻿import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { syncState, syncWindowFailures, excludedDataTypes } from '../db/schema/index.ts'
-import { DATA_TYPES } from '../api/catalogue.ts'
+import { DATA_TYPES, dataTypeById, horizonDaysFor } from '../api/catalogue.ts'
 import { SchemaDriftError } from '../errors.ts'
 
 /** Runs a day window may fail in a row before sync stops holding the rest of its type for it. */
 export const SKIP_WINDOW_AFTER_RUNS = 3
+const DAY_MS = 86_400_000
 
 export interface SkippedWindow {
   dataType: string
@@ -133,6 +134,21 @@ export class SyncStateStore {
       eq(syncWindowFailures.personId, personId), eq(syncWindowFailures.dataType, dataType),
       eq(syncWindowFailures.windowStartMs, windowStartMs),
     )).run()
+  }
+
+  /**
+   * Drops window rows the backfill will never walk again: ended on or before the type's horizon
+   * floor, or of a data type the catalogue no longer has. Nothing else removes a row for a window
+   * that never succeeds, so without this the table and the skipped list only grow. A skipped
+   * window older than its horizon leaves sync status with its row; inside the horizon it stays.
+   */
+  pruneWindowFailures(nowMs: number, userHorizonDays: number): number {
+    const stale = this.#db.select().from(syncWindowFailures).all().filter((row) => {
+      const type = dataTypeById(row.dataType)
+      return !type || row.windowEndMs <= nowMs - horizonDaysFor(type, userHorizonDays) * DAY_MS
+    })
+    for (const row of stale) this.clearWindowFailure(row.personId, row.dataType, row.windowStartMs)
+    return stale.length
   }
 
   // Over the types this person syncs, for the reason failuresFor gives: a type they turned off is

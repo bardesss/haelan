@@ -177,7 +177,9 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
         if (ends.bucketMaxMs === null || legacyEndMs > ends.bucketMaxMs) ends.bucketMaxMs = legacyEndMs
       }
 
-      if (historyStartMs === null || row.windowStartMs < historyStartMs) historyStartMs = row.windowStartMs
+      // Capped at now for the same reason as the cursor above.
+      const startMs = Math.min(row.windowStartMs, nowMs)
+      if (historyStartMs === null || startMs < historyStartMs) historyStartMs = startMs
     }
 
     // Keyed on the type alone, for the shape 0.1.0 still reads: the MINIMUM, across the type's

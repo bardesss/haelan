@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useGlance } from '../src/data/useGlance.js'
+import { useGlance, glanceKey } from '../src/data/useGlance.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { flush } from './flush.js'
@@ -247,5 +247,69 @@ describe('useGlance', () => {
     globalThis.fetch = originalFetch
 
     expect(seen).toEqual({ nearest: '2026-09-20' })
+  })
+
+  describe('at local midnight', () => {
+    const realSetTimeout = globalThis.setTimeout
+    let glanceGets = 0
+    const originalFetch = globalThis.fetch
+
+    beforeEach(() => {
+      glanceGets = 0
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+        if (url.pathname.endsWith('/glance')) glanceGets += 1
+        return new Response(JSON.stringify(glanceBody()), { status: 200 })
+      }) as typeof fetch
+    })
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch
+      vi.useRealTimers()
+    })
+
+    /** flush() waits on a faked setTimeout, so this lets real time pass and runs the zero-delay timers react-query schedules. */
+    async function settle(client: QueryClient): Promise<void> {
+      for (let i = 0; i < 20 || client.isFetching() > 0; i += 1) {
+        await act(async () => {
+          await new Promise((resolve) => realSetTimeout(resolve, 5))
+          vi.advanceTimersByTime(0)
+        })
+      }
+    }
+
+    function GlanceProbe() {
+      useGlance()
+      return null
+    }
+
+    function utcPerson(client: QueryClient): void {
+      client.setQueryData(queryKeys.session(), { ...PERSON, timezone: 'UTC', effectiveTimezone: 'UTC' })
+    }
+
+    it('asks for the new day once the person\'s midnight passes', async () => {
+      vi.setSystemTime(new Date('2026-03-10T23:59:30Z'))
+      const { client, tree } = withClient(<GlanceProbe />, true)
+      utcPerson(client)
+      mount(tree); await settle(client)
+      expect(glanceGets).toBe(1)
+      act(() => { vi.advanceTimersByTime(31_000) }); await settle(client)
+      expect(glanceGets).toBe(2)
+      expect(client.getQueryCache().find({ queryKey: glanceKey('p1', null, '2026-03-11') })).toBeDefined()
+    })
+
+    // Characterization: passes before the fix. Mutation that turns it red: key the today glance on
+    // Date.now()'s hour, and glanceGets rises above 1.
+    it('does not ask again on the hourly wake-ups within one day', async () => {
+      vi.setSystemTime(new Date('2026-03-10T08:00:00Z'))
+      const { client, tree } = withClient(<GlanceProbe />, true)
+      utcPerson(client)
+      mount(tree); await settle(client)
+      for (let hour = 0; hour < 3; hour += 1) {
+        act(() => { vi.advanceTimersByTime(3_600_000) }); await settle(client)
+      }
+      expect(glanceGets).toBe(1)
+    })
   })
 })

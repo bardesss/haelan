@@ -7,7 +7,7 @@ import type { RateLimiter } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import type { FastifyInstance } from 'fastify'
 
-export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled' | 'list_fails' | 'throttles_one_person'
+export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled' | 'list_fails' | 'throttles_one_person' | 'throttles_one_persons_backfill'
 
 // throttles_one_person answers every data request made for the person holding this refresh token
 // with a 429 whose Retry-After is past the client's cap, so the client gives up on the first
@@ -76,13 +76,14 @@ const GOOGLE_STUB_ROOT = 'http://stub.invalid'
 // Answers the two endpoints the consent round trip touches, by URL, so no test ever reaches
 // Google. Anything else throws rather than returning a plausible empty answer.
 function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
+  const lastLowerBoundByType = new Map<string, number>()
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/token')) {
       if (mode === 'redirect_uri_mismatch') {
         return new Response(JSON.stringify({ error: 'redirect_uri_mismatch' }), { status: 400 })
       }
-      const throttled = mode === 'throttles_one_person'
+      const throttled = (mode === 'throttles_one_person' || mode === 'throttles_one_persons_backfill')
         && new URLSearchParams(String(init?.body ?? '')).get('refresh_token') === THROTTLED_REFRESH_TOKEN
       return new Response(JSON.stringify({
         refresh_token: 'stub-refresh-token',
@@ -116,6 +117,22 @@ function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
     if (url.includes('/dataPoints') && mode === 'throttles_one_person'
       && new Headers(init?.headers).get('authorization') === `Bearer ${THROTTLED_ACCESS_TOKEN}`) {
       return new Response('slow down', { status: 429, headers: { 'retry-after': '3600' } })
+    }
+    // The same person, but only the backfill's windows are refused. The trailing sync walks a
+    // type's windows oldest first, so each lower bound is later than the last; a backfill pass
+    // starts at the newest day and walks back, so its first window repeats or precedes one
+    // already answered. Telling them apart by the window's age would not work: a short sprint's
+    // backfill never leaves the trailing week.
+    if (url.includes('/dataPoints') && mode === 'throttles_one_persons_backfill'
+      && new Headers(init?.headers).get('authorization') === `Bearer ${THROTTLED_ACCESS_TOKEN}`) {
+      const lower = (new URL(url).searchParams.get('filter') ?? '').match(/"([^"]+)"/)?.[1] ?? ''
+      const lowerMs = Date.parse(/[zZ]$|^\d{4}-\d\d-\d\d$/.test(lower) ? lower : `${lower}Z`)
+      const type = typeIdFrom(url)
+      const last = lastLowerBoundByType.get(type)
+      if (last !== undefined && lowerMs <= last) {
+        return new Response('slow down', { status: 429, headers: { 'retry-after': '3600' } })
+      }
+      lastLowerBoundByType.set(type, lowerMs)
     }
     if (url.includes('/dataPoints')) return new Response(body([]), { status: 200 })
     throw new Error(`the stub was asked for ${url}, which it does not serve`)
