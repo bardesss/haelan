@@ -197,3 +197,22 @@ describe('mergeActivityBandsDay', () => {
     // partition itself is broken for this hour, which is the limitation being pinned.
   })
 })
+
+describe('mergeActivityBandsDay across a fall-back night', () => {
+  it('gives each of the two 02:00 hours its own band winner', () => {
+    const pair = (sourceId: string, utcMs: number, tzOffsetMinutes: number): SampleLike[] => [
+      { sourceId, metric: 'active_minutes_vigorous', utcMs, tzOffsetMinutes, agg: 'raw', value: 1, n: 1 },
+      { sourceId, metric: 'active_zone_minutes_peak', utcMs, tzOffsetMinutes, agg: 'raw', value: 2, n: 1 },
+    ]
+    const rows = mergeActivityBandsDay({
+      personId: 'p1',
+      localDate: '2026-10-25',
+      rows: [
+        ...pair('watch', Date.UTC(2026, 9, 25, 0, 30), 120),
+        ...pair('phone', Date.UTC(2026, 9, 25, 1, 30), 60),
+      ],
+      priority,
+    })
+    expect(rows.find((r) => r.metric === 'active_minutes_vigorous_peak')?.value).toBe(2)
+  })
+})

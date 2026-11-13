@@ -144,3 +144,20 @@ describe('encodeMix', () => {
     ])).toBe('[{"source":"c","hours":5},{"source":"a","hours":1},{"source":"b","hours":1}]')
   })
 })
+
+describe('mergeDay across a fall-back night', () => {
+  it('gives each of the two 02:00 hours of a fall-back night its own winner', () => {
+    const rows = mergeDay({
+      personId: 'p1',
+      localDate: '2026-10-25',
+      rows: [
+        { sourceId: 'watch', metric: 'steps', utcMs: Date.UTC(2026, 9, 25, 0, 30), tzOffsetMinutes: 120, agg: 'raw', value: 100, n: 1 },
+        { sourceId: 'phone', metric: 'steps', utcMs: Date.UTC(2026, 9, 25, 1, 30), tzOffsetMinutes: 60, agg: 'raw', value: 50, n: 1 },
+      ],
+      priority: priorityFrom({ lists: new Map(), sources: SOURCES }),
+    })
+    const steps = rows.find((r) => r.metric === 'steps' && r.agg === 'sum')
+    expect(steps?.value).toBe(150)
+    expect(steps?.sourceMix).toBe(encodeMix([{ source: 'watch', hours: 1 }, { source: 'phone', hours: 1 }]))
+  })
+})
