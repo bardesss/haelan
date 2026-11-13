@@ -140,6 +140,38 @@ describe('the note and event routes', () => {
     expect(harness.app.haelan.instance.notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(1)
   })
 
+  // Fastify refuses these before the route runs, each with its own FST_ 4xx. They are the caller's
+  // mistake, so they keep that status in the error envelope rather than reading as a bug in us.
+  const postEvents = (h: Awaited<ReturnType<typeof withServer>>, token: string, payload: string) =>
+    h.app.inject({
+      method: 'POST', url: '/api/v1/p/p1/events',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN, 'content-type': 'application/json' }, payload,
+    })
+
+  it('answers 400 config for a body that is not JSON, not 500', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await postEvents(harness, token, '{bad json')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: { kind: 'config', code: 'bad_request', message: expect.any(String) } })
+  })
+
+  it('answers 400 config for an empty JSON body', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await postEvents(harness, token, '')
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: { kind: 'config', code: 'bad_request', message: expect.any(String) } })
+  })
+
+  it('answers 413 config for a body over the default limit', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await postEvents(harness, token,
+      JSON.stringify({ kind: 'x', startedAtMs: 0, note: 'a'.repeat(1_100_000) }))
+    expect(response.statusCode).toBe(413)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'payload_too_large', message: expect.any(String) },
+    })
+  })
+
   it('answers 200 removing a date that was never noted, and leaves other days alone', async () => {
     harness = await withServer(); const token = await harness.signIn()
     await putNote(harness, token, '2026-08-16', 'stays')
