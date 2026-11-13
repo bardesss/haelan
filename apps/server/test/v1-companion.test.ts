@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { RawArchive, SCOPES, samplePoint } from '@haelan/core'
+import { RawArchive, SCOPES, samplePoint, schema, sleepPoint } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { companionIngestibleIds, STALE_SOURCE_MS } from '../src/routes/v1/companion.ts'
@@ -343,6 +343,71 @@ describe('GET /companion/cursors', () => {
  * value it cannot parse and a session whose interval it cannot read, both of which a real
  * Health Connect payload produces (a reading with no value, a stage with a bad bound).
  */
+const LEGACY = { platform: 'HEALTH_CONNECT', application: { packageName: 'com.haelan.android' }, recordingMethod: 'PASSIVELY_MEASURED' }
+const ORIGIN_SCALE = {
+  platform: 'HEALTH_CONNECT', application: { packageName: 'health.openscale.sync.oss' },
+  recordingMethod: 'PASSIVELY_MEASURED', originScoped: true,
+}
+const nightPoint = (start: string, end: string) => sleepPoint({
+  startTime: start, endTime: end,
+  stages: [{ type: 'LIGHT', startTime: start, endTime: end }],
+})
+
+describe('GET /companion/cursors identity cutovers', () => {
+  it("answers the old identity's newest end as the cutover and stops it holding the minimum back", async () => {
+    harness = await serverAfterFixtures()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-10T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    const cutover = Date.parse('2026-08-10T10:00:00Z') + 1
+    expect(((await cursors(token)).json() as { identityCutovers: Record<string, number> }).identityCutovers).toEqual({ weight: cutover })
+
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-12T10:00:00Z')], dataSource: ORIGIN_SCALE })).statusCode).toBe(200)
+    // A different legacy record arriving after the new identity started: it must not move the cutover.
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-11T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+
+    const body = (await cursors(token)).json() as { items: CursorItem[], identityCutovers: Record<string, number> }
+    expect(body.identityCutovers).toEqual({ weight: cutover })
+    expect(body.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)?.lastWindowEndMs)
+      .toBe(Date.parse('2026-08-12T10:00:00Z') + 1)
+    expect(body.items.filter((i) => i.dataTypeId === 'weight' && i.dataSource !== undefined)).toHaveLength(2)
+    expect(parseCursorEndsLikeThePhone(JSON.stringify(body)).get('weight')).toBe(Date.parse('2026-08-12T10:00:00Z') + 1)
+
+    if (!harness) throw new Error('no harness')
+    const rows = harness.app.haelan.instance.db.select({ utcMs: schema.samples.utcMs }).from(schema.samples).all()
+    expect(rows.filter((r) => r.utcMs === Date.parse('2026-08-10T10:00:00Z'))).toHaveLength(1)
+  })
+
+  it('does not let a legacy interval record that straddles the change move the cutover', async () => {
+    harness = await serverAfterFixtures()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'sleep', { dataPoints: [nightPoint('2026-08-09T21:00:00Z', '2026-08-10T05:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    const cutover = Date.parse('2026-08-10T05:00:00Z') + 1
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'sleep', { dataPoints: [nightPoint('2026-08-11T21:00:00Z', '2026-08-12T05:00:00Z')], dataSource: ORIGIN_SCALE })).statusCode).toBe(200)
+    harness.clock.nowMs += 60_000
+    expect((await ingest(token, 'sleep', { dataPoints: [nightPoint('2026-08-10T21:00:00Z', '2026-08-11T05:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    const body = (await cursors(token)).json() as { identityCutovers: Record<string, number> }
+    expect(body.identityCutovers).toEqual({ sleep: cutover })
+  })
+
+  it('clamps a future-dated legacy cutover to the server clock', async () => {
+    harness = await serverAfterFixtures()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-12-10T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    const body = (await cursors(token)).json() as { identityCutovers: Record<string, number> }
+    expect(body.identityCutovers).toEqual({ weight: harness.clock.nowMs })
+  })
+
+  it('answers no cutovers on an instance that only ever saw the new identity', async () => {
+    harness = await serverAfterFixtures()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-12T10:00:00Z')], dataSource: ORIGIN_SCALE })).statusCode).toBe(200)
+    expect(((await cursors(token)).json() as { identityCutovers: Record<string, number> }).identityCutovers).toEqual({})
+  })
+})
+
 describe('a companion upload that maps to no rows', () => {
   const RAW_PAYLOADS = "select count(*) as n from raw_payloads where person_id = 'p1'"
 

@@ -80,14 +80,18 @@ function normalizePlatform(value: string | string[] | undefined): void {
 
 /**
  * The source identity ingest.ts resolves and archives beside `source` and `dataType`
- * (requestParams.dataSource). Every row this route reads has already passed listForSource's
+ * (requestParams.dataSource) and whether it is a device (origin) identity. Every row this route reads has already passed listForSource's
  * `json_valid` guard, so parsing here cannot throw; a row archived before this field existed, or
  * one seeded directly by a test, answers 'unknown' -- one merged bucket for history a phone
  * already re-reads today, not a crash.
  */
-function sourceIdentityOf(requestParams: string): string {
-  const parsed = JSON.parse(requestParams) as { dataSource?: unknown }
-  return typeof parsed.dataSource === 'string' ? parsed.dataSource : 'unknown'
+function requestIdentityOf(requestParams: string): { dataSource: string, origin: boolean } {
+  const parsed = JSON.parse(requestParams) as { dataSource?: unknown, identity?: unknown }
+  return {
+    dataSource: typeof parsed.dataSource === 'string' ? parsed.dataSource : 'unknown',
+    // ingest.ts stamps 'origin' on a device source; every earlier row is the app-scoped identity.
+    origin: parsed.identity === 'origin',
+  }
 }
 
 export function registerCompanionRoutes(app: FastifyInstance): void {
@@ -110,9 +114,15 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     const bySource = new Map<string, {
       dataTypeId: string
       dataSource: string
+      origin: boolean
       lastWindowEndMs: number
       lastIngestAtMs: number
     }>()
+    // Per type, the legacy (app-scoped) identity's newest end. Rows arrive oldest fetch first, so
+    // a legacy row that shows up after the type's first origin row is a late or re-sent record and
+    // must not move the cutover: the phone reads everything past it under the new identity, and a
+    // cutover that climbed would re-read history it already holds. `sawOrigin` freezes the type.
+    const legacyEnds = new Map<string, { cutoverMs: number | null, sawOrigin: boolean }>()
     let historyStartMs: number | null = null
     // A point dated ahead of the server's clock (a watch with a wrong clock) archives a window
     // that ends in the future. Left as is, the cursor answers that future time and the phone
@@ -120,19 +130,25 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     const nowMs = app.haelan.now()
 
     for (const row of archive.listForSource(personId, COMPANION_SOURCE)) {
-      const dataSource = sourceIdentityOf(row.requestParams)
+      const { dataSource, origin } = requestIdentityOf(row.requestParams)
       const sourceKey = `${row.dataType}:${dataSource}`
       const windowEndMs = Math.min(row.windowEndMs, nowMs)
       const perSource = bySource.get(sourceKey)
       if (perSource) {
+        if (origin) perSource.origin = true
         if (windowEndMs > perSource.lastWindowEndMs) perSource.lastWindowEndMs = windowEndMs
         if (row.fetchedAtMs > perSource.lastIngestAtMs) perSource.lastIngestAtMs = row.fetchedAtMs
       } else {
         bySource.set(sourceKey, {
-          dataTypeId: row.dataType, dataSource,
+          dataTypeId: row.dataType, dataSource, origin,
           lastWindowEndMs: windowEndMs, lastIngestAtMs: row.fetchedAtMs,
         })
       }
+
+      const ends = legacyEnds.get(row.dataType) ?? { cutoverMs: null, sawOrigin: false }
+      legacyEnds.set(row.dataType, ends)
+      if (origin) ends.sawOrigin = true
+      else if (!ends.sawOrigin && (ends.cutoverMs === null || row.windowEndMs > ends.cutoverMs)) ends.cutoverMs = row.windowEndMs
 
       if (historyStartMs === null || row.windowStartMs < historyStartMs) historyStartMs = row.windowStartMs
     }
@@ -153,14 +169,19 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     // stop a DEAD source holding a type back while LIVE ones carry it; when nothing is live
     // there is no one left to hold back, and the honest answer is the newest cursor this
     // instance has ever seen for the type, not "we have nothing".
-    const sourcesByType = new Map<string, Array<{ lastWindowEndMs: number, lastIngestAtMs: number }>>()
+    const sourcesByType = new Map<string, Array<{ origin: boolean, lastWindowEndMs: number, lastIngestAtMs: number }>>()
     for (const cursor of bySource.values()) {
       const list = sourcesByType.get(cursor.dataTypeId)
       if (list) list.push(cursor)
       else sourcesByType.set(cursor.dataTypeId, [cursor])
     }
     const byType = new Map<string, { minWindowEndMs: number, lastIngestAtMs: number }>()
-    for (const [dataTypeId, sources] of sourcesByType) {
+    for (const [dataTypeId, allSources] of sourcesByType) {
+      // Once a type has new-identity rows the old identity is retired: letting its frozen end hold
+      // the minimum would widen every read until STALE_SOURCE_MS ran out. It stays in
+      // perSourceItems below, and in the minimum on a type that never saw a device source.
+      const origins = allSources.filter((s) => s.origin)
+      const sources = origins.length > 0 ? origins : allSources
       // This source stays in bySource and perSourceItems below regardless of live or aged out,
       // so a phone that resumes writing under an identity just picks its progress back up.
       const live = sources.filter((s) => nowMs - s.lastIngestAtMs <= STALE_SOURCE_MS)
@@ -169,6 +190,12 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
         : Math.max(...sources.map((s) => s.lastWindowEndMs))
       const lastIngestAtMs = Math.max(...sources.map((s) => s.lastIngestAtMs))
       byType.set(dataTypeId, { minWindowEndMs: windowEndMs, lastIngestAtMs })
+    }
+
+    // Clamped to now like every cursor: a future-dated legacy point must not freeze the change.
+    const identityCutovers: Record<string, number> = {}
+    for (const [dataTypeId, ends] of legacyEnds) {
+      if (ends.cutoverMs !== null && ingestible.has(dataTypeId)) identityCutovers[dataTypeId] = Math.min(ends.cutoverMs, nowMs)
     }
 
     // Field order matters here and nowhere else in this file: SyncCursors.parseCursorEnds on an
@@ -203,6 +230,7 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     const historyStartLocalDate = historyStartMs === null ? null : personQueryOf(request).recordedDateOf({ utcMs: historyStartMs })
     return sendHashed(reply, request, {
       items: [...legacyItems, ...perSourceItems],
+      identityCutovers,
       historyStartMs,
       historyStartLocalDate,
       googleConnected,

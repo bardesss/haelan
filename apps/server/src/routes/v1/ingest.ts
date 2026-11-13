@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq, sql } from 'drizzle-orm'
 import {
   COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
-  mapSessions, mapWindowSamples, sampleDirtyDates, schema, sleepNeighbourDates, supports,
+  isOriginScoped, mapSessions, mapWindowSamples, sampleDirtyDates, schema, sleepNeighbourDates, supports,
 } from '@haelan/core'
 import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
 import { drainPersonDerivation } from './annotations.ts'
@@ -177,7 +177,11 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       const { id, deduplicated } = archive.put({
         personId,
         dataType: dataType.id,
-        requestParams: { source: COMPANION_SOURCE, dataType: dataType.id, dataSource: resolvedSourceId },
+        // `identity: 'origin'` lets /companion/cursors tell a device source from the app-scoped
+        // identity it replaces; rows without the key are legacy.
+        requestParams: isOriginScoped(dataSource as Record<string, unknown>)
+          ? { source: COMPANION_SOURCE, dataType: dataType.id, dataSource: resolvedSourceId, identity: 'origin' }
+          : { source: COMPANION_SOURCE, dataType: dataType.id, dataSource: resolvedSourceId },
         fetchEpisodeId: randomUUID(),
         windowStartMs,
         windowEndMs,
