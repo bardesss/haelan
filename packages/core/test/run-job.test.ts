@@ -792,6 +792,26 @@ describe('runJob', () => {
       expect(ctx.db.select().from(syncWindowFailures).all().map((r) => r.consecutiveRuns)).toEqual([1])
     })
 
+    it('never skips a window that fails transiently, so an outage cannot jump the mark over old days', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
+        const filter = new URL(String(url)).searchParams.get('filter')!
+        if (filter.includes(`>= "${new Date(windows[1]!.startMs).toISOString()}"`)) {
+          return new Response('unavailable', { status: 503 })
+        }
+        return new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 })
+      })
+      const deps = build(fetchMock)
+      for (let run = 0; run < 4; run++) {
+        const result = await runJob({ ...args, trackWindowFailures: true, deps })
+        expect(result.skippedWindows).toBe(0)
+      }
+      expect(store().skippedWindowsFor('p1')).toEqual([])
+      expect(ctx.db.select().from(syncWindowFailures).all()).toEqual([])
+      const state = store().get('p1', 'oxygen-saturation')
+      expect(state?.highWaterMs).toBe(windows[0]!.endMs)
+      expect(state?.consecutiveFailures).toBe(4)
+    })
+
     it('does not count a failure toward the skip when the caller is not tracking runs', async () => {
       const deps = build(stub())
       for (let run = 0; run < 4; run++) await runJob({ ...args, deps })

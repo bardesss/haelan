@@ -69,9 +69,10 @@ export interface JobInput {
   toMs: number
   deps: JobDeps
   /**
-   * Count a failing window toward giving up on it. Only the scheduled trailing sync passes true:
-   * a backfill or a manual retry revisiting the same day in one sitting is not another run, and
-   * would otherwise skip a window that has failed once.
+   * Count a failing window toward giving up on it. runSync passes true, so every sync run counts,
+   * the scheduled one and a manual one alike; a backfill revisiting a day does not, because it
+   * is not another trailing run. Only a non-transient failure counts: an outage must never be
+   * able to skip a window, since skipping lets the mark jump over days nothing ever read.
    */
   trackWindowFailures?: boolean
 }
@@ -202,7 +203,13 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         localDate: window.localDate, rowsWritten: writtenHere,
       })
 
-      deps.syncState.clearWindowFailure(input.personId, t.id, window.startMs)
+      // Guarded: the window is committed by now, and a store that cannot forget its failure
+      // must not turn it into one.
+      try {
+        deps.syncState.clearWindowFailure(input.personId, t.id, window.startMs)
+      } catch (clearError) {
+        console.error(`sync: could not clear window failure for ${t.id} (${classify(clearError).message})`)
+      }
       if (!blocked) contiguousEndMs = window.endMs
     } catch (error) {
       // A rolled back window takes its sources rows with it, so the ids this person's cache
@@ -222,11 +229,12 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       failedWindows++
       let skipped = false
       try {
-        skipped = input.trackWindowFailures
+        const classified = classify(error)
+        skipped = input.trackWindowFailures && classified.kind !== 'transient'
           ? deps.syncState.recordWindowFailure({
             personId: input.personId, dataType: t.id,
             window: { startMs: window.startMs, endMs: window.endMs, localDate: window.localDate },
-            error: classify(error), nowMs: deps.now(),
+            error: classified, nowMs: deps.now(),
           }).skipped
           : deps.syncState.isWindowSkipped(input.personId, t.id, window.startMs)
       } catch { /* a store that cannot say is treated as not skipped: the window keeps blocking */ }
