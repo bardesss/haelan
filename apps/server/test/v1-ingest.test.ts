@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { samplePoint, schema, sleepPoint } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
@@ -419,6 +419,30 @@ describe('the companion ingest route for sessions', () => {
     expect(items).toHaveLength(1)
     expect(items[0]?.localDate).toBe('2026-08-18')
     expect(items[0]?.segments).toHaveLength(5)
+  })
+
+  it('queues the neighbour nights behind the upload own night', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const queue = harness.app.haelan.instance.deriveQueue
+    const marks: { localDate: string, nowMs: number }[] = []
+    const markDirty = queue.markDirty.bind(queue)
+    vi.spyOn(queue, 'markDirty').mockImplementation((input, tx) => {
+      marks.push({ localDate: input.localDate, nowMs: input.nowMs })
+      markDirty(input, tx)
+    })
+
+    const response = await ingest(token, '/api/v1/p/p1/ingest/sleep', { dataPoints: [sleepPointFor()] })
+    const created = response.json() as { affected: { from: string, to: string } | null }
+    expect(created.affected).toEqual({ from: '2026-08-18', to: '2026-08-18' })
+
+    // Claim sorts by queuedAtMs, so a neighbour must carry a later one than the night the
+    // upload wrote, or a one day drain budget can stop on a neighbour and leave the night queued.
+    const own = marks.filter((m) => m.localDate === '2026-08-18')
+    const neighbours = marks.filter((m) => m.localDate !== '2026-08-18')
+    expect(neighbours.map((m) => m.localDate).sort()).toEqual(['2026-08-17', '2026-08-19'])
+    expect(own).toHaveLength(1)
+    for (const m of neighbours) expect(m.nowMs).toBeGreaterThan(own[0]!.nowMs)
   })
 
   it('a repeated night deduplicates instead of doubling', async () => {

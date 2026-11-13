@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources, sessions, sessionSegments } from '../src/db/schema/index.ts'
@@ -291,6 +291,20 @@ describe('readSleepPeriod', () => {
     expect(page.more.find((f) => f.metric === 'sleep_after_wake_minutes')?.value).toBe(3)
     expect(page.nights.find((n) => n.localDate === '2026-08-11')?.sourceId).toBe('watch')
     expect(page.nights.find((n) => n.localDate === '2026-08-20')?.sourceId).toBe('merged')
+  })
+
+  it('looks the provider summaries up from a day before the span, for the evening piece of its first night', () => {
+    // A night filed on the span's first date can hold a piece filed the day before. No figure on
+    // the page reaches back that far (every band is a sixty day window ending inside the period),
+    // so the contract is pinned on the lookup itself.
+    seedNights()
+    const range = 'month'
+    const span = readSpan(range, periodBounds(range, '2026-08-15'))
+    const lookup = vi.spyOn(PersonQuery.prototype, 'sessions')
+    readSleepPeriod(q(), input({ range, anchor: '2026-08-15' }))
+    const sleepReads = lookup.mock.calls.filter(([read]) => read.kind === 'sleep')
+    expect(sleepReads.map(([read]) => read.from)).toEqual([shiftLocalDate(span.from, -1)])
+    lookup.mockRestore()
   })
 
   it('honours the source asked for', () => {

@@ -243,13 +243,14 @@ export function readSleepNights(db: DbOrTx, input: {
 }
 
 /**
- * The excluded sleep sessions on one local date that would have been part of its night, sorted.
+ * The excluded sleep sessions that would have been part of the night filed on one local date, sorted.
  *
  * `Night.excludedSessions` answers every excluded session on the date, an excluded nap included,
- * so it cannot say whether an exclusion is why a date has no night. This assembles each source's
- * sessions again with the exclusions put back, through the same `assembleNights` and the same
- * gap, and keeps only the excluded ones that land in the night. An excluded nap on a date whose
- * night was simply never recorded is then not an account of the missing night.
+ * so it cannot say whether an exclusion is why a date has no night. This reads a day either side
+ * of the date, since a night filed here can hold a piece from the evening before, and files the
+ * sessions with the exclusions put back, through the same `sessionsFiledOn` and the same gap. It
+ * keeps only the excluded ones that land in the night. An excluded nap on a date whose night was
+ * simply never recorded is then not an account of the missing night.
  */
 export function readExcludedNightSessions(db: DbOrTx, input: {
   personId: string

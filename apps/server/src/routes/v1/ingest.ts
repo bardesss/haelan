@@ -194,10 +194,13 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       }
       // A sleep session joins or leaves a chain that can reach the night on a neighbouring date.
       // Marked beside the dates above but never added to `localDates`, so `affected` and
-      // `applied` in the response keep naming only the dates the upload wrote or left.
+      // `applied` in the response keep naming only the dates the upload wrote or left. Queued a
+      // millisecond later: claim takes the oldest first and the drain stops after one day, so
+      // a neighbour at the same instant could be derived ahead of the night just uploaded.
       if (mapped.sessions.some((row) => row.kind === 'sleep')) {
         for (const localDate of sleepNeighbourDates(localDates)) {
-          instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
+          if (localDates.has(localDate)) continue
+          instance.deriveQueue.markDirty({ personId, localDate, nowMs: nowMs + 1 }, tx)
         }
       }
       return { id, deduplicated, rowsWritten, localDates: [...localDates] }
