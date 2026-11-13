@@ -461,17 +461,21 @@ object SyncEngine {
                 val owner = RouteLedger.ownerOf(session)
                 val delivered = RouteLedger.load(prefs, owner).sent
                 val seen = mutableMapOf<String, RouteLedger.Seen>()
+                val refused = mutableSetOf<String>()
                 val outcome = uploadType(session, packageName, dataTypeId, source.batches(ExerciseSessionRecord::class), cutoverMs, post) { records ->
                     toExercisePoints(records.filter { record ->
                         val what = RouteLedger.seenOf(record.exerciseRouteResult)
                         RouteLedger.shouldPost(record.metadata.id, what, delivered)
-                            .also { if (it) seen[record.metadata.id] = what }
+                            .also { if (it) seen[record.metadata.id] = what else refused += record.metadata.id }
                     })
                 }
                 // Filed only once every chunk landed: a session marked delivered that never
                 // arrived would be refused by shouldPost on every background run after it, and
-                // its route would wait for a foreground read to be sent at all.
-                if (outcome is InstanceClient.Outcome.Ok) RouteLedger.record(prefs, owner, seen)
+                // its route would wait for a foreground read to be sent at all. A refused edit is
+                // filed then too, since the token it hides behind is only saved on success.
+                if (outcome is InstanceClient.Outcome.Ok) {
+                    RouteLedger.record(prefs, owner, seen, RouteLedger.refusalsToFile(refused, drained = source is ChangesSource))
+                }
                 return outcome
             }
             "sleep" -> return uploadType(session, packageName, dataTypeId, source.batches(SleepSessionRecord::class), cutoverMs, post) { toSleepPoints(it) }
