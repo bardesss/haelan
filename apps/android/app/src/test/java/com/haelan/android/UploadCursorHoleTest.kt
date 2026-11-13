@@ -203,16 +203,14 @@ class UploadCursorHoleTest {
     /**
      * The instance's answer, read the way the phone reads it. Not a model of the instance: this is
      * the app's own production rule, SyncCursors.cursorEndsFor taking the minimum across a type's
-     * sources and SyncEngine.syncAll calling SyncCursors.startFor on it. [landedBySource] is every
+     * sources, and the cursor minus SyncCursors.OVERLAP_MS the app read a refused type from before
+     * it drained Health Connect change tokens (a refused type now leaves its token unsaved). [landedBySource] is every
      * identity's own landed points -- one source that lags pulls the whole type's next start back
      * to it, which is the fix for the two source hole below.
      */
     private fun retryStartFor(landedBySource: Map<String, List<Point>>): Instant {
         val cursor = landedBySource.values.minOf { cursorFor(it) }
-        // end is effectively unbounded here, so startFor never answers null for a real
-        // (past) cursor; the type never needs the null path this deep into history.
-        return SyncCursors.startFor(cursor, Instant.ofEpochMilli(0), Instant.ofEpochMilli(Long.MAX_VALUE))
-            ?: error("a cursor this far in the past cannot be ahead of an unbounded end")
+        return Instant.ofEpochMilli(maxOf(0L, cursor - SyncCursors.OVERLAP_MS))
     }
 
     private fun points(count: Int, identity: String, bytes: Int, fromMs: Long, stepMs: Long): List<Point> =
@@ -433,9 +431,9 @@ class UploadCursorHoleTest {
     // count only found a spacing where this file's own arithmetic happened to agree with the fix;
     // it proved nothing about the fix itself, which is what going red only for an even reading
     // count turned out to mean. SyncCursorsTest's
-    // "a laggard's own late reading still falls inside the delta keyed on the minimum, not the
-    // maximum" builds the two-sources-diverge-by-more-than-the-overlap case directly against
-    // cursorEndsFor and startFor, which is the guard on this defect.
+    // "a laggard holds the type's cursor at its own progress, not the leader's" builds the
+    // two-sources-diverge-by-more-than-the-overlap case directly against cursorEndsFor, which is
+    // the guard on this defect.
 
     // ---- 5. The case the app has always handled, kept as a floor ----
 

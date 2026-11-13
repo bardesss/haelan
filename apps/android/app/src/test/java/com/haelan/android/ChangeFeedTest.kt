@@ -27,6 +27,10 @@ class ChangeFeedTest {
         )
 
     @Test
+    fun `an expired token reads the permission's whole window, not the last thirty days`() =
+        assertEquals(ChangeFeed.Mode.Bootstrap(history), ChangeFeed.fallbackAfterExpiry(history))
+
+    @Test
     fun `tokens are kept per owner and type`() =
         assertNotEquals(ChangeFeed.keyFor("a|p1", "weight"), ChangeFeed.keyFor("a|p2", "weight"))
 }

@@ -23,6 +23,13 @@ object ChangeFeed {
         if (token != null && cursorEndMs != null) Mode.Drain(token)
         else Mode.Bootstrap(SyncCursors.bootstrapStartFor(cursorEndMs, fallbackStart, end))
 
+    /**
+     * A token Health Connect stopped honouring covers an unknown stretch of changes, so the type
+     * reads everything the permission answers again rather than the thirty days [modeFor] gives a
+     * type that merely has no token yet.
+     */
+    fun fallbackAfterExpiry(fallbackStart: Instant): Mode = Mode.Bootstrap(fallbackStart)
+
     fun keyFor(owner: String, dataTypeId: String): String = "changes_token|$owner|$dataTypeId"
 
     fun load(prefs: SharedPreferences, owner: String, dataTypeId: String): String? =

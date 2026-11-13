@@ -3,6 +3,8 @@ package com.haelan.android
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.changes.DeletionChange
+import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BasalMetabolicRateRecord
@@ -26,6 +28,7 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CancellationException
@@ -69,14 +72,13 @@ object SyncEngine {
      *
      * The byte budget bounds a chunk's size and nothing about its reach: a source that writes
      * little never fills 512 KiB, so it posts once, and that one request can carry its whole
-     * window. That is the shape that loses data. The instance answers one cursor per data type -
-     * the newest end that landed, whichever source carried it - and the phone re-reads from that
-     * cursor minus SyncCursors.OVERLAP_MS, so anything a refusal leaves unposted behind that
-     * point is never asked for again. A window-sized chunk puts the whole window there.
+     * window, and a refusal then costs the whole window in one go. A refused chunk now leaves the
+     * type's change token unsaved, so the next run sends it again; bounding a chunk's reach still
+     * bounds how much one refusal holds back until then.
      *
-     * Twelve hours is half of SyncCursors.OVERLAP_MS, and half is the point: the worst a
-     * refusal can leave unposted is one chunk, so half the overlap still covers it with the
-     * other half to spare, rather than a single day balancing on the boundary.
+     * Twelve hours is half of SyncCursors.OVERLAP_MS, chosen when a refused type was re-read from
+     * its cursor minus that overlap: the worst a refusal could leave unposted was one chunk, and
+     * half the overlap covered it with the other half to spare.
      *
      * The dense case is unchanged: a day of heart rate passes 512 KiB first and is cut by bytes
      * as it always was. This only starts biting on the sparse types, which are the ones that
@@ -243,16 +245,17 @@ object SyncEngine {
         // the window that is honest is the one the provider will actually answer right now.
         // It is the fallback every type keeps without a cursor, and the floor no delta may pass.
         val fallbackStart = readWindow(client, end)
+        val owner = RouteLedger.ownerOf(session)
         for (key in SyncTypes.KEYS) {
             if (!isOn(prefs, key)) continue
             report.typeStarted(key)
-            // One window per type: a cursor means the delta back to it minus the overlap,
-            // no cursor means the full fallback. The key is a toggle, the cursor is filed
-            // under what the instance files, so the lookup goes through the same knot.
+            // The key is a toggle, the cursor and the token are filed under what the instance
+            // files, so the lookup goes through the same knot.
             val dataTypeId = SyncTypes.forKey(key).dataTypeId
-            val start = SyncCursors.startFor(cursorEnds[dataTypeId], fallbackStart, end)
             // A throw becomes an outcome here so there is one path below rather than two.
-            val outcome = runType { syncOne(client, session, packageName, prefs, key, start, end, cutovers[dataTypeId], post) }
+            val outcome = runType {
+                syncType(client, session, packageName, prefs, key, owner, cursorEnds[dataTypeId], fallbackStart, end, cutovers[dataTypeId], post)
+            }
             when (outcome) {
                 // The one answer that is not this type's business: the whole session is over.
                 is InstanceClient.Outcome.Failed -> {
@@ -291,14 +294,110 @@ object SyncEngine {
         InstanceClient.Outcome.Failed(e)
     }
 
-    private suspend fun syncOne(
+    /**
+     * One type, from its Health Connect change feed when the token can be trusted and from a
+     * window read otherwise (ChangeFeed.modeFor). The token is saved only once everything the
+     * type read has landed: a failed type saves nothing, so the next run drains the same changes
+     * again, which ingest's upserts and the instance's tombstones make safe.
+     */
+    private suspend fun syncType(
         client: HealthConnectClient,
         session: Session,
         packageName: String,
         prefs: SharedPreferences,
         key: String,
-        start: Instant,
+        owner: String,
+        cursorEndMs: Long?,
+        fallbackStart: Instant,
         end: Instant,
+        cutoverMs: Long?,
+        post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
+    ): InstanceClient.Outcome<Boolean> {
+        val dataTypeId = SyncTypes.forKey(key).dataTypeId
+        var mode = ChangeFeed.modeFor(ChangeFeed.load(prefs, owner, dataTypeId), cursorEndMs, fallbackStart, end)
+        if (mode is ChangeFeed.Mode.Drain) {
+            val changes = ChangesSource(client, mode.token)
+            val outcome = if (key == "resting") {
+                val window = WindowSource(client, SyncCursors.bootstrapStartFor(cursorEndMs, fallbackStart, end), end)
+                drainResting(session, packageName, prefs, changes, window, cutoverMs, post)
+            } else {
+                syncOne(session, packageName, prefs, key, changes, cutoverMs, post)
+            }
+            if (!changes.expired) {
+                if (outcome is InstanceClient.Outcome.Ok) changes.nextToken?.let { ChangeFeed.save(prefs, owner, dataTypeId, it) }
+                return outcome
+            }
+            // An expired feed answered nothing (see ChangesSource), so nothing was sent from it.
+            if (outcome is InstanceClient.Outcome.Failed) return outcome
+            ChangeFeed.clear(prefs, owner, dataTypeId)
+            mode = ChangeFeed.fallbackAfterExpiry(fallbackStart)
+        }
+        val start = (mode as ChangeFeed.Mode.Bootstrap).start
+        // Taken before the read, so a change made while the window is being read is in the
+        // next drain rather than in neither.
+        val fresh = withContext(Dispatchers.IO) {
+            client.getChangesToken(ChangesTokenRequest(setOf(recordTypeOf(key))))
+        }
+        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, end), cutoverMs, post)
+        if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh)
+        return outcome
+    }
+
+    /**
+     * Resting heart rate from its change feed. A day's point is built from that day's latest
+     * reading, so the changed records alone cannot rebuild it: a deleted latest reading leaves
+     * an earlier one standing that the feed never mentions. So the feed only supplies the
+     * deletions, which go first and take the day's row with them, and the days are then rebuilt
+     * from a read of the last thirty days, the span a token can cover.
+     */
+    private suspend fun drainResting(
+        session: Session,
+        packageName: String,
+        prefs: SharedPreferences,
+        changes: ChangesSource,
+        window: BatchSource,
+        cutoverMs: Long?,
+        post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
+    ): InstanceClient.Outcome<Boolean> {
+        val deletions = collect(changes.batches(RestingHeartRateRecord::class)).deletions
+        if (changes.expired) return InstanceClient.Outcome.Ok(false)
+        val dataTypeId = SyncTypes.forKey("resting").dataTypeId
+        val deleted = postDeletions(session, dataTypeId, deletions, post)
+        if (deleted is InstanceClient.Outcome.Failed) return deleted
+        val upserted = syncOne(session, packageName, prefs, "resting", window, cutoverMs, post)
+        return if (upserted is InstanceClient.Outcome.Ok) InstanceClient.Outcome.Ok(upserted.value || deletions.isNotEmpty()) else upserted
+    }
+
+    /** The record class each toggle reads, which is also the class its change token is taken for. */
+    internal fun recordTypeOf(key: String): KClass<out Record> = when (key) {
+        "steps" -> StepsRecord::class
+        "distance" -> DistanceRecord::class
+        "elevation" -> ElevationGainedRecord::class
+        "active_energy" -> ActiveCaloriesBurnedRecord::class
+        "basal" -> BasalMetabolicRateRecord::class
+        "exercise" -> ExerciseSessionRecord::class
+        "sleep" -> SleepSessionRecord::class
+        "weight" -> WeightRecord::class
+        "height" -> HeightRecord::class
+        "body_fat" -> BodyFatRecord::class
+        "body_temp" -> BodyTemperatureRecord::class
+        "glucose" -> BloodGlucoseRecord::class
+        "hydration" -> HydrationRecord::class
+        "heart_rate" -> HeartRateRecord::class
+        "resting" -> RestingHeartRateRecord::class
+        "hrv" -> HeartRateVariabilityRmssdRecord::class
+        "spo2" -> OxygenSaturationRecord::class
+        "breathing" -> RespiratoryRateRecord::class
+        "vo2" -> Vo2MaxRecord::class
+        else -> throw IllegalArgumentException("no sync for $key")
+    }
+
+    private suspend fun syncOne(
+        session: Session,
+        packageName: String,
+        prefs: SharedPreferences,
+        key: String,
+        source: BatchSource,
         cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
@@ -311,8 +410,9 @@ object SyncEngine {
                 // averaged here: see BasalMetabolicRate for the unit and the empty interval.
                 // Mapped off the caller's thread like every other type: one point per day is
                 // small today, and the rule should not depend on that staying true.
+                val read = collect(source.batches(BasalMetabolicRateRecord::class))
                 val points = withContext(Dispatchers.Default) {
-                    readAll(client, BasalMetabolicRateRecord::class, start, end)
+                    read.records
                         .groupBy { identityOf(it, cutoverMs) }
                         .flatMap { (identity, records) ->
                             val readings = records.map {
@@ -321,14 +421,16 @@ object SyncEngine {
                             BasalMetabolicRate.points(readings).map { Point(identity, basalPoint(it)) }
                         }
                 }
-                return uploadPoints(session, packageName, "basal-energy-burned", points, post)
+                val outcome = uploadPoints(session, packageName, "basal-energy-burned", points, post)
+                return thenDeletions(outcome, session, "basal-energy-burned", read.deletions, post)
             }
             "resting" -> {
                 // One point per reading, never the day's mean: see DailyRestingHeartRate. The
                 // records are split by identity first, because a day whose later reading came
                 // off another device is that device's reading and not this app's merge.
+                val read = collect(source.batches(RestingHeartRateRecord::class))
                 val points = withContext(Dispatchers.Default) {
-                    readAll(client, RestingHeartRateRecord::class, start, end)
+                    read.records
                         .groupBy { identityOf(it, cutoverMs) }
                         .flatMap { (identity, records) ->
                             val readings = records.map {
@@ -339,12 +441,13 @@ object SyncEngine {
                             }
                         }
                 }
-                return uploadPoints(session, packageName, "daily-resting-heart-rate", points, post)
+                val outcome = uploadPoints(session, packageName, "daily-resting-heart-rate", points, post)
+                return thenDeletions(outcome, session, "daily-resting-heart-rate", read.deletions, post)
             }
-            "steps" -> return uploadType(client, session, packageName, dataTypeId, StepsRecord::class, start, end, cutoverMs, post) { toStepPoints(it) }
-            "distance" -> return uploadType(client, session, packageName, dataTypeId, DistanceRecord::class, start, end, cutoverMs, post) { toDistancePoints(it) }
-            "elevation" -> return uploadType(client, session, packageName, dataTypeId, ElevationGainedRecord::class, start, end, cutoverMs, post) { toAltitudePoints(it) }
-            "active_energy" -> return uploadType(client, session, packageName, dataTypeId, ActiveCaloriesBurnedRecord::class, start, end, cutoverMs, post) { toCaloriesPoints(it) }
+            "steps" -> return uploadType(session, packageName, dataTypeId, source.batches(StepsRecord::class), cutoverMs, post) { toStepPoints(it) }
+            "distance" -> return uploadType(session, packageName, dataTypeId, source.batches(DistanceRecord::class), cutoverMs, post) { toDistancePoints(it) }
+            "elevation" -> return uploadType(session, packageName, dataTypeId, source.batches(ElevationGainedRecord::class), cutoverMs, post) { toAltitudePoints(it) }
+            "active_energy" -> return uploadType(session, packageName, dataTypeId, source.batches(ActiveCaloriesBurnedRecord::class), cutoverMs, post) { toCaloriesPoints(it) }
             "exercise" -> {
                 // The route ledger rides this type: which workouts' routes were withheld, so the
                 // screen can offer to release them, and which were already delivered, so a read
@@ -353,7 +456,7 @@ object SyncEngine {
                 val owner = RouteLedger.ownerOf(session)
                 val delivered = RouteLedger.load(prefs, owner).sent
                 val seen = mutableMapOf<String, RouteLedger.Seen>()
-                val outcome = uploadType(client, session, packageName, dataTypeId, ExerciseSessionRecord::class, start, end, cutoverMs, post) { records ->
+                val outcome = uploadType(session, packageName, dataTypeId, source.batches(ExerciseSessionRecord::class), cutoverMs, post) { records ->
                     toExercisePoints(records.filter { record ->
                         val what = RouteLedger.seenOf(record.exerciseRouteResult)
                         RouteLedger.shouldPost(record.metadata.id, what, delivered)
@@ -366,22 +469,22 @@ object SyncEngine {
                 if (outcome is InstanceClient.Outcome.Ok) RouteLedger.record(prefs, owner, seen)
                 return outcome
             }
-            "sleep" -> return uploadType(client, session, packageName, dataTypeId, SleepSessionRecord::class, start, end, cutoverMs, post) { toSleepPoints(it) }
-            "weight" -> return uploadType(client, session, packageName, dataTypeId, WeightRecord::class, start, end, cutoverMs, post) { toWeightPoints(it) }
-            "height" -> return uploadType(client, session, packageName, dataTypeId, HeightRecord::class, start, end, cutoverMs, post) { toHeightPoints(it) }
-            "body_fat" -> return uploadType(client, session, packageName, dataTypeId, BodyFatRecord::class, start, end, cutoverMs, post) { toBodyFatPoints(it) }
-            "body_temp" -> return uploadType(client, session, packageName, dataTypeId, BodyTemperatureRecord::class, start, end, cutoverMs, post) { toBodyTempPoints(it) }
-            "glucose" -> return uploadType(client, session, packageName, dataTypeId, BloodGlucoseRecord::class, start, end, cutoverMs, post) { toBloodGlucosePoints(it) }
-            "hydration" -> return uploadType(client, session, packageName, dataTypeId, HydrationRecord::class, start, end, cutoverMs, post) { toHydrationPoints(it) }
-            "heart_rate" -> return uploadType(client, session, packageName, dataTypeId, HeartRateRecord::class, start, end, cutoverMs, post) { toHeartRatePoints(it) }
-            "hrv" -> return uploadType(client, session, packageName, dataTypeId, HeartRateVariabilityRmssdRecord::class, start, end, cutoverMs, post) { toHrvPoints(it) }
-            "spo2" -> return uploadType(client, session, packageName, dataTypeId, OxygenSaturationRecord::class, start, end, cutoverMs, post) { toSpo2Points(it) }
+            "sleep" -> return uploadType(session, packageName, dataTypeId, source.batches(SleepSessionRecord::class), cutoverMs, post) { toSleepPoints(it) }
+            "weight" -> return uploadType(session, packageName, dataTypeId, source.batches(WeightRecord::class), cutoverMs, post) { toWeightPoints(it) }
+            "height" -> return uploadType(session, packageName, dataTypeId, source.batches(HeightRecord::class), cutoverMs, post) { toHeightPoints(it) }
+            "body_fat" -> return uploadType(session, packageName, dataTypeId, source.batches(BodyFatRecord::class), cutoverMs, post) { toBodyFatPoints(it) }
+            "body_temp" -> return uploadType(session, packageName, dataTypeId, source.batches(BodyTemperatureRecord::class), cutoverMs, post) { toBodyTempPoints(it) }
+            "glucose" -> return uploadType(session, packageName, dataTypeId, source.batches(BloodGlucoseRecord::class), cutoverMs, post) { toBloodGlucosePoints(it) }
+            "hydration" -> return uploadType(session, packageName, dataTypeId, source.batches(HydrationRecord::class), cutoverMs, post) { toHydrationPoints(it) }
+            "heart_rate" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateRecord::class), cutoverMs, post) { toHeartRatePoints(it) }
+            "hrv" -> return uploadType(session, packageName, dataTypeId, source.batches(HeartRateVariabilityRmssdRecord::class), cutoverMs, post) { toHrvPoints(it) }
+            "spo2" -> return uploadType(session, packageName, dataTypeId, source.batches(OxygenSaturationRecord::class), cutoverMs, post) { toSpo2Points(it) }
             "breathing" -> {
                 // No intraday respiratory rate exists in the catalogue, so the night's own
                 // summary is the only shape a reading arrives in. The day's mean was ours.
-                return uploadType(client, session, packageName, dataTypeId, RespiratoryRateRecord::class, start, end, cutoverMs, post) { toSleepRespPoints(it) }
+                return uploadType(session, packageName, dataTypeId, source.batches(RespiratoryRateRecord::class), cutoverMs, post) { toSleepRespPoints(it) }
             }
-            "vo2" -> return uploadType(client, session, packageName, dataTypeId, Vo2MaxRecord::class, start, end, cutoverMs, post) { toVo2Points(it) }
+            "vo2" -> return uploadType(session, packageName, dataTypeId, source.batches(Vo2MaxRecord::class), cutoverMs, post) { toVo2Points(it) }
             // Louder than a dropped type: a toggle the engine cannot run is a mistake, not a skip.
             else -> throw IllegalArgumentException("no sync for $key")
         }
@@ -570,68 +673,55 @@ object SyncEngine {
      * a watch's readings, the phone's and somebody's typed-in ones, and each of those is a source
      * the instance keeps apart, so the split happens here and not inside a request.
      *
-     * Streams provider pages instead of materializing the window: a real watch writes
+     * Streams the source's batches instead of materializing the window: a real watch writes
      * heart-rate every few seconds, and 30 days of that is hundreds of thousands of samples.
      * Mapping them all to JSONObjects at once exhausted the 256 MB heap on a real phone
-     * (OOM on the main thread, after an ANR). One page is mapped, buffered per identity
+     * (OOM on the main thread, after an ANR). One batch is mapped, buffered per identity
      * and posted as soon as its buffer reaches a ceiling, then forgotten. Chunk
      * boundaries move compared to one-shot batching; the rows do not, because the instance
      * upserts on the natural key.
      *
-     * A chunk is bounded by bytes, by [MAX_CHUNK_SPAN_MS] and by [MAX_CHUNK_POINTS], and the
-     * second one is what decides what a refusal costs while the third is what keeps a dense
-     * hour postable at all: tens of thousands of small points fit inside the other two and
-     * the instance refuses the request for their count. The instance's cursor is per data type - the newest end that landed,
-     * whichever source carried it - and the next sync re-reads from it minus the overlap, so
-     * whatever a refusal leaves unposted behind that point is never asked for again. Bounding a
-     * chunk's reach bounds that loss to half the overlap, for every type including the ones that
-     * write too little to ever fill the byte budget.
+     * A chunk is bounded by bytes, by [MAX_CHUNK_SPAN_MS] and by [MAX_CHUNK_POINTS]; the third is
+     * what keeps a dense hour postable at all: tens of thousands of small points fit inside the
+     * other two and the instance refuses the request for their count. A refusal ends the type
+     * with its change token unsaved, so the next run reads the same records again.
+     *
+     * The batches' deletions are posted after the tail flush, never before: a deletion that went
+     * ahead of a still buffered upsert of the same record would be undone by it.
      */
     private suspend fun <T : Record> uploadType(
-        client: HealthConnectClient,
         session: Session,
         packageName: String,
         dataTypeId: String,
-        type: KClass<T>,
-        start: Instant,
-        end: Instant,
+        next: suspend () -> Batch<T>?,
         cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
         map: (List<T>) -> List<JSONObject>,
     ): InstanceClient.Outcome<Boolean> {
         val alignToMinute = dataTypeId in MINUTE_ALIGNED_TYPES
         val buffers = mutableMapOf<SourceIdentity, MutableList<JSONObject>>()
+        val deletions = mutableListOf<String>()
         var sentAny = false
-        var pageToken: String? = null
-        do {
-            val response = withContext(Dispatchers.IO) {
-                client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = type,
-                        timeRangeFilter = TimeRangeFilter.between(start, end),
-                        // Written out although it is connect-client's own default (ReadRecordsRequest,
-                        // `ascendingOrder: Boolean = true`), because the cut policy below rests on it:
-                        // a chunk's reach is its last point's instant minus its first point's, so pages
-                        // that arrived out of order would measure a span that means nothing and the
-                        // ceiling would stop bounding what a refusal leaves behind. A default is a
-                        // promise the provider makes; this is the one promise this file depends on.
-                        ascendingOrder = true,
-                        pageToken = pageToken,
-                    ),
-                )
-            }
+        while (true) {
+            val batch = next() ?: break
+            deletions += batch.deletions
             // CPU- and memory-bound: off the caller's thread, which is the screen's when the
             // button started this. Each identity's buffer is cut as soon as it reaches a ceiling,
             // so what leaves here is always a full chunk and never a fragment; the rest stays
-            // buffered for the next page.
+            // buffered for the next batch.
             val ready: List<Pair<SourceIdentity, List<JSONObject>>> = withContext(Dispatchers.Default) {
                 val out = mutableListOf<Pair<SourceIdentity, List<JSONObject>>>()
-                val page = response.records.groupBy { identityOf(it, cutoverMs) }
+                val page = batch.records.groupBy { identityOf(it, cutoverMs) }
                     .flatMap { (identity, records) -> map(records).map { Point(identity, it) } }
                 if (page.isNotEmpty()) sentAny = true
                 for ((identity, bodies) in page.groupBy({ it.source }, { it.body })) {
                     val buffer = buffers.getOrPut(identity) { mutableListOf() }
                     buffer += bodies
+                    // A drained feed arrives in change order, and one record's samples can
+                    // reach past the next record's start: the cut compares neighbours.
+                    val ordered = inTimeOrder(buffer)
+                    buffer.clear()
+                    buffer += ordered
                     while (true) {
                         val chunk = readyChunk(buffer, alignToMinute) ?: break
                         out += identity to chunk
@@ -645,8 +735,7 @@ object SyncEngine {
                 // answer, and a caller that kept going would only be slower at saying so.
                 if (outcome is InstanceClient.Outcome.Failed) return outcome
             }
-            pageToken = response.pageToken
-        } while (pageToken != null)
+        }
         val tail: List<Pair<SourceIdentity, List<JSONObject>>> = withContext(Dispatchers.Default) {
             buffers.flatMap { (identity, buffer) ->
                 if (buffer.isEmpty()) emptyList() else chunksBySize(buffer, alignToMinute).map { identity to it }
@@ -656,7 +745,62 @@ object SyncEngine {
             val outcome = postChunk(session, packageName, dataTypeId, identity, chunk, post)
             if (outcome is InstanceClient.Outcome.Failed) return outcome
         }
-        return InstanceClient.Outcome.Ok(sentAny)
+        return thenDeletions(InstanceClient.Outcome.Ok(sentAny), session, dataTypeId, deletions, post)
+    }
+
+    /**
+     * Where each point goes when a buffer is put in time order: indexes into [timesMs], ascending
+     * by instant, ties kept in the order they came, and an unreadable instant last. Pure over the
+     * instants so a JVM test can pin it; [chunkEnds] assumes its input is in this order.
+     */
+    internal fun ascendingOrder(timesMs: List<Long?>): List<Int> =
+        timesMs.indices.sortedWith(compareBy(nullsLast()) { timesMs[it] })
+
+    private fun inTimeOrder(points: List<JSONObject>): List<JSONObject> =
+        ascendingOrder(points.map { instantMsOf(it) }).map { points[it] }
+
+    /** How many record ids one deletions request carries: ten below the route's MAX_DELETIONS. */
+    internal const val MAX_DELETIONS_PER_REQUEST = 990
+
+    /** The deletions request bodies for [ids], in order, none for an empty list. */
+    internal fun deletionPayloads(ids: List<String>): List<String> =
+        ids.chunked(MAX_DELETIONS_PER_REQUEST).map { JSONObject().put("recordIds", JSONArray(it)).toString() }
+
+    /** Posts a type's deletions once its upserts landed, and answers whether the type sent anything. */
+    private suspend fun thenDeletions(
+        upserted: InstanceClient.Outcome<Boolean>,
+        session: Session,
+        dataTypeId: String,
+        deletions: List<String>,
+        post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
+    ): InstanceClient.Outcome<Boolean> {
+        if (upserted !is InstanceClient.Outcome.Ok) return upserted
+        val deleted = postDeletions(session, dataTypeId, deletions, post)
+        if (deleted is InstanceClient.Outcome.Failed) return deleted
+        return InstanceClient.Outcome.Ok(upserted.value || deletions.isNotEmpty())
+    }
+
+    /**
+     * The record ids Health Connect reported deleted, through the same retry as a chunk; the first
+     * refusal ends the type. The instance must ship the deletions route before a phone calls it:
+     * an older instance answers 404, which fails the type like any other refusal and leaves its
+     * token unsaved.
+     */
+    private suspend fun postDeletions(
+        session: Session,
+        dataTypeId: String,
+        ids: List<String>,
+        post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
+    ): InstanceClient.Outcome<Unit> {
+        for (payload in deletionPayloads(ids)) {
+            val outcome = withContext(Dispatchers.IO) {
+                postWithRetry(POST_ATTEMPTS, { delayMs -> delay(delayMs) }) {
+                    post("/api/v1/p/${session.personId}/ingest/$dataTypeId/deletions", payload)
+                }
+            }
+            if (outcome is InstanceClient.Outcome.Failed) return outcome
+        }
+        return InstanceClient.Outcome.Ok(Unit)
     }
 
     /**
@@ -759,7 +903,7 @@ object SyncEngine {
             // The endpoint refuses more than 10000 points: chunks are capped by bytes, by span
             // and by count, and every piece of one hour is posted here in order, none skipped -
             // a cut changes how many requests the hour travels in, never which readings travel.
-            for (chunk in chunksBySize(group.map { it.body }, dataTypeId in MINUTE_ALIGNED_TYPES)) {
+            for (chunk in chunksBySize(inTimeOrder(group.map { it.body }), dataTypeId in MINUTE_ALIGNED_TYPES)) {
                 val outcome = postChunk(session, packageName, dataTypeId, identity, chunk, post)
                 // The first refusal stops this type: the chunks after it would carry the same
                 // answer, and a caller that kept going would only be slower at saying so.
@@ -769,28 +913,108 @@ object SyncEngine {
         return InstanceClient.Outcome.Ok(true)
     }
 
-    private suspend fun <T : Record> readAll(
-        client: HealthConnectClient,
-        type: KClass<T>,
-        start: Instant,
-        end: Instant,
-    ): List<T> {
-        val out = mutableListOf<T>()
-        var pageToken: String? = null
-        do {
-            val response = withContext(Dispatchers.IO) {
-                client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = type,
-                        timeRangeFilter = TimeRangeFilter.between(start, end),
-                        pageToken = pageToken,
-                    ),
-                )
+    /** Every batch [next] answers, as one: for the types whose points need the whole read at once. */
+    private suspend fun <T : Record> collect(next: suspend () -> Batch<T>?): Batch<T> {
+        val records = mutableListOf<T>()
+        val deletions = mutableListOf<String>()
+        while (true) {
+            val batch = next() ?: break
+            records += batch.records
+            deletions += batch.deletions
+        }
+        return Batch(records, deletions)
+    }
+
+    /** Records to upsert and Health Connect record ids to delete, as one source hands them over. */
+    internal class Batch<T : Record>(val records: List<T>, val deletions: List<String>)
+
+    /** Where a type's records come from: a window read or a change feed. */
+    internal interface BatchSource {
+        /** The batches of [type], one per call, null once there are no more. */
+        fun <T : Record> batches(type: KClass<T>): suspend () -> Batch<T>?
+    }
+
+    /** Every record in [start, end), a provider page per batch, never a deletion. */
+    private class WindowSource(
+        private val client: HealthConnectClient,
+        private val start: Instant,
+        private val end: Instant,
+    ) : BatchSource {
+        override fun <T : Record> batches(type: KClass<T>): suspend () -> Batch<T>? {
+            var pageToken: String? = null
+            var done = false
+            return {
+                if (done) {
+                    null
+                } else {
+                    val response = withContext(Dispatchers.IO) {
+                        client.readRecords(
+                            ReadRecordsRequest(
+                                recordType = type,
+                                timeRangeFilter = TimeRangeFilter.between(start, end),
+                                // Written out although it is connect-client's own default
+                                // (ReadRecordsRequest, `ascendingOrder: Boolean = true`): the cut
+                                // policy measures a chunk's reach from its first point to its last.
+                                // uploadType orders each buffer too; pages already in order keep
+                                // that a no-op.
+                                ascendingOrder = true,
+                                pageToken = pageToken,
+                            ),
+                        )
+                    }
+                    pageToken = response.pageToken
+                    done = pageToken == null
+                    Batch(response.records, emptyList())
+                }
             }
-            out += response.records
-            pageToken = response.pageToken
-        } while (pageToken != null)
-        return out
+        }
+    }
+
+    /**
+     * The changes since [token], as one batch: the feed's pages are drained first and the records
+     * sorted by start, because a feed lists records in the order they changed. [nextToken] is the
+     * token to save once the type landed. A token Health Connect no longer honours sets [expired]
+     * and answers no batch at all, so nothing from a partial feed is sent.
+     */
+    private class ChangesSource(private val client: HealthConnectClient, private val token: String) : BatchSource {
+        var nextToken: String? = null
+            private set
+        var expired: Boolean = false
+            private set
+
+        override fun <T : Record> batches(type: KClass<T>): suspend () -> Batch<T>? {
+            var drained = false
+            return {
+                if (drained) {
+                    null
+                } else {
+                    drained = true
+                    drain(type)
+                }
+            }
+        }
+
+        private suspend fun <T : Record> drain(type: KClass<T>): Batch<T>? {
+            val records = mutableListOf<T>()
+            val deletions = mutableListOf<String>()
+            var current = token
+            do {
+                val response = withContext(Dispatchers.IO) { client.getChanges(current) }
+                if (response.changesTokenExpired) {
+                    expired = true
+                    return null
+                }
+                for (change in response.changes) {
+                    when (change) {
+                        is UpsertionChange -> if (type.java.isInstance(change.record)) records += type.java.cast(change.record)!!
+                        is DeletionChange -> deletions += change.recordId
+                    }
+                }
+                current = response.nextChangesToken
+            } while (response.hasMore)
+            nextToken = current
+            return Batch(records.sortedBy { startOf(it) }, deletions)
+        }
     }
 
     // ---- Mapping to the Google Health API v4 shapes haelan's mappers read ----
