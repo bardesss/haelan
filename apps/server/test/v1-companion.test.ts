@@ -431,12 +431,24 @@ describe('GET /companion/cursors identity cutovers', () => {
     expect(body.identityCutovers).toEqual({ sleep: cutover })
   })
 
-  it('clamps a future-dated legacy cutover to the server clock', async () => {
+  // Clamped to when the row arrived, not to when the cutover is asked for: a clamp to now would
+  // keep climbing with the clock and push every record dated after that arrival back to legacy.
+  it('caps a future-dated legacy row at the moment it arrived', async () => {
     harness = await serverAfterFixtures()
     const token = await harness.signIn()
+    const arrivedAtMs = harness.clock.nowMs
     expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-12-10T10:00:00Z')], dataSource: LEGACY })).statusCode).toBe(200)
+    expect(((await cursors(token)).json() as { identityCutovers: Record<string, number> }).identityCutovers)
+      .toEqual({ weight: arrivedAtMs + 1 })
+
+    // A week on, the upgraded phone sends a record dated after that arrival under the new identity.
+    harness.clock.nowMs = Date.parse('2026-09-10T00:00:00Z')
+    const laterRecordMs = Date.parse('2026-09-05T10:00:00Z')
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-09-05T10:00:00Z')], dataSource: ORIGIN_SCALE })).statusCode).toBe(200)
     const body = (await cursors(token)).json() as { identityCutovers: Record<string, number> }
-    expect(body.identityCutovers).toEqual({ weight: harness.clock.nowMs })
+    expect(body.identityCutovers).toEqual({ weight: arrivedAtMs + 1 })
+    // The phone sends a record under the new identity when it starts at or after the cutover.
+    expect(laterRecordMs >= (body.identityCutovers['weight'] ?? Infinity)).toBe(true)
   })
 
   it('answers no cutovers on an instance that only ever saw the new identity', async () => {

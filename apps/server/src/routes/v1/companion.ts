@@ -172,8 +172,12 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
       if (origin) {
         ends.sawOrigin = true
         ends.bucketMaxMs = null
-      } else if (identity === null && !ends.sawOrigin && (ends.bucketMaxMs === null || row.windowEndMs > ends.bucketMaxMs)) {
-        ends.bucketMaxMs = row.windowEndMs
+      } else if (identity === null && !ends.sawOrigin) {
+        // A point dated ahead of its arrival (a watch with a wrong clock) is capped at that
+        // arrival: no record it carried can have been written later than that, and a
+        // later cap, such as now, would push records dated after it back to legacy.
+        const legacyEndMs = Math.min(row.windowEndMs, row.fetchedAtMs + 1)
+        if (ends.bucketMaxMs === null || legacyEndMs > ends.bucketMaxMs) ends.bucketMaxMs = legacyEndMs
       }
 
       if (historyStartMs === null || row.windowStartMs < historyStartMs) historyStartMs = row.windowStartMs
@@ -220,11 +224,10 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
       byType.set(dataTypeId, { minWindowEndMs: windowEndMs, lastIngestAtMs })
     }
 
-    // Clamped to now like every cursor: a future-dated legacy point must not freeze the change.
     const identityCutovers: Record<string, number> = {}
     for (const [dataTypeId, ends] of legacyEnds) {
       const cutoverMs = ends.sawOrigin ? ends.cutoverMs : commitBucket(ends.cutoverMs, ends.bucketMaxMs)
-      if (cutoverMs !== null && ingestible.has(dataTypeId)) identityCutovers[dataTypeId] = Math.min(cutoverMs, nowMs)
+      if (cutoverMs !== null && ingestible.has(dataTypeId)) identityCutovers[dataTypeId] = cutoverMs
     }
 
     // Field order matters here and nowhere else in this file: SyncCursors.parseCursorEnds on an
