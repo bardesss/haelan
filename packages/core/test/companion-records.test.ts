@@ -257,6 +257,19 @@ describe('CompanionRecords', () => {
     ctx.cleanup()
   })
 
+  it('two weights trading instants in one upload keep both rows', () => {
+    const ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    const later = T0 + 3_600_000
+    store(ctx, [row({ recordId: 'hc-weight-x' }), row({ recordId: 'hc-weight-y', utcMs: later, value: 81 })])
+    const keys = new SampleKeys(ctx.db)
+    const swapped = [row({ recordId: 'hc-weight-x', utcMs: later }), row({ recordId: 'hc-weight-y', value: 81 })]
+    store(ctx, swapped, false)
+    expect(new CompanionRecords(ctx.db).link('p1', swapped, keys)).toEqual({ rowsDeleted: 0, localDates: [] })
+    expect(readSamples(ctx.db).map((r) => [r.utcMs, r.value])).toEqual([[T0, 81], [later, 80]])
+    ctx.cleanup()
+  })
+
   it('a moved weight whose stored link is wider than one instant deletes nothing', () => {
     const ctx = createTestDatabase()
     seedPerson(ctx.db, 'p1')

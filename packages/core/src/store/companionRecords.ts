@@ -48,6 +48,7 @@ export class CompanionRecords {
    * still covers it: nothing else ever would, and a later delete of the record only reaches
    * where it is now. Only when the old link is a single instant. A wider one of a one-reading
    * metric was widened before 2.24.0, and a row inside it may belong to a record with no link.
+   * An unnamed point at the old instant is the same row and goes too (no phone sends one now).
    * Replay runs the same deletes in the same order, so live and rebuild agree.
    */
   link(personId: string, rows: readonly SampleRow[], keys: SampleKeys): DeletedRows {
@@ -216,8 +217,9 @@ export class CompanionRecords {
     // record is not itself tombstoned: an app that re-writes an entry as delete A, insert B on
     // the same key would otherwise lose B to A's delete, live and again on every rebuild. A
     // record being deleted is tombstoned before this runs, so its own links never count, and a
-    // record that moved has its link at the new range already. The live links are read once per deleted link and subtracted here rather than tested per row
-    // in SQL: a correlated test per row scanned every link for every heart-rate minute.
+    // record that moved has its link at the new range already. The live links are read once
+    // per removed range and subtracted here rather than tested per row in SQL: a correlated
+    // test per row scanned every link for every heart-rate minute.
     const inRange = and(
       eq(samples.personRef, personRef),
       eq(samples.sourceRef, sql.placeholder('sourceRef')),
