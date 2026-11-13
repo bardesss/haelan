@@ -283,6 +283,21 @@ describe('the consent handoff', () => {
     expect(harness.app.haelan.stores.credentials.listConnectedPeople()).not.toContain('p2')
   })
 
+  // The refusal comes before the single use is spent, so a stranger opening the link cannot burn
+  // it for the person it was issued to.
+  it('leaves the state unspent when another member is refused, so its owner can still finish', async () => {
+    harness = await withServer({ google: 'ok' })
+    const { admin, member, state } = await memberConsent(harness)
+    const url = `/oauth/callback?code=good&state=${encodeURIComponent(state)}`
+    const refused = await harness.app.inject({ method: 'GET', url, headers, cookies: { haelan_session: admin } })
+    expect(refused.headers.location).toBe('/setup/google?error=wrong_person')
+    expect(harness.app.haelan.stores.credentials.listConnectedPeople()).not.toContain('p2')
+
+    const finished = await harness.app.inject({ method: 'GET', url, headers, cookies: { haelan_session: member } })
+    expect(finished.headers.location).toBe('/')
+    expect(harness.app.haelan.stores.credentials.listConnectedPeople()).toContain('p2')
+  })
+
   it('accepts a state only once', async () => {
     harness = await withServer({ google: 'ok' })
     const { member, state } = await memberConsent(harness)

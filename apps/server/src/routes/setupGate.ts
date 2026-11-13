@@ -74,8 +74,10 @@ export function registerSetupGate(app: FastifyInstance): void {
   })
 }
 
-// An unmatched request reaches no handler, so the raw-URL fallback only keeps today's 409 for
-// paths like /api/v1/daily without protecting anything.
+// An unmatched request reaches no handler, so the raw-URL fallback protects nothing. Without
+// @fastify/static it keeps today's 409 for paths like /api/v1/daily; in production the static
+// '/*' route matches unmatched GETs, so they skip the gate, which is harmless because no handler
+// acts on them.
 function gatedPath(request: FastifyRequest): string {
   return request.routeOptions.url ?? request.url.split('?')[0] ?? ''
 }

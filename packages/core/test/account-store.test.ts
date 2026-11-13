@@ -136,6 +136,25 @@ describe('AccountStore', () => {
     expect(after.ok).toBe(true)
   })
 
+  // A guard for the recovery path: expiry alone lets the owner back in and leaves a clean counter.
+  it('lets the right password in once the lock has expired and leaves the failure count at zero', async () => {
+    await create()
+    for (let i = 0; i < 10; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
+    const failed = () => (fixture.db.$client.prepare('select failed_attempts as n from accounts').get() as { n: number }).n
+    const lockEnd = 2000 + 15 * 60_000
+
+    // Still inside the window: refused, and the verifier is not reached at all.
+    vi.mocked(argon2.verify).mockClear()
+    expect(await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: lockEnd - 1 }))
+      .toEqual({ ok: false, reason: 'locked' })
+    expect(argon2.verify).not.toHaveBeenCalled()
+
+    const after = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: lockEnd + 1 })
+    expect(after.ok).toBe(true)
+    expect(failed()).toBe(0)
+    expect(store.list()[0]!.lockedUntilMs).toBeNull()
+  })
+
   it('lists every account in username order, without a hash among the fields', async () => {
     await create()
     seedPerson(fixture.db, 'p2')

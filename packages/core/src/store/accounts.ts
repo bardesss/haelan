@@ -153,6 +153,8 @@ export class AccountStore {
     // time as a live one and the answer is the same one a wrong password gets. Telling the two
     // apart would confirm to anyone trying a username that the account exists, and the admin who
     // disabled it is the one who tells the member - the app has no way to reach them.
+    // The reserved attempt is kept here too, so a disabled account given its right password can
+    // lock; after an admin re-enables it, it may stay locked until expiry or `unlock`.
     if (row.disabledAtMs !== null) return { ok: false, reason: 'bad_password' }
 
     // The one write that stamps a sign-in, in the same update that clears the lockout: this is the
