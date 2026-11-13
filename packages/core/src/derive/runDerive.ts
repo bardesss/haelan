@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
 import { people } from '../db/schema/index.ts'
-import type { DeriveQueue } from '../store/deriveQueue.ts'
+import type { DeriveQueue, QueueEntry } from '../store/deriveQueue.ts'
 import type { SourcePriorityStore } from '../store/sourcePriority.ts'
 import type { OverrideStore } from '../store/overrides.ts'
 import type { Priority } from './priority.ts'
@@ -13,7 +13,7 @@ import { deriveDayInto } from './deriveDay.ts'
 
 const DEFAULT_BATCH = 64
 
-export interface DeriveReport { daysDerived: number, rowsWritten: number }
+export interface DeriveReport { daysDerived: number, daysFailed: number, rowsWritten: number }
 
 /**
  * Drains the dirty day queue. One transaction per day: a day's rows are replaced wholesale, so
@@ -37,9 +37,16 @@ export function runDerive(input: {
    * stamp exists to prevent. Omitted means every person, which is what a rebuild wants.
    */
   personIds?: readonly string[]
+  /**
+   * Called for a day whose transaction threw. The day is rolled back, sent to the back of the
+   * queue and the drain carries on, so one day that always throws cannot block the rest.
+   */
+  onDayFailed?: (entry: QueueEntry, error: unknown) => void
 }): DeriveReport {
   const claimed = input.queue.claim(input.batch ?? DEFAULT_BATCH, input.personIds)
   let rowsWritten = 0
+  let daysDerived = 0
+  let daysFailed = 0
 
   // Instance wide rather than per person, and read once for the whole drain. A change to either
   // marks nothing dirty today, so a drain that straddles an edit costs a stale night that the
@@ -84,20 +91,34 @@ export function runDerive(input: {
   }
 
   for (const entry of claimed) {
-    input.db.transaction((tx) => {
-      rowsWritten += deriveDayInto(tx, {
-        personId: entry.personId,
-        localDate: entry.localDate,
-        birthDate: birthDateFor(entry.personId),
-        priority: priorityFor(entry.personId),
-        overrides: overridesFor(entry.personId),
-        gapMinutes,
-        overlapRatio,
-        nowMs: input.nowMs,
+    try {
+      // Counted after the transaction returns: a day that rolls back wrote nothing.
+      const written = input.db.transaction((tx) => {
+        const rows = deriveDayInto(tx, {
+          personId: entry.personId,
+          localDate: entry.localDate,
+          birthDate: birthDateFor(entry.personId),
+          priority: priorityFor(entry.personId),
+          overrides: overridesFor(entry.personId),
+          gapMinutes,
+          overlapRatio,
+          nowMs: input.nowMs,
+        })
+        input.queue.clear([entry], tx)
+        return rows
       })
-      input.queue.clear([entry], tx)
-    })
+      rowsWritten += written
+      daysDerived++
+    } catch (error) {
+      daysFailed++
+      try {
+        input.queue.recordFailure(entry, input.nowMs)
+      } catch {
+        // The day stays where it was; the next drain tries it again.
+      }
+      input.onDayFailed?.(entry, error)
+    }
   }
 
-  return { daysDerived: claimed.length, rowsWritten }
+  return { daysDerived, daysFailed, rowsWritten }
 }

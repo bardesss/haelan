@@ -77,6 +77,9 @@ export function drainOnce(deps: DrainDeps): number {
       nowMs: deps.nowMs(),
       batch: DRAIN_DAYS_PER_TICK,
       personIds: eligible,
+      onDayFailed: (entry, error) => console.error(
+        `drainer: deriving ${entry.personId} ${entry.localDate} failed, ${error instanceof Error ? error.message : String(error)}`,
+      ),
     }).daysDerived
   } catch (error) {
     // Failures stay inside, the way SyncRunner#derive keeps its own: a derivation defect must

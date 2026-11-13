@@ -37,6 +37,9 @@ export const deriveQueue = sqliteTable('derive_queue', {
   personId: text('person_id').notNull().references(() => people.id),
   localDate: text('local_date').notNull(),
   queuedAtMs: integer('queued_at_ms').notNull(),
+  // Consecutive derive failures of this day. Informational: recordFailure moves the day to the
+  // back of the queue so a day that always throws cannot hold up the ones behind it.
+  failures: integer('failures').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.personId, t.localDate] })])
 
 // What a person turned OFF, never what they turned on. The direction is load-bearing: the

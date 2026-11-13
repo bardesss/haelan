@@ -69,7 +69,7 @@ describe('tier 2 and 3 schema', () => {
 
   it('queues a person and a local date, so one dirty day is one row however many metrics it touches', () => {
     const cols = columnNames(deriveQueue)
-    expect(cols).toEqual(['local_date', 'person_id', 'queued_at_ms'])
+    expect(cols).toEqual(['failures', 'local_date', 'person_id', 'queued_at_ms'])
   })
 
   it('tracks a high-water mark per person and data type', () => {

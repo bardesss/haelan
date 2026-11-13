@@ -642,6 +642,9 @@ export class SyncRunner {
           settings: this.#context.instance.settings,
           nowMs: this.#context.now(),
           personIds,
+          onDayFailed: (entry, error) => console.error(
+            `sync: deriving ${entry.personId} ${entry.localDate} failed, ${error instanceof Error ? error.message : String(error)}`,
+          ),
         }).daysDerived === 0) return
       }
       console.log(`sync: derivation stopped after ${MAX_DERIVE_BATCHES} batches with days still queued`)

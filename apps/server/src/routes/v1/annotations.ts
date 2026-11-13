@@ -353,6 +353,9 @@ export function drainPersonDerivation(
         // days inside this request: work this caller did not ask for and, on a shared instance,
         // work about somebody else's data.
         personIds: [personId],
+        onDayFailed: (entry, error) => console.error(
+          `${source}: deriving ${entry.personId} ${entry.localDate} failed, ${error instanceof Error ? error.message : String(error)}`,
+        ),
       })
       if (report.daysDerived === 0) return
       if (performance.now() - startedAtMs >= DRAIN_BUDGET_MS) {

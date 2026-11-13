@@ -97,6 +97,25 @@ describe('drainOnce', () => {
     })
   })
 
+  it('logs a day that will not derive and still derives the others', () => {
+    withInstance((instance, stores) => {
+      stores.people.create({ id: 'p1', displayName: 'Robin', timezone: 'Europe/Amsterdam', nowMs: 0 })
+      instance.deriveQueue.markDirty({ personId: 'p1', localDate: '2026-08-21', nowMs: 1 })
+      instance.deriveQueue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 2 })
+      instance.db.$client.exec(
+        "CREATE TRIGGER poison BEFORE DELETE ON derive_queue WHEN OLD.local_date = '2026-08-21' "
+        + "BEGIN SELECT RAISE(ABORT, 'poisoned day'); END",
+      )
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        expect(drainOnce({ instance, stores, nowMs: () => 3, rebuildRunning: () => false })).toBe(1)
+        expect(logged).toHaveBeenCalledWith('drainer: deriving p1 2026-08-21 failed, poisoned day')
+      } finally {
+        logged.mockRestore()
+      }
+    })
+  })
+
   it('returns zero rather than throwing when derivation fails', () => {
     withInstance((instance, stores) => {
       stores.people.create({ id: 'p1', displayName: 'Robin', timezone: 'Europe/Amsterdam', nowMs: 0 })

@@ -246,6 +246,13 @@
       "when": 1794536401139,
       "tag": "0034_smiling_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1794540232219,
+      "tag": "0035_complete_the_fury",
+      "breakpoints": true
     }
   ]
 }

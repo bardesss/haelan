@@ -1,0 +1,1 @@
+ALTER TABLE `derive_queue` ADD `failures` integer DEFAULT 0 NOT NULL;
