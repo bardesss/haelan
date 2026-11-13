@@ -11,6 +11,18 @@ import { SetupApp } from '../src/setup/SetupApp.js'
 import { navigate } from '../src/router.js'
 import { pumpUntil } from './flush.js'
 
+const router = vi.hoisted(() => ({ hold: false, held: [] as string[] }))
+vi.mock('../src/router.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/router.js')>()
+  return {
+    ...actual,
+    navigate: (to: string, options?: { replace?: boolean }) => {
+      if (router.hold) router.held.push(to)
+      else actual.navigate(to, options)
+    },
+  }
+})
+
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', effectiveTimezone: 'Europe/Amsterdam', currentTimezone: null, followPhoneZone: true, birthDate: null, sex: null,
   sleepTargetMinutes: 480,
@@ -129,5 +141,23 @@ describe('a finished instance after a failed consent', () => {
     mount()
     await pumpUntil(() => container!.textContent!.includes('sign in there'), 'the no_session text')
     expect(asked).toEqual(['/api/setup/state'])
+  })
+
+  // The route move to the backfill screen is held back, standing in for a route update that
+  // lands a frame after the step: that frame is where the failure title used to flash.
+  it('shows no failure on a finished Google route without an error code', async () => {
+    navigate('/setup/google', { replace: true })
+    const asked = stubApi({ state: done })
+    router.hold = true
+    try {
+      mount()
+      await pumpUntil(() => asked.includes('/api/setup/state') && router.held.length > 0, 'the step and the held route')
+      await pumpUntil(() => true, 'one more render')
+      expect(window.location.pathname).toBe('/setup/google')
+      expect(container!.textContent).not.toContain('Connecting Google did not work')
+    } finally {
+      router.hold = false
+      router.held.length = 0
+    }
   })
 })

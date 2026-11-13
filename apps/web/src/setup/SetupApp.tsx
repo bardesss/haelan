@@ -210,7 +210,7 @@ export function SetupApp() {
         {route.startsWith('/setup/instance-url')
           ? <InstanceUrlStep onDone={refresh} />
           : onGoogleRoute
-            ? (step === 'done'
+            ? (step === 'done' && callbackCodeOf(route) !== null
               ? <ConsentFailed error={callbackError} />
               : <GoogleStep
                 candidates={candidates}
