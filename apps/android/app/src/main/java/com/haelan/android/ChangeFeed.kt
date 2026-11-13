@@ -34,6 +34,23 @@ object ChangeFeed {
             Mode.Bootstrap(SyncCursors.bootstrapStartFor(cursorEndMs, fallbackStart, end))
         }
 
+    /** One entry of a change feed, in feed order: a record written or rewritten, or a record deleted. */
+    data class Change(val recordId: String, val deleted: Boolean)
+
+    /**
+     * The deletions still standing once [changes] follow [pending], in the order the feed gave
+     * them: the last word on an id wins. A record deleted and then restored under the same id
+     * within one drain is upserted by that drain, and its deletion, posted after every upsert,
+     * would take it off the instance again. A record written and then deleted stays deleted.
+     */
+    fun deletionsAfter(pending: List<String>, changes: List<Change>): List<String> {
+        val standing = LinkedHashSet(pending)
+        for (change in changes) {
+            if (change.deleted) standing += change.recordId else standing -= change.recordId
+        }
+        return standing.toList()
+    }
+
     fun cursorKeyFor(owner: String, dataTypeId: String): String = "changes_token_cursor|$owner|$dataTypeId"
 
     /**

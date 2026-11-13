@@ -736,11 +736,13 @@ object SyncEngine {
     ): InstanceClient.Outcome<Boolean> {
         val alignToMinute = dataTypeId in MINUTE_ALIGNED_TYPES
         val buffers = mutableMapOf<SourceIdentity, MutableList<JSONObject>>()
-        val deletions = mutableListOf<String>()
+        var deletions = emptyList<String>()
         var sentAny = false
         while (true) {
             val batch = next() ?: break
-            deletions += batch.deletions
+            // Folded page by page in feed order, so a deletion an upsert on a later page undid
+            // is not posted after that upsert.
+            deletions = ChangeFeed.deletionsAfter(deletions, batch.changes)
             // CPU- and memory-bound: off the caller's thread, which is the screen's when the
             // button started this. Each identity's buffer is cut as soon as it reaches a ceiling,
             // so what leaves here is always a full chunk and never a fragment; the rest stays
@@ -942,19 +944,25 @@ object SyncEngine {
     }
 
     /** Every batch [next] answers, as one: for the types whose points need the whole read at once. */
-    private suspend fun <T : Record> collect(next: suspend () -> Batch<T>?): Batch<T> {
+    private suspend fun <T : Record> collect(next: suspend () -> Batch<T>?): Collected<T> {
         val records = mutableListOf<T>()
-        val deletions = mutableListOf<String>()
+        var deletions = emptyList<String>()
         while (true) {
             val batch = next() ?: break
             records += batch.records
-            deletions += batch.deletions
+            deletions = ChangeFeed.deletionsAfter(deletions, batch.changes)
         }
-        return Batch(records, deletions)
+        return Collected(records, deletions)
     }
 
-    /** Records to upsert and Health Connect record ids to delete, as one source hands them over. */
-    internal class Batch<T : Record>(val records: List<T>, val deletions: List<String>)
+    /** A whole read: its records and the record ids still deleted at its end. */
+    private class Collected<T : Record>(val records: List<T>, val deletions: List<String>)
+
+    /**
+     * Records to upsert, as one source hands them over, and the feed's changes in feed order,
+     * which ChangeFeed.deletionsAfter folds into the record ids to delete.
+     */
+    internal class Batch<T : Record>(val records: List<T>, val changes: List<ChangeFeed.Change>)
 
     /** Where a type's records come from: a window read or a change feed. */
     internal interface BatchSource {
@@ -1000,8 +1008,9 @@ object SyncEngine {
 
     /**
      * The changes since [token], one batch per getChanges page: that page's records of the type,
-     * sorted by start, and its deletions. A feed lists records in the order they changed, and
-     * uploadType orders each identity's buffer across batches as well. [nextToken] is set after
+     * sorted by start, and every change on the page in feed order, which decides which deletions
+     * stand. A feed lists records in the order they changed, and uploadType orders each
+     * identity's buffer across batches as well. [nextToken] is set after
      * the last page and is the token to save once the type landed. A token Health Connect no
      * longer honours sets [expired] and ends the feed.
      */
@@ -1025,11 +1034,14 @@ object SyncEngine {
                         null
                     } else {
                         val records = mutableListOf<T>()
-                        val deletions = mutableListOf<String>()
+                        val changes = mutableListOf<ChangeFeed.Change>()
                         for (change in response.changes) {
                             when (change) {
-                                is UpsertionChange -> if (type.java.isInstance(change.record)) records += type.java.cast(change.record)!!
-                                is DeletionChange -> deletions += change.recordId
+                                is UpsertionChange -> {
+                                    if (type.java.isInstance(change.record)) records += type.java.cast(change.record)!!
+                                    changes += ChangeFeed.Change(change.record.metadata.id, deleted = false)
+                                }
+                                is DeletionChange -> changes += ChangeFeed.Change(change.recordId, deleted = true)
                             }
                         }
                         current = response.nextChangesToken
@@ -1037,7 +1049,7 @@ object SyncEngine {
                             done = true
                             nextToken = current
                         }
-                        Batch(records.sortedBy { startOf(it) }, deletions)
+                        Batch(records.sortedBy { startOf(it) }, changes)
                     }
                 }
             }

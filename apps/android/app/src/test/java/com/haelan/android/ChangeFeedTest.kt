@@ -75,4 +75,31 @@ class ChangeFeedTest {
         assertNotEquals(ChangeFeed.keyFor("a|p1", "weight"), ChangeFeed.cursorKeyFor("a|p1", "weight"))
         assertNotEquals(ChangeFeed.cursorKeyFor("a|p1", "weight"), ChangeFeed.cursorKeyFor("a|p2", "weight"))
     }
+
+    private fun upsert(id: String) = ChangeFeed.Change(id, deleted = false)
+    private fun delete(id: String) = ChangeFeed.Change(id, deleted = true)
+
+    @Test
+    fun `a record written and then deleted in one drain is deleted`() =
+        assertEquals(listOf("a"), ChangeFeed.deletionsAfter(emptyList(), listOf(upsert("a"), delete("a"))))
+
+    @Test
+    fun `a record deleted and then restored in one drain is kept, and no deletion is posted for it`() =
+        assertEquals(emptyList<String>(), ChangeFeed.deletionsAfter(emptyList(), listOf(delete("a"), upsert("a"))))
+
+    @Test
+    fun `a record only deleted is deleted`() =
+        assertEquals(listOf("a"), ChangeFeed.deletionsAfter(emptyList(), listOf(delete("a"), upsert("b"))))
+
+    @Test
+    fun `a restore on a later page undoes a deletion from an earlier page`() {
+        val first = ChangeFeed.deletionsAfter(emptyList(), listOf(delete("a"), delete("b")))
+        assertEquals(listOf("b"), ChangeFeed.deletionsAfter(first, listOf(upsert("a"))))
+    }
+
+    @Test
+    fun `a deletion on a later page of a record written earlier still deletes it`() {
+        val first = ChangeFeed.deletionsAfter(emptyList(), listOf(upsert("a")))
+        assertEquals(listOf("a"), ChangeFeed.deletionsAfter(first, listOf(delete("a"))))
+    }
 }
