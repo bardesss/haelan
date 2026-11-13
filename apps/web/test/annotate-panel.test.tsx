@@ -233,6 +233,8 @@ describe('the panel\'s actions depend on what the click named', () => {
     }) as typeof fetch
 
     mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    // The submit waits for the day's stored note to be known.
+    await settle()
     expect(actionLabels()).toEqual(['Add a note', 'Add an event'])
     expect(container!.querySelector('h2')?.textContent).toBe('This day, 2026-08-21')
     type(fieldFor('Note'), 'slept badly')
@@ -496,5 +498,23 @@ describe('a day that already has a note', () => {
     await settle()
     globalThis.fetch = original
     expect(fieldFor('Note').value).toBe('my own words')
+  })
+
+  it("sends nothing while the day's note failed to load", async () => {
+    const writes: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'GET' && String(input).includes('/notes?')) return respond(500, { error: { kind: 'internal', message: 'down' } })
+      if (init?.method === 'PUT') writes.push(String(input))
+      return respond(200, { items: [] })
+    }) as typeof fetch
+    mountPanel({ scope: 'day', localDate: '2026-08-21' })
+    await settle()
+    type(fieldFor('Note'), 'my own words')
+    expect(submitButton().disabled).toBe(true)
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+    expect(writes).toEqual([])
   })
 })

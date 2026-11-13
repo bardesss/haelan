@@ -439,6 +439,24 @@ describe('LogPanel note saved elsewhere', () => {
     expect(note().value).toBe('Late dinner')
     expect(errors()).toEqual(['note too long'])
   })
+
+  it('keeps the typed text when a refetch lands during a save that then fails', async () => {
+    render({ initial: glanceLog({ note: 'Birthday' }) })
+    let fail: () => void = () => {}
+    handler = (req) => req.method === 'PUT'
+      ? new Promise<Response>((resolve) => { fail = () => resolve(failure('note too long')) })
+      : fakeServer(req)
+    type(note(), 'Late dinner')
+    blur(note())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    await act(async () => {
+      client!.setQueryData(dayLogKey('p1', TODAY), glanceLog({ note: 'Old server note' }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    await act(async () => { fail(); await new Promise((resolve) => setTimeout(resolve, 20)) })
+    expect(note().value).toBe('Late dinner')
+    expect(errors()).toEqual(['note too long'])
+  })
 })
 
 describe('LogPanel stepped day', () => {

@@ -214,6 +214,15 @@ describe('ErrorBoundary', () => {
 })
 
 describe('the page boundary', () => {
+  // The signed-in shell reads from the server on mount; nothing here may reach the network.
+  const realFetch = globalThis.fetch
+  beforeEach(() => {
+    globalThis.fetch = (async () => new Response(JSON.stringify({ items: [] }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })) as typeof fetch
+  })
+  afterEach(() => { globalThis.fetch = realFetch })
+
   // A signed-in session the rail can render without throwing, so the only thing that can fail
   // below is the page itself.
   const signedIn = (): Session => ({

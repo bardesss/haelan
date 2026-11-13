@@ -130,7 +130,9 @@ export function AnnotatePanel({ target, onClose }: {
   const canSubmit =
     action === 'exclude' ? reason.trim() !== '' :
     action === 'correct' ? reason.trim() !== '' && correctedValue.trim() !== '' :
-    action === 'note' ? noteBody.trim() !== '' :
+    // Held until the stored note is known: while it is loading or failed the field shows empty, and
+    // a submit would PUT over a note the reader has not seen.
+    action === 'note' ? noteBody.trim() !== '' && !dayNote.isPending && !dayNote.isError :
     kind.trim() !== '' && startedAt !== ''
 
   const mutation = action === 'note' ? writeNote : action === 'event' ? writeEvent : writeOverride

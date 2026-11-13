@@ -72,7 +72,7 @@ describe('useToday', () => {
     vi.setSystemTime(new Date('2026-03-29T00:30:00Z')) // 01:30 CET, before the 02:00 jump
     mountProbe('Europe/Amsterdam')
     expect(seen).toBe('2026-03-29')
-    // 21:59:30Z is 23:59:30 CEST on the 29th.
+    // 21:59:00Z is 23:59:00 CEST on the 29th.
     act(() => { vi.advanceTimersByTime(21 * 3_600_000 + 29 * 60_000) }) // to 21:59:00Z
     expect(seen).toBe('2026-03-29')
     act(() => { vi.advanceTimersByTime(2 * 60_000) }) // 22:01:00Z = 00:01 CEST

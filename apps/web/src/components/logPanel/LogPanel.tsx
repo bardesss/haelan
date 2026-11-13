@@ -224,9 +224,12 @@ function LogBody({ day, isToday, isYesterday, log }: { day: string, isToday: boo
 
   // A note saved elsewhere (the annotate panel, the notes page) arrives through the day log. It is
   // taken only while the reader is not typing here and holds no unsaved edit, so it never
-  // overwrites text in progress.
+  // overwrites text in progress. A save in flight counts as an unsaved edit: `savedRef` has moved
+  // already, but the server holds the old note until the PUT lands, and a refetch carrying it must
+  // not replace text that a failing PUT would then lose.
   useEffect(() => {
     if (document.activeElement === noteField.current) return
+    if (saveNote.isPending) return
     if (!unchanged(textRef.current, savedRef.current)) return
     const next = log.note ?? ''
     savedRef.current = next
