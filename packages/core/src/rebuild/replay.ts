@@ -10,6 +10,7 @@ import { mapObservations } from '../api/mapObservations.ts'
 import { localDateOf } from '../derive/localDay.ts'
 import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { ArchivedPayload, RawArchive } from '../store/rawArchive.ts'
+import { CompanionRecords } from '../store/companionRecords.ts'
 import type { SourceRegistry } from '../store/sources.ts'
 import { readEnvelope } from '../api/envelope.ts'
 import { makeDropCollector, withPage } from './withPage.ts'
@@ -462,6 +463,9 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         insertSample.run(stored)
         localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
       }
+      // Rows without a recordId (everything Google sent) are skipped by link, so no page needs
+      // telling apart. Links are tier 2 and only the archive can bring them back.
+      new CompanionRecords(tx).link(input.personId, rows, keys)
     })
     afterUnit(committed)
   }
