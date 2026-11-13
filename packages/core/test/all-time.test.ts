@@ -110,6 +110,21 @@ describe('readAllTime', () => {
     expect(span.from).toBe('2026-01-01')
   })
 
+  it('keeps a derived day its person excluded until it is re-derived, and hides the provider one', () => {
+    insertDaily({ metric: 'total_calories', source: 'provider', localDate: '2024-08-25', value: 9000 })
+    insertDaily({ metric: 'steps', source: 'merged', localDate: '2024-08-26', value: 7000 })
+    insertDaily({ metric: 'steps', source: 'watch', localDate: '2024-08-27', value: 6000 })
+    for (const [localDate, metric] of [
+      ['2024-08-25', 'total_calories'], ['2024-08-26', 'steps'], ['2024-08-27', 'steps'],
+    ] as const) {
+      seedOverride(test.db, { personId: 'p1', scope: 'day_metric', targetKey: dayMetricTarget({ localDate, metric }) })
+    }
+
+    const { records } = readAllTime(test.db, 'p1')
+    expect(records.find((r) => r.metric === 'total_calories')).toBeUndefined()
+    expect(records.find((r) => r.metric === 'steps')).toMatchObject({ value: 7000, localDate: '2024-08-26' })
+  })
+
   it('gives the eddington number its own window, not the page span', () => {
     // The case the archive actually exhibits: the first row is from 2024 and steps do not start
     // until 2026, so E rests on a fraction of the span and must say which.
