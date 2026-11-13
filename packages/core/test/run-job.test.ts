@@ -707,4 +707,15 @@ describe('runJob', () => {
     expect(deps.syncState.get('p1', 'steps')?.highWaterMs).toBeGreaterThan(0)
   })
 
+  it('returns normally when recording the failure fails too, so the store error never replaces the window error', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response('{"error":{"code":400}}', { status: 400 }))
+    const deps = build(fetchMock)
+    vi.spyOn(deps.syncState, 'recordFailure').mockImplementation(() => { throw new Error('SQLITE_FULL') })
+    const result = await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
+    })
+    expect(result.failedWindows).toBeGreaterThan(0)
+    expect(result.rowsWritten).toBe(0)
+  })
 })

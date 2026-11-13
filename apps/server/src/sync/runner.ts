@@ -447,10 +447,15 @@ export class SyncRunner {
     // often than its interval would never sync at all. A boot catches up first, then settles
     // into the schedule. tryStart, so a boot during a run is a no-op rather than a queue.
     this.tryStart('scheduled')
-    this.timer = setInterval(() => { void this.trigger('scheduled') }, minutes * 60_000)
+    this.timer = setInterval(() => { this.#scheduledTick() }, minutes * 60_000)
     // Without unref, an idle timer keeps the process alive through a shutdown that has already
     // closed the server.
     this.timer.unref()
+  }
+
+  // Not assigned to #inFlight: a refused trigger would replace the promise settle() waits on.
+  #scheduledTick(): void {
+    this.trigger('scheduled').catch((error: unknown) => { console.error('sync: scheduled run failed', error) })
   }
 
   stop(): void {

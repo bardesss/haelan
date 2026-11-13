@@ -75,6 +75,8 @@ export interface JobResult {
   points: number
   /** Windows whose body was not a shape this code knows. Non-zero withholds the mark. */
   unreadableWindows: number
+  /** Windows whose fetch or write threw in this call. */
+  failedWindows: number
   rowsWritten: number
   skipped: 'revoked' | 'credentials_unreadable' | 'unsupported' | null
 }
@@ -93,7 +95,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     return result
   }
 
-  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, skipped: null }
+  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, failedWindows: 0, skipped: null }
   if (!supports(t, 'list')) return { ...empty, skipped: 'unsupported' }
 
   report({ kind: 'job_started', personId: input.personId, dataType: t.id })
@@ -193,20 +195,20 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       deps.sources.forget(input.personId)
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
-      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: 'revoked' })
+      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skipped: 'revoked' })
       // Same treatment, for the same reason: a key that cannot open this person's token is not
       // this window failing, or this type, or this run - it is every window for this person
       // until they reconsent, and recording it as a failure would write that story to every
       // data type, every day, for a state that already has its own name.
       if (error instanceof CredentialsUnreadableError) {
-        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: 'credentials_unreadable' })
+        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skipped: 'credentials_unreadable' })
       }
-      deps.syncState.recordFailure({
+      recordFailureSafely(deps.syncState, {
         personId: input.personId, dataType: t.id,
         error: classify(error),
         nowMs: deps.now(),
       })
-      return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: null })
+      return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 1, skipped: null })
     }
   }
 
@@ -243,7 +245,18 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   // Left unreported, a rename upstream reads exactly like a person who stopped wearing a device.
   // Types whose mapping is deferred are excluded, because writing no rows is their design.
 
-  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: null })
+  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skipped: null })
+}
+
+// A store that cannot record the failure (disk full, locked) must not replace the window error
+// with its own throw: that would escape runSync and end the whole run for every person.
+export function recordFailureSafely(
+  syncState: SyncStateStore,
+  input: { personId: string, dataType: string, error: Error, nowMs: number },
+): void {
+  try {
+    syncState.recordFailure(input)
+  } catch { /* the window error is the one worth reporting; the run goes on */ }
 }
 
 // last_error's first token is documented as the failure's class, so an unclassified throw from

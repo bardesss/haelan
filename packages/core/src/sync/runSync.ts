@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { people } from '../db/schema/index.ts'
 import { dataTypeById, horizonDaysFor, supports } from '../api/catalogue.ts'
-import { runJob, classify } from './runJob.ts'
+import { runJob, classify, recordFailureSafely } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
 import { runRollupJob } from './runRollupJob.ts'
 import { RevokedError } from '../api/tokens.ts'
@@ -128,7 +128,7 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
             report.skipped++
             continue
           }
-          input.deps.syncState.recordFailure({
+          recordFailureSafely(input.deps.syncState, {
             personId, dataType: job.dataType, error: classify(error), nowMs: toMs,
           })
           report.failed++
@@ -138,7 +138,6 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
 
       report.jobs++
       const state = input.deps.syncState.get(personId, job.dataType)
-      const before = state?.consecutiveFailures ?? 0
       const result = await runJob({
         personId, dataType, timezone: person.timezone,
         fromMs: reachBackTo(state?.highWaterMs ?? null, trailingFromMs, toMs, dataType, input.userHorizonDays),
@@ -146,7 +145,7 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
       })
       report.rowsWritten += result.rowsWritten
       if (result.skipped) report.skipped++
-      else if ((input.deps.syncState.get(personId, job.dataType)?.consecutiveFailures ?? 0) > before) report.failed++
+      else if (result.failedWindows > 0) report.failed++
       else report.succeeded++
     }
   }

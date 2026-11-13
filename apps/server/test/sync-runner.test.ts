@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { CredentialStore, DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, SCOPES, supports } from '@haelan/core'
 import { LIST_FAILS_TYPE, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
-import { MAX_SPRINT_PASSES } from '../src/sync/runner.ts'
+import { MAX_SPRINT_PASSES, SyncRunner } from '../src/sync/runner.ts'
 
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
@@ -509,5 +509,28 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // called recordFailure, recordSchemaDrift or recordSuccess for this person and type.
     expect(harness.app.haelan.stores.syncState.get('p1', dataTypeId)).toBeNull()
     expect(lines.some((l) => l.includes('sprint used all'))).toBe(false)
+  })
+
+  it('logs a scheduled run that rejects rather than leaving the rejection unhandled', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    await harness.app.haelan.runner.settle()
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const runner = new SyncRunner({ ...harness.app.haelan })
+    vi.spyOn(runner, 'trigger').mockRejectedValue(new Error('disk full'))
+    try {
+      runner.start()
+      await vi.advanceTimersByTimeAsync(60 * 60_000)
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(logged).toHaveBeenCalledWith('sync: scheduled run failed', expect.objectContaining({ message: 'disk full' }))
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      runner.stop()
+      process.off('unhandledRejection', unhandled)
+      vi.useRealTimers()
+    }
   })
 })
