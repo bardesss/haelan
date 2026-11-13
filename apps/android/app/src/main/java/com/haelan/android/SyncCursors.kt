@@ -20,7 +20,13 @@ object SyncCursors {
     /** What a successful cursors call holds: the per-type window ends the sync reads from. */
     data class Answer(val ends: Map<String, Long>)
 
-    fun answerOf(body: String, nowMs: Long): Answer = Answer(cursorEndsFor(body, nowMs))
+    private val ITEMS = Regex(""""items"\s*:\s*\[""")
+
+    /** An answer without an items list is not the instance's: refused rather than read as a first sync. */
+    fun answerOf(body: String, nowMs: Long): Answer {
+        if (!ITEMS.containsMatchIn(body)) throw InstanceClient.UnexpectedAnswerException("the cursors answer carries no items")
+        return Answer(cursorEndsFor(body, nowMs))
+    }
 
     /**
      * How the cursors call ended. A failed call is never read as "nothing sent yet": that would

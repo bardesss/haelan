@@ -129,4 +129,9 @@ class InstanceErrorTest {
             InstanceError.forLogin(UnknownHostException("nas")),
         )
     }
+
+    @Test
+    fun `an answer that is not the instance's reads as not an instance`() {
+        assertEquals(R.string.error_not_instance, InstanceError.forThrowable(InstanceClient.UnexpectedAnswerException("no rowsWritten")))
+    }
 }

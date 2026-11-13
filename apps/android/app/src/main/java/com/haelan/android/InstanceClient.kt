@@ -70,6 +70,9 @@ object InstanceClient {
         data class Failed(val error: Exception) : Outcome<Nothing>
     }
 
+    /** A 200 that is not the instance's own answer: a portal page, a proxy, the wrong service. */
+    class UnexpectedAnswerException(message: String) : java.io.IOException(message)
+
     /** An answer the app cannot use, carrying the status so a screen can name the case. */
     class InstanceHttpException(val status: Int, val answer: String) : Exception("$status: $answer")
 
@@ -120,7 +123,22 @@ object InstanceClient {
         cookie: String?,
         zone: ZoneId = ZoneId.systemDefault(),
         parse: (Reply) -> T,
-    ): Outcome<T> = post(server, path, body, cookie, mapOf(ZONE_HEADER to zone.id), parse)
+    ): Outcome<T> = post(server, path, body, cookie, mapOf(ZONE_HEADER to zone.id)) { reply ->
+        requireIngestAck(reply.body)
+        parse(reply)
+    }
+
+    private val INGEST_ACK = Regex(""""rowsWritten"\s*:\s*\d+""")
+
+    /**
+     * A 200 alone is not an acknowledgement: a captive portal or a proxy answers one too, and
+     * the sync would then mark the window sent. Only the instance's own ingest answer carries
+     * rowsWritten. A regex rather than org.json, for the reason SyncCursors gives. An IOException
+     * so the worker treats it as weather and retries.
+     */
+    internal fun requireIngestAck(body: String) {
+        if (!INGEST_ACK.containsMatchIn(body)) throw UnexpectedAnswerException("the ingest answer carries no rowsWritten")
+    }
 
     /** One JSON PUT, for the log sheet's writes; the same answer as [post]. */
     fun <T> put(

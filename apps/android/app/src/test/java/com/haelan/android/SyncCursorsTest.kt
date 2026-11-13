@@ -71,6 +71,16 @@ class SyncCursorsTest {
         )
     }
 
+    @Test(expected = InstanceClient.UnexpectedAnswerException::class)
+    fun `a cursors answer without items is refused`() {
+        SyncCursors.answerOf("{}", 0L)
+    }
+
+    @Test
+    fun `a cursors answer with empty items is a first sync`() {
+        assertEquals(SyncCursors.Answer(emptyMap()), SyncCursors.answerOf("""{"items":[],"historyStartMs":null}""", 0L))
+    }
+
     @Test
     fun `the parse keeps values and drops nulls`() {
         val body = """{"items":[
