@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The tag is pushed back to this repository, and a push made with GITHUB_TOKEN does not
           # trigger another workflow. That rule is the whole reason this file needs a PAT: without
@@ -41,8 +41,10 @@ jobs:
           fetch-depth: 0
 
       - name: A token that can trigger a workflow
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
         run: |
-          if [ -z "${{ secrets.RELEASE_PLEASE_TOKEN }}" ]; then
+          if [ -z "$RELEASE_PLEASE_TOKEN" ]; then
             echo "::error::RELEASE_PLEASE_TOKEN is not set. A tag pushed with GITHUB_TOKEN does not"
             echo "::error::trigger android-release.yml, so the tag would exist and no APK would be built."
             exit 1

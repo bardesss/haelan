@@ -34,8 +34,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Not cancel-in-progress: a half-finished Pages deployment is worse than a queued one.
 concurrency:
@@ -45,11 +43,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           # 26, not release.yml's 24: this job builds the static site, not the published image, so
           # there is no reason to match the image's runtime. It matches what development runs on
@@ -70,16 +68,21 @@ jobs:
       # does not exist in a fresh checkout.
       - run: pnpm site:build
 
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: site/dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # The build job runs pnpm install and the demo capture, so it never holds a token that can
+    # publish the site.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -14,6 +14,14 @@ describe('openDatabase', () => {
   it('creates the database file inside the data directory', () => {
     const db = openDatabase(dir)
     expect(existsSync(join(dir, 'haelan.sqlite'))).toBe(true)
+    closeDatabase(db)
+  })
+
+  it('creates a missing data directory readable only by its owner', () => {
+    const nested = join(dir, 'private')
+    const db = openDatabase(nested)
+    // Windows does not honour POSIX bits, so this only asserts where it means something (crypto.test.ts does the same).
+    if (process.platform !== 'win32') expect(statSync(nested).mode & 0o777).toBe(0o700)
     closeDatabase(db)
   })
 

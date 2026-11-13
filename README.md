@@ -244,14 +244,21 @@ client, and consent. After that it asks which data types to fetch and how far ba
 builds an unprivileged Debian container from the latest release rather than running the image,
 because that catalogue takes bare-metal installs and not Docker. Run it on the Proxmox VE host:
 
+<!-- x-release-please-start-version -->
 ```
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/bardesss/haelan/master/proxmox/ct/haelan.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/bardesss/haelan/v2.23.0/proxmox/ct/haelan.sh)"
 ```
+<!-- x-release-please-end -->
+
+The command is pinned to the current release, and so are the scripts it fetches in turn.
 
 It creates the container, installs Node, builds the web app, writes a systemd unit and prints the
 address to open, which lands on the same setup wizard. Running the same command again updates an
 existing container to the latest release. The data directory is `/opt/haelan_data`, deliberately
-outside the tree an update replaces, so the database, the key and the backups survive it.
+outside the tree an update replaces, so the database, the key and the backups survive it. The
+service runs as an unprivileged `haelan` user, and `/opt/haelan_data` is readable only by it. An
+update builds the new release beside the running copy and goes back to that copy if the new one
+does not answer.
 
 Nobody has run these on a Proxmox host yet, so compose above is still the path that is tested.
 [#232](https://github.com/bardesss/haelan/issues/232) is where to report it if you do, and every

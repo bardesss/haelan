@@ -13,6 +13,10 @@
       "force-tag-creation": true,
       "exclude-paths": [
         "apps/android"
+      ],
+      "extra-files": [
+        "README.md",
+        "proxmox/ct/haelan.sh"
       ]
     },
     "apps/android": {

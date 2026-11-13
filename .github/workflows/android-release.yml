@@ -11,34 +11,33 @@ on:
   push:
     tags: ['android-v*']
 
-# Creating the release needs write access to contents. Nothing else here does.
+# Only the release job writes, and it asks for that itself. Everything else, including the checkout
+# the check job does, reads.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  # Tests and lint run here, without the keystore. Gradle executes build scripts and dependency
+  # code, and pnpm install runs dependency lifecycle scripts; neither should share a job with the
+  # signing secrets. The generated palette is the only thing the release job needs from this one.
+  check:
     runs-on: ubuntu-latest
     # A hang is a failure that never arrives, and the default is six hours of a runner sitting on
     # one. This job downloads an Android SDK and runs Gradle, which is at least as hangable as the
     # server release jobs that already carry a deadline.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      # actions/checkout fetches a tag push by commit sha, which lands a lightweight tag in the
-      # runner's clone and drops the tag object. gh release create --notes-from-tag then silently
-      # falls back to the commit message, which is not what the release notes are supposed to be.
-      # Fetching the tag ref itself brings the annotation back.
-      - name: Restore the tag annotation
-        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
           cache: pnpm
@@ -51,6 +50,73 @@ jobs:
       # not need a Node toolchain.
       - name: Generate the token palette
         run: pnpm --filter @haelan/tokens build:android
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+        with:
+          cache-provider: basic
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+        working-directory: apps/android
+
+      # android.yml triggers on branch pushes and pull requests, so it has not run on this tag. A
+      # release is rare and an APK that cannot be updated is expensive, so the module is re-proven
+      # at the commit being released rather than trusted from an earlier run.
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --console=plain
+        working-directory: apps/android
+
+      - name: Lint
+        run: ./gradlew lintDebug --console=plain
+        working-directory: apps/android
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: token-palette
+          path: apps/android/app/build/haelan-tokens/
+          if-no-files-found: error
+          # Re-running only a failed release job downloads this again, so it has to outlive a day
+          # or two of someone looking into why it failed.
+          retention-days: 7
+
+  release:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+    steps:
+      # Not persisted: this job holds contents: write while Gradle runs build scripts, and a token
+      # in .git/config is readable by all of them. The tag fetch below works anonymously on this
+      # public repository, and gh release create takes its token from GH_TOKEN.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # actions/checkout fetches a tag push by commit sha, which lands a lightweight tag in the
+      # runner's clone and drops the tag object. gh release create --notes-from-tag then silently
+      # falls back to the commit message, which is not what the release notes are supposed to be.
+      # Fetching the tag ref itself brings the annotation back.
+      - name: Restore the tag annotation
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: token-palette
+          path: apps/android/app/build/haelan-tokens/
+
+      # The version step below needs Node but not the workspace: the script it runs has no imports,
+      # so there is no pnpm and no install beside the keystore.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
 
       # Both values from the tag, in one place, by the function that is tested. The workflow needs
       # the name for the release title and the APK file, and Gradle needs both, so deriving it here
@@ -84,30 +150,23 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
 
-      - uses: gradle/actions/setup-gradle@v6
+      # No cache: the one it would restore is written on the default branch by android.yml, whose
+      # job runs dependency lifecycle scripts, and nothing that job leaves behind should reach the
+      # build that holds the keystore.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-provider: basic
+          cache-disabled: true
 
       - name: Make gradlew executable
         run: chmod +x gradlew
-        working-directory: apps/android
-
-      # android.yml triggers on branch pushes and pull requests, so it has not run on this tag. A
-      # release is rare and an APK that cannot be updated is expensive, so the module is re-proven
-      # at the commit being released rather than trusted from an earlier run.
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest --console=plain
-        working-directory: apps/android
-
-      - name: Lint
-        run: ./gradlew lintDebug --console=plain
         working-directory: apps/android
 
       # build.gradle.kts throws if any of the four keystore values is missing, so this cannot
@@ -137,6 +196,31 @@ jobs:
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/apksigner
           "$APKSIGNER" verify --verbose "$APK"
           cp "$APK" "haelan-${{ steps.version.outputs.name }}.apk"
+
+      # `apksigner verify` proves the APK is signed by some key; a phone refuses an update signed by
+      # a different one, so a leaked or swapped keystore secret is caught here rather than by every
+      # installed phone.
+      - name: The APK is signed by the release key
+        run: |
+          APK="haelan-${{ steps.version.outputs.name }}.apk"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/apksigner
+          EXPECTED=$(tr -d '[:space:]' < apps/android/release-signing-cert.sha256)
+          # Two empty strings compare equal, so each side is checked on its own first.
+          if ! echo "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$'; then
+            echo "::error::release-signing-cert.sha256 does not hold a lowercase SHA-256 digest"
+            exit 1
+          fi
+          CERTS=$("$APKSIGNER" verify --print-certs "$APK")
+          if echo "$CERTS" | grep -q '^Signer #2'; then echo "::error::the APK carries more than one signer"; exit 1; fi
+          FOUND=$(echo "$CERTS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          if [ -z "$FOUND" ]; then
+            echo "::error::apksigner printed no SHA-256 digest for the APK's signer"
+            exit 1
+          fi
+          if [ "$FOUND" != "$EXPECTED" ]; then
+            echo "::error::the APK is signed by $FOUND, the release key is $EXPECTED"
+            exit 1
+          fi
 
       # apksigner proves the APK is signed, not that it carries the version the tag demanded. The
       # Gradle guard above only proves the version step's own outputs were non-empty, which is a

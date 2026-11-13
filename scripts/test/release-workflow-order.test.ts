@@ -25,6 +25,22 @@ const jobBody = (name: string): string[] => {
   return end === -1 ? rest : rest.slice(0, end)
 }
 
+const topLevelPermissions = (): string[] => {
+  const start = lines.findIndex(line => /^permissions:/.test(line))
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex(line => /^\S/.test(line))
+  return rest.slice(0, end).filter(line => /^ {2}[a-z-]+: /.test(line)).map(line => line.trim())
+}
+const jobPermissions = (name: string): string[] => {
+  const body = jobBody(name)
+  const start = body.findIndex(line => /^ {4}permissions:/.test(line))
+  if (start === -1) return []
+  const rest = body.slice(start + 1)
+  const end = rest.findIndex(line => !/^ {6}/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end))
+    .filter(line => /^ {6}[a-z-]+: /.test(line)).map(line => line.trim())
+}
+
 const stepsOf = (name: string): { label: string; onlyOnFailure: boolean }[] => {
   const steps: { label: string; onlyOnFailure: boolean }[] = []
   for (const line of jobBody(name)) {
@@ -291,6 +307,31 @@ describe('the release workflow', () => {
     expect(yaml).toContain('issues: write')
   })
 
+  it('grants writes per job and reads everywhere else', () => {
+    // A workflow level write is inherited by every job, including the one that runs the whole
+    // test suite and the ones that run third party actions. Each job asks for what it uses.
+    expect(topLevelPermissions()).toEqual(['contents: read'])
+    expect(jobPermissions('release-please').sort())
+      .toEqual(['contents: write', 'issues: write', 'pull-requests: write'])
+    expect(jobPermissions('verify')).toEqual(['contents: read'])
+    expect(jobPermissions('image').sort()).toEqual(['contents: read', 'packages: write'])
+    expect(jobPermissions('publish').sort()).toEqual(['contents: write', 'packages: write'])
+  })
+
+  it('keeps no git credentials on checkouts that never push', () => {
+    for (const job of ['verify', 'image']) {
+      expect(jobBody(job).join('\n'), `${job} leaves the token in .git/config`)
+        .toMatch(/uses: actions\/checkout@[^\n]+\n {8}with:\n(?: {10}.+\n)*? {10}persist-credentials: false/)
+    }
+  })
+
+  it('tests and builds the commit the release tag names, not the branch tip', () => {
+    for (const job of ['verify', 'image']) {
+      expect(jobBody(job).join('\n'), `${job} checkout is missing the fully qualified tag ref`)
+        .toMatch(/uses: actions\/checkout@[^\n]+\n {8}with:\n(?: {10}.+\n)*? {10}ref: refs\/tags\/\$\{\{ needs\.release-please\.outputs\.tag \}\}/)
+    }
+  })
+
   it('keeps a version in every release pull request title', () => {
     // release-please reads the version back OUT of the title it wrote, to match a merged release
     // pull request to the release it should now tag. Adding apps/android as a second package made
@@ -372,5 +413,14 @@ describe('the release workflow', () => {
     // outputs the numeric id; the job carries it across as an output for this one use.
     expect(yaml).toContain('release_id: ${{ steps.rp.outputs.id }}')
     expect(yaml).toContain('RELEASE_ID: ${{ needs.release-please.outputs.release_id }}')
+  })
+})
+
+describe('secrets in workflow text', () => {
+  it.each(['release.yml', 'android-tag.yml', 'android-release.yml'])('%s passes secrets through env or with, never into script text', (file) => {
+    const text = readFileSync(new URL(`../../.github/workflows/${file}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+    const offending = text.split('\n').filter(line => line.includes('${{ secrets.'))
+      .filter(line => !/^\s+[A-Za-z_][\w-]*: \$\{\{ secrets\.\w+(?: \|\| secrets\.\w+)? \}\}\s*$/.test(line))
+    expect(offending).toEqual([])
   })
 })
