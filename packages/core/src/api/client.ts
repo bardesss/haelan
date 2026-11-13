@@ -3,12 +3,16 @@ import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
 import { supports } from './catalogue.ts'
 import { readEnvelope } from './envelope.ts'
-import { ConfigError, HaelanError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
+import { ConfigError, HaelanError, RateLimitedError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
+import type { RateLimiter } from '../sync/runJob.ts'
 
 const API_ROOT = 'https://health.googleapis.com/v4'
 const PAGE_SIZE = 10_000
 const MAX_ATTEMPTS = 5
 const BASE_BACKOFF_MS = 500
+// A Retry-After beyond this is not waited out inside a sync run: the caller gets a RateLimitedError
+// at once and the next run asks again.
+const MAX_RETRY_AFTER_MS = 60_000
 // volume.md's densest measured real day needed eight pages. Low hundreds is generous headroom
 // while still catching a nextPageToken that never advances before it archives forever.
 const MAX_PAGES = 200
@@ -69,9 +73,24 @@ export interface ClientDeps {
   random: () => number
   /** Defaults to Google's v4 root. Overridable so a test can point the client at a stub. */
   apiRoot?: string
+  /**
+   * Takes one token before every HTTP attempt to the data API, retries and pages included, so the
+   * household's shared quota is spent per request rather than per window. Token endpoint attempts
+   * take none: they are not the quota this protects.
+   */
+  limiter?: RateLimiter
 }
 
 interface Tokens { accessTokenFor(personId: string): Promise<string> }
+
+/** Delta-seconds or an HTTP-date. Null when absent or unparseable, so the caller's own backoff stands. */
+function retryAfterMs(header: string | null, nowMs: number): number | null {
+  if (header === null) return null
+  const value = header.trim()
+  if (/^\d+$/.test(value)) return Number(value) * 1000
+  const at = Date.parse(value)
+  return Number.isNaN(at) ? null : Math.max(0, at - nowMs)
+}
 
 const iso = (ms: number) => new Date(ms).toISOString()
 
@@ -289,6 +308,8 @@ export class HealthClient {
 
       const headers: Record<string, string> = { authorization: `Bearer ${token}` }
       if (init) headers['content-type'] = 'application/json'
+      // Outside the try, so a limiter that throws is not dressed up as a network failure.
+      await this.#deps.limiter?.take()
       let res: Response
       try {
         res = await this.#deps.fetch(url.toString(), {
@@ -314,10 +335,17 @@ export class HealthClient {
       if (!retriable) return { body: lastBody, status: lastStatus, attempts, retriedStatus }
       retriedStatus = res.status
 
-      // Jittered, because the household shares one project quota and a fleet of syncs
-      // retrying in lockstep is how a transient 429 becomes a sustained one.
+      const asked = res.status === 429 ? retryAfterMs(res.headers.get('retry-after'), this.#deps.now()) : null
+      if (asked !== null && asked > MAX_RETRY_AFTER_MS) {
+        throw new RateLimitedError(`429 with Retry-After ${Math.ceil(asked / 1000)}s`, asked)
+      }
       if (attempt < MAX_ATTEMPTS - 1) {
-        await this.#deps.sleep(this.backoffMs(attempt))
+        // Jittered, because the household shares one project quota and a fleet of syncs
+        // retrying in lockstep is how a transient 429 becomes a sustained one.
+        await this.#deps.sleep(Math.max(this.backoffMs(attempt), asked ?? 0))
+      } else if (res.status === 429) {
+        // Returning the body would let the caller read a spent budget as one more ordinary 429.
+        throw new RateLimitedError(`429 after ${MAX_ATTEMPTS} attempts`, asked)
       }
     }
 

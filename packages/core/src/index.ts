@@ -39,7 +39,7 @@ export type { SessionRow, SegmentRow, RouteRow } from './api/mapSessions.ts'
 export { mapObservations } from './api/mapObservations.ts'
 export type { MapObservationsInput } from './api/mapObservations.ts'
 export {
-  HaelanError, AuthError, TransientError, SchemaDriftError, DataQualityError, ConfigError,
+  HaelanError, AuthError, TransientError, RateLimitedError, SchemaDriftError, DataQualityError, ConfigError,
   CredentialsUnreadableError, classifyHttp,
 } from './errors.ts'
 export type { ErrorKind } from './errors.ts'

@@ -74,6 +74,31 @@ describe('runSync', () => {
     return { listed: [...listed], rolledUp: [...rolledUp] }
   }
 
+  it('stops a person whose requests keep answering 429 and still syncs the next person', async () => {
+    const seen: string[] = []
+    const archive = new RawArchive(ctx.db)
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown, init?: RequestInit) => {
+      const authorization = new Headers(init?.headers).get('authorization') ?? ''
+      seen.push(authorization)
+      return authorization === 'Bearer at-alice'
+        ? new Response('slow down', { status: 429 })
+        : new Response(emptyFor(url), { status: 200 })
+    })
+    const deps = {
+      ...build(fetchMock),
+      client: new HealthClient(
+        { accessTokenFor: async (personId: string) => `at-${personId}` }, archive,
+        { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 },
+      ),
+    }
+    const report = await runSync({
+      personIds: ['alice', 'bob'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps,
+    })
+    expect(seen.filter((t) => t === 'Bearer at-alice')).toHaveLength(5)
+    expect(seen.some((t) => t === 'Bearer at-bob')).toBe(true)
+    expect(report.failed).toBe(1)
+  })
+
   // Spec section 16 promises that after an offline stretch sync resumes from sync_state and
   // backfills the gap. The trailing window alone cannot keep that promise: it is a fixed span
   // ending at now, so an outage longer than the span leaves days that no trailing run will ever

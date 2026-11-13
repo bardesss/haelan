@@ -5,7 +5,7 @@ import { runJob, classify, recordFailureSafely } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
 import { runRollupJob } from './runRollupJob.ts'
 import { RevokedError } from '../api/tokens.ts'
-import { CredentialsUnreadableError } from '../errors.ts'
+import { CredentialsUnreadableError, RateLimitedError } from '../errors.ts'
 
 export interface SyncReport {
   jobs: number
@@ -132,6 +132,8 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
             personId, dataType: job.dataType, error: classify(error), nowMs: toMs,
           })
           report.failed++
+          // The household shares one quota, so the person's remaining types would meet the same wall.
+          if (error instanceof RateLimitedError) break
         }
         continue
       }
@@ -147,6 +149,7 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
       if (result.skipped) report.skipped++
       else if (result.failedWindows > result.skippedWindows) report.failed++
       else report.succeeded++
+      if (result.rateLimited) break
     }
   }
 

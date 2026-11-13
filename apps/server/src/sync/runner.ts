@@ -480,6 +480,7 @@ export class SyncRunner {
   }
 
   private buildDeps(): JobDeps {
+    const limiter = this.#context.limiter ?? defaultLimiter()
     const tokens = new TokenProvider(this.#context.stores.credentials, {
       fetch: this.#context.fetch,
       now: this.#context.now,
@@ -491,6 +492,7 @@ export class SyncRunner {
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       random: Math.random,
       apiRoot: this.#context.endpoints?.apiRoot,
+      limiter,
     })
     return {
       db: this.#context.instance.db,
@@ -499,7 +501,6 @@ export class SyncRunner {
       syncState: this.#context.stores.syncState,
       client,
       now: this.#context.now,
-      limiter: this.#context.limiter ?? defaultLimiter(),
       onProgress: (event) => this.emit(event),
       deriveQueue: this.#context.instance.deriveQueue,
     }
@@ -738,8 +739,15 @@ export class SyncRunner {
           // going to need one anyway. Conservative in the safe direction, and it stays that way.
           if (result.windowsFetched > 0
             && result.stoppedBecause !== 'error' && result.stoppedBecause !== 'revoked'
-            && result.stoppedBecause !== 'credentials_unreadable') {
+            && result.stoppedBecause !== 'credentials_unreadable'
+            && result.stoppedBecause !== 'rate_limited') {
             cursorAdvanced = true
+          }
+          // The quota is the household's and the next type would meet the same wall, so this
+          // person's pass ends here. Their failure was already recorded by runJob.
+          if (result.stoppedBecause === 'rate_limited') {
+            this.#backfillTotals.failed.add(`${personId}:${dataType.id}`)
+            break
           }
         } catch (error) {
           // Symmetric with runJob's own catch, which is where each of these is actually

@@ -5,7 +5,7 @@ import { SourceRegistry } from '../src/store/sources.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
 import { dayWindows, startOfLocalDay } from '../src/sync/windows.ts'
-import { TransientError } from '../src/errors.ts'
+import { RateLimitedError, TransientError } from '../src/errors.ts'
 import { runBackfill } from '../src/sync/runBackfill.ts'
 import type { HealthClient, ListInput, ListResult } from '../src/api/client.ts'
 import type { JobDeps } from '../src/sync/runJob.ts'
@@ -148,6 +148,18 @@ describe('runBackfill', () => {
     })
     expect(result.stoppedBecause).toBe('error')
     expect(windows.length).toBeLessThan(10)
+  })
+
+  it('stops the walk with rate_limited when the client gave up on a 429', async () => {
+    const { deps, windows } = buildDeps(fixture)
+    deps.client.failNextWith = new RateLimitedError('429', null)
+    const result = await runBackfill({
+      personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 10, deps,
+    })
+    expect(result.stoppedBecause).toBe('rate_limited')
+    expect(result.complete).toBe(false)
+    expect(windows).toHaveLength(1)
   })
 
   it('walks past a window sync already skipped instead of stopping on it', async () => {

@@ -499,21 +499,6 @@ describe('runJob', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('takes a limiter token before each window it fetches, not after', async () => {
-    const events: string[] = []
-    const fetchMock = vi.fn().mockImplementation(async () => {
-      events.push('fetch')
-      return new Response(body([]), { status: 200 })
-    })
-    const result = await runJob({
-      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
-      fromMs: Date.parse('2026-08-17T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
-      deps: { ...build(fetchMock), limiter: { take: async () => { events.push('take') } } },
-    })
-    expect(result.windows).toBeGreaterThan(1)
-    expect(events).toEqual(Array.from({ length: result.windows }, () => ['take', 'fetch']).flat())
-  })
-
   it('records a retry episode the client recovered from, because those bodies are never archived', async () => {
     const fetchMock = vi.fn()
       .mockImplementationOnce(async () => new Response('slow down', { status: 429 }))
@@ -822,6 +807,26 @@ describe('runJob', () => {
       for (let run = 0; run < 4; run++) await runJob({ ...args, trackWindowFailures: true, deps })
       expect(store().skippedWindowsFor('p1')).toEqual([])
       expect(store().get('p1', 'oxygen-saturation')?.highWaterMs).toBe(windows[0]!.endMs)
+    })
+
+    it('never skips a window for being rate limited', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => new Response('slow down', { status: 429 }))
+      const deps = build(fetchMock)
+      for (let run = 0; run < 3; run++) {
+        const result = await runJob({ ...args, trackWindowFailures: true, deps })
+        expect(result.rateLimited).toBe(true)
+        expect(result.skippedWindows).toBe(0)
+      }
+      expect(new SyncStateStore(ctx.db).skippedWindowsFor('p1')).toEqual([])
+      expect(ctx.db.select().from(syncWindowFailures).all()).toEqual([])
+    })
+
+    it('stops at the first rate limited window instead of asking for the rest', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => new Response('slow down', { status: 429 }))
+      const result = await runJob({ ...args, trackWindowFailures: true, deps: build(fetchMock) })
+      expect(result.failedWindows).toBe(1)
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+      expect(store().get('p1', 'oxygen-saturation')?.consecutiveFailures).toBe(1)
     })
 
     it('skips a window whose write throws a plain error on three runs, since that is a poison day', async () => {

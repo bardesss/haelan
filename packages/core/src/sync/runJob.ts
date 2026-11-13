@@ -8,7 +8,7 @@ import type { SourceRegistry } from '../store/sources.ts'
 import type { SyncStateStore } from '../store/syncState.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { RevokedError } from '../api/tokens.ts'
-import { CredentialsUnreadableError, HaelanError, TransientError } from '../errors.ts'
+import { CredentialsUnreadableError, HaelanError, RateLimitedError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { sampleDirtyDates } from './dirtyDates.ts'
@@ -41,17 +41,6 @@ export interface JobDeps {
   syncState: SyncStateStore
   client: HealthClient
   now: () => number
-  /**
-   * Optional, and unset by every caller today. dueJobs filters on carrying any action rather
-   * than on being listable specifically, and, since M5f, on the person not having excluded the
-   * type; the request volume this describes is therefore a person's own catalogue minus
-   * whatever they turned off, not a fixed count for every household. Measured before exclusions
-   * existed at roughly 720 requests for a trailing week across a five person household with
-   * everything on, issued as fast as the event loop allows, against the 300 per minute per user
-   * probe/findings/scopes.md measured. Choosing the rate is a settings decision and belongs to
-   * M1d; the seat is here so filling it then is not a breaking change to a published interface.
-   */
-  limiter?: RateLimiter
   /** Called as work completes. Optional: nothing in core needs it, the SSE stream does. */
   onProgress?: (event: SyncProgress) => void
   /**
@@ -86,6 +75,8 @@ export interface JobResult {
   failedWindows: number
   /** The subset of failedWindows whose window is skipped: recorded as such now, or already was. */
   skippedWindows: number
+  /** The client gave up on a 429, so the job stopped early. The caller should stop asking this person. */
+  rateLimited: boolean
   rowsWritten: number
   skipped: 'revoked' | 'credentials_unreadable' | 'unsupported' | null
 }
@@ -104,7 +95,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     return result
   }
 
-  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, failedWindows: 0, skippedWindows: 0, skipped: null }
+  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, failedWindows: 0, skippedWindows: 0, rateLimited: false, skipped: null }
   if (!supports(t, 'list')) return { ...empty, skipped: 'unsupported' }
 
   report({ kind: 'job_started', personId: input.personId, dataType: t.id })
@@ -120,11 +111,11 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   let blocked = false
   let failedWindows = 0
   let skippedWindows = 0
+  let rateLimited = false
   let firstError: unknown = null
 
   for (const window of windows) {
     try {
-      await deps.limiter?.take()
       const listed = await deps.client.listDataPoints({
         personId: input.personId, dataType: t, timezone: input.timezone,
         windowStartMs: window.startMs, windowEndMs: window.endMs,
@@ -218,15 +209,24 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       deps.sources.forget(input.personId)
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
-      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, skipped: 'revoked' })
+      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, rateLimited: false, skipped: 'revoked' })
       // Same treatment, for the same reason: a key that cannot open this person's token is not
       // this window failing, or this type, or this run - it is every window for this person
       // until they reconsent, and recording it as a failure would write that story to every
       // data type, every day, for a state that already has its own name.
       if (error instanceof CredentialsUnreadableError) {
-        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, skipped: 'credentials_unreadable' })
+        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows: 0, skippedWindows: 0, rateLimited: false, skipped: 'credentials_unreadable' })
       }
       failedWindows++
+      // The client already spent its attempts on this window, and the next one would meet the
+      // same quota. Not recorded against the window, since the window did nothing wrong, and the
+      // loop ends so the rest of the days are not each given five more requests.
+      if (error instanceof RateLimitedError) {
+        rateLimited = true
+        firstError ??= error
+        blocked = true
+        break
+      }
       let skipped = false
       try {
         const classified = classify(error)
@@ -290,7 +290,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   // Left unreported, a rename upstream reads exactly like a person who stopped wearing a device.
   // Types whose mapping is deferred are excluded, because writing no rows is their design.
 
-  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows, skippedWindows, skipped: null })
+  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, failedWindows, skippedWindows, rateLimited, skipped: null })
 }
 
 // A store that cannot record the failure (disk full, locked) must not replace the window error

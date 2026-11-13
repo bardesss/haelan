@@ -1,6 +1,5 @@
 import type { Database } from '../db/open.ts'
 import type { DataType } from '../api/catalogue.ts'
-import type { RateLimiter } from './runJob.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { daily } from '../db/schema/index.ts'
 import { mapRollups } from '../api/mapRollups.ts'
@@ -36,11 +35,6 @@ export interface RollupJobDeps {
     ) => void
   }
   now: () => number
-  /**
-   * Optional, the same interface JobDeps carries. runJob applies it to every list window; a
-   * rollup chunk is a request too and must not get to skip the household's shared quota.
-   */
-  limiter?: RateLimiter
   /**
    * Optional, the same interface JobDeps carries. A re-walk that changes a provider row has to
    * reach that day's derivation, so each date written is marked dirty with the rows.
@@ -106,7 +100,6 @@ export async function runRollupJob(
     const spanDays = Math.min(capDays, civilDaysBetween(fromDate, endDate))
     const startDate = addCivilDays(endDate, -spanDays)
 
-    await input.deps.limiter?.take()
     const { payloadId } = await input.deps.client.dailyRollUpDataPoints({
       personId: input.personId,
       dataType: input.dataType,

@@ -4,7 +4,7 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { HealthClient } from '../src/api/client.ts'
 import { RevokedError } from '../src/api/tokens.ts'
-import { ConfigError, TransientError } from '../src/errors.ts'
+import { ConfigError, RateLimitedError, TransientError } from '../src/errors.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
 import { rawPayloads } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -359,5 +359,101 @@ describe('HealthClient', () => {
     expect((error as Error).message).toBe('[transient] network: TypeError: fetch failed')
     expect((error as Error).cause).toBeInstanceOf(TypeError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  describe('rate limiting', () => {
+    const steps = dataTypeById('steps')!
+    const limited = (events: string[]) => ({ take: async () => { events.push('take') } })
+
+    it('takes one limiter token per HTTP attempt, pages and retries included', async () => {
+      const events: string[] = []
+      const responses = [page([{ a: 1 }], 'tok-2'), new Response('unavailable', { status: 503 }), page([{ a: 2 }])]
+      const fetchMock = vi.fn().mockImplementation(async () => {
+        events.push('fetch')
+        return responses.shift()!
+      })
+      const client = new HealthClient(tokens, archive, {
+        fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0, limiter: limited(events),
+      })
+      await client.listDataPoints({ personId: 'p1', dataType: steps, ...WINDOW })
+      expect(events).toEqual(['take', 'fetch', 'take', 'fetch', 'take', 'fetch'])
+    })
+
+    it('takes a limiter token before a rollup request', async () => {
+      const events: string[] = []
+      const fetchMock = vi.fn().mockImplementation(async () => {
+        events.push('fetch')
+        return new Response(JSON.stringify({ rollupDataPoints: [] }), { status: 200 })
+      })
+      const client = new HealthClient(tokens, archive, {
+        fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0, limiter: limited(events),
+      })
+      await client.dailyRollUpDataPoints({
+        personId: 'p1', dataType: steps, fromLocalDate: '2026-08-01', toLocalDate: '2026-08-02',
+      })
+      expect(events).toEqual(['take', 'fetch'])
+    })
+
+    it('waits as long as Retry-After asks on a 429', async () => {
+      const slept: number[] = []
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response('slow down', { status: 429, headers: { 'retry-after': '7' } }))
+        .mockResolvedValueOnce(page([]))
+      const client = new HealthClient(tokens, archive, {
+        fetch: fetchMock, now: () => 1, sleep: async (ms) => { slept.push(ms) }, random: () => 0,
+      })
+      await client.listDataPoints({ personId: 'p1', dataType: steps, ...WINDOW })
+      expect(slept).toEqual([7_000])
+    })
+
+    it('reads an HTTP-date Retry-After against the injected clock', async () => {
+      const slept: number[] = []
+      const nowMs = Date.UTC(2026, 7, 19, 12, 0, 0)
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response('slow down', {
+          status: 429, headers: { 'retry-after': new Date(nowMs + 9_000).toUTCString() },
+        }))
+        .mockResolvedValueOnce(page([]))
+      const client = new HealthClient(tokens, archive, {
+        fetch: fetchMock, now: () => nowMs, sleep: async (ms) => { slept.push(ms) }, random: () => 0,
+      })
+      await client.listDataPoints({ personId: 'p1', dataType: steps, ...WINDOW })
+      expect(slept).toEqual([9_000])
+    })
+
+    it('falls back to its own backoff when Retry-After is not parseable', async () => {
+      const slept: number[] = []
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response('slow down', { status: 429, headers: { 'retry-after': 'soon' } }))
+        .mockResolvedValueOnce(page([]))
+      const client = new HealthClient(tokens, archive, {
+        fetch: fetchMock, now: () => 1, sleep: async (ms) => { slept.push(ms) }, random: () => 0,
+      })
+      await client.listDataPoints({ personId: 'p1', dataType: steps, ...WINDOW })
+      expect(slept).toEqual([500])
+    })
+
+    it('throws RateLimitedError once the retry budget is spent on 429s', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => new Response('slow down', { status: 429 }))
+      const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+      await expect(client.listDataPoints({ personId: 'p1', dataType: steps, ...WINDOW }))
+        .rejects.toBeInstanceOf(RateLimitedError)
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+    })
+
+    it('stops at once when Retry-After is longer than it is willing to wait', async () => {
+      const slept: number[] = []
+      const fetchMock = vi.fn().mockImplementation(async () =>
+        new Response('slow down', { status: 429, headers: { 'retry-after': '120' } }))
+      const client = new HealthClient(tokens, archive, {
+        fetch: fetchMock, now: () => 1, sleep: async (ms) => { slept.push(ms) }, random: () => 0,
+      })
+      const error = await client.listDataPoints({ personId: 'p1', dataType: steps, ...WINDOW })
+        .catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(RateLimitedError)
+      expect((error as RateLimitedError).retryAfterMs).toBe(120_000)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(slept).toEqual([])
+    })
   })
 })

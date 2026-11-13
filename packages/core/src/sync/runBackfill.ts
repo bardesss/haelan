@@ -26,7 +26,7 @@ export interface BackfillResult {
   windowsFetched: number
   rowsWritten: number
   complete: boolean
-  stoppedBecause: 'horizon' | 'batch' | 'error' | 'revoked' | 'credentials_unreadable'
+  stoppedBecause: 'horizon' | 'batch' | 'error' | 'revoked' | 'credentials_unreadable' | 'rate_limited'
 }
 
 /**
@@ -84,6 +84,9 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
     if (result.skipped === 'credentials_unreadable') {
       return done('credentials_unreadable', false, windowsFetched, rowsWritten)
     }
+    // Before the generic failure check, which a rate limited job also trips: the walk stops either
+    // way, but the caller reads the reason, and a quota is not a bad window.
+    if (result.rateLimited) return done('rate_limited', false, windowsFetched, rowsWritten)
     // runJob swallows its own failures and records them, so its own count is the signal that
     // this window did not land. Marching on to the horizon after it would mean walking five years
     // of days against an API that is refusing every one of them. A window runSync already gave
