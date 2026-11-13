@@ -711,11 +711,17 @@ describe('runJob', () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response('{"error":{"code":400}}', { status: 400 }))
     const deps = build(fetchMock)
     vi.spyOn(deps.syncState, 'recordFailure').mockImplementation(() => { throw new Error('SQLITE_FULL') })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     const result = await runJob({
       personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
     })
     expect(result.failedWindows).toBeGreaterThan(0)
     expect(result.rowsWritten).toBe(0)
+    expect(logged).toHaveBeenCalledTimes(1)
+    const line = String(logged.mock.calls[0]?.[0])
+    expect(line).toContain('could not record sync failure')
+    expect(line).toContain('SQLITE_FULL')
+    expect(line).toContain('oxygen-saturation')
   })
 })

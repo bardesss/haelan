@@ -256,7 +256,13 @@ export function recordFailureSafely(
 ): void {
   try {
     syncState.recordFailure(input)
-  } catch { /* the window error is the one worth reporting; the run goes on */ }
+  } catch (storeError) {
+    // The window error would otherwise vanish with the failed write, so it is logged here as
+    // classified messages only, never raw objects.
+    console.error(
+      `sync: could not record sync failure for ${input.dataType} (${classify(storeError).message}); window error: ${input.error.message}`,
+    )
+  }
 }
 
 // last_error's first token is documented as the failure's class, so an unclassified throw from
