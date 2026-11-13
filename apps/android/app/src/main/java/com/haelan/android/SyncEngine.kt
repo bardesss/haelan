@@ -29,6 +29,7 @@ import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -241,13 +242,8 @@ object SyncEngine {
             // under what the instance files, so the lookup goes through the same knot.
             val dataTypeId = SyncTypes.forKey(key).dataTypeId
             val start = SyncCursors.startFor(cursorEnds[dataTypeId], fallbackStart, end)
-            // Whatever the block threw - a Health Connect read, a socket - is this type's own
-            // failure, and becomes an outcome here so there is one path below rather than two.
-            val outcome = try {
-                syncOne(client, session, packageName, prefs, key, start, end, post)
-            } catch (e: Exception) {
-                InstanceClient.Outcome.Failed(e)
-            }
+            // A throw becomes an outcome here so there is one path below rather than two.
+            val outcome = runType { syncOne(client, session, packageName, prefs, key, start, end, post) }
             when (outcome) {
                 // The one answer that is not this type's business: the whole session is over.
                 is InstanceClient.Outcome.Failed -> {
@@ -271,6 +267,20 @@ object SyncEngine {
                 .contains(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
             SyncWindow.forHistoryGranted(historyGranted, end)
         }
+
+    /**
+     * Whatever the block threw - a Health Connect read, a socket - is this type's own failure.
+     * A cancellation is not: a stopped worker must stop, not be counted as one failed type.
+     */
+    internal suspend fun runType(
+        block: suspend () -> InstanceClient.Outcome<Boolean>,
+    ): InstanceClient.Outcome<Boolean> = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        InstanceClient.Outcome.Failed(e)
+    }
 
     private suspend fun syncOne(
         client: HealthConnectClient,
