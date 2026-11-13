@@ -344,8 +344,9 @@ object SyncEngine {
         }
         // Read up to a moment after the token, not to the run's end: the run's end was fixed
         // before the cursors call and every earlier type, and a record written since with a time
-        // after it would otherwise fall before the token and outside the window both.
-        val readEnd = maxOf(end, Instant.now())
+        // after it would otherwise fall before the token and outside the window both. The margin
+        // past it reaches a record dated ahead of the clock.
+        val readEnd = SyncCursors.bootstrapReadEnd(end, Instant.now())
         // Only a window read can start inside a minute, so only it names a first minute to drop;
         // a drain reads whole changed records and passes none.
         val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, fallbackStart, post, partialMinuteStart(start, fallbackStart))

@@ -220,4 +220,22 @@ class SyncCursorsTest {
         val noHistory = end.minus(30, ChronoUnit.DAYS)
         assertEquals(noHistory, SyncCursors.bootstrapStartFor(5L, noHistory, end))
     }
+
+    @Test
+    fun `a bootstrap reads past the clock by the margin, so a record dated ahead of it is not missed`() {
+        val now = end.plus(5, ChronoUnit.MINUTES)
+        assertEquals(now.plus(SyncCursors.FUTURE_MARGIN), SyncCursors.bootstrapReadEnd(end, now))
+    }
+
+    @Test
+    fun `a bootstrap reads past the run's end when the clock is behind it`() {
+        val now = end.minus(5, ChronoUnit.MINUTES)
+        assertEquals(end.plus(SyncCursors.FUTURE_MARGIN), SyncCursors.bootstrapReadEnd(end, now))
+    }
+
+    @Test
+    fun `a cursor the margin put ahead of the clock still bootstraps the last thirty days`() {
+        val cursor = end.plus(SyncCursors.FUTURE_MARGIN).toEpochMilli()
+        assertEquals(end.minus(30, ChronoUnit.DAYS), SyncCursors.bootstrapStartFor(cursor, Instant.EPOCH, end))
+    }
 }

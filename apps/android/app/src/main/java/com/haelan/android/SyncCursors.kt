@@ -1,5 +1,6 @@
 package com.haelan.android
 
+import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -151,6 +152,18 @@ object SyncCursors {
         }
         return parseCursorEnds(body) + fromSources
     }
+
+    /**
+     * How far past the clock a bootstrap reads. A record dated ahead of the clock (a watch set
+     * wrong) and written before the change token is in neither the window nor the drain unless
+     * the window reaches it. Not saved anywhere: the token is filed beside the instance's cursor,
+     * and the instance moves its cursor by the points it receives, so a future record pushes it
+     * ahead no further than a drain would. bootstrapStartFor still answers the thirty days then.
+     */
+    val FUTURE_MARGIN: Duration = Duration.ofHours(48)
+
+    /** Where a bootstrap's window read ends: past the run's end and the clock both, by [FUTURE_MARGIN]. */
+    internal fun bootstrapReadEnd(end: Instant, now: Instant): Instant = maxOf(end, now).plus(FUTURE_MARGIN)
 
     /**
      * Where a type starts when it has no change token to drain. A first sync keeps the fallback;
