@@ -13,6 +13,7 @@ import { MERGED_SOURCE, PROVIDER_SOURCE, ZONE_FORMULA_BASIS } from '../derive/ro
 import type { SampleLike } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { namedSourcesOf } from '../store/sourceAliases.ts'
+import { effectiveTimezone } from '../store/people.ts'
 import { ConfigError } from '../errors.ts'
 import { baselinesOver, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
@@ -1024,6 +1025,15 @@ export class PersonQuery {
   }): StoredEvent[] {
     requireRange(input.from, input.to)
     return new EventStore(this.#db).listFor(this.#personId, input.from, input.to)
+  }
+
+  /** The zone the person's days are read in now: the phone's while it is followed, else home. */
+  effectiveTimezone(): string {
+    const person = this.#db.select({
+      timezone: people.timezone, currentTimezone: people.currentTimezone, followPhoneZone: people.followPhoneZone,
+    }).from(people).where(eq(people.id, this.#personId)).get()
+    if (person === undefined) throw new ConfigError(`no person named '${this.#personId}'`)
+    return effectiveTimezone(person)
   }
 
   /**
