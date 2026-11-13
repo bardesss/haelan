@@ -18,14 +18,22 @@ import java.time.Instant
 object SyncCursors {
 
     /** What a successful cursors call holds: the per-type window ends the sync reads from. */
-    data class Answer(val ends: Map<String, Long>)
+    data class Answer(val ends: Map<String, Long>, val cutovers: Map<String, Long> = emptyMap())
 
     private val ITEMS = Regex(""""items"\s*:\s*\[""")
+    private val CUTOVERS = Regex(""""identityCutovers"\s*:\s*\{([^}]*)\}""")
+    private val CUTOVER = Regex(""""([^"]+)"\s*:\s*(\d+)""")
+
+    /** dataTypeId to the instant its source identity changed; an instance that predates the field answers none. */
+    fun parseIdentityCutovers(body: String): Map<String, Long> {
+        val inner = CUTOVERS.find(body)?.groupValues?.get(1) ?: return emptyMap()
+        return CUTOVER.findAll(inner).associate { it.groupValues[1] to it.groupValues[2].toLong() }
+    }
 
     /** An answer without an items list is not the instance's: refused rather than read as a first sync. */
     fun answerOf(body: String, nowMs: Long): Answer {
         if (!ITEMS.containsMatchIn(body)) throw InstanceClient.UnexpectedAnswerException("the cursors answer carries no items")
-        return Answer(cursorEndsFor(body, nowMs))
+        return Answer(cursorEndsFor(body, nowMs), parseIdentityCutovers(body))
     }
 
     /**

@@ -26,7 +26,6 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.WeightRecord
-import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CancellationException
@@ -235,6 +234,10 @@ object SyncEngine {
         // type's read back to it. Empty on a first sync; a failed cursors fetch never reaches
         // here, the caller stops the run instead of reading every type in full.
         cursorEnds: Map<String, Long>,
+        // dataTypeId to the moment the instance first took a record of that type under the
+        // writing app's package (SyncCursors.Answer.cutovers). A type without one has nothing
+        // filed the old way, so every record of it names its writer.
+        cutovers: Map<String, Long>,
     ) {
         // Read, not remembered: the permission can be granted or revoked between two syncs, and
         // the window that is honest is the one the provider will actually answer right now.
@@ -249,7 +252,7 @@ object SyncEngine {
             val dataTypeId = SyncTypes.forKey(key).dataTypeId
             val start = SyncCursors.startFor(cursorEnds[dataTypeId], fallbackStart, end)
             // A throw becomes an outcome here so there is one path below rather than two.
-            val outcome = runType { syncOne(client, session, packageName, prefs, key, start, end, post) }
+            val outcome = runType { syncOne(client, session, packageName, prefs, key, start, end, cutovers[dataTypeId], post) }
             when (outcome) {
                 // The one answer that is not this type's business: the whole session is over.
                 is InstanceClient.Outcome.Failed -> {
@@ -296,6 +299,7 @@ object SyncEngine {
         key: String,
         start: Instant,
         end: Instant,
+        cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
         // The key is a toggle, the id is what the instance files: SyncTypes.forKey is what
@@ -309,7 +313,7 @@ object SyncEngine {
                 // small today, and the rule should not depend on that staying true.
                 val points = withContext(Dispatchers.Default) {
                     readAll(client, BasalMetabolicRateRecord::class, start, end)
-                        .groupBy { identityOf(it.metadata) }
+                        .groupBy { identityOf(it, cutoverMs) }
                         .flatMap { (identity, records) ->
                             val readings = records.map {
                                 BasalMetabolicRate.Reading(it.time, it.zoneOffset, it.basalMetabolicRate)
@@ -325,7 +329,7 @@ object SyncEngine {
                 // off another device is that device's reading and not this app's merge.
                 val points = withContext(Dispatchers.Default) {
                     readAll(client, RestingHeartRateRecord::class, start, end)
-                        .groupBy { identityOf(it.metadata) }
+                        .groupBy { identityOf(it, cutoverMs) }
                         .flatMap { (identity, records) ->
                             val readings = records.map {
                                 DailyRestingHeartRate.Reading(it.time, it.zoneOffset, it.beatsPerMinute)
@@ -337,10 +341,10 @@ object SyncEngine {
                 }
                 return uploadPoints(session, packageName, "daily-resting-heart-rate", points, post)
             }
-            "steps" -> return uploadType(client, session, packageName, dataTypeId, StepsRecord::class, start, end, post) { toStepPoints(it) }
-            "distance" -> return uploadType(client, session, packageName, dataTypeId, DistanceRecord::class, start, end, post) { toDistancePoints(it) }
-            "elevation" -> return uploadType(client, session, packageName, dataTypeId, ElevationGainedRecord::class, start, end, post) { toAltitudePoints(it) }
-            "active_energy" -> return uploadType(client, session, packageName, dataTypeId, ActiveCaloriesBurnedRecord::class, start, end, post) { toCaloriesPoints(it) }
+            "steps" -> return uploadType(client, session, packageName, dataTypeId, StepsRecord::class, start, end, cutoverMs, post) { toStepPoints(it) }
+            "distance" -> return uploadType(client, session, packageName, dataTypeId, DistanceRecord::class, start, end, cutoverMs, post) { toDistancePoints(it) }
+            "elevation" -> return uploadType(client, session, packageName, dataTypeId, ElevationGainedRecord::class, start, end, cutoverMs, post) { toAltitudePoints(it) }
+            "active_energy" -> return uploadType(client, session, packageName, dataTypeId, ActiveCaloriesBurnedRecord::class, start, end, cutoverMs, post) { toCaloriesPoints(it) }
             "exercise" -> {
                 // The route ledger rides this type: which workouts' routes were withheld, so the
                 // screen can offer to release them, and which were already delivered, so a read
@@ -349,7 +353,7 @@ object SyncEngine {
                 val owner = RouteLedger.ownerOf(session)
                 val delivered = RouteLedger.load(prefs, owner).sent
                 val seen = mutableMapOf<String, RouteLedger.Seen>()
-                val outcome = uploadType(client, session, packageName, dataTypeId, ExerciseSessionRecord::class, start, end, post) { records ->
+                val outcome = uploadType(client, session, packageName, dataTypeId, ExerciseSessionRecord::class, start, end, cutoverMs, post) { records ->
                     toExercisePoints(records.filter { record ->
                         val what = RouteLedger.seenOf(record.exerciseRouteResult)
                         RouteLedger.shouldPost(record.metadata.id, what, delivered)
@@ -362,22 +366,22 @@ object SyncEngine {
                 if (outcome is InstanceClient.Outcome.Ok) RouteLedger.record(prefs, owner, seen)
                 return outcome
             }
-            "sleep" -> return uploadType(client, session, packageName, dataTypeId, SleepSessionRecord::class, start, end, post) { toSleepPoints(it) }
-            "weight" -> return uploadType(client, session, packageName, dataTypeId, WeightRecord::class, start, end, post) { toWeightPoints(it) }
-            "height" -> return uploadType(client, session, packageName, dataTypeId, HeightRecord::class, start, end, post) { toHeightPoints(it) }
-            "body_fat" -> return uploadType(client, session, packageName, dataTypeId, BodyFatRecord::class, start, end, post) { toBodyFatPoints(it) }
-            "body_temp" -> return uploadType(client, session, packageName, dataTypeId, BodyTemperatureRecord::class, start, end, post) { toBodyTempPoints(it) }
-            "glucose" -> return uploadType(client, session, packageName, dataTypeId, BloodGlucoseRecord::class, start, end, post) { toBloodGlucosePoints(it) }
-            "hydration" -> return uploadType(client, session, packageName, dataTypeId, HydrationRecord::class, start, end, post) { toHydrationPoints(it) }
-            "heart_rate" -> return uploadType(client, session, packageName, dataTypeId, HeartRateRecord::class, start, end, post) { toHeartRatePoints(it) }
-            "hrv" -> return uploadType(client, session, packageName, dataTypeId, HeartRateVariabilityRmssdRecord::class, start, end, post) { toHrvPoints(it) }
-            "spo2" -> return uploadType(client, session, packageName, dataTypeId, OxygenSaturationRecord::class, start, end, post) { toSpo2Points(it) }
+            "sleep" -> return uploadType(client, session, packageName, dataTypeId, SleepSessionRecord::class, start, end, cutoverMs, post) { toSleepPoints(it) }
+            "weight" -> return uploadType(client, session, packageName, dataTypeId, WeightRecord::class, start, end, cutoverMs, post) { toWeightPoints(it) }
+            "height" -> return uploadType(client, session, packageName, dataTypeId, HeightRecord::class, start, end, cutoverMs, post) { toHeightPoints(it) }
+            "body_fat" -> return uploadType(client, session, packageName, dataTypeId, BodyFatRecord::class, start, end, cutoverMs, post) { toBodyFatPoints(it) }
+            "body_temp" -> return uploadType(client, session, packageName, dataTypeId, BodyTemperatureRecord::class, start, end, cutoverMs, post) { toBodyTempPoints(it) }
+            "glucose" -> return uploadType(client, session, packageName, dataTypeId, BloodGlucoseRecord::class, start, end, cutoverMs, post) { toBloodGlucosePoints(it) }
+            "hydration" -> return uploadType(client, session, packageName, dataTypeId, HydrationRecord::class, start, end, cutoverMs, post) { toHydrationPoints(it) }
+            "heart_rate" -> return uploadType(client, session, packageName, dataTypeId, HeartRateRecord::class, start, end, cutoverMs, post) { toHeartRatePoints(it) }
+            "hrv" -> return uploadType(client, session, packageName, dataTypeId, HeartRateVariabilityRmssdRecord::class, start, end, cutoverMs, post) { toHrvPoints(it) }
+            "spo2" -> return uploadType(client, session, packageName, dataTypeId, OxygenSaturationRecord::class, start, end, cutoverMs, post) { toSpo2Points(it) }
             "breathing" -> {
                 // No intraday respiratory rate exists in the catalogue, so the night's own
                 // summary is the only shape a reading arrives in. The day's mean was ours.
-                return uploadType(client, session, packageName, dataTypeId, RespiratoryRateRecord::class, start, end, post) { toSleepRespPoints(it) }
+                return uploadType(client, session, packageName, dataTypeId, RespiratoryRateRecord::class, start, end, cutoverMs, post) { toSleepRespPoints(it) }
             }
-            "vo2" -> return uploadType(client, session, packageName, dataTypeId, Vo2MaxRecord::class, start, end, post) { toVo2Points(it) }
+            "vo2" -> return uploadType(client, session, packageName, dataTypeId, Vo2MaxRecord::class, start, end, cutoverMs, post) { toVo2Points(it) }
             // Louder than a dropped type: a toggle the engine cannot run is a mistake, not a skip.
             else -> throw IllegalArgumentException("no sync for $key")
         }
@@ -590,6 +594,7 @@ object SyncEngine {
         type: KClass<T>,
         start: Instant,
         end: Instant,
+        cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
         map: (List<T>) -> List<JSONObject>,
     ): InstanceClient.Outcome<Boolean> {
@@ -620,7 +625,7 @@ object SyncEngine {
             // buffered for the next page.
             val ready: List<Pair<SourceIdentity, List<JSONObject>>> = withContext(Dispatchers.Default) {
                 val out = mutableListOf<Pair<SourceIdentity, List<JSONObject>>>()
-                val page = response.records.groupBy { identityOf(it.metadata) }
+                val page = response.records.groupBy { identityOf(it, cutoverMs) }
                     .flatMap { (identity, records) -> map(records).map { Point(identity, it) } }
                 if (page.isNotEmpty()) sentAny = true
                 for ((identity, bodies) in page.groupBy({ it.source }, { it.body })) {
@@ -792,23 +797,63 @@ object SyncEngine {
     /**
      * The identity a record carries, read off its own metadata rather than assumed. This is what
      * makes a watch's reading the watch's source and a typed-in one a source somebody can
-     * exclude; see SourceIdentity for what each field decides on the instance.
+     * exclude; see SourceIdentity for what each field decides on the instance. The writing app's
+     * package is part of it for records starting at or after [cutoverMs]; earlier ones keep the
+     * device-only identity they were already filed under.
      */
-    private fun identityOf(metadata: Metadata): SourceIdentity =
-        SourceIdentity.of(metadata.device?.manufacturer, metadata.device?.model, metadata.recordingMethod)
+    private fun identityOf(record: Record, cutoverMs: Long?): SourceIdentity {
+        val md = record.metadata
+        return SourceIdentity.of(
+            md.device?.manufacturer, md.device?.model, md.recordingMethod,
+            md.dataOrigin.packageName, startOf(record).toEpochMilli(), cutoverMs,
+        )
+    }
+
+    /** The instant a record starts, which is what the cutover is compared with. */
+    internal fun startOf(record: Record): Instant = when (record) {
+        is StepsRecord -> record.startTime
+        is DistanceRecord -> record.startTime
+        is ElevationGainedRecord -> record.startTime
+        is ActiveCaloriesBurnedRecord -> record.startTime
+        is ExerciseSessionRecord -> record.startTime
+        is SleepSessionRecord -> record.startTime
+        is HydrationRecord -> record.startTime
+        is HeartRateRecord -> record.startTime
+        is BasalMetabolicRateRecord -> record.time
+        is RestingHeartRateRecord -> record.time
+        is WeightRecord -> record.time
+        is HeightRecord -> record.time
+        is BodyFatRecord -> record.time
+        is BodyTemperatureRecord -> record.time
+        is BloodGlucoseRecord -> record.time
+        is HeartRateVariabilityRmssdRecord -> record.time
+        is OxygenSaturationRecord -> record.time
+        is RespiratoryRateRecord -> record.time
+        is Vo2MaxRecord -> record.time
+        // A type added to the sync without a start here would silently file under the wrong
+        // identity, so it fails loudly instead.
+        else -> throw IllegalArgumentException("${record::class.simpleName} has no start time mapped")
+    }
 
     /**
-     * The dataSource one request carries. The package is read rather than written down: a review
-     * build installs under its own id, and a source naming the release package would file
-     * a reviewer's push under the app somebody actually paired.
+     * The dataSource one request carries. An identity with an origin package names the app that
+     * wrote the record and marks itself origin scoped, so the instance files it under that app.
+     * Without one (a record from before the cutover) it names the same source id it always did:
+     * this install's own package, read rather than written down because a review build installs
+     * under its own id and a source naming the release package would file a reviewer's push under
+     * the app somebody actually paired. That object ends with `originScoped: false`, which the
+     * source id ignores and the instance reads as "an upgraded phone's old identity", so these
+     * posts never move the cutover the way a 0.1.0 phone's would.
      */
-    private fun dataSourceOf(identity: SourceIdentity, packageName: String): JSONObject = JSONObject()
+    internal fun dataSourceOf(identity: SourceIdentity, packageName: String): JSONObject = JSONObject()
         .put("platform", "HEALTH_CONNECT")
-        .put("application", JSONObject().put("packageName", packageName))
+        .put("application", JSONObject().put("packageName", identity.originPackage ?: packageName))
+        .apply { if (identity.originPackage != null) put("originScoped", true) }
         // Both omitted rather than blank when the record carries neither: an absent device is
         // what makes the package name the identity, and an unstated method is not a claim.
         .apply { identity.deviceName?.let { put("device", JSONObject().put("displayName", it)) } }
         .apply { identity.recordingMethod?.let { put("recordingMethod", it) } }
+        .apply { if (identity.originPackage == null) put("originScoped", false) }
 
     private fun toStepPoints(records: List<StepsRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
@@ -1056,12 +1101,13 @@ object SyncEngine {
         packageName: String,
         prefs: SharedPreferences,
         released: List<Pair<ExerciseSessionRecord, ExerciseRoute>>,
+        cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
         if (released.isEmpty()) return InstanceClient.Outcome.Ok(false)
         val points = withContext(Dispatchers.Default) {
             released.map { (record, route) ->
-                Point(identityOf(record.metadata), exercisePoint(record, ExerciseRouteResult.Data(route)))
+                Point(identityOf(record, cutoverMs), exercisePoint(record, ExerciseRouteResult.Data(route)))
             }
         }
         val outcome = uploadPoints(session, packageName, SyncTypes.forKey("exercise").dataTypeId, points, post)

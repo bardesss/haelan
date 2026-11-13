@@ -45,7 +45,7 @@ export {
 export type { ErrorKind } from './errors.ts'
 export { openHaelan } from './instance.ts'
 export type { Instance } from './instance.ts'
-export { SourceRegistry } from './store/sources.ts'
+export { SourceRegistry, isOriginScoped } from './store/sources.ts'
 export { SyncStateStore, SKIP_WINDOW_AFTER_RUNS } from './store/syncState.ts'
 export type { SyncJob, SyncStateRow, SkippedWindow } from './store/syncState.ts'
 export { dayWindows, startOfLocalDay } from './sync/windows.ts'
