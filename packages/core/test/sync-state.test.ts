@@ -220,6 +220,31 @@ describe('SyncStateStore', () => {
     })
   })
 
+  describe('pruneWindowFailures', () => {
+    const DAY = 86_400_000
+    const nowMs = Date.UTC(2026, 9, 1)
+    const fail = (dataType: string, endedDaysAgo: number, runs = 1) => {
+      const endMs = nowMs - endedDaysAgo * DAY
+      for (let run = 0; run < runs; run++) {
+        store.recordWindowFailure({
+          personId: 'p1', dataType, window: { startMs: endMs - DAY, endMs, localDate: '2025-01-01' },
+          error: new SchemaDriftError('400'), nowMs,
+        })
+      }
+    }
+
+    it('drops rows past the type horizon and rows of a retired type, and keeps the rest', () => {
+      fail('heart-rate', 400)
+      fail('weight', 400, 3)
+      fail('retired-type', 1)
+      fail('steps', 1)
+      expect(store.pruneWindowFailures(nowMs, 730)).toBe(2)
+      expect(store.skippedWindowsFor('p1').map((w) => w.dataType)).toEqual(['weight'])
+      expect(store.isWindowSkipped('p1', 'steps', nowMs - 2 * DAY)).toBe(false)
+      expect(store.pruneWindowFailures(nowMs, 730)).toBe(0)
+    })
+  })
+
   describe('dueJobs and exclusions', () => {
     let excluded: ExcludedDataTypeStore
 
