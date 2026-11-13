@@ -379,6 +379,11 @@ describe('get_daily', () => {
 // Each case is exercised through the real intraday fallback (hrv/mean seeded, daily_hrv absent),
 // the same reason v1-export.test.ts's and this file's own query_series/get_daily filled cases do.
 describe('get_baselines, filledDays', () => {
+  it('refuses a window wider than the range maximum with the cap sentence', () => {
+    expect(() => tool('get_baselines').run(q(), { metric: 'steps', agg: 'sum', on: '2026-01-01', windowDays: 999999999999 }))
+      .toThrow(ConfigError)
+  })
+
   it('counts how many of the days behind a baseline were filled in, out of how many', () => {
     seedDaily({ localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 42 })
     seedDaily({ localDate: '2026-08-02', metric: 'daily_hrv', agg: 'last', value: 55 })

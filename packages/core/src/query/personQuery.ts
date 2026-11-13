@@ -22,7 +22,7 @@ import { coverageIsMeaningful } from './coverageSignal.ts'
 // confusing to read.
 import { comparePeriods as comparePeriodPoints, INSIGHT_MIN_COVERAGE } from './insights.ts'
 import type { Insight, PeriodPoint } from './insights.ts'
-import { localDateOf, localMinuteOf, shiftLocalDate, widenedUtcWindow } from '../derive/localDay.ts'
+import { localDateOf, localMinuteOf, MAX_RANGE_DAYS, shiftLocalDate, widenedUtcWindow } from '../derive/localDay.ts'
 import { thin } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
 import { INTRADAY_WINDOW_MAX_HOURS, INTRADAY_WINDOW_MAX_MS, readIntraday, readIntradayWindow } from './intraday.ts'
@@ -438,6 +438,11 @@ export class PersonQuery {
 
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
     requirePositiveInteger('windowDays', windowDays)
+    // Refused here, before baselineWindow shifts the date: a window past the calendar made
+    // shiftLocalDate throw an opaque RangeError that surfaced as a 500.
+    if (windowDays > MAX_RANGE_DAYS) {
+      throw new ConfigError(`windowDays must be at most ${MAX_RANGE_DAYS} days, got ${windowDays}`)
+    }
     const { points } = this.series({
       metric: input.metric, agg: input.agg,
       from: baselineWindow(input.from, windowDays).from, to: baselineWindow(input.to, windowDays).to, source: input.source,

@@ -257,14 +257,16 @@ export const getBaselines = defineTool({
     // fresh series() call, then narrowed through baselineContributingPoints to the same days
     // baseline() itself averaged, so filledDays.of equals baseline.n exactly rather than
     // overcounting a day a coverage gate excluded.
+    // baseline() runs first so its windowDays validation refuses before baselineWindow sees the value.
+    const baseline = q.baseline({
+      metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
+    })
     const windowDays = args.windowDays ?? BASELINE_WINDOW_DAYS
     const { from, to } = baselineWindow(args.on, windowDays)
     const { points } = q.series({ metric: args.metric, agg: args.agg, from, to, source: args.source })
     const contributing = baselineContributingPoints(points, args.metric)
     return {
-      baseline: q.baseline({
-        metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
-      }),
+      baseline,
       filledDays: filledCountOf(contributing),
       formulaDays: formulaCountOf(contributing),
     }
