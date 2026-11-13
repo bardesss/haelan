@@ -9,6 +9,25 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.24.0](https://github.com/bardesss/haelan/compare/v2.23.0...v2.24.0) (2026-11-13)
+
+
+### Features
+
+* **android:** deletions and backdated entries reach the instance ([#470](https://github.com/bardesss/haelan/issues/470)) ([f69f1cd](https://github.com/bardesss/haelan/commit/f69f1cdad7ea90a7976edfd1416436b9991c4fef))
+* **android:** the app that wrote a record is part of its source ([#467](https://github.com/bardesss/haelan/issues/467)) ([70ec812](https://github.com/bardesss/haelan/commit/70ec812b88d967eb0c6660c20c06df996e6b7230))
+
+
+### Bug Fixes
+
+* **android:** companion sync survives restores, bad clocks and flaky servers ([#464](https://github.com/bardesss/haelan/issues/464)) ([a7e0bfb](https://github.com/bardesss/haelan/commit/a7e0bfbe54c0c922016f378ca720e3aeccf0b7ed))
+* **core:** sync survives a bad day, a rate limit and a crashed tick ([#468](https://github.com/bardesss/haelan/issues/468)) ([bb64240](https://github.com/bardesss/haelan/commit/bb6424052675216e121232258fe6f683301fd7a9))
+* **core:** workout zones, rollup exclusions and split nights derive correctly ([#466](https://github.com/bardesss/haelan/issues/466)) ([d7a581e](https://github.com/bardesss/haelan/commit/d7a581eaf0d186e84847d24dbe1b8671dc09105d))
+* review leftovers (setup messages, glance rollover, sync and companion follow-ups) ([#471](https://github.com/bardesss/haelan/issues/471)) ([3669066](https://github.com/bardesss/haelan/commit/3669066b81a46992dd3cea4994bbd0c8f18c2811))
+* **server:** close the setup gate bypass and harden sign-in ([#461](https://github.com/bardesss/haelan/issues/461)) ([12b384a](https://github.com/bardesss/haelan/commit/12b384acb362ce4077a12b30edebf9906dda35b8))
+* **server:** MCP summaries use full data and bad input answers 4xx ([#469](https://github.com/bardesss/haelan/issues/469)) ([9b62de8](https://github.com/bardesss/haelan/commit/9b62de85adc41dcda7a7d988b5491d5b0071d681))
+* **web:** notes are never silently overwritten ([#463](https://github.com/bardesss/haelan/issues/463)) ([34202fe](https://github.com/bardesss/haelan/commit/34202feb33720de96823bd14e6f5a94cd249eabf))
+
 ## [2.23.0](https://github.com/bardesss/haelan/compare/v2.22.1...v2.23.0) (2026-10-29)
 
 
