@@ -14,6 +14,7 @@ import {
 } from './api.js'
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
 import { ApiError } from '../api/client.js'
+import { callbackCodeOf, refusalMessage } from './callbackError.js'
 
 // Exported for apps/web/test/layout-routes.test.ts, which holds the boot layout harness's
 // declared screen list against this table: a step added here without a screen added there is a
@@ -132,7 +133,13 @@ export function SetupApp() {
     void getScopes().then((r) => setScopes(r.scopes)).catch(orSignIn)
     // The callback redirects here with an error code in the query, and the message that goes
     // with it lives on the server. Fetching it is what puts the console fix on screen.
-    if (route.includes('error=')) void getLastError().then(setCallbackError).catch(orSignIn)
+    // The three refusals that come before the exchange have no server message, so they are
+    // worded here and the server is not asked.
+    const code = callbackCodeOf(route)
+    if (code === null) return
+    const message = refusalMessage(code, window.location.origin, t)
+    if (message !== null) setCallbackError({ code, message })
+    else void getLastError().then(setCallbackError).catch(orSignIn)
   }, [onGoogleRoute, route, needsSignIn])
 
   const onBackfill = route.startsWith('/setup/backfill')
