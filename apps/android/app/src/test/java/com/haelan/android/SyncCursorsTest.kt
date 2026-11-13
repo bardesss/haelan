@@ -1,7 +1,6 @@
 package com.haelan.android
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -33,20 +32,15 @@ class SyncCursorsTest {
     }
 
     @Test
-    fun `a cursor past the end answers null instead of clamping to a degenerate range`() {
-        // Past the end by more than the overlap: the candidate would land after the end.
-        // TimeRangeFilter.between(end, end) is what clamping to end used to build, and
-        // connect-client refuses it; null is how the caller learns to skip the read instead.
+    fun `a cursor past the end is read as the end, so the type reads its last overlap`() {
         val cursor = end.plus(25, ChronoUnit.HOURS).toEpochMilli()
-        assertNull(SyncCursors.startFor(cursor, fallback, end))
+        assertEquals(end.minusMillis(SyncCursors.OVERLAP_MS), SyncCursors.startFor(cursor, fallback, end))
     }
 
     @Test
-    fun `a cursor exactly one overlap past the end also answers null, not a zero width range`() {
-        // The candidate lands exactly on end -- the precise boundary TimeRangeFilter.between
-        // rejects -- so this is the case Finding C's connection error came from.
+    fun `a cursor exactly one overlap past the end reads the same last overlap`() {
         val cursor = end.plus(SyncCursors.OVERLAP_MS, ChronoUnit.MILLIS).toEpochMilli()
-        assertNull(SyncCursors.startFor(cursor, fallback, end))
+        assertEquals(end.minusMillis(SyncCursors.OVERLAP_MS), SyncCursors.startFor(cursor, fallback, end))
     }
 
     @Test

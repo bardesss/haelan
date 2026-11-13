@@ -55,6 +55,14 @@ function parseCursorEndsLikeThePhone(body: string): Map<string, number> {
   return out
 }
 
+// The harness clock starts before every 2026-08 fixture here, and a cursor is now clamped to the
+// server's clock, so tests that assert an exact window end start after the fixtures.
+async function serverAfterFixtures(): Promise<Harness> {
+  const h = await withServer()
+  h.clock.nowMs = Date.parse('2026-09-01T00:00:00Z')
+  return h
+}
+
 describe('GET /companion/cursors', () => {
   it('answers null for every ingestible type before the first sync', async () => {
     harness = await withServer()
@@ -68,7 +76,7 @@ describe('GET /companion/cursors', () => {
   })
 
   it('moves only the ingested type and records the history start', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
     expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-18T10:00:00Z')] })).statusCode).toBe(200)
 
@@ -83,7 +91,7 @@ describe('GET /companion/cursors', () => {
   })
 
   it('keeps the newest window end and the newest fetch time across two uploads', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
     expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-18T10:00:00Z')] })).statusCode).toBe(200)
     harness.clock.nowMs += 3_600_000
@@ -96,7 +104,7 @@ describe('GET /companion/cursors', () => {
   })
 
   it('ignores Google fetches archived for the same person and type', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
     if (!harness) throw new Error('no harness')
     new RawArchive(harness.app.haelan.instance.db).put({
@@ -129,7 +137,7 @@ describe('GET /companion/cursors', () => {
     // JSON: unguarded, one such row would make this route a 500 on every dashboard page load
     // instead of the skip it used to be in JavaScript. Nothing writes a row like this, so the
     // seed is direct; the endpoint is what has to survive it.
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
     if (!harness) throw new Error('no harness')
     harness.app.haelan.instance.db.$client.prepare(
@@ -170,6 +178,17 @@ describe('GET /companion/cursors', () => {
     expect(((await forPerson(added.personId)).json() as { googleConnected: boolean }).googleConnected).toBe(true)
   })
 
+  it('clamps a cursor that a future-dated point pushed past now back to now', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2027-06-01T00:00:00Z')] })).statusCode).toBe(200)
+    const body = (await cursors(token)).json() as { items: CursorItem[] }
+    const legacy = body.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)
+    const perSource = body.items.filter((i) => i.dataTypeId === 'weight' && i.dataSource !== undefined)
+    expect(legacy?.lastWindowEndMs).toBe(harness.clock.nowMs)
+    expect(perSource.map((i) => i.lastWindowEndMs)).toEqual([harness.clock.nowMs])
+  })
+
   it('cannot be read for another person', async () => {
     harness = await withServer()
     const token = await harness.signIn()
@@ -182,7 +201,7 @@ describe('GET /companion/cursors', () => {
   })
 
   it('keys the cursor on type and source, so a late source keeps its own progress', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
 
     // The phone's own reading, early. No explicit dataSource, so ingest.ts resolves it to the
@@ -234,7 +253,7 @@ describe('GET /companion/cursors', () => {
   // missing, and introduced the opposite problem -- nothing aged a source back out of it. A
   // retired watch's frozen cursor would otherwise pin the whole type's read start open forever.
   it('drops a source from the minimum once it has been silent past STALE_SOURCE_MS', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
 
     // The watch's one and only upload, at the harness's starting clock.
@@ -272,7 +291,7 @@ describe('GET /companion/cursors', () => {
   })
 
   it('still holds the minimum back to a source silent for just under STALE_SOURCE_MS', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
 
     expect((await ingest(token, 'weight', {
@@ -296,7 +315,7 @@ describe('GET /companion/cursors', () => {
   // fix: when nothing is live, answer the newest cursor this instance has ever seen instead of
   // nothing.
   it('answers the newest known cursor when every source of a type has gone stale, not the oldest', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
 
     // The watch's one upload, earliest.
@@ -373,7 +392,7 @@ describe('a companion upload that maps to no rows', () => {
   })
 
   it('leaves the type cursor and the history start alone, so no card clamps to 1970', async () => {
-    harness = await withServer()
+    harness = await serverAfterFixtures()
     const token = await harness.signIn()
 
     // One real upload first, so the assertions below are about what the empty page did *not*

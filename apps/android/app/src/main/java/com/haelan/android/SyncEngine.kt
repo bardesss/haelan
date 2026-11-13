@@ -241,14 +241,6 @@ object SyncEngine {
             // under what the instance files, so the lookup goes through the same knot.
             val dataTypeId = SyncTypes.forKey(key).dataTypeId
             val start = SyncCursors.startFor(cursorEnds[dataTypeId], fallbackStart, end)
-            // Null is a cursor ahead of the phone's own clock, not a failure: see
-            // SyncCursors.startFor. There is nothing to read yet, so the type is reported
-            // exactly as a read that found nothing would be, and Health Connect is never
-            // asked for a range that ends where it starts.
-            if (start == null) {
-                report.typeEmpty(key)
-                continue
-            }
             // Whatever the block threw - a Health Connect read, a socket - is this type's own
             // failure, and becomes an outcome here so there is one path below rather than two.
             val outcome = try {
