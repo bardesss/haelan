@@ -19,7 +19,6 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.contracts.ExerciseRouteRequestContract
 import androidx.health.connect.client.records.ExerciseRoute
-import androidx.health.connect.client.records.ExerciseRouteResult
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.Lifecycle
 import com.google.android.material.appbar.MaterialToolbar
@@ -166,11 +165,18 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
      */
     private var pendingRouteId: String? = null
 
-    /** A walk through the withheld routes is going; a second tap would start a second one. */
+    /**
+     * A walk through the withheld routes is going, the tap's or the one after a run: a second walk
+     * would read and send the same ids. Set and checked on the main thread before any walk
+     * launches, so it is the one lock both kinds take.
+     */
     private var releasing = false
 
     private val routeLauncher = registerForActivityResult(ExerciseRouteRequestContract()) { route ->
         val id = pendingRouteId
+        // Held across the launch below: between the dialog closing and answerRoute starting, a
+        // finished run must not start a walk of its own.
+        releasing = true
         pendingRouteId = null
         scope.launch { answerRoute(id, route) }
     }
@@ -411,25 +417,15 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         val owner = RouteLedger.ownerOf(engineSession())
         val ready = mutableListOf<Pair<ExerciseSessionRecord, ExerciseRoute>>()
         for (id in RouteLedger.load(prefs(), owner).withheld.sorted()) {
-            val record = when (val read = readSession(client, id)) {
-                SessionRead.Gone -> {
-                    RouteLedger.forget(prefs(), owner, id)
-                    continue
-                }
+            val read = readSession(client, id)
+            when (val step = RouteLedger.triage(read.forTriage())) {
+                is RouteLedger.Step.Send -> ready += (read as SessionRead.Found).record to step.route
+                RouteLedger.Step.Forget -> RouteLedger.forget(prefs(), owner, id)
                 // Not gone, only unreadable right now: left in the list for the next walk rather
                 // than forgotten, and not allowed to stop this one.
-                SessionRead.Failed -> continue
-                is SessionRead.Found -> read.record
-            }
-            when (val result = record.exerciseRouteResult) {
-                is ExerciseRouteResult.Data -> {
-                    if (result.exerciseRoute.route.isNotEmpty()) {
-                        ready += record to result.exerciseRoute
-                    } else {
-                        RouteLedger.record(prefs(), owner, mapOf(id to RouteLedger.Seen.NONE))
-                    }
-                }
-                is ExerciseRouteResult.ConsentRequired -> {
+                RouteLedger.Step.Skip -> continue
+                RouteLedger.Step.MarkNone -> RouteLedger.record(prefs(), owner, mapOf(id to RouteLedger.Seen.NONE))
+                RouteLedger.Step.Ask -> {
                     // What is already in hand goes first, so a dialog the household walks away
                     // from does not also cost the routes that needed none.
                     if (!sendReleased(ready)) {
@@ -440,8 +436,44 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
                     routeLauncher.launch(id)
                     return
                 }
-                // The route is gone at the source: nothing is left to release.
-                else -> RouteLedger.record(prefs(), owner, mapOf(id to RouteLedger.Seen.NONE))
+            }
+        }
+        sendReleased(ready)
+        finishRelease()
+    }
+
+    /** Starts [sendReadableRoutes] unless a walk is going or a route dialog is waiting on an answer. */
+    private fun startReadableRoutes() {
+        if (releasing || pendingRouteId != null) return
+        releasing = true
+        scope.launch { sendReadableRoutes() }
+    }
+
+    /**
+     * The walk a finished run of this screen makes on its own: every withheld route Health Connect
+     * now hands over in the foreground goes, so after one "Always allow" the routes arrive with the
+     * next sync and nobody has to find the release button. That includes the edits a change-feed
+     * drain refused for delivered workouts, which wait in the same list.
+     *
+     * A route only the household can release stays in the list: a dialog nobody tapped for is the
+     * app asking out of nowhere. A send that fails leaves every id where it was, as the tap does.
+     */
+    private suspend fun sendReadableRoutes() {
+        releasing = true
+        val client = healthClient(silent = true)
+        if (client == null) {
+            finishRelease()
+            return
+        }
+        val owner = RouteLedger.ownerOf(engineSession())
+        val ready = mutableListOf<Pair<ExerciseSessionRecord, ExerciseRoute>>()
+        for (id in RouteLedger.load(prefs(), owner).withheld.sorted()) {
+            val read = readSession(client, id)
+            when (val step = RouteLedger.triage(read.forTriage())) {
+                is RouteLedger.Step.Send -> ready += (read as SessionRead.Found).record to step.route
+                RouteLedger.Step.Forget -> RouteLedger.forget(prefs(), owner, id)
+                RouteLedger.Step.MarkNone -> RouteLedger.record(prefs(), owner, mapOf(id to RouteLedger.Seen.NONE))
+                RouteLedger.Step.Ask, RouteLedger.Step.Skip -> Unit
             }
         }
         sendReleased(ready)
@@ -484,10 +516,21 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         refreshRoutes()
     }
 
+    /**
+     * [RouteLedger.Read] with the record kept, which sending the route needs. The ledger's own
+     * shape holds only the result, because a test cannot build a record that carries
+     * ConsentRequired.
+     */
     private sealed interface SessionRead {
         data class Found(val record: ExerciseSessionRecord) : SessionRead
         data object Gone : SessionRead
         data object Failed : SessionRead
+    }
+
+    private fun SessionRead.forTriage(): RouteLedger.Read = when (this) {
+        is SessionRead.Found -> RouteLedger.Read.Found(record.exerciseRouteResult)
+        SessionRead.Gone -> RouteLedger.Read.Gone
+        SessionRead.Failed -> RouteLedger.Read.Failed
     }
 
     /**
@@ -729,6 +772,12 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
      */
     private var sessionEnded = false
 
+    /** This screen has painted the current run as going, so the end it paints next is that run's. */
+    private var watchingRun = false
+
+    /** The run being watched threw, which is not a run that ended Ok. */
+    private var runThrew = false
+
     /**
      * The tap. The toggles say what travels, the run belongs to [SyncRun] - which no rotation
      * cancels - and this only refuses the taps that cannot start one.
@@ -853,7 +902,22 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         refreshSyncStatus()
         // A finished run may have met new withheld routes, or delivered some the list still named.
         if (!status.running) refreshRoutes()
+        if (status.running) {
+            if (!watchingRun) runThrew = false
+            watchingRun = true
+        } else if (watchingRun) {
+            watchingRun = false
+            if (endedOk(status)) startReadableRoutes()
+        }
     }
+
+    /**
+     * A run that ended Ok: it neither threw nor met a 401, no type failed, and it carried the
+     * workouts, so the instance is answering and exercise sessions are this household's to send.
+     */
+    private fun endedOk(status: SyncRunState.Status): Boolean =
+        !runThrew && !sessionEnded && "exercise" in status.sending &&
+            status.marks.values.none { it == SyncRunState.Mark.FAILED }
 
     /**
      * The session is over. The cookie is already forgotten by the run that met the 401, so this
@@ -867,6 +931,7 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
 
     /** The run threw, which is not one type's failure: the screen says so once, and that is all. */
     override fun runFailed(error: Throwable) {
+        runThrew = true
         Toast.makeText(this, getString(R.string.sync_failed, SyncRun.reasonFor(this, error)), Toast.LENGTH_LONG)
             .show()
     }

@@ -98,6 +98,41 @@ class RouteLedgerTest {
         assertEquals(RouteLedger.Seen.NONE, RouteLedger.seenOf(ExerciseRouteResult.NoData()))
     }
 
+    private val point = ExerciseRoute.Location(time = Instant.parse("2026-09-20T08:30:00Z"), latitude = 52.1, longitude = 4.3)
+
+    @Test
+    fun `triage sends a route that came back`() {
+        val route = ExerciseRoute(listOf(point))
+        assertEquals(
+            RouteLedger.Step.Send(route),
+            RouteLedger.triage(RouteLedger.Read.Found(ExerciseRouteResult.Data(route))),
+        )
+    }
+
+    @Test
+    fun `triage asks about a route only the household can release`() {
+        assertEquals(RouteLedger.Step.Ask, RouteLedger.triage(RouteLedger.Read.Found(ExerciseRouteResult.ConsentRequired())))
+    }
+
+    @Test
+    fun `triage forgets a workout gone from Health Connect`() {
+        assertEquals(RouteLedger.Step.Forget, RouteLedger.triage(RouteLedger.Read.Gone))
+    }
+
+    @Test
+    fun `triage skips a workout it could not read now`() {
+        assertEquals(RouteLedger.Step.Skip, RouteLedger.triage(RouteLedger.Read.Failed))
+    }
+
+    @Test
+    fun `triage marks no route for no data and for an empty route`() {
+        assertEquals(RouteLedger.Step.MarkNone, RouteLedger.triage(RouteLedger.Read.Found(ExerciseRouteResult.NoData())))
+        assertEquals(
+            RouteLedger.Step.MarkNone,
+            RouteLedger.triage(RouteLedger.Read.Found(ExerciseRouteResult.Data(ExerciseRoute(emptyList())))),
+        )
+    }
+
     @Test
     fun `the request set never carries the route permission, which only the route screen grants`() {
         // Health Connect drops READ_EXERCISE_ROUTES from every request, so it is never in the answer:
