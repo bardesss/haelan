@@ -321,10 +321,10 @@ object SyncEngine {
         if (mode is ChangeFeed.Mode.Drain) {
             val changes = ChangesSource(client, mode.token)
             val outcome = if (key == "resting") {
-                val window = WindowSource(client, SyncCursors.bootstrapStartFor(cursorEndMs, fallbackStart, end), end)
-                drainResting(session, packageName, prefs, changes, window, cutoverMs, post)
+                val windowStart = SyncCursors.bootstrapStartFor(cursorEndMs, fallbackStart, end)
+                drainResting(client, session, packageName, prefs, owner, changes, windowStart, end, fallbackStart, cutoverMs, post)
             } else {
-                syncOne(session, packageName, prefs, key, changes, cutoverMs, post)
+                syncOne(session, packageName, prefs, key, changes, cutoverMs, fallbackStart, post)
             }
             if (!changes.expired) {
                 if (outcome is InstanceClient.Outcome.Ok) changes.nextToken?.let { ChangeFeed.save(prefs, owner, dataTypeId, it, cursorEndMs) }
@@ -348,7 +348,7 @@ object SyncEngine {
         val readEnd = maxOf(end, Instant.now())
         // Only a window read can start inside a minute, so only it names a first minute to drop;
         // a drain reads whole changed records and passes none.
-        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, post, partialMinuteStart(start, fallbackStart))
+        val outcome = syncOne(session, packageName, prefs, key, WindowSource(client, start, readEnd), cutoverMs, fallbackStart, post, partialMinuteStart(start, fallbackStart))
         if (outcome is InstanceClient.Outcome.Ok) ChangeFeed.save(prefs, owner, dataTypeId, fresh, cursorEndMs)
         return outcome
     }
@@ -356,28 +356,54 @@ object SyncEngine {
     /**
      * Resting heart rate from its change feed. A day's point is built from that day's latest
      * reading, so the changed records alone cannot rebuild it: a deleted latest reading leaves
-     * an earlier one standing that the feed never mentions. So the feed only supplies the
-     * deletions, which go first and take the day's row with them, and the days are then rebuilt
-     * from a read of [window], which starts where a bootstrap would (SyncCursors.bootstrapStartFor):
-     * thirty days back, the span a token can cover, or from the instance's older cursor, never
-     * before what the permission answers.
+     * an earlier one standing that the feed never mentions. So the feed supplies the
+     * deletions, which go first and take the day's row with them, and says which days it
+     * touched; the days are then rebuilt from a window read. [windowStart] is where a bootstrap
+     * would start (SyncCursors.bootstrapStartFor), thirty days back or the instance's older
+     * cursor, and it is now a floor rather than the reach: the read goes back further to the day
+     * of any reading the feed upserted, or of any deleted one RestingLedger can date
+     * (rebuildStart). A feed with nothing in it posts nothing.
      */
     private suspend fun drainResting(
+        client: HealthConnectClient,
         session: Session,
         packageName: String,
         prefs: SharedPreferences,
+        owner: String,
         changes: ChangesSource,
-        window: BatchSource,
+        windowStart: Instant,
+        end: Instant,
+        fallbackStart: Instant,
         cutoverMs: Long?,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
-        val deletions = collect(changes.batches(RestingHeartRateRecord::class)).deletions
+        val read = collect(changes.batches(RestingHeartRateRecord::class))
         if (changes.expired) return InstanceClient.Outcome.Ok(false)
+        if (read.records.isEmpty() && read.deletions.isEmpty()) return InstanceClient.Outcome.Ok(false)
         val dataTypeId = SyncTypes.forKey("resting").dataTypeId
-        val deleted = postDeletions(session, dataTypeId, deletions, post)
+        val deleted = postDeletions(session, dataTypeId, read.deletions, post)
         if (deleted is InstanceClient.Outcome.Failed) return deleted
-        val upserted = syncOne(session, packageName, prefs, "resting", window, cutoverMs, post)
-        return if (upserted is InstanceClient.Outcome.Ok) InstanceClient.Outcome.Ok(upserted.value || deletions.isNotEmpty()) else upserted
+        val start = rebuildStart(windowStart, read.records.map { it.time }, read.deletions, RestingLedger.load(prefs, owner), fallbackStart)
+        val upserted = syncOne(session, packageName, prefs, "resting", WindowSource(client, start, end), cutoverMs, fallbackStart, post)
+        return if (upserted is InstanceClient.Outcome.Ok) InstanceClient.Outcome.Ok(upserted.value || read.deletions.isNotEmpty()) else upserted
+    }
+
+    /**
+     * Where a resting rebuild reads from: the earliest of [windowStart] and one day before each
+     * of [upsertTimes] and each of [deletedIds] that [known] dates, so the whole local day of
+     * every touched reading is read again whatever its offset. Never before [fallbackStart]. A
+     * deleted id the ledger never filed (posted before it existed, or pruned) is ignored.
+     */
+    internal fun rebuildStart(
+        windowStart: Instant,
+        upsertTimes: List<Instant>,
+        deletedIds: List<String>,
+        known: Map<String, Long>,
+        fallbackStart: Instant,
+    ): Instant {
+        val touched = upsertTimes + deletedIds.mapNotNull { known[it] }.map { Instant.ofEpochMilli(it) }
+        val earliest = touched.map { it.minus(1, ChronoUnit.DAYS) }.fold(windowStart) { a, b -> minOf(a, b) }
+        return maxOf(earliest, fallbackStart)
     }
 
     /** The record class each toggle reads, which is also the class its change token is taken for. */
@@ -411,6 +437,7 @@ object SyncEngine {
         key: String,
         source: BatchSource,
         cutoverMs: Long?,
+        fallbackStart: Instant,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
         firstMinute: Instant? = null,
     ): InstanceClient.Outcome<Boolean> {
@@ -442,6 +469,7 @@ object SyncEngine {
                 // records are split by identity first, because a day whose later reading came
                 // off another device is that device's reading and not this app's merge.
                 val read = collect(source.batches(RestingHeartRateRecord::class))
+                val takenAt = read.records.associate { it.metadata.id to it.time.toEpochMilli() }
                 val points = withContext(Dispatchers.Default) {
                     read.records
                         .groupBy { identityOf(it, cutoverMs) }
@@ -455,6 +483,12 @@ object SyncEngine {
                         }
                 }
                 val outcome = uploadPoints(session, packageName, "daily-resting-heart-rate", points, post)
+                // Filed only once the instance took the points: a later feed reports a deleted
+                // reading by this id alone, and the ledger is what dates its day (drainResting).
+                if (outcome is InstanceClient.Outcome.Ok) {
+                    val sent = points.map { it.body.getString("name") }.mapNotNull { id -> takenAt[id]?.let { id to it } }.toMap()
+                    RestingLedger.record(prefs, RouteLedger.ownerOf(session), sent, fallbackStart)
+                }
                 return thenDeletions(outcome, session, "daily-resting-heart-rate", read.deletions, post)
             }
             "steps" -> return uploadType(session, packageName, dataTypeId, source.batches(StepsRecord::class), cutoverMs, post) { toStepPoints(it) }
