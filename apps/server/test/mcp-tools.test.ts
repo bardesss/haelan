@@ -490,23 +490,25 @@ describe('formula days behind a blended statistic', () => {
 })
 
 describe('get_intraday', () => {
-  function seedMinutes(sourceId: string, midnight: number, value: (i: number) => number): void {
-    for (let i = 0; i < 1440; i += 1) {
-      for (const agg of ['min', 'mean', 'max'] as const) {
-        insertSample(test.db, { personId: 'robin', sourceId, metric: 'heart_rate',
-          utcMs: midnight + i * 60_000, tzOffsetMinutes: 120, agg, value: value(i) })
+  function seedMinutes(sourceId: string, midnight: number, count: number, value: (i: number) => number): void {
+    test.db.transaction((tx) => {
+      for (let i = 0; i < count; i += 1) {
+        for (const agg of ['min', 'mean', 'max'] as const) {
+          insertSample(tx, { personId: 'robin', sourceId, metric: 'heart_rate',
+            utcMs: midnight + i * 60_000, tzOffsetMinutes: 120, agg, value: value(i) })
+        }
       }
-    }
+    })
   }
 
   it('summarises every minute of the day, not the thinned points it returns', () => {
-    seedMinutes('watch', Date.UTC(2026, 7, 9, 22, 0), (i) => (i % 60 === 0 ? 180 : 60))
+    seedMinutes('watch', Date.UTC(2026, 7, 9, 22, 0), 600, (i) => (i % 60 === 0 ? 180 : 60))
     const out = tool('get_intraday').run(q(), { metric: 'heart_rate', localDate: '2026-08-10' }) as {
       points: unknown[], reduction: unknown, summary: { n: number, mean: number | null, max: number | null }
     }
     expect(out.reduction).not.toBeNull()
-    expect(out.points.length).toBeLessThan(1440)
-    expect(out.summary).toMatchObject({ n: 1440, mean: 62, max: 180 })
+    expect(out.points.length).toBeLessThan(600)
+    expect(out.summary).toMatchObject({ n: 600, mean: 62, max: 180 })
   })
 
   it('summarises every source blended, not a share of each', () => {
@@ -515,12 +517,12 @@ describe('get_intraday', () => {
       kind: 'device', createdAtMs: 0,
     }).run()
     const midnight = Date.UTC(2026, 7, 9, 22, 0)
-    seedMinutes('watch', midnight, (i) => (i % 60 === 0 ? 180 : 60))
-    seedMinutes('phone', midnight, () => 70)
+    seedMinutes('watch', midnight, 400, (i) => (i % 60 === 0 ? 180 : 60))
+    seedMinutes('phone', midnight, 400, () => 70)
     const out = tool('get_intraday').run(q(), { metric: 'heart_rate', localDate: '2026-08-10' }) as {
       summary: { n: number }
     }
-    expect(out.summary.n).toBe(2880)
+    expect(out.summary.n).toBe(800)
   })
 
   it('returns a day of samples with a summary and no reduction at the default budget', () => {

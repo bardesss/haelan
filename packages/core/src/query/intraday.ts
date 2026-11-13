@@ -283,7 +283,6 @@ function readWindow(db: DbOrTx, input: {
   const sourceIds = [...bySource.keys()]
   if (sourceIds.length === 0) return { points: [], reduction: null, offsetMinutes: null }
 
-  const requested = input.points === 'all' ? DEFAULT_POINTS : input.points ?? DEFAULT_POINTS
   // Divided across the sources present, so a caller asking for 500 points still gets at most 500
   // rather than 500 per source, in the ordinary case. The floor of 2 is a deliberate exception to
   // that budget, not a bug in it: thin always keeps at least the first and last point of whatever
@@ -296,7 +295,7 @@ function readWindow(db: DbOrTx, input: {
   // 'all' skips the budget: thinBand returns its input untouched when the target is not below its length.
   const perSource = input.points === 'all'
     ? Infinity
-    : Math.max(2, Math.floor(requested / sourceIds.length))
+    : Math.max(2, Math.floor((input.points ?? DEFAULT_POINTS) / sourceIds.length))
 
   let totalFrom = 0
   let totalTo = 0
