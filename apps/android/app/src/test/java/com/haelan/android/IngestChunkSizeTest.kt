@@ -3,6 +3,7 @@ package com.haelan.android
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 /**
  * The ceiling the sync has to stay under, measured instead of assumed.
@@ -232,5 +233,32 @@ class IngestChunkSizeTest {
             listOf(17),
             SyncEngine.chunkEnds(List(17) { 1 }, 1024, newestFirst, span),
         )
+    }
+
+    private val minuteBase = Instant.parse("2026-09-14T10:00:00Z").toEpochMilli()
+
+    @Test
+    fun `a heart rate cut never splits a minute`() {
+        // Twelve points, three per minute, a count ceiling of five: unaligned cuts land at 5 and 10.
+        val times = (0 until 12).map { minuteBase + (it / 3) * 60_000L + (it % 3) * 10_000L }
+        assertEquals(
+            listOf(3, 6, 9, 12),
+            SyncEngine.chunkEnds(List(12) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5, alignToMinute = true),
+        )
+    }
+
+    @Test
+    fun `a minute larger than the ceiling is still cut at the ceiling`() {
+        val times = (0 until 12).map { minuteBase + it * 1_000L }
+        assertEquals(
+            listOf(5, 10, 12),
+            SyncEngine.chunkEnds(List(12) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5, alignToMinute = true),
+        )
+    }
+
+    @Test
+    fun `types that are not downsampled keep the unaligned cut`() {
+        val times = (0 until 12).map { minuteBase + (it / 3) * 60_000L + (it % 3) * 10_000L }
+        assertEquals(listOf(5, 10, 12), SyncEngine.chunkEnds(List(12) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5))
     }
 }
