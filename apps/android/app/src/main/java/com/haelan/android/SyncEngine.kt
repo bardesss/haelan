@@ -409,6 +409,9 @@ object SyncEngine {
      * downsamples each upload's minutes on their own and upserts on the natural key, so a minute
      * split across two requests is overwritten by the aggregate of its second half. A chunk
      * holding no boundary (one minute larger than a ceiling) is cut at the ceiling as before.
+     *
+     * The times are expected in ascending order: the minute alignment and the span ceiling both
+     * compare neighbouring points.
      */
     internal fun chunkEnds(
         sizes: List<Int>,

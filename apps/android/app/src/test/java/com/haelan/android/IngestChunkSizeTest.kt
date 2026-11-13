@@ -261,4 +261,26 @@ class IngestChunkSizeTest {
         val times = (0 until 12).map { minuteBase + (it / 3) * 60_000L + (it % 3) * 10_000L }
         assertEquals(listOf(5, 10, 12), SyncEngine.chunkEnds(List(12) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5))
     }
+
+    @Test
+    fun `an aligned cut whose carry-over is still over the count ceiling is cut again`() {
+        // One point in minute 0, ten in minute 1, a ceiling of five: the cut moves back to 1, and
+        // the ten-point minute is then cut at the ceiling because it holds no boundary.
+        val times = (0 until 11).map { if (it == 0) minuteBase else minuteBase + 60_000L + it * 1_000L }
+        assertEquals(
+            listOf(1, 6, 11),
+            SyncEngine.chunkEnds(List(11) { 10 }, Int.MAX_VALUE, times, Long.MAX_VALUE, 5, alignToMinute = true),
+        )
+    }
+
+    @Test
+    fun `an aligned cut whose carry-over is still over the byte ceiling is cut again`() {
+        // The cut moves back to 1, but the carried-over point plus the big one (10 + 40) is still
+        // over 45 bytes, so the chunk is cut once more at the big point.
+        val times = listOf(minuteBase, minuteBase + 60_000L, minuteBase + 61_000L)
+        assertEquals(
+            listOf(1, 2, 3),
+            SyncEngine.chunkEnds(listOf(5, 10, 40), 45, times, Long.MAX_VALUE, Int.MAX_VALUE, alignToMinute = true),
+        )
+    }
 }
