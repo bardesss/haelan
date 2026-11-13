@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assembleNights, DEFAULT_NIGHT_GAP_MINUTES } from '../src/derive/sleep.ts'
+import { assembleNights, sessionsFiledOn, sleepNeighbourDates, DEFAULT_NIGHT_GAP_MINUTES } from '../src/derive/sleep.ts'
 import type { SleepSessionLike } from '../src/derive/sleep.ts'
 
 const MIN = 60_000
@@ -160,5 +160,30 @@ describe('assembleNights', () => {
     ])
     expect(out.night.map((s) => s.id)).toEqual(['night'])
     expect(out.naps.map((s) => s.id)).toEqual(['earlyNap', 'lateNap'])
+  })
+})
+
+describe('sessionsFiledOn', () => {
+  it('never joins two sources across midnight', () => {
+    const sessions = [
+      { ...session({ id: 'watch-piece', sourceId: 'watch', startMs: T0 - 2 * H, endMs: T0 - 20 * MIN }), localDate: '2026-08-21' },
+      { ...session({ id: 'phone-piece', sourceId: 'phone', startMs: T0 + 20 * MIN, endMs: T0 + 6 * H }), localDate: '2026-08-22' },
+    ]
+    expect(sessionsFiledOn({ sessions, localDate: '2026-08-21', gapMinutes: 120 }).map((s) => s.id)).toEqual(['watch-piece'])
+  })
+
+  it('files a chain on the date of its piece with the greatest end', () => {
+    const sessions = [
+      { ...session({ id: 'late', startMs: T0 + 20 * MIN, endMs: T0 + 6 * H }), localDate: '2026-08-22' },
+      { ...session({ id: 'early', startMs: T0 - 2 * H, endMs: T0 - 20 * MIN }), localDate: '2026-08-21' },
+    ]
+    expect(sessionsFiledOn({ sessions, localDate: '2026-08-22', gapMinutes: 120 }).map((s) => s.id)).toEqual(['late', 'early'])
+    expect(sessionsFiledOn({ sessions, localDate: '2026-08-21', gapMinutes: 120 })).toEqual([])
+  })
+})
+
+describe('sleepNeighbourDates', () => {
+  it('gives the day either side of each date, deduplicated and sorted', () => {
+    expect(sleepNeighbourDates(['2026-08-22', '2026-08-23'])).toEqual(['2026-08-21', '2026-08-22', '2026-08-23', '2026-08-24'])
   })
 })

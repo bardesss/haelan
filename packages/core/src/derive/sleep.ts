@@ -1,5 +1,6 @@
 import type { DailyRow } from './rollup.ts'
 import { DERIVATION_VERSION } from './version.ts'
+import { shiftLocalDate } from './localDay.ts'
 
 /**
  * Sleep, from sessions and their stage segments to a day's figures.
@@ -90,6 +91,69 @@ export function assembleNights(input: {
     night: groups[nightAt] ?? [],
     naps: groups.filter((_, at) => at !== nightAt).flat(),
   }
+}
+
+export interface DatedSleepSession extends SleepSessionLike { localDate: string }
+
+/**
+ * The date each session's night is filed on, by session id.
+ *
+ * Per source, sessions are sorted by (startMs, id) and chained with the same rule assembleNights
+ * uses, against the latest end so far. A chain is filed on the `localDate` of its piece with the
+ * greatest end, so a night split at midnight is one night filed on the morning it ends rather
+ * than two halves on two dates. A session is filed by the chain it is in, whatever date it
+ * carries itself.
+ */
+export function filingDates(sessions: readonly DatedSleepSession[], gapMinutes: number): Map<string, string> {
+  const gapMs = gapMinutes * MINUTE_MS
+  const bySource = new Map<string, DatedSleepSession[]>()
+  for (const session of sessions) {
+    const list = bySource.get(session.sourceId)
+    if (list) list.push(session)
+    else bySource.set(session.sourceId, [session])
+  }
+  const filed = new Map<string, string>()
+  for (const list of bySource.values()) {
+    const ordered = [...list].sort((a, b) => (
+      a.startMs - b.startMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    ))
+    const chains: DatedSleepSession[][] = []
+    for (const session of ordered) {
+      const current = chains.at(-1)
+      const latestEnd = current ? Math.max(...current.map((s) => s.endMs)) : null
+      if (current && latestEnd !== null && session.startMs - latestEnd <= gapMs) current.push(session)
+      else chains.push([session])
+    }
+    for (const chain of chains) {
+      // First of equal ends in chain order, so the answer does not depend on input order.
+      const last = chain.reduce((best, s) => (s.endMs > best.endMs ? s : best))
+      for (const session of chain) filed.set(session.id, last.localDate)
+    }
+  }
+  return filed
+}
+
+/** Every session of every chain filed on `localDate`, in input order. See filingDates. */
+export function sessionsFiledOn<T extends DatedSleepSession>(input: {
+  sessions: readonly T[]
+  localDate: string
+  gapMinutes: number
+}): T[] {
+  const filed = filingDates(input.sessions, input.gapMinutes)
+  return input.sessions.filter((s) => filed.get(s.id) === input.localDate)
+}
+
+/**
+ * The dates on either side of each given date, deduplicated and sorted. A sleep session changing
+ * moves the chain it is in, and a chain can reach a night on the neighbouring date.
+ */
+export function sleepNeighbourDates(localDates: Iterable<string>): string[] {
+  const out = new Set<string>()
+  for (const date of localDates) {
+    out.add(shiftLocalDate(date, -1))
+    out.add(shiftLocalDate(date, 1))
+  }
+  return [...out].sort()
 }
 
 /**

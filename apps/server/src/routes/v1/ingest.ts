@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq, sql } from 'drizzle-orm'
 import {
   COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, isKnownTimezone,
-  localDateOf, mapSessions, mapWindowSamples, schema, supports,
+  localDateOf, mapSessions, mapWindowSamples, schema, sleepNeighbourDates, supports,
 } from '@haelan/core'
 import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
 import { drainPersonDerivation } from './annotations.ts'
@@ -191,6 +191,14 @@ export function registerIngestRoutes(app: FastifyInstance): void {
         : writeSessions(tx, mapped.sessions, mapped.segments, mapped.routes, id, localDates)
       for (const localDate of localDates) {
         instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
+      }
+      // A sleep session joins or leaves a chain that can reach the night on a neighbouring date.
+      // Marked beside the dates above but never added to `localDates`, so `affected` and
+      // `applied` in the response keep naming only the dates the upload wrote or left.
+      if (mapped.sessions.some((row) => row.kind === 'sleep')) {
+        for (const localDate of sleepNeighbourDates(localDates)) {
+          instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
+        }
       }
       return { id, deduplicated, rowsWritten, localDates: [...localDates] }
     })

@@ -430,13 +430,15 @@ describe('runJob', () => {
     })
 
     await runJob({ ...args, deps: deps('7200s') })
-    expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-19'])
+    // The date it landed on and the dates beside it: a sleep session can join a night either side.
+    expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-18', '2026-08-19', '2026-08-20'])
     queue.clear(queue.claim(10))
 
     // The same session, one hour earlier, which puts its end on the previous local date.
     await runJob({ ...args, deps: deps('3600s') })
     expect(ctx.db.select().from(sessions).all()[0]?.localDate).toBe('2026-08-18')
-    expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-18', '2026-08-19'])
+    // The new date, the date it left, and the neighbours of both.
+    expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20'])
   })
 
   it('skips a type the API cannot list without calling it', async () => {

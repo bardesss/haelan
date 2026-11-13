@@ -12,6 +12,7 @@ import { CredentialsUnreadableError, HaelanError, TransientError } from '../erro
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { localDateOf } from '../derive/localDay.ts'
+import { sleepNeighbourDates } from '../derive/sleep.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { mapObservations } from '../api/mapObservations.ts'
 import { ObservationStore } from '../store/observations.ts'
@@ -342,6 +343,14 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
       }).run()
       written++
       localDates.add(row.localDate)
+      // A sleep session joins or leaves a chain that can reach the night on the next or the
+      // previous date, so those are re-derived too. The ingest route marks them separately and
+      // keeps them out of its own dates; here they are marked with the rest.
+      if (row.kind === 'sleep') {
+        for (const date of sleepNeighbourDates([row.localDate, previous?.localDate].filter((d): d is string => d !== undefined))) {
+          localDates.add(date)
+        }
+      }
     }
     // Segments are replaced wholesale for the sessions in this page: a re-fetch after Google
     // finishes processing a night legitimately changes the stage timeline, and merging two

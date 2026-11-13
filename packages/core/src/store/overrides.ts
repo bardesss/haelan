@@ -6,6 +6,7 @@ import { SampleKeys } from '../db/keys.ts'
 import type { DeriveQueue } from './deriveQueue.ts'
 import { ConfigError } from '../errors.ts'
 import { localDateOf } from '../derive/localDay.ts'
+import { sleepNeighbourDates } from '../derive/sleep.ts'
 import { parseDayMetricTarget, parseSampleTarget, parseSessionTarget } from '../derive/targetKey.ts'
 import type { OverrideScope } from '../derive/targetKey.ts'
 import type { OverrideLike } from '../derive/overrides.ts'
@@ -105,6 +106,15 @@ export class OverrideStore {
     // reached the day it targets, and the sync that writes those rows marks the day itself.
     if (localDate === null) return
     this.#queue.markDirty({ personId, localDate, nowMs }, tx)
+    // An excluded or restored sleep piece changes the chain it was in, which can reach the night
+    // on either side. Sample overrides add their own dates alongside, here, when they need to.
+    if (scope === 'session') {
+      const kind = tx.select({ kind: sessions.kind }).from(sessions)
+        .where(and(eq(sessions.id, parseSessionTarget(targetKey)), eq(sessions.personId, personId))).get()?.kind
+      if (kind === 'sleep') {
+        for (const date of sleepNeighbourDates([localDate])) this.#queue.markDirty({ personId, localDate: date, nowMs }, tx)
+      }
+    }
   }
 
   #localDateOf(tx: DbOrTx, personId: string, scope: OverrideScope, targetKey: string): string | null {

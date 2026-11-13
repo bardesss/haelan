@@ -6,10 +6,10 @@ import { rollUpDay, PROVIDER_SOURCE, MERGED_SOURCE } from './rollup.ts'
 import type { SampleLike } from './rollup.ts'
 import { mergeDay } from './merge.ts'
 import type { Priority } from './priority.ts'
-import { localDateOf, widenedUtcWindow } from './localDay.ts'
+import { localDateOf, shiftLocalDate, widenedUtcWindow } from './localDay.ts'
 import { applyToDay, applyToSamples, applyToSessions, excludedMetrics } from './overrides.ts'
 import type { OverrideLike } from './overrides.ts'
-import { deriveSleepDay, mainSleepOf } from './sleep.ts'
+import { deriveSleepDay, mainSleepOf, sessionsFiledOn } from './sleep.ts'
 import type { SleepSessionLike } from './sleep.ts'
 import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
@@ -102,29 +102,37 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   })
 
   // sessions.local_date is computed at ingest and indexed, so unlike samples this needs no
-  // widened window and no per row filter.
+  // widened window and no per row filter. The neighbouring dates are loaded because a night split
+  // at midnight is filed on the date its last piece ends, whichever date each piece carries.
   const sleepRows = tx.select().from(sessions).where(and(
     eq(sessions.personId, input.personId),
-    eq(sessions.localDate, input.localDate),
+    inArray(sessions.localDate, [
+      shiftLocalDate(input.localDate, -1), input.localDate, shiftLocalDate(input.localDate, 1),
+    ]),
     eq(sessions.kind, 'sleep'),
   )).all()
 
-  const sleepSessions: SleepSessionLike[] = applyToSessions(
-    sleepRows.map((row) => ({
-      id: row.id, sourceId: row.sourceId, kind: row.kind, startMs: row.startMs, endMs: row.endMs,
-    })),
-    personOverrides,
-  ).map((kept) => {
-    const row = sleepRows.find((r) => r.id === kept.id)!
-    return {
-      id: row.id,
-      sourceId: row.sourceId,
-      startMs: row.startMs,
-      startOffsetMinutes: row.startOffsetMinutes,
-      endMs: row.endMs,
-      endOffsetMinutes: row.endOffsetMinutes,
-      mainSleep: mainSleepOf(row.attrs),
-    }
+  const sleepSessions: SleepSessionLike[] = sessionsFiledOn({
+    sessions: applyToSessions(
+      sleepRows.map((row) => ({
+        id: row.id, sourceId: row.sourceId, kind: row.kind, startMs: row.startMs, endMs: row.endMs,
+      })),
+      personOverrides,
+    ).map((kept) => {
+      const row = sleepRows.find((r) => r.id === kept.id)!
+      return {
+        id: row.id,
+        sourceId: row.sourceId,
+        startMs: row.startMs,
+        startOffsetMinutes: row.startOffsetMinutes,
+        endMs: row.endMs,
+        endOffsetMinutes: row.endOffsetMinutes,
+        mainSleep: mainSleepOf(row.attrs),
+        localDate: row.localDate,
+      }
+    }),
+    localDate: input.localDate,
+    gapMinutes: input.gapMinutes,
   })
 
   const segments = sleepSessions.length === 0 ? [] : tx.select().from(sessionSegments)
