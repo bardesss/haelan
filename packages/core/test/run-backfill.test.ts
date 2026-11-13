@@ -85,13 +85,39 @@ describe('runBackfill', () => {
   })
 
   it('resumes from the stored cursor instead of starting at today again', async () => {
-    syncState.setBackfillCursor({ personId: 'p1', dataType: 'weight', cursorMs: NOW_MS - 10 * DAY_MS, nowMs: NOW_MS })
+    // A stored cursor is always a local midnight; a mid-day one would read as written under another zone.
+    const cursor = startOfLocalDay(NOW_MS - 10 * DAY_MS, AMS)
+    syncState.setBackfillCursor({ personId: 'p1', dataType: 'weight', cursorMs: cursor, nowMs: NOW_MS })
     const { deps, windows } = buildDeps(fixture)
     await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
       nowMs: NOW_MS, horizonDays: 1825, batchDays: 2, deps,
     })
-    expect(windows[0]!.endMs).toBeLessThanOrEqual(NOW_MS - 10 * DAY_MS)
+    expect(windows[0]!.endMs).toBe(cursor)
+  })
+
+  for (const zone of ['America/New_York', 'Asia/Tokyo']) {
+    it(`leaves no gap when the person moves from Amsterdam to ${zone} mid backfill`, async () => {
+      const cursor = startOfLocalDay(NOW_MS - 10 * DAY_MS, AMS)
+      syncState.setBackfillCursor({ personId: 'p1', dataType: 'weight', cursorMs: cursor, nowMs: NOW_MS })
+      const { deps, windows } = buildDeps(fixture)
+      await runBackfill({
+        personId: 'p1', timezone: zone, dataType: dataTypeById('weight')!,
+        nowMs: NOW_MS, horizonDays: 1825, batchDays: 2, deps,
+      })
+      expect(windows[0]!.startMs).toBe(startOfLocalDay(cursor - 1, zone))
+      expect(windows[0]!.endMs).toBeGreaterThanOrEqual(cursor)
+      expect(windows[1]!.endMs).toBe(windows[0]!.startMs)
+    })
+  }
+
+  it('still leaves today alone on a first run, with no stored cursor', async () => {
+    const { deps, windows } = buildDeps(fixture)
+    await runBackfill({
+      personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 1, deps,
+    })
+    expect(windows[0]!.endMs).toBe(startOfLocalDay(NOW_MS, AMS))
   })
 
   it('stops at the horizon it was handed rather than one baked into the type', async () => {

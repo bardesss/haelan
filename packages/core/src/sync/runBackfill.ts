@@ -1,6 +1,7 @@
 import type { DataType } from '../api/catalogue.ts'
 import { supports } from '../api/catalogue.ts'
-import { dayWindows } from './windows.ts'
+import { dayWindows, startOfLocalDay } from './windows.ts'
+import type { Window } from './windows.ts'
 import { runJob } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
 
@@ -30,6 +31,28 @@ export interface BackfillResult {
 }
 
 /**
+ * The window the walk fetches next. dayWindows aligns to the person's local midnight, which is
+ * the alignment the archive's dedup key depends on, so a backwards walk takes one of its windows
+ * rather than keeping a second implementation of it.
+ */
+export function nextBackfillWindow(cursorMs: number, timezone: string, cursorIsStored: boolean): Window | undefined {
+  // A stored cursor that is not local midnight in the current zone was written under another
+  // zone. The day containing the instant just before it is the one still unfetched, and the
+  // filter below would instead skip it and leave a gap.
+  if (cursorIsStored && startOfLocalDay(cursorMs, timezone) !== cursorMs) {
+    return dayWindows({ fromMs: cursorMs - 1, toMs: cursorMs, timezone })[0]
+  }
+  const candidates = dayWindows({
+    fromMs: cursorMs - DAY_MS - ALIGNMENT_SLACK_MS, toMs: cursorMs, timezone,
+  })
+  // The last window that ends at or before the cursor, not simply the last one. A first run's
+  // cursor is not local midnight and sits inside a day whose window ends in the future:
+  // fetching it would re-cover ground the trailing sync already owns and would push the high
+  // water mark past now.
+  return candidates.filter((candidate) => candidate.endMs <= cursorMs).at(-1)
+}
+
+/**
  * Walks backwards a day at a time from the stored cursor, or from today on the first run,
  * until the type's horizon or the batch limit. The cursor is written after every window, so
  * an instance killed mid-backfill resumes at the day it was on rather than at today.
@@ -51,6 +74,7 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
   const floorMs = input.nowMs - input.horizonDays * DAY_MS
   const batchDays = input.batchDays ?? DEFAULT_BATCH_DAYS
   let cursorMs = state?.backfillCursorMs ?? input.nowMs
+  let cursorIsStored = state?.backfillCursorMs != null
   let windowsFetched = 0
   let rowsWritten = 0
 
@@ -60,17 +84,7 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
       return done('horizon', true, windowsFetched, rowsWritten)
     }
 
-    // dayWindows aligns to the person's local midnight, which is the alignment the archive's
-    // dedup key depends on. Taking one of its windows is how a backwards walk keeps that
-    // alignment without a second implementation of it.
-    const candidates = dayWindows({
-      fromMs: cursorMs - DAY_MS - ALIGNMENT_SLACK_MS, toMs: cursorMs, timezone: input.timezone,
-    })
-    // The last window that ends at or before the cursor, not simply the last one. A cursor
-    // that is not itself local midnight, which is every first run, sits inside a day whose
-    // window ends in the future: fetching it would re-cover ground the trailing sync already
-    // owns and would push the high water mark past now.
-    const window = candidates.filter((candidate) => candidate.endMs <= cursorMs).at(-1)
+    const window = nextBackfillWindow(cursorMs, input.timezone, cursorIsStored)
     if (!window) return done('horizon', true, windowsFetched, rowsWritten)
 
     const result = await runJob({
@@ -103,6 +117,7 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
     deps.syncState.setBackfillCursor({
       personId: input.personId, dataType: t.id, cursorMs, nowMs: deps.now(),
     })
+    cursorIsStored = true
   }
 
   return done('batch', false, windowsFetched, rowsWritten)
