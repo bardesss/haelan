@@ -56,7 +56,7 @@ describe('the android release workflow', () => {
     // back to the commit message unless the annotation is fetched back before anything reads the
     // tag. It only has to run before the version step actually consumes $GITHUB_REF_NAME as a tag.
     expect(at('Restore the tag annotation')).toBeLessThan(at('Read the version from the tag'))
-    expect(yaml).toContain('git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"')
+    expect(yaml).toContain('git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"')
   })
 
   it('refuses to build on an empty version output', () => {
@@ -139,7 +139,9 @@ describe('the android release workflow', () => {
   it('keeps the write token and the shared Gradle cache away from the signing build', () => {
     const release = jobBody('release')
     // A persisted token would sit in .git/config, readable by every build script Gradle runs.
-    expect(release).toMatch(/actions\/checkout@[0-9a-f]{40} # v\d+\n {8}with:\n {10}persist-credentials: false$/m)
+    // Not pinned as the first key under `with:` any more, because `ref:` is there too now; what
+    // matters is that this checkout carries it at all, whatever else it carries.
+    expect(release).toMatch(/actions\/checkout@[0-9a-f]{40} # v\d+\n {8}with:\n(?: {10}\S.*\n)*? {10}persist-credentials: false$/m)
     // The default-branch cache is written by android.yml, whose job runs pnpm install lifecycle
     // scripts; restoring it here would hand that job's output to the build that holds the keystore.
     expect(release).toMatch(/gradle\/actions\/setup-gradle@[0-9a-f]{40} # v\d+\n {8}with:\n(?: {10}\S.*\n)*? {10}cache-disabled: true$/m)
@@ -154,11 +156,55 @@ describe('the android release workflow', () => {
     // Two empty strings compare equal, so a missing or blank cert file and an apksigner that
     // printed no digest would pass the comparison above.
     expect(yaml).toContain(`if ! echo "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$'; then`)
-    expect(yaml).toContain('if [ -z "$FOUND" ]; then')
+    expect(yaml).toContain('if [ "$SIGNERS" -eq 0 ]; then')
     expect(yaml.indexOf(`grep -Eq '^[0-9a-f]{64}$'`)).toBeLessThan(yaml.indexOf('if [ "$FOUND" != "$EXPECTED" ]'))
-    expect(yaml.indexOf('if [ -z "$FOUND" ]; then')).toBeLessThan(yaml.indexOf('if [ "$FOUND" != "$EXPECTED" ]'))
+    expect(yaml.indexOf('if [ "$SIGNERS" -eq 0 ]; then')).toBeLessThan(yaml.indexOf('if [ "$FOUND" != "$EXPECTED" ]'))
+    // Whatever the shape of the parse, more than one signing certificate has to stop the release
+    // rather than pick one. android-release-signer-check.test.ts runs this step against recorded
+    // apksigner output from both build-tools 36 and 37 and proves it does.
+    expect(yaml).toContain('if [ "$SIGNERS" -gt 1 ]; then')
     const committed = readFileSync(new URL('../../apps/android/release-signing-cert.sha256', import.meta.url), 'utf8').trim()
     expect(committed, 'lowercase hex, no colons, as apksigner prints it').toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  // A release that failed for a reason outside the APK used to have no way back: re-running a push
+  // event uses the workflow file at the commit the tag points to, so a fix landed on master could
+  // not reach it, and android-v0.12.0 sat unreleased for exactly that reason. The dispatch is the
+  // way back. It also turns the tag into an argument, which is what the rest of this is about.
+  it('can be dispatched for a tag, and builds that tag rather than the branch', () => {
+    expect(yaml).toMatch(/^ {2}workflow_dispatch:\n {4}inputs:\n {6}tag:\n(?: {8}\S.*\n)*? {8}required: true$/m)
+    // One name, resolved once, for both triggers.
+    expect(yaml).toMatch(/^env:\n {2}TAG: \$\{\{ inputs\.tag \|\| github\.ref_name \}\}$/m)
+    // github.ref_name is the branch under a dispatch, so a step still reading it would test, build
+    // and release master under whatever version the input named: a correctly signed APK carrying a
+    // tree nobody tagged, and no later check could tell, because every one of them reads the same
+    // wrong tag. Comments may discuss the name; no step may read it.
+    const code = yaml.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n')
+    expect(code).not.toContain('GITHUB_REF_NAME')
+    // And the raw expression only where the fallback is being written, never at a point of use.
+    const refName = code.split('\n').filter((line) => line.includes('github.ref_name'))
+    expect(refName).toHaveLength(2)
+    for (const line of refName) expect(line).toContain('inputs.tag ||')
+    // Both jobs. The check job is what proves the tests and the lint, the release job is what
+    // builds the APK, and either one defaulting to the branch would be about the wrong tree.
+    expect(jobBody('check')).toContain('ref: ${{ env.TAG }}')
+    expect(jobBody('release')).toContain('ref: ${{ env.TAG }}')
+    // Two runs releasing one tag at once is the collision that matters. Keyed on github.ref, every
+    // dispatch shared one group while a dispatch and a push of the same tag sat in different ones.
+    expect(yaml).toMatch(/^ {2}group: android-release-\$\{\{ inputs\.tag \|\| github\.ref_name \}\}$/m)
+  })
+
+  it('refuses a bad or already released tag before it spends a runner on it', () => {
+    const guard = at('The tag is an unreleased android-v tag')
+    for (const after of ['Unit tests', 'Lint', 'Assemble the signed APK', 'Create the release']) {
+      expect(guard, `the guard has to come before "${after}"`).toBeLessThan(at(after))
+    }
+    // In the check job: it runs first, and it holds no keystore.
+    expect(jobBody('check')).toContain('- name: The tag is an unreleased android-v tag')
+    // android-release-steps.test.ts runs this step's own shell against both refusals and the
+    // accept; these two strings are what that test reads the verdict out of.
+    expect(yaml).toContain('is not an android-v tag')
+    expect(yaml).toContain('already has a release; its APK is not replaced')
   })
 
   it('checks the Gradle distribution it downloads', () => {
