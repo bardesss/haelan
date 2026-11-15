@@ -10,15 +10,41 @@ name: Android release
 on:
   push:
     tags: ['android-v*']
+  # The way back from a release that failed for a reason that was never in the APK.
+  #
+  # android-v0.12.0 built cleanly and then failed its own signing check, because the runner's
+  # build-tools had moved to 37 since 0.11.0 and relabelled apksigner's output. Fixing that on
+  # master did nothing for the tag: re-running a push event uses the workflow file at the commit
+  # the tag points to, which is still the broken one. That left moving a published tag or burning
+  # a version number on a release with no app changes in it, and the app's README rules the first
+  # of those out for good reasons. Dispatched from master the workflow definition is the fixed one
+  # while the tree is still the tag's, which is the combination neither other route offers.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The android-v tag to build and release
+        required: true
+        type: string
 
 # Only the release job writes, and it asks for that itself. Everything else, including the checkout
 # the check job does, reads.
 permissions:
   contents: read
 
+# Keyed on the tag rather than on github.ref: under workflow_dispatch github.ref is the branch the
+# run was dispatched from, so every dispatch would share one group with every other while a push of
+# the same tag sat in a different one. The tag is the thing two runs must not be releasing at once.
 concurrency:
-  group: android-release-${{ github.ref }}
+  group: android-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
+
+# The one name both triggers answer to. Every step that read GITHUB_REF_NAME reads this instead:
+# under a tag push the two are the same, and under a dispatch GITHUB_REF_NAME is the branch, which
+# would check out master and release it under whatever version the input named -- a correctly
+# signed APK carrying code nobody tagged. A step still reading GITHUB_REF_NAME is the one way this
+# workflow can now ship the wrong tree, which is why a test refuses the name anywhere in this file.
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   # Tests and lint run here, without the keystore. Gradle executes build scripts and dependency
@@ -33,7 +59,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Named rather than left to default, because the default is the branch under a dispatch.
+          ref: ${{ env.TAG }}
           persist-credentials: false
+
+      # Both of these are cheap here and expensive where they would otherwise land. A dispatch
+      # naming a branch would test and build master, and only the version script at the far end of
+      # the release job would notice it was not a tag. A dispatch naming a tag that already shipped
+      # would run the whole pipeline to reach a `gh release create` that refuses to replace it.
+      #
+      # Refusing the second is not only about the wasted half hour. A published APK is never
+      # replaced: phones have it, and the only way to change what they install is a higher version.
+      # This workflow should say that rather than discover it.
+      - name: The tag is an unreleased android-v tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$TAG" in
+            android-v*) ;;
+            *) echo "::error::$TAG is not an android-v tag"; exit 1 ;;
+          esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::$TAG already has a release; its APK is not replaced"
+            exit 1
+          fi
 
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
@@ -98,6 +147,8 @@ jobs:
       # public repository, and gh release create takes its token from GH_TOKEN.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # The check job's copy of this says why it is named rather than defaulted.
+          ref: ${{ env.TAG }}
           persist-credentials: false
 
       # actions/checkout fetches a tag push by commit sha, which lands a lightweight tag in the
@@ -105,7 +156,7 @@ jobs:
       # falls back to the commit message, which is not what the release notes are supposed to be.
       # Fetching the tag ref itself brings the annotation back.
       - name: Restore the tag annotation
-        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+        run: git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -129,7 +180,7 @@ jobs:
       # load a .ts file, and it was never proven against this Node version, only assumed.
       - name: Read the version from the tag
         id: version
-        run: node --experimental-strip-types scripts/print-android-release-version.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+        run: node --experimental-strip-types scripts/print-android-release-version.mjs "$TAG" >> "$GITHUB_OUTPUT"
 
       # signingVar in build.gradle.kts treats an empty string the same as an unset variable, so it
       # is the right behaviour there and the wrong safety net here: HAELAN_APP_VERSION_CODE="" would
@@ -211,10 +262,29 @@ jobs:
             exit 1
           fi
           CERTS=$("$APKSIGNER" verify --print-certs "$APK")
-          if echo "$CERTS" | grep -q '^Signer #2'; then echo "::error::the APK carries more than one signer"; exit 1; fi
-          FOUND=$(echo "$CERTS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
-          if [ -z "$FOUND" ]; then
+          # In the log, because the one thing this step could not tell anybody when it failed was
+          # what apksigner had actually printed.
+          echo "$CERTS"
+          # build-tools 36 labelled every line `Signer #1 certificate SHA-256 digest:`. 37 labels
+          # them per signature scheme instead - `V2 Signer: certificate SHA-256 digest:`, one block
+          # per scheme the APK carries - and android-v0.12.0 failed here, after a successful build,
+          # because the pattern that named Signer #1 matched nothing on a runner whose SDK had
+          # moved. Matching only the part both labels share, then reducing to distinct values,
+          # reads the same fact out of either: one key listed under V2 and V3 is one signer, two
+          # different keys are two, and no version of the output is assumed.
+          #
+          # The source stamp is a separate certificate printed with the same suffix and is not a
+          # signer; counting it would fail an APK that carries exactly the release key.
+          FOUND=$(echo "$CERTS" | grep -v '^Source Stamp' | sed -n 's/^.*certificate SHA-256 digest: //p' | sort -u)
+          # grep -c exits 1 when it counts nothing, which `bash -e` would take as the step failing
+          # rather than as the empty result this next line is here to notice.
+          SIGNERS=$(printf '%s' "$FOUND" | grep -c . || true)
+          if [ "$SIGNERS" -eq 0 ]; then
             echo "::error::apksigner printed no SHA-256 digest for the APK's signer"
+            exit 1
+          fi
+          if [ "$SIGNERS" -gt 1 ]; then
+            echo "::error::the APK carries more than one signer"
             exit 1
           fi
           if [ "$FOUND" != "$EXPECTED" ]; then
@@ -261,7 +331,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$TAG" \
             --title "Android ${{ steps.version.outputs.name }}" \
             --notes-from-tag \
             --latest=false \
