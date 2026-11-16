@@ -64,7 +64,7 @@ jobs:
 
       # 17 is what the module compiles against, and the Gradle version is the wrapper's, so the
       # build here is the build somebody runs on their own machine rather than a second one.
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6
         with:
           distribution: temurin
           java-version: '17'
