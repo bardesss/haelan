@@ -9,7 +9,7 @@ const MESSAGES: Record<string, string> = {
   'sleep.stage.deep': 'Deep',
   'sleep.stage.light': 'Light',
 }
-const t: Translate = (key, options) => {
+const t: Translate = (key: string, options?: Record<string, unknown>) => {
   let text = MESSAGES[key] ?? key
   if (options) for (const [k, v] of Object.entries(options)) text = text.replaceAll(`{{${k}}}`, String(v))
   return text
@@ -40,7 +40,8 @@ describe('the hypnogram tooltip', () => {
   })
 
   it('routes every word through t(), not a hardcoded literal', () => {
-    const shoutingT: Translate = (key, options) => t(key, options).toUpperCase()
+    const shoutingT: Translate = (key: string, options?: Record<string, unknown>) =>
+      (options ? t(key, options) : t(key)).toUpperCase()
     expect(hypnogramTooltip(segments, 0, shoutingT, 'en')).toBe('0H 00M TO 0H 34M<br/>LIGHT: 0H 34M')
   })
 })

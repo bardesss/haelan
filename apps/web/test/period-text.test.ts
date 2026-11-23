@@ -11,7 +11,7 @@ import { initI18n } from '../src/i18n/index.js'
 // what nl.json actually says, not what a stub believes it says. Synthetic figures throughout.
 function tFor(language: 'en' | 'nl'): Translate {
   const instance = initI18n(language)
-  return (key, options) => instance.t(key, options)
+  return instance.t
 }
 
 const t = tFor('en')

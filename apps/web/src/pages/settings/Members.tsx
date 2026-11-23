@@ -14,6 +14,7 @@ import {
 import type { InviteResult, MemberRow, MemberState } from '../../data/useMembers.js'
 import { useResetMemberPassword } from '../../data/useProfile.js'
 import { formatSince } from '../../format.js'
+import type { Translate } from '../../format.js'
 
 // The one formula for turning a bare token into the link a new member actually gets handed. A
 // function rather than a component, because both the visible <code> text and the clipboard write
@@ -232,7 +233,7 @@ export function Members() {
  */
 function activityText(
   member: MemberRow,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: Translate,
   language: string,
   nowMs: number,
 ): string {

@@ -6,7 +6,7 @@ import { initI18n } from '../src/i18n/index.js'
 // The real catalogues through a real i18next instance, as figure-text.test.ts reads them.
 function tFor(language: 'en' | 'nl'): Translate {
   const instance = initI18n(language)
-  return (key, options) => instance.t(key, options)
+  return instance.t
 }
 const t = tFor('en')
 const tNl = tFor('nl')

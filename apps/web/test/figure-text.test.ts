@@ -8,7 +8,7 @@ import { initI18n } from '../src/i18n/index.js'
 // author believed the Dutch said, and the page reads what nl.json actually says.
 function tFor(language: 'en' | 'nl'): Translate {
   const instance = initI18n(language)
-  return (key, options) => instance.t(key, options)
+  return instance.t
 }
 
 const t = tFor('en')
