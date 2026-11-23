@@ -24,3 +24,12 @@ apps/web/public/manifest.webmanifest text eol=lf
 # The phone glance's parser fixtures are written by apps/server/test/android-glance-fixture.test.ts
 # and compared byte for byte against what the server sends, the same shape and the same failure.
 apps/android/app/src/test/resources/glance/*.json text eol=lf
+
+# The workflow files are read as text by seven test files in scripts/test, and
+# android-release-workflow.test.ts anchors most of its patterns to the start and the end of a
+# line. Checked out with CRLF the carriage return sits between the last character and the end of
+# the line, so the end anchors miss and the match fails for a file nobody edited: the same shape
+# as TOOLS.md and the manifest above, and found the same way, by a rebase re-checking the
+# workflows out and turning a green branch red. Nothing reads them with CRLF on purpose - the
+# runners that execute them never see one.
+.github/workflows/** text eol=lf
