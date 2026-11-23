@@ -260,9 +260,12 @@ service runs as an unprivileged `haelan` user, and `/opt/haelan_data` is readabl
 update builds the new release beside the running copy and goes back to that copy if the new one
 does not answer.
 
-Nobody has run these on a Proxmox host yet, so compose above is still the path that is tested.
-[#232](https://github.com/bardesss/haelan/issues/232) is where to report it if you do, and every
-container the script builds points at that issue too.
+One install has been reported on a real Proxmox host: the container was created with the cores,
+memory and disk the script asks for, and haelan installed and started. That is one report, and it
+measured nothing. Whether the 4 GB of RAM and 12 GB of disk it reserves are the right numbers is
+still arithmetic rather than observation, and arm64 is untried, so compose above remains the
+better-tested path. [#232](https://github.com/bardesss/haelan/issues/232) holds that report and is
+where to add another, and every container the script builds points at the same issue.
 
 They are not in the Community Scripts catalogue and will not be for a while:
 [their bar for a new script](https://github.com/community-scripts/ProxmoxVED/pull/2264) is six
