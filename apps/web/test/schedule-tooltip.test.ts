@@ -10,7 +10,7 @@ const MESSAGES: Record<string, string> = {
   'charts.columns.naps': 'Naps',
   'charts.absence.noReading': 'no reading',
 }
-const t: Translate = (key, options) => {
+const t: Translate = (key: string, options?: Record<string, unknown>) => {
   let text = MESSAGES[key] ?? key
   if (options) for (const [k, v] of Object.entries(options)) text = text.replaceAll(`{{${k}}}`, String(v))
   return text
@@ -55,7 +55,8 @@ describe('the sleep schedule tooltip', () => {
   })
 
   it('routes every word through t(), not a hardcoded literal', () => {
-    const shoutingT: Translate = (key, options) => t(key, options).toUpperCase()
+    const shoutingT: Translate = (key: string, options?: Record<string, unknown>) =>
+      (options ? t(key, options) : t(key)).toUpperCase()
     expect(scheduleTooltip(nights, { seriesType: 'custom', value: [0, 1400] }, shoutingT))
       .toBe('2026-08-10<br/>BEDTIME: 23:20<br/>WAKE TIME: 07:20')
   })

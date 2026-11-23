@@ -9,7 +9,7 @@ import type { Translate } from '../src/format.js'
 // translator wrote back. Copied from format.test.ts's own stubT.
 function stubT(): { t: Translate, calls: [string, Record<string, unknown> | undefined][] } {
   const calls: [string, Record<string, unknown> | undefined][] = []
-  const t: Translate = (key, options) => {
+  const t: Translate = (key: string, options?: Record<string, unknown>) => {
     calls.push([key, options])
     return `t(${key})`
   }
@@ -18,7 +18,7 @@ function stubT(): { t: Translate, calls: [string, Record<string, unknown> | unde
 
 function realT(language: string): Translate {
   const i18n = initI18n(language)
-  return (key, options) => i18n.t(key, options)
+  return i18n.t
 }
 
 function figure(over: Partial<GlanceFigure> = {}): GlanceFigure {

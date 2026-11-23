@@ -15,7 +15,7 @@ const MESSAGES: Record<string, string> = {
   'charts.columns.trend': 'Trend',
   'charts.tooltip.line': '{{label}}: {{value}}',
 }
-const t: Translate = (key, options) => {
+const t: Translate = (key: string, options?: Record<string, unknown>) => {
   let text = MESSAGES[key] ?? key
   if (options) for (const [k, v] of Object.entries(options)) text = text.replaceAll(`{{${k}}}`, String(v))
   return text
@@ -128,7 +128,8 @@ describe('the sparkline tooltip', () => {
   // Every word came from t() and none survived as a literal: a t() answering in a different
   // vocabulary must change every word in the output. The same proof hr-tooltip.test.ts uses.
   it('routes every word through t(), not a hardcoded literal', () => {
-    const shoutingT: Translate = (key, options) => t(key, options).toUpperCase()
+    const shoutingT: Translate = (key: string, options?: Record<string, unknown>) =>
+      (options ? t(key, options) : t(key)).toUpperCase()
     expect(dayTooltip(input({ t: shoutingT }), { componentType: 'series', dataIndex: 1 }))
       .toBe('2026-08-11<br/>STEPS: NO READING')
   })

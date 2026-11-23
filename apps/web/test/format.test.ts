@@ -12,7 +12,7 @@ import type { Translate } from '../src/format.js'
 // without also asserting what a translator wrote back.
 function stubT(): { t: Translate, calls: [string, Record<string, unknown> | undefined][] } {
   const calls: [string, Record<string, unknown> | undefined][] = []
-  const t: Translate = (key, options) => {
+  const t: Translate = (key: string, options?: Record<string, unknown>) => {
     calls.push([key, options])
     return `t(${key})`
   }

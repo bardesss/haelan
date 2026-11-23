@@ -18,7 +18,7 @@ const MESSAGES: Record<string, string> = {
   'charts.event.withNote': '{{kind}}: {{note}}',
   'charts.event.multiDay': '{{kind}}, started',
 }
-const t: Translate = (key, options) => {
+const t: Translate = (key: string, options?: Record<string, unknown>) => {
   let text = MESSAGES[key] ?? key
   if (options) for (const [k, v] of Object.entries(options)) text = text.replaceAll(`{{${k}}}`, String(v))
   return text

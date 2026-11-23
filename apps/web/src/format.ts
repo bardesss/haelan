@@ -281,7 +281,18 @@ export function toneOf(delta: Delta | undefined): Tone {
 // The shape react-i18next's `t` actually has, kept local rather than importing i18next's own
 // type surface for one parameter: format.ts has no JSX and no hook access, so the caller (a
 // component) resolves `t` and hands it down.
-export type Translate = (key: string, options?: Record<string, unknown>) => string
+//
+// Two call signatures rather than one with an optional second parameter. i18next 27 states
+// `TFunction` as a union of argument tuples, none of which has an optional options element, and
+// `(key: string, options?: Record<string, unknown>)` is assignable to none of them: the bump from
+// 26 to 27 failed on that one line, 195 type errors deep, at every helper a component hands `t`
+// to. The pair also says what the single signature only implied - a `Translate` can be called
+// with a key alone, so anything standing in for one has to tolerate a missing second argument
+// rather than declare it required.
+export type Translate = {
+  (key: string): string
+  (key: string, options: Record<string, unknown>): string
+}
 
 /**
  * Whether a metric's values are positions on a clock rather than quantities, so no percentage

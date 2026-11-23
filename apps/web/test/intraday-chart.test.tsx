@@ -227,7 +227,7 @@ describe('seriesBySource', () => {
 // would test a translator's wording rather than what intradayBasis itself decided to ask for.
 function stubT(): { t: Translate, calls: [string, Record<string, unknown> | undefined][] } {
   const calls: [string, Record<string, unknown> | undefined][] = []
-  const t: Translate = (key, options) => {
+  const t: Translate = (key: string, options?: Record<string, unknown>) => {
     calls.push([key, options])
     return `t(${key})`
   }

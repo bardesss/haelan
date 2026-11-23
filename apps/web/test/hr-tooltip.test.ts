@@ -20,7 +20,7 @@ const MESSAGES: Record<string, string> = {
   'charts.hrTooltip.range': 'range {{min}} to {{max}} {{unit}}',
   'charts.units.bpm': 'bpm',
 }
-const t: Translate = (key, options) => {
+const t: Translate = (key: string, options?: Record<string, unknown>) => {
   let text = MESSAGES[key] ?? key
   if (options) for (const [k, v] of Object.entries(options)) text = text.replaceAll(`{{${k}}}`, String(v))
   return text
@@ -72,7 +72,8 @@ describe('heart rate tooltip', () => {
   // number. Passing a t() that answers in a different vocabulary (uppercase, here, standing in for
   // a real locale) proves every word came from t() and none of them survived as a literal.
   it('routes every word through t(), not a hardcoded literal', () => {
-    const shoutingT: Translate = (key, options) => t(key, options).toUpperCase()
+    const shoutingT: Translate = (key: string, options?: Record<string, unknown>) =>
+      (options ? t(key, options) : t(key)).toUpperCase()
     expect(hrTooltip(days, 0, shoutingT, 'en')).toBe('2026-07-02<br/>MEAN 71 BPM<br/>RANGE 52 TO 128 BPM')
     expect(hrTooltip(days, 1, shoutingT, 'en')).toBe('2026-07-05<br/>NOT WORN')
   })
